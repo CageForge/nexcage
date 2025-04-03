@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package cri;
+
+// Runtime service defines the public APIs for remote container runtimes
+service RuntimeService {
+  // CreatePod creates a pod with the specified containers
+  rpc CreatePod(CreatePodRequest) returns (CreatePodResponse) {}
+  
+  // DeletePod deletes a pod
+  rpc DeletePod(DeletePodRequest) returns (DeletePodResponse) {}
+  
+  // ListPods lists all pods
+  rpc ListPods(ListPodsRequest) returns (ListPodsResponse) {}
+  
+  // CreateContainer creates a container
+  rpc CreateContainer(CreateContainerRequest) returns (CreateContainerResponse) {}
+  
+  // DeleteContainer deletes a container
+  rpc DeleteContainer(DeleteContainerRequest) returns (DeleteContainerResponse) {}
+  
+  // ListContainers lists all containers
+  rpc ListContainers(ListContainersRequest) returns (ListContainersResponse) {}
+}
+
+message CreatePodRequest {
+  string name = 1;
+  string namespace = 2;
+  repeated ContainerSpec containers = 3;
+}
+
+message CreatePodResponse {
+  string pod_id = 1;
+}
+
+message DeletePodRequest {
+  string pod_id = 1;
+}
+
+message DeletePodResponse {}
+
+message ListPodsRequest {}
+
+message ListPodsResponse {
+  repeated Pod pods = 1;
+}
+
+message CreateContainerRequest {
+  string name = 1;
+  string image = 2;
+  repeated string command = 3;
+  repeated string args = 4;
+  repeated EnvVar env = 5;
+}
+
+message CreateContainerResponse {
+  string container_id = 1;
+}
+
+message DeleteContainerRequest {
+  string container_id = 1;
+}
+
+message DeleteContainerResponse {}
+
+message ListContainersRequest {}
+
+message ListContainersResponse {
+  repeated Container containers = 1;
+}
+
+message Pod {
+  string id = 1;
+  string name = 2;
+  string namespace = 3;
+  PodStatus status = 4;
+  repeated Container containers = 5;
+}
+
+message Container {
+  string id = 1;
+  string name = 2;
+  ContainerStatus status = 3;
+  ContainerSpec spec = 4;
+}
+
+message ContainerSpec {
+  string name = 1;
+  string image = 2;
+  repeated string command = 3;
+  repeated string args = 4;
+  repeated EnvVar env = 5;
+}
+
+message EnvVar {
+  string name = 1;
+  string value = 2;
+}
+
+enum PodStatus {
+  PENDING = 0;
+  RUNNING = 1;
+  SUCCEEDED = 2;
+  FAILED = 3;
+  UNKNOWN = 4;
+}
+
+enum ContainerStatus {
+  CREATED = 0;
+  RUNNING = 1;
+  STOPPED = 2;
+  UNKNOWN = 3;
+} 

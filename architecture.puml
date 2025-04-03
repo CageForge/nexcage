@@ -1,0 +1,49 @@
+@startuml Proxmox LXCRI Architecture
+
+' Style definitions
+skinparam componentStyle uml2
+skinparam component {
+    BackgroundColor LightBlue
+    BorderColor DarkBlue
+}
+
+' Main components
+package "Kubernetes" {
+    [kubelet] as Kubelet
+    [CRI API] as CRIAPI
+}
+
+package "Proxmox LXCRI" {
+    [LXCRI Service] as LXCRIService
+    [Pod Manager] as PodManager
+    [Container Manager] as ContainerManager
+    [Proxmox API Client] as ProxmoxClient
+}
+
+package "Proxmox VE" {
+    [Proxmox API] as ProxmoxAPI
+    [LXC Containers] as LXCContainers
+}
+
+' Relationships
+Kubelet --> CRIAPI : gRPC
+CRIAPI --> LXCRIService : Implements
+LXCRIService --> PodManager : Manages
+LXCRIService --> ContainerManager : Manages
+PodManager --> ProxmoxClient : Uses
+ContainerManager --> ProxmoxClient : Uses
+ProxmoxClient --> ProxmoxAPI : REST API
+ProxmoxAPI --> LXCContainers : Manages
+
+' Notes
+note right of LXCRIService
+  Implements CRI interface
+  for Proxmox LXC
+end note
+
+note right of ProxmoxClient
+  Handles authentication
+  and API communication
+end note
+
+@enduml 
