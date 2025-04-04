@@ -22,7 +22,7 @@ A Container Runtime Interface (CRI) implementation for Proxmox LXC containers. T
 1. Install dependencies:
    ```bash
    # Ubuntu/Debian
-   apt-get install protobuf-compiler libgrpc-dev
+   apt-get install protobuf-compiler libgrpc-dev libgrpc++-dev
    
    # macOS
    brew install protobuf grpc
