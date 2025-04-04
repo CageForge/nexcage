@@ -12,15 +12,18 @@ pub fn build(b: *std.Build) void {
     });
 
     // Add dependencies
-    exe.addModule("cri", b.createModule(.{
-        .source_file = .{ .path = "src/cri.zig" },
+    const cri_module = b.addModule("cri", .{
+        .source_file = .{ .cwd_relative = "src/cri.zig" },
         .dependencies = &.{},
-    }));
+    });
 
-    exe.addModule("proxmox", b.createModule(.{
-        .source_file = .{ .path = "src/proxmox.zig" },
+    const proxmox_module = b.addModule("proxmox", .{
+        .source_file = .{ .cwd_relative = "src/proxmox.zig" },
         .dependencies = &.{},
-    }));
+    });
+
+    exe.root_module.addImport("cri", cri_module);
+    exe.root_module.addImport("proxmox", proxmox_module);
 
     // Add system libraries
     exe.linkSystemLibrary("c");
