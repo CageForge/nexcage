@@ -13,12 +13,12 @@ pub fn build(b: *std.Build) void {
 
     // Add dependencies
     const cri_module = b.addModule("cri", .{
-        .source_file = .{ .cwd_relative = "src/cri.zig" },
+        .root_source_file = .{ .cwd_relative = "src/cri.zig" },
         .dependencies = &.{},
     });
 
     const proxmox_module = b.addModule("proxmox", .{
-        .source_file = .{ .cwd_relative = "src/proxmox.zig" },
+        .root_source_file = .{ .cwd_relative = "src/proxmox.zig" },
         .dependencies = &.{},
     });
 
