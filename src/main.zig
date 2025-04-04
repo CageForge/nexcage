@@ -1,15 +1,48 @@
 const std = @import("std");
-const cri = @import("cri");
-const proxmox = @import("proxmox");
-const config = @import("config");
-const logger = @import("logger");
-const fs = std.fs;
 const os = std.os;
-const mem = std.mem;
-const fmt = std.fmt;
+const linux = os.linux;
+const logger = @import("logger");
+const config = @import("config");
+const fs = std.fs;
+
+var shutdown_requested: bool = false;
+var last_signal: i32 = 0;
+var log: logger.Logger = undefined;
+
+fn signalHandler(sig: i32) callconv(.C) void {
+    shutdown_requested = true;
+    last_signal = sig;
+}
+
+fn waitForShutdown() !void {
+    const act = linux.Sigaction{
+        .handler = .{ .handler = signalHandler },
+        .mask = linux.empty_sigset,
+        .flags = 0,
+        .restorer = null,
+    };
+
+    // SIGINT = 2, SIGTERM = 15
+    const rc1 = linux.syscall3(.rt_sigaction, 2, @intFromPtr(&act), 0);
+    const err1: linux.E = @enumFromInt(-@as(i32, @intCast(rc1)));
+    if (err1 != .SUCCESS) {
+        return error.SignalHandlerError;
+    }
+
+    const rc2 = linux.syscall3(.rt_sigaction, 15, @intFromPtr(&act), 0);
+    const err2: linux.E = @enumFromInt(-@as(i32, @intCast(rc2)));
+    if (err2 != .SUCCESS) {
+        return error.SignalHandlerError;
+    }
+
+    while (!shutdown_requested) {
+        std.time.sleep(100 * std.time.ns_per_ms);
+    }
+
+    try log.info("Received signal {}, shutting down...", .{last_signal});
+}
 
 pub fn main() !void {
-    // Initialize allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -18,51 +51,19 @@ pub fn main() !void {
     var cfg = try config.Config.init(allocator);
     defer cfg.deinit();
 
-    // Load configuration from file
-    const config_path = try getConfigPath(allocator);
-    defer allocator.free(config_path);
-    try cfg.loadFromFile(config_path);
-
     // Initialize logger
-    const log_file = try fs.cwd().createFile("proxmox-lxcri.log", .{});
-    defer log_file.close();
-    var log = try logger.Logger.init(allocator, cfg.runtime.log_level, log_file.writer());
+    log = try logger.Logger.init(allocator, cfg.runtime.log_level, std.io.getStdOut().writer());
 
     try log.info("Starting Proxmox LXCRI...", .{});
 
-    // Initialize Proxmox client
-    var proxmox_client = try proxmox.Client.init(.{
-        .allocator = allocator,
-        .host = cfg.proxmox.host,
-        .port = cfg.proxmox.port,
-        .token = cfg.proxmox.token,
-    });
-    defer proxmox_client.deinit();
-
-    try log.info("Connected to Proxmox VE at {s}:{d}", .{ cfg.proxmox.host, cfg.proxmox.port });
-
-    // Initialize CRI service
-    var cri_service = try cri.Service.init(.{
-        .allocator = allocator,
-        .proxmox_client = &proxmox_client,
-    });
-    defer cri_service.deinit();
-
-    try log.info("CRI service initialized", .{});
-
-    // Start the service
-    try cri_service.start();
-    try log.info("CRI service started on {s}", .{cfg.runtime.socket_path});
-
-    // Wait for shutdown signal
-    try waitForShutdown(&log);
+    try waitForShutdown();
 }
 
 fn getConfigPath(allocator: std.mem.Allocator) ![]const u8 {
     // Check environment variable first
-    if (os.getenv("PROXMOX_LXCRI_CONFIG")) |path| {
-        return try allocator.dupe(u8, path);
-    }
+    if (std.process.getEnvVarOwned(allocator, "PROXMOX_LXCRI_CONFIG")) |path| {
+        return path;
+    } else |_| {}
 
     // Check default locations
     const default_paths = [_][]const u8{
@@ -78,16 +79,3 @@ fn getConfigPath(allocator: std.mem.Allocator) ![]const u8 {
 
     return error.ConfigNotFound;
 }
-
-fn waitForShutdown(log: *logger.Logger) !void {
-    var signal_set = os.SigSet.initEmpty();
-    try signal_set.add(.SIGINT);
-    try signal_set.add(.SIGTERM);
-
-    var sig: i32 = undefined;
-    while (true) {
-        try os.sigwait(&signal_set, &sig);
-        try log.info("Received signal {d}, shutting down...", .{sig});
-        break;
-    }
-} 

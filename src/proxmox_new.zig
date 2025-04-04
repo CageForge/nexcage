@@ -51,7 +51,7 @@ pub const Client = struct {
         try headers.append("Authorization", try fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
         try headers.append("Content-Type", "application/json");
 
-        var url = try fmt.allocPrint(self.allocator, "{s}{s}", .{ self.base_url, path });
+        const url = try fmt.allocPrint(self.allocator, "{s}{s}", .{ self.base_url, path });
         defer self.allocator.free(url);
 
         var req = try self.client.request(method, try std.Uri.parse(url), headers, .{});
@@ -70,7 +70,7 @@ pub const Client = struct {
         const response_body = try req.reader().readAllAlloc(self.allocator, 1024 * 1024);
         defer self.allocator.free(response_body);
 
-        var parsed = try json.parseFromSlice(APIResponse, self.allocator, response_body, .{});
+        const parsed = try json.parseFromSlice(APIResponse, self.allocator, response_body, .{});
         return parsed.value;
     }
 

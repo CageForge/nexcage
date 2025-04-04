@@ -11,14 +11,22 @@ pub const Config = struct {
     pub fn init(allocator: Allocator) !Config {
         return Config{
             .allocator = allocator,
-            .proxmox = try ProxmoxConfig.init(allocator),
-            .runtime = try RuntimeConfig.init(allocator),
+            .proxmox = ProxmoxConfig{
+                .host = "localhost",
+                .port = 8006,
+                .token = "",
+            },
+            .runtime = RuntimeConfig{
+                .log_level = .info,
+                .socket_path = "/var/run/proxmox-lxcri.sock",
+            },
         };
     }
 
     pub fn deinit(self: *Config) void {
-        self.proxmox.deinit();
-        self.runtime.deinit();
+        self.allocator.free(self.proxmox.host);
+        self.allocator.free(self.proxmox.token);
+        self.allocator.free(self.runtime.socket_path);
     }
 
     pub fn loadFromFile(self: *Config, path: []const u8) !void {
@@ -26,71 +34,63 @@ pub const Config = struct {
         defer file.close();
 
         const file_size = try file.getEndPos();
-        const buffer = try self.allocator.alloc(u8, file_size);
-        defer self.allocator.free(buffer);
+        const file_content = try self.allocator.alloc(u8, file_size);
+        defer self.allocator.free(file_content);
 
-        _ = try file.readAll(buffer);
+        const bytes_read = try file.readAll(file_content);
+        if (bytes_read != file_size) {
+            return error.IncompleteRead;
+        }
 
-        var parsed = try json.parseFromSlice(Config, self.allocator, buffer, .{});
-        self.* = parsed.value;
+        var parsed = try json.parseFromSlice(json.Value, self.allocator, file_content, .{});
+        defer parsed.deinit();
+
+        const root = parsed.value;
+
+        // Parse Proxmox configuration
+        if (root.object.get("proxmox")) |proxmox_obj| {
+            if (proxmox_obj.object.get("host")) |host| {
+                if (host == .string) {
+                    self.proxmox.host = try self.allocator.dupe(u8, host.string);
+                }
+            }
+            if (proxmox_obj.object.get("port")) |port| {
+                if (port == .integer) {
+                    self.proxmox.port = @intCast(port.integer);
+                }
+            }
+            if (proxmox_obj.object.get("token")) |token| {
+                if (token == .string) {
+                    self.proxmox.token = try self.allocator.dupe(u8, token.string);
+                }
+            }
+        }
+
+        // Parse Runtime configuration
+        if (root.object.get("runtime")) |runtime_obj| {
+            if (runtime_obj.object.get("log_level")) |log_level| {
+                if (log_level == .string) {
+                    self.runtime.log_level = std.meta.stringToEnum(LogLevel, log_level.string) orelse .info;
+                }
+            }
+            if (runtime_obj.object.get("socket_path")) |socket_path| {
+                if (socket_path == .string) {
+                    self.runtime.socket_path = try self.allocator.dupe(u8, socket_path.string);
+                }
+            }
+        }
     }
 };
 
 pub const ProxmoxConfig = struct {
-    allocator: Allocator,
     host: []const u8,
     port: u16,
     token: []const u8,
-    node: []const u8,
-    storage: []const u8,
-    network_bridge: []const u8,
-
-    pub fn init(allocator: Allocator) !ProxmoxConfig {
-        return ProxmoxConfig{
-            .allocator = allocator,
-            .host = try allocator.dupe(u8, "localhost"),
-            .port = 8006,
-            .token = try allocator.dupe(u8, ""),
-            .node = try allocator.dupe(u8, "localhost"),
-            .storage = try allocator.dupe(u8, "local-lvm"),
-            .network_bridge = try allocator.dupe(u8, "vmbr0"),
-        };
-    }
-
-    pub fn deinit(self: *ProxmoxConfig) void {
-        self.allocator.free(self.host);
-        self.allocator.free(self.token);
-        self.allocator.free(self.node);
-        self.allocator.free(self.storage);
-        self.allocator.free(self.network_bridge);
-    }
 };
 
 pub const RuntimeConfig = struct {
-    allocator: Allocator,
-    socket_path: []const u8,
     log_level: LogLevel,
-    default_memory: u32,
-    default_swap: u32,
-    default_cores: u32,
-    default_rootfs_size: []const u8,
-
-    pub fn init(allocator: Allocator) !RuntimeConfig {
-        return RuntimeConfig{
-            .allocator = allocator,
-            .socket_path = try allocator.dupe(u8, "/var/run/proxmox-lxcri.sock"),
-            .log_level = .info,
-            .default_memory = 512,
-            .default_swap = 256,
-            .default_cores = 1,
-            .default_rootfs_size = try allocator.dupe(u8, "8G"),
-        };
-    }
-
-    pub fn deinit(self: *RuntimeConfig) void {
-        self.allocator.free(self.socket_path);
-        self.allocator.free(self.default_rootfs_size);
-    }
+    socket_path: []const u8,
 };
 
 pub const LogLevel = enum {
@@ -98,4 +98,4 @@ pub const LogLevel = enum {
     info,
     warn,
     err,
-}; 
+};

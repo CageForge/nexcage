@@ -4,27 +4,29 @@ const grpc = @cImport({
     @cInclude("grpc/status.h");
     @cInclude("runtime_service.grpc.pb.h");
 });
-const cri = @import("cri");
+const types = @import("types");
 const Allocator = std.mem.Allocator;
 
 pub const RuntimeService = struct {
     allocator: Allocator,
     service: *grpc.RuntimeService,
-    cri_service: *cri.Service,
+    pod_manager: *types.PodManager,
+    container_manager: *types.ContainerManager,
 
-    pub fn init(allocator: Allocator, cri_service: *cri.Service) !RuntimeService {
+    pub fn init(allocator: Allocator, pod_manager: *types.PodManager, container_manager: *types.ContainerManager) !RuntimeService {
         return RuntimeService{
             .allocator = allocator,
             .service = undefined,
-            .cri_service = cri_service,
+            .pod_manager = pod_manager,
+            .container_manager = container_manager,
         };
     }
 
-    pub fn deinit(self: *RuntimeService) void {
+    pub fn deinit(_: *RuntimeService) void {
         // Cleanup gRPC service
     }
 
-    pub fn start(self: *RuntimeService) !void {
+    pub fn start(_: *RuntimeService) !void {
         // Initialize gRPC service
         // Register service methods
     }
@@ -32,10 +34,10 @@ pub const RuntimeService = struct {
     // CRI Service Methods
     pub fn createPod(self: *RuntimeService, request: *grpc.CreatePodRequest) !*grpc.CreatePodResponse {
         const spec = try self.requestToPodSpec(request);
-        defer spec.deinit();
+        defer spec.deinit(self.allocator);
 
-        const pod = try self.cri_service.pod_manager.createPod(spec);
-        defer pod.deinit();
+        const pod = try self.pod_manager.createPod(spec);
+        defer pod.deinit(self.allocator);
 
         const response = try self.allocator.create(grpc.CreatePodResponse);
         response.* = .{
@@ -46,7 +48,7 @@ pub const RuntimeService = struct {
     }
 
     pub fn deletePod(self: *RuntimeService, request: *grpc.DeletePodRequest) !*grpc.DeletePodResponse {
-        try self.cri_service.pod_manager.deletePod(request.pod_id);
+        try self.pod_manager.deletePod(request.pod_id);
 
         const response = try self.allocator.create(grpc.DeletePodResponse);
         response.* = .{};
@@ -54,8 +56,8 @@ pub const RuntimeService = struct {
         return response;
     }
 
-    pub fn listPods(self: *RuntimeService, request: *grpc.ListPodsRequest) !*grpc.ListPodsResponse {
-        const pods = try self.cri_service.pod_manager.listPods();
+    pub fn listPods(self: *RuntimeService, _: *grpc.ListPodsRequest) !*grpc.ListPodsResponse {
+        const pods = try self.pod_manager.listPods();
         defer self.allocator.free(pods);
 
         const response = try self.allocator.create(grpc.ListPodsResponse);
@@ -68,10 +70,10 @@ pub const RuntimeService = struct {
 
     pub fn createContainer(self: *RuntimeService, request: *grpc.CreateContainerRequest) !*grpc.CreateContainerResponse {
         const spec = try self.requestToContainerSpec(request);
-        defer spec.deinit();
+        defer spec.deinit(self.allocator);
 
-        const container = try self.cri_service.container_manager.createContainer(spec);
-        defer container.deinit();
+        const container = try self.container_manager.createContainer(spec);
+        defer container.deinit(self.allocator);
 
         const response = try self.allocator.create(grpc.CreateContainerResponse);
         response.* = .{
@@ -82,7 +84,7 @@ pub const RuntimeService = struct {
     }
 
     pub fn deleteContainer(self: *RuntimeService, request: *grpc.DeleteContainerRequest) !*grpc.DeleteContainerResponse {
-        try self.cri_service.container_manager.deleteContainer(request.container_id);
+        try self.container_manager.deleteContainer(request.container_id);
 
         const response = try self.allocator.create(grpc.DeleteContainerResponse);
         response.* = .{};
@@ -90,8 +92,8 @@ pub const RuntimeService = struct {
         return response;
     }
 
-    pub fn listContainers(self: *RuntimeService, request: *grpc.ListContainersRequest) !*grpc.ListContainersResponse {
-        const containers = try self.cri_service.container_manager.listContainers();
+    pub fn listContainers(self: *RuntimeService, _: *grpc.ListContainersRequest) !*grpc.ListContainersResponse {
+        const containers = try self.container_manager.listContainers();
         defer self.allocator.free(containers);
 
         const response = try self.allocator.create(grpc.ListContainersResponse);
@@ -103,22 +105,22 @@ pub const RuntimeService = struct {
     }
 
     // Helper functions
-    fn requestToPodSpec(self: *RuntimeService, request: *grpc.CreatePodRequest) !cri.PodSpec {
-        const containers = try self.allocator.alloc(cri.ContainerSpec, request.containers.len);
+    fn requestToPodSpec(self: *RuntimeService, request: *grpc.CreatePodRequest) !types.PodSpec {
+        const containers = try self.allocator.alloc(types.ContainerSpec, request.containers.len);
         errdefer self.allocator.free(containers);
 
         for (request.containers, 0..) |container, i| {
             containers[i] = try self.requestToContainerSpec(container);
         }
 
-        return cri.PodSpec{
+        return types.PodSpec{
             .name = try self.allocator.dupe(u8, request.name),
             .namespace = try self.allocator.dupe(u8, request.namespace),
             .containers = containers,
         };
     }
 
-    fn requestToContainerSpec(self: *RuntimeService, request: *grpc.CreateContainerRequest) !cri.ContainerSpec {
+    fn requestToContainerSpec(self: *RuntimeService, request: *grpc.CreateContainerRequest) !types.ContainerSpec {
         const command = try self.allocator.alloc([]const u8, request.command.len);
         errdefer self.allocator.free(command);
         for (request.command, 0..) |cmd, i| {
@@ -131,7 +133,7 @@ pub const RuntimeService = struct {
             args[i] = try self.allocator.dupe(u8, arg);
         }
 
-        const env = try self.allocator.alloc(cri.EnvVar, request.env.len);
+        const env = try self.allocator.alloc(types.EnvVar, request.env.len);
         errdefer self.allocator.free(env);
         for (request.env, 0..) |e, i| {
             env[i] = .{
@@ -140,7 +142,7 @@ pub const RuntimeService = struct {
             };
         }
 
-        return cri.ContainerSpec{
+        return types.ContainerSpec{
             .name = try self.allocator.dupe(u8, request.name),
             .image = try self.allocator.dupe(u8, request.image),
             .command = command,
@@ -149,7 +151,7 @@ pub const RuntimeService = struct {
         };
     }
 
-    fn podsToGRPC(self: *RuntimeService, pods: []cri.Pod) ![]grpc.Pod {
+    fn podsToGRPC(self: *RuntimeService, pods: []types.Pod) ![]grpc.Pod {
         const grpc_pods = try self.allocator.alloc(grpc.Pod, pods.len);
         errdefer self.allocator.free(grpc_pods);
 
@@ -166,7 +168,7 @@ pub const RuntimeService = struct {
         return grpc_pods;
     }
 
-    fn containersToGRPC(self: *RuntimeService, containers: []cri.Container) ![]grpc.Container {
+    fn containersToGRPC(self: *RuntimeService, containers: []types.Container) ![]grpc.Container {
         const grpc_containers = try self.allocator.alloc(grpc.Container, containers.len);
         errdefer self.allocator.free(grpc_containers);
 
@@ -182,7 +184,7 @@ pub const RuntimeService = struct {
         return grpc_containers;
     }
 
-    fn containerSpecToGRPC(self: *RuntimeService, spec: cri.ContainerSpec) !grpc.ContainerSpec {
+    fn containerSpecToGRPC(self: *RuntimeService, spec: types.ContainerSpec) !grpc.ContainerSpec {
         return grpc.ContainerSpec{
             .name = try self.allocator.dupe(u8, spec.name),
             .image = try self.allocator.dupe(u8, spec.image),
@@ -192,7 +194,7 @@ pub const RuntimeService = struct {
         };
     }
 
-    fn envVarsToGRPC(self: *RuntimeService, env_vars: []cri.EnvVar) ![]grpc.EnvVar {
+    fn envVarsToGRPC(self: *RuntimeService, env_vars: []types.EnvVar) ![]grpc.EnvVar {
         const grpc_env_vars = try self.allocator.alloc(grpc.EnvVar, env_vars.len);
         errdefer self.allocator.free(grpc_env_vars);
 
@@ -205,4 +207,4 @@ pub const RuntimeService = struct {
 
         return grpc_env_vars;
     }
-}; 
+};

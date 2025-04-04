@@ -1,28 +1,21 @@
 syntax = "proto3";
 
-package cri;
+package runtime;
 
 // Runtime service defines the public APIs for remote container runtimes
 service RuntimeService {
-  // CreatePod creates a pod with the specified containers
+  // Pod management
   rpc CreatePod(CreatePodRequest) returns (CreatePodResponse) {}
-  
-  // DeletePod deletes a pod
   rpc DeletePod(DeletePodRequest) returns (DeletePodResponse) {}
-  
-  // ListPods lists all pods
   rpc ListPods(ListPodsRequest) returns (ListPodsResponse) {}
-  
-  // CreateContainer creates a container
+
+  // Container management
   rpc CreateContainer(CreateContainerRequest) returns (CreateContainerResponse) {}
-  
-  // DeleteContainer deletes a container
   rpc DeleteContainer(DeleteContainerRequest) returns (DeleteContainerResponse) {}
-  
-  // ListContainers lists all containers
   rpc ListContainers(ListContainersRequest) returns (ListContainersResponse) {}
 }
 
+// Pod messages
 message CreatePodRequest {
   string name = 1;
   string namespace = 2;
@@ -45,6 +38,7 @@ message ListPodsResponse {
   repeated Pod pods = 1;
 }
 
+// Container messages
 message CreateContainerRequest {
   string name = 1;
   string image = 2;
@@ -69,6 +63,7 @@ message ListContainersResponse {
   repeated Container containers = 1;
 }
 
+// Common types
 message Pod {
   string id = 1;
   string name = 2;
@@ -98,17 +93,17 @@ message EnvVar {
 }
 
 enum PodStatus {
-  PENDING = 0;
-  RUNNING = 1;
-  SUCCEEDED = 2;
-  FAILED = 3;
-  UNKNOWN = 4;
+  POD_STATUS_UNKNOWN = 0;
+  POD_STATUS_PENDING = 1;
+  POD_STATUS_RUNNING = 2;
+  POD_STATUS_SUCCEEDED = 3;
+  POD_STATUS_FAILED = 4;
 }
 
 enum ContainerStatus {
   CONTAINER_STATUS_UNKNOWN = 0;
   CONTAINER_STATUS_CREATED = 1;
   CONTAINER_STATUS_RUNNING = 2;
-  CONTAINER_STATUS_EXITED = 3;
+  CONTAINER_STATUS_STOPPED = 3;
   CONTAINER_STATUS_FAILED = 4;
 } 
