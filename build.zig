@@ -120,7 +120,11 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("ssl");
     exe.linkSystemLibrary("crypto");
     exe.linkSystemLibrary("atomic");
-    exe.linkSystemLibrary("rt");
+
+    // Only link against librt on Linux
+    if (target.result.os.tag == .linux) {
+        exe.linkSystemLibrary("rt");
+    }
 
     // Add all modules as dependencies
     exe.root_module.addImport("proxmox", proxmox_module);
