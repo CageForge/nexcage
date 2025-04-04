@@ -5,6 +5,7 @@ const grpc = @cImport({
 });
 const proxmox = @import("proxmox");
 const grpc_service = @import("grpc_service");
+const fix = @import("fix");
 const mem = std.mem;
 const fmt = std.fmt;
 const Allocator = std.mem.Allocator;
@@ -229,7 +230,7 @@ pub const ContainerManager = struct {
 
     pub fn createContainer(self: *ContainerManager, spec: ContainerSpec) !Container {
         // Convert ContainerSpec to LXCConfig
-        const lxc_config = try self.specToLXCConfig(spec);
+        const lxc_config = try fix.specToLXCConfig(spec);
         defer lxc_config.deinit();
 
         // Create LXC container via Proxmox API
@@ -277,7 +278,7 @@ pub const ContainerManager = struct {
     pub fn getContainerStatus(self: *ContainerManager, container_id: []const u8) !ContainerStatus {
         if (self.containers.get(container_id)) |container| {
             const lxc_status = try self.proxmox_client.getLXCStatus(container.vmid);
-            return self.lxcStatusToContainerStatus(lxc_status);
+            return fix.lxcStatusToContainerStatus(lxc_status);
         }
         return error.ContainerNotFound;
     }
@@ -291,31 +292,6 @@ pub const ContainerManager = struct {
             i += 1;
         }
         return containers;
-    }
-
-    fn specToLXCConfig(self: *ContainerManager, spec: ContainerSpec) !proxmox.LXCConfig {
-        return proxmox.LXCConfig{
-            .hostname = spec.name,
-            .ostype = "ubuntu", // Default to Ubuntu for now
-            .memory = 512, // Default memory
-            .swap = 256, // Default swap
-            .cores = 1, // Default cores
-            .rootfs = "local-lvm:8", // Default rootfs
-            .net0 = proxmox.NetworkConfig{
-                .name = "eth0",
-                .bridge = "vmbr0",
-                .ip = "dhcp", // Default to DHCP
-            },
-        };
-    }
-
-    fn lxcStatusToContainerStatus(self: *ContainerManager, status: proxmox.LXCStatus) ContainerStatus {
-        return switch (status) {
-            .running => .running,
-            .stopped => .stopped,
-            .paused => .stopped,
-            .unknown => .unknown,
-        };
     }
 };
 
@@ -376,4 +352,4 @@ pub const ContainerStatus = enum {
     running,
     stopped,
     unknown,
-}; 
+};

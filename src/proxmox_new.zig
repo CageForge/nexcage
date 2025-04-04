@@ -4,7 +4,6 @@ const json = std.json;
 const mem = std.mem;
 const fmt = std.fmt;
 const Allocator = std.mem.Allocator;
-const proxmox_fix = @import("proxmox_fix");
 
 pub const Client = struct {
     allocator: Allocator,
@@ -173,4 +172,8 @@ pub const LXCStatus = enum {
 };
 
 // Proxmox API response types
-pub const APIResponse = proxmox_fix.APIResponse;
+pub const APIResponse = struct {
+    data: json.Value,
+    success: bool,
+    err_msg: ?[]const u8,
+};
