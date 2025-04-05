@@ -1,14 +1,14 @@
 const std = @import("std");
-const config = @import("config");
+const types = @import("types.zig");
 const Allocator = std.mem.Allocator;
 const Writer = std.fs.File.Writer;
 
 pub const Logger = struct {
     allocator: Allocator,
-    level: config.LogLevel,
+    level: types.LogLevel,
     writer: Writer,
 
-    pub fn init(allocator: Allocator, level: config.LogLevel, writer: Writer) !Logger {
+    pub fn init(allocator: Allocator, level: types.LogLevel, writer: Writer) !Logger {
         return Logger{
             .allocator = allocator,
             .level = level,
@@ -21,25 +21,25 @@ pub const Logger = struct {
     }
 
     pub fn debug(self: *Logger, comptime fmt_str: []const u8, args: anytype) !void {
-        if (self.level == config.LogLevel.debug) {
+        if (self.level == types.LogLevel.debug) {
             try self.log("DEBUG", fmt_str, args);
         }
     }
 
     pub fn info(self: *Logger, comptime fmt_str: []const u8, args: anytype) !void {
-        if (@intFromEnum(self.level) <= @intFromEnum(config.LogLevel.info)) {
+        if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.info)) {
             try self.log("INFO", fmt_str, args);
         }
     }
 
     pub fn warn(self: *Logger, comptime fmt_str: []const u8, args: anytype) !void {
-        if (@intFromEnum(self.level) <= @intFromEnum(config.LogLevel.warn)) {
+        if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.warn)) {
             try self.log("WARN", fmt_str, args);
         }
     }
 
     pub fn err(self: *Logger, comptime fmt_str: []const u8, args: anytype) !void {
-        if (@intFromEnum(self.level) <= @intFromEnum(config.LogLevel.err)) {
+        if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.err)) {
             try self.log("ERROR", fmt_str, args);
         }
     }

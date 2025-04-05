@@ -2,6 +2,7 @@ const std = @import("std");
 const json = std.json;
 const fs = std.fs;
 const Allocator = std.mem.Allocator;
+const types = @import("types.zig");
 
 pub const Config = struct {
     allocator: Allocator,
@@ -70,7 +71,7 @@ pub const Config = struct {
         if (root.object.get("runtime")) |runtime_obj| {
             if (runtime_obj.object.get("log_level")) |log_level| {
                 if (log_level == .string) {
-                    self.runtime.log_level = std.meta.stringToEnum(LogLevel, log_level.string) orelse .info;
+                    self.runtime.log_level = std.meta.stringToEnum(types.LogLevel, log_level.string) orelse .info;
                 }
             }
             if (runtime_obj.object.get("socket_path")) |socket_path| {
@@ -89,7 +90,7 @@ pub const ProxmoxConfig = struct {
 };
 
 pub const RuntimeConfig = struct {
-    log_level: LogLevel,
+    log_level: types.LogLevel,
     socket_path: []const u8,
 };
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const Logger = @import("logger.zig").Logger;
 
 pub const Error = error{
     // Configuration errors
@@ -70,4 +71,4 @@ pub fn handleError(err: Error, logger: *Logger) void {
         error.PermissionDenied => logger.err("Permission denied", .{}),
         error.NetworkError => logger.err("Network error", .{}),
     }
-} 
+}

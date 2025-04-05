@@ -1,45 +1,53 @@
 const std = @import("std");
+const c = std.c;
 const os = std.os;
 const linux = os.linux;
-const logger = @import("logger");
-const config = @import("config");
+const posix = std.posix;
+const logger = @import("logger.zig");
+const config = @import("config.zig");
+const types = @import("types.zig");
 const fs = std.fs;
+const builtin = @import("builtin");
+const log = std.log;
+const proxmox = @import("proxmox");
+const Error = @import("error.zig").Error;
+
+const SIGINT = 2;
+const SIGTERM = 15;
 
 var shutdown_requested: bool = false;
-var last_signal: i32 = 0;
-var log: logger.Logger = undefined;
+var last_signal: c_int = 0;
+var logger_instance: logger.Logger = undefined;
 
-fn signalHandler(sig: i32) callconv(.C) void {
+fn signalHandler(sig: c_int) callconv(.C) void {
     shutdown_requested = true;
     last_signal = sig;
 }
 
 fn waitForShutdown() !void {
-    const act = linux.Sigaction{
-        .handler = .{ .handler = signalHandler },
-        .mask = linux.empty_sigset,
-        .flags = 0,
-        .restorer = null,
-    };
+    var act = std.mem.zeroes(c.Sigaction);
+    act.handler.handler = signalHandler;
+    act.mask = c.empty_sigset;
+    act.flags = 0;
 
-    // SIGINT = 2, SIGTERM = 15
-    const rc1 = linux.syscall3(.rt_sigaction, 2, @intFromPtr(&act), 0);
-    const err1: linux.E = @enumFromInt(-@as(i32, @intCast(rc1)));
-    if (err1 != .SUCCESS) {
-        return error.SignalHandlerError;
+    const rc1 = c.sigaction(SIGINT, &act, null);
+    if (rc1 < 0) {
+        try logger_instance.err("Failed to set SIGINT handler: {}", .{posix.errno(rc1)});
+        return Error.ProxmoxOperationFailed;
     }
 
-    const rc2 = linux.syscall3(.rt_sigaction, 15, @intFromPtr(&act), 0);
-    const err2: linux.E = @enumFromInt(-@as(i32, @intCast(rc2)));
-    if (err2 != .SUCCESS) {
-        return error.SignalHandlerError;
+    const rc2 = c.sigaction(SIGTERM, &act, null);
+    if (rc2 < 0) {
+        try logger_instance.err("Failed to set SIGTERM handler: {}", .{posix.errno(rc2)});
+        return Error.ProxmoxOperationFailed;
     }
 
+    // Wait for signal
     while (!shutdown_requested) {
         std.time.sleep(100 * std.time.ns_per_ms);
     }
 
-    try log.info("Received signal {}, shutting down...", .{last_signal});
+    try logger_instance.info("Received signal {}, shutting down...", .{last_signal});
 }
 
 pub fn main() !void {
@@ -52,9 +60,9 @@ pub fn main() !void {
     defer cfg.deinit();
 
     // Initialize logger
-    log = try logger.Logger.init(allocator, cfg.runtime.log_level, std.io.getStdOut().writer());
+    logger_instance = try logger.Logger.init(allocator, cfg.runtime.log_level, std.io.getStdOut().writer());
 
-    try log.info("Starting Proxmox LXCRI...", .{});
+    try logger_instance.info("Starting Proxmox LXCRI...", .{});
 
     try waitForShutdown();
 }

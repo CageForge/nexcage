@@ -105,3 +105,10 @@ pub const Pod = struct {
         allocator.free(self.containers);
     }
 };
+
+pub const LogLevel = enum {
+    debug,
+    info,
+    warn,
+    err,
+};
