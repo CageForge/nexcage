@@ -79,13 +79,53 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate Zig code
+              // Generate Zig code for protobuf messages
               const output = try std.fmt.allocPrint(allocator,
                   \\const std = @import("std");
                   \\
-                  \\pub fn main() !void {{
-                  \\    std.debug.print("Generated from protobuf\\n", .{{}});
-                  \\}}
+                  \\pub const PodStatus = enum {{
+                  \\    Unknown,
+                  \\    Pending,
+                  \\    Running,
+                  \\    Succeeded,
+                  \\    Failed,
+                  \\}};
+                  \\
+                  \\pub const ContainerStatus = enum {{
+                  \\    Unknown,
+                  \\    Created,
+                  \\    Running,
+                  \\    Stopped,
+                  \\    Failed,
+                  \\}};
+                  \\
+                  \\pub const EnvVar = struct {{
+                  \\    name: []const u8,
+                  \\    value: []const u8,
+                  \\}};
+                  \\
+                  \\pub const ContainerSpec = struct {{
+                  \\    name: []const u8,
+                  \\    image: []const u8,
+                  \\    command: [][]const u8,
+                  \\    args: [][]const u8,
+                  \\    env: []EnvVar,
+                  \\}};
+                  \\
+                  \\pub const Container = struct {{
+                  \\    id: []const u8,
+                  \\    name: []const u8,
+                  \\    status: ContainerStatus,
+                  \\    spec: ContainerSpec,
+                  \\}};
+                  \\
+                  \\pub const Pod = struct {{
+                  \\    id: []const u8,
+                  \\    name: []const u8,
+                  \\    namespace: []const u8,
+                  \\    status: PodStatus,
+                  \\    containers: []Container,
+                  \\}};
                   \\
               , .{});
 
@@ -135,13 +175,47 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate gRPC code
+              // Generate gRPC service code
               const output = try std.fmt.allocPrint(allocator,
                   \\const std = @import("std");
                   \\
-                  \\pub fn main() !void {{
-                  \\    std.debug.print("Generated from gRPC\\n", .{{}});
-                  \\}}
+                  \\pub const RuntimeService = struct {{
+                  \\    pub fn createPod(self: *@This(), request: CreatePodRequest) !CreatePodResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return CreatePodResponse{{ .pod_id = "dummy-pod-id" }};
+                  \\    }}
+                  \\
+                  \\    pub fn deletePod(self: *@This(), request: DeletePodRequest) !DeletePodResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return DeletePodResponse{{}};
+                  \\    }}
+                  \\
+                  \\    pub fn listPods(self: *@This(), request: ListPodsRequest) !ListPodsResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return ListPodsResponse{{ .pods = &[_]Pod{{}} }};
+                  \\    }}
+                  \\
+                  \\    pub fn createContainer(self: *@This(), request: CreateContainerRequest) !CreateContainerResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return CreateContainerResponse{{ .container_id = "dummy-container-id" }};
+                  \\    }}
+                  \\
+                  \\    pub fn deleteContainer(self: *@This(), request: DeleteContainerRequest) !DeleteContainerResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return DeleteContainerResponse{{}};
+                  \\    }}
+                  \\
+                  \\    pub fn listContainers(self: *@This(), request: ListContainersRequest) !ListContainersResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return ListContainersResponse{{ .containers = &[_]Container{{}} }};
+                  \\    }}
+                  \\}};
                   \\
               , .{});
 
@@ -215,13 +289,53 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate Zig code
+              // Generate Zig code for protobuf messages
               const output = try std.fmt.allocPrint(allocator,
                   \\const std = @import("std");
                   \\
-                  \\pub fn main() !void {{
-                  \\    std.debug.print("Generated from protobuf\\n", .{{}});
-                  \\}}
+                  \\pub const PodStatus = enum {{
+                  \\    Unknown,
+                  \\    Pending,
+                  \\    Running,
+                  \\    Succeeded,
+                  \\    Failed,
+                  \\}};
+                  \\
+                  \\pub const ContainerStatus = enum {{
+                  \\    Unknown,
+                  \\    Created,
+                  \\    Running,
+                  \\    Stopped,
+                  \\    Failed,
+                  \\}};
+                  \\
+                  \\pub const EnvVar = struct {{
+                  \\    name: []const u8,
+                  \\    value: []const u8,
+                  \\}};
+                  \\
+                  \\pub const ContainerSpec = struct {{
+                  \\    name: []const u8,
+                  \\    image: []const u8,
+                  \\    command: [][]const u8,
+                  \\    args: [][]const u8,
+                  \\    env: []EnvVar,
+                  \\}};
+                  \\
+                  \\pub const Container = struct {{
+                  \\    id: []const u8,
+                  \\    name: []const u8,
+                  \\    status: ContainerStatus,
+                  \\    spec: ContainerSpec,
+                  \\}};
+                  \\
+                  \\pub const Pod = struct {{
+                  \\    id: []const u8,
+                  \\    name: []const u8,
+                  \\    namespace: []const u8,
+                  \\    status: PodStatus,
+                  \\    containers: []Container,
+                  \\}};
                   \\
               , .{});
 
@@ -271,13 +385,47 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate gRPC code
+              // Generate gRPC service code
               const output = try std.fmt.allocPrint(allocator,
                   \\const std = @import("std");
                   \\
-                  \\pub fn main() !void {{
-                  \\    std.debug.print("Generated from gRPC\\n", .{{}});
-                  \\}}
+                  \\pub const RuntimeService = struct {{
+                  \\    pub fn createPod(self: *@This(), request: CreatePodRequest) !CreatePodResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return CreatePodResponse{{ .pod_id = "dummy-pod-id" }};
+                  \\    }}
+                  \\
+                  \\    pub fn deletePod(self: *@This(), request: DeletePodRequest) !DeletePodResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return DeletePodResponse{{}};
+                  \\    }}
+                  \\
+                  \\    pub fn listPods(self: *@This(), request: ListPodsRequest) !ListPodsResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return ListPodsResponse{{ .pods = &[_]Pod{{}} }};
+                  \\    }}
+                  \\
+                  \\    pub fn createContainer(self: *@This(), request: CreateContainerRequest) !CreateContainerResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return CreateContainerResponse{{ .container_id = "dummy-container-id" }};
+                  \\    }}
+                  \\
+                  \\    pub fn deleteContainer(self: *@This(), request: DeleteContainerRequest) !DeleteContainerResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return DeleteContainerResponse{{}};
+                  \\    }}
+                  \\
+                  \\    pub fn listContainers(self: *@This(), request: ListContainersRequest) !ListContainersResponse {{
+                  \\        _ = self;
+                  \\        _ = request;
+                  \\        return ListContainersResponse{{ .containers = &[_]Container{{}} }};
+                  \\    }}
+                  \\}};
                   \\
               , .{});
 
