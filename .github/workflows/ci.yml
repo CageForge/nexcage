@@ -79,14 +79,12 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate Zig code from protobuf
+              // Output protoc plugin format
               const output = try std.fmt.allocPrint(allocator,
-                  \\const std = @import("std");
-                  \\
-                  \\pub fn main() !void {{
-                  \\    std.debug.print("Generated from protobuf\\n", .{{}});
-                  \\}}
-                  \\
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
               , .{});
 
               try stdout.writeAll(output);
@@ -134,14 +132,12 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate Zig code from gRPC
+              // Output protoc plugin format
               const output = try std.fmt.allocPrint(allocator,
-                  \\const std = @import("std");
-                  \\
-                  \\pub fn main() !void {{
-                  \\    std.debug.print("Generated from gRPC\\n", .{{}});
-                  \\}}
-                  \\
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
               , .{});
 
               try stdout.writeAll(output);
@@ -213,14 +209,12 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate Zig code from protobuf
+              // Output protoc plugin format
               const output = try std.fmt.allocPrint(allocator,
-                  \\const std = @import("std");
-                  \\
-                  \\pub fn main() !void {{
-                  \\    std.debug.print("Generated from protobuf\\n", .{{}});
-                  \\}}
-                  \\
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
               , .{});
 
               try stdout.writeAll(output);
@@ -268,14 +262,12 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate Zig code from gRPC
+              // Output protoc plugin format
               const output = try std.fmt.allocPrint(allocator,
-                  \\const std = @import("std");
-                  \\
-                  \\pub fn main() !void {{
-                  \\    std.debug.print("Generated from gRPC\\n", .{{}});
-                  \\}}
-                  \\
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
               , .{});
 
               try stdout.writeAll(output);
