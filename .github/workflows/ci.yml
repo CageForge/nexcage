@@ -39,24 +39,109 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip jq
-          # Download and build Zig protobuf plugins
-          # Get latest release of protoc-gen-zig
-          RELEASE_URL=$(curl -s https://api.github.com/repos/zig-protobuf/protoc-gen-zig/releases/latest | jq -r '.assets[0].browser_download_url')
-          wget -q --show-progress "$RELEASE_URL" -O protoc-gen-zig.zip || {
-            echo "Failed to download protoc-gen-zig"
-            exit 1
+          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip
+          # Build protoc-gen-zig locally
+          mkdir -p /tmp/protoc-gen-zig
+          cd /tmp/protoc-gen-zig
+          cat > build.zig << 'EOF'
+          const std = @import("std");
+
+          pub fn build(b: *std.Build) void {
+              const target = b.standardTargetOptions(.{});
+              const optimize = b.standardOptimizeOption(.{});
+
+              const exe = b.addExecutable(.{
+                  .name = "protoc-gen-zig",
+                  .root_source_file = .{ .path = "src/main.zig" },
+                  .target = target,
+                  .optimize = optimize,
+              });
+
+              b.installArtifact(exe);
           }
-          unzip -q protoc-gen-zig.zip
-          sudo mv protoc-gen-zig /usr/local/bin/
-          # Get latest release of protoc-gen-grpc-zig
-          RELEASE_URL=$(curl -s https://api.github.com/repos/zig-protobuf/protoc-gen-grpc-zig/releases/latest | jq -r '.assets[0].browser_download_url')
-          wget -q --show-progress "$RELEASE_URL" -O protoc-gen-grpc-zig.zip || {
-            echo "Failed to download protoc-gen-grpc-zig"
-            exit 1
+          EOF
+          mkdir -p src
+          cat > src/main.zig << 'EOF'
+          const std = @import("std");
+          const protobuf = @import("protobuf");
+
+          pub fn main() !void {
+              var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+              defer arena.deinit();
+              const allocator = arena.allocator();
+
+              var args = try std.process.argsWithAllocator(allocator);
+              _ = args.skip(); // Skip program name
+
+              const request = try protobuf.plugin.Request.parseFromStdin(allocator);
+              const response = try protobuf.plugin.Response.init(allocator);
+
+              for (request.proto_file) |file| {
+                  const file_desc = try protobuf.descriptor.FileDescriptorProto.parse(allocator, file);
+                  const zig_file = try protobuf.codegen.generateZigFile(allocator, file_desc);
+                  try response.file.append(.{
+                      .name = try std.fmt.allocPrint(allocator, "{s}.zig", .{file_desc.name}),
+                      .content = zig_file.content,
+                  });
+              }
+
+              try response.writeToStdout();
           }
-          unzip -q protoc-gen-grpc-zig.zip
-          sudo mv protoc-gen-grpc-zig /usr/local/bin/
+          EOF
+          zig build
+          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
+          cd $GITHUB_WORKSPACE
+          # Build protoc-gen-grpc-zig locally
+          mkdir -p /tmp/protoc-gen-grpc-zig
+          cd /tmp/protoc-gen-grpc-zig
+          cat > build.zig << 'EOF'
+          const std = @import("std");
+
+          pub fn build(b: *std.Build) void {
+              const target = b.standardTargetOptions(.{});
+              const optimize = b.standardOptimizeOption(.{});
+
+              const exe = b.addExecutable(.{
+                  .name = "protoc-gen-grpc-zig",
+                  .root_source_file = .{ .path = "src/main.zig" },
+                  .target = target,
+                  .optimize = optimize,
+              });
+
+              b.installArtifact(exe);
+          }
+          EOF
+          mkdir -p src
+          cat > src/main.zig << 'EOF'
+          const std = @import("std");
+          const protobuf = @import("protobuf");
+
+          pub fn main() !void {
+              var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+              defer arena.deinit();
+              const allocator = arena.allocator();
+
+              var args = try std.process.argsWithAllocator(allocator);
+              _ = args.skip(); // Skip program name
+
+              const request = try protobuf.plugin.Request.parseFromStdin(allocator);
+              const response = try protobuf.plugin.Response.init(allocator);
+
+              for (request.proto_file) |file| {
+                  const file_desc = try protobuf.descriptor.FileDescriptorProto.parse(allocator, file);
+                  const grpc_file = try protobuf.codegen.generateGrpcFile(allocator, file_desc);
+                  try response.file.append(.{
+                      .name = try std.fmt.allocPrint(allocator, "{s}_grpc.zig", .{file_desc.name}),
+                      .content = grpc_file.content,
+                  });
+              }
+
+              try response.writeToStdout();
+          }
+          EOF
+          zig build
+          sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
+          cd $GITHUB_WORKSPACE
 
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
@@ -80,24 +165,109 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip jq
-          # Download and build Zig protobuf plugins
-          # Get latest release of protoc-gen-zig
-          RELEASE_URL=$(curl -s https://api.github.com/repos/zig-protobuf/protoc-gen-zig/releases/latest | jq -r '.assets[0].browser_download_url')
-          wget -q --show-progress "$RELEASE_URL" -O protoc-gen-zig.zip || {
-            echo "Failed to download protoc-gen-zig"
-            exit 1
+          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip
+          # Build protoc-gen-zig locally
+          mkdir -p /tmp/protoc-gen-zig
+          cd /tmp/protoc-gen-zig
+          cat > build.zig << 'EOF'
+          const std = @import("std");
+
+          pub fn build(b: *std.Build) void {
+              const target = b.standardTargetOptions(.{});
+              const optimize = b.standardOptimizeOption(.{});
+
+              const exe = b.addExecutable(.{
+                  .name = "protoc-gen-zig",
+                  .root_source_file = .{ .path = "src/main.zig" },
+                  .target = target,
+                  .optimize = optimize,
+              });
+
+              b.installArtifact(exe);
           }
-          unzip -q protoc-gen-zig.zip
-          sudo mv protoc-gen-zig /usr/local/bin/
-          # Get latest release of protoc-gen-grpc-zig
-          RELEASE_URL=$(curl -s https://api.github.com/repos/zig-protobuf/protoc-gen-grpc-zig/releases/latest | jq -r '.assets[0].browser_download_url')
-          wget -q --show-progress "$RELEASE_URL" -O protoc-gen-grpc-zig.zip || {
-            echo "Failed to download protoc-gen-grpc-zig"
-            exit 1
+          EOF
+          mkdir -p src
+          cat > src/main.zig << 'EOF'
+          const std = @import("std");
+          const protobuf = @import("protobuf");
+
+          pub fn main() !void {
+              var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+              defer arena.deinit();
+              const allocator = arena.allocator();
+
+              var args = try std.process.argsWithAllocator(allocator);
+              _ = args.skip(); // Skip program name
+
+              const request = try protobuf.plugin.Request.parseFromStdin(allocator);
+              const response = try protobuf.plugin.Response.init(allocator);
+
+              for (request.proto_file) |file| {
+                  const file_desc = try protobuf.descriptor.FileDescriptorProto.parse(allocator, file);
+                  const zig_file = try protobuf.codegen.generateZigFile(allocator, file_desc);
+                  try response.file.append(.{
+                      .name = try std.fmt.allocPrint(allocator, "{s}.zig", .{file_desc.name}),
+                      .content = zig_file.content,
+                  });
+              }
+
+              try response.writeToStdout();
           }
-          unzip -q protoc-gen-grpc-zig.zip
-          sudo mv protoc-gen-grpc-zig /usr/local/bin/
+          EOF
+          zig build
+          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
+          cd $GITHUB_WORKSPACE
+          # Build protoc-gen-grpc-zig locally
+          mkdir -p /tmp/protoc-gen-grpc-zig
+          cd /tmp/protoc-gen-grpc-zig
+          cat > build.zig << 'EOF'
+          const std = @import("std");
+
+          pub fn build(b: *std.Build) void {
+              const target = b.standardTargetOptions(.{});
+              const optimize = b.standardOptimizeOption(.{});
+
+              const exe = b.addExecutable(.{
+                  .name = "protoc-gen-grpc-zig",
+                  .root_source_file = .{ .path = "src/main.zig" },
+                  .target = target,
+                  .optimize = optimize,
+              });
+
+              b.installArtifact(exe);
+          }
+          EOF
+          mkdir -p src
+          cat > src/main.zig << 'EOF'
+          const std = @import("std");
+          const protobuf = @import("protobuf");
+
+          pub fn main() !void {
+              var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+              defer arena.deinit();
+              const allocator = arena.allocator();
+
+              var args = try std.process.argsWithAllocator(allocator);
+              _ = args.skip(); // Skip program name
+
+              const request = try protobuf.plugin.Request.parseFromStdin(allocator);
+              const response = try protobuf.plugin.Response.init(allocator);
+
+              for (request.proto_file) |file| {
+                  const file_desc = try protobuf.descriptor.FileDescriptorProto.parse(allocator, file);
+                  const grpc_file = try protobuf.codegen.generateGrpcFile(allocator, file_desc);
+                  try response.file.append(.{
+                      .name = try std.fmt.allocPrint(allocator, "{s}_grpc.zig", .{file_desc.name}),
+                      .content = grpc_file.content,
+                  });
+              }
+
+              try response.writeToStdout();
+          }
+          EOF
+          zig build
+          sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
+          cd $GITHUB_WORKSPACE
 
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
