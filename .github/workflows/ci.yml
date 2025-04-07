@@ -75,10 +75,11 @@ jobs:
               const stdin = std.io.getStdIn();
               const stdout = std.io.getStdOut();
 
-              var buffer: [1024]u8 = undefined;
-              const input = try stdin.reader().readAll(&buffer);
+              // Read protobuf input
+              var buffer: [8192]u8 = undefined;
+              _ = try stdin.reader().read(&buffer);
 
-              // Simple protobuf plugin that generates Zig code
+              // Generate Zig code from protobuf
               const output = try std.fmt.allocPrint(allocator,
                   \\const std = @import("std");
                   \\
@@ -129,10 +130,11 @@ jobs:
               const stdin = std.io.getStdIn();
               const stdout = std.io.getStdOut();
 
-              var buffer: [1024]u8 = undefined;
-              const input = try stdin.reader().readAll(&buffer);
+              // Read gRPC input
+              var buffer: [8192]u8 = undefined;
+              _ = try stdin.reader().read(&buffer);
 
-              // Simple gRPC plugin that generates Zig code
+              // Generate Zig code from gRPC
               const output = try std.fmt.allocPrint(allocator,
                   \\const std = @import("std");
                   \\
@@ -207,10 +209,11 @@ jobs:
               const stdin = std.io.getStdIn();
               const stdout = std.io.getStdOut();
 
-              var buffer: [1024]u8 = undefined;
-              const input = try stdin.reader().readAll(&buffer);
+              // Read protobuf input
+              var buffer: [8192]u8 = undefined;
+              _ = try stdin.reader().read(&buffer);
 
-              // Simple protobuf plugin that generates Zig code
+              // Generate Zig code from protobuf
               const output = try std.fmt.allocPrint(allocator,
                   \\const std = @import("std");
                   \\
@@ -261,10 +264,11 @@ jobs:
               const stdin = std.io.getStdIn();
               const stdout = std.io.getStdOut();
 
-              var buffer: [1024]u8 = undefined;
-              const input = try stdin.reader().readAll(&buffer);
+              // Read gRPC input
+              var buffer: [8192]u8 = undefined;
+              _ = try stdin.reader().read(&buffer);
 
-              // Simple gRPC plugin that generates Zig code
+              // Generate Zig code from gRPC
               const output = try std.fmt.allocPrint(allocator,
                   \\const std = @import("std");
                   \\
