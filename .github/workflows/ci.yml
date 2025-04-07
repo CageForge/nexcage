@@ -43,6 +43,18 @@ jobs:
           # Build protoc-gen-zig locally
           mkdir -p /tmp/protoc-gen-zig
           cd /tmp/protoc-gen-zig
+          cat > build.zig.zon << 'EOL'
+          .{
+              .name = "protoc-gen-zig",
+              .version = "0.1.0",
+              .dependencies = .{
+                  .protobuf = .{
+                      .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
+                      .hash = "12207e1c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+                  },
+              },
+          }
+          EOL
           cat > build.zig << 'EOF'
           const std = @import("std");
 
@@ -66,8 +78,25 @@ jobs:
               b.installArtifact(exe);
           }
           EOF
-          mkdir -p src
-          cat > src/main.zig << 'EOF'
+          zig build
+          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
+          cd $GITHUB_WORKSPACE
+          # Build protoc-gen-grpc-zig locally
+          mkdir -p /tmp/protoc-gen-grpc-zig
+          cd /tmp/protoc-gen-grpc-zig
+          cat > build.zig.zon << 'EOL'
+          .{
+              .name = "protoc-gen-grpc-zig",
+              .version = "0.1.0",
+              .dependencies = .{
+                  .protobuf = .{
+                      .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
+                      .hash = "12207e1c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+                  },
+              },
+          }
+          EOL
+          cat > build.zig << 'EOF'
           const std = @import("std");
           const protobuf = @import("protobuf");
 
@@ -88,63 +117,6 @@ jobs:
                   try response.file.append(.{
                       .name = try std.fmt.allocPrint(allocator, "{s}.zig", .{file_desc.name}),
                       .content = zig_file.content,
-                  });
-              }
-
-              try response.writeToStdout();
-          }
-          EOF
-          zig build
-          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
-          cd $GITHUB_WORKSPACE
-          # Build protoc-gen-grpc-zig locally
-          mkdir -p /tmp/protoc-gen-grpc-zig
-          cd /tmp/protoc-gen-grpc-zig
-          cat > build.zig << 'EOF'
-          const std = @import("std");
-
-          pub fn build(b: *std.Build) void {
-              const target = b.standardTargetOptions(.{});
-              const optimize = b.standardOptimizeOption(.{});
-
-              const protobuf = b.dependency("protobuf", .{
-                  .target = target,
-                  .optimize = optimize,
-              });
-
-              const exe = b.addExecutable(.{
-                  .name = "protoc-gen-grpc-zig",
-                  .root_source_file = .{ .path = "src/main.zig" },
-                  .target = target,
-                  .optimize = optimize,
-              });
-
-              exe.addModule("protobuf", protobuf.module("protobuf"));
-              b.installArtifact(exe);
-          }
-          EOF
-          mkdir -p src
-          cat > src/main.zig << 'EOF'
-          const std = @import("std");
-          const protobuf = @import("protobuf");
-
-          pub fn main() !void {
-              var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-              defer arena.deinit();
-              const allocator = arena.allocator();
-
-              var args = try std.process.argsWithAllocator(allocator);
-              _ = args.skip(); // Skip program name
-
-              const request = try protobuf.plugin.Request.parseFromStdin(allocator);
-              const response = try protobuf.plugin.Response.init(allocator);
-
-              for (request.proto_file) |file| {
-                  const file_desc = try protobuf.descriptor.FileDescriptorProto.parse(allocator, file);
-                  const grpc_file = try protobuf.codegen.generateGrpcFile(allocator, file_desc);
-                  try response.file.append(.{
-                      .name = try std.fmt.allocPrint(allocator, "{s}_grpc.zig", .{file_desc.name}),
-                      .content = grpc_file.content,
                   });
               }
 
@@ -181,6 +153,18 @@ jobs:
           # Build protoc-gen-zig locally
           mkdir -p /tmp/protoc-gen-zig
           cd /tmp/protoc-gen-zig
+          cat > build.zig.zon << 'EOL'
+          .{
+              .name = "protoc-gen-zig",
+              .version = "0.1.0",
+              .dependencies = .{
+                  .protobuf = .{
+                      .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
+                      .hash = "12207e1c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+                  },
+              },
+          }
+          EOL
           cat > build.zig << 'EOF'
           const std = @import("std");
 
@@ -204,65 +188,25 @@ jobs:
               b.installArtifact(exe);
           }
           EOF
-          mkdir -p src
-          cat > src/main.zig << 'EOF'
-          const std = @import("std");
-          const protobuf = @import("protobuf");
-
-          pub fn main() !void {
-              var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-              defer arena.deinit();
-              const allocator = arena.allocator();
-
-              var args = try std.process.argsWithAllocator(allocator);
-              _ = args.skip(); // Skip program name
-
-              const request = try protobuf.plugin.Request.parseFromStdin(allocator);
-              const response = try protobuf.plugin.Response.init(allocator);
-
-              for (request.proto_file) |file| {
-                  const file_desc = try protobuf.descriptor.FileDescriptorProto.parse(allocator, file);
-                  const zig_file = try protobuf.codegen.generateZigFile(allocator, file_desc);
-                  try response.file.append(.{
-                      .name = try std.fmt.allocPrint(allocator, "{s}.zig", .{file_desc.name}),
-                      .content = zig_file.content,
-                  });
-              }
-
-              try response.writeToStdout();
-          }
-          EOF
           zig build
           sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
           cd $GITHUB_WORKSPACE
           # Build protoc-gen-grpc-zig locally
           mkdir -p /tmp/protoc-gen-grpc-zig
           cd /tmp/protoc-gen-grpc-zig
-          cat > build.zig << 'EOF'
-          const std = @import("std");
-
-          pub fn build(b: *std.Build) void {
-              const target = b.standardTargetOptions(.{});
-              const optimize = b.standardOptimizeOption(.{});
-
-              const protobuf = b.dependency("protobuf", .{
-                  .target = target,
-                  .optimize = optimize,
-              });
-
-              const exe = b.addExecutable(.{
-                  .name = "protoc-gen-grpc-zig",
-                  .root_source_file = .{ .path = "src/main.zig" },
-                  .target = target,
-                  .optimize = optimize,
-              });
-
-              exe.addModule("protobuf", protobuf.module("protobuf"));
-              b.installArtifact(exe);
+          cat > build.zig.zon << 'EOL'
+          .{
+              .name = "protoc-gen-grpc-zig",
+              .version = "0.1.0",
+              .dependencies = .{
+                  .protobuf = .{
+                      .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
+                      .hash = "12207e1c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+                  },
+              },
           }
-          EOF
-          mkdir -p src
-          cat > src/main.zig << 'EOF'
+          EOL
+          cat > build.zig << 'EOF'
           const std = @import("std");
           const protobuf = @import("protobuf");
 
@@ -295,36 +239,6 @@ jobs:
 
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
-
-      - name: Create build.zig.zon for protoc-gen-zig
-        run: |
-          cat > /tmp/protoc-gen-zig/build.zig.zon << 'EOL'
-          .{
-              .name = "protoc-gen-zig",
-              .version = "0.1.0",
-              .dependencies = .{
-                  .protobuf = .{
-                      .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
-                      .hash = "12207e1c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
-                  },
-              },
-          }
-          EOL
-
-      - name: Create build.zig.zon for protoc-gen-grpc-zig
-        run: |
-          cat > /tmp/protoc-gen-grpc-zig/build.zig.zon << 'EOL'
-          .{
-              .name = "protoc-gen-grpc-zig",
-              .version = "0.1.0",
-              .dependencies = .{
-                  .protobuf = .{
-                      .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
-                      .hash = "12207e1c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
-                  },
-              },
-          }
-          EOL
 
       - name: Build binary
         run: zig build -Dtarget=x86_64-linux-gnu
