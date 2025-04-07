@@ -50,7 +50,7 @@ jobs:
               .dependencies = .{
                   .protobuf = .{
                       .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
-                      .hash = "1220000000000000000000000000000000000000000000000000000000000000000000",
+                      .hash = "122000000000000000000000000000000000000000000000000000000000000000",
                   },
               },
           }
@@ -91,7 +91,7 @@ jobs:
               .dependencies = .{
                   .protobuf = .{
                       .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
-                      .hash = "1220000000000000000000000000000000000000000000000000000000000000000000",
+                      .hash = "122000000000000000000000000000000000000000000000000000000000000000",
                   },
               },
           }
@@ -160,7 +160,7 @@ jobs:
               .dependencies = .{
                   .protobuf = .{
                       .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
-                      .hash = "1220000000000000000000000000000000000000000000000000000000000000000000",
+                      .hash = "122000000000000000000000000000000000000000000000000000000000000000",
                   },
               },
           }
@@ -201,7 +201,7 @@ jobs:
               .dependencies = .{
                   .protobuf = .{
                       .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
-                      .hash = "1220000000000000000000000000000000000000000000000000000000000000000000",
+                      .hash = "122000000000000000000000000000000000000000000000000000000000000000",
                   },
               },
           }
