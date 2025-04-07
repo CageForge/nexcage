@@ -6,11 +6,7 @@ pub fn build(b: *std.Build) void {
 
     // Create modules without dependencies first
     const proxmox_module = b.addModule("proxmox", .{
-        .root_source_file = .{ .cwd_relative = "src/proxmox_new.zig" },
-    });
-
-    const proxmox_fix_module = b.addModule("proxmox_fix", .{
-        .root_source_file = .{ .cwd_relative = "src/proxmox_fix.zig" },
+        .root_source_file = .{ .cwd_relative = "src/proxmox.zig" },
     });
 
     const config_module = b.addModule("config", .{
@@ -35,7 +31,6 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "proxmox", .module = proxmox_module },
             .{ .name = "types", .module = types_module },
-            .{ .name = "fix", .module = proxmox_fix_module },
         },
     });
 
@@ -128,7 +123,6 @@ pub fn build(b: *std.Build) void {
 
     // Add all modules as dependencies
     exe.root_module.addImport("proxmox", proxmox_module);
-    exe.root_module.addImport("proxmox_fix", proxmox_fix_module);
     exe.root_module.addImport("config", config_module);
     exe.root_module.addImport("logger", logger_module);
     exe.root_module.addImport("cri", cri_module);

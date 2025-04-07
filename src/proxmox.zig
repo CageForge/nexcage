@@ -4,40 +4,96 @@ const json = std.json;
 const mem = std.mem;
 const fmt = std.fmt;
 const Allocator = std.mem.Allocator;
-const proxmox_fix = @import("proxmox_fix");
+const time = std.time;
 
 pub const Client = struct {
     allocator: Allocator,
-    host: []const u8,
+    hosts: []const []const u8,
+    current_host_index: usize,
     port: u16,
     token: []const u8,
+    node: []const u8,
     client: http.Client,
-    base_url: []const u8,
+    base_urls: []const []const u8,
+    node_cache: NodeCache,
+
+    const NodeCache = struct {
+        nodes: []Node,
+        last_update: i64,
+        duration: u64,
+
+        pub fn init(allocator: Allocator, duration: u64) NodeCache {
+            _ = allocator; // Keep the parameter for future use
+            return NodeCache{
+                .nodes = &[_]Node{},
+                .last_update = 0,
+                .duration = duration,
+            };
+        }
+
+        pub fn deinit(self: *NodeCache) void {
+            self.nodes = &[_]Node{};
+        }
+
+        pub fn isExpired(self: *NodeCache) bool {
+            const now = time.timestamp();
+            return now - self.last_update > @as(i64, @intCast(self.duration));
+        }
+    };
+
+    const Node = struct {
+        name: []const u8,
+        status: []const u8,
+        type: []const u8,
+    };
 
     pub fn init(options: struct {
         allocator: Allocator,
-        host: []const u8,
+        hosts: []const []const u8,
         port: u16,
         token: []const u8,
+        node: []const u8,
+        node_cache_duration: u64,
     }) !Client {
-        const base_url = try fmt.allocPrint(options.allocator, "https://{s}:{d}/api2/json", .{
-            options.host,
-            options.port,
-        });
+        var base_urls = try options.allocator.alloc([]const u8, options.hosts.len);
+        errdefer options.allocator.free(base_urls);
+
+        for (options.hosts, 0..) |host, i| {
+            base_urls[i] = try fmt.allocPrint(options.allocator, "https://{s}:{d}/api2/json", .{
+                host,
+                options.port,
+            });
+        }
 
         return Client{
             .allocator = options.allocator,
-            .host = options.host,
+            .hosts = options.hosts,
+            .current_host_index = 0,
             .port = options.port,
             .token = options.token,
+            .node = options.node,
             .client = http.Client{ .allocator = options.allocator },
-            .base_url = base_url,
+            .base_urls = base_urls,
+            .node_cache = NodeCache.init(options.allocator, options.node_cache_duration),
         };
     }
 
     pub fn deinit(self: *Client) void {
-        self.allocator.free(self.base_url);
+        for (self.base_urls) |url| {
+            self.allocator.free(url);
+        }
+        self.allocator.free(self.base_urls);
         self.client.deinit();
+        self.node_cache.deinit();
+    }
+
+    fn tryNextHost(self: *Client) bool {
+        if (self.current_host_index + 1 >= self.hosts.len) {
+            self.current_host_index = 0;
+            return false;
+        }
+        self.current_host_index += 1;
+        return true;
     }
 
     fn makeRequest(
@@ -52,34 +108,120 @@ pub const Client = struct {
         try headers.append("Authorization", try fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
         try headers.append("Content-Type", "application/json");
 
-        var url = try fmt.allocPrint(self.allocator, "{s}{s}", .{ self.base_url, path });
-        defer self.allocator.free(url);
+        var last_error: ?error{ ProxmoxAPIError, ConnectionError } = null;
+        var attempts: usize = 0;
+        const max_attempts = self.hosts.len;
 
-        var req = try self.client.request(method, try std.Uri.parse(url), headers, .{});
-        defer req.deinit();
+        while (attempts < max_attempts) : (attempts += 1) {
+            const url = try fmt.allocPrint(self.allocator, "{s}{s}", .{ self.base_urls[self.current_host_index], path });
+            defer self.allocator.free(url);
 
-        if (body) |b| {
-            try req.start();
-            try req.writeAll(b);
-            try req.finish();
-        } else {
-            try req.start();
+            var req = self.client.request(method, try std.Uri.parse(url), headers, .{}) catch |err| {
+                last_error = err;
+                if (!self.tryNextHost()) break;
+                continue;
+            };
+            defer req.deinit();
+
+            if (body) |b| {
+                req.start() catch |err| {
+                    last_error = err;
+                    if (!self.tryNextHost()) break;
+                    continue;
+                };
+                req.writeAll(b) catch |err| {
+                    last_error = err;
+                    if (!self.tryNextHost()) break;
+                    continue;
+                };
+                req.finish() catch |err| {
+                    last_error = err;
+                    if (!self.tryNextHost()) break;
+                    continue;
+                };
+            } else {
+                req.start() catch |err| {
+                    last_error = err;
+                    if (!self.tryNextHost()) break;
+                    continue;
+                };
+            }
+
+            req.wait() catch |err| {
+                last_error = err;
+                if (!self.tryNextHost()) break;
+                continue;
+            };
+
+            const response_body = req.reader().readAllAlloc(self.allocator, 1024 * 1024) catch |err| {
+                last_error = err;
+                if (!self.tryNextHost()) break;
+                continue;
+            };
+            defer self.allocator.free(response_body);
+
+            const parsed = json.parseFromSlice(APIResponse, self.allocator, response_body, .{}) catch |err| {
+                last_error = err;
+                if (!self.tryNextHost()) break;
+                continue;
+            };
+
+            if (!parsed.value.success) {
+                last_error = error.ProxmoxAPIError;
+                if (!self.tryNextHost()) break;
+                continue;
+            }
+
+            return parsed.value;
         }
 
-        try req.wait();
+        if (last_error) |err| {
+            return err;
+        }
+        return error.AllHostsFailed;
+    }
 
-        const response_body = try req.reader().readAllAlloc(self.allocator, 1024 * 1024);
-        defer self.allocator.free(response_body);
+    pub fn getNodes(self: *Client) ![]Node {
+        if (!self.node_cache.isExpired()) {
+            return self.node_cache.nodes;
+        }
 
-        var parsed = try json.parseFromSlice(APIResponse, self.allocator, response_body, .{});
-        return parsed.value;
+        const path = "/cluster/resources";
+        const response = try self.makeRequest(.GET, path, null);
+        if (!response.success) {
+            return error.ProxmoxAPIError;
+        }
+
+        const resources = try json.parseFromValue([]Resource, self.allocator, response.data, .{});
+        defer self.allocator.free(resources.value);
+
+        var nodes = std.ArrayList(Node).init(self.allocator);
+        defer nodes.deinit();
+
+        for (resources.value) |resource| {
+            if (std.mem.eql(u8, resource.type, "node")) {
+                try nodes.append(Node{
+                    .name = try self.allocator.dupe(u8, resource.name),
+                    .status = try self.allocator.dupe(u8, resource.status),
+                    .type = try self.allocator.dupe(u8, resource.type),
+                });
+            }
+        }
+
+        self.node_cache.nodes = try nodes.toOwnedSlice();
+        self.node_cache.last_update = time.timestamp();
+
+        return self.node_cache.nodes;
     }
 
     pub fn createLXC(self: *Client, spec: LXCConfig) !LXCContainer {
         const body = try json.stringifyAlloc(self.allocator, spec, .{});
         defer self.allocator.free(body);
 
-        const response = try self.makeRequest(.POST, "/nodes/localhost/lxc", body);
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc", .{self.node});
+        defer self.allocator.free(path);
+
+        const response = try self.makeRequest(.POST, path, body);
         if (!response.success) {
             return error.ProxmoxAPIError;
         }
@@ -89,7 +231,7 @@ pub const Client = struct {
     }
 
     pub fn deleteLXC(self: *Client, vmid: u32) !void {
-        const path = try fmt.allocPrint(self.allocator, "/nodes/localhost/lxc/{d}", .{vmid});
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}", .{ self.node, vmid });
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.DELETE, path, null);
@@ -99,7 +241,7 @@ pub const Client = struct {
     }
 
     pub fn startLXC(self: *Client, vmid: u32) !void {
-        const path = try fmt.allocPrint(self.allocator, "/nodes/localhost/lxc/{d}/status/start", .{vmid});
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/status/start", .{ self.node, vmid });
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.POST, path, null);
@@ -109,7 +251,7 @@ pub const Client = struct {
     }
 
     pub fn stopLXC(self: *Client, vmid: u32) !void {
-        const path = try fmt.allocPrint(self.allocator, "/nodes/localhost/lxc/{d}/status/stop", .{vmid});
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/status/stop", .{ self.node, vmid });
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.POST, path, null);
@@ -119,7 +261,7 @@ pub const Client = struct {
     }
 
     pub fn getLXCStatus(self: *Client, vmid: u32) !LXCStatus {
-        const path = try fmt.allocPrint(self.allocator, "/nodes/localhost/lxc/{d}/status/current", .{vmid});
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/status/current", .{ self.node, vmid });
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.GET, path, null);
@@ -132,13 +274,26 @@ pub const Client = struct {
     }
 
     pub fn listLXCs(self: *Client) ![]LXCContainer {
-        const response = try self.makeRequest(.GET, "/nodes/localhost/lxc", null);
-        if (!response.success) {
-            return error.ProxmoxAPIError;
+        const nodes = try self.getNodes();
+        var all_containers = std.ArrayList(LXCContainer).init(self.allocator);
+        defer all_containers.deinit();
+
+        for (nodes) |node| {
+            const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc", .{node.name});
+            defer self.allocator.free(path);
+
+            const response = try self.makeRequest(.GET, path, null);
+            if (!response.success) {
+                continue;
+            }
+
+            const containers = try json.parseFromValue([]LXCContainer, self.allocator, response.data, .{});
+            defer self.allocator.free(containers.value);
+
+            try all_containers.appendSlice(containers.value);
         }
 
-        const containers = try json.parseFromValue([]LXCContainer, self.allocator, response.data, .{});
-        return containers.value;
+        return try all_containers.toOwnedSlice();
     }
 };
 
@@ -172,5 +327,15 @@ pub const LXCStatus = enum {
     unknown,
 };
 
+pub const Resource = struct {
+    name: []const u8,
+    status: []const u8,
+    type: []const u8,
+};
+
 // Proxmox API response types
-pub const APIResponse = proxmox_fix.APIResponse;
+pub const APIResponse = struct {
+    data: json.Value,
+    success: bool,
+    err_msg: ?[]const u8,
+};

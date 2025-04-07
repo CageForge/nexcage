@@ -13,9 +13,12 @@ pub const Config = struct {
         return Config{
             .allocator = allocator,
             .proxmox = ProxmoxConfig{
-                .host = "localhost",
+                .hosts = &[_][]const u8{"localhost"},
+                .current_host_index = 0,
                 .port = 8006,
                 .token = "",
+                .node = "localhost",
+                .node_cache_duration = 60, // Default 60 seconds
             },
             .runtime = RuntimeConfig{
                 .log_level = .info,
@@ -25,7 +28,6 @@ pub const Config = struct {
     }
 
     pub fn deinit(self: *Config) void {
-        self.allocator.free(self.proxmox.host);
         self.allocator.free(self.proxmox.token);
         self.allocator.free(self.runtime.socket_path);
     }
@@ -50,9 +52,18 @@ pub const Config = struct {
 
         // Parse Proxmox configuration
         if (root.object.get("proxmox")) |proxmox_obj| {
-            if (proxmox_obj.object.get("host")) |host| {
-                if (host == .string) {
-                    self.proxmox.host = try self.allocator.dupe(u8, host.string);
+            if (proxmox_obj.object.get("hosts")) |hosts| {
+                if (hosts == .array) {
+                    var host_list = std.ArrayList([]const u8).init(self.allocator);
+                    defer host_list.deinit();
+
+                    for (hosts.array.items) |host| {
+                        if (host == .string) {
+                            try host_list.append(try self.allocator.dupe(u8, host.string));
+                        }
+                    }
+
+                    self.proxmox.hosts = try host_list.toOwnedSlice();
                 }
             }
             if (proxmox_obj.object.get("port")) |port| {
@@ -63,6 +74,16 @@ pub const Config = struct {
             if (proxmox_obj.object.get("token")) |token| {
                 if (token == .string) {
                     self.proxmox.token = try self.allocator.dupe(u8, token.string);
+                }
+            }
+            if (proxmox_obj.object.get("node")) |node| {
+                if (node == .string) {
+                    self.proxmox.node = try self.allocator.dupe(u8, node.string);
+                }
+            }
+            if (proxmox_obj.object.get("node_cache_duration")) |duration| {
+                if (duration == .integer) {
+                    self.proxmox.node_cache_duration = @intCast(duration.integer);
                 }
             }
         }
@@ -84,9 +105,12 @@ pub const Config = struct {
 };
 
 pub const ProxmoxConfig = struct {
-    host: []const u8,
+    hosts: []const []const u8,
+    current_host_index: usize,
     port: u16,
     token: []const u8,
+    node: []const u8,
+    node_cache_duration: u64, // Cache duration in seconds
 };
 
 pub const RuntimeConfig = struct {

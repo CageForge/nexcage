@@ -18,6 +18,7 @@ const SIGTERM = 15;
 var shutdown_requested: bool = false;
 var last_signal: c_int = 0;
 var logger_instance: logger.Logger = undefined;
+var proxmox_client: proxmox.Client = undefined;
 
 fn signalHandler(sig: c_int) callconv(.C) void {
     shutdown_requested = true;
@@ -59,10 +60,28 @@ pub fn main() !void {
     var cfg = try config.Config.init(allocator);
     defer cfg.deinit();
 
+    // Load configuration from file
+    const config_path = try getConfigPath(allocator);
+    defer allocator.free(config_path);
+    try cfg.loadFromFile(config_path);
+
     // Initialize logger
     logger_instance = try logger.Logger.init(allocator, cfg.runtime.log_level, std.io.getStdOut().writer());
 
     try logger_instance.info("Starting Proxmox LXCRI...", .{});
+
+    // Initialize Proxmox client
+    proxmox_client = try proxmox.Client.init(.{
+        .allocator = allocator,
+        .hosts = cfg.proxmox.hosts,
+        .port = cfg.proxmox.port,
+        .token = cfg.proxmox.token,
+        .node = cfg.proxmox.node,
+        .node_cache_duration = cfg.proxmox.node_cache_duration,
+    });
+    defer proxmox_client.deinit();
+
+    try logger_instance.info("Connected to Proxmox API at {s}:{}", .{ cfg.proxmox.hosts[0], cfg.proxmox.port });
 
     try waitForShutdown();
 }
