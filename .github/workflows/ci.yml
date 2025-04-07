@@ -77,7 +77,7 @@ jobs:
 
               // Read protobuf input
               var buffer: [8192]u8 = undefined;
-              const input = try stdin.reader().read(&buffer);
+              _ = try stdin.reader().read(&buffer);
 
               // Generate Zig code
               const output = try std.fmt.allocPrint(allocator,
@@ -133,7 +133,7 @@ jobs:
 
               // Read gRPC input
               var buffer: [8192]u8 = undefined;
-              const input = try stdin.reader().read(&buffer);
+              _ = try stdin.reader().read(&buffer);
 
               // Generate gRPC code
               const output = try std.fmt.allocPrint(allocator,
@@ -213,7 +213,7 @@ jobs:
 
               // Read protobuf input
               var buffer: [8192]u8 = undefined;
-              const input = try stdin.reader().read(&buffer);
+              _ = try stdin.reader().read(&buffer);
 
               // Generate Zig code
               const output = try std.fmt.allocPrint(allocator,
@@ -269,7 +269,7 @@ jobs:
 
               // Read gRPC input
               var buffer: [8192]u8 = undefined;
-              const input = try stdin.reader().read(&buffer);
+              _ = try stdin.reader().read(&buffer);
 
               // Generate gRPC code
               const output = try std.fmt.allocPrint(allocator,
