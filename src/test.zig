@@ -134,4 +134,4 @@ test "error handling" {
 
 fn loadNonExistentConfig() !void {
     return error.ConfigNotFound;
-} 
+}
