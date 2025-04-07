@@ -41,15 +41,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip
           # Download and build Zig protobuf plugins
-          wget https://github.com/zig-protobuf/protoc-gen-zig/archive/refs/heads/main.zip
-          unzip main.zip
-          cd protoc-gen-zig-main
+          wget -q --show-progress https://github.com/zig-protobuf/protoc-gen-zig/archive/master.zip || {
+            echo "Failed to download protoc-gen-zig"
+            exit 1
+          }
+          unzip -q master.zip
+          cd protoc-gen-zig-master
           zig build
           sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
           cd ..
-          wget https://github.com/zig-protobuf/protoc-gen-grpc-zig/archive/refs/heads/main.zip
-          unzip main.zip
-          cd protoc-gen-grpc-zig-main
+          wget -q --show-progress https://github.com/zig-protobuf/protoc-gen-grpc-zig/archive/master.zip || {
+            echo "Failed to download protoc-gen-grpc-zig"
+            exit 1
+          }
+          unzip -q master.zip
+          cd protoc-gen-grpc-zig-master
           zig build
           sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
           cd ..
@@ -78,15 +84,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip
           # Download and build Zig protobuf plugins
-          wget https://github.com/zig-protobuf/protoc-gen-zig/archive/refs/heads/main.zip
-          unzip main.zip
-          cd protoc-gen-zig-main
+          wget -q --show-progress https://github.com/zig-protobuf/protoc-gen-zig/archive/master.zip || {
+            echo "Failed to download protoc-gen-zig"
+            exit 1
+          }
+          unzip -q master.zip
+          cd protoc-gen-zig-master
           zig build
           sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
           cd ..
-          wget https://github.com/zig-protobuf/protoc-gen-grpc-zig/archive/refs/heads/main.zip
-          unzip main.zip
-          cd protoc-gen-grpc-zig-main
+          wget -q --show-progress https://github.com/zig-protobuf/protoc-gen-grpc-zig/archive/master.zip || {
+            echo "Failed to download protoc-gen-grpc-zig"
+            exit 1
+          }
+          unzip -q master.zip
+          cd protoc-gen-grpc-zig-master
           zig build
           sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
           cd ..
