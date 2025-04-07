@@ -50,6 +50,11 @@ jobs:
               const target = b.standardTargetOptions(.{});
               const optimize = b.standardOptimizeOption(.{});
 
+              const protobuf = b.dependency("protobuf", .{
+                  .target = target,
+                  .optimize = optimize,
+              });
+
               const exe = b.addExecutable(.{
                   .name = "protoc-gen-zig",
                   .root_source_file = .{ .path = "src/main.zig" },
@@ -57,6 +62,7 @@ jobs:
                   .optimize = optimize,
               });
 
+              exe.addModule("protobuf", protobuf.module("protobuf"));
               b.installArtifact(exe);
           }
           EOF
@@ -101,6 +107,11 @@ jobs:
               const target = b.standardTargetOptions(.{});
               const optimize = b.standardOptimizeOption(.{});
 
+              const protobuf = b.dependency("protobuf", .{
+                  .target = target,
+                  .optimize = optimize,
+              });
+
               const exe = b.addExecutable(.{
                   .name = "protoc-gen-grpc-zig",
                   .root_source_file = .{ .path = "src/main.zig" },
@@ -108,6 +119,7 @@ jobs:
                   .optimize = optimize,
               });
 
+              exe.addModule("protobuf", protobuf.module("protobuf"));
               b.installArtifact(exe);
           }
           EOF
@@ -176,6 +188,11 @@ jobs:
               const target = b.standardTargetOptions(.{});
               const optimize = b.standardOptimizeOption(.{});
 
+              const protobuf = b.dependency("protobuf", .{
+                  .target = target,
+                  .optimize = optimize,
+              });
+
               const exe = b.addExecutable(.{
                   .name = "protoc-gen-zig",
                   .root_source_file = .{ .path = "src/main.zig" },
@@ -183,6 +200,7 @@ jobs:
                   .optimize = optimize,
               });
 
+              exe.addModule("protobuf", protobuf.module("protobuf"));
               b.installArtifact(exe);
           }
           EOF
@@ -227,6 +245,11 @@ jobs:
               const target = b.standardTargetOptions(.{});
               const optimize = b.standardOptimizeOption(.{});
 
+              const protobuf = b.dependency("protobuf", .{
+                  .target = target,
+                  .optimize = optimize,
+              });
+
               const exe = b.addExecutable(.{
                   .name = "protoc-gen-grpc-zig",
                   .root_source_file = .{ .path = "src/main.zig" },
@@ -234,6 +257,7 @@ jobs:
                   .optimize = optimize,
               });
 
+              exe.addModule("protobuf", protobuf.module("protobuf"));
               b.installArtifact(exe);
           }
           EOF
