@@ -296,6 +296,36 @@ jobs:
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
 
+      - name: Create build.zig.zon for protoc-gen-zig
+        run: |
+          cat > /tmp/protoc-gen-zig/build.zig.zon << 'EOL'
+          .{
+              .name = "protoc-gen-zig",
+              .version = "0.1.0",
+              .dependencies = .{
+                  .protobuf = .{
+                      .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
+                      .hash = "12207e1c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+                  },
+              },
+          }
+          EOL
+
+      - name: Create build.zig.zon for protoc-gen-grpc-zig
+        run: |
+          cat > /tmp/protoc-gen-grpc-zig/build.zig.zon << 'EOL'
+          .{
+              .name = "protoc-gen-grpc-zig",
+              .version = "0.1.0",
+              .dependencies = .{
+                  .protobuf = .{
+                      .url = "https://github.com/zig-protobuf/protobuf/archive/refs/heads/main.tar.gz",
+                      .hash = "12207e1c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+                  },
+              },
+          }
+          EOL
+
       - name: Build binary
         run: zig build -Dtarget=x86_64-linux-gnu
 
