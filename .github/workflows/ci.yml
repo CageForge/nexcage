@@ -39,11 +39,18 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev
-          # Install Zig protobuf plugins
-          go install github.com/zig-protobuf/protoc-gen-zig@latest
-          go install github.com/zig-protobuf/protoc-gen-grpc-zig@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
+          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git
+          # Clone and build Zig protobuf plugins
+          git clone https://github.com/zig-protobuf/protoc-gen-zig.git
+          cd protoc-gen-zig
+          zig build
+          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
+          cd ..
+          git clone https://github.com/zig-protobuf/protoc-gen-grpc-zig.git
+          cd protoc-gen-grpc-zig
+          zig build
+          sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
+          cd ..
 
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
@@ -67,11 +74,18 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev
-          # Install Zig protobuf plugins
-          go install github.com/zig-protobuf/protoc-gen-zig@latest
-          go install github.com/zig-protobuf/protoc-gen-grpc-zig@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
+          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git
+          # Clone and build Zig protobuf plugins
+          git clone https://github.com/zig-protobuf/protoc-gen-zig.git
+          cd protoc-gen-zig
+          zig build
+          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
+          cd ..
+          git clone https://github.com/zig-protobuf/protoc-gen-grpc-zig.git
+          cd protoc-gen-grpc-zig
+          zig build
+          sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
+          cd ..
 
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
