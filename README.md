@@ -9,6 +9,8 @@ A Container Runtime Interface (CRI) implementation for Proxmox LXC containers. T
 - Configuration management
 - Logging system
 - Proxmox VE API integration
+- Multi-host support with automatic failover
+- Node caching to reduce API calls
 
 ## Requirements
 
@@ -49,12 +51,11 @@ Example configuration:
 ```json
 {
     "proxmox": {
-        "host": "localhost",
+        "hosts": ["host1.example.com", "host2.example.com", "host3.example.com"],
         "port": 8006,
         "token": "YOUR-API-TOKEN",
-        "node": "localhost",
-        "storage": "local-lvm",
-        "network_bridge": "vmbr0"
+        "node": "your-node",
+        "node_cache_duration": 60
     },
     "runtime": {
         "socket_path": "/var/run/proxmox-lxcri.sock",
@@ -98,6 +99,17 @@ The project consists of several key components:
 4. **Proxmox Client**: Communicates with Proxmox VE API
 5. **Configuration System**: Manages service configuration
 6. **Logging System**: Handles logging and debugging
+
+## CI/CD and Releases
+
+This project uses GitHub Actions for continuous integration and deployment:
+
+- **Linting**: Code formatting is checked using `zig fmt`
+- **Testing**: Unit tests are run using `zig test`
+- **Building**: AMD64 binaries are built for Linux
+- **Releases**: Automated release process with GitHub Releases
+
+For more information about the release process, see [RELEASE.md](RELEASE.md).
 
 ## Contributing
 
