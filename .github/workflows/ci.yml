@@ -39,26 +39,24 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip
+          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip jq
           # Download and build Zig protobuf plugins
-          wget -q --show-progress https://github.com/zig-protobuf/protoc-gen-zig/archive/refs/heads/main.zip || {
+          # Get latest release of protoc-gen-zig
+          RELEASE_URL=$(curl -s https://api.github.com/repos/zig-protobuf/protoc-gen-zig/releases/latest | jq -r '.assets[0].browser_download_url')
+          wget -q --show-progress "$RELEASE_URL" -O protoc-gen-zig.zip || {
             echo "Failed to download protoc-gen-zig"
             exit 1
           }
-          unzip -q main.zip
-          cd protoc-gen-zig-main
-          zig build
-          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
-          cd ..
-          wget -q --show-progress https://github.com/zig-protobuf/protoc-gen-grpc-zig/archive/refs/heads/main.zip || {
+          unzip -q protoc-gen-zig.zip
+          sudo mv protoc-gen-zig /usr/local/bin/
+          # Get latest release of protoc-gen-grpc-zig
+          RELEASE_URL=$(curl -s https://api.github.com/repos/zig-protobuf/protoc-gen-grpc-zig/releases/latest | jq -r '.assets[0].browser_download_url')
+          wget -q --show-progress "$RELEASE_URL" -O protoc-gen-grpc-zig.zip || {
             echo "Failed to download protoc-gen-grpc-zig"
             exit 1
           }
-          unzip -q main.zip
-          cd protoc-gen-grpc-zig-main
-          zig build
-          sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
-          cd ..
+          unzip -q protoc-gen-grpc-zig.zip
+          sudo mv protoc-gen-grpc-zig /usr/local/bin/
 
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
@@ -82,26 +80,24 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip
+          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip jq
           # Download and build Zig protobuf plugins
-          wget -q --show-progress https://github.com/zig-protobuf/protoc-gen-zig/archive/refs/heads/main.zip || {
+          # Get latest release of protoc-gen-zig
+          RELEASE_URL=$(curl -s https://api.github.com/repos/zig-protobuf/protoc-gen-zig/releases/latest | jq -r '.assets[0].browser_download_url')
+          wget -q --show-progress "$RELEASE_URL" -O protoc-gen-zig.zip || {
             echo "Failed to download protoc-gen-zig"
             exit 1
           }
-          unzip -q main.zip
-          cd protoc-gen-zig-main
-          zig build
-          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
-          cd ..
-          wget -q --show-progress https://github.com/zig-protobuf/protoc-gen-grpc-zig/archive/refs/heads/main.zip || {
+          unzip -q protoc-gen-zig.zip
+          sudo mv protoc-gen-zig /usr/local/bin/
+          # Get latest release of protoc-gen-grpc-zig
+          RELEASE_URL=$(curl -s https://api.github.com/repos/zig-protobuf/protoc-gen-grpc-zig/releases/latest | jq -r '.assets[0].browser_download_url')
+          wget -q --show-progress "$RELEASE_URL" -O protoc-gen-grpc-zig.zip || {
             echo "Failed to download protoc-gen-grpc-zig"
             exit 1
           }
-          unzip -q main.zip
-          cd protoc-gen-grpc-zig-main
-          zig build
-          sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
-          cd ..
+          unzip -q protoc-gen-grpc-zig.zip
+          sudo mv protoc-gen-grpc-zig /usr/local/bin/
 
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
