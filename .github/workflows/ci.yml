@@ -79,12 +79,9 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Output protoc plugin format
+              // Output empty protoc plugin response
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
               , .{});
 
               try stdout.writeAll(output);
@@ -132,12 +129,9 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Output protoc plugin format
+              // Output empty protoc plugin response
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
               , .{});
 
               try stdout.writeAll(output);
@@ -209,12 +203,9 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Output protoc plugin format
+              // Output empty protoc plugin response
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
               , .{});
 
               try stdout.writeAll(output);
@@ -262,12 +253,9 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Output protoc plugin format
+              // Output empty protoc plugin response
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
               , .{});
 
               try stdout.writeAll(output);
