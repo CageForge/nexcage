@@ -39,15 +39,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git
-          # Clone and build Zig protobuf plugins
-          git clone https://github.com/zig-protobuf/protoc-gen-zig.git
-          cd protoc-gen-zig
+          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip
+          # Download and build Zig protobuf plugins
+          wget https://github.com/zig-protobuf/protoc-gen-zig/archive/refs/heads/main.zip
+          unzip main.zip
+          cd protoc-gen-zig-main
           zig build
           sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
           cd ..
-          git clone https://github.com/zig-protobuf/protoc-gen-grpc-zig.git
-          cd protoc-gen-grpc-zig
+          wget https://github.com/zig-protobuf/protoc-gen-grpc-zig/archive/refs/heads/main.zip
+          unzip main.zip
+          cd protoc-gen-grpc-zig-main
           zig build
           sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
           cd ..
@@ -74,15 +76,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git
-          # Clone and build Zig protobuf plugins
-          git clone https://github.com/zig-protobuf/protoc-gen-zig.git
-          cd protoc-gen-zig
+          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev git wget unzip
+          # Download and build Zig protobuf plugins
+          wget https://github.com/zig-protobuf/protoc-gen-zig/archive/refs/heads/main.zip
+          unzip main.zip
+          cd protoc-gen-zig-main
           zig build
           sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
           cd ..
-          git clone https://github.com/zig-protobuf/protoc-gen-grpc-zig.git
-          cd protoc-gen-grpc-zig
+          wget https://github.com/zig-protobuf/protoc-gen-grpc-zig/archive/refs/heads/main.zip
+          unzip main.zip
+          cd protoc-gen-grpc-zig-main
           zig build
           sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
           cd ..
