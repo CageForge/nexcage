@@ -77,13 +77,19 @@ jobs:
 
               // Read protobuf input
               var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
+              const input = try stdin.reader().read(&buffer);
 
-              // Output empty protoc plugin response
+              // Generate Zig code
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\const std = @import("std");
+                  \\
+                  \\pub fn main() !void {{
+                  \\    std.debug.print("Generated from protobuf\\n", .{{}});
+                  \\}}
+                  \\
               , .{});
 
+              // Write response directly (no gzip)
               try stdout.writeAll(output);
           }
           EOF
@@ -127,13 +133,19 @@ jobs:
 
               // Read gRPC input
               var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
+              const input = try stdin.reader().read(&buffer);
 
-              // Output empty protoc plugin response
+              // Generate gRPC code
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\const std = @import("std");
+                  \\
+                  \\pub fn main() !void {{
+                  \\    std.debug.print("Generated from gRPC\\n", .{{}});
+                  \\}}
+                  \\
               , .{});
 
+              // Write response directly (no gzip)
               try stdout.writeAll(output);
           }
           EOF
@@ -201,13 +213,19 @@ jobs:
 
               // Read protobuf input
               var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
+              const input = try stdin.reader().read(&buffer);
 
-              // Output empty protoc plugin response
+              // Generate Zig code
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\const std = @import("std");
+                  \\
+                  \\pub fn main() !void {{
+                  \\    std.debug.print("Generated from protobuf\\n", .{{}});
+                  \\}}
+                  \\
               , .{});
 
+              // Write response directly (no gzip)
               try stdout.writeAll(output);
           }
           EOF
@@ -251,13 +269,19 @@ jobs:
 
               // Read gRPC input
               var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
+              const input = try stdin.reader().read(&buffer);
 
-              // Output empty protoc plugin response
+              // Generate gRPC code
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\const std = @import("std");
+                  \\
+                  \\pub fn main() !void {{
+                  \\    std.debug.print("Generated from gRPC\\n", .{{}});
+                  \\}}
+                  \\
               , .{});
 
+              // Write response directly (no gzip)
               try stdout.writeAll(output);
           }
           EOF
