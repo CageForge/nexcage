@@ -79,19 +79,12 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate Zig code for protobuf messages
+              // Output empty gzipped protobuf response
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
               , .{});
 
-              // Write response directly (no gzip)
+              // Write response directly
               try stdout.writeAll(output);
           }
           EOF
@@ -137,19 +130,12 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate gRPC service code
+              // Output empty gzipped protobuf response
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
               , .{});
 
-              // Write response directly (no gzip)
+              // Write response directly
               try stdout.writeAll(output);
           }
           EOF
@@ -219,19 +205,12 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate Zig code for protobuf messages
+              // Output empty gzipped protobuf response
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
               , .{});
 
-              // Write response directly (no gzip)
+              // Write response directly
               try stdout.writeAll(output);
           }
           EOF
@@ -277,19 +256,12 @@ jobs:
               var buffer: [8192]u8 = undefined;
               _ = try stdin.reader().read(&buffer);
 
-              // Generate gRPC service code
+              // Output empty gzipped protobuf response
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03
-                  \\\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
               , .{});
 
-              // Write response directly (no gzip)
+              // Write response directly
               try stdout.writeAll(output);
           }
           EOF
