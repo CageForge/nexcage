@@ -50,6 +50,11 @@ jobs:
               const target = b.standardTargetOptions(.{});
               const optimize = b.standardOptimizeOption(.{});
 
+              const protobuf = b.dependency("protobuf", .{
+                  .target = target,
+                  .optimize = optimize,
+              });
+
               const exe = b.addExecutable(.{
                   .name = "protoc-gen-zig",
                   .root_source_file = .{ .path = "src/main.zig" },
@@ -57,6 +62,7 @@ jobs:
                   .optimize = optimize,
               });
 
+              exe.addModule("protobuf", protobuf.module("protobuf"));
               b.installArtifact(exe);
           }
           EOF
@@ -118,6 +124,11 @@ jobs:
               const target = b.standardTargetOptions(.{});
               const optimize = b.standardOptimizeOption(.{});
 
+              const protobuf = b.dependency("protobuf", .{
+                  .target = target,
+                  .optimize = optimize,
+              });
+
               const exe = b.addExecutable(.{
                   .name = "protoc-gen-grpc-zig",
                   .root_source_file = .{ .path = "src/main.zig" },
@@ -125,6 +136,7 @@ jobs:
                   .optimize = optimize,
               });
 
+              exe.addModule("protobuf", protobuf.module("protobuf"));
               b.installArtifact(exe);
           }
           EOF
@@ -216,6 +228,11 @@ jobs:
               const target = b.standardTargetOptions(.{});
               const optimize = b.standardOptimizeOption(.{});
 
+              const protobuf = b.dependency("protobuf", .{
+                  .target = target,
+                  .optimize = optimize,
+              });
+
               const exe = b.addExecutable(.{
                   .name = "protoc-gen-zig",
                   .root_source_file = .{ .path = "src/main.zig" },
@@ -223,6 +240,7 @@ jobs:
                   .optimize = optimize,
               });
 
+              exe.addModule("protobuf", protobuf.module("protobuf"));
               b.installArtifact(exe);
           }
           EOF
@@ -284,6 +302,11 @@ jobs:
               const target = b.standardTargetOptions(.{});
               const optimize = b.standardOptimizeOption(.{});
 
+              const protobuf = b.dependency("protobuf", .{
+                  .target = target,
+                  .optimize = optimize,
+              });
+
               const exe = b.addExecutable(.{
                   .name = "protoc-gen-grpc-zig",
                   .root_source_file = .{ .path = "src/main.zig" },
@@ -291,6 +314,7 @@ jobs:
                   .optimize = optimize,
               });
 
+              exe.addModule("protobuf", protobuf.module("protobuf"));
               b.installArtifact(exe);
           }
           EOF
@@ -389,4 +413,33 @@ jobs:
         with:
           files: proxmox-lxcri-linux-amd64.tar.gz
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          cd /tmp/protoc-gen-zig
+          cat > build.zig.zon << 'EOF'
+          .{
+              .name = "protoc-gen-zig",
+              .version = "0.1.0",
+              .dependencies = .{
+                  .protobuf = .{
+                      .url = "https://github.com/kubebsd/zig-protobuf/archive/main.tar.gz",
+                      .hash = "1220f6f3b857f2e8d0e0f7e2c0c4d2c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+                  },
+              },
+          }
+          EOF
+          cd $GITHUB_WORKSPACE
+          cd /tmp/protoc-gen-grpc-zig
+          cat > build.zig.zon << 'EOF'
+          .{
+              .name = "protoc-gen-grpc-zig",
+              .version = "0.1.0",
+              .dependencies = .{
+                  .protobuf = .{
+                      .url = "https://github.com/kubebsd/zig-protobuf/archive/main.tar.gz",
+                      .hash = "1220f6f3b857f2e8d0e0f7e2c0c4d2c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+                  },
+              },
+          }
+          EOF
+          cd $GITHUB_WORKSPACE 
