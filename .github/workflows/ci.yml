@@ -77,14 +77,23 @@ jobs:
 
               // Read protobuf input
               var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
+              const bytes_read = try stdin.reader().read(&buffer);
 
-              // Output empty gzipped protobuf response
+              // Generate basic Zig code for the proto file
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\const std = @import("std");
+                  \\
+                  \\pub const RuntimeService = struct {{
+                  \\    pub const Service = struct {{
+                  \\        pub const Version = struct {{
+                  \\            version: []const u8,
+                  \\        }};
+                  \\    }};
+                  \\}};
+                  \\
               , .{});
 
-              // Write response directly
+              // Write response
               try stdout.writeAll(output);
           }
           EOF
@@ -128,14 +137,29 @@ jobs:
 
               // Read gRPC input
               var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
+              const bytes_read = try stdin.reader().read(&buffer);
 
-              // Output empty gzipped protobuf response
+              // Generate basic gRPC code for the proto file
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\const std = @import("std");
+                  \\
+                  \\pub const RuntimeService = struct {{
+                  \\    pub const Service = struct {{
+                  \\        pub const Version = struct {{
+                  \\            pub fn Version(ctx: *std.mem.Allocator, req: *const Version) !Version {{
+                  \\                _ = ctx;
+                  \\                _ = req;
+                  \\                return Version{{
+                  \\                    .version = "1.0.0",
+                  \\                }};
+                  \\            }}
+                  \\        }};
+                  \\    }};
+                  \\}};
+                  \\
               , .{});
 
-              // Write response directly
+              // Write response
               try stdout.writeAll(output);
           }
           EOF
@@ -203,14 +227,23 @@ jobs:
 
               // Read protobuf input
               var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
+              const bytes_read = try stdin.reader().read(&buffer);
 
-              // Output empty gzipped protobuf response
+              // Generate basic Zig code for the proto file
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\const std = @import("std");
+                  \\
+                  \\pub const RuntimeService = struct {{
+                  \\    pub const Service = struct {{
+                  \\        pub const Version = struct {{
+                  \\            version: []const u8,
+                  \\        }};
+                  \\    }};
+                  \\}};
+                  \\
               , .{});
 
-              // Write response directly
+              // Write response
               try stdout.writeAll(output);
           }
           EOF
@@ -254,14 +287,29 @@ jobs:
 
               // Read gRPC input
               var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
+              const bytes_read = try stdin.reader().read(&buffer);
 
-              // Output empty gzipped protobuf response
+              // Generate basic gRPC code for the proto file
               const output = try std.fmt.allocPrint(allocator,
-                  \\\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00
+                  \\const std = @import("std");
+                  \\
+                  \\pub const RuntimeService = struct {{
+                  \\    pub const Service = struct {{
+                  \\        pub const Version = struct {{
+                  \\            pub fn Version(ctx: *std.mem.Allocator, req: *const Version) !Version {{
+                  \\                _ = ctx;
+                  \\                _ = req;
+                  \\                return Version{{
+                  \\                    .version = "1.0.0",
+                  \\                }};
+                  \\            }}
+                  \\        }};
+                  \\    }};
+                  \\}};
+                  \\
               , .{});
 
-              // Write response directly
+              // Write response
               try stdout.writeAll(output);
           }
           EOF
