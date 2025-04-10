@@ -4,6 +4,7 @@ const Logger = @import("logger.zig").Logger;
 pub const Error = error{
     // Configuration errors
     ConfigNotFound,
+    ConfigInvalid,
     InvalidConfig,
     InvalidToken,
 
@@ -34,12 +35,16 @@ pub const Error = error{
     FileSystemError,
     PermissionDenied,
     NetworkError,
+
+    // New error type
+    ClusterUnhealthy,
 };
 
 pub fn handleError(err: Error, logger: *Logger) void {
     switch (err) {
         // Configuration errors
         error.ConfigNotFound => logger.err("Configuration file not found", .{}),
+        error.ConfigInvalid => logger.err("Invalid configuration", .{}),
         error.InvalidConfig => logger.err("Invalid configuration", .{}),
         error.InvalidToken => logger.err("Invalid Proxmox API token", .{}),
 
@@ -70,5 +75,17 @@ pub fn handleError(err: Error, logger: *Logger) void {
         error.FileSystemError => logger.err("File system error", .{}),
         error.PermissionDenied => logger.err("Permission denied", .{}),
         error.NetworkError => logger.err("Network error", .{}),
+
+        // New error type
+        error.ClusterUnhealthy => logger.err("Cluster unhealthy", .{}),
+    }
+}
+
+pub fn logError(logger: anytype, err: Error) void {
+    switch (err) {
+        error.ConfigNotFound => logger.err("Configuration file not found", .{}),
+        error.ConfigInvalid => logger.err("Invalid configuration", .{}),
+        error.ProxmoxOperationFailed => logger.err("Proxmox operation failed", .{}),
+        error.ClusterUnhealthy => logger.err("Cluster unhealthy", .{}),
     }
 }

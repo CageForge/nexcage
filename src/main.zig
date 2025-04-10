@@ -81,6 +81,27 @@ pub fn main() !void {
     });
     defer proxmox_client.deinit();
 
+    // Verify cluster connection and status
+    const nodes = proxmox_client.getNodes() catch |err| {
+        try logger_instance.err("Failed to connect to Proxmox cluster: {}", .{err});
+        return err;
+    };
+    defer allocator.free(nodes);
+
+    var cluster_healthy = false;
+    for (nodes) |node| {
+        if (std.mem.eql(u8, node.status, "online")) {
+            cluster_healthy = true;
+            break;
+        }
+    }
+
+    if (!cluster_healthy) {
+        try logger_instance.err("No healthy nodes found in the cluster. Service cannot start.", .{});
+        return error.ClusterUnhealthy;
+    }
+
+    try logger_instance.info("Successfully connected to Proxmox cluster. Found {} nodes.", .{nodes.len});
     try logger_instance.info("Connected to Proxmox API at {s}:{}", .{ cfg.proxmox.hosts[0], cfg.proxmox.port });
 
     try waitForShutdown();

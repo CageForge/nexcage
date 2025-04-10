@@ -1,10 +1,12 @@
 const std = @import("std");
 const http = std.http;
+const protocol = std.http.protocol;
 const json = std.json;
 const mem = std.mem;
 const fmt = std.fmt;
 const Allocator = std.mem.Allocator;
 const time = std.time;
+const net = std.net;
 
 pub const Client = struct {
     allocator: Allocator,
@@ -98,16 +100,10 @@ pub const Client = struct {
 
     fn makeRequest(
         self: *Client,
-        method: http.Method,
+        method: std.http.Method,
         path: []const u8,
         body: ?[]const u8,
     ) !APIResponse {
-        var headers = http.Headers{ .allocator = self.allocator };
-        defer headers.deinit();
-
-        try headers.append("Authorization", try fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
-        try headers.append("Content-Type", "application/json");
-
         var last_error: ?error{ ProxmoxAPIError, ConnectionError } = null;
         var attempts: usize = 0;
         const max_attempts = self.hosts.len;
@@ -116,48 +112,26 @@ pub const Client = struct {
             const url = try fmt.allocPrint(self.allocator, "{s}{s}", .{ self.base_urls[self.current_host_index], path });
             defer self.allocator.free(url);
 
-            var req = self.client.request(method, try std.Uri.parse(url), headers, .{}) catch |err| {
-                last_error = err;
-                if (!self.tryNextHost()) break;
-                continue;
-            };
+            const uri = try std.Uri.parse(url);
+
+            var header_map = std.StringHashMap([]const u8).init(self.allocator);
+            defer header_map.deinit();
+            try header_map.put("Authorization", try fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
+            try header_map.put("Content-Type", "application/json");
+
+            var req = try self.client.open(method, uri, header_map, .{});
             defer req.deinit();
 
             if (body) |b| {
-                req.start() catch |err| {
-                    last_error = err;
-                    if (!self.tryNextHost()) break;
-                    continue;
-                };
-                req.writeAll(b) catch |err| {
-                    last_error = err;
-                    if (!self.tryNextHost()) break;
-                    continue;
-                };
-                req.finish() catch |err| {
-                    last_error = err;
-                    if (!self.tryNextHost()) break;
-                    continue;
-                };
+                try req.writeAll(b);
+                try req.finish();
             } else {
-                req.start() catch |err| {
-                    last_error = err;
-                    if (!self.tryNextHost()) break;
-                    continue;
-                };
+                try req.finish();
             }
 
-            req.wait() catch |err| {
-                last_error = err;
-                if (!self.tryNextHost()) break;
-                continue;
-            };
+            try req.wait();
 
-            const response_body = req.reader().readAllAlloc(self.allocator, 1024 * 1024) catch |err| {
-                last_error = err;
-                if (!self.tryNextHost()) break;
-                continue;
-            };
+            const response_body = try req.reader().readAllAlloc(self.allocator, 1024 * 1024);
             defer self.allocator.free(response_body);
 
             const parsed = json.parseFromSlice(APIResponse, self.allocator, response_body, .{}) catch |err| {
