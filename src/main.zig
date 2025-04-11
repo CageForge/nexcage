@@ -11,6 +11,14 @@ const builtin = @import("builtin");
 const log = std.log;
 const proxmox = @import("proxmox");
 const Error = @import("error.zig").Error;
+const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
+const StringHashMap = std.StringHashMap;
+const json = std.json;
+const http = std.http;
+const Uri = std.Uri;
+const Client = http.Client;
+const Headers = http.Headers;
 
 const SIGINT = 2;
 const SIGTERM = 15;
@@ -56,55 +64,52 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // Initialize configuration
-    var cfg = try config.Config.init(allocator);
-    defer cfg.deinit();
+    var client = std.http.Client{ .allocator = allocator };
+    defer client.deinit();
 
-    // Load configuration from file
-    const config_path = try getConfigPath(allocator);
-    defer allocator.free(config_path);
-    try cfg.loadFromFile(config_path);
+    const uri = try Uri.parse("https://api.github.com/repos/ziglang/zig/releases/latest");
 
-    // Initialize logger
-    logger_instance = try logger.Logger.init(allocator, cfg.runtime.log_level, std.io.getStdOut().writer());
+    const server_header_buffer = try allocator.alloc(u8, 4096);
+    defer allocator.free(server_header_buffer);
 
-    try logger_instance.info("Starting Proxmox LXCRI...", .{});
-
-    // Initialize Proxmox client
-    proxmox_client = try proxmox.Client.init(.{
-        .allocator = allocator,
-        .hosts = cfg.proxmox.hosts,
-        .port = cfg.proxmox.port,
-        .token = cfg.proxmox.token,
-        .node = cfg.proxmox.node,
-        .node_cache_duration = cfg.proxmox.node_cache_duration,
+    var req = try client.open(.GET, uri, .{
+        .server_header_buffer = server_header_buffer,
     });
-    defer proxmox_client.deinit();
+    defer req.deinit();
 
-    // Verify cluster connection and status
-    const nodes = proxmox_client.getNodes() catch |err| {
-        try logger_instance.err("Failed to connect to Proxmox cluster: {}", .{err});
-        return err;
+    req.headers.user_agent = .{ .override = "zig-http-client" };
+    req.headers.accept_encoding = .{ .override = "application/vnd.github.v3+json" };
+
+    try req.send();
+    try req.wait();
+
+    if (req.response.status != .ok) {
+        std.debug.print("HTTP request failed with status: {}\n", .{req.response.status});
+        return;
+    }
+
+    const body = try req.reader().readAllAlloc(allocator, 1024 * 1024);
+    defer allocator.free(body);
+
+    const parsed = try json.parseFromSlice(json.Value, allocator, body, .{});
+    defer parsed.deinit();
+
+    if (parsed.value != .object) {
+        std.debug.print("Expected JSON object\n", .{});
+        return;
+    }
+
+    const tag_name = parsed.value.object.get("tag_name") orelse {
+        std.debug.print("No tag_name found in response\n", .{});
+        return;
     };
-    defer allocator.free(nodes);
 
-    var cluster_healthy = false;
-    for (nodes) |node| {
-        if (std.mem.eql(u8, node.status, "online")) {
-            cluster_healthy = true;
-            break;
-        }
+    if (tag_name != .string) {
+        std.debug.print("Expected tag_name to be a string\n", .{});
+        return;
     }
 
-    if (!cluster_healthy) {
-        try logger_instance.err("No healthy nodes found in the cluster. Service cannot start.", .{});
-        return error.ClusterUnhealthy;
-    }
-
-    try logger_instance.info("Successfully connected to Proxmox cluster. Found {} nodes.", .{nodes.len});
-    try logger_instance.info("Connected to Proxmox API at {s}:{}", .{ cfg.proxmox.hosts[0], cfg.proxmox.port });
-
-    try waitForShutdown();
+    std.debug.print("Latest Zig version: {s}\n", .{tag_name.string});
 }
 
 fn getConfigPath(allocator: std.mem.Allocator) ![]const u8 {

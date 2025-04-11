@@ -112,33 +112,36 @@ pub const Client = struct {
             const url = try fmt.allocPrint(self.allocator, "{s}{s}", .{ self.base_urls[self.current_host_index], path });
             defer self.allocator.free(url);
 
-            const uri = try std.Uri.parse(url);
+            const server_header_buffer = try self.allocator.alloc(u8, 4096);
+            defer self.allocator.free(server_header_buffer);
 
-            var header_map = std.StringHashMap([]const u8).init(self.allocator);
-            defer header_map.deinit();
-            try header_map.put("Authorization", try fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
-            try header_map.put("Content-Type", "application/json");
-
-            var req = try self.client.open(method, uri, header_map, .{});
+            var req = try self.client.open(method, try std.Uri.parse(url), .{
+                .server_header_buffer = server_header_buffer,
+            });
             defer req.deinit();
+
+            try req.headers.append("Authorization", try fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
+            try req.headers.append("Content-Type", "application/json");
 
             if (body) |b| {
                 try req.writeAll(b);
-                try req.finish();
-            } else {
-                try req.finish();
             }
 
+            try req.send();
             try req.wait();
+
+            const status = req.response.status;
+            if (status != .ok) {
+                last_error = error.ProxmoxAPIError;
+                if (!self.tryNextHost()) break;
+                continue;
+            }
 
             const response_body = try req.reader().readAllAlloc(self.allocator, 1024 * 1024);
             defer self.allocator.free(response_body);
 
-            const parsed = json.parseFromSlice(APIResponse, self.allocator, response_body, .{}) catch |err| {
-                last_error = err;
-                if (!self.tryNextHost()) break;
-                continue;
-            };
+            const parsed = try json.parseFromSlice(APIResponse, self.allocator, response_body, .{});
+            defer parsed.deinit();
 
             if (!parsed.value.success) {
                 last_error = error.ProxmoxAPIError;
