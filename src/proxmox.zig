@@ -8,7 +8,7 @@ const types = @import("types");
 const fs = std.fs;
 const builtin = @import("builtin");
 const log = std.log;
-const Error = @import("error").Error;
+const Error = @import("error");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
@@ -21,7 +21,12 @@ const fmt = std.fmt;
 const time = std.time;
 const net = std.net;
 const logger = logger_mod.Logger;
-const Headers = std.http.protocol.Headers;
+const Headers = http.Headers;
+const HeaderIterator = http.HeaderIterator;
+
+const Options = struct {
+    timeout: ?u64 = null,
+};
 
 pub const Client = struct {
     allocator: Allocator,
@@ -34,6 +39,9 @@ pub const Client = struct {
     port: u16,
     node: []const u8,
     node_cache: NodeCache,
+    timeout: u64 = 30_000, // 30 seconds default timeout
+    last_node_check: u64 = 0,
+    cached_node: ?[]const u8 = null,
 
     const NodeCache = struct {
         allocator: Allocator,
@@ -86,6 +94,10 @@ pub const Client = struct {
         node: []const u8,
         node_cache_duration: u64,
     ) !Client {
+        if (hosts.len == 0) return Error.ProxmoxInvalidConfig;
+        if (token.len == 0) return Error.ProxmoxInvalidToken;
+        if (node.len == 0) return Error.ProxmoxInvalidNode;
+
         var base_urls = try allocator.alloc([]const u8, hosts.len);
         errdefer allocator.free(base_urls);
 
@@ -107,6 +119,7 @@ pub const Client = struct {
             .port = port,
             .node = node,
             .node_cache = NodeCache.init(allocator, node_cache_duration),
+            .timeout = 30_000, // Default timeout of 30 seconds
         };
     }
 
@@ -128,34 +141,101 @@ pub const Client = struct {
         return true;
     }
 
-    fn makeRequest(self: *Client, method: http.Method, path: []const u8, body: ?[]const u8) ![]const u8 {
-        const url = try std.fmt.allocPrint(self.allocator, "{s}{s}", .{ self.base_urls[self.current_host_index], path });
-        defer self.allocator.free(url);
+    pub fn makeRequest(self: *Client, method: http.Method, path: []const u8, body: ?[]const u8) ![]const u8 {
+        const max_retries = 3;
+        var retry_count: u8 = 0;
+        var last_error: anyerror = undefined;
 
-        try self.logger.info("Making {s} request to {s}", .{ @tagName(method), url });
+        while (retry_count < max_retries) : (retry_count += 1) {
+            try self.logger.info("Making {s} request to {s} (attempt {d}/{d})", .{ @tagName(method), path, retry_count + 1, max_retries });
 
-        var headers = Headers.init(self.allocator);
-        defer headers.deinit();
+            var url_buffer: [1024]u8 = undefined;
+            const url = try std.fmt.bufPrint(&url_buffer, "https://{s}:{d}{s}", .{ self.hosts[self.current_host_index], self.port, path });
 
-        try headers.put("Authorization", try std.fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
-        try headers.put("Content-Type", "application/json");
+            var headers = Headers.init(self.allocator);
+            defer headers.deinit();
 
-        var request = try self.client.open(method, try Uri.parse(url), headers, .{});
-        defer request.deinit();
+            try headers.put("Authorization", try std.fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
+            try headers.put("Content-Type", "application/json");
 
-        if (body) |b| {
-            try request.writeAll(b);
+            var request = try self.client.open(method, try Uri.parse(url), headers, .{
+                .timeout = self.timeout,
+            });
+            defer request.deinit();
+
+            if (body) |b| {
+                request.transfer_encoding = .{ .content_length = b.len };
+            }
+
+            request.send() catch |err| {
+                try self.logger.err("Failed to send request: {s}", .{@errorName(err)});
+                last_error = err;
+                if (self.tryNextHost()) continue;
+                return err;
+            };
+
+            if (body) |b| {
+                request.writeAll(b) catch |err| {
+                    try self.logger.err("Failed to write request body: {s}", .{@errorName(err)});
+                    last_error = err;
+                    if (self.tryNextHost()) continue;
+                    return err;
+                };
+            }
+
+            request.finish() catch |err| {
+                try self.logger.err("Failed to finish request: {s}", .{@errorName(err)});
+                last_error = err;
+                if (self.tryNextHost()) continue;
+                return err;
+            };
+
+            request.wait() catch |err| {
+                try self.logger.err("Failed to wait for response: {s}", .{@errorName(err)});
+                last_error = err;
+                if (self.tryNextHost()) continue;
+                return err;
+            };
+
+            const status = request.response.status;
+            const response_body = try request.reader().readAllAlloc(self.allocator, 1024 * 1024);
+            errdefer self.allocator.free(response_body);
+
+            if (status != .ok) {
+                try self.logger.err("Request failed with status {d}: {s}", .{ @intFromEnum(status), response_body });
+
+                // Try to parse error response
+                if (json.parseFromSlice(json.Value, self.allocator, response_body, .{})) |parsed| {
+                    defer parsed.deinit();
+                    if (parsed.value.get("errors")) |errors| {
+                        if (errors.get("message")) |message| {
+                            try self.logger.err("Proxmox error: {s}", .{message});
+                        }
+                    }
+                } else |_| {}
+
+                // Handle specific status codes
+                switch (status) {
+                    .unauthorized => return Error.ProxmoxAuthError,
+                    .forbidden => return Error.ProxmoxPermissionDenied,
+                    .not_found => return Error.ProxmoxResourceNotFound,
+                    .request_timeout => {
+                        last_error = Error.ProxmoxTimeout;
+                        if (self.tryNextHost()) continue;
+                        return Error.ProxmoxTimeout;
+                    },
+                    else => {
+                        last_error = Error.ProxmoxOperationFailed;
+                        if (self.tryNextHost()) continue;
+                        return Error.ProxmoxOperationFailed;
+                    },
+                }
+            }
+
+            return response_body;
         }
 
-        try request.finish();
-        try request.wait();
-
-        var buffer = std.ArrayList(u8).init(self.allocator);
-        errdefer buffer.deinit();
-
-        try request.reader().readAllArrayList(&buffer, std.math.maxInt(usize));
-
-        return buffer.toOwnedSlice();
+        return last_error;
     }
 
     pub fn getNodes(self: *Client) ![]Node {
@@ -274,6 +354,132 @@ pub const Client = struct {
 
         return try all_containers.toOwnedSlice();
     }
+
+    pub fn updateLXCConfig(self: *Client, vmid: u32, config: LXCConfig) !void {
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/config", .{ self.node, vmid });
+        defer self.allocator.free(path);
+
+        const body = try json.stringifyAlloc(self.allocator, config, .{});
+        defer self.allocator.free(body);
+
+        _ = try self.makeRequest(.PUT, path, body);
+    }
+
+    pub fn createSnapshot(self: *Client, vmid: u32, name: []const u8, description: ?[]const u8) !void {
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/snapshot", .{ self.node, vmid });
+        defer self.allocator.free(path);
+
+        var snapshot_config = std.StringHashMap([]const u8).init(self.allocator);
+        defer snapshot_config.deinit();
+
+        try snapshot_config.put("snapname", name);
+        if (description) |desc| {
+            try snapshot_config.put("description", desc);
+        }
+
+        const body = try json.stringifyAlloc(self.allocator, snapshot_config, .{});
+        defer self.allocator.free(body);
+
+        _ = try self.makeRequest(.POST, path, body);
+    }
+
+    pub fn deleteSnapshot(self: *Client, vmid: u32, name: []const u8) !void {
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/snapshot/{s}", .{ self.node, vmid, name });
+        defer self.allocator.free(path);
+
+        _ = try self.makeRequest(.DELETE, path, null);
+    }
+
+    pub fn rollbackSnapshot(self: *Client, vmid: u32, name: []const u8) !void {
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/snapshot/{s}/rollback", .{ self.node, vmid, name });
+        defer self.allocator.free(path);
+
+        _ = try self.makeRequest(.POST, path, null);
+    }
+
+    pub fn listSnapshots(self: *Client, vmid: u32) ![]Snapshot {
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/snapshot", .{ self.node, vmid });
+        defer self.allocator.free(path);
+
+        const response = try self.makeRequest(.GET, path, null);
+        const snapshots = try json.parseFromSlice([]Snapshot, self.allocator, response, .{});
+        return snapshots.value;
+    }
+
+    pub const Snapshot = struct {
+        name: []const u8,
+        description: ?[]const u8,
+        parent: ?[]const u8,
+        snaptime: u64,
+        vmstate: bool,
+    };
+
+    pub fn migrateLXC(self: *Client, vmid: u32, target_node: []const u8, options: struct {
+        online: bool = false,
+        force: bool = false,
+        target_storage: ?[]const u8 = null,
+        with_local_disks: bool = false,
+    }) !void {
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/migrate", .{ self.node, vmid });
+        defer self.allocator.free(path);
+
+        var migrate_config = std.StringHashMap([]const u8).init(self.allocator);
+        defer migrate_config.deinit();
+
+        try migrate_config.put("target", target_node);
+        try migrate_config.put("online", if (options.online) "1" else "0");
+        try migrate_config.put("force", if (options.force) "1" else "0");
+        if (options.target_storage) |storage| {
+            try migrate_config.put("target-storage", storage);
+        }
+        try migrate_config.put("with-local-disks", if (options.with_local_disks) "1" else "0");
+
+        const body = try json.stringifyAlloc(self.allocator, migrate_config, .{});
+        defer self.allocator.free(body);
+
+        _ = try self.makeRequest(.POST, path, body);
+    }
+
+    pub fn createTemplate(self: *Client, vmid: u32) !void {
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/template", .{ self.node, vmid });
+        defer self.allocator.free(path);
+
+        _ = try self.makeRequest(.POST, path, null);
+    }
+
+    pub fn cloneLXC(self: *Client, vmid: u32, newid: u32, options: struct {
+        name: ?[]const u8 = null,
+        full: bool = false,
+        target: ?[]const u8 = null,
+        storage: ?[]const u8 = null,
+        snapname: ?[]const u8 = null,
+    }) !void {
+        const path = try fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{d}/clone", .{ self.node, vmid });
+        defer self.allocator.free(path);
+
+        var clone_config = std.StringHashMap([]const u8).init(self.allocator);
+        defer clone_config.deinit();
+
+        try clone_config.put("newid", try fmt.allocPrint(self.allocator, "{d}", .{newid}));
+        if (options.name) |name| {
+            try clone_config.put("name", name);
+        }
+        try clone_config.put("full", if (options.full) "1" else "0");
+        if (options.target) |target| {
+            try clone_config.put("target", target);
+        }
+        if (options.storage) |storage| {
+            try clone_config.put("storage", storage);
+        }
+        if (options.snapname) |snapname| {
+            try clone_config.put("snapname", snapname);
+        }
+
+        const body = try json.stringifyAlloc(self.allocator, clone_config, .{});
+        defer self.allocator.free(body);
+
+        _ = try self.makeRequest(.POST, path, body);
+    }
 };
 
 pub const LXCContainer = struct {
@@ -291,12 +497,53 @@ pub const LXCConfig = struct {
     cores: u32,
     rootfs: []const u8,
     net0: NetworkConfig,
+    onboot: bool = false,
+    protection: bool = false,
+    start: bool = true,
+    template: bool = false,
+    unprivileged: bool = true,
+    features: Features = .{},
+    mp0: ?MountPoint = null,
+    mp1: ?MountPoint = null,
+    mp2: ?MountPoint = null,
+    mp3: ?MountPoint = null,
+    mp4: ?MountPoint = null,
+    mp5: ?MountPoint = null,
+    mp6: ?MountPoint = null,
+    mp7: ?MountPoint = null,
+};
+
+pub const Features = struct {
+    nesting: bool = false,
+    fuse: bool = false,
+    keyctl: bool = false,
+    mknod: bool = false,
+    mount: []const []const u8 = &[_][]const u8{},
+};
+
+pub const MountPoint = struct {
+    volume: []const u8,
+    mp: []const u8,
+    size: []const u8,
+    acl: bool = false,
+    backup: bool = true,
+    quota: bool = false,
+    replicate: bool = true,
+    shared: bool = false,
 };
 
 pub const NetworkConfig = struct {
     name: []const u8,
     bridge: []const u8,
     ip: []const u8,
+    gw: ?[]const u8 = null,
+    ip6: ?[]const u8 = null,
+    gw6: ?[]const u8 = null,
+    mtu: ?u16 = null,
+    rate: ?u32 = null,
+    tag: ?u16 = null,
+    trunks: ?[]const u16 = null,
+    type: []const u8 = "veth",
 };
 
 pub const LXCStatus = enum {
@@ -329,20 +576,42 @@ pub const ContainerStatus = enum {
     unknown,
 };
 
-pub fn specToLXCConfig(spec: ContainerSpec) !LXCConfig {
-    return LXCConfig{
+pub fn specToLXCConfig(spec: ContainerSpec, options: struct {
+    memory: u32 = 512,
+    swap: u32 = 256,
+    cores: u32 = 1,
+    rootfs: []const u8 = "local-lvm:8",
+    ostype: []const u8 = "ubuntu",
+    features: Features = .{},
+    mount_points: ?[]const MountPoint = null,
+}) !LXCConfig {
+    var config = LXCConfig{
         .hostname = spec.name,
-        .ostype = "ubuntu", // Default to Ubuntu for now
-        .memory = 512, // Default memory
-        .swap = 256, // Default swap
-        .cores = 1, // Default cores
-        .rootfs = "local-lvm:8", // Default rootfs
+        .ostype = options.ostype,
+        .memory = options.memory,
+        .swap = options.swap,
+        .cores = options.cores,
+        .rootfs = options.rootfs,
         .net0 = NetworkConfig{
             .name = "eth0",
             .bridge = "vmbr0",
-            .ip = "dhcp", // Default to DHCP
+            .ip = "dhcp",
         },
+        .features = options.features,
     };
+
+    if (options.mount_points) |mounts| {
+        if (mounts.len > 0) config.mp0 = mounts[0];
+        if (mounts.len > 1) config.mp1 = mounts[1];
+        if (mounts.len > 2) config.mp2 = mounts[2];
+        if (mounts.len > 3) config.mp3 = mounts[3];
+        if (mounts.len > 4) config.mp4 = mounts[4];
+        if (mounts.len > 5) config.mp5 = mounts[5];
+        if (mounts.len > 6) config.mp6 = mounts[6];
+        if (mounts.len > 7) config.mp7 = mounts[7];
+    }
+
+    return config;
 }
 
 pub fn lxcStatusToContainerStatus(status: LXCStatus) ContainerStatus {

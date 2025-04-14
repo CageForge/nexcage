@@ -52,7 +52,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Create the executable
+    // Create the main executable
     const exe = b.addExecutable(.{
         .name = "proxmox-lxcri",
         .root_source_file = .{ .cwd_relative = "src/main.zig" },
@@ -60,12 +60,23 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Create the test connection executable
+    const test_exe = b.addExecutable(.{
+        .name = "test-connection",
+        .root_source_file = .{ .cwd_relative = "src/test_connection.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Add include paths
     exe.addIncludePath(.{ .cwd_relative = "include" });
     exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+    test_exe.addIncludePath(.{ .cwd_relative = "include" });
+    test_exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
 
     // Add library path
     exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+    test_exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
 
     // Link with gRPC and protobuf libraries
     exe.linkSystemLibrary("grpc");
@@ -131,7 +142,7 @@ pub fn build(b: *std.Build) void {
         exe.linkSystemLibrary("rt");
     }
 
-    // Add module dependencies to the executable
+    // Add module dependencies to the executables
     exe.root_module.addImport("types", types_module);
     exe.root_module.addImport("logger", logger_module);
     exe.root_module.addImport("config", config_module);
@@ -139,8 +150,13 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("cri", cri_module);
     exe.root_module.addImport("grpc_service", grpc_service_module);
 
-    // Install the executable
+    test_exe.root_module.addImport("types", types_module);
+    test_exe.root_module.addImport("logger", logger_module);
+    test_exe.root_module.addImport("proxmox", proxmox_module);
+
+    // Install the executables
     b.installArtifact(exe);
+    b.installArtifact(test_exe);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -151,4 +167,10 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    const test_cmd = b.addRunArtifact(test_exe);
+    test_cmd.step.dependOn(b.getInstallStep());
+
+    const test_step = b.step("test-connection", "Test Proxmox API connection");
+    test_step.dependOn(&test_cmd.step);
 }

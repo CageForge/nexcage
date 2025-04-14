@@ -14,6 +14,18 @@ pub const Error = error{
     ProxmoxAuthError,
     ProxmoxResourceNotFound,
     ProxmoxOperationFailed,
+    ProxmoxInvalidResponse,
+    ProxmoxInvalidConfig,
+    ProxmoxInvalidNode,
+    ProxmoxInvalidVMID,
+    ProxmoxInvalidToken,
+    ProxmoxConnectionFailed,
+    ProxmoxTimeout,
+    ProxmoxResourceExists,
+    ProxmoxInvalidState,
+    ProxmoxInvalidParameter,
+    ProxmoxPermissionDenied,
+    ProxmoxInternalError,
 
     // CRI errors
     PodNotFound,
@@ -54,6 +66,18 @@ pub fn handleError(err: Error, logger: *Logger) void {
         error.ProxmoxAuthError => logger.err("Proxmox authentication failed", .{}),
         error.ProxmoxResourceNotFound => logger.err("Proxmox resource not found", .{}),
         error.ProxmoxOperationFailed => logger.err("Proxmox operation failed", .{}),
+        error.ProxmoxInvalidResponse => logger.err("Invalid response from Proxmox API", .{}),
+        error.ProxmoxInvalidConfig => logger.err("Invalid Proxmox configuration", .{}),
+        error.ProxmoxInvalidNode => logger.err("Invalid Proxmox node", .{}),
+        error.ProxmoxInvalidVMID => logger.err("Invalid VM ID", .{}),
+        error.ProxmoxInvalidToken => logger.err("Invalid Proxmox API token", .{}),
+        error.ProxmoxConnectionFailed => logger.err("Failed to connect to Proxmox", .{}),
+        error.ProxmoxTimeout => logger.err("Proxmox operation timed out", .{}),
+        error.ProxmoxResourceExists => logger.err("Resource already exists in Proxmox", .{}),
+        error.ProxmoxInvalidState => logger.err("Invalid state for Proxmox operation", .{}),
+        error.ProxmoxInvalidParameter => logger.err("Invalid parameter for Proxmox operation", .{}),
+        error.ProxmoxPermissionDenied => logger.err("Permission denied for Proxmox operation", .{}),
+        error.ProxmoxInternalError => logger.err("Internal Proxmox error", .{}),
 
         // CRI errors
         error.PodNotFound => logger.err("Pod not found", .{}),
@@ -88,4 +112,24 @@ pub fn logError(logger: anytype, err: Error) void {
         error.ProxmoxOperationFailed => logger.err("Proxmox operation failed", .{}),
         error.ClusterUnhealthy => logger.err("Cluster unhealthy", .{}),
     }
+}
+
+pub fn formatError(err: Error) []const u8 {
+    return switch (err) {
+        Error.ProxmoxOperationFailed => "Proxmox operation failed",
+        Error.ProxmoxAPIError => "Proxmox API error",
+        Error.ProxmoxInvalidResponse => "Invalid response from Proxmox API",
+        Error.ProxmoxInvalidConfig => "Invalid Proxmox configuration",
+        Error.ProxmoxInvalidNode => "Invalid Proxmox node",
+        Error.ProxmoxInvalidVMID => "Invalid VM ID",
+        Error.ProxmoxInvalidToken => "Invalid Proxmox API token",
+        Error.ProxmoxConnectionFailed => "Failed to connect to Proxmox",
+        Error.ProxmoxTimeout => "Proxmox operation timed out",
+        Error.ProxmoxResourceNotFound => "Resource not found in Proxmox",
+        Error.ProxmoxResourceExists => "Resource already exists in Proxmox",
+        Error.ProxmoxInvalidState => "Invalid state for Proxmox operation",
+        Error.ProxmoxInvalidParameter => "Invalid parameter for Proxmox operation",
+        Error.ProxmoxPermissionDenied => "Permission denied for Proxmox operation",
+        Error.ProxmoxInternalError => "Internal Proxmox error",
+    };
 }

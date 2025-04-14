@@ -44,23 +44,17 @@ pub fn main() !void {
 
     var config_instance = config.Config{
         .allocator = allocator,
-        .proxmox = config.ProxmoxConfig{
-            .hosts = hosts,
-            .current_host_index = 0,
-            .port = 8006,
-            .token = try allocator.dupe(u8, "root@pam!token=1234-5678-9012-3456"),
-            .node = try allocator.dupe(u8, "pve"),
-            .node_cache_duration = 60,
-        },
-        .runtime = config.RuntimeConfig{
-            .log_level = .info,
-            .socket_path = try allocator.dupe(u8, "/var/run/proxmox-lxcri.sock"),
-        },
+        .hosts = hosts,
+        .token = try allocator.dupe(u8, "root@pam!token=be7823bc-d949-460e-a9ce-28d0844648ed"),
+        .port = 8006,
+        .node = try allocator.dupe(u8, "pve"),
+        .node_cache_duration = 300,
+        .timeout = 30_000,
         .logger = &logger_instance,
     };
     defer config_instance.deinit();
 
-    proxmox_client = try proxmox.Client.init(allocator, config_instance.proxmox.hosts, config_instance.proxmox.token, &logger_instance, config_instance.proxmox.port, config_instance.proxmox.node, config_instance.proxmox.node_cache_duration);
+    proxmox_client = try proxmox.Client.init(allocator, config_instance.hosts, config_instance.token, &logger_instance, config_instance.port, config_instance.node, config_instance.node_cache_duration);
     defer proxmox_client.deinit();
 
     try logger_instance.info("Starting proxmox-lxcri...", .{});
