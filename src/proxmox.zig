@@ -158,6 +158,7 @@ pub const Client = struct {
                 .server_header_buffer = &server_header_buffer,
             });
             const auth_header = try std.fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token});
+            defer self.allocator.free(auth_header);
             const headers = [_]http.Header{
                 .{ .name = "Authorization", .value = auth_header },
                 .{ .name = "Content-Type", .value = "application/json" },
@@ -201,6 +202,8 @@ pub const Client = struct {
             const status = request.response.status;
             const response_body = try request.reader().readAllAlloc(self.allocator, 1024 * 1024);
             errdefer self.allocator.free(response_body);
+
+            request.deinit();
 
             if (status != .ok) {
                 try self.logger.err("Request failed with status {d}: {s}", .{ @intFromEnum(status), response_body });

@@ -12,8 +12,8 @@ pub fn main() !void {
     defer logger.deinit();
 
     const hosts = [_][]const u8{"mgr.cp.if.ua"};
-    const token = "root@pam!token=be7823bc-d949-460e-a9ce-28d0844648ed";
-    const node = "pve"; // Default node name in Proxmox
+    const token = "root@pam!capi=be7823bc-d949-460e-a9ce-28d0844648ed";
+    const node = "mgr"; // Default node name in Proxmox
 
     var client = try proxmox.Client.init(
         allocator,
@@ -29,7 +29,7 @@ pub fn main() !void {
     try logger.info("Testing connection to Proxmox API...", .{});
 
     // Try to get version information
-    const response = try client.makeRequest(.GET, "/version", null);
+    const response = try client.makeRequest(.GET, "/api2/json/version", null);
     defer allocator.free(response);
 
     try logger.info("Proxmox API version: {s}", .{response});
