@@ -5,37 +5,54 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Create modules without dependencies first
-    const proxmox_module = b.createModule(.{
-        .root_source_file = .{ .cwd_relative = "src/proxmox.zig" },
-    });
-
-    const config_module = b.createModule(.{
-        .root_source_file = .{ .cwd_relative = "src/config.zig" },
-    });
-
     const types_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/types.zig" },
     });
 
-    // Create logger module with config dependency
+    // Create logger module with its dependencies
     const logger_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/logger.zig" },
+        .imports = &.{
+            .{ .name = "types", .module = types_module },
+        },
     });
-    logger_module.addImport("config", config_module);
+
+    // Create config module with its dependencies
+    const config_module = b.createModule(.{
+        .root_source_file = .{ .cwd_relative = "src/config.zig" },
+        .imports = &.{
+            .{ .name = "types", .module = types_module },
+            .{ .name = "logger", .module = logger_module },
+        },
+    });
+
+    // Create proxmox module with its dependencies
+    const proxmox_module = b.createModule(.{
+        .root_source_file = .{ .cwd_relative = "src/proxmox.zig" },
+        .imports = &.{
+            .{ .name = "logger", .module = logger_module },
+            .{ .name = "types", .module = types_module },
+        },
+    });
 
     // Create cri module with its dependencies
     const cri_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/cri.zig" },
+        .imports = &.{
+            .{ .name = "proxmox", .module = proxmox_module },
+            .{ .name = "types", .module = types_module },
+        },
     });
-    cri_module.addImport("proxmox", proxmox_module);
-    cri_module.addImport("types", types_module);
 
     // Create grpc_service module with its dependencies
     const grpc_service_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/grpc_service.zig" },
+        .imports = &.{
+            .{ .name = "types", .module = types_module },
+        },
     });
-    grpc_service_module.addImport("types", types_module);
 
+    // Create the executable
     const exe = b.addExecutable(.{
         .name = "proxmox-lxcri",
         .root_source_file = .{ .cwd_relative = "src/main.zig" },
@@ -114,14 +131,15 @@ pub fn build(b: *std.Build) void {
         exe.linkSystemLibrary("rt");
     }
 
-    // Add all modules as dependencies
-    exe.root_module.addImport("proxmox", proxmox_module);
-    exe.root_module.addImport("config", config_module);
+    // Add module dependencies to the executable
+    exe.root_module.addImport("types", types_module);
     exe.root_module.addImport("logger", logger_module);
+    exe.root_module.addImport("config", config_module);
+    exe.root_module.addImport("proxmox", proxmox_module);
     exe.root_module.addImport("cri", cri_module);
     exe.root_module.addImport("grpc_service", grpc_service_module);
-    exe.root_module.addImport("types", types_module);
 
+    // Install the executable
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);

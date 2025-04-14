@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("types.zig");
+const types = @import("types");
 const Allocator = std.mem.Allocator;
 const Writer = std.fs.File.Writer;
 
@@ -16,7 +16,8 @@ pub const Logger = struct {
         };
     }
 
-    pub fn deinit() void {
+    pub fn deinit(self: *Logger) void {
+        _ = self;
         // Nothing to deinit for now
     }
 

@@ -1,32 +1,49 @@
 const std = @import("std");
-const http = std.http;
-const protocol = std.http.protocol;
+const c = std.c;
+const os = std.os;
+const linux = os.linux;
+const posix = std.posix;
+const logger_mod = @import("logger");
+const types = @import("types");
+const fs = std.fs;
+const builtin = @import("builtin");
+const log = std.log;
+const Error = @import("error").Error;
+const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
+const StringHashMap = std.StringHashMap;
 const json = std.json;
+const http = std.http;
+const Uri = std.Uri;
+const HttpClient = http.Client;
 const mem = std.mem;
 const fmt = std.fmt;
-const Allocator = std.mem.Allocator;
 const time = std.time;
 const net = std.net;
+const logger = logger_mod.Logger;
+const Headers = std.http.protocol.Headers;
 
 pub const Client = struct {
     allocator: Allocator,
+    client: HttpClient,
     hosts: []const []const u8,
-    current_host_index: usize,
-    port: u16,
-    token: []const u8,
-    node: []const u8,
-    client: http.Client,
     base_urls: []const []const u8,
+    token: []const u8,
+    current_host_index: usize,
+    logger: *logger,
+    port: u16,
+    node: []const u8,
     node_cache: NodeCache,
 
     const NodeCache = struct {
+        allocator: Allocator,
         nodes: []Node,
         last_update: i64,
         duration: u64,
 
         pub fn init(allocator: Allocator, duration: u64) NodeCache {
-            _ = allocator; // Keep the parameter for future use
             return NodeCache{
+                .allocator = allocator,
                 .nodes = &[_]Node{},
                 .last_update = 0,
                 .duration = duration,
@@ -34,7 +51,12 @@ pub const Client = struct {
         }
 
         pub fn deinit(self: *NodeCache) void {
-            self.nodes = &[_]Node{};
+            for (self.nodes) |*node| {
+                node.deinit(self.allocator);
+            }
+            if (self.nodes.len > 0) {
+                self.allocator.free(self.nodes);
+            }
         }
 
         pub fn isExpired(self: *NodeCache) bool {
@@ -47,36 +69,44 @@ pub const Client = struct {
         name: []const u8,
         status: []const u8,
         type: []const u8,
+
+        pub fn deinit(self: *Node, allocator: Allocator) void {
+            allocator.free(self.name);
+            allocator.free(self.status);
+            allocator.free(self.type);
+        }
     };
 
-    pub fn init(options: struct {
+    pub fn init(
         allocator: Allocator,
         hosts: []const []const u8,
-        port: u16,
         token: []const u8,
+        logger_instance: *logger,
+        port: u16,
         node: []const u8,
         node_cache_duration: u64,
-    }) !Client {
-        var base_urls = try options.allocator.alloc([]const u8, options.hosts.len);
-        errdefer options.allocator.free(base_urls);
+    ) !Client {
+        var base_urls = try allocator.alloc([]const u8, hosts.len);
+        errdefer allocator.free(base_urls);
 
-        for (options.hosts, 0..) |host, i| {
-            base_urls[i] = try fmt.allocPrint(options.allocator, "https://{s}:{d}/api2/json", .{
+        for (hosts, 0..) |host, i| {
+            base_urls[i] = try fmt.allocPrint(allocator, "https://{s}:{d}/api2/json", .{
                 host,
-                options.port,
+                port,
             });
         }
 
         return Client{
-            .allocator = options.allocator,
-            .hosts = options.hosts,
-            .current_host_index = 0,
-            .port = options.port,
-            .token = options.token,
-            .node = options.node,
-            .client = http.Client{ .allocator = options.allocator },
+            .allocator = allocator,
+            .client = HttpClient{ .allocator = allocator },
+            .hosts = hosts,
             .base_urls = base_urls,
-            .node_cache = NodeCache.init(options.allocator, options.node_cache_duration),
+            .token = token,
+            .current_host_index = 0,
+            .logger = logger_instance,
+            .port = port,
+            .node = node,
+            .node_cache = NodeCache.init(allocator, node_cache_duration),
         };
     }
 
@@ -85,8 +115,8 @@ pub const Client = struct {
             self.allocator.free(url);
         }
         self.allocator.free(self.base_urls);
-        self.client.deinit();
         self.node_cache.deinit();
+        self.client.deinit();
     }
 
     fn tryNextHost(self: *Client) bool {
@@ -98,64 +128,34 @@ pub const Client = struct {
         return true;
     }
 
-    fn makeRequest(
-        self: *Client,
-        method: std.http.Method,
-        path: []const u8,
-        body: ?[]const u8,
-    ) !APIResponse {
-        var last_error: ?error{ ProxmoxAPIError, ConnectionError } = null;
-        var attempts: usize = 0;
-        const max_attempts = self.hosts.len;
+    fn makeRequest(self: *Client, method: http.Method, path: []const u8, body: ?[]const u8) ![]const u8 {
+        const url = try std.fmt.allocPrint(self.allocator, "{s}{s}", .{ self.base_urls[self.current_host_index], path });
+        defer self.allocator.free(url);
 
-        while (attempts < max_attempts) : (attempts += 1) {
-            const url = try fmt.allocPrint(self.allocator, "{s}{s}", .{ self.base_urls[self.current_host_index], path });
-            defer self.allocator.free(url);
+        try self.logger.info("Making {s} request to {s}", .{ @tagName(method), url });
 
-            const server_header_buffer = try self.allocator.alloc(u8, 4096);
-            defer self.allocator.free(server_header_buffer);
+        var headers = Headers.init(self.allocator);
+        defer headers.deinit();
 
-            var req = try self.client.open(method, try std.Uri.parse(url), .{
-                .server_header_buffer = server_header_buffer,
-            });
-            defer req.deinit();
+        try headers.put("Authorization", try std.fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
+        try headers.put("Content-Type", "application/json");
 
-            try req.headers.append("Authorization", try fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
-            try req.headers.append("Content-Type", "application/json");
+        var request = try self.client.open(method, try Uri.parse(url), headers, .{});
+        defer request.deinit();
 
-            if (body) |b| {
-                try req.writeAll(b);
-            }
-
-            try req.send();
-            try req.wait();
-
-            const status = req.response.status;
-            if (status != .ok) {
-                last_error = error.ProxmoxAPIError;
-                if (!self.tryNextHost()) break;
-                continue;
-            }
-
-            const response_body = try req.reader().readAllAlloc(self.allocator, 1024 * 1024);
-            defer self.allocator.free(response_body);
-
-            const parsed = try json.parseFromSlice(APIResponse, self.allocator, response_body, .{});
-            defer parsed.deinit();
-
-            if (!parsed.value.success) {
-                last_error = error.ProxmoxAPIError;
-                if (!self.tryNextHost()) break;
-                continue;
-            }
-
-            return parsed.value;
+        if (body) |b| {
+            try request.writeAll(b);
         }
 
-        if (last_error) |err| {
-            return err;
-        }
-        return error.AllHostsFailed;
+        try request.finish();
+        try request.wait();
+
+        var buffer = std.ArrayList(u8).init(self.allocator);
+        errdefer buffer.deinit();
+
+        try request.reader().readAllArrayList(&buffer, std.math.maxInt(usize));
+
+        return buffer.toOwnedSlice();
     }
 
     pub fn getNodes(self: *Client) ![]Node {
@@ -165,11 +165,11 @@ pub const Client = struct {
 
         const path = "/cluster/resources";
         const response = try self.makeRequest(.GET, path, null);
-        if (!response.success) {
+        if (response.len == 0) {
             return error.ProxmoxAPIError;
         }
 
-        const resources = try json.parseFromValue([]Resource, self.allocator, response.data, .{});
+        const resources = try json.parseFromSlice(json.Value, self.allocator, response, .{});
         defer self.allocator.free(resources.value);
 
         var nodes = std.ArrayList(Node).init(self.allocator);
@@ -185,6 +185,8 @@ pub const Client = struct {
             }
         }
 
+        // Free old nodes before assigning new ones
+        self.node_cache.deinit();
         self.node_cache.nodes = try nodes.toOwnedSlice();
         self.node_cache.last_update = time.timestamp();
 
@@ -199,11 +201,11 @@ pub const Client = struct {
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.POST, path, body);
-        if (!response.success) {
+        if (response.len == 0) {
             return error.ProxmoxAPIError;
         }
 
-        const container = try json.parseFromValue(LXCContainer, self.allocator, response.data, .{});
+        const container = try json.parseFromSlice(LXCContainer, self.allocator, response, .{});
         return container.value;
     }
 
@@ -212,7 +214,7 @@ pub const Client = struct {
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.DELETE, path, null);
-        if (!response.success) {
+        if (response.len == 0) {
             return error.ProxmoxAPIError;
         }
     }
@@ -222,7 +224,7 @@ pub const Client = struct {
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.POST, path, null);
-        if (!response.success) {
+        if (response.len == 0) {
             return error.ProxmoxAPIError;
         }
     }
@@ -232,7 +234,7 @@ pub const Client = struct {
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.POST, path, null);
-        if (!response.success) {
+        if (response.len == 0) {
             return error.ProxmoxAPIError;
         }
     }
@@ -242,11 +244,11 @@ pub const Client = struct {
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.GET, path, null);
-        if (!response.success) {
+        if (response.len == 0) {
             return error.ProxmoxAPIError;
         }
 
-        const status = try json.parseFromValue(LXCStatus, self.allocator, response.data, .{});
+        const status = try json.parseFromSlice(LXCStatus, self.allocator, response, .{});
         return status.value;
     }
 
@@ -260,11 +262,11 @@ pub const Client = struct {
             defer self.allocator.free(path);
 
             const response = try self.makeRequest(.GET, path, null);
-            if (!response.success) {
+            if (response.len == 0) {
                 continue;
             }
 
-            const containers = try json.parseFromValue([]LXCContainer, self.allocator, response.data, .{});
+            const containers = try json.parseFromSlice(json.Value, self.allocator, response, .{});
             defer self.allocator.free(containers.value);
 
             try all_containers.appendSlice(containers.value);
@@ -316,3 +318,38 @@ pub const APIResponse = struct {
     success: bool,
     err_msg: ?[]const u8,
 };
+
+pub const ContainerSpec = struct {
+    name: []const u8,
+};
+
+pub const ContainerStatus = enum {
+    running,
+    stopped,
+    unknown,
+};
+
+pub fn specToLXCConfig(spec: ContainerSpec) !LXCConfig {
+    return LXCConfig{
+        .hostname = spec.name,
+        .ostype = "ubuntu", // Default to Ubuntu for now
+        .memory = 512, // Default memory
+        .swap = 256, // Default swap
+        .cores = 1, // Default cores
+        .rootfs = "local-lvm:8", // Default rootfs
+        .net0 = NetworkConfig{
+            .name = "eth0",
+            .bridge = "vmbr0",
+            .ip = "dhcp", // Default to DHCP
+        },
+    };
+}
+
+pub fn lxcStatusToContainerStatus(status: LXCStatus) ContainerStatus {
+    return switch (status) {
+        .running => .running,
+        .stopped => .stopped,
+        .paused => .stopped,
+        .unknown => .unknown,
+    };
+}

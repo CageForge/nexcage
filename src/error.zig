@@ -1,5 +1,5 @@
 const std = @import("std");
-const Logger = @import("logger.zig").Logger;
+const Logger = @import("logger").Logger;
 
 pub const Error = error{
     // Configuration errors
