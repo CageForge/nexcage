@@ -1,18 +1,13 @@
 {
     "proxmox": {
-        "host": "localhost",
+        "hosts": ["mgr.cp.if.ua"],
         "port": 8006,
-        "token": "",
-        "node": "localhost",
-        "storage": "local-lvm",
-        "network_bridge": "vmbr0"
+        "token": "root@pve!capi",
+        "node": "mgr",
+        "node_cache_duration": 60
     },
     "runtime": {
         "socket_path": "/var/run/proxmox-lxcri.sock",
-        "log_level": "info",
-        "default_memory": 512,
-        "default_swap": 256,
-        "default_cores": 1,
-        "default_rootfs_size": "8G"
+        "log_level": "info"
     }
 } 

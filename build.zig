@@ -5,28 +5,38 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Create modules without dependencies first
-    const proxmox_module = b.addModule("proxmox", .{
-        .root_source_file = .{ .cwd_relative = "src/proxmox.zig" },
-    });
-
-    const config_module = b.addModule("config", .{
-        .root_source_file = .{ .cwd_relative = "src/config.zig" },
-    });
-
-    const types_module = b.addModule("types", .{
+    const types_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/types.zig" },
     });
 
-    // Create logger module with config dependency
-    const logger_module = b.addModule("logger", .{
+    // Create logger module with its dependencies
+    const logger_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/logger.zig" },
         .imports = &.{
-            .{ .name = "config", .module = config_module },
+            .{ .name = "types", .module = types_module },
+        },
+    });
+
+    // Create config module with its dependencies
+    const config_module = b.createModule(.{
+        .root_source_file = .{ .cwd_relative = "src/config.zig" },
+        .imports = &.{
+            .{ .name = "types", .module = types_module },
+            .{ .name = "logger", .module = logger_module },
+        },
+    });
+
+    // Create proxmox module with its dependencies
+    const proxmox_module = b.createModule(.{
+        .root_source_file = .{ .cwd_relative = "src/proxmox.zig" },
+        .imports = &.{
+            .{ .name = "logger", .module = logger_module },
+            .{ .name = "types", .module = types_module },
         },
     });
 
     // Create cri module with its dependencies
-    const cri_module = b.addModule("cri", .{
+    const cri_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/cri.zig" },
         .imports = &.{
             .{ .name = "proxmox", .module = proxmox_module },
@@ -35,14 +45,14 @@ pub fn build(b: *std.Build) void {
     });
 
     // Create grpc_service module with its dependencies
-    const grpc_service_module = b.addModule("grpc_service", .{
+    const grpc_service_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/grpc_service.zig" },
         .imports = &.{
             .{ .name = "types", .module = types_module },
         },
     });
 
-    // Create the executable
+    // Create the main executable
     const exe = b.addExecutable(.{
         .name = "proxmox-lxcri",
         .root_source_file = .{ .cwd_relative = "src/main.zig" },
@@ -50,12 +60,23 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Create the test connection executable
+    const test_exe = b.addExecutable(.{
+        .name = "test-connection",
+        .root_source_file = .{ .cwd_relative = "src/test_connection.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Add include paths
     exe.addIncludePath(.{ .cwd_relative = "include" });
     exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+    test_exe.addIncludePath(.{ .cwd_relative = "include" });
+    test_exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
 
     // Add library path
     exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+    test_exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
 
     // Link with gRPC and protobuf libraries
     exe.linkSystemLibrary("grpc");
@@ -121,15 +142,21 @@ pub fn build(b: *std.Build) void {
         exe.linkSystemLibrary("rt");
     }
 
-    // Add all modules as dependencies
-    exe.root_module.addImport("proxmox", proxmox_module);
-    exe.root_module.addImport("config", config_module);
+    // Add module dependencies to the executables
+    exe.root_module.addImport("types", types_module);
     exe.root_module.addImport("logger", logger_module);
+    exe.root_module.addImport("config", config_module);
+    exe.root_module.addImport("proxmox", proxmox_module);
     exe.root_module.addImport("cri", cri_module);
     exe.root_module.addImport("grpc_service", grpc_service_module);
-    exe.root_module.addImport("types", types_module);
 
+    test_exe.root_module.addImport("types", types_module);
+    test_exe.root_module.addImport("logger", logger_module);
+    test_exe.root_module.addImport("proxmox", proxmox_module);
+
+    // Install the executables
     b.installArtifact(exe);
+    b.installArtifact(test_exe);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -140,4 +167,10 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    const test_cmd = b.addRunArtifact(test_exe);
+    test_cmd.step.dependOn(b.getInstallStep());
+
+    const test_step = b.step("test-connection", "Test Proxmox API connection");
+    test_step.dependOn(&test_cmd.step);
 }
