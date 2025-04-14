@@ -8,21 +8,22 @@ const types = @import("types");
 const fs = std.fs;
 const builtin = @import("builtin");
 const log = std.log;
-const Error = @import("error");
+const error_mod = @import("./error.zig");
+const Error = error_mod.Error;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
 const json = std.json;
 const http = std.http;
 const Uri = std.Uri;
-const HttpClient = http.Client;
+const HttpClient = std.http.Client;
 const mem = std.mem;
 const fmt = std.fmt;
 const time = std.time;
 const net = std.net;
 const logger = logger_mod.Logger;
-const Headers = http.Headers;
-const HeaderIterator = http.HeaderIterator;
+const Headers = std.http.Headers;
+const HeaderIterator = std.http.Headers.Iterator;
 
 const Options = struct {
     timeout: ?u64 = null,
@@ -152,16 +153,16 @@ pub const Client = struct {
             var url_buffer: [1024]u8 = undefined;
             const url = try std.fmt.bufPrint(&url_buffer, "https://{s}:{d}{s}", .{ self.hosts[self.current_host_index], self.port, path });
 
-            var headers = Headers.init(self.allocator);
-            defer headers.deinit();
-
-            try headers.put("Authorization", try std.fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token}));
-            try headers.put("Content-Type", "application/json");
-
-            var request = try self.client.open(method, try Uri.parse(url), headers, .{
-                .timeout = self.timeout,
+            var server_header_buffer: [1024]u8 = undefined;
+            var request = try self.client.open(method, try Uri.parse(url), .{
+                .server_header_buffer = &server_header_buffer,
             });
-            defer request.deinit();
+            const auth_header = try std.fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token});
+            const headers = [_]http.Header{
+                .{ .name = "Authorization", .value = auth_header },
+                .{ .name = "Content-Type", .value = "application/json" },
+            };
+            request.extra_headers = &headers;
 
             if (body) |b| {
                 request.transfer_encoding = .{ .content_length = b.len };
@@ -205,11 +206,10 @@ pub const Client = struct {
                 try self.logger.err("Request failed with status {d}: {s}", .{ @intFromEnum(status), response_body });
 
                 // Try to parse error response
-                if (json.parseFromSlice(json.Value, self.allocator, response_body, .{})) |parsed| {
-                    defer parsed.deinit();
-                    if (parsed.value.get("errors")) |errors| {
-                        if (errors.get("message")) |message| {
-                            try self.logger.err("Proxmox error: {s}", .{message});
+                if (json.parseFromSliceLeaky(json.Value, self.allocator, response_body, .{})) |parsed| {
+                    if (parsed.object.get("errors")) |errors| {
+                        if (errors.object.get("message")) |message| {
+                            try self.logger.err("Proxmox error: {s}", .{message.string});
                         }
                     }
                 } else |_| {}
@@ -249,19 +249,20 @@ pub const Client = struct {
             return error.ProxmoxAPIError;
         }
 
-        const resources = try json.parseFromSlice(json.Value, self.allocator, response, .{});
-        defer self.allocator.free(resources.value);
+        const resources = try json.parseFromSliceLeaky(json.Value, self.allocator, response, .{});
 
         var nodes = std.ArrayList(Node).init(self.allocator);
         defer nodes.deinit();
 
-        for (resources.value) |resource| {
-            if (std.mem.eql(u8, resource.type, "node")) {
-                try nodes.append(Node{
-                    .name = try self.allocator.dupe(u8, resource.name),
-                    .status = try self.allocator.dupe(u8, resource.status),
-                    .type = try self.allocator.dupe(u8, resource.type),
-                });
+        if (resources.object.get("data")) |data| {
+            for (data.array.items) |resource| {
+                if (std.mem.eql(u8, resource.object.get("type").?.string, "node")) {
+                    try nodes.append(Node{
+                        .name = try self.allocator.dupe(u8, resource.object.get("name").?.string),
+                        .status = try self.allocator.dupe(u8, resource.object.get("status").?.string),
+                        .type = try self.allocator.dupe(u8, resource.object.get("type").?.string),
+                    });
+                }
             }
         }
 
@@ -285,7 +286,7 @@ pub const Client = struct {
             return error.ProxmoxAPIError;
         }
 
-        const container = try json.parseFromSlice(LXCContainer, self.allocator, response, .{});
+        const container = try json.parseFromSliceLeaky(LXCContainer, self.allocator, response, .{});
         return container.value;
     }
 
@@ -328,7 +329,7 @@ pub const Client = struct {
             return error.ProxmoxAPIError;
         }
 
-        const status = try json.parseFromSlice(LXCStatus, self.allocator, response, .{});
+        const status = try json.parseFromSliceLeaky(LXCStatus, self.allocator, response, .{});
         return status.value;
     }
 
@@ -346,13 +347,82 @@ pub const Client = struct {
                 continue;
             }
 
-            const containers = try json.parseFromSlice(json.Value, self.allocator, response, .{});
-            defer self.allocator.free(containers.value);
+            const containers = try json.parseFromSliceLeaky(json.Value, self.allocator, response, .{});
 
-            try all_containers.appendSlice(containers.value);
+            if (containers.object.get("data")) |data| {
+                for (data.array.items) |container| {
+                    try all_containers.append(LXCContainer{
+                        .vmid = @intCast(container.object.get("vmid").?.integer),
+                        .name = try self.allocator.dupe(u8, container.object.get("name").?.string),
+                        .status = try parseStatus(container.object.get("status").?.string),
+                        .config = try parseConfig(self.allocator, container.object.get("config").?.object),
+                    });
+                }
+            }
         }
 
         return try all_containers.toOwnedSlice();
+    }
+
+    fn parseStatus(status: []const u8) !LXCStatus {
+        if (std.mem.eql(u8, status, "running")) {
+            return .running;
+        } else if (std.mem.eql(u8, status, "stopped")) {
+            return .stopped;
+        } else if (std.mem.eql(u8, status, "paused")) {
+            return .paused;
+        } else {
+            return .unknown;
+        }
+    }
+
+    fn parseConfig(allocator: Allocator, config: json.ObjectMap) !LXCConfig {
+        return LXCConfig{
+            .hostname = try allocator.dupe(u8, config.get("hostname").?.string),
+            .ostype = try allocator.dupe(u8, config.get("ostype").?.string),
+            .memory = @intCast(config.get("memory").?.integer),
+            .swap = @intCast(config.get("swap").?.integer),
+            .cores = @intCast(config.get("cores").?.integer),
+            .rootfs = try allocator.dupe(u8, config.get("rootfs").?.string),
+            .net0 = try parseNetworkConfig(allocator, config.get("net0").?.object),
+            .onboot = if (config.get("onboot")) |v| v.bool else false,
+            .protection = if (config.get("protection")) |v| v.bool else false,
+            .start = if (config.get("start")) |v| v.bool else true,
+            .template = if (config.get("template")) |v| v.bool else false,
+            .unprivileged = if (config.get("unprivileged")) |v| v.bool else true,
+            .features = try parseFeatures(allocator, config.get("features").?.object),
+        };
+    }
+
+    fn parseNetworkConfig(allocator: Allocator, network: json.ObjectMap) !NetworkConfig {
+        return NetworkConfig{
+            .name = try allocator.dupe(u8, network.get("name").?.string),
+            .bridge = try allocator.dupe(u8, network.get("bridge").?.string),
+            .ip = try allocator.dupe(u8, network.get("ip").?.string),
+            .gw = if (network.get("gw")) |v| try allocator.dupe(u8, v.string) else null,
+            .ip6 = if (network.get("ip6")) |v| try allocator.dupe(u8, v.string) else null,
+            .gw6 = if (network.get("gw6")) |v| try allocator.dupe(u8, v.string) else null,
+            .mtu = if (network.get("mtu")) |v| @intCast(v.integer) else null,
+            .rate = if (network.get("rate")) |v| @intCast(v.integer) else null,
+            .tag = if (network.get("tag")) |v| @intCast(v.integer) else null,
+            .type = try allocator.dupe(u8, if (network.get("type")) |v| v.string else "veth"),
+        };
+    }
+
+    fn parseFeatures(allocator: Allocator, features: json.ObjectMap) !Features {
+        return Features{
+            .nesting = if (features.get("nesting")) |v| v.bool else false,
+            .fuse = if (features.get("fuse")) |v| v.bool else false,
+            .keyctl = if (features.get("keyctl")) |v| v.bool else false,
+            .mknod = if (features.get("mknod")) |v| v.bool else false,
+            .mount = if (features.get("mount")) |v| blk: {
+                var mounts = std.ArrayList([]const u8).init(allocator);
+                for (v.array.items) |mount| {
+                    try mounts.append(try allocator.dupe(u8, mount.string));
+                }
+                break :blk try mounts.toOwnedSlice();
+            } else &[_][]const u8{},
+        };
     }
 
     pub fn updateLXCConfig(self: *Client, vmid: u32, config: LXCConfig) !void {
@@ -402,7 +472,7 @@ pub const Client = struct {
         defer self.allocator.free(path);
 
         const response = try self.makeRequest(.GET, path, null);
-        const snapshots = try json.parseFromSlice([]Snapshot, self.allocator, response, .{});
+        const snapshots = try json.parseFromSliceLeaky([]Snapshot, self.allocator, response, .{});
         return snapshots.value;
     }
 
