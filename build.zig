@@ -9,6 +9,11 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{ .cwd_relative = "src/types.zig" },
     });
 
+    // Create error module
+    const error_module = b.createModule(.{
+        .root_source_file = .{ .cwd_relative = "src/error.zig" },
+    });
+
     // Create logger module with its dependencies
     const logger_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/logger.zig" },
@@ -32,6 +37,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "logger", .module = logger_module },
             .{ .name = "types", .module = types_module },
+            .{ .name = "error", .module = error_module },
         },
     });
 

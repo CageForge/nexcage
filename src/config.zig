@@ -60,10 +60,10 @@ pub const Config = struct {
         const content = try file.readToEndAlloc(self.allocator, 1024 * 1024);
         defer self.allocator.free(content);
 
-        const parsed = try json.parseFromSlice(json.Value, self.allocator, content, .{});
+        const parsed = try json.parseFromSliceLeaky(json.Value, self.allocator, content, .{});
         defer parsed.deinit();
 
-        if (parsed.value.get("hosts")) |hosts| {
+        if (parsed.value.object.get("hosts")) |hosts| {
             var host_list = std.ArrayList([]const u8).init(self.allocator);
             defer host_list.deinit();
 
@@ -76,27 +76,27 @@ pub const Config = struct {
             return Error.ProxmoxInvalidConfig;
         }
 
-        if (parsed.value.get("token")) |token| {
+        if (parsed.value.object.get("token")) |token| {
             self.token = try self.allocator.dupe(u8, token.string);
         } else {
             return Error.ProxmoxInvalidConfig;
         }
 
-        if (parsed.value.get("port")) |port| {
+        if (parsed.value.object.get("port")) |port| {
             self.port = @intCast(port.integer);
         }
 
-        if (parsed.value.get("node")) |node| {
+        if (parsed.value.object.get("node")) |node| {
             self.node = try self.allocator.dupe(u8, node.string);
         } else {
             return Error.ProxmoxInvalidConfig;
         }
 
-        if (parsed.value.get("node_cache_duration")) |duration| {
+        if (parsed.value.object.get("node_cache_duration")) |duration| {
             self.node_cache_duration = @intCast(duration.integer);
         }
 
-        if (parsed.value.get("timeout")) |timeout| {
+        if (parsed.value.object.get("timeout")) |timeout| {
             self.timeout = @intCast(timeout.integer);
         }
     }
