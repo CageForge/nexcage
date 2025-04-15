@@ -29,7 +29,7 @@ var logger_instance: logger_mod.Logger = undefined;
 var proxmox_client: proxmox.Client = undefined;
 
 fn printHelp() void {
-    const help_text = 
+    const help_text =
         \\proxmox-lxcri - Proxmox LXC Container Runtime Interface
         \\
         \\Usage:
@@ -62,7 +62,7 @@ pub fn main() !void {
     // Parse command line arguments
     var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
-    
+
     var debug_mode = false;
     var no_daemon = false;
     while (args.next()) |arg| {
@@ -86,22 +86,22 @@ pub fn main() !void {
         break :blk file;
     } else null;
     defer if (log_file) |file| file.close();
-    
+
     const log_writer = if (debug_mode) std.io.getStdErr().writer() else log_file.?.writer();
-    
+
     logger_instance = try logger_mod.Logger.init(allocator, log_level, log_writer);
     defer logger_instance.deinit();
 
     // Load configuration
     const config_path = try getConfigPath(allocator);
     defer allocator.free(config_path);
-    
+
     const config_content = try fs.cwd().readFileAlloc(allocator, config_path, 1024 * 1024);
     defer allocator.free(config_content);
-    
+
     const config_json = try json.parseFromSlice(json.Value, allocator, config_content, .{});
     defer config_json.deinit();
-    
+
     const config_data = config_json.value.object;
     const proxmox_config = config_data.get("proxmox").?.object;
 
