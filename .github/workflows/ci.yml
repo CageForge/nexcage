@@ -28,7 +28,7 @@ jobs:
         with:
           version: '0.12.0'
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libprotobuf-dev
       - name: Build protoc plugins
         run: |
           cd .github/workflows
@@ -50,7 +50,7 @@ jobs:
         with:
           version: '0.12.0'
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libprotobuf-dev
       - name: Build
         run: zig build
       - name: Upload artifacts
