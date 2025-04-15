@@ -32,9 +32,8 @@ jobs:
       - name: Build protoc plugins
         run: |
           cd .github/workflows
-          zig build-exe protoc-gen-zig.zig
-          zig build-exe protoc-gen-grpc-zig.zig
-          sudo mv protoc-gen-zig protoc-gen-grpc-zig /usr/local/bin/
+          zig build
+          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
       - name: Run tests

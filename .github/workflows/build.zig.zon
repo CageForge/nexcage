@@ -1,0 +1,10 @@
+.{
+    .name = "protoc-gen-zig",
+    .version = "0.1.0",
+    .dependencies = .{
+        .protobuf = .{
+            .url = "https://github.com/kubebsd/zig-protobuf/archive/main.tar.gz",
+            .hash = "1220f6f3b857f2e8d0e0f7e2c0c4d2c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+        },
+    },
+} 
