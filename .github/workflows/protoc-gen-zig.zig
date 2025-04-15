@@ -13,7 +13,7 @@ pub fn main() !void {
         .file = &[_]protobuf.CodeGeneratorResponse.File{
             .{
                 .name = "runtime_service.zig",
-                .content = 
+                .content =
                 \\const std = @import("std");
                 \\const protobuf = @import("protobuf");
                 \\
