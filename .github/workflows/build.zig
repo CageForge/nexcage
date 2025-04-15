@@ -8,13 +8,21 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{ .path = "protobuf.zig" },
     });
 
-    const exe = b.addExecutable(.{
+    const zig_plugin = b.addExecutable(.{
         .name = "protoc-gen-zig",
         .root_source_file = .{ .path = "protoc-gen-zig.zig" },
         .target = target,
         .optimize = optimize,
     });
+    zig_plugin.root_module.addImport("protobuf", protobuf_module);
+    b.installArtifact(zig_plugin);
 
-    exe.root_module.addImport("protobuf", protobuf_module);
-    b.installArtifact(exe);
+    const grpc_plugin = b.addExecutable(.{
+        .name = "protoc-gen-grpc-zig",
+        .root_source_file = .{ .path = "protoc-gen-grpc-zig.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    grpc_plugin.root_module.addImport("protobuf", protobuf_module);
+    b.installArtifact(grpc_plugin);
 }
