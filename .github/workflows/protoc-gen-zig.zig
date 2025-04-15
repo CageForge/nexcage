@@ -6,23 +6,26 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var args = try std.process.argsWithAllocator(allocator);
-    _ = args.skip();
+    const input = try std.io.getStdIn().readToEndAlloc(allocator, std.math.maxInt(usize));
+    defer allocator.free(input);
 
-    const stdin = std.io.getStdIn();
-    const stdout = std.io.getStdOut();
-
-    var buffer: [8192]u8 = undefined;
-    _ = try stdin.reader().read(&buffer);
-
-    var response = protobuf.CodeGeneratorResponse{
+    const response = protobuf.CodeGeneratorResponse{
         .file = &[_]protobuf.CodeGeneratorResponse.File{
             .{
                 .name = "runtime_service.zig",
-                .content = "const std = @import(\"std\");\npub const RuntimeService = struct {\n    pub const Service = struct {\n        pub const Version = struct {\n            version: []const u8,\n        };\n    };\n};\n",
+                .content =
+                \\const std = @import("std");
+                \\const protobuf = @import("protobuf");
+                \\
+                \\pub const RuntimeService = struct {
+                \\    pub fn version(self: *RuntimeService) ![]const u8 {
+                \\        return "1.0.0";
+                \\    }
+                \\};
+                ,
             },
         },
     };
 
-    try response.write(stdout.writer());
-} 
+    try response.write(std.io.getStdOut().writer());
+}
