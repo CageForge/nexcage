@@ -1,0 +1,60 @@
+name: Security
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0' # Run weekly on Sunday
+
+jobs:
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm install -g npm-audit
+        
+      - name: Run npm audit
+        run: npm audit
+        
+  code-scan:
+    name: Code Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: '0.14.0'
+          
+      - name: Run Zig Security Checks
+        run: |
+          zig build -Doptimize=ReleaseSafe -Dfuzzing=true
+          zig test -Doptimize=ReleaseSafe -Dfuzzing=true
+          
+  secrets-scan:
+    name: Secrets Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm install -g trufflehog
+        
+      - name: Run TruffleHog
+        run: trufflehog --regex --entropy=False . 

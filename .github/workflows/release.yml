@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: '0.14.0'
+          
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23
+          
+      - name: Build protoc plugins
+        run: |
+          cd .github/workflows
+          zig build-exe protoc-gen-zig.zig
+          zig build-exe protoc-gen-grpc-zig.zig
+          sudo mv protoc-gen-zig protoc-gen-grpc-zig /usr/local/bin/
+          
+      - name: Generate gRPC code
+        run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
+        
+      - name: Build Release
+        run: zig build -Doptimize=ReleaseSafe
+        
+      - name: Create Release Asset
+        run: |
+          mkdir -p release
+          cp zig-out/bin/proxmox-lxcri release/
+          cp config.json release/
+          cp proxmox-lxcri.service release/
+          cp install.sh release/
+          tar -czf proxmox-lxcri-${{ github.ref_name }}.tar.gz -C release .
+          
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./proxmox-lxcri-${{ github.ref_name }}.tar.gz
+          asset_name: proxmox-lxcri-${{ github.ref_name }}.tar.gz
+          asset_content_type: application/gzip 

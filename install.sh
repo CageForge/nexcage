@@ -11,9 +11,29 @@ fi
 # Install dependencies
 if [ -f /etc/debian_version ]; then
     apt-get update
-    apt-get install -y protobuf-compiler libgrpc-dev
+    apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23
 elif [ -f /etc/redhat-release ]; then
-    dnf install -y protobuf-compiler grpc-devel
+    dnf install -y protobuf-compiler grpc-devel grpc-cpp-devel
+fi
+
+# Install development dependencies
+if [ -f /etc/debian_version ]; then
+    apt-get install -y git make curl docker.io
+elif [ -f /etc/redhat-release ]; then
+    dnf install -y git make curl docker
+fi
+
+# Install GitHub CLI
+if ! command -v gh &> /dev/null; then
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    apt-get update
+    apt-get install -y gh
+fi
+
+# Install act
+if ! command -v act &> /dev/null; then
+    curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
 fi
 
 # Create directories

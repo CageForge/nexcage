@@ -4,6 +4,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Add protobuf dependency
+    const protobuf_dep = b.dependency("protobuf", .{});
+    const protobuf_module = protobuf_dep.module("protobuf");
+
     // Create modules without dependencies first
     const types_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/types.zig" },
@@ -69,20 +73,48 @@ pub fn build(b: *std.Build) void {
     // Create the test connection executable
     const test_exe = b.addExecutable(.{
         .name = "test-connection",
-        .root_source_file = .{ .cwd_relative = "src/test_connection.zig" },
+        .root_source_file = .{ .cwd_relative = "tests/test_connection.zig" },
         .target = target,
         .optimize = optimize,
     });
+
+    // Create the test workflow executable
+    const test_workflow_exe = b.addExecutable(.{
+        .name = "test-workflow",
+        .root_source_file = .{ .cwd_relative = "tests/test_workflow.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Create protoc-gen modules with protobuf dependency
+    const protoc_gen_zig = b.addExecutable(.{
+        .name = "protoc-gen-zig",
+        .root_source_file = .{ .cwd_relative = ".github/workflows/protoc-gen-zig.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    protoc_gen_zig.root_module.addImport("protobuf", protobuf_module);
+
+    const protoc_gen_grpc_zig = b.addExecutable(.{
+        .name = "protoc-gen-grpc-zig",
+        .root_source_file = .{ .cwd_relative = ".github/workflows/protoc-gen-grpc-zig.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    protoc_gen_grpc_zig.root_module.addImport("protobuf", protobuf_module);
 
     // Add include paths
     exe.addIncludePath(.{ .cwd_relative = "include" });
     exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
     test_exe.addIncludePath(.{ .cwd_relative = "include" });
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+    test_workflow_exe.addIncludePath(.{ .cwd_relative = "include" });
+    test_workflow_exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
 
     // Add library path
     exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
     test_exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+    test_workflow_exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
 
     // Link with gRPC and protobuf libraries
     exe.linkSystemLibrary("grpc");
@@ -161,9 +193,15 @@ pub fn build(b: *std.Build) void {
     test_exe.root_module.addImport("logger", logger_module);
     test_exe.root_module.addImport("proxmox", proxmox_module);
 
+    test_workflow_exe.root_module.addImport("types", types_module);
+    test_workflow_exe.root_module.addImport("logger", logger_module);
+
     // Install the executables
     b.installArtifact(exe);
     b.installArtifact(test_exe);
+    b.installArtifact(test_workflow_exe);
+    b.installArtifact(protoc_gen_zig);
+    b.installArtifact(protoc_gen_grpc_zig);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -180,4 +218,10 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test-connection", "Test Proxmox API connection");
     test_step.dependOn(&test_cmd.step);
+
+    const test_workflow_cmd = b.addRunArtifact(test_workflow_exe);
+    test_workflow_cmd.step.dependOn(b.getInstallStep());
+
+    const test_workflow_step = b.step("test-workflow", "Test GitHub workflows locally");
+    test_workflow_step.dependOn(&test_workflow_cmd.step);
 }

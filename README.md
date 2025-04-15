@@ -14,7 +14,7 @@ A Container Runtime Interface (CRI) implementation for Proxmox LXC containers. T
 
 ## Requirements
 
-- Zig 0.11.0 or later
+- Zig 0.14.0 or later
 - Proxmox VE 7.0 or later
 - gRPC development libraries
 - Protocol Buffers compiler
@@ -22,6 +22,7 @@ A Container Runtime Interface (CRI) implementation for Proxmox LXC containers. T
 ## Building
 
 1. Install dependencies:
+
    ```bash
    # Ubuntu/Debian
    apt-get install protobuf-compiler libgrpc-dev libgrpc++-dev
@@ -31,11 +32,13 @@ A Container Runtime Interface (CRI) implementation for Proxmox LXC containers. T
    ```
 
 2. Generate gRPC code:
+
    ```bash
    protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
    ```
 
 3. Build the project:
+
    ```bash
    zig build
    ```
@@ -43,11 +46,13 @@ A Container Runtime Interface (CRI) implementation for Proxmox LXC containers. T
 ## Configuration
 
 The configuration file can be placed in one of these locations:
+
 1. Path specified in `PROXMOX_LXCRI_CONFIG` environment variable
 2. `/etc/proxmox-lxcri/config.json`
 3. `./config.json`
 
 Example configuration:
+
 ```json
 {
     "proxmox": {
@@ -71,11 +76,13 @@ Example configuration:
 ## Usage
 
 1. Start the LXCRI service:
+
    ```bash
    sudo ./proxmox-lxcri
    ```
 
 2. Configure Kubernetes to use LXCRI:
+
    ```yaml
    # /etc/kubernetes/kubelet.conf
    apiVersion: kubelet.config.k8s.io/v1beta1
@@ -85,6 +92,7 @@ Example configuration:
    ```
 
 3. Restart kubelet:
+
    ```bash
    sudo systemctl restart kubelet
    ```
