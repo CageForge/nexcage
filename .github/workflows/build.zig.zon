@@ -1,9 +1,12 @@
 .{
-    .name = "protoc-gen-zig",
+    .name = .protoc_gen_zig,
     .version = "0.1.0",
-    .dependencies = .{
-        .protobuf = .{
-            .path = "protobuf/module.zig",
-        },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "protobuf/module.zig",
+        "protoc-gen-zig.zig",
+        "protoc-gen-grpc-zig.zig",
     },
+    .fingerprint = 0xa18e217ad2df2770,
 }

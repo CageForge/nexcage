@@ -5,12 +5,12 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const protobuf_module = b.createModule(.{
-        .root_source_file = .{ .path = "protobuf/module.zig" },
+        .root_source_file = .{ .cwd_relative = "protobuf/module.zig" },
     });
 
     const zig_plugin = b.addExecutable(.{
         .name = "protoc-gen-zig",
-        .root_source_file = .{ .path = "protoc-gen-zig.zig" },
+        .root_source_file = .{ .cwd_relative = "protoc-gen-zig.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
 
     const grpc_plugin = b.addExecutable(.{
         .name = "protoc-gen-grpc-zig",
-        .root_source_file = .{ .path = "protoc-gen-grpc-zig.zig" },
+        .root_source_file = .{ .cwd_relative = "protoc-gen-grpc-zig.zig" },
         .target = target,
         .optimize = optimize,
     });
