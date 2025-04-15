@@ -22,7 +22,7 @@ mkdir -p /var/log/proxmox-lxcri
 mkdir -p /usr/local/bin
 
 # Build the project
-zig build -Drelease-safe
+zig build -Doptimize=ReleaseSafe
 
 # Install binary
 cp zig-out/bin/proxmox-lxcri /usr/local/bin/

@@ -14,12 +14,17 @@ RestartSec=10
 Environment=PROXMOX_LXCRI_CONFIG=/etc/proxmox-lxcri/config.json
 
 # Security settings
-NoNewPrivileges=true
-ProtectSystem=full
-ProtectHome=true
-PrivateTmp=true
-PrivateDevices=true
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
+PrivateTmp=false
+PrivateDevices=false
 ReadWritePaths=/var/run/proxmox-lxcri.sock /var/log/proxmox-lxcri.log
+
+# Logging
+StandardOutput=null
+StandardError=null
+SyslogIdentifier=proxmox-lxcri
 
 [Install]
 WantedBy=multi-user.target 

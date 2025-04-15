@@ -29,7 +29,7 @@ pub fn main() !void {
     try logger.info("Testing connection to Proxmox API...", .{});
 
     // Try to get version information
-    const response = try client.makeRequest(.GET, "/api2/json/version", null);
+    const response = try client.makeRequest(.GET, "/version", null);
     defer allocator.free(response);
 
     try logger.info("Proxmox API version: {s}", .{response});

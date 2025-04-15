@@ -10,7 +10,8 @@ const fs = std.fs;
 const builtin = @import("builtin");
 const log = std.log;
 const proxmox = @import("proxmox");
-const Error = @import("error").Error;
+const error_mod = @import("error");
+const Error = error_mod.Error;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
@@ -27,28 +28,93 @@ var last_signal: c_int = 0;
 var logger_instance: logger_mod.Logger = undefined;
 var proxmox_client: proxmox.Client = undefined;
 
+fn printHelp() void {
+    const help_text = 
+        \\proxmox-lxcri - Proxmox LXC Container Runtime Interface
+        \\
+        \\Usage:
+        \\  proxmox-lxcri [OPTIONS]
+        \\
+        \\OPTIONS:
+        \\  -h, --help          Show this help message
+        \\  -d, --debug         Enable debug mode
+        \\  --no-daemon         Run without daemonization
+        \\
+        \\Examples:
+        \\  proxmox-lxcri --debug --no-daemon  # Run with debug mode without daemonization
+        \\  proxmox-lxcri                       # Run as a daemon
+        \\
+        \\Configuration:
+        \\  The program looks for configuration file in the following order:
+        \\  1. Environment variable PROXMOX_LXCRI_CONFIG
+        \\  2. /etc/proxmox-lxcri/config.json
+        \\  3. ./config.json
+        \\
+    ;
+    std.io.getStdOut().writeAll(help_text) catch {};
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    logger_instance = try logger_mod.Logger.init(allocator, types.LogLevel.info, std.io.getStdErr().writer());
+    // Parse command line arguments
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
+    
+    var debug_mode = false;
+    var no_daemon = false;
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "-d") or std.mem.eql(u8, arg, "--debug")) {
+            debug_mode = true;
+        } else if (std.mem.eql(u8, arg, "--no-daemon")) {
+            no_daemon = true;
+        } else if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+            printHelp();
+            return;
+        }
+    }
+
+    // Initialize logger with appropriate level and output
+    const log_level = if (debug_mode) types.LogLevel.debug else types.LogLevel.info;
+    const log_file = if (!debug_mode) blk: {
+        const file = fs.cwd().createFile("/var/log/proxmox-lxcri.log", .{ .truncate = false }) catch |err| {
+            std.log.err("Failed to create log file: {s}", .{@errorName(err)});
+            return err;
+        };
+        break :blk file;
+    } else null;
+    defer if (log_file) |file| file.close();
+    
+    const log_writer = if (debug_mode) std.io.getStdErr().writer() else log_file.?.writer();
+    
+    logger_instance = try logger_mod.Logger.init(allocator, log_level, log_writer);
     defer logger_instance.deinit();
 
+    // Load configuration
+    const config_path = try getConfigPath(allocator);
+    defer allocator.free(config_path);
+    
+    const config_content = try fs.cwd().readFileAlloc(allocator, config_path, 1024 * 1024);
+    defer allocator.free(config_content);
+    
+    const config_json = try json.parseFromSlice(json.Value, allocator, config_content, .{});
+    defer config_json.deinit();
+    
+    const config_data = config_json.value.object;
+    const proxmox_config = config_data.get("proxmox").?.object;
+
     var hosts = try allocator.alloc([]const u8, 1);
-    hosts[0] = try allocator.dupe(u8, "192.168.1.100");
-    defer {
-        allocator.free(hosts[0]);
-        allocator.free(hosts);
-    }
+    hosts[0] = try allocator.dupe(u8, proxmox_config.get("hosts").?.array.items[0].string);
 
     var config_instance = config.Config{
         .allocator = allocator,
         .hosts = hosts,
-        .token = try allocator.dupe(u8, "root@pam!token=be7823bc-d949-460e-a9ce-28d0844648ed"),
-        .port = 8006,
-        .node = try allocator.dupe(u8, "pve"),
-        .node_cache_duration = 300,
+        .token = try allocator.dupe(u8, proxmox_config.get("token").?.string),
+        .port = @intCast(proxmox_config.get("port").?.integer),
+        .node = try allocator.dupe(u8, proxmox_config.get("node").?.string),
+        .node_cache_duration = @intCast(proxmox_config.get("node_cache_duration").?.integer),
         .timeout = 30_000,
         .logger = &logger_instance,
     };
@@ -78,8 +144,10 @@ pub fn main() !void {
     posix.sigaction(SIGINT, &sa, null);
     posix.sigaction(SIGTERM, &sa, null);
 
-    while (!shutdown_requested) {
-        std.time.sleep(1 * std.time.ns_per_s);
+    if (!no_daemon) {
+        while (!shutdown_requested) {
+            std.time.sleep(1 * std.time.ns_per_s);
+        }
     }
 
     try logger_instance.info("Shutting down proxmox-lxcri...", .{});
@@ -103,10 +171,10 @@ fn getConfigPath(allocator: std.mem.Allocator) ![]const u8 {
     };
 
     for (default_paths) |path| {
-        if (fs.cwd().access(path, .{})) |_| {
+        if (fs.cwd().access(path, .{})) {
             return try allocator.dupe(u8, path);
         } else |_| {}
     }
 
-    return error.ConfigNotFound;
+    return Error.ConfigNotFound;
 }
