@@ -4,9 +4,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const protobuf = b.dependency("protobuf", .{
-        .target = target,
-        .optimize = optimize,
+    const protobuf_module = b.addModule("protobuf", .{
+        .source_file = .{ .path = "protobuf.zig" },
     });
 
     const exe = b.addExecutable(.{
@@ -16,6 +15,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.addModule("protobuf", protobuf.module("protobuf"));
+    exe.addModule("protobuf", protobuf_module);
     b.installArtifact(exe);
 }
