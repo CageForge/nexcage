@@ -27,5 +27,5 @@ pub fn main() !void {
         },
     };
 
-    try response.writeTo(std.io.getStdOut().writer());
+    try response.write(std.io.getStdOut().writer());
 }
