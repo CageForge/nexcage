@@ -3,8 +3,7 @@
     .version = "0.1.0",
     .dependencies = .{
         .protobuf = .{
-            .url = "https://github.com/kubebsd/protobuf-zig/archive/refs/heads/main.tar.gz",
-            .hash = "1220a1c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+            .path = "protobuf.zig",
         },
     },
 }

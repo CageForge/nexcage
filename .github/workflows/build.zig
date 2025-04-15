@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const protobuf_module = b.createModule(.{
-        .root_source_file = .{ .path = "protobuf.zig" },
+        .root_source_file = .{ .path = "protobuf/module.zig" },
     });
 
     const zig_plugin = b.addExecutable(.{
