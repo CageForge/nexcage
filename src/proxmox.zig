@@ -328,7 +328,7 @@ pub const Client = struct {
             }
             self.allocator.free(self.node_cache.nodes);
         }
-        
+
         self.node_cache.nodes = new_nodes;
         self.node_cache.last_update = time.timestamp();
 
@@ -402,7 +402,7 @@ pub const Client = struct {
     pub fn listLXCs(self: *Client) ![]LXCContainer {
         const nodes = try self.getNodes();
         // Не звільняємо nodes, оскільки вони належать до node_cache
-        
+
         var containers = std.ArrayList(LXCContainer).init(self.allocator);
         errdefer {
             for (containers.items) |container| {
@@ -533,7 +533,7 @@ pub const Client = struct {
 
         const name_dup = try self.allocator.dupe(u8, name);
         try snapshot_config.put("snapname", name_dup);
-        
+
         if (description) |desc| {
             const desc_dup = try self.allocator.dupe(u8, desc);
             try snapshot_config.put("description", desc_dup);
@@ -551,7 +551,7 @@ pub const Client = struct {
 
         const response = try self.makeRequest(.DELETE, path, null);
         defer self.allocator.free(response);
-        
+
         if (response.len == 0) {
             return error.ProxmoxAPIError;
         }
@@ -580,11 +580,15 @@ pub const Client = struct {
         if (parsed.value.object.get("data")) |data| {
             for (data.array.items) |snapshot| {
                 const name = try self.allocator.dupe(u8, snapshot.object.get("name").?.string);
-                const description = if (snapshot.object.get("description")) |desc| 
-                    try self.allocator.dupe(u8, desc.string) else null;
-                const parent = if (snapshot.object.get("parent")) |p| 
-                    try self.allocator.dupe(u8, p.string) else null;
-                
+                const description = if (snapshot.object.get("description")) |desc|
+                    try self.allocator.dupe(u8, desc.string)
+                else
+                    null;
+                const parent = if (snapshot.object.get("parent")) |p|
+                    try self.allocator.dupe(u8, p.string)
+                else
+                    null;
+
                 try snapshots.append(Snapshot{
                     .name = name,
                     .description = description,
@@ -626,18 +630,18 @@ pub const Client = struct {
 
         const target_dup = try self.allocator.dupe(u8, target_node);
         try migrate_config.put("target", target_dup);
-        
+
         const online_str = try self.allocator.dupe(u8, if (options.online) "1" else "0");
         try migrate_config.put("online", online_str);
-        
+
         const force_str = try self.allocator.dupe(u8, if (options.force) "1" else "0");
         try migrate_config.put("force", force_str);
-        
+
         if (options.target_storage) |storage| {
             const storage_dup = try self.allocator.dupe(u8, storage);
             try migrate_config.put("target-storage", storage_dup);
         }
-        
+
         const local_disks_str = try self.allocator.dupe(u8, if (options.with_local_disks) "1" else "0");
         try migrate_config.put("with-local-disks", local_disks_str);
 
@@ -675,14 +679,14 @@ pub const Client = struct {
 
         const newid_str = try fmt.allocPrint(self.allocator, "{d}", .{newid});
         try clone_config.put("newid", newid_str);
-        
+
         if (options.name) |name| {
             const name_dup = try self.allocator.dupe(u8, name);
             try clone_config.put("name", name_dup);
         }
         const full_str = try self.allocator.dupe(u8, if (options.full) "1" else "0");
         try clone_config.put("full", full_str);
-        
+
         if (options.target) |target| {
             const target_dup = try self.allocator.dupe(u8, target);
             try clone_config.put("target", target_dup);
@@ -715,13 +719,7 @@ pub const Client = struct {
         const data = parsed.value.object.get("data").?.array;
         for (data.items) |resource| {
             if (std.mem.eql(u8, resource.object.get("type").?.string, "node")) {
-                try nodes.append(try Node.init(
-                    self.allocator,
-                    resource.object.get("node").?.string,
-                    resource.object.get("status").?.string,
-                    resource.object.get("type").?.string,
-                    true
-                ));
+                try nodes.append(try Node.init(self.allocator, resource.object.get("node").?.string, resource.object.get("status").?.string, resource.object.get("type").?.string, true));
             }
         }
 

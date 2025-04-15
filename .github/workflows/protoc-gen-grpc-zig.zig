@@ -25,4 +25,4 @@ pub fn main() !void {
     };
 
     try response.write(stdout.writer());
-} 
+}
