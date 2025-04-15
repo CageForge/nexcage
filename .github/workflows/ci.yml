@@ -13,191 +13,30 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v1
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v1
         with:
           version: '0.12.0'
-
-      - name: Run linter
-        run: zig fmt --check .
+      - run: zig fmt --check .
 
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v1
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v1
         with:
           version: '0.12.0'
-
       - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23
+      - name: Build protoc plugins
         run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23 git wget unzip
-          # Build protoc-gen-zig locally
-          mkdir -p /tmp/protoc-gen-zig
-          cd /tmp/protoc-gen-zig
-          cat > build.zig << 'EOF'
-          const std = @import("std");
-
-          pub fn build(b: *std.Build) void {
-              const target = b.standardTargetOptions(.{});
-              const optimize = b.standardOptimizeOption(.{});
-
-              const protobuf = b.dependency("protobuf", .{
-                  .target = target,
-                  .optimize = optimize,
-              });
-
-              const exe = b.addExecutable(.{
-                  .name = "protoc-gen-zig",
-                  .root_source_file = .{ .path = "src/main.zig" },
-                  .target = target,
-                  .optimize = optimize,
-              });
-
-              exe.addModule("protobuf", protobuf.module("protobuf"));
-              b.installArtifact(exe);
-          }
-          EOF
-          mkdir -p src
-          cat > src/main.zig << 'EOF'
-          const std = @import("std");
-          const protobuf = @import("protobuf");
-
-          pub fn main() !void {
-              var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-              defer arena.deinit();
-              const allocator = arena.allocator();
-
-              var args = try std.process.argsWithAllocator(allocator);
-              _ = args.skip(); // Skip program name
-
-              const stdin = std.io.getStdIn();
-              const stdout = std.io.getStdOut();
-
-              // Read protobuf input
-              var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
-
-              // Create CodeGeneratorResponse
-              var response = protobuf.CodeGeneratorResponse{
-                  .file = &[_]protobuf.CodeGeneratorResponse.File{
-                      .{
-                          .name = "runtime_service.zig",
-                          .content = 
-                              \\const std = @import("std");
-                              \\
-                              \\pub const RuntimeService = struct {
-                              \\    pub const Service = struct {
-                              \\        pub const Version = struct {
-                              \\            version: []const u8,
-                              \\        };
-                              \\    };
-                              \\};
-                              \\
-                          ,
-                      },
-                  },
-              };
-
-              // Write response
-              try response.write(stdout.writer());
-          }
-          EOF
-          zig build
-          sudo mv zig-out/bin/protoc-gen-zig /usr/local/bin/
-          cd $GITHUB_WORKSPACE
-          # Build protoc-gen-grpc-zig locally
-          mkdir -p /tmp/protoc-gen-grpc-zig
-          cd /tmp/protoc-gen-grpc-zig
-          cat > build.zig << 'EOF'
-          const std = @import("std");
-
-          pub fn build(b: *std.Build) void {
-              const target = b.standardTargetOptions(.{});
-              const optimize = b.standardOptimizeOption(.{});
-
-              const protobuf = b.dependency("protobuf", .{
-                  .target = target,
-                  .optimize = optimize,
-              });
-
-              const exe = b.addExecutable(.{
-                  .name = "protoc-gen-grpc-zig",
-                  .root_source_file = .{ .path = "src/main.zig" },
-                  .target = target,
-                  .optimize = optimize,
-              });
-
-              exe.addModule("protobuf", protobuf.module("protobuf"));
-              b.installArtifact(exe);
-          }
-          EOF
-          mkdir -p src
-          cat > src/main.zig << 'EOF'
-          const std = @import("std");
-          const protobuf = @import("protobuf");
-
-          pub fn main() !void {
-              var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-              defer arena.deinit();
-              const allocator = arena.allocator();
-
-              var args = try std.process.argsWithAllocator(allocator);
-              _ = args.skip(); // Skip program name
-
-              const stdin = std.io.getStdIn();
-              const stdout = std.io.getStdOut();
-
-              // Read gRPC input
-              var buffer: [8192]u8 = undefined;
-              _ = try stdin.reader().read(&buffer);
-
-              // Create CodeGeneratorResponse
-              var response = protobuf.CodeGeneratorResponse{
-                  .file = &[_]protobuf.CodeGeneratorResponse.File{
-                      .{
-                          .name = "runtime_service_grpc.zig",
-                          .content = 
-                              \\const std = @import("std");
-                              \\
-                              \\pub const RuntimeService = struct {
-                              \\    pub const Service = struct {
-                              \\        pub const Version = struct {
-                              \\            pub fn Version(ctx: *std.mem.Allocator, req: *const Version) !Version {
-                              \\                _ = ctx;
-                              \\                _ = req;
-                              \\                return Version{
-                              \\                    .version = "1.0.0",
-                              \\                };
-                              \\            }
-                              \\        };
-                              \\    };
-                              \\};
-                              \\
-                          ,
-                      },
-                  },
-              };
-
-              // Write response
-              try response.write(stdout.writer());
-          }
-          EOF
-          zig build
-          sudo mv zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
-          cd $GITHUB_WORKSPACE
-
+          cd .github/workflows
+          zig build-exe protoc-gen-zig.zig
+          zig build-exe protoc-gen-grpc-zig.zig
+          sudo mv protoc-gen-zig protoc-gen-grpc-zig /usr/local/bin/
       - name: Generate gRPC code
         run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
-
       - name: Run tests
         run: zig test .
 
@@ -206,22 +45,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v1
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v1
         with:
           version: '0.12.0'
-
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23 git wget unzip
-
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23
       - name: Build
         run: zig build
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
