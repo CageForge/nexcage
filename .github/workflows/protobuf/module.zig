@@ -8,26 +8,35 @@ pub const CodeGeneratorResponse = struct {
         content: []const u8,
     };
 
-    pub fn write(self: CodeGeneratorResponse, output_writer: anytype) !void {
-        var buffer = std.ArrayList(u8).init(std.heap.page_allocator);
-        defer buffer.deinit();
-        const writer = buffer.writer();
+    pub fn write(self: CodeGeneratorResponse, writer: anytype) !void {
+        // Write the number of files (field 1, repeated)
+        for (self.file) |f| {
+            // Write field tag (1 << 3 | 2 = 10)
+            try writer.writeByte(10);
 
-        try writer.writeAll("{\n");
-        try writer.writeAll("  \"file\": [\n");
-        for (self.file, 0..) |f, i| {
-            try writer.writeAll("    {\n");
-            try writer.print("      \"name\": \"{s}\",\n", .{f.name});
-            try writer.print("      \"content\": \"{s}\"\n", .{f.content});
-            try writer.writeAll("    }");
-            if (i < self.file.len - 1) {
-                try writer.writeAll(",");
-            }
-            try writer.writeAll("\n");
+            // Write length of the file message
+            const file_len = 2 + f.name.len + 2 + f.content.len;
+            try writeVarint(writer, file_len);
+
+            // Write name field (field 1, string)
+            try writer.writeByte(10);
+            try writeVarint(writer, f.name.len);
+            try writer.writeAll(f.name);
+
+            // Write content field (field 2, string)
+            try writer.writeByte(18);
+            try writeVarint(writer, f.content.len);
+            try writer.writeAll(f.content);
         }
-        try writer.writeAll("  ]\n");
-        try writer.writeAll("}\n");
+    }
 
-        try output_writer.writeAll(buffer.items);
+    fn writeVarint(writer: anytype, value: usize) !void {
+        var v = value;
+        while (v >= 0x80) {
+            const byte = @as(u8, @truncate((v & 0x7F) | 0x80));
+            try writer.writeByte(byte);
+            v >>= 7;
+        }
+        try writer.writeByte(@as(u8, @truncate(v)));
     }
 };
