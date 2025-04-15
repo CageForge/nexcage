@@ -18,4 +18,4 @@ pub fn build(b: *std.Build) void {
 
     exe.addModule("protobuf", protobuf.module("protobuf"));
     b.installArtifact(exe);
-} 
+}
