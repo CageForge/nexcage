@@ -155,6 +155,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("proxmox", proxmox_module);
     exe.root_module.addImport("cri", cri_module);
     exe.root_module.addImport("grpc_service", grpc_service_module);
+    exe.root_module.addImport("error", error_module);
 
     test_exe.root_module.addImport("types", types_module);
     test_exe.root_module.addImport("logger", logger_module);

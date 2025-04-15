@@ -2,7 +2,7 @@
     "proxmox": {
         "hosts": ["mgr.cp.if.ua"],
         "port": 8006,
-        "token": "root@pve!capi",
+        "token": "root@pam!capi=be7823bc-d949-460e-a9ce-28d0844648ed",
         "node": "mgr",
         "node_cache_duration": 60
     },
