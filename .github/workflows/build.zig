@@ -15,6 +15,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.addModule("protobuf", protobuf_module);
+    exe.root_module.addImport("protobuf", protobuf_module);
     b.installArtifact(exe);
 }
