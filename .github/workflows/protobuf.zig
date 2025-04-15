@@ -12,4 +12,4 @@ pub const CodeGeneratorResponse = struct {
         _ = self;
         _ = writer;
     }
-}; 
+};
