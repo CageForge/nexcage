@@ -4,8 +4,9 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const protobuf_module = b.addModule("protobuf", .{
-        .source_file = .{ .path = "protobuf.zig" },
+    const protobuf_module = b.createModule(.{
+        .name = "protobuf",
+        .root_source_file = .{ .path = "protobuf.zig" },
     });
 
     const exe = b.addExecutable(.{
