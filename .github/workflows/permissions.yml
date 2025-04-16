@@ -1,0 +1,26 @@
+name: "Permissions"
+
+on:
+  workflow_call:
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+      checks: write
+      statuses: write
+      security-events: write
+      packages: read
+      deployments: write
+      pages: write
+      issues: write
+      discussions: write
+      repository-projects: write
+      workflows: write
+
+jobs:
+  permissions:
+    name: "Set Permissions"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Set Permissions"
+        run: echo "Permissions set" 

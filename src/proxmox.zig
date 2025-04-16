@@ -235,7 +235,7 @@ pub const Client = struct {
             try self.logger.info("Response status: {d}", .{@intFromEnum(status)});
 
             const response_body = try request.reader().readAllAlloc(self.allocator, 1024 * 1024);
-            errdefer self.allocator.free(response_body);
+            defer self.allocator.free(response_body);
 
             try self.logger.info("Response body: {s}", .{response_body});
 
@@ -270,7 +270,9 @@ pub const Client = struct {
                 }
             }
 
-            return response_body;
+            // Duplicate response_body before returning to avoid memory leak
+            const result = try self.allocator.dupe(u8, response_body);
+            return result;
         }
 
         return last_error;
@@ -283,6 +285,8 @@ pub const Client = struct {
 
         const path = "/cluster/resources";
         const response = try self.makeRequest(.GET, path, null);
+        defer self.allocator.free(response);
+
         if (response.len == 0) {
             return error.ProxmoxAPIError;
         }
