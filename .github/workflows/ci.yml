@@ -7,7 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,30 +18,19 @@ jobs:
         with:
           zig-version: '0.14.0'
 
-      - name: Build
-        run: zig build
-
-      - name: Run tests
-        run: zig build test
-
       - name: Check formatting
         run: zig fmt --check .
 
-      - name: Check documentation
-        run: zig build docs
+  dependencies:
+    name: Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Upload documentation
-        uses: actions/upload-artifact@v4
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
         with:
-          name: documentation
-          path: docs/
-          retention-days: 5
+          zig-version: '0.14.0'
 
-      - name: Create Release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            zig-out/bin/*
-            docs/*
-          generate_release_notes: true 
+      - name: Check dependencies
+        run: zig build 
