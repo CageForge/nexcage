@@ -188,4 +188,9 @@ pub fn build(b: *std.Build) void {
     const test_workflow_cmd = b.addRunArtifact(test_workflow_exe);
     const test_workflow_step = b.step("test-workflow", "Test GitHub workflows");
     test_workflow_step.dependOn(&test_workflow_cmd.step);
+
+    // Add test step that runs all tests
+    const test_step = b.step("test", "Run all tests");
+    test_step.dependOn(&test_connection_cmd.step);
+    test_step.dependOn(&test_workflow_cmd.step);
 }
