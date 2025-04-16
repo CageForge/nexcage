@@ -1,75 +1,49 @@
-name: "Release"
+name: Release
 
 on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   release:
-    name: "Create Release"
+    name: Create Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
-      checks: write
-      statuses: write
-      security-events: write
-      packages: read
-      deployments: write
-      pages: write
-      issues: write
-      discussions: write
-      repository-projects: write
     steps:
-      - name: "Checkout"
-        uses: actions/checkout@v4
-
-      - name: "Setup Zig"
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          zig-version: "0.13.0"
-
-      - name: "Create Release"
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-      - name: Install dependencies
+      - name: Checkout code
+        run: git checkout ${{ github.ref }}
+      - name: Setup Node.js
         run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23
-          
-      - name: Build protoc plugins
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+      - name: Create Release
         run: |
-          cd .github/workflows
-          zig build-exe protoc-gen-zig.zig
-          zig build-exe protoc-gen-grpc-zig.zig
-          sudo mv protoc-gen-zig protoc-gen-grpc-zig /usr/local/bin/
-          
-      - name: Generate gRPC code
-        run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
-        
+          RELEASE_TAG=$(git describe --tags --abbrev=0)
+          RELEASE_BODY=$(git log -1 --pretty=%B)
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"$RELEASE_TAG\",\"name\":\"$RELEASE_TAG\",\"body\":\"$RELEASE_BODY\",\"draft\":false,\"prerelease\":false}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases"
+      - name: Install Dependencies
+        run: npm ci
+      - name: Build Plugins
+        run: npm run build:plugins
+      - name: Generate gRPC Code
+        run: npm run generate:grpc
       - name: Build Release
-        run: zig build -Doptimize=ReleaseSafe
-        
+        run: npm run build:release
       - name: Create Release Asset
         run: |
-          mkdir -p release
-          cp zig-out/bin/proxmox-lxcri release/
-          cp config.json release/
-          cp proxmox-lxcri.service release/
-          cp install.sh release/
-          tar -czf proxmox-lxcri-${{ github.ref_name }}.tar.gz -C release .
-          
+          mkdir -p dist
+          cp -r build/* dist/
+          tar -czf release.tar.gz dist/
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v2
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./proxmox-lxcri-${{ github.ref_name }}.tar.gz
-          asset_name: proxmox-lxcri-${{ github.ref_name }}.tar.gz
-          asset_content_type: application/gzip 
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary @release.tar.gz \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ github.event.release.id }}/assets?name=release.tar.gz" 

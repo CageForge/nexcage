@@ -7,99 +7,74 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  packages: read
+  security-events: write
+
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
-      checks: write
-      statuses: write
-      security-events: write
-      packages: read
-      deployments: write
-      pages: write
-      issues: write
-      discussions: write
-      repository-projects: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Run tests in Docker
+      - name: Checkout code
+        run: git checkout ${{ github.ref }}
+      - name: Setup Node.js
         run: |
-          docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest zig build test
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+      - name: Install Dependencies
+        run: npm ci
+      - name: Run Tests
+        run: npm test
+      - name: Upload Test Results
+        run: |
+          mkdir -p test-results
+          tar -czf test-results.tar.gz test-results/
+          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary @test-results.tar.gz \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ github.event.release.id }}/assets?name=test-results.tar.gz"
 
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
-      checks: write
-      statuses: write
-      security-events: write
-      packages: read
-      deployments: write
-      pages: write
-      issues: write
-      discussions: write
-      repository-projects: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Run lint in Docker
+      - name: Checkout code
+        run: git checkout ${{ github.ref }}
+      - name: Setup Node.js
         run: |
-          docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest zig fmt --check .
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+      - name: Install Dependencies
+        run: npm ci
+      - name: Run Lint
+        run: npm run lint
 
   code-scanning:
     name: Code Scanning
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
-      checks: write
-      statuses: write
-      security-events: write
-      packages: read
-      deployments: write
-      pages: write
-      issues: write
-      discussions: write
-      repository-projects: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Run code scanning in Docker
+      - name: Checkout code
+        run: git checkout ${{ github.ref }}
+      - name: Run CodeQL Analysis
         run: |
-          docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest zig build
+          wget https://github.com/github/codeql-action/releases/download/codeql-bundle-20230418/codeql-bundle-linux64.tar.gz
+          tar -xvzf codeql-bundle-linux64.tar.gz
+          ./codeql/codeql database create --language=javascript codeql-db
+          ./codeql/codeql database analyze codeql-db --format=sarif-latest --output=codeql-results.sarif
 
   secrets-scanning:
     name: Secrets Scanning
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
-      checks: write
-      statuses: write
-      security-events: write
-      packages: read
-      deployments: write
-      pages: write
-      issues: write
-      discussions: write
-      repository-projects: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Run secrets scanning in Docker
+      - name: Checkout code
+        run: git checkout ${{ github.ref }}
+      - name: Run Secret Scanning
         run: |
-          docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest gitleaks detect --no-git --verbose --report-format json --report-path gitleaks-report.json
-          cat gitleaks-report.json
+          wget https://github.com/gitleaks/gitleaks/releases/download/v8.16.4/gitleaks_8.16.4_linux_x64.tar.gz
+          tar -xvzf gitleaks_8.16.4_linux_x64.tar.gz
+          ./gitleaks detect --no-git --verbose --report-format json --report-path gitleaks-report.json
 
 #   dependencies:
 #     name: Dependencies
