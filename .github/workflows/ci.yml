@@ -13,35 +13,40 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: mlugg/setup-zig@v1
+      - uses: actions/checkout@v4
+      - uses: goto-bus-stop/setup-zig@v2
         with:
           version: '0.14.0'
-      - run: zig fmt --check .
+      - name: Check formatting
+        run: zig fmt --check .
+      - name: Check code quality
+        run: |
+          zig build test-workflow
+          zig build test-connection
 
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Run tests in Docker
         run: |
           docker pull moriarti/proxmox-lxcri-test:latest
-          docker run --rm moriarti/proxmox-lxcri-test:latest bash -c "cd .github/workflows && zig build && zig test protoc-gen-zig.zig && zig test protoc-gen-grpc-zig.zig"
+          docker run --rm -v ${{ github.workspace }}:/app moriarti/proxmox-lxcri-test:latest bash -c "cd /app && zig build test"
 
   build:
     name: Build
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
-      - uses: actions/checkout@v3
-      - uses: mlugg/setup-zig@v1
+      - uses: actions/checkout@v4
+      - uses: goto-bus-stop/setup-zig@v2
         with:
           version: '0.14.0'
       - name: Build
         run: zig build
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: proxmox-lxcri
           path: zig-out/bin/
@@ -53,9 +58,9 @@ jobs:
     if: github.event_name == 'release'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Download artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: proxmox-lxcri
           path: .
@@ -66,7 +71,7 @@ jobs:
           chmod +x release/proxmox-lxcri-linux-amd64
           tar -czf proxmox-lxcri-linux-amd64.tar.gz -C release .
       - name: Upload release asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: proxmox-lxcri-linux-amd64.tar.gz
         env:
