@@ -4,27 +4,44 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Отримуємо залежність protobuf
-    const protobuf_dep = b.dependency("protobuf", .{});
-    const protobuf_module = protobuf_dep.module("protobuf");
+    const protobuf = b.createModule(.{
+        .root_source_file = .{ .path = "protobuf.zig" },
+    });
 
-    // Створюємо виконуваний файл protoc-gen-zig
-    const zig_plugin = b.addExecutable(.{
+    const protoc_gen_zig = b.addExecutable(.{
         .name = "protoc-gen-zig",
         .root_source_file = .{ .path = "protoc-gen-zig.zig" },
         .target = target,
         .optimize = optimize,
     });
-    zig_plugin.root_module.addImport("protobuf", protobuf_module);
-    b.installArtifact(zig_plugin);
+    protoc_gen_zig.addModule("protobuf", protobuf);
 
-    // Створюємо виконуваний файл protoc-gen-grpc-zig
-    const grpc_plugin = b.addExecutable(.{
+    const protoc_gen_grpc_zig = b.addExecutable(.{
         .name = "protoc-gen-grpc-zig",
         .root_source_file = .{ .path = "protoc-gen-grpc-zig.zig" },
         .target = target,
         .optimize = optimize,
     });
-    grpc_plugin.root_module.addImport("protobuf", protobuf_module);
-    b.installArtifact(grpc_plugin);
+    protoc_gen_grpc_zig.addModule("protobuf", protobuf);
+
+    const test_protoc_gen_zig = b.addTest(.{
+        .root_source_file = .{ .path = "test_protoc_gen_zig.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    test_protoc_gen_zig.addModule("protobuf", protobuf);
+
+    const test_protoc_gen_grpc_zig = b.addTest(.{
+        .root_source_file = .{ .path = "test_protoc_gen_grpc_zig.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    test_protoc_gen_grpc_zig.addModule("protobuf", protobuf);
+
+    const test_step = b.step("test", "Run all tests");
+    test_step.dependOn(&test_protoc_gen_zig.step);
+    test_step.dependOn(&test_protoc_gen_grpc_zig.step);
+
+    b.installArtifact(protoc_gen_zig);
+    b.installArtifact(protoc_gen_grpc_zig);
 }
