@@ -1,12 +1,10 @@
 .{
-    .name = .protoc_gen_zig,
+    .name = "protoc-gen-zig",
     .version = "0.1.0",
-    .paths = .{
-        "build.zig",
-        "build.zig.zon",
-        "protobuf/module.zig",
-        "protoc-gen-zig.zig",
-        "protoc-gen-grpc-zig.zig",
+    .dependencies = .{
+        .protobuf = .{
+            .url = "https://github.com/kubebsd/protobuf-zig/archive/main.tar.gz",
+            .hash = "12209cbe8cd6f8891e6f6d54c26e60e0c0c8068c4c1e448e98d33b70e0a92f6d2c6f",
+        },
     },
-    .fingerprint = 0xa18e217ad2df2770,
 }
