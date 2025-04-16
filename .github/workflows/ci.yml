@@ -98,7 +98,8 @@ jobs:
 
       - name: Run secrets scanning in Docker
         run: |
-          docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest gitleaks detect --no-git --verbose
+          docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest gitleaks detect --no-git --verbose --report-format json --report-path gitleaks-report.json
+          cat gitleaks-report.json
 
 #   dependencies:
 #     name: Dependencies
