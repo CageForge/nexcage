@@ -1,25 +1,82 @@
-name: Dependencies
+name: "Dependencies"
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 0 * * 0' # Run weekly on Sunday
-  workflow_dispatch:
 
 jobs:
+  dependencies:
+    name: "Check Dependencies"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+      checks: write
+      statuses: write
+      security-events: write
+      packages: read
+      deployments: write
+      pages: write
+      issues: write
+      discussions: write
+      repository-projects: write
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Setup Zig"
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          zig-version: "0.13.0"
+
+      - name: "Check Dependencies"
+        run: |
+          zig build check-dependencies
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
   check-updates:
     name: Check for Updates
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+      checks: write
+      statuses: write
+      security-events: write
+      packages: read
+      deployments: write
+      pages: write
+      issues: write
+      discussions: write
+      repository-projects: write
     steps:
       - uses: actions/checkout@v4
       - uses: goto-bus-stop/setup-zig@v2
         with:
-          version: '0.14.0'
+          zig-version: '0.14.0'
       - name: Check dependencies
         run: zig build test-workflow
           
   update-zig:
     name: Update Zig
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+      checks: write
+      statuses: write
+      security-events: write
+      packages: read
+      deployments: write
+      pages: write
+      issues: write
+      discussions: write
+      repository-projects: write
     steps:
       - uses: actions/checkout@v4
       - name: Get latest Zig version
@@ -29,11 +86,11 @@ jobs:
           
       - name: Update Zig version in workflows
         run: |
-          find .github/workflows -type f -name "*.yml" -exec sed -i "s/version: '.*'/version: '${{ env.LATEST_VERSION }}'/" {} +
+          find .github/workflows -type f -name "*.yml" -exec sed -i "s/zig-version: '.*'/zig-version: '${{ env.LATEST_VERSION }}'/" {} +
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add .
           git commit -m "chore: update Zig to ${{ env.LATEST_VERSION }}"
           git push
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GH_TOKEN: ${{ secrets.GH_TOKEN }} 

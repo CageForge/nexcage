@@ -1,21 +1,42 @@
-name: Release
+name: "Release"
 
 on:
   release:
     types: [published]
 
 jobs:
-  build:
-    name: Build Release
+  release:
+    name: "Create Release"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+      checks: write
+      statuses: write
+      security-events: write
+      packages: read
+      deployments: write
+      pages: write
+      issues: write
+      discussions: write
+      repository-projects: write
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v1
+      - name: "Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Setup Zig"
+        uses: goto-bus-stop/setup-zig@v2
         with:
-          version: '0.14.0'
-          
+          zig-version: "0.13.0"
+
+      - name: "Create Release"
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -44,9 +65,9 @@ jobs:
           tar -czf proxmox-lxcri-${{ github.ref_name }}.tar.gz -C release .
           
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: ./proxmox-lxcri-${{ github.ref_name }}.tar.gz
