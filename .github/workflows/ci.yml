@@ -27,28 +27,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          zig-version: '0.14.0'
-
-      - name: Install dependencies
+      - name: Run tests in Docker
         run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libgrpc-dev libprotobuf-dev libprotobuf-lite23 libprotobuf23 libprotoc23
-
-      - name: Build protoc plugins
-        run: |
-          cd .github/workflows
-          zig build-exe protoc-gen-zig.zig
-          zig build-exe protoc-gen-grpc-zig.zig
-          sudo mv protoc-gen-zig protoc-gen-grpc-zig /usr/local/bin/
-
-      - name: Generate gRPC code
-        run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
-
-      - name: Run tests
-        run: zig build test
+          docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest zig build test
 
   lint:
     name: Lint
@@ -69,13 +50,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          zig-version: '0.14.0'
-
-      - name: Check formatting
-        run: zig fmt --check .
+      - name: Run lint in Docker
+        run: |
+          docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest zig fmt --check .
 
 #   dependencies:
 #     name: Dependencies
