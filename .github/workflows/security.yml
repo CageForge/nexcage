@@ -13,48 +13,34 @@ jobs:
     name: Dependency Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: goto-bus-stop/setup-zig@v2
         with:
-          node-version: '18'
-          
-      - name: Install dependencies
-        run: npm install -g npm-audit
-        
-      - name: Run npm audit
-        run: npm audit
+          version: '0.14.0'
+      - name: Check dependencies
+        run: zig build test-workflow
         
   code-scan:
     name: Code Scanning
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v1
+      - uses: actions/checkout@v4
+      - uses: goto-bus-stop/setup-zig@v2
         with:
           version: '0.14.0'
-          
       - name: Run Zig Security Checks
         run: |
-          zig build -Doptimize=ReleaseSafe -Dfuzzing=true
-          zig test -Doptimize=ReleaseSafe -Dfuzzing=true
+          zig build -Doptimize=ReleaseSafe
+          zig build test
           
   secrets-scan:
     name: Secrets Scanning
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          
-      - name: Install dependencies
-        run: npm install -g trufflehog
-        
-      - name: Run TruffleHog
-        run: trufflehog --regex --entropy=False . 
+      - uses: actions/checkout@v4
+      - name: Install gitleaks
+        run: |
+          curl -L https://github.com/zricethezav/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz | tar xz
+          sudo mv gitleaks /usr/local/bin/
+      - name: Run gitleaks
+        run: gitleaks detect --no-git 

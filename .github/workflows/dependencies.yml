@@ -10,38 +10,18 @@ jobs:
     name: Check for Updates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: goto-bus-stop/setup-zig@v2
         with:
-          node-version: '18'
-          
-      - name: Install dependencies
-        run: npm install -g npm-check-updates
-        
-      - name: Check for updates
-        run: |
-          ncu -u
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add .
-          git commit -m "chore: update dependencies"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          version: '0.14.0'
+      - name: Check dependencies
+        run: zig build test-workflow
           
   update-zig:
     name: Update Zig
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          
+      - uses: actions/checkout@v4
       - name: Get latest Zig version
         run: |
           LATEST_VERSION=$(curl -s https://ziglang.org/download/index.json | jq -r '.master.version')
@@ -49,7 +29,7 @@ jobs:
           
       - name: Update Zig version in workflows
         run: |
-          sed -i "s/version: '.*'/version: '${{ env.LATEST_VERSION }}'/" .github/workflows/*.yml
+          find .github/workflows -type f -name "*.yml" -exec sed -i "s/version: '.*'/version: '${{ env.LATEST_VERSION }}'/" {} +
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add .
