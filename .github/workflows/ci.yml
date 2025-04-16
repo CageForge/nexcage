@@ -77,6 +77,29 @@ jobs:
         run: |
           docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest zig build
 
+  secrets-scanning:
+    name: Secrets Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+      checks: write
+      statuses: write
+      security-events: write
+      packages: read
+      deployments: write
+      pages: write
+      issues: write
+      discussions: write
+      repository-projects: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run secrets scanning in Docker
+        run: |
+          docker run --rm -v $(pwd):/app -w /app moriarti/proxmox-lxcri-test:latest gitleaks detect --no-git --verbose
+
 #   dependencies:
 #     name: Dependencies
 #     runs-on: ubuntu-latest
