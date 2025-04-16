@@ -24,20 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: mlugg/setup-zig@v1
-        with:
-          version: '0.14.0'
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libprotobuf-dev
-      - name: Build protoc plugins
+      - name: Build and run tests in Docker
         run: |
-          cd .github/workflows
-          zig build
-          sudo mv zig-out/bin/protoc-gen-zig zig-out/bin/protoc-gen-grpc-zig /usr/local/bin/
-      - name: Generate gRPC code
-        run: protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
-      - name: Run tests
-        run: zig test .
+          docker build -t proxmox-lxcri-test -f .github/workflows/Dockerfile .
+          docker run --rm proxmox-lxcri-test bash -c "cd .github/workflows && zig build && zig test protoc-gen-zig.zig && zig test protoc-gen-grpc-zig.zig"
 
   build:
     name: Build
@@ -48,8 +38,6 @@ jobs:
       - uses: mlugg/setup-zig@v1
         with:
           version: '0.14.0'
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libgrpc-dev libgrpc++-dev libgrpc++1 libprotobuf-dev
       - name: Build
         run: zig build
       - name: Upload artifacts
