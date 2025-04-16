@@ -4,10 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Add protobuf dependency
-    const protobuf_dep = b.dependency("protobuf", .{});
-    const protobuf_module = protobuf_dep.module("protobuf");
-
     // Create modules without dependencies first
     const types_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/types.zig" },
@@ -85,23 +81,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
-    // Create protoc-gen modules with protobuf dependency
-    const protoc_gen_zig = b.addExecutable(.{
-        .name = "protoc-gen-zig",
-        .root_source_file = .{ .cwd_relative = ".github/workflows/protoc-gen-zig.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-    protoc_gen_zig.root_module.addImport("protobuf", protobuf_module);
-
-    const protoc_gen_grpc_zig = b.addExecutable(.{
-        .name = "protoc-gen-grpc-zig",
-        .root_source_file = .{ .cwd_relative = ".github/workflows/protoc-gen-grpc-zig.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-    protoc_gen_grpc_zig.root_module.addImport("protobuf", protobuf_module);
 
     // Add include paths
     exe.addIncludePath(.{ .cwd_relative = "include" });
@@ -200,28 +179,13 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
     b.installArtifact(test_exe);
     b.installArtifact(test_workflow_exe);
-    b.installArtifact(protoc_gen_zig);
-    b.installArtifact(protoc_gen_grpc_zig);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
-
-    const test_cmd = b.addRunArtifact(test_exe);
-    test_cmd.step.dependOn(b.getInstallStep());
-
-    const test_step = b.step("test-connection", "Test Proxmox API connection");
-    test_step.dependOn(&test_cmd.step);
+    // Add test steps
+    const test_connection_cmd = b.addRunArtifact(test_exe);
+    const test_connection_step = b.step("test-connection", "Test Proxmox API connection");
+    test_connection_step.dependOn(&test_connection_cmd.step);
 
     const test_workflow_cmd = b.addRunArtifact(test_workflow_exe);
-    test_workflow_cmd.step.dependOn(b.getInstallStep());
-
-    const test_workflow_step = b.step("test-workflow", "Test GitHub workflows locally");
+    const test_workflow_step = b.step("test-workflow", "Test GitHub workflows");
     test_workflow_step.dependOn(&test_workflow_cmd.step);
 }

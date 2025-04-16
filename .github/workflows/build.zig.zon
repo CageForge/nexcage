@@ -1,4 +1,7 @@
 .{
+    .paths = .{
+        .root = ".",
+    },
     .name = "protoc-gen-zig",
     .version = "0.1.0",
     .dependencies = .{
