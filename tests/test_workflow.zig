@@ -56,7 +56,7 @@ pub fn main() !void {
         // Read and validate the workflow file
         const file_path = try std.fmt.allocPrint(allocator, ".github/workflows/{s}", .{workflow_file});
         defer allocator.free(file_path);
-        
+
         const file = try fs.cwd().openFile(file_path, .{});
         defer file.close();
 
@@ -66,7 +66,8 @@ pub fn main() !void {
         // Basic validation - check for required fields
         if (std.mem.indexOf(u8, content, "name:") == null or
             std.mem.indexOf(u8, content, "on:") == null or
-            std.mem.indexOf(u8, content, "jobs:") == null) {
+            std.mem.indexOf(u8, content, "jobs:") == null)
+        {
             try logger.err("Invalid workflow file format: {s}", .{workflow_file});
             return error.InvalidWorkflowFormat;
         }
