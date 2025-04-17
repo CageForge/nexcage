@@ -10,7 +10,7 @@ const Allocator = std.mem.Allocator;
 const logger = std.log.scoped(.grpc_runtime);
 
 /// Структура сервісу Runtime
-pub const RuntimeService = struct {
+pub const GrpcRuntimeService = struct {
     allocator: Allocator,
     server: ?*grpc.grpc_server,
     type_converter: TypeConverter,
@@ -102,7 +102,7 @@ pub const RuntimeService = struct {
             self.server.?,
             method_name.ptr,
             null,
-            grpc.GRPC_SRM_PAYLOAD_READ_INITIAL_BYTE_BUFFER,
+            grpc.GRPC_SRM_PAYLOAD_READ_INITIAL_BYTEBUFFER,
             0
         );
 
@@ -140,7 +140,7 @@ pub const GrpcError = error{
 };
 
 /// Тип для обробника gRPC методу
-pub const GrpcHandler = *const fn (*RuntimeService, []const u8) callconv(.C) grpc.grpc_status_code;
+pub const GrpcHandler = *const fn (*GrpcRuntimeService, []const u8) callconv(.C) grpc.grpc_status_code;
 
 /// Структура для зберігання інформації про метод
 pub const MethodInfo = struct {
