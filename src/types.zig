@@ -393,3 +393,253 @@ pub const LXCContainer = struct {
         try writer.writeByte('}');
     }
 };
+
+pub const ContainerResources = struct {
+    cpu_shares: ?u32 = null,
+    cpu_quota: ?i64 = null,
+    cpu_period: ?u64 = null,
+    memory_limit_bytes: ?u64 = null,
+    oom_score_adj: ?i32 = null,
+    cpuset_cpus: ?[]const u8 = null,
+    cpuset_mems: ?[]const u8 = null,
+
+    pub fn deinit(self: *ContainerResources, allocator: Allocator) void {
+        if (self.cpuset_cpus) |cpus| allocator.free(cpus);
+        if (self.cpuset_mems) |mems| allocator.free(mems);
+    }
+};
+
+pub const ContainerFilter = struct {
+    id: ?[]const u8 = null,
+    state: ?ContainerStatus = null,
+    pod_id: ?[]const u8 = null,
+    label_selector: ?[]const u8 = null,
+
+    pub fn deinit(self: *ContainerFilter, allocator: Allocator) void {
+        if (self.id) |id| allocator.free(id);
+        if (self.pod_id) |pod_id| allocator.free(pod_id);
+        if (self.label_selector) |selector| allocator.free(selector);
+    }
+};
+
+pub const ContainerConfig = struct {
+    metadata: ContainerMetadata,
+    image: ImageSpec,
+    command: []const []const u8,
+    args: []const []const u8,
+    working_dir: []const u8,
+    envs: []EnvVar,
+    mounts: []Mount,
+    devices: []Device,
+    labels: std.StringHashMap([]const u8),
+    annotations: std.StringHashMap([]const u8),
+    linux: LinuxContainerConfig,
+    log_path: []const u8,
+
+    pub fn deinit(self: *ContainerConfig, allocator: Allocator) void {
+        self.metadata.deinit(allocator);
+        self.image.deinit(allocator);
+        for (self.command) |cmd| {
+            allocator.free(cmd);
+        }
+        allocator.free(self.command);
+        for (self.args) |arg| {
+            allocator.free(arg);
+        }
+        allocator.free(self.args);
+        allocator.free(self.working_dir);
+        for (self.envs) |*env| {
+            env.deinit(allocator);
+        }
+        allocator.free(self.envs);
+        for (self.mounts) |*mount| {
+            mount.deinit(allocator);
+        }
+        allocator.free(self.mounts);
+        for (self.devices) |*device| {
+            device.deinit(allocator);
+        }
+        allocator.free(self.devices);
+        var labels_it = self.labels.iterator();
+        while (labels_it.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
+            allocator.free(entry.value_ptr.*);
+        }
+        self.labels.deinit();
+        var annotations_it = self.annotations.iterator();
+        while (annotations_it.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
+            allocator.free(entry.value_ptr.*);
+        }
+        self.annotations.deinit();
+        self.linux.deinit(allocator);
+        allocator.free(self.log_path);
+    }
+};
+
+pub const ContainerMetadata = struct {
+    name: []const u8,
+    attempt: u32,
+
+    pub fn deinit(self: *ContainerMetadata, allocator: Allocator) void {
+        allocator.free(self.name);
+    }
+};
+
+pub const ImageSpec = struct {
+    image: []const u8,
+    url: ?[]const u8 = null,
+
+    pub fn deinit(self: *ImageSpec, allocator: Allocator) void {
+        allocator.free(self.image);
+        if (self.url) |url| {
+            allocator.free(url);
+        }
+    }
+};
+
+pub const Image = struct {
+    id: []const u8,
+    spec: ImageSpec,
+    size_bytes: u64,
+    uid: []const u8,
+    username: []const u8,
+
+    pub fn deinit(self: *Image, allocator: Allocator) void {
+        allocator.free(self.id);
+        self.spec.deinit(allocator);
+        allocator.free(self.uid);
+        allocator.free(self.username);
+    }
+};
+
+pub const ImageStatus = struct {
+    image: ImageSpec,
+    present: bool,
+    size_bytes: u64,
+
+    pub fn deinit(self: *ImageStatus, allocator: Allocator) void {
+        self.image.deinit(allocator);
+    }
+};
+
+pub const ImageFilter = struct {
+    image: ?ImageSpec = null,
+
+    pub fn deinit(self: *ImageFilter, allocator: Allocator) void {
+        if (self.image) |*img| {
+            img.deinit(allocator);
+        }
+    }
+};
+
+pub const AuthConfig = struct {
+    username: ?[]const u8 = null,
+    password: ?[]const u8 = null,
+    auth: ?[]const u8 = null,
+    server: ?[]const u8 = null,
+    identity_token: ?[]const u8 = null,
+    registry_token: ?[]const u8 = null,
+
+    pub fn deinit(self: *AuthConfig, allocator: Allocator) void {
+        if (self.username) |username| allocator.free(username);
+        if (self.password) |password| allocator.free(password);
+        if (self.auth) |auth| allocator.free(auth);
+        if (self.server) |server| allocator.free(server);
+        if (self.identity_token) |token| allocator.free(token);
+        if (self.registry_token) |token| allocator.free(token);
+    }
+};
+
+pub const Mount = struct {
+    container_path: []const u8,
+    host_path: []const u8,
+    readonly: bool,
+    selinux_relabel: bool,
+    propagation: MountPropagation,
+
+    pub fn deinit(self: *Mount, allocator: Allocator) void {
+        allocator.free(self.container_path);
+        allocator.free(self.host_path);
+    }
+};
+
+pub const MountPropagation = enum {
+    private,
+    host_to_container,
+    bidirectional,
+};
+
+pub const Device = struct {
+    container_path: []const u8,
+    host_path: []const u8,
+    permissions: []const u8,
+
+    pub fn deinit(self: *Device, allocator: Allocator) void {
+        allocator.free(self.container_path);
+        allocator.free(self.host_path);
+        allocator.free(self.permissions);
+    }
+};
+
+pub const LinuxContainerConfig = struct {
+    resources: ?ContainerResources = null,
+    security_context: ?LinuxContainerSecurityContext = null,
+
+    pub fn deinit(self: *LinuxContainerConfig, allocator: Allocator) void {
+        if (self.resources) |*res| res.deinit(allocator);
+        if (self.security_context) |*ctx| ctx.deinit(allocator);
+    }
+};
+
+pub const LinuxContainerSecurityContext = struct {
+    namespace_options: ?NamespaceOption = null,
+    selinux_options: ?SELinuxOption = null,
+    run_as_user: ?u32 = null,
+    run_as_group: ?u32 = null,
+    readonly_rootfs: bool = false,
+    supplemental_groups: []u32,
+    privileged: bool = false,
+    seccomp_profile_path: ?[]const u8 = null,
+    apparmor_profile: ?[]const u8 = null,
+    no_new_privs: bool = false,
+
+    pub fn deinit(self: *LinuxContainerSecurityContext, allocator: Allocator) void {
+        if (self.namespace_options) |*ns| ns.deinit(allocator);
+        if (self.selinux_options) |*selinux| selinux.deinit(allocator);
+        allocator.free(self.supplemental_groups);
+        if (self.seccomp_profile_path) |path| allocator.free(path);
+        if (self.apparmor_profile) |profile| allocator.free(profile);
+    }
+};
+
+pub const NamespaceOption = struct {
+    network: NamespaceMode = .pod,
+    pid: NamespaceMode = .container,
+    ipc: NamespaceMode = .pod,
+
+    pub fn deinit(self: *NamespaceOption, allocator: Allocator) void {
+        _ = self;
+        _ = allocator;
+    }
+};
+
+pub const NamespaceMode = enum {
+    pod,
+    container,
+    node,
+};
+
+pub const SELinuxOption = struct {
+    user: []const u8,
+    role: []const u8,
+    type: []const u8,
+    level: []const u8,
+
+    pub fn deinit(self: *SELinuxOption, allocator: Allocator) void {
+        allocator.free(self.user);
+        allocator.free(self.role);
+        allocator.free(self.type);
+        allocator.free(self.level);
+    }
+};
