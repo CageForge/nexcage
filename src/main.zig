@@ -10,8 +10,8 @@ const fs = std.fs;
 const builtin = @import("builtin");
 const log = std.log;
 const proxmox = @import("proxmox");
-const error_mod = @import("error");
-const Error = error_mod.Error;
+const error_module = @import("error");
+const Error = error_module.Error;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
@@ -20,13 +20,13 @@ const http = std.http;
 const Uri = std.Uri;
 const Client = http.Client;
 
-const SIGINT = 2;
-const SIGTERM = 15;
+const SIGINT = posix.SIG.INT;
+const SIGTERM = posix.SIG.TERM;
 
 var shutdown_requested: bool = false;
 var last_signal: c_int = 0;
 var logger_instance: logger_mod.Logger = undefined;
-var proxmox_client: proxmox.Client = undefined;
+var proxmox_client: proxmox.ProxmoxClient = undefined;
 
 fn printHelp() void {
     const help_text =
@@ -60,13 +60,14 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     // Parse command line arguments
-    var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
 
     var debug_mode = false;
     var no_daemon = false;
-    while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "-d") or std.mem.eql(u8, arg, "--debug")) {
+
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "--debug")) {
             debug_mode = true;
         } else if (std.mem.eql(u8, arg, "--no-daemon")) {
             no_daemon = true;
@@ -87,9 +88,17 @@ pub fn main() !void {
     } else null;
     defer if (log_file) |file| file.close();
 
-    const log_writer = if (debug_mode) std.io.getStdErr().writer() else log_file.?.writer();
-
-    logger_instance = try logger_mod.Logger.init(allocator, log_level, log_writer);
+    const log_writer = if (debug_mode) 
+        std.io.getStdErr().writer() 
+    else if (log_file) |file|
+        file.writer()
+    else 
+        std.io.getStdErr().writer();
+    logger_instance = try logger_mod.Logger.init(
+        allocator,
+        log_writer,
+        log_level,
+    );
     defer logger_instance.deinit();
 
     // Load configuration
@@ -120,7 +129,14 @@ pub fn main() !void {
     };
     defer config_instance.deinit();
 
-    proxmox_client = try proxmox.Client.init(allocator, config_instance.hosts, config_instance.token, &logger_instance, config_instance.port, config_instance.node, config_instance.node_cache_duration);
+    proxmox_client = try proxmox.ProxmoxClient.init(
+        allocator,
+        config_instance.hosts,
+        config_instance.token,
+        &logger_instance,
+        config_instance.port,
+        config_instance.node,
+    );
     defer proxmox_client.deinit();
 
     try logger_instance.info("Starting proxmox-lxcri...", .{});

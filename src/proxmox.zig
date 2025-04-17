@@ -44,7 +44,7 @@ pub const ProxmoxClient = struct {
         allocator: std.mem.Allocator,
         hosts: []const []const u8,
         token: []const u8,
-        logger_instance: *std.log.Logger,
+        logger_instance: *logger_mod.Logger,
         port: u16,
         node: []const u8,
     ) !ProxmoxClient {

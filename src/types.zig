@@ -16,6 +16,27 @@ pub const PodStatus = enum {
     unknown,
 };
 
+pub const LogLevel = enum {
+    debug,
+    info,
+    warn,
+    err,
+
+    pub fn jsonStringify(self: LogLevel, _: json.StringifyOptions, writer: anytype) !void {
+        try writer.writeByte('"');
+        try writer.writeAll(@tagName(self));
+        try writer.writeByte('"');
+    }
+
+    pub fn fromString(str: []const u8) !LogLevel {
+        if (std.mem.eql(u8, str, "debug")) return .debug;
+        if (std.mem.eql(u8, str, "info")) return .info;
+        if (std.mem.eql(u8, str, "warn")) return .warn;
+        if (std.mem.eql(u8, str, "err")) return .err;
+        return error.InvalidLogLevel;
+    }
+};
+
 pub const EnvVar = struct {
     name: []const u8,
     value: []const u8,
@@ -107,13 +128,6 @@ pub const Pod = struct {
     }
 };
 
-pub const LogLevel = enum {
-    debug,
-    info,
-    warn,
-    err,
-};
-
 pub const LXCConfig = struct {
     hostname: []const u8,
     ostype: []const u8,
@@ -136,6 +150,21 @@ pub const LXCConfig = struct {
     mp5: ?MountPoint = null,
     mp6: ?MountPoint = null,
     mp7: ?MountPoint = null,
+
+    pub fn deinit(self: *LXCConfig, allocator: Allocator) void {
+        allocator.free(self.hostname);
+        allocator.free(self.ostype);
+        allocator.free(self.rootfs);
+        self.net0.deinit(allocator);
+        if (self.mp0) |*mp| mp.deinit(allocator);
+        if (self.mp1) |*mp| mp.deinit(allocator);
+        if (self.mp2) |*mp| mp.deinit(allocator);
+        if (self.mp3) |*mp| mp.deinit(allocator);
+        if (self.mp4) |*mp| mp.deinit(allocator);
+        if (self.mp5) |*mp| mp.deinit(allocator);
+        if (self.mp6) |*mp| mp.deinit(allocator);
+        if (self.mp7) |*mp| mp.deinit(allocator);
+    }
 
     pub fn jsonStringify(self: LXCConfig, options: json.StringifyOptions, writer: anytype) !void {
         try writer.writeByte('{');
@@ -215,6 +244,17 @@ pub const NetworkConfig = struct {
     trunks: ?[]const u16 = null,
     type: []const u8 = "veth",
 
+    pub fn deinit(self: *NetworkConfig, allocator: Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.bridge);
+        allocator.free(self.ip);
+        if (self.gw) |gw| allocator.free(gw);
+        if (self.ip6) |ip6| allocator.free(ip6);
+        if (self.gw6) |gw6| allocator.free(gw6);
+        if (self.trunks) |trunks| allocator.free(trunks);
+        allocator.free(self.type);
+    }
+
     pub fn jsonStringify(self: NetworkConfig, options: json.StringifyOptions, writer: anytype) !void {
         try writer.writeByte('{');
         try json.stringifyField("name", self.name, options, writer);
@@ -290,6 +330,12 @@ pub const MountPoint = struct {
     replicate: bool = true,
     shared: bool = false,
 
+    pub fn deinit(self: *MountPoint, allocator: Allocator) void {
+        allocator.free(self.volume);
+        allocator.free(self.mp);
+        allocator.free(self.size);
+    }
+
     pub fn jsonStringify(self: MountPoint, options: json.StringifyOptions, writer: anytype) !void {
         try writer.writeByte('{');
         try json.stringifyField("volume", self.volume, options, writer);
@@ -329,6 +375,11 @@ pub const LXCContainer = struct {
     name: []const u8,
     status: LXCStatus,
     config: LXCConfig,
+
+    pub fn deinit(self: *LXCContainer, allocator: Allocator) void {
+        allocator.free(self.name);
+        self.config.deinit(allocator);
+    }
 
     pub fn jsonStringify(self: LXCContainer, options: json.StringifyOptions, writer: anytype) !void {
         try writer.writeByte('{');

@@ -10,10 +10,21 @@ pub fn build(b: *std.Build) void {
 
     const logger_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/logger.zig" },
+        .imports = &.{
+            .{ .name = "types", .module = types_module },
+        },
     });
 
     const error_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/error.zig" },
+    });
+
+    const config_module = b.createModule(.{
+        .root_source_file = .{ .cwd_relative = "src/config.zig" },
+        .imports = &.{
+            .{ .name = "types", .module = types_module },
+            .{ .name = "logger", .module = logger_module },
+        },
     });
 
     const proxmox_module = b.createModule(.{
@@ -35,6 +46,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("types", types_module);
     exe.root_module.addImport("logger", logger_module);
     exe.root_module.addImport("error", error_module);
+    exe.root_module.addImport("config", config_module);
     exe.root_module.addImport("proxmox", proxmox_module);
 
     exe.linkSystemLibrary("grpc");
@@ -58,6 +70,7 @@ pub fn build(b: *std.Build) void {
     test_lxc.root_module.addImport("types", types_module);
     test_lxc.root_module.addImport("logger", logger_module);
     test_lxc.root_module.addImport("error", error_module);
+    test_lxc.root_module.addImport("config", config_module);
     test_lxc.root_module.addImport("proxmox", proxmox_module);
 
     test_lxc.linkSystemLibrary("grpc");
