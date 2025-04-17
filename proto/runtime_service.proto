@@ -1,50 +1,150 @@
 syntax = "proto3";
 
-package runtime;
+package runtime.v1alpha2;
 
 // Runtime service defines the public APIs for remote container runtimes
 service RuntimeService {
-  // Pod management
+  // Pod operations
   rpc CreatePod(CreatePodRequest) returns (CreatePodResponse) {}
   rpc DeletePod(DeletePodRequest) returns (DeletePodResponse) {}
-  rpc ListPods(ListPodsRequest) returns (ListPodsResponse) {}
+  rpc ListPods(ListPodRequest) returns (ListPodResponse) {}
+  rpc StartPod(StartPodRequest) returns (StartPodResponse) {}
+  rpc StopPod(StopPodRequest) returns (StopPodResponse) {}
 
-  // Container management
+  // Container operations
   rpc CreateContainer(CreateContainerRequest) returns (CreateContainerResponse) {}
   rpc DeleteContainer(DeleteContainerRequest) returns (DeleteContainerResponse) {}
   rpc ListContainers(ListContainersRequest) returns (ListContainersResponse) {}
+  rpc StartContainer(StartContainerRequest) returns (StartContainerResponse) {}
+  rpc StopContainer(StopContainerRequest) returns (StopContainerResponse) {}
 }
 
 // Pod messages
-message CreatePodRequest {
+message PodSandboxConfig {
+  PodMetadata metadata = 1;
+  NetworkConfig network = 2;
+  LinuxConfig linux = 3;
+  map<string, string> annotations = 4;
+  map<string, string> labels = 5;
+}
+
+message PodMetadata {
   string name = 1;
-  string namespace = 2;
-  repeated ContainerSpec containers = 3;
+  string uid = 2;
+  string namespace = 3;
+  uint32 attempt = 4;
+}
+
+message NetworkConfig {
+  string pod_cidr = 1;
+}
+
+message LinuxConfig {
+  string cgroup_parent = 1;
+  SecurityContext security_context = 2;
+  map<string, string> sysctls = 3;
+}
+
+message SecurityContext {
+  string namespace_options = 1;
+  string selinux_options = 2;
+  string run_as_user = 3;
+  bool privileged = 4;
+}
+
+message CreatePodRequest {
+  PodSandboxConfig config = 1;
 }
 
 message CreatePodResponse {
-  string pod_id = 1;
+  string pod_sandbox_id = 1;
 }
 
 message DeletePodRequest {
-  string pod_id = 1;
+  string pod_sandbox_id = 1;
 }
 
 message DeletePodResponse {}
 
-message ListPodsRequest {}
-
-message ListPodsResponse {
-  repeated Pod pods = 1;
+message ListPodRequest {
+  PodFilter filter = 1;
 }
 
+message PodFilter {
+  string id = 1;
+  PodState state = 2;
+  map<string, string> label_selector = 3;
+}
+
+enum PodState {
+  UNKNOWN = 0;
+  CREATED = 1;
+  RUNNING = 2;
+  STOPPED = 3;
+}
+
+message ListPodResponse {
+  repeated Pod items = 1;
+}
+
+message Pod {
+  string id = 1;
+  PodMetadata metadata = 2;
+  PodState state = 3;
+  int64 created_at = 4;
+  map<string, string> labels = 5;
+  map<string, string> annotations = 6;
+}
+
+message StartPodRequest {
+  string pod_sandbox_id = 1;
+}
+
+message StartPodResponse {}
+
+message StopPodRequest {
+  string pod_sandbox_id = 1;
+}
+
+message StopPodResponse {}
+
 // Container messages
-message CreateContainerRequest {
-  string name = 1;
-  string image = 2;
+message ContainerConfig {
+  ContainerMetadata metadata = 1;
+  ImageSpec image = 2;
   repeated string command = 3;
   repeated string args = 4;
-  repeated EnvVar env = 5;
+  string working_dir = 5;
+  repeated KeyValue envs = 6;
+  repeated Mount mounts = 7;
+  map<string, string> labels = 8;
+  map<string, string> annotations = 9;
+}
+
+message ContainerMetadata {
+  string name = 1;
+  uint32 attempt = 2;
+}
+
+message ImageSpec {
+  string image = 1;
+}
+
+message KeyValue {
+  string key = 1;
+  string value = 2;
+}
+
+message Mount {
+  string container_path = 1;
+  string host_path = 2;
+  bool readonly = 3;
+}
+
+message CreateContainerRequest {
+  string pod_sandbox_id = 1;
+  ContainerConfig config = 2;
+  PodSandboxConfig sandbox_config = 3;
 }
 
 message CreateContainerResponse {
@@ -57,53 +157,49 @@ message DeleteContainerRequest {
 
 message DeleteContainerResponse {}
 
-message ListContainersRequest {}
+message ListContainersRequest {
+  ContainerFilter filter = 1;
+}
+
+message ContainerFilter {
+  string id = 1;
+  string pod_sandbox_id = 2;
+  ContainerState state = 3;
+  map<string, string> label_selector = 4;
+}
+
+enum ContainerState {
+  CONTAINER_UNKNOWN = 0;
+  CONTAINER_CREATED = 1;
+  CONTAINER_RUNNING = 2;
+  CONTAINER_STOPPED = 3;
+}
 
 message ListContainersResponse {
   repeated Container containers = 1;
 }
 
-// Common types
-message Pod {
-  string id = 1;
-  string name = 2;
-  string namespace = 3;
-  PodStatus status = 4;
-  repeated Container containers = 5;
-}
-
 message Container {
   string id = 1;
-  string name = 2;
-  ContainerStatus status = 3;
-  ContainerSpec spec = 4;
+  string pod_id = 2;
+  ContainerMetadata metadata = 3;
+  ImageSpec image = 4;
+  string image_ref = 5;
+  ContainerState state = 6;
+  int64 created_at = 7;
+  map<string, string> labels = 8;
+  map<string, string> annotations = 9;
 }
 
-message ContainerSpec {
-  string name = 1;
-  string image = 2;
-  repeated string command = 3;
-  repeated string args = 4;
-  repeated EnvVar env = 5;
+message StartContainerRequest {
+  string container_id = 1;
 }
 
-message EnvVar {
-  string name = 1;
-  string value = 2;
+message StartContainerResponse {}
+
+message StopContainerRequest {
+  string container_id = 1;
+  int64 timeout = 2;
 }
 
-enum PodStatus {
-  POD_STATUS_UNKNOWN = 0;
-  POD_STATUS_PENDING = 1;
-  POD_STATUS_RUNNING = 2;
-  POD_STATUS_SUCCEEDED = 3;
-  POD_STATUS_FAILED = 4;
-}
-
-enum ContainerStatus {
-  CONTAINER_STATUS_UNKNOWN = 0;
-  CONTAINER_STATUS_CREATED = 1;
-  CONTAINER_STATUS_RUNNING = 2;
-  CONTAINER_STATUS_STOPPED = 3;
-  CONTAINER_STATUS_FAILED = 4;
-} 
+message StopContainerResponse {} 

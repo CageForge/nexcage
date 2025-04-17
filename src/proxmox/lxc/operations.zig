@@ -158,4 +158,134 @@ fn parseStatus(status: []const u8) !types.LXCStatus {
     } else {
         return .unknown;
     }
+}
+
+pub fn startLXC(client: *Client, node: []const u8, vmid: u32) !void {
+    const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/start", .{ node, vmid });
+    defer client.allocator.free(path);
+
+    try client.logger.debug("Starting LXC container {d} on node {s}", .{ vmid, node });
+    
+    const response = try client.makeRequest(.POST, path, null);
+    defer client.allocator.free(response);
+
+    if (response.len == 0) {
+        try client.logger.err("Empty response when starting container {d}", .{vmid});
+        return error.EmptyResponse;
+    }
+
+    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
+    defer parsed.deinit();
+
+    // Перевіряємо успішність операції
+    if (parsed.value.object.get("data")) |_| {
+        try client.logger.info("Container {d} started successfully", .{vmid});
+    } else {
+        try client.logger.err("Failed to start container {d}: {s}", .{ vmid, response });
+        return error.StartError;
+    }
+}
+
+// Додаємо функцію для перевірки стану контейнера
+pub fn getLXCStatus(client: *Client, node: []const u8, vmid: u32) !types.LXCStatus {
+    const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/current", .{ node, vmid });
+    defer client.allocator.free(path);
+
+    try client.logger.debug("Getting status for LXC container {d} on node {s}", .{ vmid, node });
+    
+    const response = try client.makeRequest(.GET, path, null);
+    defer client.allocator.free(response);
+
+    if (response.len == 0) {
+        try client.logger.err("Empty response when getting container status {d}", .{vmid});
+        return error.EmptyResponse;
+    }
+
+    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
+    defer parsed.deinit();
+
+    if (parsed.value.object.get("data")) |data| {
+        if (data.object.get("status")) |status| {
+            return try parseStatus(status.string);
+        }
+    }
+
+    try client.logger.err("Invalid response format for container status {d}: {s}", .{ vmid, response });
+    return error.InvalidResponse;
+}
+
+pub fn stopLXC(client: *Client, node: []const u8, vmid: u32, timeout: ?i64) !void {
+    // Формуємо параметри для зупинки
+    var query = std.ArrayList(u8).init(client.allocator);
+    defer query.deinit();
+
+    if (timeout) |t| {
+        try query.writer().print("timeout={d}", .{t});
+    }
+
+    const path = if (query.items.len > 0)
+        try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/stop?{s}", .{ node, vmid, query.items })
+    else
+        try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/stop", .{ node, vmid });
+    defer client.allocator.free(path);
+
+    try client.logger.debug("Stopping LXC container {d} on node {s} with timeout {?}", .{ vmid, node, timeout });
+    
+    const response = try client.makeRequest(.POST, path, null);
+    defer client.allocator.free(response);
+
+    if (response.len == 0) {
+        try client.logger.err("Empty response when stopping container {d}", .{vmid});
+        return error.EmptyResponse;
+    }
+
+    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
+    defer parsed.deinit();
+
+    // Перевіряємо успішність операції
+    if (parsed.value.object.get("data")) |_| {
+        try client.logger.info("Container {d} stop initiated successfully", .{vmid});
+
+        // Чекаємо поки контейнер зупиниться
+        var attempts: u8 = 0;
+        const max_attempts: u8 = 30; // 30 секунд максимум
+        while (attempts < max_attempts) : (attempts += 1) {
+            const status = try getLXCStatus(client, node, vmid);
+            if (status == .stopped) {
+                try client.logger.info("Container {d} stopped successfully", .{vmid});
+                return;
+            }
+            try std.time.sleep(1 * std.time.ns_per_s); // Чекаємо 1 секунду між перевірками
+        }
+        try client.logger.warn("Container {d} stop timeout after {d} seconds", .{ vmid, max_attempts });
+    } else {
+        try client.logger.err("Failed to stop container {d}: {s}", .{ vmid, response });
+        return error.StopError;
+    }
+}
+
+pub fn deleteLXC(client: *Client, node: []const u8, vmid: u32) !void {
+    const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}", .{ node, vmid });
+    defer client.allocator.free(path);
+
+    try client.logger.debug("Deleting LXC container {d} on node {s}", .{ vmid, node });
+    
+    const response = try client.makeRequest(.DELETE, path, null);
+    defer client.allocator.free(response);
+
+    if (response.len == 0) {
+        try client.logger.err("Empty response when deleting container {d}", .{vmid});
+        return error.EmptyResponse;
+    }
+
+    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
+    defer parsed.deinit();
+
+    // Перевіряємо успішність операції
+    if (parsed.value.object.get("data")) |_| {
+        try client.logger.info("Container {d} deleted successfully", .{vmid});
+    } else {
+        try client.logger.err("Failed to delete container {d}: {s}", .{ vmid, response });
+        return error.DeleteError;
+    }
 } 
