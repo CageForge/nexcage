@@ -1,14 +1,18 @@
 const std = @import("std");
-const types = @import("types");
-const Allocator = std.mem.Allocator;
-const Writer = std.fs.File.Writer;
+
+pub const LogLevel = enum {
+    debug,
+    info,
+    warn,
+    err,
+};
 
 pub const Logger = struct {
-    allocator: Allocator,
-    level: types.LogLevel,
-    writer: Writer,
+    allocator: std.mem.Allocator,
+    level: LogLevel,
+    writer: std.fs.File.Writer,
 
-    pub fn init(allocator: Allocator, level: types.LogLevel, writer: Writer) !Logger {
+    pub fn init(allocator: std.mem.Allocator, level: LogLevel, writer: std.fs.File.Writer) !Logger {
         return Logger{
             .allocator = allocator,
             .level = level,
@@ -22,25 +26,25 @@ pub const Logger = struct {
     }
 
     pub fn debug(self: *Logger, comptime fmt_str: []const u8, args: anytype) !void {
-        if (self.level == types.LogLevel.debug) {
+        if (self.level == .debug) {
             try self.log("DEBUG", fmt_str, args);
         }
     }
 
     pub fn info(self: *Logger, comptime fmt_str: []const u8, args: anytype) !void {
-        if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.info)) {
+        if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.info)) {
             try self.log("INFO", fmt_str, args);
         }
     }
 
     pub fn warn(self: *Logger, comptime fmt_str: []const u8, args: anytype) !void {
-        if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.warn)) {
+        if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.warn)) {
             try self.log("WARN", fmt_str, args);
         }
     }
 
     pub fn err(self: *Logger, comptime fmt_str: []const u8, args: anytype) !void {
-        if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.err)) {
+        if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.err)) {
             try self.log("ERROR", fmt_str, args);
         }
     }
@@ -61,11 +65,4 @@ pub const Logger = struct {
 
         try self.writer.print(fmt_str ++ "\n", args);
     }
-};
-
-pub const LogLevel = enum {
-    debug,
-    info,
-    warn,
-    err,
 };
