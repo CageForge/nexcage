@@ -1,5 +1,102 @@
 const std = @import("std");
 
+fn addCommonConfig(artifact: *std.Build.Step.Compile) void {
+    const include_paths = [_][]const u8{
+        "src/grpc/proto",
+        "/usr/local/include",
+    };
+
+    for (include_paths) |path| {
+        artifact.addIncludePath(.{ .cwd_relative = path });
+    }
+
+    const C_FLAGS = [_][]const u8{
+        "-DNOMINMAX",
+        "-DABSL_ATTRIBUTE_LIFETIME_BOUND=",
+        "-DABSL_ASSUME(x)=",
+        "-DABSL_INTERNAL_CORDZ_ENABLED=0",
+        "-DABSL_INTERNAL_CORD_INTERNAL_MAX_FLAT_SIZE=0x7FFF'FFFF",
+        "-U linux",
+        "-fPIC",
+    };
+
+    const CXX_FLAGS = [_][]const u8{
+        "-std=c++14",
+        "-DNOMINMAX",
+        "-DABSL_ATTRIBUTE_LIFETIME_BOUND=",
+        "-DABSL_ASSUME(x)=",
+        "-DABSL_INTERNAL_CORDZ_ENABLED=0",
+        "-DABSL_INTERNAL_CORD_INTERNAL_MAX_FLAT_SIZE=0x7FFF'FFFF",
+        "-U linux",
+        "-fPIC",
+    };
+
+    artifact.addCSourceFile(.{
+        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.pb-c.c" },
+        .flags = &C_FLAGS,
+    });
+    artifact.addCSourceFile(.{
+        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.pb.cc" },
+        .flags = &CXX_FLAGS,
+    });
+    artifact.addCSourceFile(.{
+        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.grpc.pb.cc" },
+        .flags = &CXX_FLAGS,
+    });
+
+    artifact.linkLibCpp();
+    artifact.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+    artifact.addLibraryPath(.{ .cwd_relative = "/usr/lib" });
+    artifact.addLibraryPath(.{ .cwd_relative = "/usr/lib/x86_64-linux-gnu" });
+    artifact.addRPath(.{ .cwd_relative = "/usr/local/lib" });
+
+    artifact.linkSystemLibrary("protobuf-c");
+    artifact.linkSystemLibrary("protobuf");
+    artifact.linkSystemLibrary("grpc++");
+    artifact.linkSystemLibrary("grpc");
+    artifact.linkSystemLibrary("gpr");
+    artifact.linkSystemLibrary("z");
+    artifact.linkSystemLibrary("pthread");
+    artifact.linkSystemLibrary("dl");
+
+    const absl_libs = [_][]const u8{
+        "absl_strings",
+        "absl_str_format_internal",
+        "absl_cord",
+        "absl_bad_optional_access",
+        "absl_cordz_info",
+        "absl_cord_internal",
+        "absl_cordz_functions",
+        "absl_exponential_biased",
+        "absl_cordz_handle",
+        "absl_raw_hash_set",
+        "absl_hashtablez_sampler",
+        "absl_synchronization",
+        "absl_stacktrace",
+        "absl_symbolize",
+        "absl_malloc_internal",
+        "absl_debugging_internal",
+        "absl_demangle_internal",
+        "absl_time",
+        "absl_civil_time",
+        "absl_time_zone",
+        "absl_bad_variant_access",
+        "absl_base",
+        "absl_spinlock_wait",
+        "absl_int128",
+        "absl_throw_delegate",
+        "absl_raw_logging_internal",
+        "absl_log_severity",
+        "absl_status",
+        "absl_statusor",
+        "absl_strerror",
+    };
+
+    for (absl_libs) |lib| {
+        artifact.linkSystemLibrary(lib);
+    }
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -40,6 +137,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{ .cwd_relative = "src/cri.zig" },
     });
 
+    const oci_module = b.createModule(.{
+        .root_source_file = .{ .cwd_relative = "src/oci/mod.zig" },
+    });
+
     const runtime_service_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/grpc/runtime_service.zig" },
         .imports = &.{
@@ -49,6 +150,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "config", .module = config_module },
             .{ .name = "proxmox", .module = proxmox_module },
             .{ .name = "cri", .module = cri_module },
+            .{ .name = "oci", .module = oci_module },
         },
     });
 
@@ -59,30 +161,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.addIncludePath(.{ .cwd_relative = "include" });
-    exe.addIncludePath(.{ .cwd_relative = "src/grpc/proto" });
-    exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
-    exe.addIncludePath(.{ .cwd_relative = "/usr/include/google" });
-    exe.addIncludePath(.{ .cwd_relative = "/usr/include/grpc++" });
-    exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-    exe.addIncludePath(.{ .cwd_relative = "/usr/local/include/google" });
-
-    exe.addCSourceFile(.{
-        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.pb.cc" },
-        .flags = &[_][]const u8{
-            "-std=c++14",
-            "-DPROTOBUF_USE_DLLS",
-            "-DNOMINMAX",
-        },
-    });
-    exe.addCSourceFile(.{
-        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.grpc.pb.cc" },
-        .flags = &[_][]const u8{
-            "-std=c++14",
-            "-DPROTOBUF_USE_DLLS",
-            "-DNOMINMAX",
-        },
-    });
+    addCommonConfig(exe);
 
     exe.root_module.addImport("types", types_module);
     exe.root_module.addImport("logger", logger_module);
@@ -90,42 +169,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("config", config_module);
     exe.root_module.addImport("proxmox", proxmox_module);
     exe.root_module.addImport("runtime_service", runtime_service_module);
-
-    exe.linkSystemLibrary("grpc");
-    exe.linkSystemLibrary("grpc++");
-    exe.linkSystemLibrary("gpr");
-    exe.linkSystemLibrary("protobuf");
-    exe.linkSystemLibrary("absl_strings");
-    exe.linkSystemLibrary("absl_str_format_internal");
-    exe.linkSystemLibrary("absl_cord");
-    exe.linkSystemLibrary("absl_bad_optional_access");
-    exe.linkSystemLibrary("absl_cordz_info");
-    exe.linkSystemLibrary("absl_cord_internal");
-    exe.linkSystemLibrary("absl_cordz_functions");
-    exe.linkSystemLibrary("absl_exponential_biased");
-    exe.linkSystemLibrary("absl_cordz_handle");
-    exe.linkSystemLibrary("absl_raw_hash_set");
-    exe.linkSystemLibrary("absl_hashtablez_sampler");
-    exe.linkSystemLibrary("absl_synchronization");
-    exe.linkSystemLibrary("absl_stacktrace");
-    exe.linkSystemLibrary("absl_symbolize");
-    exe.linkSystemLibrary("absl_malloc_internal");
-    exe.linkSystemLibrary("absl_debugging_internal");
-    exe.linkSystemLibrary("absl_demangle_internal");
-    exe.linkSystemLibrary("absl_time");
-    exe.linkSystemLibrary("absl_civil_time");
-    exe.linkSystemLibrary("absl_time_zone");
-    exe.linkSystemLibrary("absl_bad_variant_access");
-    exe.linkSystemLibrary("absl_base");
-    exe.linkSystemLibrary("absl_spinlock_wait");
-    exe.linkSystemLibrary("absl_int128");
-    exe.linkSystemLibrary("absl_throw_delegate");
-    exe.linkSystemLibrary("absl_raw_logging_internal");
-    exe.linkSystemLibrary("absl_log_severity");
-    exe.linkLibCpp();
-
-    exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
-    exe.addLibraryPath(.{ .cwd_relative = "/usr/lib" });
+    exe.root_module.addImport("oci", oci_module);
 
     b.installArtifact(exe);
 
@@ -141,22 +185,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    unit_tests.addIncludePath(.{ .cwd_relative = "include" });
-    unit_tests.addIncludePath(.{ .cwd_relative = "src/grpc/proto" });
-    unit_tests.addIncludePath(.{ .cwd_relative = "/usr/include" });
-    unit_tests.addIncludePath(.{ .cwd_relative = "/usr/include/google" });
-    unit_tests.addIncludePath(.{ .cwd_relative = "/usr/include/grpc++" });
-    unit_tests.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-    unit_tests.addIncludePath(.{ .cwd_relative = "/usr/local/include/google" });
-
-    unit_tests.addCSourceFile(.{
-        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.pb.cc" },
-        .flags = &[_][]const u8{"-std=c++14"},
-    });
-    unit_tests.addCSourceFile(.{
-        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.grpc.pb.cc" },
-        .flags = &[_][]const u8{"-std=c++14"},
-    });
+    addCommonConfig(unit_tests);
 
     unit_tests.root_module.addImport("types", types_module);
     unit_tests.root_module.addImport("logger", logger_module);
@@ -164,34 +193,11 @@ pub fn build(b: *std.Build) void {
     unit_tests.root_module.addImport("config", config_module);
     unit_tests.root_module.addImport("proxmox", proxmox_module);
     unit_tests.root_module.addImport("runtime_service", runtime_service_module);
+    unit_tests.root_module.addImport("oci", oci_module);
 
-    unit_tests.linkSystemLibrary("grpc");
-    unit_tests.linkSystemLibrary("protobuf");
-    unit_tests.linkSystemLibrary("grpc++");
-    unit_tests.linkLibCpp();
+    unit_tests.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
 
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&b.addRunArtifact(unit_tests).step);
-
-    const test_lxc = b.addExecutable(.{
-        .name = "test-lxc",
-        .root_source_file = .{ .cwd_relative = "tests/test_lxc.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-
-    test_lxc.root_module.addImport("types", types_module);
-    test_lxc.root_module.addImport("logger", logger_module);
-    test_lxc.root_module.addImport("error", error_module);
-    test_lxc.root_module.addImport("config", config_module);
-    test_lxc.root_module.addImport("proxmox", proxmox_module);
-    test_lxc.root_module.addImport("runtime_service", runtime_service_module);
-
-    test_lxc.linkSystemLibrary("grpc");
-    test_lxc.linkSystemLibrary("protobuf");
-
-    const test_lxc_run = b.addRunArtifact(test_lxc);
-    const test_lxc_step = b.step("test-lxc", "Run LXC test");
-    test_lxc_step.dependOn(&test_lxc_run.step);
+    test_step.dependOn(&unit_tests.step);
 }
 

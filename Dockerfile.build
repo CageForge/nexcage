@@ -1,0 +1,44 @@
+FROM ubuntu:latest
+
+# Встановлюємо часовий пояс неінтерактивно
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Встановлюємо необхідні залежності
+RUN apt-get update && apt-get install -y \
+    protobuf-compiler \
+    libgrpc-dev \
+    libgrpc++-dev \
+    libgrpc++1 \
+    libprotobuf-dev \
+    libabsl-dev \
+    build-essential \
+    pkg-config \
+    curl \
+    git \
+    xz-utils \
+    wget \
+    cmake \
+    libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Встановлюємо Zig
+RUN curl -L https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz -o zig.tar.xz \
+    && tar -xf zig.tar.xz \
+    && mv zig-linux-x86_64-0.13.0 /opt/zig \
+    && rm zig.tar.xz
+
+# Додаємо Zig до PATH
+ENV PATH="/opt/zig:${PATH}"
+
+# Створюємо робочу директорію
+WORKDIR /build
+
+# Копіюємо файли проекту
+COPY . .
+
+# Встановлюємо права на виконання
+RUN chmod +x /opt/zig/zig
+
+# Команда за замовчуванням
+CMD ["zig", "build"] 

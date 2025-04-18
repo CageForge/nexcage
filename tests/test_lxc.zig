@@ -8,7 +8,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    var log = try logger.Logger.init(allocator, .info, std.io.getStdOut().writer());
+    var log = try logger.Logger.init(allocator, std.io.getStdOut().writer(), types.LogLevel.info);
     defer log.deinit();
 
     const hosts = [_][]const u8{"mgr.cp.if.ua"};

@@ -4,44 +4,40 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const protobuf = b.createModule(.{
-        .root_source_file = .{ .path = "protobuf.zig" },
+    const protobuf = b.addExecutable(.{
+        .root_source_file = .{ .cwd_relative = "protobuf.zig" },
+        .target = target,
+        .optimize = optimize,
     });
 
     const protoc_gen_zig = b.addExecutable(.{
-        .name = "protoc-gen-zig",
-        .root_source_file = .{ .path = "protoc-gen-zig.zig" },
+        .root_source_file = .{ .cwd_relative = "protoc-gen-zig.zig" },
         .target = target,
         .optimize = optimize,
     });
-    protoc_gen_zig.addModule("protobuf", protobuf);
 
     const protoc_gen_grpc_zig = b.addExecutable(.{
-        .name = "protoc-gen-grpc-zig",
-        .root_source_file = .{ .path = "protoc-gen-grpc-zig.zig" },
+        .root_source_file = .{ .cwd_relative = "protoc-gen-grpc-zig.zig" },
         .target = target,
         .optimize = optimize,
     });
-    protoc_gen_grpc_zig.addModule("protobuf", protobuf);
 
     const test_protoc_gen_zig = b.addTest(.{
-        .root_source_file = .{ .path = "test_protoc_gen_zig.zig" },
+        .root_source_file = .{ .cwd_relative = "test_protoc_gen_zig.zig" },
         .target = target,
         .optimize = optimize,
     });
-    test_protoc_gen_zig.addModule("protobuf", protobuf);
 
     const test_protoc_gen_grpc_zig = b.addTest(.{
-        .root_source_file = .{ .path = "test_protoc_gen_grpc_zig.zig" },
+        .root_source_file = .{ .cwd_relative = "test_protoc_gen_grpc_zig.zig" },
         .target = target,
         .optimize = optimize,
     });
-    test_protoc_gen_grpc_zig.addModule("protobuf", protobuf);
 
-    const test_step = b.step("test", "Run all tests");
-    test_step.dependOn(&test_protoc_gen_zig.step);
-    test_step.dependOn(&test_protoc_gen_grpc_zig.step);
+    const run_protobuf_tests = b.addRunArtifact(test_protoc_gen_zig);
+    const run_grpc_tests = b.addRunArtifact(test_protoc_gen_grpc_zig);
 
-    b.installArtifact(protoc_gen_zig);
-    b.installArtifact(protoc_gen_grpc_zig);
+    const test_step = b.step("test", "Run tests");
+    test_step.dependOn(&run_protobuf_tests.step);
+    test_step.dependOn(&run_grpc_tests.step);
 }
