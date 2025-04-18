@@ -31,12 +31,12 @@
 - [x] Image mounting
 - [x] Format conversion
 
-### 5. Network Subsystem (90% complete) - 2.5 days
+### 5. Network Subsystem (95% complete) - 2.5 days
 - [x] Basic network configuration
 - [x] DNS configuration
 - [x] Port forwarding with tests
 - [x] Test location standardization
-- [ ] CNI plugins
+- [x] CNI plugins base implementation
 - [x] Network isolation
 
 ### 6. Security (70% complete) - 2 days
