@@ -2,6 +2,8 @@ const std = @import("std");
 const interface = @import("interface.zig");
 const types = @import("types");
 const proxmox = @import("proxmox");
+const cni = @import("network/cni.zig");
+const hooks = @import("hooks.zig");
 const Allocator = std.mem.Allocator;
 
 /// CRI-сумісний runtime для Proxmox LXC
@@ -9,6 +11,8 @@ pub const CRIRuntime = struct {
     interface: interface.RuntimeInterface,
     containers: std.StringHashMap(Container),
     proxmox_client: *proxmox.Client,
+    cni_plugin: *cni.CNIPlugin,
+    hooks_manager: *hooks.HooksManager,
     
     const Self = @This();
 
@@ -19,6 +23,7 @@ pub const CRIRuntime = struct {
         pod_id: []const u8,
         state: interface.RuntimeInterface.State,
         resources: ?types.Resources,
+        network: ?types.NetworkConfig,
         
         fn init(allocator: Allocator, id: []const u8, name: []const u8, pod_id: []const u8) !Container {
             return Container{
@@ -27,6 +32,7 @@ pub const CRIRuntime = struct {
                 .pod_id = try allocator.dupe(u8, pod_id),
                 .state = .created,
                 .resources = null,
+                .network = null,
             };
         }
 
@@ -34,22 +40,38 @@ pub const CRIRuntime = struct {
             allocator.free(self.id);
             allocator.free(self.name);
             allocator.free(self.pod_id);
+            if (self.network) |network| {
+                network.deinit(allocator);
+            }
         }
     };
 
     /// Створює новий CRI runtime
-    pub fn init(allocator: Allocator, proxmox_client: *proxmox.Client, root_dir: []const u8, state_dir: []const u8) !*Self {
+    pub fn init(
+        allocator: Allocator,
+        proxmox_client: *proxmox.Client,
+        root_dir: []const u8,
+        state_dir: []const u8,
+    ) !*Self {
         const self = try allocator.create(Self);
         errdefer allocator.destroy(self);
 
         self.containers = std.StringHashMap(Container).init(allocator);
         self.proxmox_client = proxmox_client;
+        
+        // Ініціалізуємо CNI плагін
+        self.cni_plugin = try cni.CNIPlugin.init(allocator, root_dir);
+        errdefer self.cni_plugin.deinit();
+        
+        // Ініціалізуємо менеджер хуків
+        self.hooks_manager = try hooks.HooksManager.init(allocator);
+        errdefer self.hooks_manager.deinit();
 
         const config = interface.RuntimeInterface.Config{
             .runtime_type = .cri,
             .root_dir = root_dir,
             .state_dir = state_dir,
-            .network_plugin = "cni",  // Використовуємо CNI для мережі
+            .network_plugin = "cni",
         };
 
         const lifecycle = interface.RuntimeInterface.Lifecycle{
@@ -64,12 +86,26 @@ pub const CRIRuntime = struct {
             .updateFn = updateResources,
             .statsFn = stats,
         };
+        
+        const network = interface.RuntimeInterface.Network{
+            .setupFn = setupNetwork,
+            .teardownFn = teardownNetwork,
+            .statsFn = networkStats,
+        };
+        
+        const hooks_interface = interface.RuntimeInterface.Hooks{
+            .prestartFn = prestart,
+            .poststartFn = poststart,
+            .poststopFn = poststop,
+        };
 
         self.interface = interface.RuntimeInterface.init(
             allocator,
             config,
             lifecycle,
             resources,
+            network,
+            hooks_interface,
         );
 
         return self;
@@ -83,6 +119,8 @@ pub const CRIRuntime = struct {
             container.deinit(self.interface.allocator);
         }
         self.containers.deinit();
+        self.cni_plugin.deinit();
+        self.hooks_manager.deinit();
         self.interface.allocator.destroy(self);
     }
 
@@ -239,6 +277,106 @@ pub const CRIRuntime = struct {
                     .max_usage = proxmox_stats.memory_max_usage,
                     .failcnt = proxmox_stats.memory_failcnt,
                 },
+            };
+        } else {
+            return error.NotFound;
+        }
+    }
+
+    /// Налаштування мережі контейнера
+    fn setupNetwork(rt: *interface.RuntimeInterface, id: []const u8, config: types.NetworkConfig) interface.RuntimeError!void {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.containers.getPtr(id)) |container| {
+            try self.cni_plugin.setup(id, config) catch |err| {
+                return switch (err) {
+                    error.CNIError => error.NetworkError,
+                    else => error.NetworkError,
+                };
+            };
+            container.network = config;
+        } else {
+            return error.NotFound;
+        }
+    }
+
+    /// Видалення мережевих налаштувань
+    fn teardownNetwork(rt: *interface.RuntimeInterface, id: []const u8) interface.RuntimeError!void {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.containers.getPtr(id)) |container| {
+            if (container.network) |network| {
+                try self.cni_plugin.teardown(id, network) catch |err| {
+                    return switch (err) {
+                        error.CNIError => error.NetworkError,
+                        else => error.NetworkError,
+                    };
+                };
+                container.network = null;
+            }
+        } else {
+            return error.NotFound;
+        }
+    }
+
+    /// Отримання мережевої статистики
+    fn networkStats(rt: *interface.RuntimeInterface, id: []const u8) interface.RuntimeError!types.NetworkStats {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.containers.get(id)) |container| {
+            return self.cni_plugin.stats(id) catch |err| {
+                return switch (err) {
+                    error.CNIError => error.NetworkError,
+                    else => error.NetworkError,
+                };
+            };
+        } else {
+            return error.NotFound;
+        }
+    }
+
+    /// Виконання prestart хуків
+    fn prestart(rt: *interface.RuntimeInterface, id: []const u8) interface.RuntimeError!void {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.containers.get(id)) |container| {
+            try self.hooks_manager.runPrestart(container) catch |err| {
+                return switch (err) {
+                    error.HookError => error.HookError,
+                    else => error.HookError,
+                };
+            };
+        } else {
+            return error.NotFound;
+        }
+    }
+
+    /// Виконання poststart хуків
+    fn poststart(rt: *interface.RuntimeInterface, id: []const u8) interface.RuntimeError!void {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.containers.get(id)) |container| {
+            try self.hooks_manager.runPoststart(container) catch |err| {
+                return switch (err) {
+                    error.HookError => error.HookError,
+                    else => error.HookError,
+                };
+            };
+        } else {
+            return error.NotFound;
+        }
+    }
+
+    /// Виконання poststop хуків
+    fn poststop(rt: *interface.RuntimeInterface, id: []const u8) interface.RuntimeError!void {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.containers.get(id)) |container| {
+            try self.hooks_manager.runPoststop(container) catch |err| {
+                return switch (err) {
+                    error.HookError => error.HookError,
+                    else => error.HookError,
+                };
             };
         } else {
             return error.NotFound;

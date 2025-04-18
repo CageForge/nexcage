@@ -11,6 +11,11 @@ pub const NetworkError = error{
     InterfaceError,
     StateError,
     ProxmoxError,
+    InitializationFailed,
+    InterfaceCreationFailed,
+    InterfaceNotFound,
+    ConfigurationFailed,
+    ConnectionFailed,
 };
 
 /// Менеджер мережі
@@ -18,6 +23,7 @@ pub const NetworkManager = struct {
     allocator: Allocator,
     cilium_plugin: *cilium.CiliumPlugin,
     state_manager: *state.NetworkStateManager,
+    interfaces: std.ArrayList(NetworkInterface),
     
     const Self = @This();
     
@@ -61,6 +67,7 @@ pub const NetworkManager = struct {
             .allocator = allocator,
             .cilium_plugin = plugin,
             .state_manager = state_manager,
+            .interfaces = std.ArrayList(NetworkInterface).init(allocator),
         };
         
         return self;
@@ -70,6 +77,10 @@ pub const NetworkManager = struct {
     pub fn deinit(self: *Self) void {
         self.cilium_plugin.deinit();
         self.state_manager.deinit();
+        for (self.interfaces.items) |*interface| {
+            interface.deinit(self.allocator);
+        }
+        self.interfaces.deinit();
         self.allocator.destroy(self);
     }
     
@@ -203,5 +214,71 @@ pub const NetworkManager = struct {
     /// Отримує стан мережі контейнера
     pub fn getNetworkState(self: *Self, container_id: []const u8) ?*state.NetworkState {
         return self.state_manager.getState(container_id);
+    }
+    
+    pub fn createInterface(self: *Self, name: []const u8) !void {
+        var interface = try NetworkInterface.init(self.allocator);
+        interface.name = try self.allocator.dupe(u8, name);
+        try self.interfaces.append(interface);
+    }
+    
+    pub fn configureInterface(self: *Self, name: []const u8, ip: []const u8, netmask: []const u8, gateway: ?[]const u8) !void {
+        for (self.interfaces.items) |*interface| {
+            if (std.mem.eql(u8, interface.name, name)) {
+                interface.ip_address = try self.allocator.dupe(u8, ip);
+                interface.netmask = try self.allocator.dupe(u8, netmask);
+                if (gateway) |g| {
+                    interface.gateway = try self.allocator.dupe(u8, g);
+                }
+                return;
+            }
+        }
+        return NetworkError.InterfaceNotFound;
+    }
+    
+    pub fn deleteInterface(self: *Self, name: []const u8) !void {
+        var i: usize = 0;
+        while (i < self.interfaces.items.len) : (i += 1) {
+            if (std.mem.eql(u8, self.interfaces.items[i].name, name)) {
+                var interface = self.interfaces.orderedRemove(i);
+                interface.deinit(self.allocator);
+                return;
+            }
+        }
+        return NetworkError.InterfaceNotFound;
+    }
+    
+    pub fn getInterface(self: *Self, name: []const u8) !*NetworkInterface {
+        for (self.interfaces.items) |*interface| {
+            if (std.mem.eql(u8, interface.name, name)) {
+                return interface;
+            }
+        }
+        return NetworkError.InterfaceNotFound;
+    }
+};
+
+pub const NetworkInterface = struct {
+    name: []const u8,
+    ip_address: []const u8,
+    netmask: []const u8,
+    gateway: ?[]const u8,
+    mtu: u32,
+    
+    pub fn init(allocator: Allocator) !NetworkInterface {
+        return NetworkInterface{
+            .name = try allocator.dupe(u8, "eth0"),
+            .ip_address = try allocator.dupe(u8, "0.0.0.0"),
+            .netmask = try allocator.dupe(u8, "255.255.255.0"),
+            .gateway = null,
+            .mtu = 1500,
+        };
+    }
+    
+    pub fn deinit(self: *NetworkInterface, allocator: Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.ip_address);
+        allocator.free(self.netmask);
+        if (self.gateway) |g| allocator.free(g);
     }
 }; 
