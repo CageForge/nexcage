@@ -2,7 +2,12 @@ const std = @import("std");
 const grpc = @cImport({
     @cInclude("grpc/grpc.h");
     @cInclude("grpc/status.h");
+    @cInclude("grpc/grpc_security.h");
+    @cInclude("grpc/slice.h");
+    @cInclude("grpc/support/alloc.h");
+    @cInclude("grpc/support/log.h");
     @cInclude("runtime_service.grpc.pb.h");
+    @cInclude("runtime_service.pb.h");
 });
 const types = @import("types");
 const cri = @import("cri");

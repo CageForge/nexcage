@@ -19,13 +19,35 @@ service RuntimeService {
   rpc StopContainer(StopContainerRequest) returns (StopContainerResponse) {}
 }
 
+message DNSConfig {
+  repeated string servers = 1;
+  repeated string searches = 2;
+  repeated string options = 3;
+}
+
+message PortMapping {
+  string protocol = 1;
+  int32 container_port = 2;
+  int32 host_port = 3;
+  string host_ip = 4;
+}
+
+message LinuxPodSandboxConfig {
+  string cgroup_parent = 1;
+  SecurityContext security_context = 2;
+  map<string, string> sysctls = 3;
+}
+
 // Pod messages
 message PodSandboxConfig {
   PodMetadata metadata = 1;
-  NetworkConfig network = 2;
-  LinuxConfig linux = 3;
-  map<string, string> annotations = 4;
-  map<string, string> labels = 5;
+  string hostname = 2;
+  string log_directory = 3;
+  DNSConfig dns_config = 4;
+  repeated PortMapping port_mappings = 5;
+  LinuxPodSandboxConfig linux_config = 6;
+  map<string, string> labels = 7;
+  map<string, string> annotations = 8;
 }
 
 message PodMetadata {
@@ -46,10 +68,29 @@ message LinuxConfig {
 }
 
 message SecurityContext {
-  string namespace_options = 1;
-  string selinux_options = 2;
-  string run_as_user = 3;
+  NamespaceOption namespace_options = 1;
+  SELinuxOption selinux_options = 2;
+  RunAsUserOption run_as_user = 3;
   bool privileged = 4;
+}
+
+message NamespaceOption {
+  bool host_network = 1;
+  bool host_pid = 2;
+  bool host_ipc = 3;
+}
+
+message SELinuxOption {
+  string user = 1;
+  string role = 2;
+  string type = 3;
+  string level = 4;
+}
+
+message RunAsUserOption {
+  int64 uid = 1;
+  int64 gid = 2;
+  repeated int64 additional_gids = 3;
 }
 
 message CreatePodRequest {

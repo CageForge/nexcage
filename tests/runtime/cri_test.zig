@@ -158,4 +158,4 @@ test "CRIRuntime error handling" {
     try testing.expectError(error.NotFound, rt.interface.state("non-existent"));
     try testing.expectError(error.NotFound, rt.interface.updateResources("non-existent", .{}));
     try testing.expectError(error.NotFound, rt.interface.stats("non-existent"));
-}; 
+} 
