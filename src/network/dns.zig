@@ -25,17 +25,17 @@ pub const DNSManager = struct {
         self.allocator.free(self.netns_path);
     }
 
-    /// Налаштовує DNS для network namespace
+    /// Configures DNS for the network namespace
     pub fn configure(self: *Self, servers: []const []const u8, search: []const []const u8, options: []const []const u8) !void {
-        // Створюємо шлях до resolv.conf в network namespace
+        // Create path to resolv.conf in the network namespace
         const resolv_path = try std.fs.path.join(self.allocator, 
             &[_][]const u8{self.netns_path, "etc/resolv.conf"});
         defer self.allocator.free(resolv_path);
 
-        // Створюємо директорію якщо не існує
+        // Create directory if it doesn't exist
         try std.fs.makeDirAbsolute(std.fs.path.dirname(resolv_path).?);
 
-        // Відкриваємо файл для запису
+        // Open file for writing
         const file = try std.fs.createFileAbsolute(resolv_path, .{
             .read = true,
             .truncate = true,
@@ -44,12 +44,12 @@ pub const DNSManager = struct {
 
         const writer = file.writer();
 
-        // Записуємо nameservers
+        // Write nameservers
         for (servers) |server| {
             try writer.print("nameserver {s}\n", .{server});
         }
 
-        // Записуємо search domains
+        // Write search domains
         if (search.len > 0) {
             try writer.writeAll("search");
             for (search) |domain| {
@@ -58,7 +58,7 @@ pub const DNSManager = struct {
             try writer.writeAll("\n");
         }
 
-        // Записуємо options
+        // Write options
         if (options.len > 0) {
             try writer.writeAll("options");
             for (options) |opt| {
@@ -68,7 +68,7 @@ pub const DNSManager = struct {
         }
     }
 
-    /// Очищає DNS налаштування
+    /// Cleans up DNS configuration
     pub fn cleanup(self: *Self) !void {
         const resolv_path = try std.fs.path.join(self.allocator, 
             &[_][]const u8{self.netns_path, "etc/resolv.conf"});
@@ -76,7 +76,7 @@ pub const DNSManager = struct {
 
         std.fs.deleteFileAbsolute(resolv_path) catch |err| {
             switch (err) {
-                error.FileNotFound => {}, // Ігноруємо якщо файл не існує
+                error.FileNotFound => {}, // Ignore if file doesn't exist
                 else => return err,
             }
         };

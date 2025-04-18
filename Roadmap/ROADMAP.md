@@ -1,92 +1,92 @@
-# 🗺️ Roadmap проекту Proxmox LXC Container Runtime Interface
+# 🗺️ Proxmox LXC Container Runtime Interface Project Roadmap
 
-## 📊 Загальний прогрес: 92%
+## 📊 Overall Progress: 92%
 
-## ✅ Виконані завдання
+## ✅ Completed Tasks
 
-### 1. Базова структура проекту (100% завершено) - 2 дні
-- [x] Налаштування проекту на Zig
-- [x] Конфігурація build.zig
-- [x] Базова обробка помилок та логування
-- [x] Структура директорій проекту
+### 1. Basic Project Structure (100% complete) - 2 days
+- [x] Zig project setup
+- [x] build.zig configuration
+- [x] Basic error handling and logging
+- [x] Project directory structure
 
-### 2. Інтеграція з Proxmox API (100% завершено) - 3 дні
-- [x] Базовий GRPC клієнт
-- [x] Інтеграція з C API Proxmox
-- [x] Базові сервіси для управління контейнерами
-- [x] Обробка помилок API
+### 2. Proxmox API Integration (100% complete) - 3 days
+- [x] Basic GRPC client
+- [x] Proxmox C API integration
+- [x] Basic container management services
+- [x] API error handling
 
-### 3. Управління Pod-ами (100% завершено) - 4 дні
-- [x] Структура Pod Manager
-- [x] Життєвий цикл Pod-ів
-- [x] Інтеграція з LXC контейнерами
-- [x] Управління ресурсами
-- [x] Мережеві налаштування
+### 3. Pod Management (100% complete) - 4 days
+- [x] Pod Manager structure
+- [x] Pod lifecycle
+- [x] LXC container integration
+- [x] Resource management
+- [x] Network configuration
 
-### 4. Система образів (100% завершено) - 3 дні
-- [x] Реалізація Image Manager
-- [x] Підтримка LXC templates
-- [x] Підтримка rootfs образів
-- [x] Інтеграція з ZFS
-- [x] Монтування образів
-- [x] Конвертація форматів
+### 4. Image System (100% complete) - 3 days
+- [x] Image Manager implementation
+- [x] LXC templates support
+- [x] Rootfs image support
+- [x] ZFS integration
+- [x] Image mounting
+- [x] Format conversion
 
-### 5. Мережева підсистема (90% завершено) - 2.5 дні
-- [x] Базова мережева конфігурація
-- [x] DNS налаштування
-- [x] Port forwarding з тестами
-- [x] Стандартизація розміщення тестів
-- [ ] CNI плагіни
-- [x] Мережева ізоляція
+### 5. Network Subsystem (90% complete) - 2.5 days
+- [x] Basic network configuration
+- [x] DNS configuration
+- [x] Port forwarding with tests
+- [x] Test location standardization
+- [ ] CNI plugins
+- [x] Network isolation
 
-### 6. Безпека (70% завершено) - 2 дні
-- [x] Базові налаштування безпеки
-- [x] Управління правами доступу
-- [ ] SELinux/AppArmor інтеграція
-- [ ] Аудит безпеки
+### 6. Security (70% complete) - 2 days
+- [x] Basic security settings
+- [x] Access rights management
+- [ ] SELinux/AppArmor integration
+- [ ] Security audit
 
-## 🎯 Заплановані завдання
+## 🎯 Planned Tasks
 
-### 7. Тестування та документація (70% завершено) - 3 дні
-- [x] Unit тести для Pod Manager
-- [x] Тести для Image Manager
-- [x] Тести для Port Forwarding
-- [x] Тести для DNS Manager
-- [ ] Інтеграційні тести
-- [ ] Документація API
-- [x] Приклади використання
+### 7. Testing and Documentation (70% complete) - 3 days
+- [x] Pod Manager unit tests
+- [x] Image Manager tests
+- [x] Port Forwarding tests
+- [x] DNS Manager tests
+- [ ] Integration tests
+- [ ] API documentation
+- [x] Usage examples
 
-### 8. Моніторинг та метрики (30% завершено) - 2 дні
-- [x] Базовий моніторинг ресурсів
-- [ ] Prometheus експортер
-- [ ] Grafana дашборди
-- [ ] Алерти та нотифікації
+### 8. Monitoring and Metrics (30% complete) - 2 days
+- [x] Basic resource monitoring
+- [ ] Prometheus exporter
+- [ ] Grafana dashboards
+- [ ] Alerts and notifications
 
-### 9. CI/CD та інструменти розробки (40% завершено) - 2 дні
-- [x] GitHub Actions для тестів
-- [ ] Автоматичне збирання релізів
-- [ ] Лінтери та форматтери
-- [ ] Автоматична документація
+### 9. CI/CD and Development Tools (40% complete) - 2 days
+- [x] GitHub Actions for tests
+- [ ] Automatic release builds
+- [ ] Linters and formatters
+- [ ] Automatic documentation
 
-## 📝 Технічні покращення
-- Оптимізація використання пам'яті
-- Покращена обробка помилок
-- Асинхронні операції
-- Кешування образів
-- Стандартизація структури тестів
-- Покращення управління мережевими ресурсами
+## 📝 Technical Improvements
+- Memory usage optimization
+- Enhanced error handling
+- Asynchronous operations
+- Image caching
+- Test structure standardization
+- Network resource management improvements
 
-## 🔄 Наступні кроки
-1. Завершити реалізацію CNI плагінів
-2. Покращити документацію
-3. Додати підтримку Kubernetes CRI
-4. Реалізувати міграцію контейнерів
-5. Розширити тестове покриття
+## 🔄 Next Steps
+1. Complete CNI plugins implementation
+2. Improve documentation
+3. Add Kubernetes CRI support
+4. Implement container migration
+5. Expand test coverage
 
-## 📈 Загальні витрати часу
-- Заплановано: 23.5 дні
-- Витрачено: 17.5 днів
-- Залишилось: 6 днів
+## 📈 Time Expenditure
+- Planned: 23.5 days
+- Spent: 17.5 days
+- Remaining: 6 days
 
-## 💡 Пропозиції щодо покращень
-Будь ласка, створюйте нові issues або коментуйте існуючі для пропозицій щодо покращень проекту.
+## 💡 Improvement Suggestions
+Please create new issues or comment on existing ones for project improvement suggestions.

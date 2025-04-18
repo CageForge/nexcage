@@ -30,7 +30,7 @@ pub const PortForwarder = struct {
         self.rules.deinit();
     }
 
-    /// Перевіряє наявність правила port forwarding
+    /// Checks if a port forwarding rule exists
     pub fn hasRule(self: *const Self, mapping: types.PortMapping) bool {
         for (self.rules.items) |rule| {
             if (std.meta.eql(rule, mapping)) {
@@ -40,7 +40,7 @@ pub const PortForwarder = struct {
         return false;
     }
 
-    /// Додає правило port forwarding
+    /// Adds a port forwarding rule
     pub fn addRule(self: *Self, mapping: types.PortMapping) !void {
         const protocol = switch (mapping.protocol) {
             .tcp => "tcp",
@@ -48,7 +48,7 @@ pub const PortForwarder = struct {
             else => return Error.InvalidProtocol,
         };
 
-        // Створюємо команду iptables
+        // Create iptables command
         const cmd = try std.fmt.allocPrint(self.allocator,
             "iptables -t nat -A PREROUTING -p {s} " ++
             "-m {s} --dport {d} -j DNAT " ++
@@ -63,7 +63,7 @@ pub const PortForwarder = struct {
         );
         defer self.allocator.free(cmd);
 
-        // Виконуємо команду
+        // Execute command
         const result = try std.ChildProcess.exec(.{
             .allocator = self.allocator,
             .argv = &[_][]const u8{ "sh", "-c", cmd },
@@ -77,7 +77,7 @@ pub const PortForwarder = struct {
             return Error.RuleAddFailed;
         }
 
-        // Додаємо правило для MASQUERADE
+        // Add MASQUERADE rule
         const masq_cmd = try std.fmt.allocPrint(self.allocator,
             "iptables -t nat -A POSTROUTING -p {s} " ++
             "-m {s} --dport {d} -j MASQUERADE",
@@ -99,7 +99,7 @@ pub const PortForwarder = struct {
         }
 
         if (masq_result.term.Exited != 0) {
-            // Видаляємо попереднє правило, якщо MASQUERADE не вдалося
+            // Remove previous rule if MASQUERADE failed
             _ = try std.ChildProcess.exec(.{
                 .allocator = self.allocator,
                 .argv = &[_][]const u8{ "sh", "-c", "iptables -t nat -D PREROUTING -p " ++ protocol },
@@ -107,11 +107,11 @@ pub const PortForwarder = struct {
             return Error.RuleAddFailed;
         }
 
-        // Зберігаємо правило в списку
+        // Save rule to the list
         try self.rules.append(mapping);
     }
 
-    /// Видаляє правило port forwarding
+    /// Removes a port forwarding rule
     pub fn deleteRule(self: *Self, mapping: types.PortMapping) !void {
         const protocol = switch (mapping.protocol) {
             .tcp => "tcp",
@@ -119,7 +119,7 @@ pub const PortForwarder = struct {
             else => return Error.InvalidProtocol,
         };
 
-        // Видаляємо правило DNAT
+        // Remove DNAT rule
         const cmd = try std.fmt.allocPrint(self.allocator,
             "iptables -t nat -D PREROUTING -p {s} " ++
             "-m {s} --dport {d} -j DNAT " ++
@@ -147,7 +147,7 @@ pub const PortForwarder = struct {
             return Error.RuleDeleteFailed;
         }
 
-        // Видаляємо правило MASQUERADE
+        // Remove MASQUERADE rule
         const masq_cmd = try std.fmt.allocPrint(self.allocator,
             "iptables -t nat -D POSTROUTING -p {s} " ++
             "-m {s} --dport {d} -j MASQUERADE",
@@ -172,7 +172,7 @@ pub const PortForwarder = struct {
             return Error.RuleDeleteFailed;
         }
 
-        // Видаляємо правило зі списку
+        // Remove rule from the list
         for (self.rules.items) |rule, i| {
             if (std.meta.eql(rule, mapping)) {
                 _ = self.rules.orderedRemove(i);

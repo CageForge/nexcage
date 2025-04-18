@@ -3,7 +3,7 @@ const testing = std.testing;
 const types = @import("../../src/types/pod.zig");
 const port_forward = @import("../../src/network/port_forward.zig");
 
-test "PortForwarder - базові операції" {
+test "PortForwarder - basic operations" {
     const allocator = testing.allocator;
     var forwarder = try port_forward.PortForwarder.init(allocator, "10.0.0.2");
     defer forwarder.deinit();
@@ -39,7 +39,7 @@ test "PortForwarder - базові операції" {
     try testing.expectEqual(forwarder.rules.items.len, 0);
 }
 
-test "PortForwarder - невалідний протокол" {
+test "PortForwarder - invalid protocol" {
     const allocator = testing.allocator;
     var forwarder = try port_forward.PortForwarder.init(allocator, "10.0.0.2");
     defer forwarder.deinit();
@@ -55,12 +55,12 @@ test "PortForwarder - невалідний протокол" {
     try testing.expect(!forwarder.hasRule(invalid_rule));
 }
 
-test "PortForwarder - управління пам'яттю" {
+test "PortForwarder - memory management" {
     const allocator = testing.allocator;
     var forwarder = try port_forward.PortForwarder.init(allocator, "10.0.0.2");
     defer forwarder.deinit();
 
-    // Додаємо декілька правил
+    // Add multiple rules
     const rules = [_]types.PortMapping{
         .{
             .protocol = .tcp,
@@ -79,14 +79,14 @@ test "PortForwarder - управління пам'яттю" {
         },
     };
 
-    // Додаємо всі правила
+    // Add all rules
     for (rules) |rule| {
         try forwarder.addRule(rule);
         try testing.expect(forwarder.hasRule(rule));
     }
     try testing.expectEqual(forwarder.rules.items.len, rules.len);
 
-    // Видаляємо всі правила
+    // Remove all rules
     for (rules) |rule| {
         try forwarder.deleteRule(rule);
         try testing.expect(!forwarder.hasRule(rule));
