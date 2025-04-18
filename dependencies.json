@@ -1,0 +1,84 @@
+{
+    "build_dependencies": {
+        "zig": "0.13.0",
+        "cmake": ">=3.13",
+        "protobuf-compiler": "3.12.4",
+        "docker": ">=20.10"
+    },
+    "system_libraries": {
+        "grpc": {
+            "libgrpc-dev": ">=1.16.0",
+            "libgrpc++-dev": ">=1.16.0",
+            "libgrpc++1": ">=1.16.0",
+            "libprotobuf-dev": ">=3.12.4",
+            "libprotobuf-lite23": ">=3.12.4",
+            "libprotobuf23": ">=3.12.4",
+            "libprotoc23": ">=3.12.4"
+        },
+        "abseil": {
+            "version": "20230802.1",
+            "components": [
+                "absl_base",
+                "absl_throw_delegate",
+                "absl_raw_logging_internal",
+                "absl_log_severity",
+                "absl_spinlock_wait",
+                "absl_malloc_internal",
+                "absl_time",
+                "absl_civil_time",
+                "absl_time_zone",
+                "absl_strings",
+                "absl_strings_internal",
+                "absl_status",
+                "absl_cord",
+                "absl_str_format_internal",
+                "absl_synchronization",
+                "absl_stacktrace",
+                "absl_symbolize",
+                "absl_debugging_internal",
+                "absl_demangle_internal",
+                "absl_graphcycles_internal",
+                "absl_hash",
+                "absl_city",
+                "absl_low_level_hash",
+                "absl_raw_hash_set",
+                "absl_hashtablez_sampler",
+                "absl_exponential_biased"
+            ]
+        },
+        "ssl": {
+            "libssl-dev": ">=1.1.1"
+        },
+        "other": {
+            "zlib1g-dev": ">=1.2.11",
+            "libcares-dev": ">=1.14.0",
+            "libre2-dev": ">=20200101",
+            "libc-ares2": ">=1.14.0",
+            "libatomic1": ">=10.0.0"
+        }
+    },
+    "development_tools": {
+        "git": ">=2.25.1",
+        "make": ">=4.2.1",
+        "curl": ">=7.68.0",
+        "gh": "latest",
+        "act": "latest"
+    },
+    "environment_variables": {
+        "LD_LIBRARY_PATH": [
+            "/usr/lib",
+            "/usr/local/lib",
+            "/usr/lib/x86_64-linux-gnu"
+        ],
+        "LIBRARY_PATH": [
+            "/usr/lib",
+            "/usr/local/lib",
+            "/usr/lib/x86_64-linux-gnu"
+        ],
+        "PKG_CONFIG_PATH": [
+            "/usr/lib/pkgconfig",
+            "/usr/local/lib/pkgconfig",
+            "/usr/lib/x86_64-linux-gnu/pkgconfig"
+        ]
+    }
+} 

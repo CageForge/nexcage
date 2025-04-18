@@ -1,6 +1,7 @@
 const std = @import("std");
 const spec = @import("spec.zig");
 const container_state = @import("container_state.zig");
+const hooks = @import("hooks.zig");
 const Allocator = std.mem.Allocator;
 
 /// Помилки, які можуть виникнути при роботі з контейнером
@@ -92,37 +93,58 @@ pub const ContainerMetadata = struct {
 
 /// Структура контейнера
 pub const Container = struct {
+    allocator: Allocator,
     metadata: ContainerMetadata,
     spec: spec.Spec,
     state: container_state.ContainerState,
-    allocator: Allocator,
+    hook_manager: hooks.HookManager,
 
     const Self = @This();
 
     /// Створює новий контейнер
-    pub fn create(allocator: Allocator, id: []const u8, name: []const u8, container_spec: spec.Spec) !Self {
-        return Self{
-            .metadata = try ContainerMetadata.create(allocator, id, name),
-            .spec = container_spec,
-            .state = container_state.ContainerState.init(),
+    pub fn init(allocator: Allocator, metadata: *ContainerMetadata, spec: *spec.Spec) !*Self {
+        const self = try allocator.create(Self);
+        errdefer allocator.destroy(self);
+
+        self.* = .{
             .allocator = allocator,
+            .metadata = metadata.*,
+            .spec = spec.*,
+            .state = container_state.ContainerState.init(),
+            .hook_manager = hooks.HookManager.init(allocator),
         };
+
+        return self;
     }
 
     /// Звільняє ресурси
     pub fn deinit(self: *Self) void {
-        self.metadata.deinit(self.allocator);
-        self.spec.deinit(self.allocator);
+        self.hook_manager.deinit();
+        self.allocator.destroy(self);
+    }
+
+    /// Додає хук до контейнера
+    pub fn addHook(self: *Self, hook_type: hooks.HookType, hook: *hooks.Hook) !void {
+        try self.hook_manager.addHook(hook_type, hook);
     }
 
     /// Запускає контейнер
-    pub fn start(self: *Self) ContainerError!void {
+    pub fn start(self: *Self) !void {
+        // Виконуємо prestart хуки
+        try self.hook_manager.executeHooks(.prestart);
+        
         try self.state.transitionTo(.running);
+        
+        // Виконуємо poststart хуки
+        try self.hook_manager.executeHooks(.poststart);
     }
 
     /// Зупиняє контейнер
-    pub fn stop(self: *Self) ContainerError!void {
+    pub fn stop(self: *Self) !void {
         try self.state.transitionTo(.stopped);
+        
+        // Виконуємо poststop хуки
+        try self.hook_manager.executeHooks(.poststop);
     }
 
     /// Призупиняє контейнер

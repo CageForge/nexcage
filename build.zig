@@ -1,100 +1,132 @@
 const std = @import("std");
+const Build = std.Build;
 
-fn addCommonConfig(artifact: *std.Build.Step.Compile) void {
-    const include_paths = [_][]const u8{
-        "src/grpc/proto",
-        "/usr/local/include",
-    };
+fn addCommonConfig(exe: *std.Build.Step.Compile) void {
+    // Add include paths
+    exe.addIncludePath(.{ .cwd_relative = "src/grpc/proto" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/c++/12" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu/c++/12" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/google" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/c++/12/backward" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/lib/gcc/x86_64-linux-gnu/12/include" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/grpc" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/grpc++" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/grpcpp" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/google/protobuf" });
+    
+    // Add standard C++ library paths
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/c++/12/bits" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/c++/12/ext" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/c++/12/debug" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include/c++/12/limits" });
 
-    for (include_paths) |path| {
-        artifact.addIncludePath(.{ .cwd_relative = path });
-    }
-
-    const C_FLAGS = [_][]const u8{
-        "-DNOMINMAX",
-        "-DABSL_ATTRIBUTE_LIFETIME_BOUND=",
-        "-DABSL_ASSUME(x)=",
-        "-DABSL_INTERNAL_CORDZ_ENABLED=0",
-        "-DABSL_INTERNAL_CORD_INTERNAL_MAX_FLAT_SIZE=0x7FFF'FFFF",
-        "-U linux",
+    // Add library paths
+    exe.addLibraryPath(.{ .cwd_relative = "/usr/lib/x86_64-linux-gnu" });
+    exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+    exe.addLibraryPath(.{ .cwd_relative = "/usr/lib/gcc/x86_64-linux-gnu/12" });
+    exe.linkLibC();
+    exe.linkLibCpp();
+    
+    // Add C flags
+    const c_flags = &[_][]const u8{
         "-fPIC",
+        "-DNDEBUG",
+        "-D_GNU_SOURCE",
+        "-DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1",
     };
 
-    const CXX_FLAGS = [_][]const u8{
-        "-std=c++14",
+    // C++ flags
+    const cpp_flags = &[_][]const u8{
+        "-std=c++17",
         "-DNOMINMAX",
-        "-DABSL_ATTRIBUTE_LIFETIME_BOUND=",
-        "-DABSL_ASSUME(x)=",
-        "-DABSL_INTERNAL_CORDZ_ENABLED=0",
-        "-DABSL_INTERNAL_CORD_INTERNAL_MAX_FLAT_SIZE=0x7FFF'FFFF",
-        "-U linux",
         "-fPIC",
+        "-DNDEBUG",
+        "-D_GNU_SOURCE",
+        "-DUSE_ABSL_STATUSOR",
+        "-DABSL_USES_STD_STRING_VIEW",
+        "-DABSL_ATTRIBUTE_LIFETIME_BOUND=",
+        "-DABSL_ASSUME(x)=__builtin_assume(x)",
+        "-DABSL_INTERNAL_ASSUME(x)=__builtin_assume(x)",
+        "-DABSL_PREDICT_TRUE(x)=__builtin_expect(!!(x), 1)",
+        "-DABSL_PREDICT_FALSE(x)=__builtin_expect(!!(x), 0)",
+        "-D__STDC_FORMAT_MACROS",
+        "-D__STDC_CONSTANT_MACROS",
+        "-D__STDC_LIMIT_MACROS",
+        "-DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1",
+        "-I/usr/include/c++/12",
+        "-I/usr/include/x86_64-linux-gnu/c++/12",
+        "-I/usr/include/c++/12/backward",
+        "-I/usr/local/include",
+        "-fexceptions",
+        "-frtti",
     };
 
-    artifact.addCSourceFile(.{
+    // Add C source files
+    exe.addCSourceFile(.{
         .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.pb-c.c" },
-        .flags = &C_FLAGS,
+        .flags = c_flags,
     });
-    artifact.addCSourceFile(.{
+
+    // Add C++ source files
+    exe.addCSourceFile(.{
         .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.pb.cc" },
-        .flags = &CXX_FLAGS,
+        .flags = cpp_flags,
     });
-    artifact.addCSourceFile(.{
+    exe.addCSourceFile(.{
         .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.grpc.pb.cc" },
-        .flags = &CXX_FLAGS,
+        .flags = cpp_flags,
     });
 
-    artifact.linkLibCpp();
-    artifact.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
-    artifact.addLibraryPath(.{ .cwd_relative = "/usr/lib" });
-    artifact.addLibraryPath(.{ .cwd_relative = "/usr/lib/x86_64-linux-gnu" });
-    artifact.addRPath(.{ .cwd_relative = "/usr/local/lib" });
+    // Link system libraries
+    exe.linkSystemLibrary("protobuf");
+    exe.linkSystemLibrary("grpc++");
+    exe.linkSystemLibrary("grpc");
+    exe.linkSystemLibrary("gpr");
+    exe.linkSystemLibrary("upb");
+    exe.linkSystemLibrary("address_sorting");
+    exe.linkSystemLibrary("re2");
+    exe.linkSystemLibrary("cares");
+    exe.linkSystemLibrary("ssl");
+    exe.linkSystemLibrary("crypto");
+    exe.linkSystemLibrary("atomic");
+    exe.linkSystemLibrary("pthread");
+    exe.linkSystemLibrary("dl");
+    exe.linkSystemLibrary("rt");
+    exe.linkSystemLibrary("z");
 
-    artifact.linkSystemLibrary("protobuf-c");
-    artifact.linkSystemLibrary("protobuf");
-    artifact.linkSystemLibrary("grpc++");
-    artifact.linkSystemLibrary("grpc");
-    artifact.linkSystemLibrary("gpr");
-    artifact.linkSystemLibrary("z");
-    artifact.linkSystemLibrary("pthread");
-    artifact.linkSystemLibrary("dl");
-
-    const absl_libs = [_][]const u8{
-        "absl_strings",
-        "absl_str_format_internal",
-        "absl_cord",
-        "absl_bad_optional_access",
-        "absl_cordz_info",
-        "absl_cord_internal",
-        "absl_cordz_functions",
-        "absl_exponential_biased",
-        "absl_cordz_handle",
-        "absl_raw_hash_set",
-        "absl_hashtablez_sampler",
-        "absl_synchronization",
-        "absl_stacktrace",
-        "absl_symbolize",
-        "absl_malloc_internal",
-        "absl_debugging_internal",
-        "absl_demangle_internal",
-        "absl_time",
-        "absl_civil_time",
-        "absl_time_zone",
-        "absl_bad_variant_access",
-        "absl_base",
-        "absl_spinlock_wait",
-        "absl_int128",
-        "absl_throw_delegate",
-        "absl_raw_logging_internal",
-        "absl_log_severity",
-        "absl_status",
-        "absl_statusor",
-        "absl_strerror",
-    };
-
-    for (absl_libs) |lib| {
-        artifact.linkSystemLibrary(lib);
-    }
+    // Link Abseil libraries
+    exe.linkSystemLibrary("absl_base");
+    exe.linkSystemLibrary("absl_throw_delegate");
+    exe.linkSystemLibrary("absl_raw_logging_internal");
+    exe.linkSystemLibrary("absl_log_severity");
+    exe.linkSystemLibrary("absl_spinlock_wait");
+    exe.linkSystemLibrary("absl_malloc_internal");
+    exe.linkSystemLibrary("absl_time");
+    exe.linkSystemLibrary("absl_civil_time");
+    exe.linkSystemLibrary("absl_time_zone");
+    exe.linkSystemLibrary("absl_strings");
+    exe.linkSystemLibrary("absl_strings_internal");
+    exe.linkSystemLibrary("absl_status");
+    exe.linkSystemLibrary("absl_cord");
+    exe.linkSystemLibrary("absl_str_format_internal");
+    exe.linkSystemLibrary("absl_synchronization");
+    exe.linkSystemLibrary("absl_stacktrace");
+    exe.linkSystemLibrary("absl_symbolize");
+    exe.linkSystemLibrary("absl_debugging_internal");
+    exe.linkSystemLibrary("absl_demangle_internal");
+    exe.linkSystemLibrary("absl_graphcycles_internal");
+    exe.linkSystemLibrary("absl_hash");
+    exe.linkSystemLibrary("absl_city");
+    exe.linkSystemLibrary("absl_low_level_hash");
+    exe.linkSystemLibrary("absl_raw_hash_set");
+    exe.linkSystemLibrary("absl_hashtablez_sampler");
+    exe.linkSystemLibrary("absl_exponential_biased");
+    exe.linkSystemLibrary("absl_statusor");
+    exe.linkSystemLibrary("absl_bad_optional_access");
+    exe.linkSystemLibrary("absl_bad_variant_access");
 }
 
 pub fn build(b: *std.Build) void {
@@ -130,6 +162,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "types", .module = types_module },
             .{ .name = "logger", .module = logger_module },
             .{ .name = "error", .module = error_module },
+            .{ .name = "config", .module = config_module },
         },
     });
 
@@ -139,6 +172,14 @@ pub fn build(b: *std.Build) void {
 
     const oci_module = b.createModule(.{
         .root_source_file = .{ .cwd_relative = "src/oci/mod.zig" },
+    });
+
+    const crio_module = b.addModule("crio", .{
+        .root_source_file = .{ .cwd_relative = "src/crio/mod.zig" },
+        .imports = &.{
+            .{ .name = "types", .module = types_module },
+            .{ .name = "oci", .module = oci_module },
+        },
     });
 
     const runtime_service_module = b.createModule(.{
@@ -179,25 +220,25 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const unit_tests = b.addTest(.{
-        .root_source_file = .{ .cwd_relative = "tests/test_runtime_service.zig" },
+    const test_step = b.step("test", "Run library tests");
+    const main_tests = b.addTest(.{
+        .root_source_file = .{ .cwd_relative = "tests/main.zig" },
         .target = target,
         .optimize = optimize,
     });
 
-    addCommonConfig(unit_tests);
+    main_tests.root_module.addImport("types", types_module);
+    main_tests.root_module.addImport("logger", logger_module);
+    main_tests.root_module.addImport("error", error_module);
+    main_tests.root_module.addImport("config", config_module);
+    main_tests.root_module.addImport("proxmox", proxmox_module);
+    main_tests.root_module.addImport("oci", oci_module);
+    main_tests.root_module.addImport("crio", crio_module);
 
-    unit_tests.root_module.addImport("types", types_module);
-    unit_tests.root_module.addImport("logger", logger_module);
-    unit_tests.root_module.addImport("error", error_module);
-    unit_tests.root_module.addImport("config", config_module);
-    unit_tests.root_module.addImport("proxmox", proxmox_module);
-    unit_tests.root_module.addImport("runtime_service", runtime_service_module);
-    unit_tests.root_module.addImport("oci", oci_module);
-
-    unit_tests.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
-
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&unit_tests.step);
+    addCommonConfig(main_tests);
+    main_tests.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+    
+    const run_tests = b.addRunArtifact(main_tests);
+    test_step.dependOn(&run_tests.step);
 }
 
