@@ -1,7 +1,9 @@
 const std = @import("std");
+const testing = std.testing;
 const proxmox = @import("proxmox");
 const logger = @import("logger");
 const types = @import("types");
+const Connection = @import("proxmox/connection.zig").Connection;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -12,8 +14,17 @@ pub fn main() !void {
     defer log.deinit();
 
     const hosts = [_][]const u8{"mgr.cp.if.ua"};
-    const token = "root@pam!capi=be7823bc-d949-460e-a9ce-28d0844648ed";
+    const token = std.os.getenv("PROXMOX_TOKEN") orelse "root@pam!token=test-token-12345";
     const node = "mgr";
+
+    var conn = try Connection.init(
+        allocator,
+        "localhost",
+        8006,
+        token,
+        false,
+    );
+    defer conn.deinit();
 
     var client = try proxmox.Client.init(
         allocator,
@@ -43,4 +54,22 @@ pub fn main() !void {
             @tagName(container.status),
         });
     }
+}
+
+test "LXC container operations" {
+    const allocator = testing.allocator;
+    
+    // Get token from environment variable or use test token
+    const token = std.os.getenv("PROXMOX_TOKEN") orelse "root@pam!token=test-token-12345";
+    
+    var conn = try Connection.init(
+        allocator,
+        "localhost",
+        8006,
+        token,
+        false,
+    );
+    defer conn.deinit();
+    
+    // ... existing code ...
 } 

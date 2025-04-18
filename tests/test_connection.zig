@@ -2,6 +2,8 @@ const std = @import("std");
 const logger_mod = @import("logger");
 const proxmox = @import("proxmox");
 const Error = @import("error").Error;
+const testing = std.testing;
+const Connection = @import("proxmox/connection.zig").Connection;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -33,4 +35,33 @@ pub fn main() !void {
     defer allocator.free(response);
 
     try logger.info("Proxmox API version: {s}", .{response});
+}
+
+test "Connection initialization and basic operations" {
+    const allocator = testing.allocator;
+    
+    // Get connection details from environment or use defaults
+    const host = std.os.getenv("PROXMOX_HOST") orelse "localhost";
+    const port = if (std.os.getenv("PROXMOX_PORT")) |port_str| {
+        try std.fmt.parseInt(u16, port_str, 10);
+    } else {
+        8006;
+    };
+    const token = std.os.getenv("PROXMOX_TOKEN") orelse "root@pam!token=test-token-12345";
+    const verify_ssl = if (std.os.getenv("PROXMOX_VERIFY_SSL")) |verify| {
+        std.mem.eql(u8, verify, "true");
+    } else {
+        false;
+    };
+    
+    var conn = try Connection.init(
+        allocator,
+        host,
+        port,
+        token,
+        verify_ssl,
+    );
+    defer conn.deinit();
+    
+    // ... existing code ...
 }
