@@ -1,5 +1,6 @@
 const std = @import("std");
 const types = @import("types");
+const pod = @import("pod.zig");
 const Allocator = std.mem.Allocator;
 
 pub const RuntimeError = error{
@@ -38,7 +39,7 @@ pub const RuntimeInterface = struct {
         runtime_type: RuntimeType,
         root_dir: []const u8,
         state_dir: []const u8,
-        network_plugin: ?[]const u8 = null,
+        network_plugin: []const u8,
     };
 
     /// Метадані контейнера
@@ -109,13 +110,28 @@ pub const RuntimeInterface = struct {
         poststopFn: *const fn (self: *RuntimeInterface, id: []const u8) RuntimeError!void,
     };
 
+    /// Інтерфейс для роботи з Pod-ами
+    pub const Pod = struct {
+        /// Створення Pod
+        createFn: *const fn (self: *RuntimeInterface, config: types.PodConfig) RuntimeError!void,
+        /// Видалення Pod
+        deleteFn: *const fn (self: *RuntimeInterface, id: []const u8) RuntimeError!void,
+        /// Запуск Pod
+        startFn: *const fn (self: *RuntimeInterface, id: []const u8) RuntimeError!void,
+        /// Зупинка Pod
+        stopFn: *const fn (self: *RuntimeInterface, id: []const u8) RuntimeError!void,
+        /// Отримання стану Pod
+        stateFn: *const fn (self: *RuntimeInterface, id: []const u8) RuntimeError!pod.Pod.State,
+    };
+
     /// Дані runtime
     allocator: Allocator,
     config: Config,
     lifecycle: Lifecycle,
     resources: Resources,
-    network: ?Network,
-    hooks: ?Hooks,
+    network: Network,
+    hooks: Hooks,
+    pod_interface: Pod,
 
     /// Ініціалізація runtime
     pub fn init(
@@ -123,8 +139,9 @@ pub const RuntimeInterface = struct {
         config: Config,
         lifecycle: Lifecycle,
         resources: Resources,
-        network: ?Network,
-        hooks: ?Hooks,
+        network: Network,
+        hooks: Hooks,
+        pod_interface: Pod,
     ) RuntimeInterface {
         return .{
             .allocator = allocator,
@@ -133,6 +150,7 @@ pub const RuntimeInterface = struct {
             .resources = resources,
             .network = network,
             .hooks = hooks,
+            .pod_interface = pod_interface,
         };
     }
 
@@ -215,5 +233,26 @@ pub const RuntimeInterface = struct {
             return network.statsFn(self, id);
         }
         return error.NetworkError;
+    }
+
+    /// Методи управління Pod-ами
+    pub fn createPod(self: *RuntimeInterface, config: types.PodConfig) RuntimeError!void {
+        return self.pod_interface.createFn(self, config);
+    }
+
+    pub fn deletePod(self: *RuntimeInterface, id: []const u8) RuntimeError!void {
+        return self.pod_interface.deleteFn(self, id);
+    }
+
+    pub fn startPod(self: *RuntimeInterface, id: []const u8) RuntimeError!void {
+        return self.pod_interface.startFn(self, id);
+    }
+
+    pub fn stopPod(self: *RuntimeInterface, id: []const u8) RuntimeError!void {
+        return self.pod_interface.stopFn(self, id);
+    }
+
+    pub fn podState(self: *RuntimeInterface, id: []const u8) RuntimeError!pod.Pod.State {
+        return self.pod_interface.stateFn(self, id);
     }
 }; 

@@ -4,11 +4,13 @@ const types = @import("types");
 const proxmox = @import("proxmox");
 const cni = @import("network/cni.zig");
 const hooks = @import("hooks.zig");
+const pod = @import("pod.zig");
 const Allocator = std.mem.Allocator;
 
 /// CRI-сумісний runtime для Proxmox LXC
 pub const CRIRuntime = struct {
     interface: interface.RuntimeInterface,
+    pods: std.StringHashMap(*pod.Pod),
     containers: std.StringHashMap(Container),
     proxmox_client: *proxmox.Client,
     cni_plugin: *cni.CNIPlugin,
@@ -56,6 +58,7 @@ pub const CRIRuntime = struct {
         const self = try allocator.create(Self);
         errdefer allocator.destroy(self);
 
+        self.pods = std.StringHashMap(*pod.Pod).init(allocator);
         self.containers = std.StringHashMap(Container).init(allocator);
         self.proxmox_client = proxmox_client;
         
@@ -98,6 +101,14 @@ pub const CRIRuntime = struct {
             .poststartFn = poststart,
             .poststopFn = poststop,
         };
+        
+        const pod_interface = interface.RuntimeInterface.Pod{
+            .createFn = createPod,
+            .deleteFn = deletePod,
+            .startFn = startPod,
+            .stopFn = stopPod,
+            .stateFn = podState,
+        };
 
         self.interface = interface.RuntimeInterface.init(
             allocator,
@@ -106,6 +117,7 @@ pub const CRIRuntime = struct {
             resources,
             network,
             hooks_interface,
+            pod_interface,
         );
 
         return self;
@@ -113,15 +125,114 @@ pub const CRIRuntime = struct {
 
     /// Звільняє ресурси
     pub fn deinit(self: *Self) void {
-        var it = self.containers.iterator();
-        while (it.next()) |entry| {
+        var pod_it = self.pods.iterator();
+        while (pod_it.next()) |entry| {
+            entry.value_ptr.*.deinit(self.interface.allocator);
+        }
+        self.pods.deinit();
+        
+        var container_it = self.containers.iterator();
+        while (container_it.next()) |entry| {
             var container = entry.value_ptr;
             container.deinit(self.interface.allocator);
         }
         self.containers.deinit();
+        
         self.cni_plugin.deinit();
         self.hooks_manager.deinit();
         self.interface.allocator.destroy(self);
+    }
+
+    /// Створює новий Pod
+    fn createPod(rt: *interface.RuntimeInterface, config: types.PodConfig) interface.RuntimeError!void {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        // Створюємо новий Pod
+        const new_pod = try pod.Pod.init(
+            rt.allocator,
+            config.id,
+            config.name,
+            config.namespace,
+        );
+        errdefer new_pod.deinit(rt.allocator);
+        
+        // Додаємо анотації
+        if (config.annotations) |annotations| {
+            var it = annotations.iterator();
+            while (it.next()) |entry| {
+                try new_pod.setAnnotation(rt.allocator, entry.key_ptr.*, entry.value_ptr.*);
+            }
+        }
+        
+        try self.pods.put(config.id, new_pod);
+    }
+    
+    /// Видаляє Pod
+    fn deletePod(rt: *interface.RuntimeInterface, id: []const u8) interface.RuntimeError!void {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.pods.fetchRemove(id)) |entry| {
+            const pod_ptr = entry.value;
+            
+            // Видаляємо всі контейнери Pod-а
+            var it = pod_ptr.containers.iterator();
+            while (it.next()) |container_entry| {
+                const container_id = container_entry.key_ptr.*;
+                try self.delete(rt, container_id);
+            }
+            
+            // Видаляємо Pod
+            pod_ptr.deinit(rt.allocator);
+        } else {
+            return error.NotFound;
+        }
+    }
+    
+    /// Запускає Pod
+    fn startPod(rt: *interface.RuntimeInterface, id: []const u8) interface.RuntimeError!void {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.pods.getPtr(id)) |pod_ptr| {
+            // Запускаємо всі контейнери Pod-а
+            var it = pod_ptr.containers.iterator();
+            while (it.next()) |container_entry| {
+                const container_id = container_entry.key_ptr.*;
+                try self.start(rt, container_id);
+            }
+            
+            pod_ptr.updateState();
+        } else {
+            return error.NotFound;
+        }
+    }
+    
+    /// Зупиняє Pod
+    fn stopPod(rt: *interface.RuntimeInterface, id: []const u8) interface.RuntimeError!void {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.pods.getPtr(id)) |pod_ptr| {
+            // Зупиняємо всі контейнери Pod-а
+            var it = pod_ptr.containers.iterator();
+            while (it.next()) |container_entry| {
+                const container_id = container_entry.key_ptr.*;
+                try self.stop(rt, container_id);
+            }
+            
+            pod_ptr.updateState();
+        } else {
+            return error.NotFound;
+        }
+    }
+    
+    /// Отримує стан Pod-а
+    fn podState(rt: *interface.RuntimeInterface, id: []const u8) interface.RuntimeError!pod.Pod.State {
+        const self = @fieldParentPtr(Self, "interface", rt);
+        
+        if (self.pods.getPtr(id)) |pod_ptr| {
+            return pod_ptr.state;
+        } else {
+            return error.NotFound;
+        }
     }
 
     /// Створює новий контейнер
