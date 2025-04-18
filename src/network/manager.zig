@@ -1,4 +1,5 @@
 const std = @import("std");
+const types = @import("../types/pod.zig");
 const cni = @import("cni.zig");
 const cilium = @import("cilium.zig");
 const state = @import("state.zig");
@@ -16,58 +17,45 @@ pub const NetworkError = error{
     InterfaceNotFound,
     ConfigurationFailed,
     ConnectionFailed,
+    NetworkAlreadyExists,
+    NetworkNotFound,
+    InvalidState,
+    NetworkCreateFailed,
+    NetworkDeleteFailed,
+    NetworkStartFailed,
+    NetworkStopFailed,
 };
 
 /// Менеджер мережі
 pub const NetworkManager = struct {
     allocator: Allocator,
-    cilium_plugin: *cilium.CiliumPlugin,
-    state_manager: *state.NetworkStateManager,
-    interfaces: std.ArrayList(NetworkInterface),
+    cni_plugin: *cni.CNIPlugin,
+    networks: std.StringHashMap(*Network),
     
     const Self = @This();
     
     /// Створює новий менеджер мережі
-    pub fn init(
-        allocator: Allocator,
-        config_dir: []const u8,
-        state_dir: []const u8,
-    ) !*Self {
+    pub fn init(allocator: Allocator, plugin_dir: []const u8) !*Self {
         const self = try allocator.create(Self);
         errdefer allocator.destroy(self);
         
-        // Створюємо конфігурацію Cilium
-        var cilium_config = try cilium.CiliumConfig.init(allocator, "cilium");
-        cilium_config.enable_endpoint_routes = true;
-        cilium_config.enable_ipv4 = true;
-        cilium_config.enable_ipv6 = false;
-        cilium_config.ipam = .{
-            .type = "cilium-ipam",
-            .pool_v4 = "10.0.0.0/16",
+        // Створюємо базову конфігурацію CNI
+        const config = cni.CNIConfig{
+            .name = "proxmox-net",
+            .type = "bridge",
+            .cniVersion = cni.CNI_VERSION,
+            .args = null,
         };
-        cilium_config.dns = .{
-            .servers = &[_][]const u8{
-                "8.8.8.8",
-                "1.1.1.1",
-            },
-            .options = &[_][]const u8{
-                "ndots:5",
-            },
-        };
-        
-        // Створюємо Cilium плагін
-        const plugin = try cilium.CiliumPlugin.init(allocator, cilium_config);
-        errdefer plugin.deinit();
-        
-        // Створюємо менеджер стану
-        const state_manager = try state.NetworkStateManager.init(allocator, state_dir);
-        errdefer state_manager.deinit();
-        
+
+        // Ініціалізуємо CNI плагін
+        const plugin = try allocator.create(cni.CNIPlugin);
+        errdefer allocator.destroy(plugin);
+        plugin.* = try cni.CNIPlugin.init(allocator, config, plugin_dir);
+
         self.* = .{
             .allocator = allocator,
-            .cilium_plugin = plugin,
-            .state_manager = state_manager,
-            .interfaces = std.ArrayList(NetworkInterface).init(allocator),
+            .cni_plugin = plugin,
+            .networks = std.StringHashMap(*Network).init(allocator),
         };
         
         return self;
@@ -75,187 +63,170 @@ pub const NetworkManager = struct {
     
     /// Звільняє ресурси
     pub fn deinit(self: *Self) void {
-        self.cilium_plugin.deinit();
-        self.state_manager.deinit();
-        for (self.interfaces.items) |*interface| {
-            interface.deinit(self.allocator);
+        var it = self.networks.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.*.deinit();
+            self.allocator.destroy(entry.value_ptr.*);
         }
-        self.interfaces.deinit();
+        self.networks.deinit();
+        self.cni_plugin.deinit();
+        self.allocator.destroy(self.cni_plugin);
         self.allocator.destroy(self);
     }
     
-    /// Додає мережевий інтерфейс до контейнера
-    pub fn setupNetwork(
-        self: *Self,
-        container_id: []const u8,
-        netns: []const u8,
-    ) !*state.NetworkState {
-        // Викликаємо Cilium CNI для налаштування мережі
-        const result = try self.cilium_plugin.add(container_id, netns);
-        if (!result.success) {
-            if (result.error) |err| {
-                std.log.err(
-                    "Failed to setup network for container {s}: {s}",
-                    .{ container_id, err.msg },
-                );
-            }
-            return NetworkError.CNIError;
+    /// Створює нову мережу для Pod-а
+    pub fn createNetwork(self: *Self, pod_id: []const u8, config: types.NetworkConfig) !void {
+        if (self.networks.get(pod_id)) |_| {
+            return error.NetworkAlreadyExists;
         }
-        
-        // Парсимо результат
-        var parsed = try std.json.parseFromSlice(
-            std.json.Value,
+
+        var network = try self.allocator.create(Network);
+        errdefer self.allocator.destroy(network);
+
+        network.* = try Network.init(self.allocator, pod_id, config, self.cni_plugin);
+        errdefer network.deinit();
+
+        try self.networks.put(pod_id, network);
+    }
+    
+    /// Видаляє мережу Pod-а
+    pub fn deleteNetwork(self: *Self, pod_id: []const u8) !void {
+        const network = self.networks.get(pod_id) orelse return error.NetworkNotFound;
+        try network.cleanup();
+        network.deinit();
+        self.allocator.destroy(network);
+        _ = self.networks.remove(pod_id);
+    }
+    
+    /// Запускає мережу Pod-а
+    pub fn startNetwork(self: *Self, pod_id: []const u8) !void {
+        const network = self.networks.get(pod_id) orelse return error.NetworkNotFound;
+        try network.start();
+    }
+    
+    /// Зупиняє мережу Pod-а
+    pub fn stopNetwork(self: *Self, pod_id: []const u8) !void {
+        const network = self.networks.get(pod_id) orelse return error.NetworkNotFound;
+        try network.stop();
+    }
+    
+    /// Отримує статус мережі Pod-а
+    pub fn getNetworkStatus(self: *Self, pod_id: []const u8) !NetworkStatus {
+        const network = self.networks.get(pod_id) orelse return error.NetworkNotFound;
+        return network.getStatus();
+    }
+};
+
+pub const Network = struct {
+    const Self = @This();
+
+    allocator: Allocator,
+    pod_id: []const u8,
+    config: types.NetworkConfig,
+    cni_plugin: *cni.CNIPlugin,
+    status: NetworkStatus,
+
+    pub fn init(
+        allocator: Allocator,
+        pod_id: []const u8,
+        config: types.NetworkConfig,
+        cni_plugin: *cni.CNIPlugin,
+    ) !Self {
+        return Self{
+            .allocator = allocator,
+            .pod_id = try allocator.dupe(u8, pod_id),
+            .config = config,
+            .cni_plugin = cni_plugin,
+            .status = .Created,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.allocator.free(self.pod_id);
+    }
+
+    pub fn start(self: *Self) !void {
+        if (self.status != .Created and self.status != .Stopped) {
+            return error.InvalidState;
+        }
+
+        // Отримуємо шлях до network namespace
+        const netns = try std.fmt.allocPrint(
             self.allocator,
-            result.message.?,
-            .{},
+            "/proc/{s}/ns/net",
+            .{self.pod_id},
         );
-        defer parsed.deinit();
-        
-        // Створюємо запис про стан мережі
-        const network_state = try state.NetworkState.init(
+        defer self.allocator.free(netns);
+
+        // Додаємо мережу через CNI плагін
+        _ = try self.cni_plugin.add(self.pod_id, netns);
+
+        // Налаштовуємо DNS якщо потрібно
+        if (self.config.dns.servers.len > 0) {
+            try self.setupDNS();
+        }
+
+        // Налаштовуємо port forwarding
+        for (self.config.port_mappings) |mapping| {
+            try self.setupPortForward(mapping);
+        }
+
+        self.status = .Running;
+    }
+
+    pub fn stop(self: *Self) !void {
+        if (self.status != .Running) {
+            return error.InvalidState;
+        }
+
+        // Видаляємо port forwarding
+        for (self.config.port_mappings) |mapping| {
+            try self.removePortForward(mapping);
+        }
+
+        // Отримуємо шлях до network namespace
+        const netns = try std.fmt.allocPrint(
             self.allocator,
-            container_id,
-            "eth0", // TODO: make configurable
-            parsed.value.object.get("mac").?.string,
+            "/proc/{s}/ns/net",
+            .{self.pod_id},
         );
-        errdefer network_state.deinit(self.allocator);
-        
-        // Зберігаємо IP адреси
-        if (parsed.value.object.get("ips")) |ips| {
-            for (ips.array.items) |ip| {
-                const version = ip.object.get("version").?.string;
-                const address = ip.object.get("address").?.string;
-                
-                if (std.mem.eql(u8, version, "4")) {
-                    network_state.ip_v4 = try self.allocator.dupe(u8, address);
-                } else if (std.mem.eql(u8, version, "6")) {
-                    network_state.ip_v6 = try self.allocator.dupe(u8, address);
-                }
-            }
-        }
-        
-        // Зберігаємо DNS конфігурацію
-        if (parsed.value.object.get("dns")) |dns| {
-            const dns_config = try self.allocator.create(state.NetworkState.DNSConfig);
-            
-            // Копіюємо DNS сервери
-            const servers = dns.object.get("servers").?.array;
-            dns_config.servers = try self.allocator.alloc([]const u8, servers.items.len);
-            for (servers.items, 0..) |server, i| {
-                dns_config.servers[i] = try self.allocator.dupe(u8, server.string);
-            }
-            
-            // Копіюємо search домени
-            const search = dns.object.get("search").?.array;
-            dns_config.search = try self.allocator.alloc([]const u8, search.items.len);
-            for (search.items, 0..) |domain, i| {
-                dns_config.search[i] = try self.allocator.dupe(u8, domain.string);
-            }
-            
-            // Копіюємо опції
-            const options = dns.object.get("options").?.array;
-            dns_config.options = try self.allocator.alloc([]const u8, options.items.len);
-            for (options.items, 0..) |opt, i| {
-                dns_config.options[i] = try self.allocator.dupe(u8, opt.string);
-            }
-            
-            network_state.dns = dns_config;
-        }
-        
-        // Зберігаємо маршрути
-        if (parsed.value.object.get("routes")) |routes| {
-            for (routes.array.items) |route| {
-                try network_state.routes.append(.{
-                    .destination = try self.allocator.dupe(u8, route.object.get("dst").?.string),
-                    .gateway = try self.allocator.dupe(u8, route.object.get("gw").?.string),
-                    .interface = try self.allocator.dupe(u8, "eth0"),
-                });
-            }
-        }
-        
-        // Зберігаємо стан
-        try self.state_manager.addState(network_state);
-        
-        return network_state;
+        defer self.allocator.free(netns);
+
+        // Видаляємо мережу через CNI плагін
+        try self.cni_plugin.delete(self.pod_id, netns);
+
+        self.status = .Stopped;
     }
-    
-    /// Видаляє мережевий інтерфейс з контейнера
-    pub fn cleanupNetwork(self: *Self, container_id: []const u8, netns: []const u8) !void {
-        // Викликаємо Cilium CNI для очищення мережі
-        const result = try self.cilium_plugin.delete(container_id, netns);
-        if (!result.success) {
-            if (result.error) |err| {
-                std.log.err(
-                    "Failed to cleanup network for container {s}: {s}",
-                    .{ container_id, err.msg },
-                );
-            }
-            return NetworkError.CNIError;
+
+    pub fn cleanup(self: *Self) !void {
+        if (self.status == .Running) {
+            try self.stop();
         }
-        
-        // Видаляємо стан
-        self.state_manager.removeState(container_id);
+        self.status = .Deleted;
     }
-    
-    /// Перевіряє стан мережі контейнера
-    pub fn checkNetwork(self: *Self, container_id: []const u8, netns: []const u8) !void {
-        const result = try self.cilium_plugin.check(container_id, netns);
-        if (!result.success) {
-            if (result.error) |err| {
-                std.log.err(
-                    "Network check failed for container {s}: {s}",
-                    .{ container_id, err.msg },
-                );
-            }
-            return NetworkError.CNIError;
-        }
+
+    pub fn getStatus(self: *Self) NetworkStatus {
+        return self.status;
     }
-    
-    /// Отримує стан мережі контейнера
-    pub fn getNetworkState(self: *Self, container_id: []const u8) ?*state.NetworkState {
-        return self.state_manager.getState(container_id);
+
+    fn setupDNS(self: *Self) !void {
+        // TODO: Реалізувати налаштування DNS
     }
-    
-    pub fn createInterface(self: *Self, name: []const u8) !void {
-        var interface = try NetworkInterface.init(self.allocator);
-        interface.name = try self.allocator.dupe(u8, name);
-        try self.interfaces.append(interface);
+
+    fn setupPortForward(self: *Self, mapping: types.PortMapping) !void {
+        // TODO: Реалізувати налаштування port forwarding
     }
-    
-    pub fn configureInterface(self: *Self, name: []const u8, ip: []const u8, netmask: []const u8, gateway: ?[]const u8) !void {
-        for (self.interfaces.items) |*interface| {
-            if (std.mem.eql(u8, interface.name, name)) {
-                interface.ip_address = try self.allocator.dupe(u8, ip);
-                interface.netmask = try self.allocator.dupe(u8, netmask);
-                if (gateway) |g| {
-                    interface.gateway = try self.allocator.dupe(u8, g);
-                }
-                return;
-            }
-        }
-        return NetworkError.InterfaceNotFound;
+
+    fn removePortForward(self: *Self, mapping: types.PortMapping) !void {
+        // TODO: Реалізувати видалення port forwarding
     }
-    
-    pub fn deleteInterface(self: *Self, name: []const u8) !void {
-        var i: usize = 0;
-        while (i < self.interfaces.items.len) : (i += 1) {
-            if (std.mem.eql(u8, self.interfaces.items[i].name, name)) {
-                var interface = self.interfaces.orderedRemove(i);
-                interface.deinit(self.allocator);
-                return;
-            }
-        }
-        return NetworkError.InterfaceNotFound;
-    }
-    
-    pub fn getInterface(self: *Self, name: []const u8) !*NetworkInterface {
-        for (self.interfaces.items) |*interface| {
-            if (std.mem.eql(u8, interface.name, name)) {
-                return interface;
-            }
-        }
-        return NetworkError.InterfaceNotFound;
-    }
+};
+
+pub const NetworkStatus = enum {
+    Created,
+    Running,
+    Stopped,
+    Deleted,
 };
 
 pub const NetworkInterface = struct {

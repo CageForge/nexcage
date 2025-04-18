@@ -1,151 +1,172 @@
 const std = @import("std");
 const json = std.json;
-const Allocator = std.mem.Allocator;
+const net = std.net;
+const os = std.os;
 
-/// CNI версія, яку ми підтримуємо
-pub const CNI_VERSION = "0.3.1";
-
-/// Типи CNI операцій
-pub const CNICommand = enum {
-    add,
-    del,
-    check,
+pub const CNIError = error{
+    InvalidConfig,
+    NetworkCreateFailed,
+    NetworkDeleteFailed,
+    NetworkCheckFailed,
+    PluginNotFound,
+    CommandFailed,
 };
 
-/// Конфігурація CNI плагіна
+/// CNI версія, яку ми підтримуємо
+pub const CNI_VERSION = "1.0.0";
+
+/// Базова конфігурація CNI
 pub const CNIConfig = struct {
-    cni_version: []const u8,
+    /// Назва мережі
     name: []const u8,
+    /// Тип CNI плагіна
     type: []const u8,
+    /// Версія CNI
+    cniVersion: []const u8,
+    /// Додаткові параметри плагіна
     args: ?std.StringHashMap([]const u8) = null,
-    
-    /// Парсить конфігурацію з JSON
-    pub fn fromJson(allocator: Allocator, data: []const u8) !CNIConfig {
-        var parsed = try json.parseFromSlice(std.json.Value, allocator, data, .{});
-        defer parsed.deinit();
-
-        return CNIConfig{
-            .cni_version = try allocator.dupe(u8, parsed.value.object.get("cniVersion").?.string),
-            .name = try allocator.dupe(u8, parsed.value.object.get("name").?.string),
-            .type = try allocator.dupe(u8, parsed.value.object.get("type").?.string),
-            .args = null, // TODO: parse args
-        };
-    }
-
-    /// Серіалізує конфігурацію в JSON
-    pub fn toJson(self: CNIConfig, allocator: Allocator) ![]const u8 {
-        var root = std.json.Value{ .object = std.json.ObjectMap.init(allocator) };
-        
-        try root.object.put("cniVersion", .{ .string = self.cni_version });
-        try root.object.put("name", .{ .string = self.name });
-        try root.object.put("type", .{ .string = self.type });
-
-        if (self.args) |args| {
-            var args_obj = std.json.Value{ .object = std.json.ObjectMap.init(allocator) };
-            var it = args.iterator();
-            while (it.next()) |entry| {
-                try args_obj.object.put(entry.key_ptr.*, .{ .string = entry.value_ptr.* });
-            }
-            try root.object.put("args", args_obj);
-        }
-
-        return try std.json.stringify(root, .{}, allocator);
-    }
 };
 
 /// Результат виконання CNI операції
 pub const CNIResult = struct {
-    success: bool,
-    message: ?[]const u8,
-    error: ?CNIError,
-    
-    pub const CNIError = struct {
-        code: u32,
-        msg: []const u8,
-        details: ?[]const u8,
-    };
+    /// Версія CNI
+    cniVersion: []const u8,
+    /// IP адреси
+    ips: ?[]IPConfig = null,
+    /// DNS налаштування
+    dns: ?DNSConfig = null,
+    /// Маршрути
+    routes: ?[]Route = null,
 };
 
-/// CNI Plugin інтерфейс
+pub const IPConfig = struct {
+    /// Версія IP (4 або 6)
+    version: []const u8,
+    /// IP адреса
+    address: []const u8,
+    /// Gateway
+    gateway: ?[]const u8 = null,
+};
+
+pub const DNSConfig = struct {
+    /// DNS сервери
+    nameservers: [][]const u8,
+    /// Пошукові домени
+    search: [][]const u8,
+    /// Опції
+    options: [][]const u8,
+};
+
+pub const Route = struct {
+    /// Призначення
+    dst: []const u8,
+    /// Gateway
+    gw: ?[]const u8 = null,
+};
+
+/// CNI плагін
 pub const CNIPlugin = struct {
-    allocator: Allocator,
-    config: CNIConfig,
-    plugin_path: []const u8,
-    
     const Self = @This();
-    
-    /// Створює новий екземпляр CNI плагіна
-    pub fn init(allocator: Allocator, config: CNIConfig, plugin_path: []const u8) !*Self {
-        const self = try allocator.create(Self);
-        self.* = .{
+
+    allocator: std.mem.Allocator,
+    config: CNIConfig,
+    plugin_dir: []const u8,
+
+    pub fn init(allocator: std.mem.Allocator, config: CNIConfig, plugin_dir: []const u8) !Self {
+        return Self{
             .allocator = allocator,
             .config = config,
-            .plugin_path = try allocator.dupe(u8, plugin_path),
+            .plugin_dir = try allocator.dupe(u8, plugin_dir),
         };
-        return self;
     }
-    
-    /// Звільняє ресурси
+
     pub fn deinit(self: *Self) void {
-        self.allocator.free(self.plugin_path);
-        self.allocator.destroy(self);
+        if (self.config.args) |*args| {
+            args.deinit();
+        }
+        self.allocator.free(self.plugin_dir);
     }
-    
-    /// Виконує CNI операцію
-    pub fn exec(self: *Self, cmd: CNICommand, container_id: []const u8, netns: []const u8) !CNIResult {
-        // Підготовка оточення для CNI плагіна
+
+    /// Додає контейнер до мережі
+    pub fn add(self: *Self, container_id: []const u8, netns: []const u8) !CNIResult {
+        return self.execPlugin("ADD", .{
+            .container_id = container_id,
+            .netns = netns,
+        });
+    }
+
+    /// Видаляє контейнер з мережі
+    pub fn delete(self: *Self, container_id: []const u8, netns: []const u8) !void {
+        _ = try self.execPlugin("DEL", .{
+            .container_id = container_id,
+            .netns = netns,
+        });
+    }
+
+    /// Перевіряє стан мережі контейнера
+    pub fn check(self: *Self, container_id: []const u8, netns: []const u8) !void {
+        _ = try self.execPlugin("CHECK", .{
+            .container_id = container_id,
+            .netns = netns,
+        });
+    }
+
+    /// Виконує CNI плагін
+    fn execPlugin(self: *Self, cmd: []const u8, args: struct {
+        container_id: []const u8,
+        netns: []const u8,
+    }) !CNIResult {
+        const plugin_path = try std.fs.path.join(self.allocator, 
+            &[_][]const u8{self.plugin_dir, self.config.type});
+        defer self.allocator.free(plugin_path);
+
+        // Перевіряємо чи існує плагін
+        const plugin_stat = try std.fs.cwd().statFile(plugin_path);
+        if (plugin_stat.kind != .file) {
+            return error.PluginNotFound;
+        }
+
+        // Готуємо змінні оточення
         var env = std.process.EnvMap.init(self.allocator);
         defer env.deinit();
-        
-        try env.put("CNI_COMMAND", @tagName(cmd));
-        try env.put("CNI_CONTAINERID", container_id);
-        try env.put("CNI_NETNS", netns);
-        try env.put("CNI_IFNAME", "eth0"); // TODO: make configurable
-        try env.put("CNI_PATH", "/opt/cni/bin"); // TODO: make configurable
-        
-        // Серіалізуємо конфігурацію
-        const config_json = try self.config.toJson(self.allocator);
-        defer self.allocator.free(config_json);
-        
-        // Створюємо процес CNI плагіна
-        var process = std.ChildProcess.init(&[_][]const u8{self.plugin_path}, self.allocator);
-        process.env_map = &env;
-        process.stdin_behavior = .Pipe;
-        process.stdout_behavior = .Pipe;
-        process.stderr_behavior = .Pipe;
-        
-        try process.spawn();
-        
-        // Відправляємо конфігурацію через stdin
-        try process.stdin.?.writeAll(config_json);
-        try process.stdin.?.close();
-        
-        // Читаємо результат
-        const stdout = try process.stdout.?.readToEndAlloc(self.allocator, std.math.maxInt(usize));
-        defer self.allocator.free(stdout);
-        
-        const stderr = try process.stderr.?.readToEndAlloc(self.allocator, std.math.maxInt(usize));
-        defer self.allocator.free(stderr);
-        
-        const term = try process.wait();
-        
-        // Обробляємо результат
-        if (term.Exited == 0) {
-            return CNIResult{
-                .success = true,
-                .message = try self.allocator.dupe(u8, stdout),
-                .error = null,
-            };
-        } else {
-            return CNIResult{
-                .success = false,
-                .message = null,
-                .error = .{
-                    .code = term.Exited,
-                    .msg = try self.allocator.dupe(u8, stderr),
-                    .details = null,
-                },
-            };
+
+        try env.put("CNI_COMMAND", cmd);
+        try env.put("CNI_CONTAINERID", args.container_id);
+        try env.put("CNI_NETNS", args.netns);
+        try env.put("CNI_IFNAME", "eth0");
+        try env.put("CNI_VERSION", CNI_VERSION);
+
+        // Серіалізуємо конфігурацію в JSON
+        var config_json = std.ArrayList(u8).init(self.allocator);
+        defer config_json.deinit();
+        try json.stringify(self.config, .{}, config_json.writer());
+        try env.put("CNI_ARGS", config_json.items);
+
+        // Виконуємо плагін
+        const result = try std.ChildProcess.exec(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{plugin_path},
+            .env_map = &env,
+        });
+        defer {
+            self.allocator.free(result.stdout);
+            self.allocator.free(result.stderr);
         }
+
+        if (result.term.Exited != 0) {
+            return error.CommandFailed;
+        }
+
+        // Парсимо результат
+        var parser = json.Parser.init(self.allocator, false);
+        defer parser.deinit();
+
+        var tree = try parser.parse(result.stdout);
+        defer tree.deinit();
+
+        const root = tree.root;
+        return try json.parse(CNIResult, &root, .{
+            .allocator = self.allocator,
+        });
     }
 }; 
