@@ -39,22 +39,20 @@ fn addCommonConfig(exe: *std.Build.Step.Compile) void {
    
     
     // Add library paths
-    exe.addLibraryPath(.{ .cwd_relative = "/usr/lib/x86_64-linux-gnu" });
-    exe.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
-    exe.addLibraryPath(.{ .cwd_relative = "/usr/lib/gcc/x86_64-linux-gnu/12" });
+    exe.addLibraryPath(.{ .path = "/usr/lib/x86_64-linux-gnu" });
+    exe.addLibraryPath(.{ .path = "/usr/local/lib" });
+    exe.addLibraryPath(.{ .path = "/usr/lib/gcc/x86_64-linux-gnu/12" });
+
     exe.linkLibC();
     exe.linkLibCpp();
     
     // C flags
-    exe.addCSourceFile(.{
-        .file = .{ .path = "src/grpc/proto/runtime_service.pb-c.c" },
-        .flags = &[_][]const u8{
-            "-fPIC",
-            "-DNDEBUG",
-            "-D_GNU_SOURCE",
-            "-DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1",
-        },
-    });
+    const c_flags = [_][]const u8{
+        "-fPIC",
+        "-DNDEBUG",
+        "-D_GNU_SOURCE",
+        "-DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1",
+    };
 
     // C++ flags
     const cpp_flags = [_][]const u8{
@@ -75,28 +73,24 @@ fn addCommonConfig(exe: *std.Build.Step.Compile) void {
         "-D__STDC_LIMIT_MACROS",
         "-DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1",
         "-DPROTOBUF_NO_BUILTIN_ENDIAN",
-        "-I/usr/lib/libccx/include",
-        "-I/usr/include/c++/12",
-        "-I/usr/include/x86_64-linux-gnu/c++/12",
-        "-I/usr/include/c++/12/backward",
-        "-I/usr/local/include",
         "-fexceptions",
         "-frtti",
     };
 
-    //exe.addCSourceFile(.{
-        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.pb-c.c" },
-        .flags = c_flags,
+    // Add source files
+    exe.addCSourceFile(.{
+        .file = .{ .path = "src/grpc/proto/runtime_service.pb-c.c" },
+        .flags = &c_flags,
     });
 
-    // Add C++ source files
     exe.addCSourceFile(.{
-        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.pb.cc" },
-        .flags = cpp_flags,
+        .file = .{ .path = "src/grpc/proto/runtime_service.pb.cc" },
+        .flags = &cpp_flags,
     });
+
     exe.addCSourceFile(.{
-        .file = .{ .cwd_relative = "src/grpc/proto/runtime_service.grpc.pb.cc" },
-        .flags = cpp_flags,
+        .file = .{ .path = "src/grpc/proto/runtime_service.grpc.pb.cc" },
+        .flags = &cpp_flags,
     });
 
     // Link system libraries

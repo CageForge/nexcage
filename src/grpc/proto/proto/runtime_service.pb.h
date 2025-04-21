@@ -101,6 +101,9 @@ extern CreatePodRequestDefaultTypeInternal _CreatePodRequest_default_instance_;
 class CreatePodResponse;
 struct CreatePodResponseDefaultTypeInternal;
 extern CreatePodResponseDefaultTypeInternal _CreatePodResponse_default_instance_;
+class DNSConfig;
+struct DNSConfigDefaultTypeInternal;
+extern DNSConfigDefaultTypeInternal _DNSConfig_default_instance_;
 class DeleteContainerRequest;
 struct DeleteContainerRequestDefaultTypeInternal;
 extern DeleteContainerRequestDefaultTypeInternal _DeleteContainerRequest_default_instance_;
@@ -125,6 +128,12 @@ extern LinuxConfigDefaultTypeInternal _LinuxConfig_default_instance_;
 class LinuxConfig_SysctlsEntry_DoNotUse;
 struct LinuxConfig_SysctlsEntry_DoNotUseDefaultTypeInternal;
 extern LinuxConfig_SysctlsEntry_DoNotUseDefaultTypeInternal _LinuxConfig_SysctlsEntry_DoNotUse_default_instance_;
+class LinuxPodSandboxConfig;
+struct LinuxPodSandboxConfigDefaultTypeInternal;
+extern LinuxPodSandboxConfigDefaultTypeInternal _LinuxPodSandboxConfig_default_instance_;
+class LinuxPodSandboxConfig_SysctlsEntry_DoNotUse;
+struct LinuxPodSandboxConfig_SysctlsEntry_DoNotUseDefaultTypeInternal;
+extern LinuxPodSandboxConfig_SysctlsEntry_DoNotUseDefaultTypeInternal _LinuxPodSandboxConfig_SysctlsEntry_DoNotUse_default_instance_;
 class ListContainersRequest;
 struct ListContainersRequestDefaultTypeInternal;
 extern ListContainersRequestDefaultTypeInternal _ListContainersRequest_default_instance_;
@@ -140,6 +149,9 @@ extern ListPodResponseDefaultTypeInternal _ListPodResponse_default_instance_;
 class Mount;
 struct MountDefaultTypeInternal;
 extern MountDefaultTypeInternal _Mount_default_instance_;
+class NamespaceOption;
+struct NamespaceOptionDefaultTypeInternal;
+extern NamespaceOptionDefaultTypeInternal _NamespaceOption_default_instance_;
 class NetworkConfig;
 struct NetworkConfigDefaultTypeInternal;
 extern NetworkConfigDefaultTypeInternal _NetworkConfig_default_instance_;
@@ -170,6 +182,15 @@ extern Pod_AnnotationsEntry_DoNotUseDefaultTypeInternal _Pod_AnnotationsEntry_Do
 class Pod_LabelsEntry_DoNotUse;
 struct Pod_LabelsEntry_DoNotUseDefaultTypeInternal;
 extern Pod_LabelsEntry_DoNotUseDefaultTypeInternal _Pod_LabelsEntry_DoNotUse_default_instance_;
+class PortMapping;
+struct PortMappingDefaultTypeInternal;
+extern PortMappingDefaultTypeInternal _PortMapping_default_instance_;
+class RunAsUserOption;
+struct RunAsUserOptionDefaultTypeInternal;
+extern RunAsUserOptionDefaultTypeInternal _RunAsUserOption_default_instance_;
+class SELinuxOption;
+struct SELinuxOptionDefaultTypeInternal;
+extern SELinuxOptionDefaultTypeInternal _SELinuxOption_default_instance_;
 class SecurityContext;
 struct SecurityContextDefaultTypeInternal;
 extern SecurityContextDefaultTypeInternal _SecurityContext_default_instance_;
@@ -340,7 +361,7 @@ class StopPodResponse final :
                &_StopPodResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    22;
+    29;
 
   friend void swap(StopPodResponse& a, StopPodResponse& b) {
     a.Swap(&b);
@@ -477,7 +498,7 @@ class StopPodRequest final :
                &_StopPodRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    21;
+    28;
 
   friend void swap(StopPodRequest& a, StopPodRequest& b) {
     a.Swap(&b);
@@ -657,7 +678,7 @@ class StopContainerResponse final :
                &_StopContainerResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    44;
+    51;
 
   friend void swap(StopContainerResponse& a, StopContainerResponse& b) {
     a.Swap(&b);
@@ -794,7 +815,7 @@ class StopContainerRequest final :
                &_StopContainerRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    43;
+    50;
 
   friend void swap(StopContainerRequest& a, StopContainerRequest& b) {
     a.Swap(&b);
@@ -986,7 +1007,7 @@ class StartPodResponse final :
                &_StartPodResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    20;
+    27;
 
   friend void swap(StartPodResponse& a, StartPodResponse& b) {
     a.Swap(&b);
@@ -1123,7 +1144,7 @@ class StartPodRequest final :
                &_StartPodRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    19;
+    26;
 
   friend void swap(StartPodRequest& a, StartPodRequest& b) {
     a.Swap(&b);
@@ -1303,7 +1324,7 @@ class StartContainerResponse final :
                &_StartContainerResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    42;
+    49;
 
   friend void swap(StartContainerResponse& a, StartContainerResponse& b) {
     a.Swap(&b);
@@ -1440,7 +1461,7 @@ class StartContainerRequest final :
                &_StartContainerRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    41;
+    48;
 
   friend void swap(StartContainerRequest& a, StartContainerRequest& b) {
     a.Swap(&b);
@@ -1562,26 +1583,26 @@ class StartContainerRequest final :
   friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
 };// -------------------------------------------------------------------
 
-class SecurityContext final :
-    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.SecurityContext) */ {
+class SELinuxOption final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.SELinuxOption) */ {
  public:
-  inline SecurityContext() : SecurityContext(nullptr) {}
-  ~SecurityContext() override;
+  inline SELinuxOption() : SELinuxOption(nullptr) {}
+  ~SELinuxOption() override;
   template<typename = void>
-  explicit PROTOBUF_CONSTEXPR SecurityContext(::google::protobuf::internal::ConstantInitialized);
+  explicit PROTOBUF_CONSTEXPR SELinuxOption(::google::protobuf::internal::ConstantInitialized);
 
-  inline SecurityContext(const SecurityContext& from)
-      : SecurityContext(nullptr, from) {}
-  SecurityContext(SecurityContext&& from) noexcept
-    : SecurityContext() {
+  inline SELinuxOption(const SELinuxOption& from)
+      : SELinuxOption(nullptr, from) {}
+  SELinuxOption(SELinuxOption&& from) noexcept
+    : SELinuxOption() {
     *this = ::std::move(from);
   }
 
-  inline SecurityContext& operator=(const SecurityContext& from) {
+  inline SELinuxOption& operator=(const SELinuxOption& from) {
     CopyFrom(from);
     return *this;
   }
-  inline SecurityContext& operator=(SecurityContext&& from) noexcept {
+  inline SELinuxOption& operator=(SELinuxOption&& from) noexcept {
     if (this == &from) return *this;
     if (GetArena() == from.GetArena()
   #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
@@ -1613,20 +1634,20 @@ class SecurityContext final :
   static const ::google::protobuf::Reflection* GetReflection() {
     return default_instance().GetMetadata().reflection;
   }
-  static const SecurityContext& default_instance() {
+  static const SELinuxOption& default_instance() {
     return *internal_default_instance();
   }
-  static inline const SecurityContext* internal_default_instance() {
-    return reinterpret_cast<const SecurityContext*>(
-               &_SecurityContext_default_instance_);
+  static inline const SELinuxOption* internal_default_instance() {
+    return reinterpret_cast<const SELinuxOption*>(
+               &_SELinuxOption_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    7;
+    13;
 
-  friend void swap(SecurityContext& a, SecurityContext& b) {
+  friend void swap(SELinuxOption& a, SELinuxOption& b) {
     a.Swap(&b);
   }
-  inline void Swap(SecurityContext* other) {
+  inline void Swap(SELinuxOption* other) {
     if (other == this) return;
   #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
     if (GetArena() != nullptr &&
@@ -1639,7 +1660,7 @@ class SecurityContext final :
       ::google::protobuf::internal::GenericSwap(this, other);
     }
   }
-  void UnsafeArenaSwap(SecurityContext* other) {
+  void UnsafeArenaSwap(SELinuxOption* other) {
     if (other == this) return;
     ABSL_DCHECK(GetArena() == other->GetArena());
     InternalSwap(other);
@@ -1647,14 +1668,14 @@ class SecurityContext final :
 
   // implements Message ----------------------------------------------
 
-  SecurityContext* New(::google::protobuf::Arena* arena = nullptr) const final {
-    return CreateMaybeMessage<SecurityContext>(arena);
+  SELinuxOption* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<SELinuxOption>(arena);
   }
   using ::google::protobuf::Message::CopyFrom;
-  void CopyFrom(const SecurityContext& from);
+  void CopyFrom(const SELinuxOption& from);
   using ::google::protobuf::Message::MergeFrom;
-  void MergeFrom( const SecurityContext& from) {
-    SecurityContext::MergeImpl(*this, from);
+  void MergeFrom( const SELinuxOption& from) {
+    SELinuxOption::MergeImpl(*this, from);
   }
   private:
   static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
@@ -1672,16 +1693,16 @@ class SecurityContext final :
   ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
   void SharedCtor(::google::protobuf::Arena* arena);
   void SharedDtor();
-  void InternalSwap(SecurityContext* other);
+  void InternalSwap(SELinuxOption* other);
 
   private:
   friend class ::google::protobuf::internal::AnyMetadata;
   static ::absl::string_view FullMessageName() {
-    return "runtime.v1alpha2.SecurityContext";
+    return "runtime.v1alpha2.SELinuxOption";
   }
   protected:
-  explicit SecurityContext(::google::protobuf::Arena* arena);
-  SecurityContext(::google::protobuf::Arena* arena, const SecurityContext& from);
+  explicit SELinuxOption(::google::protobuf::Arena* arena);
+  SELinuxOption(::google::protobuf::Arena* arena, const SELinuxOption& from);
   public:
 
   static const ClassData _class_data_;
@@ -1694,77 +1715,83 @@ class SecurityContext final :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kNamespaceOptionsFieldNumber = 1,
-    kSelinuxOptionsFieldNumber = 2,
-    kRunAsUserFieldNumber = 3,
-    kPrivilegedFieldNumber = 4,
+    kUserFieldNumber = 1,
+    kRoleFieldNumber = 2,
+    kTypeFieldNumber = 3,
+    kLevelFieldNumber = 4,
   };
-  // string namespace_options = 1;
-  void clear_namespace_options() ;
-  const std::string& namespace_options() const;
+  // string user = 1;
+  void clear_user() ;
+  const std::string& user() const;
   template <typename Arg_ = const std::string&, typename... Args_>
-  void set_namespace_options(Arg_&& arg, Args_... args);
-  std::string* mutable_namespace_options();
-  PROTOBUF_NODISCARD std::string* release_namespace_options();
-  void set_allocated_namespace_options(std::string* value);
+  void set_user(Arg_&& arg, Args_... args);
+  std::string* mutable_user();
+  PROTOBUF_NODISCARD std::string* release_user();
+  void set_allocated_user(std::string* value);
 
   private:
-  const std::string& _internal_namespace_options() const;
-  inline PROTOBUF_ALWAYS_INLINE void _internal_set_namespace_options(
+  const std::string& _internal_user() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_user(
       const std::string& value);
-  std::string* _internal_mutable_namespace_options();
+  std::string* _internal_mutable_user();
 
   public:
-  // string selinux_options = 2;
-  void clear_selinux_options() ;
-  const std::string& selinux_options() const;
+  // string role = 2;
+  void clear_role() ;
+  const std::string& role() const;
   template <typename Arg_ = const std::string&, typename... Args_>
-  void set_selinux_options(Arg_&& arg, Args_... args);
-  std::string* mutable_selinux_options();
-  PROTOBUF_NODISCARD std::string* release_selinux_options();
-  void set_allocated_selinux_options(std::string* value);
+  void set_role(Arg_&& arg, Args_... args);
+  std::string* mutable_role();
+  PROTOBUF_NODISCARD std::string* release_role();
+  void set_allocated_role(std::string* value);
 
   private:
-  const std::string& _internal_selinux_options() const;
-  inline PROTOBUF_ALWAYS_INLINE void _internal_set_selinux_options(
+  const std::string& _internal_role() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_role(
       const std::string& value);
-  std::string* _internal_mutable_selinux_options();
+  std::string* _internal_mutable_role();
 
   public:
-  // string run_as_user = 3;
-  void clear_run_as_user() ;
-  const std::string& run_as_user() const;
+  // string type = 3;
+  void clear_type() ;
+  const std::string& type() const;
   template <typename Arg_ = const std::string&, typename... Args_>
-  void set_run_as_user(Arg_&& arg, Args_... args);
-  std::string* mutable_run_as_user();
-  PROTOBUF_NODISCARD std::string* release_run_as_user();
-  void set_allocated_run_as_user(std::string* value);
+  void set_type(Arg_&& arg, Args_... args);
+  std::string* mutable_type();
+  PROTOBUF_NODISCARD std::string* release_type();
+  void set_allocated_type(std::string* value);
 
   private:
-  const std::string& _internal_run_as_user() const;
-  inline PROTOBUF_ALWAYS_INLINE void _internal_set_run_as_user(
+  const std::string& _internal_type() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_type(
       const std::string& value);
-  std::string* _internal_mutable_run_as_user();
+  std::string* _internal_mutable_type();
 
   public:
-  // bool privileged = 4;
-  void clear_privileged() ;
-  bool privileged() const;
-  void set_privileged(bool value);
+  // string level = 4;
+  void clear_level() ;
+  const std::string& level() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_level(Arg_&& arg, Args_... args);
+  std::string* mutable_level();
+  PROTOBUF_NODISCARD std::string* release_level();
+  void set_allocated_level(std::string* value);
 
   private:
-  bool _internal_privileged() const;
-  void _internal_set_privileged(bool value);
+  const std::string& _internal_level() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_level(
+      const std::string& value);
+  std::string* _internal_mutable_level();
 
   public:
-  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.SecurityContext)
+  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.SELinuxOption)
  private:
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
   static const ::google::protobuf::internal::TcParseTable<
       2, 4, 0,
-      84, 2>
+      56, 2>
       _table_;
   friend class ::google::protobuf::MessageLite;
   friend class ::google::protobuf::Arena;
@@ -1780,10 +1807,441 @@ class SecurityContext final :
                               ::google::protobuf::Arena* arena);
         inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
                               ::google::protobuf::Arena* arena, const Impl_& from);
-    ::google::protobuf::internal::ArenaStringPtr namespace_options_;
-    ::google::protobuf::internal::ArenaStringPtr selinux_options_;
-    ::google::protobuf::internal::ArenaStringPtr run_as_user_;
-    bool privileged_;
+    ::google::protobuf::internal::ArenaStringPtr user_;
+    ::google::protobuf::internal::ArenaStringPtr role_;
+    ::google::protobuf::internal::ArenaStringPtr type_;
+    ::google::protobuf::internal::ArenaStringPtr level_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
+};// -------------------------------------------------------------------
+
+class RunAsUserOption final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.RunAsUserOption) */ {
+ public:
+  inline RunAsUserOption() : RunAsUserOption(nullptr) {}
+  ~RunAsUserOption() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR RunAsUserOption(::google::protobuf::internal::ConstantInitialized);
+
+  inline RunAsUserOption(const RunAsUserOption& from)
+      : RunAsUserOption(nullptr, from) {}
+  RunAsUserOption(RunAsUserOption&& from) noexcept
+    : RunAsUserOption() {
+    *this = ::std::move(from);
+  }
+
+  inline RunAsUserOption& operator=(const RunAsUserOption& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline RunAsUserOption& operator=(RunAsUserOption&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const RunAsUserOption& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const RunAsUserOption* internal_default_instance() {
+    return reinterpret_cast<const RunAsUserOption*>(
+               &_RunAsUserOption_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    14;
+
+  friend void swap(RunAsUserOption& a, RunAsUserOption& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(RunAsUserOption* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(RunAsUserOption* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  RunAsUserOption* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<RunAsUserOption>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const RunAsUserOption& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const RunAsUserOption& from) {
+    RunAsUserOption::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(RunAsUserOption* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "runtime.v1alpha2.RunAsUserOption";
+  }
+  protected:
+  explicit RunAsUserOption(::google::protobuf::Arena* arena);
+  RunAsUserOption(::google::protobuf::Arena* arena, const RunAsUserOption& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kAdditionalGidsFieldNumber = 3,
+    kUidFieldNumber = 1,
+    kGidFieldNumber = 2,
+  };
+  // repeated int64 additional_gids = 3;
+  int additional_gids_size() const;
+  private:
+  int _internal_additional_gids_size() const;
+
+  public:
+  void clear_additional_gids() ;
+  ::int64_t additional_gids(int index) const;
+  void set_additional_gids(int index, ::int64_t value);
+  void add_additional_gids(::int64_t value);
+  const ::google::protobuf::RepeatedField<::int64_t>& additional_gids() const;
+  ::google::protobuf::RepeatedField<::int64_t>* mutable_additional_gids();
+
+  private:
+  const ::google::protobuf::RepeatedField<::int64_t>& _internal_additional_gids() const;
+  ::google::protobuf::RepeatedField<::int64_t>* _internal_mutable_additional_gids();
+
+  public:
+  // int64 uid = 1;
+  void clear_uid() ;
+  ::int64_t uid() const;
+  void set_uid(::int64_t value);
+
+  private:
+  ::int64_t _internal_uid() const;
+  void _internal_set_uid(::int64_t value);
+
+  public:
+  // int64 gid = 2;
+  void clear_gid() ;
+  ::int64_t gid() const;
+  void set_gid(::int64_t value);
+
+  private:
+  ::int64_t _internal_gid() const;
+  void _internal_set_gid(::int64_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.RunAsUserOption)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      2, 3, 0,
+      0, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::RepeatedField<::int64_t> additional_gids_;
+    mutable ::google::protobuf::internal::CachedSize _additional_gids_cached_byte_size_;
+    ::int64_t uid_;
+    ::int64_t gid_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
+};// -------------------------------------------------------------------
+
+class PortMapping final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.PortMapping) */ {
+ public:
+  inline PortMapping() : PortMapping(nullptr) {}
+  ~PortMapping() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR PortMapping(::google::protobuf::internal::ConstantInitialized);
+
+  inline PortMapping(const PortMapping& from)
+      : PortMapping(nullptr, from) {}
+  PortMapping(PortMapping&& from) noexcept
+    : PortMapping() {
+    *this = ::std::move(from);
+  }
+
+  inline PortMapping& operator=(const PortMapping& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline PortMapping& operator=(PortMapping&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const PortMapping& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const PortMapping* internal_default_instance() {
+    return reinterpret_cast<const PortMapping*>(
+               &_PortMapping_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    1;
+
+  friend void swap(PortMapping& a, PortMapping& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(PortMapping* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(PortMapping* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  PortMapping* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<PortMapping>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const PortMapping& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const PortMapping& from) {
+    PortMapping::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(PortMapping* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "runtime.v1alpha2.PortMapping";
+  }
+  protected:
+  explicit PortMapping(::google::protobuf::Arena* arena);
+  PortMapping(::google::protobuf::Arena* arena, const PortMapping& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kProtocolFieldNumber = 1,
+    kHostIpFieldNumber = 4,
+    kContainerPortFieldNumber = 2,
+    kHostPortFieldNumber = 3,
+  };
+  // string protocol = 1;
+  void clear_protocol() ;
+  const std::string& protocol() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_protocol(Arg_&& arg, Args_... args);
+  std::string* mutable_protocol();
+  PROTOBUF_NODISCARD std::string* release_protocol();
+  void set_allocated_protocol(std::string* value);
+
+  private:
+  const std::string& _internal_protocol() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_protocol(
+      const std::string& value);
+  std::string* _internal_mutable_protocol();
+
+  public:
+  // string host_ip = 4;
+  void clear_host_ip() ;
+  const std::string& host_ip() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_host_ip(Arg_&& arg, Args_... args);
+  std::string* mutable_host_ip();
+  PROTOBUF_NODISCARD std::string* release_host_ip();
+  void set_allocated_host_ip(std::string* value);
+
+  private:
+  const std::string& _internal_host_ip() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_host_ip(
+      const std::string& value);
+  std::string* _internal_mutable_host_ip();
+
+  public:
+  // int32 container_port = 2;
+  void clear_container_port() ;
+  ::int32_t container_port() const;
+  void set_container_port(::int32_t value);
+
+  private:
+  ::int32_t _internal_container_port() const;
+  void _internal_set_container_port(::int32_t value);
+
+  public:
+  // int32 host_port = 3;
+  void clear_host_port() ;
+  ::int32_t host_port() const;
+  void set_host_port(::int32_t value);
+
+  private:
+  ::int32_t _internal_host_port() const;
+  void _internal_set_host_port(::int32_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.PortMapping)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      2, 4, 0,
+      52, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::internal::ArenaStringPtr protocol_;
+    ::google::protobuf::internal::ArenaStringPtr host_ip_;
+    ::int32_t container_port_;
+    ::int32_t host_port_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -1910,7 +2368,7 @@ class PodMetadata final :
                &_PodMetadata_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    3;
+    7;
 
   friend void swap(PodMetadata& a, PodMetadata& b) {
     a.Swap(&b);
@@ -2229,7 +2687,7 @@ class NetworkConfig final :
                &_NetworkConfig_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    4;
+    8;
 
   friend void swap(NetworkConfig& a, NetworkConfig& b) {
     a.Swap(&b);
@@ -2351,6 +2809,205 @@ class NetworkConfig final :
   friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
 };// -------------------------------------------------------------------
 
+class NamespaceOption final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.NamespaceOption) */ {
+ public:
+  inline NamespaceOption() : NamespaceOption(nullptr) {}
+  ~NamespaceOption() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR NamespaceOption(::google::protobuf::internal::ConstantInitialized);
+
+  inline NamespaceOption(const NamespaceOption& from)
+      : NamespaceOption(nullptr, from) {}
+  NamespaceOption(NamespaceOption&& from) noexcept
+    : NamespaceOption() {
+    *this = ::std::move(from);
+  }
+
+  inline NamespaceOption& operator=(const NamespaceOption& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline NamespaceOption& operator=(NamespaceOption&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const NamespaceOption& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const NamespaceOption* internal_default_instance() {
+    return reinterpret_cast<const NamespaceOption*>(
+               &_NamespaceOption_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    12;
+
+  friend void swap(NamespaceOption& a, NamespaceOption& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(NamespaceOption* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(NamespaceOption* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  NamespaceOption* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<NamespaceOption>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const NamespaceOption& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const NamespaceOption& from) {
+    NamespaceOption::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(NamespaceOption* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "runtime.v1alpha2.NamespaceOption";
+  }
+  protected:
+  explicit NamespaceOption(::google::protobuf::Arena* arena);
+  NamespaceOption(::google::protobuf::Arena* arena, const NamespaceOption& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kHostNetworkFieldNumber = 1,
+    kHostPidFieldNumber = 2,
+    kHostIpcFieldNumber = 3,
+  };
+  // bool host_network = 1;
+  void clear_host_network() ;
+  bool host_network() const;
+  void set_host_network(bool value);
+
+  private:
+  bool _internal_host_network() const;
+  void _internal_set_host_network(bool value);
+
+  public:
+  // bool host_pid = 2;
+  void clear_host_pid() ;
+  bool host_pid() const;
+  void set_host_pid(bool value);
+
+  private:
+  bool _internal_host_pid() const;
+  void _internal_set_host_pid(bool value);
+
+  public:
+  // bool host_ipc = 3;
+  void clear_host_ipc() ;
+  bool host_ipc() const;
+  void set_host_ipc(bool value);
+
+  private:
+  bool _internal_host_ipc() const;
+  void _internal_set_host_ipc(bool value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.NamespaceOption)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      2, 3, 0,
+      0, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    bool host_network_;
+    bool host_pid_;
+    bool host_ipc_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
+};// -------------------------------------------------------------------
+
 class Mount final :
     public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.Mount) */ {
  public:
@@ -2410,7 +3067,7 @@ class Mount final :
                &_Mount_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    29;
+    36;
 
   friend void swap(Mount& a, Mount& b) {
     a.Swap(&b);
@@ -2562,6 +3219,36 @@ class Mount final :
   friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
 };// -------------------------------------------------------------------
 
+class LinuxPodSandboxConfig_SysctlsEntry_DoNotUse final
+    : public ::google::protobuf::internal::MapEntry<
+          LinuxPodSandboxConfig_SysctlsEntry_DoNotUse, std::string, std::string,
+          ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+          ::google::protobuf::internal::WireFormatLite::TYPE_STRING> {
+ public:
+  using SuperType = ::google::protobuf::internal::MapEntry<
+      LinuxPodSandboxConfig_SysctlsEntry_DoNotUse, std::string, std::string,
+      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+      ::google::protobuf::internal::WireFormatLite::TYPE_STRING>;
+  LinuxPodSandboxConfig_SysctlsEntry_DoNotUse();
+  template <typename = void>
+  explicit PROTOBUF_CONSTEXPR LinuxPodSandboxConfig_SysctlsEntry_DoNotUse(
+      ::google::protobuf::internal::ConstantInitialized);
+  explicit LinuxPodSandboxConfig_SysctlsEntry_DoNotUse(::google::protobuf::Arena* arena);
+  static const LinuxPodSandboxConfig_SysctlsEntry_DoNotUse* internal_default_instance() {
+    return reinterpret_cast<const LinuxPodSandboxConfig_SysctlsEntry_DoNotUse*>(
+        &_LinuxPodSandboxConfig_SysctlsEntry_DoNotUse_default_instance_);
+  }
+  static bool ValidateKey(std::string* s) {
+    return ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(s->data(), static_cast<int>(s->size()), ::google::protobuf::internal::WireFormatLite::PARSE, "runtime.v1alpha2.LinuxPodSandboxConfig.SysctlsEntry.key");
+ }
+  static bool ValidateValue(std::string* s) {
+    return ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(s->data(), static_cast<int>(s->size()), ::google::protobuf::internal::WireFormatLite::PARSE, "runtime.v1alpha2.LinuxPodSandboxConfig.SysctlsEntry.value");
+ }
+  ::google::protobuf::Metadata GetMetadata() const final;
+  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
+};
+// -------------------------------------------------------------------
+
 class LinuxConfig_SysctlsEntry_DoNotUse final
     : public ::google::protobuf::internal::MapEntry<
           LinuxConfig_SysctlsEntry_DoNotUse, std::string, std::string,
@@ -2651,7 +3338,7 @@ class KeyValue final :
                &_KeyValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    28;
+    35;
 
   friend void swap(KeyValue& a, KeyValue& b) {
     a.Swap(&b);
@@ -2850,7 +3537,7 @@ class ImageSpec final :
                &_ImageSpec_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    27;
+    34;
 
   friend void swap(ImageSpec& a, ImageSpec& b) {
     a.Swap(&b);
@@ -3030,7 +3717,7 @@ class DeletePodResponse final :
                &_DeletePodResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    11;
+    18;
 
   friend void swap(DeletePodResponse& a, DeletePodResponse& b) {
     a.Swap(&b);
@@ -3167,7 +3854,7 @@ class DeletePodRequest final :
                &_DeletePodRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    10;
+    17;
 
   friend void swap(DeletePodRequest& a, DeletePodRequest& b) {
     a.Swap(&b);
@@ -3347,7 +4034,7 @@ class DeleteContainerResponse final :
                &_DeleteContainerResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    33;
+    40;
 
   friend void swap(DeleteContainerResponse& a, DeleteContainerResponse& b) {
     a.Swap(&b);
@@ -3484,7 +4171,7 @@ class DeleteContainerRequest final :
                &_DeleteContainerRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    32;
+    39;
 
   friend void swap(DeleteContainerRequest& a, DeleteContainerRequest& b) {
     a.Swap(&b);
@@ -3606,6 +4293,259 @@ class DeleteContainerRequest final :
   friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
 };// -------------------------------------------------------------------
 
+class DNSConfig final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.DNSConfig) */ {
+ public:
+  inline DNSConfig() : DNSConfig(nullptr) {}
+  ~DNSConfig() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR DNSConfig(::google::protobuf::internal::ConstantInitialized);
+
+  inline DNSConfig(const DNSConfig& from)
+      : DNSConfig(nullptr, from) {}
+  DNSConfig(DNSConfig&& from) noexcept
+    : DNSConfig() {
+    *this = ::std::move(from);
+  }
+
+  inline DNSConfig& operator=(const DNSConfig& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline DNSConfig& operator=(DNSConfig&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const DNSConfig& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const DNSConfig* internal_default_instance() {
+    return reinterpret_cast<const DNSConfig*>(
+               &_DNSConfig_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    0;
+
+  friend void swap(DNSConfig& a, DNSConfig& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(DNSConfig* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(DNSConfig* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  DNSConfig* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<DNSConfig>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const DNSConfig& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const DNSConfig& from) {
+    DNSConfig::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(DNSConfig* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "runtime.v1alpha2.DNSConfig";
+  }
+  protected:
+  explicit DNSConfig(::google::protobuf::Arena* arena);
+  DNSConfig(::google::protobuf::Arena* arena, const DNSConfig& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kServersFieldNumber = 1,
+    kSearchesFieldNumber = 2,
+    kOptionsFieldNumber = 3,
+  };
+  // repeated string servers = 1;
+  int servers_size() const;
+  private:
+  int _internal_servers_size() const;
+
+  public:
+  void clear_servers() ;
+  const std::string& servers(int index) const;
+  std::string* mutable_servers(int index);
+  void set_servers(int index, const std::string& value);
+  void set_servers(int index, std::string&& value);
+  void set_servers(int index, const char* value);
+  void set_servers(int index, const char* value, std::size_t size);
+  void set_servers(int index, absl::string_view value);
+  std::string* add_servers();
+  void add_servers(const std::string& value);
+  void add_servers(std::string&& value);
+  void add_servers(const char* value);
+  void add_servers(const char* value, std::size_t size);
+  void add_servers(absl::string_view value);
+  const ::google::protobuf::RepeatedPtrField<std::string>& servers() const;
+  ::google::protobuf::RepeatedPtrField<std::string>* mutable_servers();
+
+  private:
+  const ::google::protobuf::RepeatedPtrField<std::string>& _internal_servers() const;
+  ::google::protobuf::RepeatedPtrField<std::string>* _internal_mutable_servers();
+
+  public:
+  // repeated string searches = 2;
+  int searches_size() const;
+  private:
+  int _internal_searches_size() const;
+
+  public:
+  void clear_searches() ;
+  const std::string& searches(int index) const;
+  std::string* mutable_searches(int index);
+  void set_searches(int index, const std::string& value);
+  void set_searches(int index, std::string&& value);
+  void set_searches(int index, const char* value);
+  void set_searches(int index, const char* value, std::size_t size);
+  void set_searches(int index, absl::string_view value);
+  std::string* add_searches();
+  void add_searches(const std::string& value);
+  void add_searches(std::string&& value);
+  void add_searches(const char* value);
+  void add_searches(const char* value, std::size_t size);
+  void add_searches(absl::string_view value);
+  const ::google::protobuf::RepeatedPtrField<std::string>& searches() const;
+  ::google::protobuf::RepeatedPtrField<std::string>* mutable_searches();
+
+  private:
+  const ::google::protobuf::RepeatedPtrField<std::string>& _internal_searches() const;
+  ::google::protobuf::RepeatedPtrField<std::string>* _internal_mutable_searches();
+
+  public:
+  // repeated string options = 3;
+  int options_size() const;
+  private:
+  int _internal_options_size() const;
+
+  public:
+  void clear_options() ;
+  const std::string& options(int index) const;
+  std::string* mutable_options(int index);
+  void set_options(int index, const std::string& value);
+  void set_options(int index, std::string&& value);
+  void set_options(int index, const char* value);
+  void set_options(int index, const char* value, std::size_t size);
+  void set_options(int index, absl::string_view value);
+  std::string* add_options();
+  void add_options(const std::string& value);
+  void add_options(std::string&& value);
+  void add_options(const char* value);
+  void add_options(const char* value, std::size_t size);
+  void add_options(absl::string_view value);
+  const ::google::protobuf::RepeatedPtrField<std::string>& options() const;
+  ::google::protobuf::RepeatedPtrField<std::string>* mutable_options();
+
+  private:
+  const ::google::protobuf::RepeatedPtrField<std::string>& _internal_options() const;
+  ::google::protobuf::RepeatedPtrField<std::string>* _internal_mutable_options();
+
+  public:
+  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.DNSConfig)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      2, 3, 0,
+      57, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::RepeatedPtrField<std::string> servers_;
+    ::google::protobuf::RepeatedPtrField<std::string> searches_;
+    ::google::protobuf::RepeatedPtrField<std::string> options_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
+};// -------------------------------------------------------------------
+
 class CreatePodResponse final :
     public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.CreatePodResponse) */ {
  public:
@@ -3665,7 +4605,7 @@ class CreatePodResponse final :
                &_CreatePodResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    9;
+    16;
 
   friend void swap(CreatePodResponse& a, CreatePodResponse& b) {
     a.Swap(&b);
@@ -3846,7 +4786,7 @@ class CreateContainerResponse final :
                &_CreateContainerResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    31;
+    38;
 
   friend void swap(CreateContainerResponse& a, CreateContainerResponse& b) {
     a.Swap(&b);
@@ -4027,7 +4967,7 @@ class ContainerMetadata final :
                &_ContainerMetadata_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    26;
+    33;
 
   friend void swap(ContainerMetadata& a, ContainerMetadata& b) {
     a.Swap(&b);
@@ -4311,6 +5251,233 @@ class Container_AnnotationsEntry_DoNotUse final
 };
 // -------------------------------------------------------------------
 
+class SecurityContext final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.SecurityContext) */ {
+ public:
+  inline SecurityContext() : SecurityContext(nullptr) {}
+  ~SecurityContext() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR SecurityContext(::google::protobuf::internal::ConstantInitialized);
+
+  inline SecurityContext(const SecurityContext& from)
+      : SecurityContext(nullptr, from) {}
+  SecurityContext(SecurityContext&& from) noexcept
+    : SecurityContext() {
+    *this = ::std::move(from);
+  }
+
+  inline SecurityContext& operator=(const SecurityContext& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline SecurityContext& operator=(SecurityContext&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const SecurityContext& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const SecurityContext* internal_default_instance() {
+    return reinterpret_cast<const SecurityContext*>(
+               &_SecurityContext_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    11;
+
+  friend void swap(SecurityContext& a, SecurityContext& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(SecurityContext* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(SecurityContext* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  SecurityContext* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<SecurityContext>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const SecurityContext& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const SecurityContext& from) {
+    SecurityContext::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(SecurityContext* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "runtime.v1alpha2.SecurityContext";
+  }
+  protected:
+  explicit SecurityContext(::google::protobuf::Arena* arena);
+  SecurityContext(::google::protobuf::Arena* arena, const SecurityContext& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kNamespaceOptionsFieldNumber = 1,
+    kSelinuxOptionsFieldNumber = 2,
+    kRunAsUserFieldNumber = 3,
+    kPrivilegedFieldNumber = 4,
+  };
+  // .runtime.v1alpha2.NamespaceOption namespace_options = 1;
+  bool has_namespace_options() const;
+  void clear_namespace_options() ;
+  const ::runtime::v1alpha2::NamespaceOption& namespace_options() const;
+  PROTOBUF_NODISCARD ::runtime::v1alpha2::NamespaceOption* release_namespace_options();
+  ::runtime::v1alpha2::NamespaceOption* mutable_namespace_options();
+  void set_allocated_namespace_options(::runtime::v1alpha2::NamespaceOption* value);
+  void unsafe_arena_set_allocated_namespace_options(::runtime::v1alpha2::NamespaceOption* value);
+  ::runtime::v1alpha2::NamespaceOption* unsafe_arena_release_namespace_options();
+
+  private:
+  const ::runtime::v1alpha2::NamespaceOption& _internal_namespace_options() const;
+  ::runtime::v1alpha2::NamespaceOption* _internal_mutable_namespace_options();
+
+  public:
+  // .runtime.v1alpha2.SELinuxOption selinux_options = 2;
+  bool has_selinux_options() const;
+  void clear_selinux_options() ;
+  const ::runtime::v1alpha2::SELinuxOption& selinux_options() const;
+  PROTOBUF_NODISCARD ::runtime::v1alpha2::SELinuxOption* release_selinux_options();
+  ::runtime::v1alpha2::SELinuxOption* mutable_selinux_options();
+  void set_allocated_selinux_options(::runtime::v1alpha2::SELinuxOption* value);
+  void unsafe_arena_set_allocated_selinux_options(::runtime::v1alpha2::SELinuxOption* value);
+  ::runtime::v1alpha2::SELinuxOption* unsafe_arena_release_selinux_options();
+
+  private:
+  const ::runtime::v1alpha2::SELinuxOption& _internal_selinux_options() const;
+  ::runtime::v1alpha2::SELinuxOption* _internal_mutable_selinux_options();
+
+  public:
+  // .runtime.v1alpha2.RunAsUserOption run_as_user = 3;
+  bool has_run_as_user() const;
+  void clear_run_as_user() ;
+  const ::runtime::v1alpha2::RunAsUserOption& run_as_user() const;
+  PROTOBUF_NODISCARD ::runtime::v1alpha2::RunAsUserOption* release_run_as_user();
+  ::runtime::v1alpha2::RunAsUserOption* mutable_run_as_user();
+  void set_allocated_run_as_user(::runtime::v1alpha2::RunAsUserOption* value);
+  void unsafe_arena_set_allocated_run_as_user(::runtime::v1alpha2::RunAsUserOption* value);
+  ::runtime::v1alpha2::RunAsUserOption* unsafe_arena_release_run_as_user();
+
+  private:
+  const ::runtime::v1alpha2::RunAsUserOption& _internal_run_as_user() const;
+  ::runtime::v1alpha2::RunAsUserOption* _internal_mutable_run_as_user();
+
+  public:
+  // bool privileged = 4;
+  void clear_privileged() ;
+  bool privileged() const;
+  void set_privileged(bool value);
+
+  private:
+  bool _internal_privileged() const;
+  void _internal_set_privileged(bool value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.SecurityContext)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      2, 4, 3,
+      0, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    ::runtime::v1alpha2::NamespaceOption* namespace_options_;
+    ::runtime::v1alpha2::SELinuxOption* selinux_options_;
+    ::runtime::v1alpha2::RunAsUserOption* run_as_user_;
+    bool privileged_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
+};// -------------------------------------------------------------------
+
 class PodFilter final :
     public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.PodFilter) */ {
  public:
@@ -4370,7 +5537,7 @@ class PodFilter final :
                &_PodFilter_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    14;
+    21;
 
   friend void swap(PodFilter& a, PodFilter& b) {
     a.Swap(&b);
@@ -4584,7 +5751,7 @@ class Pod final :
                &_Pod_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    18;
+    25;
 
   friend void swap(Pod& a, Pod& b) {
     a.Swap(&b);
@@ -4789,226 +5956,6 @@ class Pod final :
   friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
 };// -------------------------------------------------------------------
 
-class LinuxConfig final :
-    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.LinuxConfig) */ {
- public:
-  inline LinuxConfig() : LinuxConfig(nullptr) {}
-  ~LinuxConfig() override;
-  template<typename = void>
-  explicit PROTOBUF_CONSTEXPR LinuxConfig(::google::protobuf::internal::ConstantInitialized);
-
-  inline LinuxConfig(const LinuxConfig& from)
-      : LinuxConfig(nullptr, from) {}
-  LinuxConfig(LinuxConfig&& from) noexcept
-    : LinuxConfig() {
-    *this = ::std::move(from);
-  }
-
-  inline LinuxConfig& operator=(const LinuxConfig& from) {
-    CopyFrom(from);
-    return *this;
-  }
-  inline LinuxConfig& operator=(LinuxConfig&& from) noexcept {
-    if (this == &from) return *this;
-    if (GetArena() == from.GetArena()
-  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
-        && GetArena() != nullptr
-  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
-    ) {
-      InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
-  }
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor() {
-    return GetDescriptor();
-  }
-  static const ::google::protobuf::Descriptor* GetDescriptor() {
-    return default_instance().GetMetadata().descriptor;
-  }
-  static const ::google::protobuf::Reflection* GetReflection() {
-    return default_instance().GetMetadata().reflection;
-  }
-  static const LinuxConfig& default_instance() {
-    return *internal_default_instance();
-  }
-  static inline const LinuxConfig* internal_default_instance() {
-    return reinterpret_cast<const LinuxConfig*>(
-               &_LinuxConfig_default_instance_);
-  }
-  static constexpr int kIndexInFileMessages =
-    6;
-
-  friend void swap(LinuxConfig& a, LinuxConfig& b) {
-    a.Swap(&b);
-  }
-  inline void Swap(LinuxConfig* other) {
-    if (other == this) return;
-  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
-    if (GetArena() != nullptr &&
-        GetArena() == other->GetArena()) {
-   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
-    if (GetArena() == other->GetArena()) {
-  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
-      InternalSwap(other);
-    } else {
-      ::google::protobuf::internal::GenericSwap(this, other);
-    }
-  }
-  void UnsafeArenaSwap(LinuxConfig* other) {
-    if (other == this) return;
-    ABSL_DCHECK(GetArena() == other->GetArena());
-    InternalSwap(other);
-  }
-
-  // implements Message ----------------------------------------------
-
-  LinuxConfig* New(::google::protobuf::Arena* arena = nullptr) const final {
-    return CreateMaybeMessage<LinuxConfig>(arena);
-  }
-  using ::google::protobuf::Message::CopyFrom;
-  void CopyFrom(const LinuxConfig& from);
-  using ::google::protobuf::Message::MergeFrom;
-  void MergeFrom( const LinuxConfig& from) {
-    LinuxConfig::MergeImpl(*this, from);
-  }
-  private:
-  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
-  public:
-  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
-  bool IsInitialized() const final;
-
-  ::size_t ByteSizeLong() const final;
-  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
-  ::uint8_t* _InternalSerialize(
-      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
-  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
-
-  private:
-  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
-  void SharedCtor(::google::protobuf::Arena* arena);
-  void SharedDtor();
-  void InternalSwap(LinuxConfig* other);
-
-  private:
-  friend class ::google::protobuf::internal::AnyMetadata;
-  static ::absl::string_view FullMessageName() {
-    return "runtime.v1alpha2.LinuxConfig";
-  }
-  protected:
-  explicit LinuxConfig(::google::protobuf::Arena* arena);
-  LinuxConfig(::google::protobuf::Arena* arena, const LinuxConfig& from);
-  public:
-
-  static const ClassData _class_data_;
-  const ::google::protobuf::Message::ClassData*GetClassData() const final;
-
-  ::google::protobuf::Metadata GetMetadata() const final;
-
-  // nested types ----------------------------------------------------
-
-
-  // accessors -------------------------------------------------------
-
-  enum : int {
-    kSysctlsFieldNumber = 3,
-    kCgroupParentFieldNumber = 1,
-    kSecurityContextFieldNumber = 2,
-  };
-  // map<string, string> sysctls = 3;
-  int sysctls_size() const;
-  private:
-  int _internal_sysctls_size() const;
-
-  public:
-  void clear_sysctls() ;
-  const ::google::protobuf::Map<std::string, std::string>& sysctls() const;
-  ::google::protobuf::Map<std::string, std::string>* mutable_sysctls();
-
-  private:
-  const ::google::protobuf::Map<std::string, std::string>& _internal_sysctls() const;
-  ::google::protobuf::Map<std::string, std::string>* _internal_mutable_sysctls();
-
-  public:
-  // string cgroup_parent = 1;
-  void clear_cgroup_parent() ;
-  const std::string& cgroup_parent() const;
-  template <typename Arg_ = const std::string&, typename... Args_>
-  void set_cgroup_parent(Arg_&& arg, Args_... args);
-  std::string* mutable_cgroup_parent();
-  PROTOBUF_NODISCARD std::string* release_cgroup_parent();
-  void set_allocated_cgroup_parent(std::string* value);
-
-  private:
-  const std::string& _internal_cgroup_parent() const;
-  inline PROTOBUF_ALWAYS_INLINE void _internal_set_cgroup_parent(
-      const std::string& value);
-  std::string* _internal_mutable_cgroup_parent();
-
-  public:
-  // .runtime.v1alpha2.SecurityContext security_context = 2;
-  bool has_security_context() const;
-  void clear_security_context() ;
-  const ::runtime::v1alpha2::SecurityContext& security_context() const;
-  PROTOBUF_NODISCARD ::runtime::v1alpha2::SecurityContext* release_security_context();
-  ::runtime::v1alpha2::SecurityContext* mutable_security_context();
-  void set_allocated_security_context(::runtime::v1alpha2::SecurityContext* value);
-  void unsafe_arena_set_allocated_security_context(::runtime::v1alpha2::SecurityContext* value);
-  ::runtime::v1alpha2::SecurityContext* unsafe_arena_release_security_context();
-
-  private:
-  const ::runtime::v1alpha2::SecurityContext& _internal_security_context() const;
-  ::runtime::v1alpha2::SecurityContext* _internal_mutable_security_context();
-
-  public:
-  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.LinuxConfig)
- private:
-  class _Internal;
-
-  friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<
-      1, 3, 2,
-      57, 2>
-      _table_;
-  friend class ::google::protobuf::MessageLite;
-  friend class ::google::protobuf::Arena;
-  template <typename T>
-  friend class ::google::protobuf::Arena::InternalHelper;
-  using InternalArenaConstructable_ = void;
-  using DestructorSkippable_ = void;
-  struct Impl_ {
-
-        inline explicit constexpr Impl_(
-            ::google::protobuf::internal::ConstantInitialized) noexcept;
-        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
-                              ::google::protobuf::Arena* arena);
-        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
-                              ::google::protobuf::Arena* arena, const Impl_& from);
-    ::google::protobuf::internal::HasBits<1> _has_bits_;
-    mutable ::google::protobuf::internal::CachedSize _cached_size_;
-    ::google::protobuf::internal::MapField<LinuxConfig_SysctlsEntry_DoNotUse, std::string, std::string,
-                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING>
-        sysctls_;
-    ::google::protobuf::internal::ArenaStringPtr cgroup_parent_;
-    ::runtime::v1alpha2::SecurityContext* security_context_;
-    PROTOBUF_TSAN_DECLARE_MEMBER
-  };
-  union { Impl_ _impl_; };
-  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
-};// -------------------------------------------------------------------
-
 class ContainerFilter final :
     public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.ContainerFilter) */ {
  public:
@@ -5068,7 +6015,7 @@ class ContainerFilter final :
                &_ContainerFilter_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    36;
+    43;
 
   friend void swap(ContainerFilter& a, ContainerFilter& b) {
     a.Swap(&b);
@@ -5300,7 +6247,7 @@ class ContainerConfig final :
                &_ContainerConfig_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    25;
+    32;
 
   friend void swap(ContainerConfig& a, ContainerConfig& b) {
     a.Swap(&b);
@@ -5657,7 +6604,7 @@ class Container final :
                &_Container_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    40;
+    47;
 
   friend void swap(Container& a, Container& b) {
     a.Swap(&b);
@@ -5915,262 +6862,6 @@ class Container final :
   friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
 };// -------------------------------------------------------------------
 
-class PodSandboxConfig final :
-    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.PodSandboxConfig) */ {
- public:
-  inline PodSandboxConfig() : PodSandboxConfig(nullptr) {}
-  ~PodSandboxConfig() override;
-  template<typename = void>
-  explicit PROTOBUF_CONSTEXPR PodSandboxConfig(::google::protobuf::internal::ConstantInitialized);
-
-  inline PodSandboxConfig(const PodSandboxConfig& from)
-      : PodSandboxConfig(nullptr, from) {}
-  PodSandboxConfig(PodSandboxConfig&& from) noexcept
-    : PodSandboxConfig() {
-    *this = ::std::move(from);
-  }
-
-  inline PodSandboxConfig& operator=(const PodSandboxConfig& from) {
-    CopyFrom(from);
-    return *this;
-  }
-  inline PodSandboxConfig& operator=(PodSandboxConfig&& from) noexcept {
-    if (this == &from) return *this;
-    if (GetArena() == from.GetArena()
-  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
-        && GetArena() != nullptr
-  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
-    ) {
-      InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
-  }
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor() {
-    return GetDescriptor();
-  }
-  static const ::google::protobuf::Descriptor* GetDescriptor() {
-    return default_instance().GetMetadata().descriptor;
-  }
-  static const ::google::protobuf::Reflection* GetReflection() {
-    return default_instance().GetMetadata().reflection;
-  }
-  static const PodSandboxConfig& default_instance() {
-    return *internal_default_instance();
-  }
-  static inline const PodSandboxConfig* internal_default_instance() {
-    return reinterpret_cast<const PodSandboxConfig*>(
-               &_PodSandboxConfig_default_instance_);
-  }
-  static constexpr int kIndexInFileMessages =
-    2;
-
-  friend void swap(PodSandboxConfig& a, PodSandboxConfig& b) {
-    a.Swap(&b);
-  }
-  inline void Swap(PodSandboxConfig* other) {
-    if (other == this) return;
-  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
-    if (GetArena() != nullptr &&
-        GetArena() == other->GetArena()) {
-   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
-    if (GetArena() == other->GetArena()) {
-  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
-      InternalSwap(other);
-    } else {
-      ::google::protobuf::internal::GenericSwap(this, other);
-    }
-  }
-  void UnsafeArenaSwap(PodSandboxConfig* other) {
-    if (other == this) return;
-    ABSL_DCHECK(GetArena() == other->GetArena());
-    InternalSwap(other);
-  }
-
-  // implements Message ----------------------------------------------
-
-  PodSandboxConfig* New(::google::protobuf::Arena* arena = nullptr) const final {
-    return CreateMaybeMessage<PodSandboxConfig>(arena);
-  }
-  using ::google::protobuf::Message::CopyFrom;
-  void CopyFrom(const PodSandboxConfig& from);
-  using ::google::protobuf::Message::MergeFrom;
-  void MergeFrom( const PodSandboxConfig& from) {
-    PodSandboxConfig::MergeImpl(*this, from);
-  }
-  private:
-  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
-  public:
-  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
-  bool IsInitialized() const final;
-
-  ::size_t ByteSizeLong() const final;
-  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
-  ::uint8_t* _InternalSerialize(
-      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
-  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
-
-  private:
-  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
-  void SharedCtor(::google::protobuf::Arena* arena);
-  void SharedDtor();
-  void InternalSwap(PodSandboxConfig* other);
-
-  private:
-  friend class ::google::protobuf::internal::AnyMetadata;
-  static ::absl::string_view FullMessageName() {
-    return "runtime.v1alpha2.PodSandboxConfig";
-  }
-  protected:
-  explicit PodSandboxConfig(::google::protobuf::Arena* arena);
-  PodSandboxConfig(::google::protobuf::Arena* arena, const PodSandboxConfig& from);
-  public:
-
-  static const ClassData _class_data_;
-  const ::google::protobuf::Message::ClassData*GetClassData() const final;
-
-  ::google::protobuf::Metadata GetMetadata() const final;
-
-  // nested types ----------------------------------------------------
-
-
-  // accessors -------------------------------------------------------
-
-  enum : int {
-    kAnnotationsFieldNumber = 4,
-    kLabelsFieldNumber = 5,
-    kMetadataFieldNumber = 1,
-    kNetworkFieldNumber = 2,
-    kLinuxFieldNumber = 3,
-  };
-  // map<string, string> annotations = 4;
-  int annotations_size() const;
-  private:
-  int _internal_annotations_size() const;
-
-  public:
-  void clear_annotations() ;
-  const ::google::protobuf::Map<std::string, std::string>& annotations() const;
-  ::google::protobuf::Map<std::string, std::string>* mutable_annotations();
-
-  private:
-  const ::google::protobuf::Map<std::string, std::string>& _internal_annotations() const;
-  ::google::protobuf::Map<std::string, std::string>* _internal_mutable_annotations();
-
-  public:
-  // map<string, string> labels = 5;
-  int labels_size() const;
-  private:
-  int _internal_labels_size() const;
-
-  public:
-  void clear_labels() ;
-  const ::google::protobuf::Map<std::string, std::string>& labels() const;
-  ::google::protobuf::Map<std::string, std::string>* mutable_labels();
-
-  private:
-  const ::google::protobuf::Map<std::string, std::string>& _internal_labels() const;
-  ::google::protobuf::Map<std::string, std::string>* _internal_mutable_labels();
-
-  public:
-  // .runtime.v1alpha2.PodMetadata metadata = 1;
-  bool has_metadata() const;
-  void clear_metadata() ;
-  const ::runtime::v1alpha2::PodMetadata& metadata() const;
-  PROTOBUF_NODISCARD ::runtime::v1alpha2::PodMetadata* release_metadata();
-  ::runtime::v1alpha2::PodMetadata* mutable_metadata();
-  void set_allocated_metadata(::runtime::v1alpha2::PodMetadata* value);
-  void unsafe_arena_set_allocated_metadata(::runtime::v1alpha2::PodMetadata* value);
-  ::runtime::v1alpha2::PodMetadata* unsafe_arena_release_metadata();
-
-  private:
-  const ::runtime::v1alpha2::PodMetadata& _internal_metadata() const;
-  ::runtime::v1alpha2::PodMetadata* _internal_mutable_metadata();
-
-  public:
-  // .runtime.v1alpha2.NetworkConfig network = 2;
-  bool has_network() const;
-  void clear_network() ;
-  const ::runtime::v1alpha2::NetworkConfig& network() const;
-  PROTOBUF_NODISCARD ::runtime::v1alpha2::NetworkConfig* release_network();
-  ::runtime::v1alpha2::NetworkConfig* mutable_network();
-  void set_allocated_network(::runtime::v1alpha2::NetworkConfig* value);
-  void unsafe_arena_set_allocated_network(::runtime::v1alpha2::NetworkConfig* value);
-  ::runtime::v1alpha2::NetworkConfig* unsafe_arena_release_network();
-
-  private:
-  const ::runtime::v1alpha2::NetworkConfig& _internal_network() const;
-  ::runtime::v1alpha2::NetworkConfig* _internal_mutable_network();
-
-  public:
-  // .runtime.v1alpha2.LinuxConfig linux = 3;
-  bool has_linux() const;
-  void clear_linux() ;
-  const ::runtime::v1alpha2::LinuxConfig& linux() const;
-  PROTOBUF_NODISCARD ::runtime::v1alpha2::LinuxConfig* release_linux();
-  ::runtime::v1alpha2::LinuxConfig* mutable_linux();
-  void set_allocated_linux(::runtime::v1alpha2::LinuxConfig* value);
-  void unsafe_arena_set_allocated_linux(::runtime::v1alpha2::LinuxConfig* value);
-  ::runtime::v1alpha2::LinuxConfig* unsafe_arena_release_linux();
-
-  private:
-  const ::runtime::v1alpha2::LinuxConfig& _internal_linux() const;
-  ::runtime::v1alpha2::LinuxConfig* _internal_mutable_linux();
-
-  public:
-  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.PodSandboxConfig)
- private:
-  class _Internal;
-
-  friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<
-      2, 5, 5,
-      59, 2>
-      _table_;
-  friend class ::google::protobuf::MessageLite;
-  friend class ::google::protobuf::Arena;
-  template <typename T>
-  friend class ::google::protobuf::Arena::InternalHelper;
-  using InternalArenaConstructable_ = void;
-  using DestructorSkippable_ = void;
-  struct Impl_ {
-
-        inline explicit constexpr Impl_(
-            ::google::protobuf::internal::ConstantInitialized) noexcept;
-        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
-                              ::google::protobuf::Arena* arena);
-        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
-                              ::google::protobuf::Arena* arena, const Impl_& from);
-    ::google::protobuf::internal::HasBits<1> _has_bits_;
-    mutable ::google::protobuf::internal::CachedSize _cached_size_;
-    ::google::protobuf::internal::MapField<PodSandboxConfig_AnnotationsEntry_DoNotUse, std::string, std::string,
-                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING>
-        annotations_;
-    ::google::protobuf::internal::MapField<PodSandboxConfig_LabelsEntry_DoNotUse, std::string, std::string,
-                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING>
-        labels_;
-    ::runtime::v1alpha2::PodMetadata* metadata_;
-    ::runtime::v1alpha2::NetworkConfig* network_;
-    ::runtime::v1alpha2::LinuxConfig* linux_;
-    PROTOBUF_TSAN_DECLARE_MEMBER
-  };
-  union { Impl_ _impl_; };
-  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
-};// -------------------------------------------------------------------
-
 class ListPodResponse final :
     public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.ListPodResponse) */ {
  public:
@@ -6230,7 +6921,7 @@ class ListPodResponse final :
                &_ListPodResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    15;
+    22;
 
   friend void swap(ListPodResponse& a, ListPodResponse& b) {
     a.Swap(&b);
@@ -6413,7 +7104,7 @@ class ListPodRequest final :
                &_ListPodRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    12;
+    19;
 
   friend void swap(ListPodRequest& a, ListPodRequest& b) {
     a.Swap(&b);
@@ -6594,7 +7285,7 @@ class ListContainersResponse final :
                &_ListContainersResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    37;
+    44;
 
   friend void swap(ListContainersResponse& a, ListContainersResponse& b) {
     a.Swap(&b);
@@ -6777,7 +7468,7 @@ class ListContainersRequest final :
                &_ListContainersRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    34;
+    41;
 
   friend void swap(ListContainersRequest& a, ListContainersRequest& b) {
     a.Swap(&b);
@@ -6899,6 +7590,758 @@ class ListContainersRequest final :
   friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
 };// -------------------------------------------------------------------
 
+class LinuxPodSandboxConfig final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.LinuxPodSandboxConfig) */ {
+ public:
+  inline LinuxPodSandboxConfig() : LinuxPodSandboxConfig(nullptr) {}
+  ~LinuxPodSandboxConfig() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR LinuxPodSandboxConfig(::google::protobuf::internal::ConstantInitialized);
+
+  inline LinuxPodSandboxConfig(const LinuxPodSandboxConfig& from)
+      : LinuxPodSandboxConfig(nullptr, from) {}
+  LinuxPodSandboxConfig(LinuxPodSandboxConfig&& from) noexcept
+    : LinuxPodSandboxConfig() {
+    *this = ::std::move(from);
+  }
+
+  inline LinuxPodSandboxConfig& operator=(const LinuxPodSandboxConfig& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline LinuxPodSandboxConfig& operator=(LinuxPodSandboxConfig&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const LinuxPodSandboxConfig& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const LinuxPodSandboxConfig* internal_default_instance() {
+    return reinterpret_cast<const LinuxPodSandboxConfig*>(
+               &_LinuxPodSandboxConfig_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    3;
+
+  friend void swap(LinuxPodSandboxConfig& a, LinuxPodSandboxConfig& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(LinuxPodSandboxConfig* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(LinuxPodSandboxConfig* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  LinuxPodSandboxConfig* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<LinuxPodSandboxConfig>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const LinuxPodSandboxConfig& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const LinuxPodSandboxConfig& from) {
+    LinuxPodSandboxConfig::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(LinuxPodSandboxConfig* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "runtime.v1alpha2.LinuxPodSandboxConfig";
+  }
+  protected:
+  explicit LinuxPodSandboxConfig(::google::protobuf::Arena* arena);
+  LinuxPodSandboxConfig(::google::protobuf::Arena* arena, const LinuxPodSandboxConfig& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kSysctlsFieldNumber = 3,
+    kCgroupParentFieldNumber = 1,
+    kSecurityContextFieldNumber = 2,
+  };
+  // map<string, string> sysctls = 3;
+  int sysctls_size() const;
+  private:
+  int _internal_sysctls_size() const;
+
+  public:
+  void clear_sysctls() ;
+  const ::google::protobuf::Map<std::string, std::string>& sysctls() const;
+  ::google::protobuf::Map<std::string, std::string>* mutable_sysctls();
+
+  private:
+  const ::google::protobuf::Map<std::string, std::string>& _internal_sysctls() const;
+  ::google::protobuf::Map<std::string, std::string>* _internal_mutable_sysctls();
+
+  public:
+  // string cgroup_parent = 1;
+  void clear_cgroup_parent() ;
+  const std::string& cgroup_parent() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_cgroup_parent(Arg_&& arg, Args_... args);
+  std::string* mutable_cgroup_parent();
+  PROTOBUF_NODISCARD std::string* release_cgroup_parent();
+  void set_allocated_cgroup_parent(std::string* value);
+
+  private:
+  const std::string& _internal_cgroup_parent() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_cgroup_parent(
+      const std::string& value);
+  std::string* _internal_mutable_cgroup_parent();
+
+  public:
+  // .runtime.v1alpha2.SecurityContext security_context = 2;
+  bool has_security_context() const;
+  void clear_security_context() ;
+  const ::runtime::v1alpha2::SecurityContext& security_context() const;
+  PROTOBUF_NODISCARD ::runtime::v1alpha2::SecurityContext* release_security_context();
+  ::runtime::v1alpha2::SecurityContext* mutable_security_context();
+  void set_allocated_security_context(::runtime::v1alpha2::SecurityContext* value);
+  void unsafe_arena_set_allocated_security_context(::runtime::v1alpha2::SecurityContext* value);
+  ::runtime::v1alpha2::SecurityContext* unsafe_arena_release_security_context();
+
+  private:
+  const ::runtime::v1alpha2::SecurityContext& _internal_security_context() const;
+  ::runtime::v1alpha2::SecurityContext* _internal_mutable_security_context();
+
+  public:
+  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.LinuxPodSandboxConfig)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      1, 3, 2,
+      67, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::internal::MapField<LinuxPodSandboxConfig_SysctlsEntry_DoNotUse, std::string, std::string,
+                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING>
+        sysctls_;
+    ::google::protobuf::internal::ArenaStringPtr cgroup_parent_;
+    ::runtime::v1alpha2::SecurityContext* security_context_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
+};// -------------------------------------------------------------------
+
+class LinuxConfig final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.LinuxConfig) */ {
+ public:
+  inline LinuxConfig() : LinuxConfig(nullptr) {}
+  ~LinuxConfig() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR LinuxConfig(::google::protobuf::internal::ConstantInitialized);
+
+  inline LinuxConfig(const LinuxConfig& from)
+      : LinuxConfig(nullptr, from) {}
+  LinuxConfig(LinuxConfig&& from) noexcept
+    : LinuxConfig() {
+    *this = ::std::move(from);
+  }
+
+  inline LinuxConfig& operator=(const LinuxConfig& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline LinuxConfig& operator=(LinuxConfig&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const LinuxConfig& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const LinuxConfig* internal_default_instance() {
+    return reinterpret_cast<const LinuxConfig*>(
+               &_LinuxConfig_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    10;
+
+  friend void swap(LinuxConfig& a, LinuxConfig& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(LinuxConfig* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(LinuxConfig* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  LinuxConfig* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<LinuxConfig>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const LinuxConfig& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const LinuxConfig& from) {
+    LinuxConfig::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(LinuxConfig* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "runtime.v1alpha2.LinuxConfig";
+  }
+  protected:
+  explicit LinuxConfig(::google::protobuf::Arena* arena);
+  LinuxConfig(::google::protobuf::Arena* arena, const LinuxConfig& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kSysctlsFieldNumber = 3,
+    kCgroupParentFieldNumber = 1,
+    kSecurityContextFieldNumber = 2,
+  };
+  // map<string, string> sysctls = 3;
+  int sysctls_size() const;
+  private:
+  int _internal_sysctls_size() const;
+
+  public:
+  void clear_sysctls() ;
+  const ::google::protobuf::Map<std::string, std::string>& sysctls() const;
+  ::google::protobuf::Map<std::string, std::string>* mutable_sysctls();
+
+  private:
+  const ::google::protobuf::Map<std::string, std::string>& _internal_sysctls() const;
+  ::google::protobuf::Map<std::string, std::string>* _internal_mutable_sysctls();
+
+  public:
+  // string cgroup_parent = 1;
+  void clear_cgroup_parent() ;
+  const std::string& cgroup_parent() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_cgroup_parent(Arg_&& arg, Args_... args);
+  std::string* mutable_cgroup_parent();
+  PROTOBUF_NODISCARD std::string* release_cgroup_parent();
+  void set_allocated_cgroup_parent(std::string* value);
+
+  private:
+  const std::string& _internal_cgroup_parent() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_cgroup_parent(
+      const std::string& value);
+  std::string* _internal_mutable_cgroup_parent();
+
+  public:
+  // .runtime.v1alpha2.SecurityContext security_context = 2;
+  bool has_security_context() const;
+  void clear_security_context() ;
+  const ::runtime::v1alpha2::SecurityContext& security_context() const;
+  PROTOBUF_NODISCARD ::runtime::v1alpha2::SecurityContext* release_security_context();
+  ::runtime::v1alpha2::SecurityContext* mutable_security_context();
+  void set_allocated_security_context(::runtime::v1alpha2::SecurityContext* value);
+  void unsafe_arena_set_allocated_security_context(::runtime::v1alpha2::SecurityContext* value);
+  ::runtime::v1alpha2::SecurityContext* unsafe_arena_release_security_context();
+
+  private:
+  const ::runtime::v1alpha2::SecurityContext& _internal_security_context() const;
+  ::runtime::v1alpha2::SecurityContext* _internal_mutable_security_context();
+
+  public:
+  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.LinuxConfig)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      1, 3, 2,
+      57, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::internal::MapField<LinuxConfig_SysctlsEntry_DoNotUse, std::string, std::string,
+                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING>
+        sysctls_;
+    ::google::protobuf::internal::ArenaStringPtr cgroup_parent_;
+    ::runtime::v1alpha2::SecurityContext* security_context_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
+};// -------------------------------------------------------------------
+
+class PodSandboxConfig final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.PodSandboxConfig) */ {
+ public:
+  inline PodSandboxConfig() : PodSandboxConfig(nullptr) {}
+  ~PodSandboxConfig() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR PodSandboxConfig(::google::protobuf::internal::ConstantInitialized);
+
+  inline PodSandboxConfig(const PodSandboxConfig& from)
+      : PodSandboxConfig(nullptr, from) {}
+  PodSandboxConfig(PodSandboxConfig&& from) noexcept
+    : PodSandboxConfig() {
+    *this = ::std::move(from);
+  }
+
+  inline PodSandboxConfig& operator=(const PodSandboxConfig& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline PodSandboxConfig& operator=(PodSandboxConfig&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const PodSandboxConfig& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const PodSandboxConfig* internal_default_instance() {
+    return reinterpret_cast<const PodSandboxConfig*>(
+               &_PodSandboxConfig_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    6;
+
+  friend void swap(PodSandboxConfig& a, PodSandboxConfig& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(PodSandboxConfig* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(PodSandboxConfig* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  PodSandboxConfig* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<PodSandboxConfig>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const PodSandboxConfig& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const PodSandboxConfig& from) {
+    PodSandboxConfig::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(PodSandboxConfig* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "runtime.v1alpha2.PodSandboxConfig";
+  }
+  protected:
+  explicit PodSandboxConfig(::google::protobuf::Arena* arena);
+  PodSandboxConfig(::google::protobuf::Arena* arena, const PodSandboxConfig& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kPortMappingsFieldNumber = 5,
+    kLabelsFieldNumber = 7,
+    kAnnotationsFieldNumber = 8,
+    kHostnameFieldNumber = 2,
+    kLogDirectoryFieldNumber = 3,
+    kMetadataFieldNumber = 1,
+    kDnsConfigFieldNumber = 4,
+    kLinuxConfigFieldNumber = 6,
+  };
+  // repeated .runtime.v1alpha2.PortMapping port_mappings = 5;
+  int port_mappings_size() const;
+  private:
+  int _internal_port_mappings_size() const;
+
+  public:
+  void clear_port_mappings() ;
+  ::runtime::v1alpha2::PortMapping* mutable_port_mappings(int index);
+  ::google::protobuf::RepeatedPtrField< ::runtime::v1alpha2::PortMapping >*
+      mutable_port_mappings();
+  private:
+  const ::google::protobuf::RepeatedPtrField<::runtime::v1alpha2::PortMapping>& _internal_port_mappings() const;
+  ::google::protobuf::RepeatedPtrField<::runtime::v1alpha2::PortMapping>* _internal_mutable_port_mappings();
+  public:
+  const ::runtime::v1alpha2::PortMapping& port_mappings(int index) const;
+  ::runtime::v1alpha2::PortMapping* add_port_mappings();
+  const ::google::protobuf::RepeatedPtrField< ::runtime::v1alpha2::PortMapping >&
+      port_mappings() const;
+  // map<string, string> labels = 7;
+  int labels_size() const;
+  private:
+  int _internal_labels_size() const;
+
+  public:
+  void clear_labels() ;
+  const ::google::protobuf::Map<std::string, std::string>& labels() const;
+  ::google::protobuf::Map<std::string, std::string>* mutable_labels();
+
+  private:
+  const ::google::protobuf::Map<std::string, std::string>& _internal_labels() const;
+  ::google::protobuf::Map<std::string, std::string>* _internal_mutable_labels();
+
+  public:
+  // map<string, string> annotations = 8;
+  int annotations_size() const;
+  private:
+  int _internal_annotations_size() const;
+
+  public:
+  void clear_annotations() ;
+  const ::google::protobuf::Map<std::string, std::string>& annotations() const;
+  ::google::protobuf::Map<std::string, std::string>* mutable_annotations();
+
+  private:
+  const ::google::protobuf::Map<std::string, std::string>& _internal_annotations() const;
+  ::google::protobuf::Map<std::string, std::string>* _internal_mutable_annotations();
+
+  public:
+  // string hostname = 2;
+  void clear_hostname() ;
+  const std::string& hostname() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_hostname(Arg_&& arg, Args_... args);
+  std::string* mutable_hostname();
+  PROTOBUF_NODISCARD std::string* release_hostname();
+  void set_allocated_hostname(std::string* value);
+
+  private:
+  const std::string& _internal_hostname() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_hostname(
+      const std::string& value);
+  std::string* _internal_mutable_hostname();
+
+  public:
+  // string log_directory = 3;
+  void clear_log_directory() ;
+  const std::string& log_directory() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_log_directory(Arg_&& arg, Args_... args);
+  std::string* mutable_log_directory();
+  PROTOBUF_NODISCARD std::string* release_log_directory();
+  void set_allocated_log_directory(std::string* value);
+
+  private:
+  const std::string& _internal_log_directory() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_log_directory(
+      const std::string& value);
+  std::string* _internal_mutable_log_directory();
+
+  public:
+  // .runtime.v1alpha2.PodMetadata metadata = 1;
+  bool has_metadata() const;
+  void clear_metadata() ;
+  const ::runtime::v1alpha2::PodMetadata& metadata() const;
+  PROTOBUF_NODISCARD ::runtime::v1alpha2::PodMetadata* release_metadata();
+  ::runtime::v1alpha2::PodMetadata* mutable_metadata();
+  void set_allocated_metadata(::runtime::v1alpha2::PodMetadata* value);
+  void unsafe_arena_set_allocated_metadata(::runtime::v1alpha2::PodMetadata* value);
+  ::runtime::v1alpha2::PodMetadata* unsafe_arena_release_metadata();
+
+  private:
+  const ::runtime::v1alpha2::PodMetadata& _internal_metadata() const;
+  ::runtime::v1alpha2::PodMetadata* _internal_mutable_metadata();
+
+  public:
+  // .runtime.v1alpha2.DNSConfig dns_config = 4;
+  bool has_dns_config() const;
+  void clear_dns_config() ;
+  const ::runtime::v1alpha2::DNSConfig& dns_config() const;
+  PROTOBUF_NODISCARD ::runtime::v1alpha2::DNSConfig* release_dns_config();
+  ::runtime::v1alpha2::DNSConfig* mutable_dns_config();
+  void set_allocated_dns_config(::runtime::v1alpha2::DNSConfig* value);
+  void unsafe_arena_set_allocated_dns_config(::runtime::v1alpha2::DNSConfig* value);
+  ::runtime::v1alpha2::DNSConfig* unsafe_arena_release_dns_config();
+
+  private:
+  const ::runtime::v1alpha2::DNSConfig& _internal_dns_config() const;
+  ::runtime::v1alpha2::DNSConfig* _internal_mutable_dns_config();
+
+  public:
+  // .runtime.v1alpha2.LinuxPodSandboxConfig linux_config = 6;
+  bool has_linux_config() const;
+  void clear_linux_config() ;
+  const ::runtime::v1alpha2::LinuxPodSandboxConfig& linux_config() const;
+  PROTOBUF_NODISCARD ::runtime::v1alpha2::LinuxPodSandboxConfig* release_linux_config();
+  ::runtime::v1alpha2::LinuxPodSandboxConfig* mutable_linux_config();
+  void set_allocated_linux_config(::runtime::v1alpha2::LinuxPodSandboxConfig* value);
+  void unsafe_arena_set_allocated_linux_config(::runtime::v1alpha2::LinuxPodSandboxConfig* value);
+  ::runtime::v1alpha2::LinuxPodSandboxConfig* unsafe_arena_release_linux_config();
+
+  private:
+  const ::runtime::v1alpha2::LinuxPodSandboxConfig& _internal_linux_config() const;
+  ::runtime::v1alpha2::LinuxPodSandboxConfig* _internal_mutable_linux_config();
+
+  public:
+  // @@protoc_insertion_point(class_scope:runtime.v1alpha2.PodSandboxConfig)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      3, 8, 6,
+      88, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::RepeatedPtrField< ::runtime::v1alpha2::PortMapping > port_mappings_;
+    ::google::protobuf::internal::MapField<PodSandboxConfig_LabelsEntry_DoNotUse, std::string, std::string,
+                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING>
+        labels_;
+    ::google::protobuf::internal::MapField<PodSandboxConfig_AnnotationsEntry_DoNotUse, std::string, std::string,
+                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+                      ::google::protobuf::internal::WireFormatLite::TYPE_STRING>
+        annotations_;
+    ::google::protobuf::internal::ArenaStringPtr hostname_;
+    ::google::protobuf::internal::ArenaStringPtr log_directory_;
+    ::runtime::v1alpha2::PodMetadata* metadata_;
+    ::runtime::v1alpha2::DNSConfig* dns_config_;
+    ::runtime::v1alpha2::LinuxPodSandboxConfig* linux_config_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_proto_2fruntime_5fservice_2eproto;
+};// -------------------------------------------------------------------
+
 class CreatePodRequest final :
     public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:runtime.v1alpha2.CreatePodRequest) */ {
  public:
@@ -6958,7 +8401,7 @@ class CreatePodRequest final :
                &_CreatePodRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    8;
+    15;
 
   friend void swap(CreatePodRequest& a, CreatePodRequest& b) {
     a.Swap(&b);
@@ -7139,7 +8582,7 @@ class CreateContainerRequest final :
                &_CreateContainerRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    30;
+    37;
 
   friend void swap(CreateContainerRequest& a, CreateContainerRequest& b) {
     a.Swap(&b);
@@ -7310,6 +8753,652 @@ class CreateContainerRequest final :
 #endif  // __GNUC__
 // -------------------------------------------------------------------
 
+// DNSConfig
+
+// repeated string servers = 1;
+inline int DNSConfig::_internal_servers_size() const {
+  return _internal_servers().size();
+}
+inline int DNSConfig::servers_size() const {
+  return _internal_servers_size();
+}
+inline void DNSConfig::clear_servers() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.servers_.Clear();
+}
+inline std::string* DNSConfig::add_servers()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  std::string* _s = _internal_mutable_servers()->Add();
+  // @@protoc_insertion_point(field_add_mutable:runtime.v1alpha2.DNSConfig.servers)
+  return _s;
+}
+inline const std::string& DNSConfig::servers(int index) const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.DNSConfig.servers)
+  return _internal_servers().Get(index);
+}
+inline std::string* DNSConfig::mutable_servers(int index)
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.DNSConfig.servers)
+  return _internal_mutable_servers()->Mutable(index);
+}
+inline void DNSConfig::set_servers(int index, const std::string& value) {
+  _internal_mutable_servers()->Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.DNSConfig.servers)
+}
+inline void DNSConfig::set_servers(int index, std::string&& value) {
+  _internal_mutable_servers()->Mutable(index)->assign(std::move(value));
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.DNSConfig.servers)
+}
+inline void DNSConfig::set_servers(int index, const char* value) {
+  ABSL_DCHECK(value != nullptr);
+  _internal_mutable_servers()->Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:runtime.v1alpha2.DNSConfig.servers)
+}
+inline void DNSConfig::set_servers(int index, const char* value,
+                              std::size_t size) {
+  _internal_mutable_servers()->Mutable(index)->assign(
+      reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:runtime.v1alpha2.DNSConfig.servers)
+}
+inline void DNSConfig::set_servers(int index, absl::string_view value) {
+  _internal_mutable_servers()->Mutable(index)->assign(value.data(),
+                                                     value.size());
+  // @@protoc_insertion_point(field_set_string_piece:runtime.v1alpha2.DNSConfig.servers)
+}
+inline void DNSConfig::add_servers(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_servers()->Add()->assign(value);
+  // @@protoc_insertion_point(field_add:runtime.v1alpha2.DNSConfig.servers)
+}
+inline void DNSConfig::add_servers(std::string&& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_servers()->Add(std::move(value));
+  // @@protoc_insertion_point(field_add:runtime.v1alpha2.DNSConfig.servers)
+}
+inline void DNSConfig::add_servers(const char* value) {
+  ABSL_DCHECK(value != nullptr);
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_servers()->Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:runtime.v1alpha2.DNSConfig.servers)
+}
+inline void DNSConfig::add_servers(const char* value, std::size_t size) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_servers()->Add()->assign(
+      reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:runtime.v1alpha2.DNSConfig.servers)
+}
+inline void DNSConfig::add_servers(absl::string_view value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_servers()->Add()->assign(value.data(), value.size());
+  // @@protoc_insertion_point(field_add_string_piece:runtime.v1alpha2.DNSConfig.servers)
+}
+inline const ::google::protobuf::RepeatedPtrField<std::string>&
+DNSConfig::servers() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_list:runtime.v1alpha2.DNSConfig.servers)
+  return _internal_servers();
+}
+inline ::google::protobuf::RepeatedPtrField<std::string>*
+DNSConfig::mutable_servers() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable_list:runtime.v1alpha2.DNSConfig.servers)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  return _internal_mutable_servers();
+}
+inline const ::google::protobuf::RepeatedPtrField<std::string>&
+DNSConfig::_internal_servers() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.servers_;
+}
+inline ::google::protobuf::RepeatedPtrField<std::string>*
+DNSConfig::_internal_mutable_servers() {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return &_impl_.servers_;
+}
+
+// repeated string searches = 2;
+inline int DNSConfig::_internal_searches_size() const {
+  return _internal_searches().size();
+}
+inline int DNSConfig::searches_size() const {
+  return _internal_searches_size();
+}
+inline void DNSConfig::clear_searches() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.searches_.Clear();
+}
+inline std::string* DNSConfig::add_searches()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  std::string* _s = _internal_mutable_searches()->Add();
+  // @@protoc_insertion_point(field_add_mutable:runtime.v1alpha2.DNSConfig.searches)
+  return _s;
+}
+inline const std::string& DNSConfig::searches(int index) const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.DNSConfig.searches)
+  return _internal_searches().Get(index);
+}
+inline std::string* DNSConfig::mutable_searches(int index)
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.DNSConfig.searches)
+  return _internal_mutable_searches()->Mutable(index);
+}
+inline void DNSConfig::set_searches(int index, const std::string& value) {
+  _internal_mutable_searches()->Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.DNSConfig.searches)
+}
+inline void DNSConfig::set_searches(int index, std::string&& value) {
+  _internal_mutable_searches()->Mutable(index)->assign(std::move(value));
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.DNSConfig.searches)
+}
+inline void DNSConfig::set_searches(int index, const char* value) {
+  ABSL_DCHECK(value != nullptr);
+  _internal_mutable_searches()->Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:runtime.v1alpha2.DNSConfig.searches)
+}
+inline void DNSConfig::set_searches(int index, const char* value,
+                              std::size_t size) {
+  _internal_mutable_searches()->Mutable(index)->assign(
+      reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:runtime.v1alpha2.DNSConfig.searches)
+}
+inline void DNSConfig::set_searches(int index, absl::string_view value) {
+  _internal_mutable_searches()->Mutable(index)->assign(value.data(),
+                                                     value.size());
+  // @@protoc_insertion_point(field_set_string_piece:runtime.v1alpha2.DNSConfig.searches)
+}
+inline void DNSConfig::add_searches(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_searches()->Add()->assign(value);
+  // @@protoc_insertion_point(field_add:runtime.v1alpha2.DNSConfig.searches)
+}
+inline void DNSConfig::add_searches(std::string&& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_searches()->Add(std::move(value));
+  // @@protoc_insertion_point(field_add:runtime.v1alpha2.DNSConfig.searches)
+}
+inline void DNSConfig::add_searches(const char* value) {
+  ABSL_DCHECK(value != nullptr);
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_searches()->Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:runtime.v1alpha2.DNSConfig.searches)
+}
+inline void DNSConfig::add_searches(const char* value, std::size_t size) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_searches()->Add()->assign(
+      reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:runtime.v1alpha2.DNSConfig.searches)
+}
+inline void DNSConfig::add_searches(absl::string_view value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_searches()->Add()->assign(value.data(), value.size());
+  // @@protoc_insertion_point(field_add_string_piece:runtime.v1alpha2.DNSConfig.searches)
+}
+inline const ::google::protobuf::RepeatedPtrField<std::string>&
+DNSConfig::searches() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_list:runtime.v1alpha2.DNSConfig.searches)
+  return _internal_searches();
+}
+inline ::google::protobuf::RepeatedPtrField<std::string>*
+DNSConfig::mutable_searches() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable_list:runtime.v1alpha2.DNSConfig.searches)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  return _internal_mutable_searches();
+}
+inline const ::google::protobuf::RepeatedPtrField<std::string>&
+DNSConfig::_internal_searches() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.searches_;
+}
+inline ::google::protobuf::RepeatedPtrField<std::string>*
+DNSConfig::_internal_mutable_searches() {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return &_impl_.searches_;
+}
+
+// repeated string options = 3;
+inline int DNSConfig::_internal_options_size() const {
+  return _internal_options().size();
+}
+inline int DNSConfig::options_size() const {
+  return _internal_options_size();
+}
+inline void DNSConfig::clear_options() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.options_.Clear();
+}
+inline std::string* DNSConfig::add_options()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  std::string* _s = _internal_mutable_options()->Add();
+  // @@protoc_insertion_point(field_add_mutable:runtime.v1alpha2.DNSConfig.options)
+  return _s;
+}
+inline const std::string& DNSConfig::options(int index) const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.DNSConfig.options)
+  return _internal_options().Get(index);
+}
+inline std::string* DNSConfig::mutable_options(int index)
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.DNSConfig.options)
+  return _internal_mutable_options()->Mutable(index);
+}
+inline void DNSConfig::set_options(int index, const std::string& value) {
+  _internal_mutable_options()->Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.DNSConfig.options)
+}
+inline void DNSConfig::set_options(int index, std::string&& value) {
+  _internal_mutable_options()->Mutable(index)->assign(std::move(value));
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.DNSConfig.options)
+}
+inline void DNSConfig::set_options(int index, const char* value) {
+  ABSL_DCHECK(value != nullptr);
+  _internal_mutable_options()->Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:runtime.v1alpha2.DNSConfig.options)
+}
+inline void DNSConfig::set_options(int index, const char* value,
+                              std::size_t size) {
+  _internal_mutable_options()->Mutable(index)->assign(
+      reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:runtime.v1alpha2.DNSConfig.options)
+}
+inline void DNSConfig::set_options(int index, absl::string_view value) {
+  _internal_mutable_options()->Mutable(index)->assign(value.data(),
+                                                     value.size());
+  // @@protoc_insertion_point(field_set_string_piece:runtime.v1alpha2.DNSConfig.options)
+}
+inline void DNSConfig::add_options(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_options()->Add()->assign(value);
+  // @@protoc_insertion_point(field_add:runtime.v1alpha2.DNSConfig.options)
+}
+inline void DNSConfig::add_options(std::string&& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_options()->Add(std::move(value));
+  // @@protoc_insertion_point(field_add:runtime.v1alpha2.DNSConfig.options)
+}
+inline void DNSConfig::add_options(const char* value) {
+  ABSL_DCHECK(value != nullptr);
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_options()->Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:runtime.v1alpha2.DNSConfig.options)
+}
+inline void DNSConfig::add_options(const char* value, std::size_t size) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_options()->Add()->assign(
+      reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:runtime.v1alpha2.DNSConfig.options)
+}
+inline void DNSConfig::add_options(absl::string_view value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_options()->Add()->assign(value.data(), value.size());
+  // @@protoc_insertion_point(field_add_string_piece:runtime.v1alpha2.DNSConfig.options)
+}
+inline const ::google::protobuf::RepeatedPtrField<std::string>&
+DNSConfig::options() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_list:runtime.v1alpha2.DNSConfig.options)
+  return _internal_options();
+}
+inline ::google::protobuf::RepeatedPtrField<std::string>*
+DNSConfig::mutable_options() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable_list:runtime.v1alpha2.DNSConfig.options)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  return _internal_mutable_options();
+}
+inline const ::google::protobuf::RepeatedPtrField<std::string>&
+DNSConfig::_internal_options() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.options_;
+}
+inline ::google::protobuf::RepeatedPtrField<std::string>*
+DNSConfig::_internal_mutable_options() {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return &_impl_.options_;
+}
+
+// -------------------------------------------------------------------
+
+// PortMapping
+
+// string protocol = 1;
+inline void PortMapping::clear_protocol() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.protocol_.ClearToEmpty();
+}
+inline const std::string& PortMapping::protocol() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PortMapping.protocol)
+  return _internal_protocol();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void PortMapping::set_protocol(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.protocol_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.PortMapping.protocol)
+}
+inline std::string* PortMapping::mutable_protocol() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_protocol();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.PortMapping.protocol)
+  return _s;
+}
+inline const std::string& PortMapping::_internal_protocol() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.protocol_.Get();
+}
+inline void PortMapping::_internal_set_protocol(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.protocol_.Set(value, GetArena());
+}
+inline std::string* PortMapping::_internal_mutable_protocol() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.protocol_.Mutable( GetArena());
+}
+inline std::string* PortMapping::release_protocol() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.PortMapping.protocol)
+  return _impl_.protocol_.Release();
+}
+inline void PortMapping::set_allocated_protocol(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.protocol_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.protocol_.IsDefault()) {
+          _impl_.protocol_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.PortMapping.protocol)
+}
+
+// int32 container_port = 2;
+inline void PortMapping::clear_container_port() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.container_port_ = 0;
+}
+inline ::int32_t PortMapping::container_port() const {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PortMapping.container_port)
+  return _internal_container_port();
+}
+inline void PortMapping::set_container_port(::int32_t value) {
+  _internal_set_container_port(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.PortMapping.container_port)
+}
+inline ::int32_t PortMapping::_internal_container_port() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.container_port_;
+}
+inline void PortMapping::_internal_set_container_port(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.container_port_ = value;
+}
+
+// int32 host_port = 3;
+inline void PortMapping::clear_host_port() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.host_port_ = 0;
+}
+inline ::int32_t PortMapping::host_port() const {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PortMapping.host_port)
+  return _internal_host_port();
+}
+inline void PortMapping::set_host_port(::int32_t value) {
+  _internal_set_host_port(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.PortMapping.host_port)
+}
+inline ::int32_t PortMapping::_internal_host_port() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.host_port_;
+}
+inline void PortMapping::_internal_set_host_port(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.host_port_ = value;
+}
+
+// string host_ip = 4;
+inline void PortMapping::clear_host_ip() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.host_ip_.ClearToEmpty();
+}
+inline const std::string& PortMapping::host_ip() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PortMapping.host_ip)
+  return _internal_host_ip();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void PortMapping::set_host_ip(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.host_ip_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.PortMapping.host_ip)
+}
+inline std::string* PortMapping::mutable_host_ip() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_host_ip();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.PortMapping.host_ip)
+  return _s;
+}
+inline const std::string& PortMapping::_internal_host_ip() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.host_ip_.Get();
+}
+inline void PortMapping::_internal_set_host_ip(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.host_ip_.Set(value, GetArena());
+}
+inline std::string* PortMapping::_internal_mutable_host_ip() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.host_ip_.Mutable( GetArena());
+}
+inline std::string* PortMapping::release_host_ip() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.PortMapping.host_ip)
+  return _impl_.host_ip_.Release();
+}
+inline void PortMapping::set_allocated_host_ip(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.host_ip_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.host_ip_.IsDefault()) {
+          _impl_.host_ip_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.PortMapping.host_ip)
+}
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// LinuxPodSandboxConfig
+
+// string cgroup_parent = 1;
+inline void LinuxPodSandboxConfig::clear_cgroup_parent() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.cgroup_parent_.ClearToEmpty();
+}
+inline const std::string& LinuxPodSandboxConfig::cgroup_parent() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.LinuxPodSandboxConfig.cgroup_parent)
+  return _internal_cgroup_parent();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void LinuxPodSandboxConfig::set_cgroup_parent(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.cgroup_parent_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.LinuxPodSandboxConfig.cgroup_parent)
+}
+inline std::string* LinuxPodSandboxConfig::mutable_cgroup_parent() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_cgroup_parent();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.LinuxPodSandboxConfig.cgroup_parent)
+  return _s;
+}
+inline const std::string& LinuxPodSandboxConfig::_internal_cgroup_parent() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.cgroup_parent_.Get();
+}
+inline void LinuxPodSandboxConfig::_internal_set_cgroup_parent(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.cgroup_parent_.Set(value, GetArena());
+}
+inline std::string* LinuxPodSandboxConfig::_internal_mutable_cgroup_parent() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.cgroup_parent_.Mutable( GetArena());
+}
+inline std::string* LinuxPodSandboxConfig::release_cgroup_parent() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.LinuxPodSandboxConfig.cgroup_parent)
+  return _impl_.cgroup_parent_.Release();
+}
+inline void LinuxPodSandboxConfig::set_allocated_cgroup_parent(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.cgroup_parent_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.cgroup_parent_.IsDefault()) {
+          _impl_.cgroup_parent_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.LinuxPodSandboxConfig.cgroup_parent)
+}
+
+// .runtime.v1alpha2.SecurityContext security_context = 2;
+inline bool LinuxPodSandboxConfig::has_security_context() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
+  PROTOBUF_ASSUME(!value || _impl_.security_context_ != nullptr);
+  return value;
+}
+inline void LinuxPodSandboxConfig::clear_security_context() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (_impl_.security_context_ != nullptr) _impl_.security_context_->Clear();
+  _impl_._has_bits_[0] &= ~0x00000001u;
+}
+inline const ::runtime::v1alpha2::SecurityContext& LinuxPodSandboxConfig::_internal_security_context() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  const ::runtime::v1alpha2::SecurityContext* p = _impl_.security_context_;
+  return p != nullptr ? *p : reinterpret_cast<const ::runtime::v1alpha2::SecurityContext&>(::runtime::v1alpha2::_SecurityContext_default_instance_);
+}
+inline const ::runtime::v1alpha2::SecurityContext& LinuxPodSandboxConfig::security_context() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.LinuxPodSandboxConfig.security_context)
+  return _internal_security_context();
+}
+inline void LinuxPodSandboxConfig::unsafe_arena_set_allocated_security_context(::runtime::v1alpha2::SecurityContext* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.security_context_);
+  }
+  _impl_.security_context_ = reinterpret_cast<::runtime::v1alpha2::SecurityContext*>(value);
+  if (value != nullptr) {
+    _impl_._has_bits_[0] |= 0x00000001u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000001u;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:runtime.v1alpha2.LinuxPodSandboxConfig.security_context)
+}
+inline ::runtime::v1alpha2::SecurityContext* LinuxPodSandboxConfig::release_security_context() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+
+  _impl_._has_bits_[0] &= ~0x00000001u;
+  ::runtime::v1alpha2::SecurityContext* released = _impl_.security_context_;
+  _impl_.security_context_ = nullptr;
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+  released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  if (GetArena() == nullptr) {
+    delete old;
+  }
+#else   // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (GetArena() != nullptr) {
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  }
+#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  return released;
+}
+inline ::runtime::v1alpha2::SecurityContext* LinuxPodSandboxConfig::unsafe_arena_release_security_context() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.LinuxPodSandboxConfig.security_context)
+
+  _impl_._has_bits_[0] &= ~0x00000001u;
+  ::runtime::v1alpha2::SecurityContext* temp = _impl_.security_context_;
+  _impl_.security_context_ = nullptr;
+  return temp;
+}
+inline ::runtime::v1alpha2::SecurityContext* LinuxPodSandboxConfig::_internal_mutable_security_context() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_._has_bits_[0] |= 0x00000001u;
+  if (_impl_.security_context_ == nullptr) {
+    auto* p = CreateMaybeMessage<::runtime::v1alpha2::SecurityContext>(GetArena());
+    _impl_.security_context_ = reinterpret_cast<::runtime::v1alpha2::SecurityContext*>(p);
+  }
+  return _impl_.security_context_;
+}
+inline ::runtime::v1alpha2::SecurityContext* LinuxPodSandboxConfig::mutable_security_context() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::runtime::v1alpha2::SecurityContext* _msg = _internal_mutable_security_context();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.LinuxPodSandboxConfig.security_context)
+  return _msg;
+}
+inline void LinuxPodSandboxConfig::set_allocated_security_context(::runtime::v1alpha2::SecurityContext* value) {
+  ::google::protobuf::Arena* message_arena = GetArena();
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::runtime::v1alpha2::SecurityContext*>(_impl_.security_context_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena = reinterpret_cast<::runtime::v1alpha2::SecurityContext*>(value)->GetArena();
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    _impl_._has_bits_[0] |= 0x00000001u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000001u;
+  }
+
+  _impl_.security_context_ = reinterpret_cast<::runtime::v1alpha2::SecurityContext*>(value);
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.LinuxPodSandboxConfig.security_context)
+}
+
+// map<string, string> sysctls = 3;
+inline int LinuxPodSandboxConfig::_internal_sysctls_size() const {
+  return _internal_sysctls().size();
+}
+inline int LinuxPodSandboxConfig::sysctls_size() const {
+  return _internal_sysctls_size();
+}
+inline void LinuxPodSandboxConfig::clear_sysctls() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.sysctls_.Clear();
+}
+inline const ::google::protobuf::Map<std::string, std::string>& LinuxPodSandboxConfig::_internal_sysctls() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.sysctls_.GetMap();
+}
+inline const ::google::protobuf::Map<std::string, std::string>& LinuxPodSandboxConfig::sysctls() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_map:runtime.v1alpha2.LinuxPodSandboxConfig.sysctls)
+  return _internal_sysctls();
+}
+inline ::google::protobuf::Map<std::string, std::string>* LinuxPodSandboxConfig::_internal_mutable_sysctls() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  return _impl_.sysctls_.MutableMap();
+}
+inline ::google::protobuf::Map<std::string, std::string>* LinuxPodSandboxConfig::mutable_sysctls() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable_map:runtime.v1alpha2.LinuxPodSandboxConfig.sysctls)
+  return _internal_mutable_sysctls();
+}
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
@@ -7412,45 +9501,151 @@ inline void PodSandboxConfig::set_allocated_metadata(::runtime::v1alpha2::PodMet
   // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.PodSandboxConfig.metadata)
 }
 
-// .runtime.v1alpha2.NetworkConfig network = 2;
-inline bool PodSandboxConfig::has_network() const {
+// string hostname = 2;
+inline void PodSandboxConfig::clear_hostname() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.hostname_.ClearToEmpty();
+}
+inline const std::string& PodSandboxConfig::hostname() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PodSandboxConfig.hostname)
+  return _internal_hostname();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void PodSandboxConfig::set_hostname(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.hostname_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.PodSandboxConfig.hostname)
+}
+inline std::string* PodSandboxConfig::mutable_hostname() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_hostname();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.PodSandboxConfig.hostname)
+  return _s;
+}
+inline const std::string& PodSandboxConfig::_internal_hostname() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.hostname_.Get();
+}
+inline void PodSandboxConfig::_internal_set_hostname(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.hostname_.Set(value, GetArena());
+}
+inline std::string* PodSandboxConfig::_internal_mutable_hostname() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.hostname_.Mutable( GetArena());
+}
+inline std::string* PodSandboxConfig::release_hostname() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.PodSandboxConfig.hostname)
+  return _impl_.hostname_.Release();
+}
+inline void PodSandboxConfig::set_allocated_hostname(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.hostname_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.hostname_.IsDefault()) {
+          _impl_.hostname_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.PodSandboxConfig.hostname)
+}
+
+// string log_directory = 3;
+inline void PodSandboxConfig::clear_log_directory() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.log_directory_.ClearToEmpty();
+}
+inline const std::string& PodSandboxConfig::log_directory() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PodSandboxConfig.log_directory)
+  return _internal_log_directory();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void PodSandboxConfig::set_log_directory(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.log_directory_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.PodSandboxConfig.log_directory)
+}
+inline std::string* PodSandboxConfig::mutable_log_directory() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_log_directory();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.PodSandboxConfig.log_directory)
+  return _s;
+}
+inline const std::string& PodSandboxConfig::_internal_log_directory() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.log_directory_.Get();
+}
+inline void PodSandboxConfig::_internal_set_log_directory(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.log_directory_.Set(value, GetArena());
+}
+inline std::string* PodSandboxConfig::_internal_mutable_log_directory() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.log_directory_.Mutable( GetArena());
+}
+inline std::string* PodSandboxConfig::release_log_directory() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.PodSandboxConfig.log_directory)
+  return _impl_.log_directory_.Release();
+}
+inline void PodSandboxConfig::set_allocated_log_directory(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.log_directory_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.log_directory_.IsDefault()) {
+          _impl_.log_directory_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.PodSandboxConfig.log_directory)
+}
+
+// .runtime.v1alpha2.DNSConfig dns_config = 4;
+inline bool PodSandboxConfig::has_dns_config() const {
   bool value = (_impl_._has_bits_[0] & 0x00000002u) != 0;
-  PROTOBUF_ASSUME(!value || _impl_.network_ != nullptr);
+  PROTOBUF_ASSUME(!value || _impl_.dns_config_ != nullptr);
   return value;
 }
-inline void PodSandboxConfig::clear_network() {
+inline void PodSandboxConfig::clear_dns_config() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  if (_impl_.network_ != nullptr) _impl_.network_->Clear();
+  if (_impl_.dns_config_ != nullptr) _impl_.dns_config_->Clear();
   _impl_._has_bits_[0] &= ~0x00000002u;
 }
-inline const ::runtime::v1alpha2::NetworkConfig& PodSandboxConfig::_internal_network() const {
+inline const ::runtime::v1alpha2::DNSConfig& PodSandboxConfig::_internal_dns_config() const {
   PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  const ::runtime::v1alpha2::NetworkConfig* p = _impl_.network_;
-  return p != nullptr ? *p : reinterpret_cast<const ::runtime::v1alpha2::NetworkConfig&>(::runtime::v1alpha2::_NetworkConfig_default_instance_);
+  const ::runtime::v1alpha2::DNSConfig* p = _impl_.dns_config_;
+  return p != nullptr ? *p : reinterpret_cast<const ::runtime::v1alpha2::DNSConfig&>(::runtime::v1alpha2::_DNSConfig_default_instance_);
 }
-inline const ::runtime::v1alpha2::NetworkConfig& PodSandboxConfig::network() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PodSandboxConfig.network)
-  return _internal_network();
+inline const ::runtime::v1alpha2::DNSConfig& PodSandboxConfig::dns_config() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PodSandboxConfig.dns_config)
+  return _internal_dns_config();
 }
-inline void PodSandboxConfig::unsafe_arena_set_allocated_network(::runtime::v1alpha2::NetworkConfig* value) {
+inline void PodSandboxConfig::unsafe_arena_set_allocated_dns_config(::runtime::v1alpha2::DNSConfig* value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   if (GetArena() == nullptr) {
-    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.network_);
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.dns_config_);
   }
-  _impl_.network_ = reinterpret_cast<::runtime::v1alpha2::NetworkConfig*>(value);
+  _impl_.dns_config_ = reinterpret_cast<::runtime::v1alpha2::DNSConfig*>(value);
   if (value != nullptr) {
     _impl_._has_bits_[0] |= 0x00000002u;
   } else {
     _impl_._has_bits_[0] &= ~0x00000002u;
   }
-  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:runtime.v1alpha2.PodSandboxConfig.network)
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:runtime.v1alpha2.PodSandboxConfig.dns_config)
 }
-inline ::runtime::v1alpha2::NetworkConfig* PodSandboxConfig::release_network() {
+inline ::runtime::v1alpha2::DNSConfig* PodSandboxConfig::release_dns_config() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
 
   _impl_._has_bits_[0] &= ~0x00000002u;
-  ::runtime::v1alpha2::NetworkConfig* released = _impl_.network_;
-  _impl_.network_ = nullptr;
+  ::runtime::v1alpha2::DNSConfig* released = _impl_.dns_config_;
+  _impl_.dns_config_ = nullptr;
 #ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
   auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
   released = ::google::protobuf::internal::DuplicateIfNonNull(released);
@@ -7464,38 +9659,38 @@ inline ::runtime::v1alpha2::NetworkConfig* PodSandboxConfig::release_network() {
 #endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
   return released;
 }
-inline ::runtime::v1alpha2::NetworkConfig* PodSandboxConfig::unsafe_arena_release_network() {
+inline ::runtime::v1alpha2::DNSConfig* PodSandboxConfig::unsafe_arena_release_dns_config() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  // @@protoc_insertion_point(field_release:runtime.v1alpha2.PodSandboxConfig.network)
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.PodSandboxConfig.dns_config)
 
   _impl_._has_bits_[0] &= ~0x00000002u;
-  ::runtime::v1alpha2::NetworkConfig* temp = _impl_.network_;
-  _impl_.network_ = nullptr;
+  ::runtime::v1alpha2::DNSConfig* temp = _impl_.dns_config_;
+  _impl_.dns_config_ = nullptr;
   return temp;
 }
-inline ::runtime::v1alpha2::NetworkConfig* PodSandboxConfig::_internal_mutable_network() {
+inline ::runtime::v1alpha2::DNSConfig* PodSandboxConfig::_internal_mutable_dns_config() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   _impl_._has_bits_[0] |= 0x00000002u;
-  if (_impl_.network_ == nullptr) {
-    auto* p = CreateMaybeMessage<::runtime::v1alpha2::NetworkConfig>(GetArena());
-    _impl_.network_ = reinterpret_cast<::runtime::v1alpha2::NetworkConfig*>(p);
+  if (_impl_.dns_config_ == nullptr) {
+    auto* p = CreateMaybeMessage<::runtime::v1alpha2::DNSConfig>(GetArena());
+    _impl_.dns_config_ = reinterpret_cast<::runtime::v1alpha2::DNSConfig*>(p);
   }
-  return _impl_.network_;
+  return _impl_.dns_config_;
 }
-inline ::runtime::v1alpha2::NetworkConfig* PodSandboxConfig::mutable_network() ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  ::runtime::v1alpha2::NetworkConfig* _msg = _internal_mutable_network();
-  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.PodSandboxConfig.network)
+inline ::runtime::v1alpha2::DNSConfig* PodSandboxConfig::mutable_dns_config() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::runtime::v1alpha2::DNSConfig* _msg = _internal_mutable_dns_config();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.PodSandboxConfig.dns_config)
   return _msg;
 }
-inline void PodSandboxConfig::set_allocated_network(::runtime::v1alpha2::NetworkConfig* value) {
+inline void PodSandboxConfig::set_allocated_dns_config(::runtime::v1alpha2::DNSConfig* value) {
   ::google::protobuf::Arena* message_arena = GetArena();
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   if (message_arena == nullptr) {
-    delete reinterpret_cast<::runtime::v1alpha2::NetworkConfig*>(_impl_.network_);
+    delete reinterpret_cast<::runtime::v1alpha2::DNSConfig*>(_impl_.dns_config_);
   }
 
   if (value != nullptr) {
-    ::google::protobuf::Arena* submessage_arena = reinterpret_cast<::runtime::v1alpha2::NetworkConfig*>(value)->GetArena();
+    ::google::protobuf::Arena* submessage_arena = reinterpret_cast<::runtime::v1alpha2::DNSConfig*>(value)->GetArena();
     if (message_arena != submessage_arena) {
       value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
     }
@@ -7504,49 +9699,98 @@ inline void PodSandboxConfig::set_allocated_network(::runtime::v1alpha2::Network
     _impl_._has_bits_[0] &= ~0x00000002u;
   }
 
-  _impl_.network_ = reinterpret_cast<::runtime::v1alpha2::NetworkConfig*>(value);
-  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.PodSandboxConfig.network)
+  _impl_.dns_config_ = reinterpret_cast<::runtime::v1alpha2::DNSConfig*>(value);
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.PodSandboxConfig.dns_config)
 }
 
-// .runtime.v1alpha2.LinuxConfig linux = 3;
-inline bool PodSandboxConfig::has_linux() const {
+// repeated .runtime.v1alpha2.PortMapping port_mappings = 5;
+inline int PodSandboxConfig::_internal_port_mappings_size() const {
+  return _internal_port_mappings().size();
+}
+inline int PodSandboxConfig::port_mappings_size() const {
+  return _internal_port_mappings_size();
+}
+inline void PodSandboxConfig::clear_port_mappings() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.port_mappings_.Clear();
+}
+inline ::runtime::v1alpha2::PortMapping* PodSandboxConfig::mutable_port_mappings(int index)
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.PodSandboxConfig.port_mappings)
+  return _internal_mutable_port_mappings()->Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField<::runtime::v1alpha2::PortMapping>* PodSandboxConfig::mutable_port_mappings()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable_list:runtime.v1alpha2.PodSandboxConfig.port_mappings)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  return _internal_mutable_port_mappings();
+}
+inline const ::runtime::v1alpha2::PortMapping& PodSandboxConfig::port_mappings(int index) const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PodSandboxConfig.port_mappings)
+  return _internal_port_mappings().Get(index);
+}
+inline ::runtime::v1alpha2::PortMapping* PodSandboxConfig::add_port_mappings() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ::runtime::v1alpha2::PortMapping* _add = _internal_mutable_port_mappings()->Add();
+  // @@protoc_insertion_point(field_add:runtime.v1alpha2.PodSandboxConfig.port_mappings)
+  return _add;
+}
+inline const ::google::protobuf::RepeatedPtrField<::runtime::v1alpha2::PortMapping>& PodSandboxConfig::port_mappings() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_list:runtime.v1alpha2.PodSandboxConfig.port_mappings)
+  return _internal_port_mappings();
+}
+inline const ::google::protobuf::RepeatedPtrField<::runtime::v1alpha2::PortMapping>&
+PodSandboxConfig::_internal_port_mappings() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.port_mappings_;
+}
+inline ::google::protobuf::RepeatedPtrField<::runtime::v1alpha2::PortMapping>*
+PodSandboxConfig::_internal_mutable_port_mappings() {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return &_impl_.port_mappings_;
+}
+
+// .runtime.v1alpha2.LinuxPodSandboxConfig linux_config = 6;
+inline bool PodSandboxConfig::has_linux_config() const {
   bool value = (_impl_._has_bits_[0] & 0x00000004u) != 0;
-  PROTOBUF_ASSUME(!value || _impl_.linux_ != nullptr);
+  PROTOBUF_ASSUME(!value || _impl_.linux_config_ != nullptr);
   return value;
 }
-inline void PodSandboxConfig::clear_linux() {
+inline void PodSandboxConfig::clear_linux_config() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  if (_impl_.linux_ != nullptr) _impl_.linux_->Clear();
+  if (_impl_.linux_config_ != nullptr) _impl_.linux_config_->Clear();
   _impl_._has_bits_[0] &= ~0x00000004u;
 }
-inline const ::runtime::v1alpha2::LinuxConfig& PodSandboxConfig::_internal_linux() const {
+inline const ::runtime::v1alpha2::LinuxPodSandboxConfig& PodSandboxConfig::_internal_linux_config() const {
   PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  const ::runtime::v1alpha2::LinuxConfig* p = _impl_.linux_;
-  return p != nullptr ? *p : reinterpret_cast<const ::runtime::v1alpha2::LinuxConfig&>(::runtime::v1alpha2::_LinuxConfig_default_instance_);
+  const ::runtime::v1alpha2::LinuxPodSandboxConfig* p = _impl_.linux_config_;
+  return p != nullptr ? *p : reinterpret_cast<const ::runtime::v1alpha2::LinuxPodSandboxConfig&>(::runtime::v1alpha2::_LinuxPodSandboxConfig_default_instance_);
 }
-inline const ::runtime::v1alpha2::LinuxConfig& PodSandboxConfig::linux() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PodSandboxConfig.linux)
-  return _internal_linux();
+inline const ::runtime::v1alpha2::LinuxPodSandboxConfig& PodSandboxConfig::linux_config() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.PodSandboxConfig.linux_config)
+  return _internal_linux_config();
 }
-inline void PodSandboxConfig::unsafe_arena_set_allocated_linux(::runtime::v1alpha2::LinuxConfig* value) {
+inline void PodSandboxConfig::unsafe_arena_set_allocated_linux_config(::runtime::v1alpha2::LinuxPodSandboxConfig* value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   if (GetArena() == nullptr) {
-    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.linux_);
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.linux_config_);
   }
-  _impl_.linux_ = reinterpret_cast<::runtime::v1alpha2::LinuxConfig*>(value);
+  _impl_.linux_config_ = reinterpret_cast<::runtime::v1alpha2::LinuxPodSandboxConfig*>(value);
   if (value != nullptr) {
     _impl_._has_bits_[0] |= 0x00000004u;
   } else {
     _impl_._has_bits_[0] &= ~0x00000004u;
   }
-  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:runtime.v1alpha2.PodSandboxConfig.linux)
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:runtime.v1alpha2.PodSandboxConfig.linux_config)
 }
-inline ::runtime::v1alpha2::LinuxConfig* PodSandboxConfig::release_linux() {
+inline ::runtime::v1alpha2::LinuxPodSandboxConfig* PodSandboxConfig::release_linux_config() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
 
   _impl_._has_bits_[0] &= ~0x00000004u;
-  ::runtime::v1alpha2::LinuxConfig* released = _impl_.linux_;
-  _impl_.linux_ = nullptr;
+  ::runtime::v1alpha2::LinuxPodSandboxConfig* released = _impl_.linux_config_;
+  _impl_.linux_config_ = nullptr;
 #ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
   auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
   released = ::google::protobuf::internal::DuplicateIfNonNull(released);
@@ -7560,38 +9804,38 @@ inline ::runtime::v1alpha2::LinuxConfig* PodSandboxConfig::release_linux() {
 #endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
   return released;
 }
-inline ::runtime::v1alpha2::LinuxConfig* PodSandboxConfig::unsafe_arena_release_linux() {
+inline ::runtime::v1alpha2::LinuxPodSandboxConfig* PodSandboxConfig::unsafe_arena_release_linux_config() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  // @@protoc_insertion_point(field_release:runtime.v1alpha2.PodSandboxConfig.linux)
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.PodSandboxConfig.linux_config)
 
   _impl_._has_bits_[0] &= ~0x00000004u;
-  ::runtime::v1alpha2::LinuxConfig* temp = _impl_.linux_;
-  _impl_.linux_ = nullptr;
+  ::runtime::v1alpha2::LinuxPodSandboxConfig* temp = _impl_.linux_config_;
+  _impl_.linux_config_ = nullptr;
   return temp;
 }
-inline ::runtime::v1alpha2::LinuxConfig* PodSandboxConfig::_internal_mutable_linux() {
+inline ::runtime::v1alpha2::LinuxPodSandboxConfig* PodSandboxConfig::_internal_mutable_linux_config() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   _impl_._has_bits_[0] |= 0x00000004u;
-  if (_impl_.linux_ == nullptr) {
-    auto* p = CreateMaybeMessage<::runtime::v1alpha2::LinuxConfig>(GetArena());
-    _impl_.linux_ = reinterpret_cast<::runtime::v1alpha2::LinuxConfig*>(p);
+  if (_impl_.linux_config_ == nullptr) {
+    auto* p = CreateMaybeMessage<::runtime::v1alpha2::LinuxPodSandboxConfig>(GetArena());
+    _impl_.linux_config_ = reinterpret_cast<::runtime::v1alpha2::LinuxPodSandboxConfig*>(p);
   }
-  return _impl_.linux_;
+  return _impl_.linux_config_;
 }
-inline ::runtime::v1alpha2::LinuxConfig* PodSandboxConfig::mutable_linux() ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  ::runtime::v1alpha2::LinuxConfig* _msg = _internal_mutable_linux();
-  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.PodSandboxConfig.linux)
+inline ::runtime::v1alpha2::LinuxPodSandboxConfig* PodSandboxConfig::mutable_linux_config() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::runtime::v1alpha2::LinuxPodSandboxConfig* _msg = _internal_mutable_linux_config();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.PodSandboxConfig.linux_config)
   return _msg;
 }
-inline void PodSandboxConfig::set_allocated_linux(::runtime::v1alpha2::LinuxConfig* value) {
+inline void PodSandboxConfig::set_allocated_linux_config(::runtime::v1alpha2::LinuxPodSandboxConfig* value) {
   ::google::protobuf::Arena* message_arena = GetArena();
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   if (message_arena == nullptr) {
-    delete reinterpret_cast<::runtime::v1alpha2::LinuxConfig*>(_impl_.linux_);
+    delete reinterpret_cast<::runtime::v1alpha2::LinuxPodSandboxConfig*>(_impl_.linux_config_);
   }
 
   if (value != nullptr) {
-    ::google::protobuf::Arena* submessage_arena = reinterpret_cast<::runtime::v1alpha2::LinuxConfig*>(value)->GetArena();
+    ::google::protobuf::Arena* submessage_arena = reinterpret_cast<::runtime::v1alpha2::LinuxPodSandboxConfig*>(value)->GetArena();
     if (message_arena != submessage_arena) {
       value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
     }
@@ -7600,39 +9844,11 @@ inline void PodSandboxConfig::set_allocated_linux(::runtime::v1alpha2::LinuxConf
     _impl_._has_bits_[0] &= ~0x00000004u;
   }
 
-  _impl_.linux_ = reinterpret_cast<::runtime::v1alpha2::LinuxConfig*>(value);
-  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.PodSandboxConfig.linux)
+  _impl_.linux_config_ = reinterpret_cast<::runtime::v1alpha2::LinuxPodSandboxConfig*>(value);
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.PodSandboxConfig.linux_config)
 }
 
-// map<string, string> annotations = 4;
-inline int PodSandboxConfig::_internal_annotations_size() const {
-  return _internal_annotations().size();
-}
-inline int PodSandboxConfig::annotations_size() const {
-  return _internal_annotations_size();
-}
-inline void PodSandboxConfig::clear_annotations() {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  _impl_.annotations_.Clear();
-}
-inline const ::google::protobuf::Map<std::string, std::string>& PodSandboxConfig::_internal_annotations() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  return _impl_.annotations_.GetMap();
-}
-inline const ::google::protobuf::Map<std::string, std::string>& PodSandboxConfig::annotations() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  // @@protoc_insertion_point(field_map:runtime.v1alpha2.PodSandboxConfig.annotations)
-  return _internal_annotations();
-}
-inline ::google::protobuf::Map<std::string, std::string>* PodSandboxConfig::_internal_mutable_annotations() {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  return _impl_.annotations_.MutableMap();
-}
-inline ::google::protobuf::Map<std::string, std::string>* PodSandboxConfig::mutable_annotations() ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  // @@protoc_insertion_point(field_mutable_map:runtime.v1alpha2.PodSandboxConfig.annotations)
-  return _internal_mutable_annotations();
-}
-
-// map<string, string> labels = 5;
+// map<string, string> labels = 7;
 inline int PodSandboxConfig::_internal_labels_size() const {
   return _internal_labels().size();
 }
@@ -7658,6 +9874,34 @@ inline ::google::protobuf::Map<std::string, std::string>* PodSandboxConfig::_int
 inline ::google::protobuf::Map<std::string, std::string>* PodSandboxConfig::mutable_labels() ABSL_ATTRIBUTE_LIFETIME_BOUND {
   // @@protoc_insertion_point(field_mutable_map:runtime.v1alpha2.PodSandboxConfig.labels)
   return _internal_mutable_labels();
+}
+
+// map<string, string> annotations = 8;
+inline int PodSandboxConfig::_internal_annotations_size() const {
+  return _internal_annotations().size();
+}
+inline int PodSandboxConfig::annotations_size() const {
+  return _internal_annotations_size();
+}
+inline void PodSandboxConfig::clear_annotations() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.annotations_.Clear();
+}
+inline const ::google::protobuf::Map<std::string, std::string>& PodSandboxConfig::_internal_annotations() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.annotations_.GetMap();
+}
+inline const ::google::protobuf::Map<std::string, std::string>& PodSandboxConfig::annotations() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_map:runtime.v1alpha2.PodSandboxConfig.annotations)
+  return _internal_annotations();
+}
+inline ::google::protobuf::Map<std::string, std::string>* PodSandboxConfig::_internal_mutable_annotations() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  return _impl_.annotations_.MutableMap();
+}
+inline ::google::protobuf::Map<std::string, std::string>* PodSandboxConfig::mutable_annotations() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable_map:runtime.v1alpha2.PodSandboxConfig.annotations)
+  return _internal_mutable_annotations();
 }
 
 // -------------------------------------------------------------------
@@ -8090,162 +10334,291 @@ inline ::google::protobuf::Map<std::string, std::string>* LinuxConfig::mutable_s
 
 // SecurityContext
 
-// string namespace_options = 1;
+// .runtime.v1alpha2.NamespaceOption namespace_options = 1;
+inline bool SecurityContext::has_namespace_options() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
+  PROTOBUF_ASSUME(!value || _impl_.namespace_options_ != nullptr);
+  return value;
+}
 inline void SecurityContext::clear_namespace_options() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  _impl_.namespace_options_.ClearToEmpty();
+  if (_impl_.namespace_options_ != nullptr) _impl_.namespace_options_->Clear();
+  _impl_._has_bits_[0] &= ~0x00000001u;
 }
-inline const std::string& SecurityContext::namespace_options() const
-    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+inline const ::runtime::v1alpha2::NamespaceOption& SecurityContext::_internal_namespace_options() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  const ::runtime::v1alpha2::NamespaceOption* p = _impl_.namespace_options_;
+  return p != nullptr ? *p : reinterpret_cast<const ::runtime::v1alpha2::NamespaceOption&>(::runtime::v1alpha2::_NamespaceOption_default_instance_);
+}
+inline const ::runtime::v1alpha2::NamespaceOption& SecurityContext::namespace_options() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
   // @@protoc_insertion_point(field_get:runtime.v1alpha2.SecurityContext.namespace_options)
   return _internal_namespace_options();
 }
-template <typename Arg_, typename... Args_>
-inline PROTOBUF_ALWAYS_INLINE void SecurityContext::set_namespace_options(Arg_&& arg,
-                                                     Args_... args) {
+inline void SecurityContext::unsafe_arena_set_allocated_namespace_options(::runtime::v1alpha2::NamespaceOption* value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.namespace_options_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
-  // @@protoc_insertion_point(field_set:runtime.v1alpha2.SecurityContext.namespace_options)
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.namespace_options_);
+  }
+  _impl_.namespace_options_ = reinterpret_cast<::runtime::v1alpha2::NamespaceOption*>(value);
+  if (value != nullptr) {
+    _impl_._has_bits_[0] |= 0x00000001u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000001u;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:runtime.v1alpha2.SecurityContext.namespace_options)
 }
-inline std::string* SecurityContext::mutable_namespace_options() ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  std::string* _s = _internal_mutable_namespace_options();
-  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SecurityContext.namespace_options)
-  return _s;
-}
-inline const std::string& SecurityContext::_internal_namespace_options() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  return _impl_.namespace_options_.Get();
-}
-inline void SecurityContext::_internal_set_namespace_options(const std::string& value) {
+inline ::runtime::v1alpha2::NamespaceOption* SecurityContext::release_namespace_options() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.namespace_options_.Set(value, GetArena());
+
+  _impl_._has_bits_[0] &= ~0x00000001u;
+  ::runtime::v1alpha2::NamespaceOption* released = _impl_.namespace_options_;
+  _impl_.namespace_options_ = nullptr;
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+  released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  if (GetArena() == nullptr) {
+    delete old;
+  }
+#else   // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (GetArena() != nullptr) {
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  }
+#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  return released;
 }
-inline std::string* SecurityContext::_internal_mutable_namespace_options() {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  return _impl_.namespace_options_.Mutable( GetArena());
-}
-inline std::string* SecurityContext::release_namespace_options() {
+inline ::runtime::v1alpha2::NamespaceOption* SecurityContext::unsafe_arena_release_namespace_options() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   // @@protoc_insertion_point(field_release:runtime.v1alpha2.SecurityContext.namespace_options)
-  return _impl_.namespace_options_.Release();
+
+  _impl_._has_bits_[0] &= ~0x00000001u;
+  ::runtime::v1alpha2::NamespaceOption* temp = _impl_.namespace_options_;
+  _impl_.namespace_options_ = nullptr;
+  return temp;
 }
-inline void SecurityContext::set_allocated_namespace_options(std::string* value) {
+inline ::runtime::v1alpha2::NamespaceOption* SecurityContext::_internal_mutable_namespace_options() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  _impl_.namespace_options_.SetAllocated(value, GetArena());
-  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
-        if (_impl_.namespace_options_.IsDefault()) {
-          _impl_.namespace_options_.Set("", GetArena());
-        }
-  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_._has_bits_[0] |= 0x00000001u;
+  if (_impl_.namespace_options_ == nullptr) {
+    auto* p = CreateMaybeMessage<::runtime::v1alpha2::NamespaceOption>(GetArena());
+    _impl_.namespace_options_ = reinterpret_cast<::runtime::v1alpha2::NamespaceOption*>(p);
+  }
+  return _impl_.namespace_options_;
+}
+inline ::runtime::v1alpha2::NamespaceOption* SecurityContext::mutable_namespace_options() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::runtime::v1alpha2::NamespaceOption* _msg = _internal_mutable_namespace_options();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SecurityContext.namespace_options)
+  return _msg;
+}
+inline void SecurityContext::set_allocated_namespace_options(::runtime::v1alpha2::NamespaceOption* value) {
+  ::google::protobuf::Arena* message_arena = GetArena();
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::runtime::v1alpha2::NamespaceOption*>(_impl_.namespace_options_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena = reinterpret_cast<::runtime::v1alpha2::NamespaceOption*>(value)->GetArena();
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    _impl_._has_bits_[0] |= 0x00000001u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000001u;
+  }
+
+  _impl_.namespace_options_ = reinterpret_cast<::runtime::v1alpha2::NamespaceOption*>(value);
   // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.SecurityContext.namespace_options)
 }
 
-// string selinux_options = 2;
+// .runtime.v1alpha2.SELinuxOption selinux_options = 2;
+inline bool SecurityContext::has_selinux_options() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000002u) != 0;
+  PROTOBUF_ASSUME(!value || _impl_.selinux_options_ != nullptr);
+  return value;
+}
 inline void SecurityContext::clear_selinux_options() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  _impl_.selinux_options_.ClearToEmpty();
+  if (_impl_.selinux_options_ != nullptr) _impl_.selinux_options_->Clear();
+  _impl_._has_bits_[0] &= ~0x00000002u;
 }
-inline const std::string& SecurityContext::selinux_options() const
-    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+inline const ::runtime::v1alpha2::SELinuxOption& SecurityContext::_internal_selinux_options() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  const ::runtime::v1alpha2::SELinuxOption* p = _impl_.selinux_options_;
+  return p != nullptr ? *p : reinterpret_cast<const ::runtime::v1alpha2::SELinuxOption&>(::runtime::v1alpha2::_SELinuxOption_default_instance_);
+}
+inline const ::runtime::v1alpha2::SELinuxOption& SecurityContext::selinux_options() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
   // @@protoc_insertion_point(field_get:runtime.v1alpha2.SecurityContext.selinux_options)
   return _internal_selinux_options();
 }
-template <typename Arg_, typename... Args_>
-inline PROTOBUF_ALWAYS_INLINE void SecurityContext::set_selinux_options(Arg_&& arg,
-                                                     Args_... args) {
+inline void SecurityContext::unsafe_arena_set_allocated_selinux_options(::runtime::v1alpha2::SELinuxOption* value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.selinux_options_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
-  // @@protoc_insertion_point(field_set:runtime.v1alpha2.SecurityContext.selinux_options)
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.selinux_options_);
+  }
+  _impl_.selinux_options_ = reinterpret_cast<::runtime::v1alpha2::SELinuxOption*>(value);
+  if (value != nullptr) {
+    _impl_._has_bits_[0] |= 0x00000002u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000002u;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:runtime.v1alpha2.SecurityContext.selinux_options)
 }
-inline std::string* SecurityContext::mutable_selinux_options() ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  std::string* _s = _internal_mutable_selinux_options();
-  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SecurityContext.selinux_options)
-  return _s;
-}
-inline const std::string& SecurityContext::_internal_selinux_options() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  return _impl_.selinux_options_.Get();
-}
-inline void SecurityContext::_internal_set_selinux_options(const std::string& value) {
+inline ::runtime::v1alpha2::SELinuxOption* SecurityContext::release_selinux_options() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.selinux_options_.Set(value, GetArena());
+
+  _impl_._has_bits_[0] &= ~0x00000002u;
+  ::runtime::v1alpha2::SELinuxOption* released = _impl_.selinux_options_;
+  _impl_.selinux_options_ = nullptr;
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+  released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  if (GetArena() == nullptr) {
+    delete old;
+  }
+#else   // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (GetArena() != nullptr) {
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  }
+#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  return released;
 }
-inline std::string* SecurityContext::_internal_mutable_selinux_options() {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  return _impl_.selinux_options_.Mutable( GetArena());
-}
-inline std::string* SecurityContext::release_selinux_options() {
+inline ::runtime::v1alpha2::SELinuxOption* SecurityContext::unsafe_arena_release_selinux_options() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   // @@protoc_insertion_point(field_release:runtime.v1alpha2.SecurityContext.selinux_options)
-  return _impl_.selinux_options_.Release();
+
+  _impl_._has_bits_[0] &= ~0x00000002u;
+  ::runtime::v1alpha2::SELinuxOption* temp = _impl_.selinux_options_;
+  _impl_.selinux_options_ = nullptr;
+  return temp;
 }
-inline void SecurityContext::set_allocated_selinux_options(std::string* value) {
+inline ::runtime::v1alpha2::SELinuxOption* SecurityContext::_internal_mutable_selinux_options() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  _impl_.selinux_options_.SetAllocated(value, GetArena());
-  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
-        if (_impl_.selinux_options_.IsDefault()) {
-          _impl_.selinux_options_.Set("", GetArena());
-        }
-  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_._has_bits_[0] |= 0x00000002u;
+  if (_impl_.selinux_options_ == nullptr) {
+    auto* p = CreateMaybeMessage<::runtime::v1alpha2::SELinuxOption>(GetArena());
+    _impl_.selinux_options_ = reinterpret_cast<::runtime::v1alpha2::SELinuxOption*>(p);
+  }
+  return _impl_.selinux_options_;
+}
+inline ::runtime::v1alpha2::SELinuxOption* SecurityContext::mutable_selinux_options() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::runtime::v1alpha2::SELinuxOption* _msg = _internal_mutable_selinux_options();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SecurityContext.selinux_options)
+  return _msg;
+}
+inline void SecurityContext::set_allocated_selinux_options(::runtime::v1alpha2::SELinuxOption* value) {
+  ::google::protobuf::Arena* message_arena = GetArena();
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::runtime::v1alpha2::SELinuxOption*>(_impl_.selinux_options_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena = reinterpret_cast<::runtime::v1alpha2::SELinuxOption*>(value)->GetArena();
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    _impl_._has_bits_[0] |= 0x00000002u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000002u;
+  }
+
+  _impl_.selinux_options_ = reinterpret_cast<::runtime::v1alpha2::SELinuxOption*>(value);
   // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.SecurityContext.selinux_options)
 }
 
-// string run_as_user = 3;
+// .runtime.v1alpha2.RunAsUserOption run_as_user = 3;
+inline bool SecurityContext::has_run_as_user() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000004u) != 0;
+  PROTOBUF_ASSUME(!value || _impl_.run_as_user_ != nullptr);
+  return value;
+}
 inline void SecurityContext::clear_run_as_user() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  _impl_.run_as_user_.ClearToEmpty();
+  if (_impl_.run_as_user_ != nullptr) _impl_.run_as_user_->Clear();
+  _impl_._has_bits_[0] &= ~0x00000004u;
 }
-inline const std::string& SecurityContext::run_as_user() const
-    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+inline const ::runtime::v1alpha2::RunAsUserOption& SecurityContext::_internal_run_as_user() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  const ::runtime::v1alpha2::RunAsUserOption* p = _impl_.run_as_user_;
+  return p != nullptr ? *p : reinterpret_cast<const ::runtime::v1alpha2::RunAsUserOption&>(::runtime::v1alpha2::_RunAsUserOption_default_instance_);
+}
+inline const ::runtime::v1alpha2::RunAsUserOption& SecurityContext::run_as_user() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
   // @@protoc_insertion_point(field_get:runtime.v1alpha2.SecurityContext.run_as_user)
   return _internal_run_as_user();
 }
-template <typename Arg_, typename... Args_>
-inline PROTOBUF_ALWAYS_INLINE void SecurityContext::set_run_as_user(Arg_&& arg,
-                                                     Args_... args) {
+inline void SecurityContext::unsafe_arena_set_allocated_run_as_user(::runtime::v1alpha2::RunAsUserOption* value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.run_as_user_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
-  // @@protoc_insertion_point(field_set:runtime.v1alpha2.SecurityContext.run_as_user)
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.run_as_user_);
+  }
+  _impl_.run_as_user_ = reinterpret_cast<::runtime::v1alpha2::RunAsUserOption*>(value);
+  if (value != nullptr) {
+    _impl_._has_bits_[0] |= 0x00000004u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000004u;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:runtime.v1alpha2.SecurityContext.run_as_user)
 }
-inline std::string* SecurityContext::mutable_run_as_user() ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  std::string* _s = _internal_mutable_run_as_user();
-  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SecurityContext.run_as_user)
-  return _s;
-}
-inline const std::string& SecurityContext::_internal_run_as_user() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  return _impl_.run_as_user_.Get();
-}
-inline void SecurityContext::_internal_set_run_as_user(const std::string& value) {
+inline ::runtime::v1alpha2::RunAsUserOption* SecurityContext::release_run_as_user() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.run_as_user_.Set(value, GetArena());
+
+  _impl_._has_bits_[0] &= ~0x00000004u;
+  ::runtime::v1alpha2::RunAsUserOption* released = _impl_.run_as_user_;
+  _impl_.run_as_user_ = nullptr;
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+  released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  if (GetArena() == nullptr) {
+    delete old;
+  }
+#else   // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (GetArena() != nullptr) {
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  }
+#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  return released;
 }
-inline std::string* SecurityContext::_internal_mutable_run_as_user() {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  return _impl_.run_as_user_.Mutable( GetArena());
-}
-inline std::string* SecurityContext::release_run_as_user() {
+inline ::runtime::v1alpha2::RunAsUserOption* SecurityContext::unsafe_arena_release_run_as_user() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   // @@protoc_insertion_point(field_release:runtime.v1alpha2.SecurityContext.run_as_user)
-  return _impl_.run_as_user_.Release();
+
+  _impl_._has_bits_[0] &= ~0x00000004u;
+  ::runtime::v1alpha2::RunAsUserOption* temp = _impl_.run_as_user_;
+  _impl_.run_as_user_ = nullptr;
+  return temp;
 }
-inline void SecurityContext::set_allocated_run_as_user(std::string* value) {
+inline ::runtime::v1alpha2::RunAsUserOption* SecurityContext::_internal_mutable_run_as_user() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  _impl_.run_as_user_.SetAllocated(value, GetArena());
-  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
-        if (_impl_.run_as_user_.IsDefault()) {
-          _impl_.run_as_user_.Set("", GetArena());
-        }
-  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_._has_bits_[0] |= 0x00000004u;
+  if (_impl_.run_as_user_ == nullptr) {
+    auto* p = CreateMaybeMessage<::runtime::v1alpha2::RunAsUserOption>(GetArena());
+    _impl_.run_as_user_ = reinterpret_cast<::runtime::v1alpha2::RunAsUserOption*>(p);
+  }
+  return _impl_.run_as_user_;
+}
+inline ::runtime::v1alpha2::RunAsUserOption* SecurityContext::mutable_run_as_user() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::runtime::v1alpha2::RunAsUserOption* _msg = _internal_mutable_run_as_user();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SecurityContext.run_as_user)
+  return _msg;
+}
+inline void SecurityContext::set_allocated_run_as_user(::runtime::v1alpha2::RunAsUserOption* value) {
+  ::google::protobuf::Arena* message_arena = GetArena();
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::runtime::v1alpha2::RunAsUserOption*>(_impl_.run_as_user_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena = reinterpret_cast<::runtime::v1alpha2::RunAsUserOption*>(value)->GetArena();
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    _impl_._has_bits_[0] |= 0x00000004u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000004u;
+  }
+
+  _impl_.run_as_user_ = reinterpret_cast<::runtime::v1alpha2::RunAsUserOption*>(value);
   // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.SecurityContext.run_as_user)
 }
 
@@ -8270,6 +10643,390 @@ inline void SecurityContext::_internal_set_privileged(bool value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.privileged_ = value;
+}
+
+// -------------------------------------------------------------------
+
+// NamespaceOption
+
+// bool host_network = 1;
+inline void NamespaceOption::clear_host_network() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.host_network_ = false;
+}
+inline bool NamespaceOption::host_network() const {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.NamespaceOption.host_network)
+  return _internal_host_network();
+}
+inline void NamespaceOption::set_host_network(bool value) {
+  _internal_set_host_network(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.NamespaceOption.host_network)
+}
+inline bool NamespaceOption::_internal_host_network() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.host_network_;
+}
+inline void NamespaceOption::_internal_set_host_network(bool value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.host_network_ = value;
+}
+
+// bool host_pid = 2;
+inline void NamespaceOption::clear_host_pid() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.host_pid_ = false;
+}
+inline bool NamespaceOption::host_pid() const {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.NamespaceOption.host_pid)
+  return _internal_host_pid();
+}
+inline void NamespaceOption::set_host_pid(bool value) {
+  _internal_set_host_pid(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.NamespaceOption.host_pid)
+}
+inline bool NamespaceOption::_internal_host_pid() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.host_pid_;
+}
+inline void NamespaceOption::_internal_set_host_pid(bool value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.host_pid_ = value;
+}
+
+// bool host_ipc = 3;
+inline void NamespaceOption::clear_host_ipc() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.host_ipc_ = false;
+}
+inline bool NamespaceOption::host_ipc() const {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.NamespaceOption.host_ipc)
+  return _internal_host_ipc();
+}
+inline void NamespaceOption::set_host_ipc(bool value) {
+  _internal_set_host_ipc(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.NamespaceOption.host_ipc)
+}
+inline bool NamespaceOption::_internal_host_ipc() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.host_ipc_;
+}
+inline void NamespaceOption::_internal_set_host_ipc(bool value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.host_ipc_ = value;
+}
+
+// -------------------------------------------------------------------
+
+// SELinuxOption
+
+// string user = 1;
+inline void SELinuxOption::clear_user() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.user_.ClearToEmpty();
+}
+inline const std::string& SELinuxOption::user() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.SELinuxOption.user)
+  return _internal_user();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void SELinuxOption::set_user(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.user_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.SELinuxOption.user)
+}
+inline std::string* SELinuxOption::mutable_user() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_user();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SELinuxOption.user)
+  return _s;
+}
+inline const std::string& SELinuxOption::_internal_user() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.user_.Get();
+}
+inline void SELinuxOption::_internal_set_user(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.user_.Set(value, GetArena());
+}
+inline std::string* SELinuxOption::_internal_mutable_user() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.user_.Mutable( GetArena());
+}
+inline std::string* SELinuxOption::release_user() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.SELinuxOption.user)
+  return _impl_.user_.Release();
+}
+inline void SELinuxOption::set_allocated_user(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.user_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.user_.IsDefault()) {
+          _impl_.user_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.SELinuxOption.user)
+}
+
+// string role = 2;
+inline void SELinuxOption::clear_role() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.role_.ClearToEmpty();
+}
+inline const std::string& SELinuxOption::role() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.SELinuxOption.role)
+  return _internal_role();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void SELinuxOption::set_role(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.role_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.SELinuxOption.role)
+}
+inline std::string* SELinuxOption::mutable_role() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_role();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SELinuxOption.role)
+  return _s;
+}
+inline const std::string& SELinuxOption::_internal_role() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.role_.Get();
+}
+inline void SELinuxOption::_internal_set_role(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.role_.Set(value, GetArena());
+}
+inline std::string* SELinuxOption::_internal_mutable_role() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.role_.Mutable( GetArena());
+}
+inline std::string* SELinuxOption::release_role() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.SELinuxOption.role)
+  return _impl_.role_.Release();
+}
+inline void SELinuxOption::set_allocated_role(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.role_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.role_.IsDefault()) {
+          _impl_.role_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.SELinuxOption.role)
+}
+
+// string type = 3;
+inline void SELinuxOption::clear_type() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.type_.ClearToEmpty();
+}
+inline const std::string& SELinuxOption::type() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.SELinuxOption.type)
+  return _internal_type();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void SELinuxOption::set_type(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.type_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.SELinuxOption.type)
+}
+inline std::string* SELinuxOption::mutable_type() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_type();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SELinuxOption.type)
+  return _s;
+}
+inline const std::string& SELinuxOption::_internal_type() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.type_.Get();
+}
+inline void SELinuxOption::_internal_set_type(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.type_.Set(value, GetArena());
+}
+inline std::string* SELinuxOption::_internal_mutable_type() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.type_.Mutable( GetArena());
+}
+inline std::string* SELinuxOption::release_type() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.SELinuxOption.type)
+  return _impl_.type_.Release();
+}
+inline void SELinuxOption::set_allocated_type(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.type_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.type_.IsDefault()) {
+          _impl_.type_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.SELinuxOption.type)
+}
+
+// string level = 4;
+inline void SELinuxOption::clear_level() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.level_.ClearToEmpty();
+}
+inline const std::string& SELinuxOption::level() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.SELinuxOption.level)
+  return _internal_level();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void SELinuxOption::set_level(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.level_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.SELinuxOption.level)
+}
+inline std::string* SELinuxOption::mutable_level() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_level();
+  // @@protoc_insertion_point(field_mutable:runtime.v1alpha2.SELinuxOption.level)
+  return _s;
+}
+inline const std::string& SELinuxOption::_internal_level() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.level_.Get();
+}
+inline void SELinuxOption::_internal_set_level(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.level_.Set(value, GetArena());
+}
+inline std::string* SELinuxOption::_internal_mutable_level() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.level_.Mutable( GetArena());
+}
+inline std::string* SELinuxOption::release_level() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:runtime.v1alpha2.SELinuxOption.level)
+  return _impl_.level_.Release();
+}
+inline void SELinuxOption::set_allocated_level(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.level_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.level_.IsDefault()) {
+          _impl_.level_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:runtime.v1alpha2.SELinuxOption.level)
+}
+
+// -------------------------------------------------------------------
+
+// RunAsUserOption
+
+// int64 uid = 1;
+inline void RunAsUserOption::clear_uid() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.uid_ = ::int64_t{0};
+}
+inline ::int64_t RunAsUserOption::uid() const {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.RunAsUserOption.uid)
+  return _internal_uid();
+}
+inline void RunAsUserOption::set_uid(::int64_t value) {
+  _internal_set_uid(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.RunAsUserOption.uid)
+}
+inline ::int64_t RunAsUserOption::_internal_uid() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.uid_;
+}
+inline void RunAsUserOption::_internal_set_uid(::int64_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.uid_ = value;
+}
+
+// int64 gid = 2;
+inline void RunAsUserOption::clear_gid() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.gid_ = ::int64_t{0};
+}
+inline ::int64_t RunAsUserOption::gid() const {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.RunAsUserOption.gid)
+  return _internal_gid();
+}
+inline void RunAsUserOption::set_gid(::int64_t value) {
+  _internal_set_gid(value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.RunAsUserOption.gid)
+}
+inline ::int64_t RunAsUserOption::_internal_gid() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.gid_;
+}
+inline void RunAsUserOption::_internal_set_gid(::int64_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.gid_ = value;
+}
+
+// repeated int64 additional_gids = 3;
+inline int RunAsUserOption::_internal_additional_gids_size() const {
+  return _internal_additional_gids().size();
+}
+inline int RunAsUserOption::additional_gids_size() const {
+  return _internal_additional_gids_size();
+}
+inline void RunAsUserOption::clear_additional_gids() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.additional_gids_.Clear();
+}
+inline ::int64_t RunAsUserOption::additional_gids(int index) const {
+  // @@protoc_insertion_point(field_get:runtime.v1alpha2.RunAsUserOption.additional_gids)
+  return _internal_additional_gids().Get(index);
+}
+inline void RunAsUserOption::set_additional_gids(int index, ::int64_t value) {
+  _internal_mutable_additional_gids()->Set(index, value);
+  // @@protoc_insertion_point(field_set:runtime.v1alpha2.RunAsUserOption.additional_gids)
+}
+inline void RunAsUserOption::add_additional_gids(::int64_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _internal_mutable_additional_gids()->Add(value);
+  // @@protoc_insertion_point(field_add:runtime.v1alpha2.RunAsUserOption.additional_gids)
+}
+inline const ::google::protobuf::RepeatedField<::int64_t>& RunAsUserOption::additional_gids() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_list:runtime.v1alpha2.RunAsUserOption.additional_gids)
+  return _internal_additional_gids();
+}
+inline ::google::protobuf::RepeatedField<::int64_t>* RunAsUserOption::mutable_additional_gids()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable_list:runtime.v1alpha2.RunAsUserOption.additional_gids)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  return _internal_mutable_additional_gids();
+}
+inline const ::google::protobuf::RepeatedField<::int64_t>& RunAsUserOption::_internal_additional_gids()
+    const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.additional_gids_;
+}
+inline ::google::protobuf::RepeatedField<::int64_t>* RunAsUserOption::_internal_mutable_additional_gids() {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return &_impl_.additional_gids_;
 }
 
 // -------------------------------------------------------------------

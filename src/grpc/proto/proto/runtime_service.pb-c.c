@@ -7,16 +7,157 @@
 #endif
 
 #include "proto/runtime_service.pb-c.h"
-void   runtime__v1alpha2__pod_sandbox_config__annotations_entry__init
-                     (Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry         *message)
+void   runtime__v1alpha2__dnsconfig__init
+                     (Runtime__V1alpha2__DNSConfig         *message)
 {
-  static const Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry init_value = RUNTIME__V1ALPHA2__POD_SANDBOX_CONFIG__ANNOTATIONS_ENTRY__INIT;
+  static const Runtime__V1alpha2__DNSConfig init_value = RUNTIME__V1ALPHA2__DNSCONFIG__INIT;
   *message = init_value;
+}
+size_t runtime__v1alpha2__dnsconfig__get_packed_size
+                     (const Runtime__V1alpha2__DNSConfig *message)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__dnsconfig__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t runtime__v1alpha2__dnsconfig__pack
+                     (const Runtime__V1alpha2__DNSConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__dnsconfig__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t runtime__v1alpha2__dnsconfig__pack_to_buffer
+                     (const Runtime__V1alpha2__DNSConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__dnsconfig__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+Runtime__V1alpha2__DNSConfig *
+       runtime__v1alpha2__dnsconfig__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (Runtime__V1alpha2__DNSConfig *)
+     protobuf_c_message_unpack (&runtime__v1alpha2__dnsconfig__descriptor,
+                                allocator, len, data);
+}
+void   runtime__v1alpha2__dnsconfig__free_unpacked
+                     (Runtime__V1alpha2__DNSConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &runtime__v1alpha2__dnsconfig__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   runtime__v1alpha2__port_mapping__init
+                     (Runtime__V1alpha2__PortMapping         *message)
+{
+  static const Runtime__V1alpha2__PortMapping init_value = RUNTIME__V1ALPHA2__PORT_MAPPING__INIT;
+  *message = init_value;
+}
+size_t runtime__v1alpha2__port_mapping__get_packed_size
+                     (const Runtime__V1alpha2__PortMapping *message)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__port_mapping__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t runtime__v1alpha2__port_mapping__pack
+                     (const Runtime__V1alpha2__PortMapping *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__port_mapping__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t runtime__v1alpha2__port_mapping__pack_to_buffer
+                     (const Runtime__V1alpha2__PortMapping *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__port_mapping__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+Runtime__V1alpha2__PortMapping *
+       runtime__v1alpha2__port_mapping__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (Runtime__V1alpha2__PortMapping *)
+     protobuf_c_message_unpack (&runtime__v1alpha2__port_mapping__descriptor,
+                                allocator, len, data);
+}
+void   runtime__v1alpha2__port_mapping__free_unpacked
+                     (Runtime__V1alpha2__PortMapping *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &runtime__v1alpha2__port_mapping__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__init
+                     (Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry         *message)
+{
+  static const Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry init_value = RUNTIME__V1ALPHA2__LINUX_POD_SANDBOX_CONFIG__SYSCTLS_ENTRY__INIT;
+  *message = init_value;
+}
+void   runtime__v1alpha2__linux_pod_sandbox_config__init
+                     (Runtime__V1alpha2__LinuxPodSandboxConfig         *message)
+{
+  static const Runtime__V1alpha2__LinuxPodSandboxConfig init_value = RUNTIME__V1ALPHA2__LINUX_POD_SANDBOX_CONFIG__INIT;
+  *message = init_value;
+}
+size_t runtime__v1alpha2__linux_pod_sandbox_config__get_packed_size
+                     (const Runtime__V1alpha2__LinuxPodSandboxConfig *message)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__linux_pod_sandbox_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t runtime__v1alpha2__linux_pod_sandbox_config__pack
+                     (const Runtime__V1alpha2__LinuxPodSandboxConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__linux_pod_sandbox_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t runtime__v1alpha2__linux_pod_sandbox_config__pack_to_buffer
+                     (const Runtime__V1alpha2__LinuxPodSandboxConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__linux_pod_sandbox_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+Runtime__V1alpha2__LinuxPodSandboxConfig *
+       runtime__v1alpha2__linux_pod_sandbox_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (Runtime__V1alpha2__LinuxPodSandboxConfig *)
+     protobuf_c_message_unpack (&runtime__v1alpha2__linux_pod_sandbox_config__descriptor,
+                                allocator, len, data);
+}
+void   runtime__v1alpha2__linux_pod_sandbox_config__free_unpacked
+                     (Runtime__V1alpha2__LinuxPodSandboxConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &runtime__v1alpha2__linux_pod_sandbox_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   runtime__v1alpha2__pod_sandbox_config__labels_entry__init
                      (Runtime__V1alpha2__PodSandboxConfig__LabelsEntry         *message)
 {
   static const Runtime__V1alpha2__PodSandboxConfig__LabelsEntry init_value = RUNTIME__V1ALPHA2__POD_SANDBOX_CONFIG__LABELS_ENTRY__INIT;
+  *message = init_value;
+}
+void   runtime__v1alpha2__pod_sandbox_config__annotations_entry__init
+                     (Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry         *message)
+{
+  static const Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry init_value = RUNTIME__V1ALPHA2__POD_SANDBOX_CONFIG__ANNOTATIONS_ENTRY__INIT;
   *message = init_value;
 }
 void   runtime__v1alpha2__pod_sandbox_config__init
@@ -248,6 +389,141 @@ void   runtime__v1alpha2__security_context__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &runtime__v1alpha2__security_context__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   runtime__v1alpha2__namespace_option__init
+                     (Runtime__V1alpha2__NamespaceOption         *message)
+{
+  static const Runtime__V1alpha2__NamespaceOption init_value = RUNTIME__V1ALPHA2__NAMESPACE_OPTION__INIT;
+  *message = init_value;
+}
+size_t runtime__v1alpha2__namespace_option__get_packed_size
+                     (const Runtime__V1alpha2__NamespaceOption *message)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__namespace_option__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t runtime__v1alpha2__namespace_option__pack
+                     (const Runtime__V1alpha2__NamespaceOption *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__namespace_option__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t runtime__v1alpha2__namespace_option__pack_to_buffer
+                     (const Runtime__V1alpha2__NamespaceOption *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__namespace_option__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+Runtime__V1alpha2__NamespaceOption *
+       runtime__v1alpha2__namespace_option__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (Runtime__V1alpha2__NamespaceOption *)
+     protobuf_c_message_unpack (&runtime__v1alpha2__namespace_option__descriptor,
+                                allocator, len, data);
+}
+void   runtime__v1alpha2__namespace_option__free_unpacked
+                     (Runtime__V1alpha2__NamespaceOption *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &runtime__v1alpha2__namespace_option__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   runtime__v1alpha2__selinux_option__init
+                     (Runtime__V1alpha2__SELinuxOption         *message)
+{
+  static const Runtime__V1alpha2__SELinuxOption init_value = RUNTIME__V1ALPHA2__SELINUX_OPTION__INIT;
+  *message = init_value;
+}
+size_t runtime__v1alpha2__selinux_option__get_packed_size
+                     (const Runtime__V1alpha2__SELinuxOption *message)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__selinux_option__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t runtime__v1alpha2__selinux_option__pack
+                     (const Runtime__V1alpha2__SELinuxOption *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__selinux_option__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t runtime__v1alpha2__selinux_option__pack_to_buffer
+                     (const Runtime__V1alpha2__SELinuxOption *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__selinux_option__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+Runtime__V1alpha2__SELinuxOption *
+       runtime__v1alpha2__selinux_option__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (Runtime__V1alpha2__SELinuxOption *)
+     protobuf_c_message_unpack (&runtime__v1alpha2__selinux_option__descriptor,
+                                allocator, len, data);
+}
+void   runtime__v1alpha2__selinux_option__free_unpacked
+                     (Runtime__V1alpha2__SELinuxOption *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &runtime__v1alpha2__selinux_option__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   runtime__v1alpha2__run_as_user_option__init
+                     (Runtime__V1alpha2__RunAsUserOption         *message)
+{
+  static const Runtime__V1alpha2__RunAsUserOption init_value = RUNTIME__V1ALPHA2__RUN_AS_USER_OPTION__INIT;
+  *message = init_value;
+}
+size_t runtime__v1alpha2__run_as_user_option__get_packed_size
+                     (const Runtime__V1alpha2__RunAsUserOption *message)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__run_as_user_option__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t runtime__v1alpha2__run_as_user_option__pack
+                     (const Runtime__V1alpha2__RunAsUserOption *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__run_as_user_option__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t runtime__v1alpha2__run_as_user_option__pack_to_buffer
+                     (const Runtime__V1alpha2__RunAsUserOption *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &runtime__v1alpha2__run_as_user_option__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+Runtime__V1alpha2__RunAsUserOption *
+       runtime__v1alpha2__run_as_user_option__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (Runtime__V1alpha2__RunAsUserOption *)
+     protobuf_c_message_unpack (&runtime__v1alpha2__run_as_user_option__descriptor,
+                                allocator, len, data);
+}
+void   runtime__v1alpha2__run_as_user_option__free_unpacked
+                     (Runtime__V1alpha2__RunAsUserOption *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &runtime__v1alpha2__run_as_user_option__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   runtime__v1alpha2__create_pod_request__init
@@ -1603,7 +1879,148 @@ void   runtime__v1alpha2__stop_container_response__free_unpacked
   assert(message->base.descriptor == &runtime__v1alpha2__stop_container_response__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-static const ProtobufCFieldDescriptor runtime__v1alpha2__pod_sandbox_config__annotations_entry__field_descriptors[2] =
+static const ProtobufCFieldDescriptor runtime__v1alpha2__dnsconfig__field_descriptors[3] =
+{
+  {
+    "servers",
+    1,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_STRING,
+    offsetof(Runtime__V1alpha2__DNSConfig, n_servers),
+    offsetof(Runtime__V1alpha2__DNSConfig, servers),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "searches",
+    2,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_STRING,
+    offsetof(Runtime__V1alpha2__DNSConfig, n_searches),
+    offsetof(Runtime__V1alpha2__DNSConfig, searches),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "options",
+    3,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_STRING,
+    offsetof(Runtime__V1alpha2__DNSConfig, n_options),
+    offsetof(Runtime__V1alpha2__DNSConfig, options),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned runtime__v1alpha2__dnsconfig__field_indices_by_name[] = {
+  2,   /* field[2] = options */
+  1,   /* field[1] = searches */
+  0,   /* field[0] = servers */
+};
+static const ProtobufCIntRange runtime__v1alpha2__dnsconfig__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor runtime__v1alpha2__dnsconfig__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "runtime.v1alpha2.DNSConfig",
+  "DNSConfig",
+  "Runtime__V1alpha2__DNSConfig",
+  "runtime.v1alpha2",
+  sizeof(Runtime__V1alpha2__DNSConfig),
+  3,
+  runtime__v1alpha2__dnsconfig__field_descriptors,
+  runtime__v1alpha2__dnsconfig__field_indices_by_name,
+  1,  runtime__v1alpha2__dnsconfig__number_ranges,
+  (ProtobufCMessageInit) runtime__v1alpha2__dnsconfig__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor runtime__v1alpha2__port_mapping__field_descriptors[4] =
+{
+  {
+    "protocol",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__PortMapping, protocol),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "container_port",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__PortMapping, container_port),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "host_port",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__PortMapping, host_port),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "host_ip",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__PortMapping, host_ip),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned runtime__v1alpha2__port_mapping__field_indices_by_name[] = {
+  1,   /* field[1] = container_port */
+  3,   /* field[3] = host_ip */
+  2,   /* field[2] = host_port */
+  0,   /* field[0] = protocol */
+};
+static const ProtobufCIntRange runtime__v1alpha2__port_mapping__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 4 }
+};
+const ProtobufCMessageDescriptor runtime__v1alpha2__port_mapping__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "runtime.v1alpha2.PortMapping",
+  "PortMapping",
+  "Runtime__V1alpha2__PortMapping",
+  "runtime.v1alpha2",
+  sizeof(Runtime__V1alpha2__PortMapping),
+  4,
+  runtime__v1alpha2__port_mapping__field_descriptors,
+  runtime__v1alpha2__port_mapping__field_indices_by_name,
+  1,  runtime__v1alpha2__port_mapping__number_ranges,
+  (ProtobufCMessageInit) runtime__v1alpha2__port_mapping__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__field_descriptors[2] =
 {
   {
     "key",
@@ -1611,7 +2028,7 @@ static const ProtobufCFieldDescriptor runtime__v1alpha2__pod_sandbox_config__ann
     PROTOBUF_C_LABEL_NONE,
     PROTOBUF_C_TYPE_STRING,
     0,   /* quantifier_offset */
-    offsetof(Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry, key),
+    offsetof(Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry, key),
     NULL,
     &protobuf_c_empty_string,
     0,             /* flags */
@@ -1623,35 +2040,99 @@ static const ProtobufCFieldDescriptor runtime__v1alpha2__pod_sandbox_config__ann
     PROTOBUF_C_LABEL_NONE,
     PROTOBUF_C_TYPE_STRING,
     0,   /* quantifier_offset */
-    offsetof(Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry, value),
+    offsetof(Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry, value),
     NULL,
     &protobuf_c_empty_string,
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
 };
-static const unsigned runtime__v1alpha2__pod_sandbox_config__annotations_entry__field_indices_by_name[] = {
+static const unsigned runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__field_indices_by_name[] = {
   0,   /* field[0] = key */
   1,   /* field[1] = value */
 };
-static const ProtobufCIntRange runtime__v1alpha2__pod_sandbox_config__annotations_entry__number_ranges[1 + 1] =
+static const ProtobufCIntRange runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__number_ranges[1 + 1] =
 {
   { 1, 0 },
   { 0, 2 }
 };
-const ProtobufCMessageDescriptor runtime__v1alpha2__pod_sandbox_config__annotations_entry__descriptor =
+const ProtobufCMessageDescriptor runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__descriptor =
 {
   PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "runtime.v1alpha2.PodSandboxConfig.AnnotationsEntry",
-  "AnnotationsEntry",
-  "Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry",
+  "runtime.v1alpha2.LinuxPodSandboxConfig.SysctlsEntry",
+  "SysctlsEntry",
+  "Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry",
   "runtime.v1alpha2",
-  sizeof(Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry),
+  sizeof(Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry),
   2,
-  runtime__v1alpha2__pod_sandbox_config__annotations_entry__field_descriptors,
-  runtime__v1alpha2__pod_sandbox_config__annotations_entry__field_indices_by_name,
-  1,  runtime__v1alpha2__pod_sandbox_config__annotations_entry__number_ranges,
-  (ProtobufCMessageInit) runtime__v1alpha2__pod_sandbox_config__annotations_entry__init,
+  runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__field_descriptors,
+  runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__field_indices_by_name,
+  1,  runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__number_ranges,
+  (ProtobufCMessageInit) runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor runtime__v1alpha2__linux_pod_sandbox_config__field_descriptors[3] =
+{
+  {
+    "cgroup_parent",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__LinuxPodSandboxConfig, cgroup_parent),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "security_context",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__LinuxPodSandboxConfig, security_context),
+    &runtime__v1alpha2__security_context__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "sysctls",
+    3,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Runtime__V1alpha2__LinuxPodSandboxConfig, n_sysctls),
+    offsetof(Runtime__V1alpha2__LinuxPodSandboxConfig, sysctls),
+    &runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned runtime__v1alpha2__linux_pod_sandbox_config__field_indices_by_name[] = {
+  0,   /* field[0] = cgroup_parent */
+  1,   /* field[1] = security_context */
+  2,   /* field[2] = sysctls */
+};
+static const ProtobufCIntRange runtime__v1alpha2__linux_pod_sandbox_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor runtime__v1alpha2__linux_pod_sandbox_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "runtime.v1alpha2.LinuxPodSandboxConfig",
+  "LinuxPodSandboxConfig",
+  "Runtime__V1alpha2__LinuxPodSandboxConfig",
+  "runtime.v1alpha2",
+  sizeof(Runtime__V1alpha2__LinuxPodSandboxConfig),
+  3,
+  runtime__v1alpha2__linux_pod_sandbox_config__field_descriptors,
+  runtime__v1alpha2__linux_pod_sandbox_config__field_indices_by_name,
+  1,  runtime__v1alpha2__linux_pod_sandbox_config__number_ranges,
+  (ProtobufCMessageInit) runtime__v1alpha2__linux_pod_sandbox_config__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
 static const ProtobufCFieldDescriptor runtime__v1alpha2__pod_sandbox_config__labels_entry__field_descriptors[2] =
@@ -1705,7 +2186,58 @@ const ProtobufCMessageDescriptor runtime__v1alpha2__pod_sandbox_config__labels_e
   (ProtobufCMessageInit) runtime__v1alpha2__pod_sandbox_config__labels_entry__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor runtime__v1alpha2__pod_sandbox_config__field_descriptors[5] =
+static const ProtobufCFieldDescriptor runtime__v1alpha2__pod_sandbox_config__annotations_entry__field_descriptors[2] =
+{
+  {
+    "key",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry, key),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "value",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry, value),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned runtime__v1alpha2__pod_sandbox_config__annotations_entry__field_indices_by_name[] = {
+  0,   /* field[0] = key */
+  1,   /* field[1] = value */
+};
+static const ProtobufCIntRange runtime__v1alpha2__pod_sandbox_config__annotations_entry__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor runtime__v1alpha2__pod_sandbox_config__annotations_entry__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "runtime.v1alpha2.PodSandboxConfig.AnnotationsEntry",
+  "AnnotationsEntry",
+  "Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry",
+  "runtime.v1alpha2",
+  sizeof(Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry),
+  2,
+  runtime__v1alpha2__pod_sandbox_config__annotations_entry__field_descriptors,
+  runtime__v1alpha2__pod_sandbox_config__annotations_entry__field_indices_by_name,
+  1,  runtime__v1alpha2__pod_sandbox_config__annotations_entry__number_ranges,
+  (ProtobufCMessageInit) runtime__v1alpha2__pod_sandbox_config__annotations_entry__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor runtime__v1alpha2__pod_sandbox_config__field_descriptors[8] =
 {
   {
     "metadata",
@@ -1720,44 +2252,68 @@ static const ProtobufCFieldDescriptor runtime__v1alpha2__pod_sandbox_config__fie
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
-    "network",
+    "hostname",
     2,
     PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_MESSAGE,
+    PROTOBUF_C_TYPE_STRING,
     0,   /* quantifier_offset */
-    offsetof(Runtime__V1alpha2__PodSandboxConfig, network),
-    &runtime__v1alpha2__network_config__descriptor,
+    offsetof(Runtime__V1alpha2__PodSandboxConfig, hostname),
     NULL,
+    &protobuf_c_empty_string,
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
-    "linux",
+    "log_directory",
     3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__PodSandboxConfig, log_directory),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_config",
+    4,
     PROTOBUF_C_LABEL_NONE,
     PROTOBUF_C_TYPE_MESSAGE,
     0,   /* quantifier_offset */
-    offsetof(Runtime__V1alpha2__PodSandboxConfig, linux),
-    &runtime__v1alpha2__linux_config__descriptor,
+    offsetof(Runtime__V1alpha2__PodSandboxConfig, dns_config),
+    &runtime__v1alpha2__dnsconfig__descriptor,
     NULL,
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
-    "annotations",
-    4,
+    "port_mappings",
+    5,
     PROTOBUF_C_LABEL_REPEATED,
     PROTOBUF_C_TYPE_MESSAGE,
-    offsetof(Runtime__V1alpha2__PodSandboxConfig, n_annotations),
-    offsetof(Runtime__V1alpha2__PodSandboxConfig, annotations),
-    &runtime__v1alpha2__pod_sandbox_config__annotations_entry__descriptor,
+    offsetof(Runtime__V1alpha2__PodSandboxConfig, n_port_mappings),
+    offsetof(Runtime__V1alpha2__PodSandboxConfig, port_mappings),
+    &runtime__v1alpha2__port_mapping__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "linux_config",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__PodSandboxConfig, linux_config),
+    &runtime__v1alpha2__linux_pod_sandbox_config__descriptor,
     NULL,
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
     "labels",
-    5,
+    7,
     PROTOBUF_C_LABEL_REPEATED,
     PROTOBUF_C_TYPE_MESSAGE,
     offsetof(Runtime__V1alpha2__PodSandboxConfig, n_labels),
@@ -1767,18 +2323,33 @@ static const ProtobufCFieldDescriptor runtime__v1alpha2__pod_sandbox_config__fie
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "annotations",
+    8,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Runtime__V1alpha2__PodSandboxConfig, n_annotations),
+    offsetof(Runtime__V1alpha2__PodSandboxConfig, annotations),
+    &runtime__v1alpha2__pod_sandbox_config__annotations_entry__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned runtime__v1alpha2__pod_sandbox_config__field_indices_by_name[] = {
-  3,   /* field[3] = annotations */
-  4,   /* field[4] = labels */
-  2,   /* field[2] = linux */
+  7,   /* field[7] = annotations */
+  3,   /* field[3] = dns_config */
+  1,   /* field[1] = hostname */
+  6,   /* field[6] = labels */
+  5,   /* field[5] = linux_config */
+  2,   /* field[2] = log_directory */
   0,   /* field[0] = metadata */
-  1,   /* field[1] = network */
+  4,   /* field[4] = port_mappings */
 };
 static const ProtobufCIntRange runtime__v1alpha2__pod_sandbox_config__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 5 }
+  { 0, 8 }
 };
 const ProtobufCMessageDescriptor runtime__v1alpha2__pod_sandbox_config__descriptor =
 {
@@ -1788,7 +2359,7 @@ const ProtobufCMessageDescriptor runtime__v1alpha2__pod_sandbox_config__descript
   "Runtime__V1alpha2__PodSandboxConfig",
   "runtime.v1alpha2",
   sizeof(Runtime__V1alpha2__PodSandboxConfig),
-  5,
+  8,
   runtime__v1alpha2__pod_sandbox_config__field_descriptors,
   runtime__v1alpha2__pod_sandbox_config__field_indices_by_name,
   1,  runtime__v1alpha2__pod_sandbox_config__number_ranges,
@@ -2031,11 +2602,11 @@ static const ProtobufCFieldDescriptor runtime__v1alpha2__security_context__field
     "namespace_options",
     1,
     PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_STRING,
+    PROTOBUF_C_TYPE_MESSAGE,
     0,   /* quantifier_offset */
     offsetof(Runtime__V1alpha2__SecurityContext, namespace_options),
+    &runtime__v1alpha2__namespace_option__descriptor,
     NULL,
-    &protobuf_c_empty_string,
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
@@ -2043,11 +2614,11 @@ static const ProtobufCFieldDescriptor runtime__v1alpha2__security_context__field
     "selinux_options",
     2,
     PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_STRING,
+    PROTOBUF_C_TYPE_MESSAGE,
     0,   /* quantifier_offset */
     offsetof(Runtime__V1alpha2__SecurityContext, selinux_options),
+    &runtime__v1alpha2__selinux_option__descriptor,
     NULL,
-    &protobuf_c_empty_string,
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
@@ -2055,11 +2626,11 @@ static const ProtobufCFieldDescriptor runtime__v1alpha2__security_context__field
     "run_as_user",
     3,
     PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_STRING,
+    PROTOBUF_C_TYPE_MESSAGE,
     0,   /* quantifier_offset */
     offsetof(Runtime__V1alpha2__SecurityContext, run_as_user),
+    &runtime__v1alpha2__run_as_user_option__descriptor,
     NULL,
-    &protobuf_c_empty_string,
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
@@ -2100,6 +2671,211 @@ const ProtobufCMessageDescriptor runtime__v1alpha2__security_context__descriptor
   runtime__v1alpha2__security_context__field_indices_by_name,
   1,  runtime__v1alpha2__security_context__number_ranges,
   (ProtobufCMessageInit) runtime__v1alpha2__security_context__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor runtime__v1alpha2__namespace_option__field_descriptors[3] =
+{
+  {
+    "host_network",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__NamespaceOption, host_network),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "host_pid",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__NamespaceOption, host_pid),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "host_ipc",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__NamespaceOption, host_ipc),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned runtime__v1alpha2__namespace_option__field_indices_by_name[] = {
+  2,   /* field[2] = host_ipc */
+  0,   /* field[0] = host_network */
+  1,   /* field[1] = host_pid */
+};
+static const ProtobufCIntRange runtime__v1alpha2__namespace_option__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor runtime__v1alpha2__namespace_option__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "runtime.v1alpha2.NamespaceOption",
+  "NamespaceOption",
+  "Runtime__V1alpha2__NamespaceOption",
+  "runtime.v1alpha2",
+  sizeof(Runtime__V1alpha2__NamespaceOption),
+  3,
+  runtime__v1alpha2__namespace_option__field_descriptors,
+  runtime__v1alpha2__namespace_option__field_indices_by_name,
+  1,  runtime__v1alpha2__namespace_option__number_ranges,
+  (ProtobufCMessageInit) runtime__v1alpha2__namespace_option__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor runtime__v1alpha2__selinux_option__field_descriptors[4] =
+{
+  {
+    "user",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__SELinuxOption, user),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "role",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__SELinuxOption, role),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "type",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__SELinuxOption, type),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "level",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__SELinuxOption, level),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned runtime__v1alpha2__selinux_option__field_indices_by_name[] = {
+  3,   /* field[3] = level */
+  1,   /* field[1] = role */
+  2,   /* field[2] = type */
+  0,   /* field[0] = user */
+};
+static const ProtobufCIntRange runtime__v1alpha2__selinux_option__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 4 }
+};
+const ProtobufCMessageDescriptor runtime__v1alpha2__selinux_option__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "runtime.v1alpha2.SELinuxOption",
+  "SELinuxOption",
+  "Runtime__V1alpha2__SELinuxOption",
+  "runtime.v1alpha2",
+  sizeof(Runtime__V1alpha2__SELinuxOption),
+  4,
+  runtime__v1alpha2__selinux_option__field_descriptors,
+  runtime__v1alpha2__selinux_option__field_indices_by_name,
+  1,  runtime__v1alpha2__selinux_option__number_ranges,
+  (ProtobufCMessageInit) runtime__v1alpha2__selinux_option__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor runtime__v1alpha2__run_as_user_option__field_descriptors[3] =
+{
+  {
+    "uid",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT64,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__RunAsUserOption, uid),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "gid",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT64,
+    0,   /* quantifier_offset */
+    offsetof(Runtime__V1alpha2__RunAsUserOption, gid),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "additional_gids",
+    3,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_INT64,
+    offsetof(Runtime__V1alpha2__RunAsUserOption, n_additional_gids),
+    offsetof(Runtime__V1alpha2__RunAsUserOption, additional_gids),
+    NULL,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_PACKED,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned runtime__v1alpha2__run_as_user_option__field_indices_by_name[] = {
+  2,   /* field[2] = additional_gids */
+  1,   /* field[1] = gid */
+  0,   /* field[0] = uid */
+};
+static const ProtobufCIntRange runtime__v1alpha2__run_as_user_option__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor runtime__v1alpha2__run_as_user_option__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "runtime.v1alpha2.RunAsUserOption",
+  "RunAsUserOption",
+  "Runtime__V1alpha2__RunAsUserOption",
+  "runtime.v1alpha2",
+  sizeof(Runtime__V1alpha2__RunAsUserOption),
+  3,
+  runtime__v1alpha2__run_as_user_option__field_descriptors,
+  runtime__v1alpha2__run_as_user_option__field_indices_by_name,
+  1,  runtime__v1alpha2__run_as_user_option__number_ranges,
+  (ProtobufCMessageInit) runtime__v1alpha2__run_as_user_option__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
 static const ProtobufCFieldDescriptor runtime__v1alpha2__create_pod_request__field_descriptors[1] =

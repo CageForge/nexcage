@@ -156,33 +156,83 @@ struct StartContainerRequestDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 StartContainerRequestDefaultTypeInternal _StartContainerRequest_default_instance_;
 
-inline constexpr SecurityContext::Impl_::Impl_(
+inline constexpr SELinuxOption::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
-      : namespace_options_(
+      : user_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
-        selinux_options_(
+        role_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
-        run_as_user_(
+        type_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
-        privileged_{false},
+        level_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
         _cached_size_{0} {}
 
 template <typename>
-PROTOBUF_CONSTEXPR SecurityContext::SecurityContext(::_pbi::ConstantInitialized)
+PROTOBUF_CONSTEXPR SELinuxOption::SELinuxOption(::_pbi::ConstantInitialized)
     : _impl_(::_pbi::ConstantInitialized()) {}
-struct SecurityContextDefaultTypeInternal {
-  PROTOBUF_CONSTEXPR SecurityContextDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
-  ~SecurityContextDefaultTypeInternal() {}
+struct SELinuxOptionDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR SELinuxOptionDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~SELinuxOptionDefaultTypeInternal() {}
   union {
-    SecurityContext _instance;
+    SELinuxOption _instance;
   };
 };
 
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
-    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 SecurityContextDefaultTypeInternal _SecurityContext_default_instance_;
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 SELinuxOptionDefaultTypeInternal _SELinuxOption_default_instance_;
+
+inline constexpr RunAsUserOption::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : additional_gids_{},
+        _additional_gids_cached_byte_size_{0},
+        uid_{::int64_t{0}},
+        gid_{::int64_t{0}},
+        _cached_size_{0} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR RunAsUserOption::RunAsUserOption(::_pbi::ConstantInitialized)
+    : _impl_(::_pbi::ConstantInitialized()) {}
+struct RunAsUserOptionDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR RunAsUserOptionDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~RunAsUserOptionDefaultTypeInternal() {}
+  union {
+    RunAsUserOption _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 RunAsUserOptionDefaultTypeInternal _RunAsUserOption_default_instance_;
+
+inline constexpr PortMapping::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : protocol_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        host_ip_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        container_port_{0},
+        host_port_{0},
+        _cached_size_{0} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR PortMapping::PortMapping(::_pbi::ConstantInitialized)
+    : _impl_(::_pbi::ConstantInitialized()) {}
+struct PortMappingDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR PortMappingDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~PortMappingDefaultTypeInternal() {}
+  union {
+    PortMapping _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PortMappingDefaultTypeInternal _PortMapping_default_instance_;
       template <typename>
 PROTOBUF_CONSTEXPR PodSandboxConfig_LabelsEntry_DoNotUse::PodSandboxConfig_LabelsEntry_DoNotUse(::_pbi::ConstantInitialized) {}
 struct PodSandboxConfig_LabelsEntry_DoNotUseDefaultTypeInternal {
@@ -293,6 +343,27 @@ struct NetworkConfigDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 NetworkConfigDefaultTypeInternal _NetworkConfig_default_instance_;
 
+inline constexpr NamespaceOption::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : host_network_{false},
+        host_pid_{false},
+        host_ipc_{false},
+        _cached_size_{0} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR NamespaceOption::NamespaceOption(::_pbi::ConstantInitialized)
+    : _impl_(::_pbi::ConstantInitialized()) {}
+struct NamespaceOptionDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR NamespaceOptionDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~NamespaceOptionDefaultTypeInternal() {}
+  union {
+    NamespaceOption _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 NamespaceOptionDefaultTypeInternal _NamespaceOption_default_instance_;
+
 inline constexpr Mount::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : container_path_(
@@ -317,6 +388,18 @@ struct MountDefaultTypeInternal {
 
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 MountDefaultTypeInternal _Mount_default_instance_;
+      template <typename>
+PROTOBUF_CONSTEXPR LinuxPodSandboxConfig_SysctlsEntry_DoNotUse::LinuxPodSandboxConfig_SysctlsEntry_DoNotUse(::_pbi::ConstantInitialized) {}
+struct LinuxPodSandboxConfig_SysctlsEntry_DoNotUseDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR LinuxPodSandboxConfig_SysctlsEntry_DoNotUseDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~LinuxPodSandboxConfig_SysctlsEntry_DoNotUseDefaultTypeInternal() {}
+  union {
+    LinuxPodSandboxConfig_SysctlsEntry_DoNotUse _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 LinuxPodSandboxConfig_SysctlsEntry_DoNotUseDefaultTypeInternal _LinuxPodSandboxConfig_SysctlsEntry_DoNotUse_default_instance_;
       template <typename>
 PROTOBUF_CONSTEXPR LinuxConfig_SysctlsEntry_DoNotUse::LinuxConfig_SysctlsEntry_DoNotUse(::_pbi::ConstantInitialized) {}
 struct LinuxConfig_SysctlsEntry_DoNotUseDefaultTypeInternal {
@@ -440,6 +523,27 @@ struct DeleteContainerRequestDefaultTypeInternal {
 
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 DeleteContainerRequestDefaultTypeInternal _DeleteContainerRequest_default_instance_;
+
+inline constexpr DNSConfig::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : servers_{},
+        searches_{},
+        options_{},
+        _cached_size_{0} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR DNSConfig::DNSConfig(::_pbi::ConstantInitialized)
+    : _impl_(::_pbi::ConstantInitialized()) {}
+struct DNSConfigDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR DNSConfigDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~DNSConfigDefaultTypeInternal() {}
+  union {
+    DNSConfig _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 DNSConfigDefaultTypeInternal _DNSConfig_default_instance_;
 
 inline constexpr CreatePodResponse::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
@@ -565,6 +669,28 @@ struct Container_AnnotationsEntry_DoNotUseDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 Container_AnnotationsEntry_DoNotUseDefaultTypeInternal _Container_AnnotationsEntry_DoNotUse_default_instance_;
 
+inline constexpr SecurityContext::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        namespace_options_{nullptr},
+        selinux_options_{nullptr},
+        run_as_user_{nullptr},
+        privileged_{false} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR SecurityContext::SecurityContext(::_pbi::ConstantInitialized)
+    : _impl_(::_pbi::ConstantInitialized()) {}
+struct SecurityContextDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR SecurityContextDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~SecurityContextDefaultTypeInternal() {}
+  union {
+    SecurityContext _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 SecurityContextDefaultTypeInternal _SecurityContext_default_instance_;
+
 inline constexpr PodFilter::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : label_selector_{},
@@ -613,29 +739,6 @@ struct PodDefaultTypeInternal {
 
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PodDefaultTypeInternal _Pod_default_instance_;
-
-inline constexpr LinuxConfig::Impl_::Impl_(
-    ::_pbi::ConstantInitialized) noexcept
-      : _cached_size_{0},
-        sysctls_{},
-        cgroup_parent_(
-            &::google::protobuf::internal::fixed_address_empty_string,
-            ::_pbi::ConstantInitialized()),
-        security_context_{nullptr} {}
-
-template <typename>
-PROTOBUF_CONSTEXPR LinuxConfig::LinuxConfig(::_pbi::ConstantInitialized)
-    : _impl_(::_pbi::ConstantInitialized()) {}
-struct LinuxConfigDefaultTypeInternal {
-  PROTOBUF_CONSTEXPR LinuxConfigDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
-  ~LinuxConfigDefaultTypeInternal() {}
-  union {
-    LinuxConfig _instance;
-  };
-};
-
-PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
-    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 LinuxConfigDefaultTypeInternal _LinuxConfig_default_instance_;
 
 inline constexpr ContainerFilter::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
@@ -725,29 +828,6 @@ struct ContainerDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 ContainerDefaultTypeInternal _Container_default_instance_;
 
-inline constexpr PodSandboxConfig::Impl_::Impl_(
-    ::_pbi::ConstantInitialized) noexcept
-      : _cached_size_{0},
-        annotations_{},
-        labels_{},
-        metadata_{nullptr},
-        network_{nullptr},
-        linux_{nullptr} {}
-
-template <typename>
-PROTOBUF_CONSTEXPR PodSandboxConfig::PodSandboxConfig(::_pbi::ConstantInitialized)
-    : _impl_(::_pbi::ConstantInitialized()) {}
-struct PodSandboxConfigDefaultTypeInternal {
-  PROTOBUF_CONSTEXPR PodSandboxConfigDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
-  ~PodSandboxConfigDefaultTypeInternal() {}
-  union {
-    PodSandboxConfig _instance;
-  };
-};
-
-PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
-    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PodSandboxConfigDefaultTypeInternal _PodSandboxConfig_default_instance_;
-
 inline constexpr ListPodResponse::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : items_{},
@@ -824,6 +904,82 @@ struct ListContainersRequestDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 ListContainersRequestDefaultTypeInternal _ListContainersRequest_default_instance_;
 
+inline constexpr LinuxPodSandboxConfig::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        sysctls_{},
+        cgroup_parent_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        security_context_{nullptr} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR LinuxPodSandboxConfig::LinuxPodSandboxConfig(::_pbi::ConstantInitialized)
+    : _impl_(::_pbi::ConstantInitialized()) {}
+struct LinuxPodSandboxConfigDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR LinuxPodSandboxConfigDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~LinuxPodSandboxConfigDefaultTypeInternal() {}
+  union {
+    LinuxPodSandboxConfig _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 LinuxPodSandboxConfigDefaultTypeInternal _LinuxPodSandboxConfig_default_instance_;
+
+inline constexpr LinuxConfig::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        sysctls_{},
+        cgroup_parent_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        security_context_{nullptr} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR LinuxConfig::LinuxConfig(::_pbi::ConstantInitialized)
+    : _impl_(::_pbi::ConstantInitialized()) {}
+struct LinuxConfigDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR LinuxConfigDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~LinuxConfigDefaultTypeInternal() {}
+  union {
+    LinuxConfig _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 LinuxConfigDefaultTypeInternal _LinuxConfig_default_instance_;
+
+inline constexpr PodSandboxConfig::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        port_mappings_{},
+        labels_{},
+        annotations_{},
+        hostname_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        log_directory_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        metadata_{nullptr},
+        dns_config_{nullptr},
+        linux_config_{nullptr} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR PodSandboxConfig::PodSandboxConfig(::_pbi::ConstantInitialized)
+    : _impl_(::_pbi::ConstantInitialized()) {}
+struct PodSandboxConfigDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR PodSandboxConfigDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~PodSandboxConfigDefaultTypeInternal() {}
+  union {
+    PodSandboxConfig _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PodSandboxConfigDefaultTypeInternal _PodSandboxConfig_default_instance_;
+
 inline constexpr CreatePodRequest::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : _cached_size_{0},
@@ -867,24 +1023,61 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 CreateContainerRequestDefaultTypeInternal _CreateContainerRequest_default_instance_;
 }  // namespace v1alpha2
 }  // namespace runtime
-static ::_pb::Metadata file_level_metadata_proto_2fruntime_5fservice_2eproto[45];
+static ::_pb::Metadata file_level_metadata_proto_2fruntime_5fservice_2eproto[52];
 static const ::_pb::EnumDescriptor* file_level_enum_descriptors_proto_2fruntime_5fservice_2eproto[2];
 static constexpr const ::_pb::ServiceDescriptor**
     file_level_service_descriptors_proto_2fruntime_5fservice_2eproto = nullptr;
 const ::uint32_t TableStruct_proto_2fruntime_5fservice_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     protodesc_cold) = {
-    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse, _has_bits_),
-    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse, _internal_metadata_),
+    ~0u,  // no _has_bits_
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::DNSConfig, _internal_metadata_),
     ~0u,  // no _extensions_
     ~0u,  // no _oneof_case_
     ~0u,  // no _weak_field_map_
     ~0u,  // no _inlined_string_donated_
     ~0u,  // no _split_
     ~0u,  // no sizeof(Split)
-    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse, key_),
-    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse, value_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::DNSConfig, _impl_.servers_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::DNSConfig, _impl_.searches_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::DNSConfig, _impl_.options_),
+    ~0u,  // no _has_bits_
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PortMapping, _internal_metadata_),
+    ~0u,  // no _extensions_
+    ~0u,  // no _oneof_case_
+    ~0u,  // no _weak_field_map_
+    ~0u,  // no _inlined_string_donated_
+    ~0u,  // no _split_
+    ~0u,  // no sizeof(Split)
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PortMapping, _impl_.protocol_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PortMapping, _impl_.container_port_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PortMapping, _impl_.host_port_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PortMapping, _impl_.host_ip_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::LinuxPodSandboxConfig_SysctlsEntry_DoNotUse, _has_bits_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::LinuxPodSandboxConfig_SysctlsEntry_DoNotUse, _internal_metadata_),
+    ~0u,  // no _extensions_
+    ~0u,  // no _oneof_case_
+    ~0u,  // no _weak_field_map_
+    ~0u,  // no _inlined_string_donated_
+    ~0u,  // no _split_
+    ~0u,  // no sizeof(Split)
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::LinuxPodSandboxConfig_SysctlsEntry_DoNotUse, key_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::LinuxPodSandboxConfig_SysctlsEntry_DoNotUse, value_),
     0,
     1,
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::LinuxPodSandboxConfig, _impl_._has_bits_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::LinuxPodSandboxConfig, _internal_metadata_),
+    ~0u,  // no _extensions_
+    ~0u,  // no _oneof_case_
+    ~0u,  // no _weak_field_map_
+    ~0u,  // no _inlined_string_donated_
+    ~0u,  // no _split_
+    ~0u,  // no sizeof(Split)
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::LinuxPodSandboxConfig, _impl_.cgroup_parent_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::LinuxPodSandboxConfig, _impl_.security_context_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::LinuxPodSandboxConfig, _impl_.sysctls_),
+    ~0u,
+    0,
+    ~0u,
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_LabelsEntry_DoNotUse, _has_bits_),
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_LabelsEntry_DoNotUse, _internal_metadata_),
     ~0u,  // no _extensions_
@@ -897,6 +1090,18 @@ const ::uint32_t TableStruct_proto_2fruntime_5fservice_2eproto::offsets[] PROTOB
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_LabelsEntry_DoNotUse, value_),
     0,
     1,
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse, _has_bits_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse, _internal_metadata_),
+    ~0u,  // no _extensions_
+    ~0u,  // no _oneof_case_
+    ~0u,  // no _weak_field_map_
+    ~0u,  // no _inlined_string_donated_
+    ~0u,  // no _split_
+    ~0u,  // no sizeof(Split)
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse, key_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse, value_),
+    0,
+    1,
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_._has_bits_),
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _internal_metadata_),
     ~0u,  // no _extensions_
@@ -906,12 +1111,18 @@ const ::uint32_t TableStruct_proto_2fruntime_5fservice_2eproto::offsets[] PROTOB
     ~0u,  // no _split_
     ~0u,  // no sizeof(Split)
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.metadata_),
-    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.network_),
-    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.linux_),
-    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.annotations_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.hostname_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.log_directory_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.dns_config_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.port_mappings_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.linux_config_),
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.labels_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::PodSandboxConfig, _impl_.annotations_),
     0,
+    ~0u,
+    ~0u,
     1,
+    ~0u,
     2,
     ~0u,
     ~0u,
@@ -962,7 +1173,7 @@ const ::uint32_t TableStruct_proto_2fruntime_5fservice_2eproto::offsets[] PROTOB
     ~0u,
     0,
     ~0u,
-    ~0u,  // no _has_bits_
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SecurityContext, _impl_._has_bits_),
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SecurityContext, _internal_metadata_),
     ~0u,  // no _extensions_
     ~0u,  // no _oneof_case_
@@ -974,6 +1185,44 @@ const ::uint32_t TableStruct_proto_2fruntime_5fservice_2eproto::offsets[] PROTOB
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SecurityContext, _impl_.selinux_options_),
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SecurityContext, _impl_.run_as_user_),
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SecurityContext, _impl_.privileged_),
+    0,
+    1,
+    2,
+    ~0u,
+    ~0u,  // no _has_bits_
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::NamespaceOption, _internal_metadata_),
+    ~0u,  // no _extensions_
+    ~0u,  // no _oneof_case_
+    ~0u,  // no _weak_field_map_
+    ~0u,  // no _inlined_string_donated_
+    ~0u,  // no _split_
+    ~0u,  // no sizeof(Split)
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::NamespaceOption, _impl_.host_network_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::NamespaceOption, _impl_.host_pid_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::NamespaceOption, _impl_.host_ipc_),
+    ~0u,  // no _has_bits_
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SELinuxOption, _internal_metadata_),
+    ~0u,  // no _extensions_
+    ~0u,  // no _oneof_case_
+    ~0u,  // no _weak_field_map_
+    ~0u,  // no _inlined_string_donated_
+    ~0u,  // no _split_
+    ~0u,  // no sizeof(Split)
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SELinuxOption, _impl_.user_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SELinuxOption, _impl_.role_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SELinuxOption, _impl_.type_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::SELinuxOption, _impl_.level_),
+    ~0u,  // no _has_bits_
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::RunAsUserOption, _internal_metadata_),
+    ~0u,  // no _extensions_
+    ~0u,  // no _oneof_case_
+    ~0u,  // no _weak_field_map_
+    ~0u,  // no _inlined_string_donated_
+    ~0u,  // no _split_
+    ~0u,  // no sizeof(Split)
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::RunAsUserOption, _impl_.uid_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::RunAsUserOption, _impl_.gid_),
+    PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::RunAsUserOption, _impl_.additional_gids_),
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::CreatePodRequest, _impl_._has_bits_),
     PROTOBUF_FIELD_OFFSET(::runtime::v1alpha2::CreatePodRequest, _internal_metadata_),
     ~0u,  // no _extensions_
@@ -1392,62 +1641,76 @@ const ::uint32_t TableStruct_proto_2fruntime_5fservice_2eproto::offsets[] PROTOB
 
 static const ::_pbi::MigrationSchema
     schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
-        {0, 10, -1, sizeof(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse)},
-        {12, 22, -1, sizeof(::runtime::v1alpha2::PodSandboxConfig_LabelsEntry_DoNotUse)},
-        {24, 37, -1, sizeof(::runtime::v1alpha2::PodSandboxConfig)},
-        {42, -1, -1, sizeof(::runtime::v1alpha2::PodMetadata)},
-        {54, -1, -1, sizeof(::runtime::v1alpha2::NetworkConfig)},
-        {63, 73, -1, sizeof(::runtime::v1alpha2::LinuxConfig_SysctlsEntry_DoNotUse)},
-        {75, 86, -1, sizeof(::runtime::v1alpha2::LinuxConfig)},
-        {89, -1, -1, sizeof(::runtime::v1alpha2::SecurityContext)},
-        {101, 110, -1, sizeof(::runtime::v1alpha2::CreatePodRequest)},
-        {111, -1, -1, sizeof(::runtime::v1alpha2::CreatePodResponse)},
-        {120, -1, -1, sizeof(::runtime::v1alpha2::DeletePodRequest)},
-        {129, -1, -1, sizeof(::runtime::v1alpha2::DeletePodResponse)},
-        {137, 146, -1, sizeof(::runtime::v1alpha2::ListPodRequest)},
-        {147, 157, -1, sizeof(::runtime::v1alpha2::PodFilter_LabelSelectorEntry_DoNotUse)},
-        {159, -1, -1, sizeof(::runtime::v1alpha2::PodFilter)},
-        {170, -1, -1, sizeof(::runtime::v1alpha2::ListPodResponse)},
-        {179, 189, -1, sizeof(::runtime::v1alpha2::Pod_LabelsEntry_DoNotUse)},
-        {191, 201, -1, sizeof(::runtime::v1alpha2::Pod_AnnotationsEntry_DoNotUse)},
-        {203, 217, -1, sizeof(::runtime::v1alpha2::Pod)},
-        {223, -1, -1, sizeof(::runtime::v1alpha2::StartPodRequest)},
-        {232, -1, -1, sizeof(::runtime::v1alpha2::StartPodResponse)},
-        {240, -1, -1, sizeof(::runtime::v1alpha2::StopPodRequest)},
-        {249, -1, -1, sizeof(::runtime::v1alpha2::StopPodResponse)},
-        {257, 267, -1, sizeof(::runtime::v1alpha2::ContainerConfig_LabelsEntry_DoNotUse)},
-        {269, 279, -1, sizeof(::runtime::v1alpha2::ContainerConfig_AnnotationsEntry_DoNotUse)},
-        {281, 298, -1, sizeof(::runtime::v1alpha2::ContainerConfig)},
-        {307, -1, -1, sizeof(::runtime::v1alpha2::ContainerMetadata)},
-        {317, -1, -1, sizeof(::runtime::v1alpha2::ImageSpec)},
-        {326, -1, -1, sizeof(::runtime::v1alpha2::KeyValue)},
-        {336, -1, -1, sizeof(::runtime::v1alpha2::Mount)},
-        {347, 358, -1, sizeof(::runtime::v1alpha2::CreateContainerRequest)},
-        {361, -1, -1, sizeof(::runtime::v1alpha2::CreateContainerResponse)},
-        {370, -1, -1, sizeof(::runtime::v1alpha2::DeleteContainerRequest)},
-        {379, -1, -1, sizeof(::runtime::v1alpha2::DeleteContainerResponse)},
-        {387, 396, -1, sizeof(::runtime::v1alpha2::ListContainersRequest)},
-        {397, 407, -1, sizeof(::runtime::v1alpha2::ContainerFilter_LabelSelectorEntry_DoNotUse)},
-        {409, -1, -1, sizeof(::runtime::v1alpha2::ContainerFilter)},
-        {421, -1, -1, sizeof(::runtime::v1alpha2::ListContainersResponse)},
-        {430, 440, -1, sizeof(::runtime::v1alpha2::Container_LabelsEntry_DoNotUse)},
-        {442, 452, -1, sizeof(::runtime::v1alpha2::Container_AnnotationsEntry_DoNotUse)},
-        {454, 471, -1, sizeof(::runtime::v1alpha2::Container)},
-        {480, -1, -1, sizeof(::runtime::v1alpha2::StartContainerRequest)},
-        {489, -1, -1, sizeof(::runtime::v1alpha2::StartContainerResponse)},
-        {497, -1, -1, sizeof(::runtime::v1alpha2::StopContainerRequest)},
-        {507, -1, -1, sizeof(::runtime::v1alpha2::StopContainerResponse)},
+        {0, -1, -1, sizeof(::runtime::v1alpha2::DNSConfig)},
+        {11, -1, -1, sizeof(::runtime::v1alpha2::PortMapping)},
+        {23, 33, -1, sizeof(::runtime::v1alpha2::LinuxPodSandboxConfig_SysctlsEntry_DoNotUse)},
+        {35, 46, -1, sizeof(::runtime::v1alpha2::LinuxPodSandboxConfig)},
+        {49, 59, -1, sizeof(::runtime::v1alpha2::PodSandboxConfig_LabelsEntry_DoNotUse)},
+        {61, 71, -1, sizeof(::runtime::v1alpha2::PodSandboxConfig_AnnotationsEntry_DoNotUse)},
+        {73, 89, -1, sizeof(::runtime::v1alpha2::PodSandboxConfig)},
+        {97, -1, -1, sizeof(::runtime::v1alpha2::PodMetadata)},
+        {109, -1, -1, sizeof(::runtime::v1alpha2::NetworkConfig)},
+        {118, 128, -1, sizeof(::runtime::v1alpha2::LinuxConfig_SysctlsEntry_DoNotUse)},
+        {130, 141, -1, sizeof(::runtime::v1alpha2::LinuxConfig)},
+        {144, 156, -1, sizeof(::runtime::v1alpha2::SecurityContext)},
+        {160, -1, -1, sizeof(::runtime::v1alpha2::NamespaceOption)},
+        {171, -1, -1, sizeof(::runtime::v1alpha2::SELinuxOption)},
+        {183, -1, -1, sizeof(::runtime::v1alpha2::RunAsUserOption)},
+        {194, 203, -1, sizeof(::runtime::v1alpha2::CreatePodRequest)},
+        {204, -1, -1, sizeof(::runtime::v1alpha2::CreatePodResponse)},
+        {213, -1, -1, sizeof(::runtime::v1alpha2::DeletePodRequest)},
+        {222, -1, -1, sizeof(::runtime::v1alpha2::DeletePodResponse)},
+        {230, 239, -1, sizeof(::runtime::v1alpha2::ListPodRequest)},
+        {240, 250, -1, sizeof(::runtime::v1alpha2::PodFilter_LabelSelectorEntry_DoNotUse)},
+        {252, -1, -1, sizeof(::runtime::v1alpha2::PodFilter)},
+        {263, -1, -1, sizeof(::runtime::v1alpha2::ListPodResponse)},
+        {272, 282, -1, sizeof(::runtime::v1alpha2::Pod_LabelsEntry_DoNotUse)},
+        {284, 294, -1, sizeof(::runtime::v1alpha2::Pod_AnnotationsEntry_DoNotUse)},
+        {296, 310, -1, sizeof(::runtime::v1alpha2::Pod)},
+        {316, -1, -1, sizeof(::runtime::v1alpha2::StartPodRequest)},
+        {325, -1, -1, sizeof(::runtime::v1alpha2::StartPodResponse)},
+        {333, -1, -1, sizeof(::runtime::v1alpha2::StopPodRequest)},
+        {342, -1, -1, sizeof(::runtime::v1alpha2::StopPodResponse)},
+        {350, 360, -1, sizeof(::runtime::v1alpha2::ContainerConfig_LabelsEntry_DoNotUse)},
+        {362, 372, -1, sizeof(::runtime::v1alpha2::ContainerConfig_AnnotationsEntry_DoNotUse)},
+        {374, 391, -1, sizeof(::runtime::v1alpha2::ContainerConfig)},
+        {400, -1, -1, sizeof(::runtime::v1alpha2::ContainerMetadata)},
+        {410, -1, -1, sizeof(::runtime::v1alpha2::ImageSpec)},
+        {419, -1, -1, sizeof(::runtime::v1alpha2::KeyValue)},
+        {429, -1, -1, sizeof(::runtime::v1alpha2::Mount)},
+        {440, 451, -1, sizeof(::runtime::v1alpha2::CreateContainerRequest)},
+        {454, -1, -1, sizeof(::runtime::v1alpha2::CreateContainerResponse)},
+        {463, -1, -1, sizeof(::runtime::v1alpha2::DeleteContainerRequest)},
+        {472, -1, -1, sizeof(::runtime::v1alpha2::DeleteContainerResponse)},
+        {480, 489, -1, sizeof(::runtime::v1alpha2::ListContainersRequest)},
+        {490, 500, -1, sizeof(::runtime::v1alpha2::ContainerFilter_LabelSelectorEntry_DoNotUse)},
+        {502, -1, -1, sizeof(::runtime::v1alpha2::ContainerFilter)},
+        {514, -1, -1, sizeof(::runtime::v1alpha2::ListContainersResponse)},
+        {523, 533, -1, sizeof(::runtime::v1alpha2::Container_LabelsEntry_DoNotUse)},
+        {535, 545, -1, sizeof(::runtime::v1alpha2::Container_AnnotationsEntry_DoNotUse)},
+        {547, 564, -1, sizeof(::runtime::v1alpha2::Container)},
+        {573, -1, -1, sizeof(::runtime::v1alpha2::StartContainerRequest)},
+        {582, -1, -1, sizeof(::runtime::v1alpha2::StartContainerResponse)},
+        {590, -1, -1, sizeof(::runtime::v1alpha2::StopContainerRequest)},
+        {600, -1, -1, sizeof(::runtime::v1alpha2::StopContainerResponse)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
-    &::runtime::v1alpha2::_PodSandboxConfig_AnnotationsEntry_DoNotUse_default_instance_._instance,
+    &::runtime::v1alpha2::_DNSConfig_default_instance_._instance,
+    &::runtime::v1alpha2::_PortMapping_default_instance_._instance,
+    &::runtime::v1alpha2::_LinuxPodSandboxConfig_SysctlsEntry_DoNotUse_default_instance_._instance,
+    &::runtime::v1alpha2::_LinuxPodSandboxConfig_default_instance_._instance,
     &::runtime::v1alpha2::_PodSandboxConfig_LabelsEntry_DoNotUse_default_instance_._instance,
+    &::runtime::v1alpha2::_PodSandboxConfig_AnnotationsEntry_DoNotUse_default_instance_._instance,
     &::runtime::v1alpha2::_PodSandboxConfig_default_instance_._instance,
     &::runtime::v1alpha2::_PodMetadata_default_instance_._instance,
     &::runtime::v1alpha2::_NetworkConfig_default_instance_._instance,
     &::runtime::v1alpha2::_LinuxConfig_SysctlsEntry_DoNotUse_default_instance_._instance,
     &::runtime::v1alpha2::_LinuxConfig_default_instance_._instance,
     &::runtime::v1alpha2::_SecurityContext_default_instance_._instance,
+    &::runtime::v1alpha2::_NamespaceOption_default_instance_._instance,
+    &::runtime::v1alpha2::_SELinuxOption_default_instance_._instance,
+    &::runtime::v1alpha2::_RunAsUserOption_default_instance_._instance,
     &::runtime::v1alpha2::_CreatePodRequest_default_instance_._instance,
     &::runtime::v1alpha2::_CreatePodResponse_default_instance_._instance,
     &::runtime::v1alpha2::_DeletePodRequest_default_instance_._instance,
@@ -1488,141 +1751,162 @@ static const ::_pb::Message* const file_default_instances[] = {
 };
 const char descriptor_table_protodef_proto_2fruntime_5fservice_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
     "\n\033proto/runtime_service.proto\022\020runtime.v"
-    "1alpha2\"\220\003\n\020PodSandboxConfig\022/\n\010metadata"
-    "\030\001 \001(\0132\035.runtime.v1alpha2.PodMetadata\0220\n"
-    "\007network\030\002 \001(\0132\037.runtime.v1alpha2.Networ"
-    "kConfig\022,\n\005linux\030\003 \001(\0132\035.runtime.v1alpha"
-    "2.LinuxConfig\022H\n\013annotations\030\004 \003(\01323.run"
-    "time.v1alpha2.PodSandboxConfig.Annotatio"
-    "nsEntry\022>\n\006labels\030\005 \003(\0132..runtime.v1alph"
-    "a2.PodSandboxConfig.LabelsEntry\0322\n\020Annot"
-    "ationsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:"
-    "\0028\001\032-\n\013LabelsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value"
-    "\030\002 \001(\t:\0028\001\"L\n\013PodMetadata\022\014\n\004name\030\001 \001(\t\022"
-    "\013\n\003uid\030\002 \001(\t\022\021\n\tnamespace\030\003 \001(\t\022\017\n\007attem"
-    "pt\030\004 \001(\r\"!\n\rNetworkConfig\022\020\n\010pod_cidr\030\001 "
-    "\001(\t\"\316\001\n\013LinuxConfig\022\025\n\rcgroup_parent\030\001 \001"
-    "(\t\022;\n\020security_context\030\002 \001(\0132!.runtime.v"
-    "1alpha2.SecurityContext\022;\n\007sysctls\030\003 \003(\013"
-    "2*.runtime.v1alpha2.LinuxConfig.SysctlsE"
-    "ntry\032.\n\014SysctlsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005val"
-    "ue\030\002 \001(\t:\0028\001\"n\n\017SecurityContext\022\031\n\021names"
-    "pace_options\030\001 \001(\t\022\027\n\017selinux_options\030\002 "
-    "\001(\t\022\023\n\013run_as_user\030\003 \001(\t\022\022\n\nprivileged\030\004"
-    " \001(\010\"F\n\020CreatePodRequest\0222\n\006config\030\001 \001(\013"
-    "2\".runtime.v1alpha2.PodSandboxConfig\"+\n\021"
-    "CreatePodResponse\022\026\n\016pod_sandbox_id\030\001 \001("
-    "\t\"*\n\020DeletePodRequest\022\026\n\016pod_sandbox_id\030"
-    "\001 \001(\t\"\023\n\021DeletePodResponse\"=\n\016ListPodReq"
-    "uest\022+\n\006filter\030\001 \001(\0132\033.runtime.v1alpha2."
-    "PodFilter\"\300\001\n\tPodFilter\022\n\n\002id\030\001 \001(\t\022)\n\005s"
-    "tate\030\002 \001(\0162\032.runtime.v1alpha2.PodState\022F"
-    "\n\016label_selector\030\003 \003(\0132..runtime.v1alpha"
-    "2.PodFilter.LabelSelectorEntry\0324\n\022LabelS"
-    "electorEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t"
-    ":\0028\001\"7\n\017ListPodResponse\022$\n\005items\030\001 \003(\0132\025"
-    ".runtime.v1alpha2.Pod\"\324\002\n\003Pod\022\n\n\002id\030\001 \001("
-    "\t\022/\n\010metadata\030\002 \001(\0132\035.runtime.v1alpha2.P"
-    "odMetadata\022)\n\005state\030\003 \001(\0162\032.runtime.v1al"
-    "pha2.PodState\022\022\n\ncreated_at\030\004 \001(\003\0221\n\006lab"
-    "els\030\005 \003(\0132!.runtime.v1alpha2.Pod.LabelsE"
-    "ntry\022;\n\013annotations\030\006 \003(\0132&.runtime.v1al"
-    "pha2.Pod.AnnotationsEntry\032-\n\013LabelsEntry"
-    "\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\0322\n\020Anno"
-    "tationsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t"
-    ":\0028\001\")\n\017StartPodRequest\022\026\n\016pod_sandbox_i"
-    "d\030\001 \001(\t\"\022\n\020StartPodResponse\"(\n\016StopPodRe"
-    "quest\022\026\n\016pod_sandbox_id\030\001 \001(\t\"\021\n\017StopPod"
-    "Response\"\346\003\n\017ContainerConfig\0225\n\010metadata"
-    "\030\001 \001(\0132#.runtime.v1alpha2.ContainerMetad"
-    "ata\022*\n\005image\030\002 \001(\0132\033.runtime.v1alpha2.Im"
-    "ageSpec\022\017\n\007command\030\003 \003(\t\022\014\n\004args\030\004 \003(\t\022\023"
-    "\n\013working_dir\030\005 \001(\t\022(\n\004envs\030\006 \003(\0132\032.runt"
-    "ime.v1alpha2.KeyValue\022\'\n\006mounts\030\007 \003(\0132\027."
-    "runtime.v1alpha2.Mount\022=\n\006labels\030\010 \003(\0132-"
-    ".runtime.v1alpha2.ContainerConfig.Labels"
-    "Entry\022G\n\013annotations\030\t \003(\01322.runtime.v1a"
-    "lpha2.ContainerConfig.AnnotationsEntry\032-"
-    "\n\013LabelsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001("
-    "\t:\0028\001\0322\n\020AnnotationsEntry\022\013\n\003key\030\001 \001(\t\022\r"
-    "\n\005value\030\002 \001(\t:\0028\001\"2\n\021ContainerMetadata\022\014"
-    "\n\004name\030\001 \001(\t\022\017\n\007attempt\030\002 \001(\r\"\032\n\tImageSp"
-    "ec\022\r\n\005image\030\001 \001(\t\"&\n\010KeyValue\022\013\n\003key\030\001 \001"
-    "(\t\022\r\n\005value\030\002 \001(\t\"D\n\005Mount\022\026\n\016container_"
-    "path\030\001 \001(\t\022\021\n\thost_path\030\002 \001(\t\022\020\n\010readonl"
-    "y\030\003 \001(\010\"\237\001\n\026CreateContainerRequest\022\026\n\016po"
-    "d_sandbox_id\030\001 \001(\t\0221\n\006config\030\002 \001(\0132!.run"
-    "time.v1alpha2.ContainerConfig\022:\n\016sandbox"
-    "_config\030\003 \001(\0132\".runtime.v1alpha2.PodSand"
-    "boxConfig\"/\n\027CreateContainerResponse\022\024\n\014"
-    "container_id\030\001 \001(\t\".\n\026DeleteContainerReq"
-    "uest\022\024\n\014container_id\030\001 \001(\t\"\031\n\027DeleteCont"
-    "ainerResponse\"J\n\025ListContainersRequest\0221"
-    "\n\006filter\030\001 \001(\0132!.runtime.v1alpha2.Contai"
-    "nerFilter\"\352\001\n\017ContainerFilter\022\n\n\002id\030\001 \001("
-    "\t\022\026\n\016pod_sandbox_id\030\002 \001(\t\022/\n\005state\030\003 \001(\016"
-    "2 .runtime.v1alpha2.ContainerState\022L\n\016la"
-    "bel_selector\030\004 \003(\01324.runtime.v1alpha2.Co"
-    "ntainerFilter.LabelSelectorEntry\0324\n\022Labe"
-    "lSelectorEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001"
-    "(\t:\0028\001\"I\n\026ListContainersResponse\022/\n\ncont"
-    "ainers\030\001 \003(\0132\033.runtime.v1alpha2.Containe"
-    "r\"\301\003\n\tContainer\022\n\n\002id\030\001 \001(\t\022\016\n\006pod_id\030\002 "
-    "\001(\t\0225\n\010metadata\030\003 \001(\0132#.runtime.v1alpha2"
-    ".ContainerMetadata\022*\n\005image\030\004 \001(\0132\033.runt"
-    "ime.v1alpha2.ImageSpec\022\021\n\timage_ref\030\005 \001("
-    "\t\022/\n\005state\030\006 \001(\0162 .runtime.v1alpha2.Cont"
-    "ainerState\022\022\n\ncreated_at\030\007 \001(\003\0227\n\006labels"
-    "\030\010 \003(\0132\'.runtime.v1alpha2.Container.Labe"
-    "lsEntry\022A\n\013annotations\030\t \003(\0132,.runtime.v"
-    "1alpha2.Container.AnnotationsEntry\032-\n\013La"
-    "belsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028"
-    "\001\0322\n\020AnnotationsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005va"
-    "lue\030\002 \001(\t:\0028\001\"-\n\025StartContainerRequest\022\024"
-    "\n\014container_id\030\001 \001(\t\"\030\n\026StartContainerRe"
-    "sponse\"=\n\024StopContainerRequest\022\024\n\014contai"
-    "ner_id\030\001 \001(\t\022\017\n\007timeout\030\002 \001(\003\"\027\n\025StopCon"
-    "tainerResponse*>\n\010PodState\022\013\n\007UNKNOWN\020\000\022"
-    "\013\n\007CREATED\020\001\022\013\n\007RUNNING\020\002\022\013\n\007STOPPED\020\003*l"
-    "\n\016ContainerState\022\025\n\021CONTAINER_UNKNOWN\020\000\022"
-    "\025\n\021CONTAINER_CREATED\020\001\022\025\n\021CONTAINER_RUNN"
-    "ING\020\002\022\025\n\021CONTAINER_STOPPED\020\0032\300\007\n\016Runtime"
-    "Service\022V\n\tCreatePod\022\".runtime.v1alpha2."
-    "CreatePodRequest\032#.runtime.v1alpha2.Crea"
-    "tePodResponse\"\000\022V\n\tDeletePod\022\".runtime.v"
-    "1alpha2.DeletePodRequest\032#.runtime.v1alp"
-    "ha2.DeletePodResponse\"\000\022Q\n\010ListPods\022 .ru"
-    "ntime.v1alpha2.ListPodRequest\032!.runtime."
-    "v1alpha2.ListPodResponse\"\000\022S\n\010StartPod\022!"
-    ".runtime.v1alpha2.StartPodRequest\032\".runt"
-    "ime.v1alpha2.StartPodResponse\"\000\022P\n\007StopP"
-    "od\022 .runtime.v1alpha2.StopPodRequest\032!.r"
-    "untime.v1alpha2.StopPodResponse\"\000\022h\n\017Cre"
-    "ateContainer\022(.runtime.v1alpha2.CreateCo"
-    "ntainerRequest\032).runtime.v1alpha2.Create"
-    "ContainerResponse\"\000\022h\n\017DeleteContainer\022("
-    ".runtime.v1alpha2.DeleteContainerRequest"
-    "\032).runtime.v1alpha2.DeleteContainerRespo"
-    "nse\"\000\022e\n\016ListContainers\022\'.runtime.v1alph"
-    "a2.ListContainersRequest\032(.runtime.v1alp"
-    "ha2.ListContainersResponse\"\000\022e\n\016StartCon"
-    "tainer\022\'.runtime.v1alpha2.StartContainer"
-    "Request\032(.runtime.v1alpha2.StartContaine"
-    "rResponse\"\000\022b\n\rStopContainer\022&.runtime.v"
-    "1alpha2.StopContainerRequest\032\'.runtime.v"
-    "1alpha2.StopContainerResponse\"\000b\006proto3"
+    "1alpha2\"\?\n\tDNSConfig\022\017\n\007servers\030\001 \003(\t\022\020\n"
+    "\010searches\030\002 \003(\t\022\017\n\007options\030\003 \003(\t\"[\n\013Port"
+    "Mapping\022\020\n\010protocol\030\001 \001(\t\022\026\n\016container_p"
+    "ort\030\002 \001(\005\022\021\n\thost_port\030\003 \001(\005\022\017\n\007host_ip\030"
+    "\004 \001(\t\"\342\001\n\025LinuxPodSandboxConfig\022\025\n\rcgrou"
+    "p_parent\030\001 \001(\t\022;\n\020security_context\030\002 \001(\013"
+    "2!.runtime.v1alpha2.SecurityContext\022E\n\007s"
+    "ysctls\030\003 \003(\01324.runtime.v1alpha2.LinuxPod"
+    "SandboxConfig.SysctlsEntry\032.\n\014SysctlsEnt"
+    "ry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\377\003\n\020P"
+    "odSandboxConfig\022/\n\010metadata\030\001 \001(\0132\035.runt"
+    "ime.v1alpha2.PodMetadata\022\020\n\010hostname\030\002 \001"
+    "(\t\022\025\n\rlog_directory\030\003 \001(\t\022/\n\ndns_config\030"
+    "\004 \001(\0132\033.runtime.v1alpha2.DNSConfig\0224\n\rpo"
+    "rt_mappings\030\005 \003(\0132\035.runtime.v1alpha2.Por"
+    "tMapping\022=\n\014linux_config\030\006 \001(\0132\'.runtime"
+    ".v1alpha2.LinuxPodSandboxConfig\022>\n\006label"
+    "s\030\007 \003(\0132..runtime.v1alpha2.PodSandboxCon"
+    "fig.LabelsEntry\022H\n\013annotations\030\010 \003(\01323.r"
+    "untime.v1alpha2.PodSandboxConfig.Annotat"
+    "ionsEntry\032-\n\013LabelsEntry\022\013\n\003key\030\001 \001(\t\022\r\n"
+    "\005value\030\002 \001(\t:\0028\001\0322\n\020AnnotationsEntry\022\013\n\003"
+    "key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"L\n\013PodMetad"
+    "ata\022\014\n\004name\030\001 \001(\t\022\013\n\003uid\030\002 \001(\t\022\021\n\tnamesp"
+    "ace\030\003 \001(\t\022\017\n\007attempt\030\004 \001(\r\"!\n\rNetworkCon"
+    "fig\022\020\n\010pod_cidr\030\001 \001(\t\"\316\001\n\013LinuxConfig\022\025\n"
+    "\rcgroup_parent\030\001 \001(\t\022;\n\020security_context"
+    "\030\002 \001(\0132!.runtime.v1alpha2.SecurityContex"
+    "t\022;\n\007sysctls\030\003 \003(\0132*.runtime.v1alpha2.Li"
+    "nuxConfig.SysctlsEntry\032.\n\014SysctlsEntry\022\013"
+    "\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\325\001\n\017Secur"
+    "ityContext\022<\n\021namespace_options\030\001 \001(\0132!."
+    "runtime.v1alpha2.NamespaceOption\0228\n\017seli"
+    "nux_options\030\002 \001(\0132\037.runtime.v1alpha2.SEL"
+    "inuxOption\0226\n\013run_as_user\030\003 \001(\0132!.runtim"
+    "e.v1alpha2.RunAsUserOption\022\022\n\nprivileged"
+    "\030\004 \001(\010\"K\n\017NamespaceOption\022\024\n\014host_networ"
+    "k\030\001 \001(\010\022\020\n\010host_pid\030\002 \001(\010\022\020\n\010host_ipc\030\003 "
+    "\001(\010\"H\n\rSELinuxOption\022\014\n\004user\030\001 \001(\t\022\014\n\004ro"
+    "le\030\002 \001(\t\022\014\n\004type\030\003 \001(\t\022\r\n\005level\030\004 \001(\t\"D\n"
+    "\017RunAsUserOption\022\013\n\003uid\030\001 \001(\003\022\013\n\003gid\030\002 \001"
+    "(\003\022\027\n\017additional_gids\030\003 \003(\003\"F\n\020CreatePod"
+    "Request\0222\n\006config\030\001 \001(\0132\".runtime.v1alph"
+    "a2.PodSandboxConfig\"+\n\021CreatePodResponse"
+    "\022\026\n\016pod_sandbox_id\030\001 \001(\t\"*\n\020DeletePodReq"
+    "uest\022\026\n\016pod_sandbox_id\030\001 \001(\t\"\023\n\021DeletePo"
+    "dResponse\"=\n\016ListPodRequest\022+\n\006filter\030\001 "
+    "\001(\0132\033.runtime.v1alpha2.PodFilter\"\300\001\n\tPod"
+    "Filter\022\n\n\002id\030\001 \001(\t\022)\n\005state\030\002 \001(\0162\032.runt"
+    "ime.v1alpha2.PodState\022F\n\016label_selector\030"
+    "\003 \003(\0132..runtime.v1alpha2.PodFilter.Label"
+    "SelectorEntry\0324\n\022LabelSelectorEntry\022\013\n\003k"
+    "ey\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"7\n\017ListPodRe"
+    "sponse\022$\n\005items\030\001 \003(\0132\025.runtime.v1alpha2"
+    ".Pod\"\324\002\n\003Pod\022\n\n\002id\030\001 \001(\t\022/\n\010metadata\030\002 \001"
+    "(\0132\035.runtime.v1alpha2.PodMetadata\022)\n\005sta"
+    "te\030\003 \001(\0162\032.runtime.v1alpha2.PodState\022\022\n\n"
+    "created_at\030\004 \001(\003\0221\n\006labels\030\005 \003(\0132!.runti"
+    "me.v1alpha2.Pod.LabelsEntry\022;\n\013annotatio"
+    "ns\030\006 \003(\0132&.runtime.v1alpha2.Pod.Annotati"
+    "onsEntry\032-\n\013LabelsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005"
+    "value\030\002 \001(\t:\0028\001\0322\n\020AnnotationsEntry\022\013\n\003k"
+    "ey\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\")\n\017StartPodR"
+    "equest\022\026\n\016pod_sandbox_id\030\001 \001(\t\"\022\n\020StartP"
+    "odResponse\"(\n\016StopPodRequest\022\026\n\016pod_sand"
+    "box_id\030\001 \001(\t\"\021\n\017StopPodResponse\"\346\003\n\017Cont"
+    "ainerConfig\0225\n\010metadata\030\001 \001(\0132#.runtime."
+    "v1alpha2.ContainerMetadata\022*\n\005image\030\002 \001("
+    "\0132\033.runtime.v1alpha2.ImageSpec\022\017\n\007comman"
+    "d\030\003 \003(\t\022\014\n\004args\030\004 \003(\t\022\023\n\013working_dir\030\005 \001"
+    "(\t\022(\n\004envs\030\006 \003(\0132\032.runtime.v1alpha2.KeyV"
+    "alue\022\'\n\006mounts\030\007 \003(\0132\027.runtime.v1alpha2."
+    "Mount\022=\n\006labels\030\010 \003(\0132-.runtime.v1alpha2"
+    ".ContainerConfig.LabelsEntry\022G\n\013annotati"
+    "ons\030\t \003(\01322.runtime.v1alpha2.ContainerCo"
+    "nfig.AnnotationsEntry\032-\n\013LabelsEntry\022\013\n\003"
+    "key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\0322\n\020Annotati"
+    "onsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001"
+    "\"2\n\021ContainerMetadata\022\014\n\004name\030\001 \001(\t\022\017\n\007a"
+    "ttempt\030\002 \001(\r\"\032\n\tImageSpec\022\r\n\005image\030\001 \001(\t"
+    "\"&\n\010KeyValue\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t"
+    "\"D\n\005Mount\022\026\n\016container_path\030\001 \001(\t\022\021\n\thos"
+    "t_path\030\002 \001(\t\022\020\n\010readonly\030\003 \001(\010\"\237\001\n\026Creat"
+    "eContainerRequest\022\026\n\016pod_sandbox_id\030\001 \001("
+    "\t\0221\n\006config\030\002 \001(\0132!.runtime.v1alpha2.Con"
+    "tainerConfig\022:\n\016sandbox_config\030\003 \001(\0132\".r"
+    "untime.v1alpha2.PodSandboxConfig\"/\n\027Crea"
+    "teContainerResponse\022\024\n\014container_id\030\001 \001("
+    "\t\".\n\026DeleteContainerRequest\022\024\n\014container"
+    "_id\030\001 \001(\t\"\031\n\027DeleteContainerResponse\"J\n\025"
+    "ListContainersRequest\0221\n\006filter\030\001 \001(\0132!."
+    "runtime.v1alpha2.ContainerFilter\"\352\001\n\017Con"
+    "tainerFilter\022\n\n\002id\030\001 \001(\t\022\026\n\016pod_sandbox_"
+    "id\030\002 \001(\t\022/\n\005state\030\003 \001(\0162 .runtime.v1alph"
+    "a2.ContainerState\022L\n\016label_selector\030\004 \003("
+    "\01324.runtime.v1alpha2.ContainerFilter.Lab"
+    "elSelectorEntry\0324\n\022LabelSelectorEntry\022\013\n"
+    "\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"I\n\026ListCon"
+    "tainersResponse\022/\n\ncontainers\030\001 \003(\0132\033.ru"
+    "ntime.v1alpha2.Container\"\301\003\n\tContainer\022\n"
+    "\n\002id\030\001 \001(\t\022\016\n\006pod_id\030\002 \001(\t\0225\n\010metadata\030\003"
+    " \001(\0132#.runtime.v1alpha2.ContainerMetadat"
+    "a\022*\n\005image\030\004 \001(\0132\033.runtime.v1alpha2.Imag"
+    "eSpec\022\021\n\timage_ref\030\005 \001(\t\022/\n\005state\030\006 \001(\0162"
+    " .runtime.v1alpha2.ContainerState\022\022\n\ncre"
+    "ated_at\030\007 \001(\003\0227\n\006labels\030\010 \003(\0132\'.runtime."
+    "v1alpha2.Container.LabelsEntry\022A\n\013annota"
+    "tions\030\t \003(\0132,.runtime.v1alpha2.Container"
+    ".AnnotationsEntry\032-\n\013LabelsEntry\022\013\n\003key\030"
+    "\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\0322\n\020AnnotationsE"
+    "ntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"-\n\025"
+    "StartContainerRequest\022\024\n\014container_id\030\001 "
+    "\001(\t\"\030\n\026StartContainerResponse\"=\n\024StopCon"
+    "tainerRequest\022\024\n\014container_id\030\001 \001(\t\022\017\n\007t"
+    "imeout\030\002 \001(\003\"\027\n\025StopContainerResponse*>\n"
+    "\010PodState\022\013\n\007UNKNOWN\020\000\022\013\n\007CREATED\020\001\022\013\n\007R"
+    "UNNING\020\002\022\013\n\007STOPPED\020\003*l\n\016ContainerState\022"
+    "\025\n\021CONTAINER_UNKNOWN\020\000\022\025\n\021CONTAINER_CREA"
+    "TED\020\001\022\025\n\021CONTAINER_RUNNING\020\002\022\025\n\021CONTAINE"
+    "R_STOPPED\020\0032\300\007\n\016RuntimeService\022V\n\tCreate"
+    "Pod\022\".runtime.v1alpha2.CreatePodRequest\032"
+    "#.runtime.v1alpha2.CreatePodResponse\"\000\022V"
+    "\n\tDeletePod\022\".runtime.v1alpha2.DeletePod"
+    "Request\032#.runtime.v1alpha2.DeletePodResp"
+    "onse\"\000\022Q\n\010ListPods\022 .runtime.v1alpha2.Li"
+    "stPodRequest\032!.runtime.v1alpha2.ListPodR"
+    "esponse\"\000\022S\n\010StartPod\022!.runtime.v1alpha2"
+    ".StartPodRequest\032\".runtime.v1alpha2.Star"
+    "tPodResponse\"\000\022P\n\007StopPod\022 .runtime.v1al"
+    "pha2.StopPodRequest\032!.runtime.v1alpha2.S"
+    "topPodResponse\"\000\022h\n\017CreateContainer\022(.ru"
+    "ntime.v1alpha2.CreateContainerRequest\032)."
+    "runtime.v1alpha2.CreateContainerResponse"
+    "\"\000\022h\n\017DeleteContainer\022(.runtime.v1alpha2"
+    ".DeleteContainerRequest\032).runtime.v1alph"
+    "a2.DeleteContainerResponse\"\000\022e\n\016ListCont"
+    "ainers\022\'.runtime.v1alpha2.ListContainers"
+    "Request\032(.runtime.v1alpha2.ListContainer"
+    "sResponse\"\000\022e\n\016StartContainer\022\'.runtime."
+    "v1alpha2.StartContainerRequest\032(.runtime"
+    ".v1alpha2.StartContainerResponse\"\000\022b\n\rSt"
+    "opContainer\022&.runtime.v1alpha2.StopConta"
+    "inerRequest\032\'.runtime.v1alpha2.StopConta"
+    "inerResponse\"\000b\006proto3"
 };
 static ::absl::once_flag descriptor_table_proto_2fruntime_5fservice_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_proto_2fruntime_5fservice_2eproto = {
     false,
     false,
-    4959,
+    5782,
     descriptor_table_protodef_proto_2fruntime_5fservice_2eproto,
     "proto/runtime_service.proto",
     &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
     nullptr,
     0,
-    45,
+    52,
     schemas,
     file_default_instances,
     TableStruct_proto_2fruntime_5fservice_2eproto::offsets,
@@ -1670,13 +1954,829 @@ bool ContainerState_IsValid(int value) {
 }
 // ===================================================================
 
-PodSandboxConfig_AnnotationsEntry_DoNotUse::PodSandboxConfig_AnnotationsEntry_DoNotUse() {}
-PodSandboxConfig_AnnotationsEntry_DoNotUse::PodSandboxConfig_AnnotationsEntry_DoNotUse(::google::protobuf::Arena* arena)
-    : SuperType(arena) {}
-::google::protobuf::Metadata PodSandboxConfig_AnnotationsEntry_DoNotUse::GetMetadata() const {
+class DNSConfig::_Internal {
+ public:
+};
+
+DNSConfig::DNSConfig(::google::protobuf::Arena* arena)
+    : ::google::protobuf::Message(arena) {
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:runtime.v1alpha2.DNSConfig)
+}
+inline PROTOBUF_NDEBUG_INLINE DNSConfig::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility, ::google::protobuf::Arena* arena,
+    const Impl_& from)
+      : servers_{visibility, arena, from.servers_},
+        searches_{visibility, arena, from.searches_},
+        options_{visibility, arena, from.options_},
+        _cached_size_{0} {}
+
+DNSConfig::DNSConfig(
+    ::google::protobuf::Arena* arena,
+    const DNSConfig& from)
+    : ::google::protobuf::Message(arena) {
+  DNSConfig* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_);
+
+  // @@protoc_insertion_point(copy_constructor:runtime.v1alpha2.DNSConfig)
+}
+inline PROTOBUF_NDEBUG_INLINE DNSConfig::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* arena)
+      : servers_{visibility, arena},
+        searches_{visibility, arena},
+        options_{visibility, arena},
+        _cached_size_{0} {}
+
+inline void DNSConfig::SharedCtor(::_pb::Arena* arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+}
+DNSConfig::~DNSConfig() {
+  // @@protoc_insertion_point(destructor:runtime.v1alpha2.DNSConfig)
+  _internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  SharedDtor();
+}
+inline void DNSConfig::SharedDtor() {
+  ABSL_DCHECK(GetArena() == nullptr);
+  _impl_.~Impl_();
+}
+
+PROTOBUF_NOINLINE void DNSConfig::Clear() {
+// @@protoc_insertion_point(message_clear_start:runtime.v1alpha2.DNSConfig)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.servers_.Clear();
+  _impl_.searches_.Clear();
+  _impl_.options_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+const char* DNSConfig::_InternalParse(
+    const char* ptr, ::_pbi::ParseContext* ctx) {
+  ptr = ::_pbi::TcParser::ParseLoop(this, ptr, ctx, &_table_.header);
+  return ptr;
+}
+
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<2, 3, 0, 57, 2> DNSConfig::_table_ = {
+  {
+    0,  // no _has_bits_
+    0, // no _extensions_
+    3, 24,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967288,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    3,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    &_DNSConfig_default_instance_._instance,
+    ::_pbi::TcParser::GenericFallback,  // fallback
+  }, {{
+    {::_pbi::TcParser::MiniParse, {}},
+    // repeated string servers = 1;
+    {::_pbi::TcParser::FastUR1,
+     {10, 63, 0, PROTOBUF_FIELD_OFFSET(DNSConfig, _impl_.servers_)}},
+    // repeated string searches = 2;
+    {::_pbi::TcParser::FastUR1,
+     {18, 63, 0, PROTOBUF_FIELD_OFFSET(DNSConfig, _impl_.searches_)}},
+    // repeated string options = 3;
+    {::_pbi::TcParser::FastUR1,
+     {26, 63, 0, PROTOBUF_FIELD_OFFSET(DNSConfig, _impl_.options_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // repeated string servers = 1;
+    {PROTOBUF_FIELD_OFFSET(DNSConfig, _impl_.servers_), 0, 0,
+    (0 | ::_fl::kFcRepeated | ::_fl::kUtf8String | ::_fl::kRepSString)},
+    // repeated string searches = 2;
+    {PROTOBUF_FIELD_OFFSET(DNSConfig, _impl_.searches_), 0, 0,
+    (0 | ::_fl::kFcRepeated | ::_fl::kUtf8String | ::_fl::kRepSString)},
+    // repeated string options = 3;
+    {PROTOBUF_FIELD_OFFSET(DNSConfig, _impl_.options_), 0, 0,
+    (0 | ::_fl::kFcRepeated | ::_fl::kUtf8String | ::_fl::kRepSString)},
+  }},
+  // no aux_entries
+  {{
+    "\32\7\10\7\0\0\0\0"
+    "runtime.v1alpha2.DNSConfig"
+    "servers"
+    "searches"
+    "options"
+  }},
+};
+
+::uint8_t* DNSConfig::_InternalSerialize(
+    ::uint8_t* target,
+    ::google::protobuf::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:runtime.v1alpha2.DNSConfig)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // repeated string servers = 1;
+  for (int i = 0, n = this->_internal_servers_size(); i < n; ++i) {
+    const auto& s = this->_internal_servers().Get(i);
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        s.data(), static_cast<int>(s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.DNSConfig.servers");
+    target = stream->WriteString(1, s, target);
+  }
+
+  // repeated string searches = 2;
+  for (int i = 0, n = this->_internal_searches_size(); i < n; ++i) {
+    const auto& s = this->_internal_searches().Get(i);
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        s.data(), static_cast<int>(s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.DNSConfig.searches");
+    target = stream->WriteString(2, s, target);
+  }
+
+  // repeated string options = 3;
+  for (int i = 0, n = this->_internal_options_size(); i < n; ++i) {
+    const auto& s = this->_internal_options().Get(i);
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        s.data(), static_cast<int>(s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.DNSConfig.options");
+    target = stream->WriteString(3, s, target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:runtime.v1alpha2.DNSConfig)
+  return target;
+}
+
+::size_t DNSConfig::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:runtime.v1alpha2.DNSConfig)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // repeated string servers = 1;
+  total_size += 1 * ::google::protobuf::internal::FromIntSize(_internal_servers().size());
+  for (int i = 0, n = _internal_servers().size(); i < n; ++i) {
+    total_size += ::google::protobuf::internal::WireFormatLite::StringSize(
+        _internal_servers().Get(i));
+  }
+  // repeated string searches = 2;
+  total_size += 1 * ::google::protobuf::internal::FromIntSize(_internal_searches().size());
+  for (int i = 0, n = _internal_searches().size(); i < n; ++i) {
+    total_size += ::google::protobuf::internal::WireFormatLite::StringSize(
+        _internal_searches().Get(i));
+  }
+  // repeated string options = 3;
+  total_size += 1 * ::google::protobuf::internal::FromIntSize(_internal_options().size());
+  for (int i = 0, n = _internal_options().size(); i < n; ++i) {
+    total_size += ::google::protobuf::internal::WireFormatLite::StringSize(
+        _internal_options().Get(i));
+  }
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::google::protobuf::Message::ClassData DNSConfig::_class_data_ = {
+    DNSConfig::MergeImpl,
+    nullptr,  // OnDemandRegisterArenaDtor
+};
+const ::google::protobuf::Message::ClassData* DNSConfig::GetClassData() const {
+  return &_class_data_;
+}
+
+void DNSConfig::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
+  auto* const _this = static_cast<DNSConfig*>(&to_msg);
+  auto& from = static_cast<const DNSConfig&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:runtime.v1alpha2.DNSConfig)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  _this->_internal_mutable_servers()->MergeFrom(from._internal_servers());
+  _this->_internal_mutable_searches()->MergeFrom(from._internal_searches());
+  _this->_internal_mutable_options()->MergeFrom(from._internal_options());
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void DNSConfig::CopyFrom(const DNSConfig& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:runtime.v1alpha2.DNSConfig)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+PROTOBUF_NOINLINE bool DNSConfig::IsInitialized() const {
+  return true;
+}
+
+::_pbi::CachedSize* DNSConfig::AccessCachedSize() const {
+  return &_impl_._cached_size_;
+}
+void DNSConfig::InternalSwap(DNSConfig* PROTOBUF_RESTRICT other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  _impl_.servers_.InternalSwap(&other->_impl_.servers_);
+  _impl_.searches_.InternalSwap(&other->_impl_.searches_);
+  _impl_.options_.InternalSwap(&other->_impl_.options_);
+}
+
+::google::protobuf::Metadata DNSConfig::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
       file_level_metadata_proto_2fruntime_5fservice_2eproto[0]);
+}
+// ===================================================================
+
+class PortMapping::_Internal {
+ public:
+};
+
+PortMapping::PortMapping(::google::protobuf::Arena* arena)
+    : ::google::protobuf::Message(arena) {
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:runtime.v1alpha2.PortMapping)
+}
+inline PROTOBUF_NDEBUG_INLINE PortMapping::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility, ::google::protobuf::Arena* arena,
+    const Impl_& from)
+      : protocol_(arena, from.protocol_),
+        host_ip_(arena, from.host_ip_),
+        _cached_size_{0} {}
+
+PortMapping::PortMapping(
+    ::google::protobuf::Arena* arena,
+    const PortMapping& from)
+    : ::google::protobuf::Message(arena) {
+  PortMapping* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_);
+  ::memcpy(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, container_port_),
+           reinterpret_cast<const char *>(&from._impl_) +
+               offsetof(Impl_, container_port_),
+           offsetof(Impl_, host_port_) -
+               offsetof(Impl_, container_port_) +
+               sizeof(Impl_::host_port_));
+
+  // @@protoc_insertion_point(copy_constructor:runtime.v1alpha2.PortMapping)
+}
+inline PROTOBUF_NDEBUG_INLINE PortMapping::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* arena)
+      : protocol_(arena),
+        host_ip_(arena),
+        _cached_size_{0} {}
+
+inline void PortMapping::SharedCtor(::_pb::Arena* arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, container_port_),
+           0,
+           offsetof(Impl_, host_port_) -
+               offsetof(Impl_, container_port_) +
+               sizeof(Impl_::host_port_));
+}
+PortMapping::~PortMapping() {
+  // @@protoc_insertion_point(destructor:runtime.v1alpha2.PortMapping)
+  _internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  SharedDtor();
+}
+inline void PortMapping::SharedDtor() {
+  ABSL_DCHECK(GetArena() == nullptr);
+  _impl_.protocol_.Destroy();
+  _impl_.host_ip_.Destroy();
+  _impl_.~Impl_();
+}
+
+PROTOBUF_NOINLINE void PortMapping::Clear() {
+// @@protoc_insertion_point(message_clear_start:runtime.v1alpha2.PortMapping)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.protocol_.ClearToEmpty();
+  _impl_.host_ip_.ClearToEmpty();
+  ::memset(&_impl_.container_port_, 0, static_cast<::size_t>(
+      reinterpret_cast<char*>(&_impl_.host_port_) -
+      reinterpret_cast<char*>(&_impl_.container_port_)) + sizeof(_impl_.host_port_));
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+const char* PortMapping::_InternalParse(
+    const char* ptr, ::_pbi::ParseContext* ctx) {
+  ptr = ::_pbi::TcParser::ParseLoop(this, ptr, ctx, &_table_.header);
+  return ptr;
+}
+
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<2, 4, 0, 52, 2> PortMapping::_table_ = {
+  {
+    0,  // no _has_bits_
+    0, // no _extensions_
+    4, 24,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967280,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    4,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    &_PortMapping_default_instance_._instance,
+    ::_pbi::TcParser::GenericFallback,  // fallback
+  }, {{
+    // string host_ip = 4;
+    {::_pbi::TcParser::FastUS1,
+     {34, 63, 0, PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.host_ip_)}},
+    // string protocol = 1;
+    {::_pbi::TcParser::FastUS1,
+     {10, 63, 0, PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.protocol_)}},
+    // int32 container_port = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(PortMapping, _impl_.container_port_), 63>(),
+     {16, 63, 0, PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.container_port_)}},
+    // int32 host_port = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(PortMapping, _impl_.host_port_), 63>(),
+     {24, 63, 0, PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.host_port_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // string protocol = 1;
+    {PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.protocol_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // int32 container_port = 2;
+    {PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.container_port_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // int32 host_port = 3;
+    {PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.host_port_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // string host_ip = 4;
+    {PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.host_ip_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+  }},
+  // no aux_entries
+  {{
+    "\34\10\0\0\7\0\0\0"
+    "runtime.v1alpha2.PortMapping"
+    "protocol"
+    "host_ip"
+  }},
+};
+
+::uint8_t* PortMapping::_InternalSerialize(
+    ::uint8_t* target,
+    ::google::protobuf::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:runtime.v1alpha2.PortMapping)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // string protocol = 1;
+  if (!this->_internal_protocol().empty()) {
+    const std::string& _s = this->_internal_protocol();
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PortMapping.protocol");
+    target = stream->WriteStringMaybeAliased(1, _s, target);
+  }
+
+  // int32 container_port = 2;
+  if (this->_internal_container_port() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<2>(
+            stream, this->_internal_container_port(), target);
+  }
+
+  // int32 host_port = 3;
+  if (this->_internal_host_port() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<3>(
+            stream, this->_internal_host_port(), target);
+  }
+
+  // string host_ip = 4;
+  if (!this->_internal_host_ip().empty()) {
+    const std::string& _s = this->_internal_host_ip();
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PortMapping.host_ip");
+    target = stream->WriteStringMaybeAliased(4, _s, target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:runtime.v1alpha2.PortMapping)
+  return target;
+}
+
+::size_t PortMapping::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:runtime.v1alpha2.PortMapping)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // string protocol = 1;
+  if (!this->_internal_protocol().empty()) {
+    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                    this->_internal_protocol());
+  }
+
+  // string host_ip = 4;
+  if (!this->_internal_host_ip().empty()) {
+    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                    this->_internal_host_ip());
+  }
+
+  // int32 container_port = 2;
+  if (this->_internal_container_port() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_container_port());
+  }
+
+  // int32 host_port = 3;
+  if (this->_internal_host_port() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_host_port());
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::google::protobuf::Message::ClassData PortMapping::_class_data_ = {
+    PortMapping::MergeImpl,
+    nullptr,  // OnDemandRegisterArenaDtor
+};
+const ::google::protobuf::Message::ClassData* PortMapping::GetClassData() const {
+  return &_class_data_;
+}
+
+void PortMapping::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
+  auto* const _this = static_cast<PortMapping*>(&to_msg);
+  auto& from = static_cast<const PortMapping&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:runtime.v1alpha2.PortMapping)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (!from._internal_protocol().empty()) {
+    _this->_internal_set_protocol(from._internal_protocol());
+  }
+  if (!from._internal_host_ip().empty()) {
+    _this->_internal_set_host_ip(from._internal_host_ip());
+  }
+  if (from._internal_container_port() != 0) {
+    _this->_internal_set_container_port(from._internal_container_port());
+  }
+  if (from._internal_host_port() != 0) {
+    _this->_internal_set_host_port(from._internal_host_port());
+  }
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void PortMapping::CopyFrom(const PortMapping& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:runtime.v1alpha2.PortMapping)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+PROTOBUF_NOINLINE bool PortMapping::IsInitialized() const {
+  return true;
+}
+
+::_pbi::CachedSize* PortMapping::AccessCachedSize() const {
+  return &_impl_._cached_size_;
+}
+void PortMapping::InternalSwap(PortMapping* PROTOBUF_RESTRICT other) {
+  using std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.protocol_, &other->_impl_.protocol_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.host_ip_, &other->_impl_.host_ip_, arena);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.host_port_)
+      + sizeof(PortMapping::_impl_.host_port_)
+      - PROTOBUF_FIELD_OFFSET(PortMapping, _impl_.container_port_)>(
+          reinterpret_cast<char*>(&_impl_.container_port_),
+          reinterpret_cast<char*>(&other->_impl_.container_port_));
+}
+
+::google::protobuf::Metadata PortMapping::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[1]);
+}
+// ===================================================================
+
+LinuxPodSandboxConfig_SysctlsEntry_DoNotUse::LinuxPodSandboxConfig_SysctlsEntry_DoNotUse() {}
+LinuxPodSandboxConfig_SysctlsEntry_DoNotUse::LinuxPodSandboxConfig_SysctlsEntry_DoNotUse(::google::protobuf::Arena* arena)
+    : SuperType(arena) {}
+::google::protobuf::Metadata LinuxPodSandboxConfig_SysctlsEntry_DoNotUse::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[2]);
+}
+// ===================================================================
+
+class LinuxPodSandboxConfig::_Internal {
+ public:
+  using HasBits = decltype(std::declval<LinuxPodSandboxConfig>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+    8 * PROTOBUF_FIELD_OFFSET(LinuxPodSandboxConfig, _impl_._has_bits_);
+  static const ::runtime::v1alpha2::SecurityContext& security_context(const LinuxPodSandboxConfig* msg);
+  static void set_has_security_context(HasBits* has_bits) {
+    (*has_bits)[0] |= 1u;
+  }
+};
+
+const ::runtime::v1alpha2::SecurityContext& LinuxPodSandboxConfig::_Internal::security_context(const LinuxPodSandboxConfig* msg) {
+  return *msg->_impl_.security_context_;
+}
+LinuxPodSandboxConfig::LinuxPodSandboxConfig(::google::protobuf::Arena* arena)
+    : ::google::protobuf::Message(arena) {
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:runtime.v1alpha2.LinuxPodSandboxConfig)
+}
+inline PROTOBUF_NDEBUG_INLINE LinuxPodSandboxConfig::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility, ::google::protobuf::Arena* arena,
+    const Impl_& from)
+      : _has_bits_{from._has_bits_},
+        _cached_size_{0},
+        sysctls_{visibility, arena, from.sysctls_},
+        cgroup_parent_(arena, from.cgroup_parent_) {}
+
+LinuxPodSandboxConfig::LinuxPodSandboxConfig(
+    ::google::protobuf::Arena* arena,
+    const LinuxPodSandboxConfig& from)
+    : ::google::protobuf::Message(arena) {
+  LinuxPodSandboxConfig* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_);
+  ::uint32_t cached_has_bits = _impl_._has_bits_[0];
+  _impl_.security_context_ = (cached_has_bits & 0x00000001u)
+                ? CreateMaybeMessage<::runtime::v1alpha2::SecurityContext>(arena, *from._impl_.security_context_)
+                : nullptr;
+
+  // @@protoc_insertion_point(copy_constructor:runtime.v1alpha2.LinuxPodSandboxConfig)
+}
+inline PROTOBUF_NDEBUG_INLINE LinuxPodSandboxConfig::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* arena)
+      : _cached_size_{0},
+        sysctls_{visibility, arena},
+        cgroup_parent_(arena) {}
+
+inline void LinuxPodSandboxConfig::SharedCtor(::_pb::Arena* arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  _impl_.security_context_ = {};
+}
+LinuxPodSandboxConfig::~LinuxPodSandboxConfig() {
+  // @@protoc_insertion_point(destructor:runtime.v1alpha2.LinuxPodSandboxConfig)
+  _internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  SharedDtor();
+}
+inline void LinuxPodSandboxConfig::SharedDtor() {
+  ABSL_DCHECK(GetArena() == nullptr);
+  _impl_.cgroup_parent_.Destroy();
+  delete _impl_.security_context_;
+  _impl_.~Impl_();
+}
+
+PROTOBUF_NOINLINE void LinuxPodSandboxConfig::Clear() {
+// @@protoc_insertion_point(message_clear_start:runtime.v1alpha2.LinuxPodSandboxConfig)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.sysctls_.Clear();
+  _impl_.cgroup_parent_.ClearToEmpty();
+  cached_has_bits = _impl_._has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
+    ABSL_DCHECK(_impl_.security_context_ != nullptr);
+    _impl_.security_context_->Clear();
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+const char* LinuxPodSandboxConfig::_InternalParse(
+    const char* ptr, ::_pbi::ParseContext* ctx) {
+  ptr = ::_pbi::TcParser::ParseLoop(this, ptr, ctx, &_table_.header);
+  return ptr;
+}
+
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<1, 3, 2, 67, 2> LinuxPodSandboxConfig::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(LinuxPodSandboxConfig, _impl_._has_bits_),
+    0, // no _extensions_
+    3, 8,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967288,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    3,  // num_field_entries
+    2,  // num_aux_entries
+    offsetof(decltype(_table_), aux_entries),
+    &_LinuxPodSandboxConfig_default_instance_._instance,
+    ::_pbi::TcParser::GenericFallback,  // fallback
+  }, {{
+    // .runtime.v1alpha2.SecurityContext security_context = 2;
+    {::_pbi::TcParser::FastMtS1,
+     {18, 0, 0, PROTOBUF_FIELD_OFFSET(LinuxPodSandboxConfig, _impl_.security_context_)}},
+    // string cgroup_parent = 1;
+    {::_pbi::TcParser::FastUS1,
+     {10, 63, 0, PROTOBUF_FIELD_OFFSET(LinuxPodSandboxConfig, _impl_.cgroup_parent_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // string cgroup_parent = 1;
+    {PROTOBUF_FIELD_OFFSET(LinuxPodSandboxConfig, _impl_.cgroup_parent_), -1, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // .runtime.v1alpha2.SecurityContext security_context = 2;
+    {PROTOBUF_FIELD_OFFSET(LinuxPodSandboxConfig, _impl_.security_context_), _Internal::kHasBitsOffset + 0, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+    // map<string, string> sysctls = 3;
+    {PROTOBUF_FIELD_OFFSET(LinuxPodSandboxConfig, _impl_.sysctls_), -1, 1,
+    (0 | ::_fl::kFcRepeated | ::_fl::kMap)},
+  }}, {{
+    {::_pbi::TcParser::GetTable<::runtime::v1alpha2::SecurityContext>()},
+    {::_pbi::TcParser::GetMapAuxInfo<
+        decltype(LinuxPodSandboxConfig()._impl_.sysctls_)>(
+        1, 0, 0, 9,
+        9)},
+  }}, {{
+    "\46\15\0\7\0\0\0\0"
+    "runtime.v1alpha2.LinuxPodSandboxConfig"
+    "cgroup_parent"
+    "sysctls"
+  }},
+};
+
+::uint8_t* LinuxPodSandboxConfig::_InternalSerialize(
+    ::uint8_t* target,
+    ::google::protobuf::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:runtime.v1alpha2.LinuxPodSandboxConfig)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // string cgroup_parent = 1;
+  if (!this->_internal_cgroup_parent().empty()) {
+    const std::string& _s = this->_internal_cgroup_parent();
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.LinuxPodSandboxConfig.cgroup_parent");
+    target = stream->WriteStringMaybeAliased(1, _s, target);
+  }
+
+  cached_has_bits = _impl_._has_bits_[0];
+  // .runtime.v1alpha2.SecurityContext security_context = 2;
+  if (cached_has_bits & 0x00000001u) {
+    target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+        2, _Internal::security_context(this),
+        _Internal::security_context(this).GetCachedSize(), target, stream);
+  }
+
+  // map<string, string> sysctls = 3;
+  if (!_internal_sysctls().empty()) {
+    using MapType = ::google::protobuf::Map<std::string, std::string>;
+    using WireHelper = _pbi::MapEntryFuncs<std::string, std::string,
+                                   _pbi::WireFormatLite::TYPE_STRING,
+                                   _pbi::WireFormatLite::TYPE_STRING>;
+    const auto& field = _internal_sysctls();
+
+    if (stream->IsSerializationDeterministic() && field.size() > 1) {
+      for (const auto& entry : ::google::protobuf::internal::MapSorterPtr<MapType>(field)) {
+        target = WireHelper::InternalSerialize(
+            3, entry.first, entry.second, target, stream);
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry.first.data(), static_cast<int>(entry.first.length()),
+ ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.LinuxPodSandboxConfig.sysctls");
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry.second.data(), static_cast<int>(entry.second.length()),
+ ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.LinuxPodSandboxConfig.sysctls");
+      }
+    } else {
+      for (const auto& entry : field) {
+        target = WireHelper::InternalSerialize(
+            3, entry.first, entry.second, target, stream);
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry.first.data(), static_cast<int>(entry.first.length()),
+ ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.LinuxPodSandboxConfig.sysctls");
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry.second.data(), static_cast<int>(entry.second.length()),
+ ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.LinuxPodSandboxConfig.sysctls");
+      }
+    }
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:runtime.v1alpha2.LinuxPodSandboxConfig)
+  return target;
+}
+
+::size_t LinuxPodSandboxConfig::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:runtime.v1alpha2.LinuxPodSandboxConfig)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // map<string, string> sysctls = 3;
+  total_size += 1 * ::google::protobuf::internal::FromIntSize(_internal_sysctls_size());
+  for (const auto& entry : _internal_sysctls()) {
+    total_size += _pbi::MapEntryFuncs<std::string, std::string,
+                                   _pbi::WireFormatLite::TYPE_STRING,
+                                   _pbi::WireFormatLite::TYPE_STRING>::ByteSizeLong(entry.first, entry.second);
+  }
+  // string cgroup_parent = 1;
+  if (!this->_internal_cgroup_parent().empty()) {
+    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                    this->_internal_cgroup_parent());
+  }
+
+  // .runtime.v1alpha2.SecurityContext security_context = 2;
+  cached_has_bits = _impl_._has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
+    total_size +=
+        1 + ::google::protobuf::internal::WireFormatLite::MessageSize(*_impl_.security_context_);
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::google::protobuf::Message::ClassData LinuxPodSandboxConfig::_class_data_ = {
+    LinuxPodSandboxConfig::MergeImpl,
+    nullptr,  // OnDemandRegisterArenaDtor
+};
+const ::google::protobuf::Message::ClassData* LinuxPodSandboxConfig::GetClassData() const {
+  return &_class_data_;
+}
+
+void LinuxPodSandboxConfig::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
+  auto* const _this = static_cast<LinuxPodSandboxConfig*>(&to_msg);
+  auto& from = static_cast<const LinuxPodSandboxConfig&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:runtime.v1alpha2.LinuxPodSandboxConfig)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  _this->_impl_.sysctls_.MergeFrom(from._impl_.sysctls_);
+  if (!from._internal_cgroup_parent().empty()) {
+    _this->_internal_set_cgroup_parent(from._internal_cgroup_parent());
+  }
+  if ((from._impl_._has_bits_[0] & 0x00000001u) != 0) {
+    _this->_internal_mutable_security_context()->::runtime::v1alpha2::SecurityContext::MergeFrom(
+        from._internal_security_context());
+  }
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void LinuxPodSandboxConfig::CopyFrom(const LinuxPodSandboxConfig& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:runtime.v1alpha2.LinuxPodSandboxConfig)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+PROTOBUF_NOINLINE bool LinuxPodSandboxConfig::IsInitialized() const {
+  return true;
+}
+
+::_pbi::CachedSize* LinuxPodSandboxConfig::AccessCachedSize() const {
+  return &_impl_._cached_size_;
+}
+void LinuxPodSandboxConfig::InternalSwap(LinuxPodSandboxConfig* PROTOBUF_RESTRICT other) {
+  using std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  _impl_.sysctls_.InternalSwap(&other->_impl_.sysctls_);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.cgroup_parent_, &other->_impl_.cgroup_parent_, arena);
+  swap(_impl_.security_context_, other->_impl_.security_context_);
+}
+
+::google::protobuf::Metadata LinuxPodSandboxConfig::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[3]);
 }
 // ===================================================================
 
@@ -1686,7 +2786,17 @@ PodSandboxConfig_LabelsEntry_DoNotUse::PodSandboxConfig_LabelsEntry_DoNotUse(::g
 ::google::protobuf::Metadata PodSandboxConfig_LabelsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[1]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[4]);
+}
+// ===================================================================
+
+PodSandboxConfig_AnnotationsEntry_DoNotUse::PodSandboxConfig_AnnotationsEntry_DoNotUse() {}
+PodSandboxConfig_AnnotationsEntry_DoNotUse::PodSandboxConfig_AnnotationsEntry_DoNotUse(::google::protobuf::Arena* arena)
+    : SuperType(arena) {}
+::google::protobuf::Metadata PodSandboxConfig_AnnotationsEntry_DoNotUse::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[5]);
 }
 // ===================================================================
 
@@ -1699,12 +2809,12 @@ class PodSandboxConfig::_Internal {
   static void set_has_metadata(HasBits* has_bits) {
     (*has_bits)[0] |= 1u;
   }
-  static const ::runtime::v1alpha2::NetworkConfig& network(const PodSandboxConfig* msg);
-  static void set_has_network(HasBits* has_bits) {
+  static const ::runtime::v1alpha2::DNSConfig& dns_config(const PodSandboxConfig* msg);
+  static void set_has_dns_config(HasBits* has_bits) {
     (*has_bits)[0] |= 2u;
   }
-  static const ::runtime::v1alpha2::LinuxConfig& linux(const PodSandboxConfig* msg);
-  static void set_has_linux(HasBits* has_bits) {
+  static const ::runtime::v1alpha2::LinuxPodSandboxConfig& linux_config(const PodSandboxConfig* msg);
+  static void set_has_linux_config(HasBits* has_bits) {
     (*has_bits)[0] |= 4u;
   }
 };
@@ -1712,11 +2822,11 @@ class PodSandboxConfig::_Internal {
 const ::runtime::v1alpha2::PodMetadata& PodSandboxConfig::_Internal::metadata(const PodSandboxConfig* msg) {
   return *msg->_impl_.metadata_;
 }
-const ::runtime::v1alpha2::NetworkConfig& PodSandboxConfig::_Internal::network(const PodSandboxConfig* msg) {
-  return *msg->_impl_.network_;
+const ::runtime::v1alpha2::DNSConfig& PodSandboxConfig::_Internal::dns_config(const PodSandboxConfig* msg) {
+  return *msg->_impl_.dns_config_;
 }
-const ::runtime::v1alpha2::LinuxConfig& PodSandboxConfig::_Internal::linux(const PodSandboxConfig* msg) {
-  return *msg->_impl_.linux_;
+const ::runtime::v1alpha2::LinuxPodSandboxConfig& PodSandboxConfig::_Internal::linux_config(const PodSandboxConfig* msg) {
+  return *msg->_impl_.linux_config_;
 }
 PodSandboxConfig::PodSandboxConfig(::google::protobuf::Arena* arena)
     : ::google::protobuf::Message(arena) {
@@ -1728,8 +2838,11 @@ inline PROTOBUF_NDEBUG_INLINE PodSandboxConfig::Impl_::Impl_(
     const Impl_& from)
       : _has_bits_{from._has_bits_},
         _cached_size_{0},
+        port_mappings_{visibility, arena, from.port_mappings_},
+        labels_{visibility, arena, from.labels_},
         annotations_{visibility, arena, from.annotations_},
-        labels_{visibility, arena, from.labels_} {}
+        hostname_(arena, from.hostname_),
+        log_directory_(arena, from.log_directory_) {}
 
 PodSandboxConfig::PodSandboxConfig(
     ::google::protobuf::Arena* arena,
@@ -1744,11 +2857,11 @@ PodSandboxConfig::PodSandboxConfig(
   _impl_.metadata_ = (cached_has_bits & 0x00000001u)
                 ? CreateMaybeMessage<::runtime::v1alpha2::PodMetadata>(arena, *from._impl_.metadata_)
                 : nullptr;
-  _impl_.network_ = (cached_has_bits & 0x00000002u)
-                ? CreateMaybeMessage<::runtime::v1alpha2::NetworkConfig>(arena, *from._impl_.network_)
+  _impl_.dns_config_ = (cached_has_bits & 0x00000002u)
+                ? CreateMaybeMessage<::runtime::v1alpha2::DNSConfig>(arena, *from._impl_.dns_config_)
                 : nullptr;
-  _impl_.linux_ = (cached_has_bits & 0x00000004u)
-                ? CreateMaybeMessage<::runtime::v1alpha2::LinuxConfig>(arena, *from._impl_.linux_)
+  _impl_.linux_config_ = (cached_has_bits & 0x00000004u)
+                ? CreateMaybeMessage<::runtime::v1alpha2::LinuxPodSandboxConfig>(arena, *from._impl_.linux_config_)
                 : nullptr;
 
   // @@protoc_insertion_point(copy_constructor:runtime.v1alpha2.PodSandboxConfig)
@@ -1757,17 +2870,20 @@ inline PROTOBUF_NDEBUG_INLINE PodSandboxConfig::Impl_::Impl_(
     ::google::protobuf::internal::InternalVisibility visibility,
     ::google::protobuf::Arena* arena)
       : _cached_size_{0},
+        port_mappings_{visibility, arena},
+        labels_{visibility, arena},
         annotations_{visibility, arena},
-        labels_{visibility, arena} {}
+        hostname_(arena),
+        log_directory_(arena) {}
 
 inline void PodSandboxConfig::SharedCtor(::_pb::Arena* arena) {
   new (&_impl_) Impl_(internal_visibility(), arena);
   ::memset(reinterpret_cast<char *>(&_impl_) +
                offsetof(Impl_, metadata_),
            0,
-           offsetof(Impl_, linux_) -
+           offsetof(Impl_, linux_config_) -
                offsetof(Impl_, metadata_) +
-               sizeof(Impl_::linux_));
+               sizeof(Impl_::linux_config_));
 }
 PodSandboxConfig::~PodSandboxConfig() {
   // @@protoc_insertion_point(destructor:runtime.v1alpha2.PodSandboxConfig)
@@ -1776,9 +2892,11 @@ PodSandboxConfig::~PodSandboxConfig() {
 }
 inline void PodSandboxConfig::SharedDtor() {
   ABSL_DCHECK(GetArena() == nullptr);
+  _impl_.hostname_.Destroy();
+  _impl_.log_directory_.Destroy();
   delete _impl_.metadata_;
-  delete _impl_.network_;
-  delete _impl_.linux_;
+  delete _impl_.dns_config_;
+  delete _impl_.linux_config_;
   _impl_.~Impl_();
 }
 
@@ -1789,8 +2907,11 @@ PROTOBUF_NOINLINE void PodSandboxConfig::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  _impl_.annotations_.Clear();
+  _impl_.port_mappings_.Clear();
   _impl_.labels_.Clear();
+  _impl_.annotations_.Clear();
+  _impl_.hostname_.ClearToEmpty();
+  _impl_.log_directory_.ClearToEmpty();
   cached_has_bits = _impl_._has_bits_[0];
   if (cached_has_bits & 0x00000007u) {
     if (cached_has_bits & 0x00000001u) {
@@ -1798,12 +2919,12 @@ PROTOBUF_NOINLINE void PodSandboxConfig::Clear() {
       _impl_.metadata_->Clear();
     }
     if (cached_has_bits & 0x00000002u) {
-      ABSL_DCHECK(_impl_.network_ != nullptr);
-      _impl_.network_->Clear();
+      ABSL_DCHECK(_impl_.dns_config_ != nullptr);
+      _impl_.dns_config_->Clear();
     }
     if (cached_has_bits & 0x00000004u) {
-      ABSL_DCHECK(_impl_.linux_ != nullptr);
-      _impl_.linux_->Clear();
+      ABSL_DCHECK(_impl_.linux_config_ != nullptr);
+      _impl_.linux_config_->Clear();
     }
   }
   _impl_._has_bits_.Clear();
@@ -1818,16 +2939,16 @@ const char* PodSandboxConfig::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<2, 5, 5, 59, 2> PodSandboxConfig::_table_ = {
+const ::_pbi::TcParseTable<3, 8, 6, 88, 2> PodSandboxConfig::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_._has_bits_),
     0, // no _extensions_
-    5, 24,  // max_field_number, fast_idx_mask
+    8, 56,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967264,  // skipmap
+    4294967040,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    5,  // num_field_entries
-    5,  // num_aux_entries
+    8,  // num_field_entries
+    6,  // num_aux_entries
     offsetof(decltype(_table_), aux_entries),
     &_PodSandboxConfig_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
@@ -1836,47 +2957,69 @@ const ::_pbi::TcParseTable<2, 5, 5, 59, 2> PodSandboxConfig::_table_ = {
     // .runtime.v1alpha2.PodMetadata metadata = 1;
     {::_pbi::TcParser::FastMtS1,
      {10, 0, 0, PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.metadata_)}},
-    // .runtime.v1alpha2.NetworkConfig network = 2;
+    // string hostname = 2;
+    {::_pbi::TcParser::FastUS1,
+     {18, 63, 0, PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.hostname_)}},
+    // string log_directory = 3;
+    {::_pbi::TcParser::FastUS1,
+     {26, 63, 0, PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.log_directory_)}},
+    // .runtime.v1alpha2.DNSConfig dns_config = 4;
     {::_pbi::TcParser::FastMtS1,
-     {18, 1, 1, PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.network_)}},
-    // .runtime.v1alpha2.LinuxConfig linux = 3;
+     {34, 1, 1, PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.dns_config_)}},
+    // repeated .runtime.v1alpha2.PortMapping port_mappings = 5;
+    {::_pbi::TcParser::FastMtR1,
+     {42, 63, 2, PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.port_mappings_)}},
+    // .runtime.v1alpha2.LinuxPodSandboxConfig linux_config = 6;
     {::_pbi::TcParser::FastMtS1,
-     {26, 2, 2, PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.linux_)}},
+     {50, 2, 3, PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.linux_config_)}},
+    {::_pbi::TcParser::MiniParse, {}},
   }}, {{
     65535, 65535
   }}, {{
     // .runtime.v1alpha2.PodMetadata metadata = 1;
     {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.metadata_), _Internal::kHasBitsOffset + 0, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-    // .runtime.v1alpha2.NetworkConfig network = 2;
-    {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.network_), _Internal::kHasBitsOffset + 1, 1,
+    // string hostname = 2;
+    {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.hostname_), -1, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string log_directory = 3;
+    {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.log_directory_), -1, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // .runtime.v1alpha2.DNSConfig dns_config = 4;
+    {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.dns_config_), _Internal::kHasBitsOffset + 1, 1,
     (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-    // .runtime.v1alpha2.LinuxConfig linux = 3;
-    {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.linux_), _Internal::kHasBitsOffset + 2, 2,
+    // repeated .runtime.v1alpha2.PortMapping port_mappings = 5;
+    {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.port_mappings_), -1, 2,
+    (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
+    // .runtime.v1alpha2.LinuxPodSandboxConfig linux_config = 6;
+    {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.linux_config_), _Internal::kHasBitsOffset + 2, 3,
     (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-    // map<string, string> annotations = 4;
-    {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.annotations_), -1, 3,
-    (0 | ::_fl::kFcRepeated | ::_fl::kMap)},
-    // map<string, string> labels = 5;
+    // map<string, string> labels = 7;
     {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.labels_), -1, 4,
+    (0 | ::_fl::kFcRepeated | ::_fl::kMap)},
+    // map<string, string> annotations = 8;
+    {PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.annotations_), -1, 5,
     (0 | ::_fl::kFcRepeated | ::_fl::kMap)},
   }}, {{
     {::_pbi::TcParser::GetTable<::runtime::v1alpha2::PodMetadata>()},
-    {::_pbi::TcParser::GetTable<::runtime::v1alpha2::NetworkConfig>()},
-    {::_pbi::TcParser::GetTable<::runtime::v1alpha2::LinuxConfig>()},
-    {::_pbi::TcParser::GetMapAuxInfo<
-        decltype(PodSandboxConfig()._impl_.annotations_)>(
-        1, 0, 0, 9,
-        9)},
+    {::_pbi::TcParser::GetTable<::runtime::v1alpha2::DNSConfig>()},
+    {::_pbi::TcParser::GetTable<::runtime::v1alpha2::PortMapping>()},
+    {::_pbi::TcParser::GetTable<::runtime::v1alpha2::LinuxPodSandboxConfig>()},
     {::_pbi::TcParser::GetMapAuxInfo<
         decltype(PodSandboxConfig()._impl_.labels_)>(
         1, 0, 0, 9,
         9)},
+    {::_pbi::TcParser::GetMapAuxInfo<
+        decltype(PodSandboxConfig()._impl_.annotations_)>(
+        1, 0, 0, 9,
+        9)},
   }}, {{
-    "\41\0\0\0\13\6\0\0"
+    "\41\0\10\15\0\0\0\6\13\0\0\0\0\0\0\0"
     "runtime.v1alpha2.PodSandboxConfig"
-    "annotations"
+    "hostname"
+    "log_directory"
     "labels"
+    "annotations"
   }},
 };
 
@@ -1895,54 +3038,45 @@ const ::_pbi::TcParseTable<2, 5, 5, 59, 2> PodSandboxConfig::_table_ = {
         _Internal::metadata(this).GetCachedSize(), target, stream);
   }
 
-  // .runtime.v1alpha2.NetworkConfig network = 2;
+  // string hostname = 2;
+  if (!this->_internal_hostname().empty()) {
+    const std::string& _s = this->_internal_hostname();
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.hostname");
+    target = stream->WriteStringMaybeAliased(2, _s, target);
+  }
+
+  // string log_directory = 3;
+  if (!this->_internal_log_directory().empty()) {
+    const std::string& _s = this->_internal_log_directory();
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.log_directory");
+    target = stream->WriteStringMaybeAliased(3, _s, target);
+  }
+
+  // .runtime.v1alpha2.DNSConfig dns_config = 4;
   if (cached_has_bits & 0x00000002u) {
     target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
-        2, _Internal::network(this),
-        _Internal::network(this).GetCachedSize(), target, stream);
+        4, _Internal::dns_config(this),
+        _Internal::dns_config(this).GetCachedSize(), target, stream);
   }
 
-  // .runtime.v1alpha2.LinuxConfig linux = 3;
+  // repeated .runtime.v1alpha2.PortMapping port_mappings = 5;
+  for (unsigned i = 0,
+      n = static_cast<unsigned>(this->_internal_port_mappings_size()); i < n; i++) {
+    const auto& repfield = this->_internal_port_mappings().Get(i);
+    target = ::google::protobuf::internal::WireFormatLite::
+        InternalWriteMessage(5, repfield, repfield.GetCachedSize(), target, stream);
+  }
+
+  // .runtime.v1alpha2.LinuxPodSandboxConfig linux_config = 6;
   if (cached_has_bits & 0x00000004u) {
     target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
-        3, _Internal::linux(this),
-        _Internal::linux(this).GetCachedSize(), target, stream);
+        6, _Internal::linux_config(this),
+        _Internal::linux_config(this).GetCachedSize(), target, stream);
   }
 
-  // map<string, string> annotations = 4;
-  if (!_internal_annotations().empty()) {
-    using MapType = ::google::protobuf::Map<std::string, std::string>;
-    using WireHelper = _pbi::MapEntryFuncs<std::string, std::string,
-                                   _pbi::WireFormatLite::TYPE_STRING,
-                                   _pbi::WireFormatLite::TYPE_STRING>;
-    const auto& field = _internal_annotations();
-
-    if (stream->IsSerializationDeterministic() && field.size() > 1) {
-      for (const auto& entry : ::google::protobuf::internal::MapSorterPtr<MapType>(field)) {
-        target = WireHelper::InternalSerialize(
-            4, entry.first, entry.second, target, stream);
-        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            entry.first.data(), static_cast<int>(entry.first.length()),
- ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.annotations");
-        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            entry.second.data(), static_cast<int>(entry.second.length()),
- ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.annotations");
-      }
-    } else {
-      for (const auto& entry : field) {
-        target = WireHelper::InternalSerialize(
-            4, entry.first, entry.second, target, stream);
-        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            entry.first.data(), static_cast<int>(entry.first.length()),
- ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.annotations");
-        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            entry.second.data(), static_cast<int>(entry.second.length()),
- ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.annotations");
-      }
-    }
-  }
-
-  // map<string, string> labels = 5;
+  // map<string, string> labels = 7;
   if (!_internal_labels().empty()) {
     using MapType = ::google::protobuf::Map<std::string, std::string>;
     using WireHelper = _pbi::MapEntryFuncs<std::string, std::string,
@@ -1953,7 +3087,7 @@ const ::_pbi::TcParseTable<2, 5, 5, 59, 2> PodSandboxConfig::_table_ = {
     if (stream->IsSerializationDeterministic() && field.size() > 1) {
       for (const auto& entry : ::google::protobuf::internal::MapSorterPtr<MapType>(field)) {
         target = WireHelper::InternalSerialize(
-            5, entry.first, entry.second, target, stream);
+            7, entry.first, entry.second, target, stream);
         ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
             entry.first.data(), static_cast<int>(entry.first.length()),
  ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.labels");
@@ -1964,13 +3098,46 @@ const ::_pbi::TcParseTable<2, 5, 5, 59, 2> PodSandboxConfig::_table_ = {
     } else {
       for (const auto& entry : field) {
         target = WireHelper::InternalSerialize(
-            5, entry.first, entry.second, target, stream);
+            7, entry.first, entry.second, target, stream);
         ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
             entry.first.data(), static_cast<int>(entry.first.length()),
  ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.labels");
         ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
             entry.second.data(), static_cast<int>(entry.second.length()),
  ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.labels");
+      }
+    }
+  }
+
+  // map<string, string> annotations = 8;
+  if (!_internal_annotations().empty()) {
+    using MapType = ::google::protobuf::Map<std::string, std::string>;
+    using WireHelper = _pbi::MapEntryFuncs<std::string, std::string,
+                                   _pbi::WireFormatLite::TYPE_STRING,
+                                   _pbi::WireFormatLite::TYPE_STRING>;
+    const auto& field = _internal_annotations();
+
+    if (stream->IsSerializationDeterministic() && field.size() > 1) {
+      for (const auto& entry : ::google::protobuf::internal::MapSorterPtr<MapType>(field)) {
+        target = WireHelper::InternalSerialize(
+            8, entry.first, entry.second, target, stream);
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry.first.data(), static_cast<int>(entry.first.length()),
+ ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.annotations");
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry.second.data(), static_cast<int>(entry.second.length()),
+ ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.annotations");
+      }
+    } else {
+      for (const auto& entry : field) {
+        target = WireHelper::InternalSerialize(
+            8, entry.first, entry.second, target, stream);
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry.first.data(), static_cast<int>(entry.first.length()),
+ ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.annotations");
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry.second.data(), static_cast<int>(entry.second.length()),
+ ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.PodSandboxConfig.annotations");
       }
     }
   }
@@ -1992,20 +3159,38 @@ const ::_pbi::TcParseTable<2, 5, 5, 59, 2> PodSandboxConfig::_table_ = {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // map<string, string> annotations = 4;
-  total_size += 1 * ::google::protobuf::internal::FromIntSize(_internal_annotations_size());
-  for (const auto& entry : _internal_annotations()) {
-    total_size += _pbi::MapEntryFuncs<std::string, std::string,
-                                   _pbi::WireFormatLite::TYPE_STRING,
-                                   _pbi::WireFormatLite::TYPE_STRING>::ByteSizeLong(entry.first, entry.second);
+  // repeated .runtime.v1alpha2.PortMapping port_mappings = 5;
+  total_size += 1UL * this->_internal_port_mappings_size();
+  for (const auto& msg : this->_internal_port_mappings()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
   }
-  // map<string, string> labels = 5;
+  // map<string, string> labels = 7;
   total_size += 1 * ::google::protobuf::internal::FromIntSize(_internal_labels_size());
   for (const auto& entry : _internal_labels()) {
     total_size += _pbi::MapEntryFuncs<std::string, std::string,
                                    _pbi::WireFormatLite::TYPE_STRING,
                                    _pbi::WireFormatLite::TYPE_STRING>::ByteSizeLong(entry.first, entry.second);
   }
+  // map<string, string> annotations = 8;
+  total_size += 1 * ::google::protobuf::internal::FromIntSize(_internal_annotations_size());
+  for (const auto& entry : _internal_annotations()) {
+    total_size += _pbi::MapEntryFuncs<std::string, std::string,
+                                   _pbi::WireFormatLite::TYPE_STRING,
+                                   _pbi::WireFormatLite::TYPE_STRING>::ByteSizeLong(entry.first, entry.second);
+  }
+  // string hostname = 2;
+  if (!this->_internal_hostname().empty()) {
+    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                    this->_internal_hostname());
+  }
+
+  // string log_directory = 3;
+  if (!this->_internal_log_directory().empty()) {
+    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                    this->_internal_log_directory());
+  }
+
   cached_has_bits = _impl_._has_bits_[0];
   if (cached_has_bits & 0x00000007u) {
     // .runtime.v1alpha2.PodMetadata metadata = 1;
@@ -2014,16 +3199,16 @@ const ::_pbi::TcParseTable<2, 5, 5, 59, 2> PodSandboxConfig::_table_ = {
           1 + ::google::protobuf::internal::WireFormatLite::MessageSize(*_impl_.metadata_);
     }
 
-    // .runtime.v1alpha2.NetworkConfig network = 2;
+    // .runtime.v1alpha2.DNSConfig dns_config = 4;
     if (cached_has_bits & 0x00000002u) {
       total_size +=
-          1 + ::google::protobuf::internal::WireFormatLite::MessageSize(*_impl_.network_);
+          1 + ::google::protobuf::internal::WireFormatLite::MessageSize(*_impl_.dns_config_);
     }
 
-    // .runtime.v1alpha2.LinuxConfig linux = 3;
+    // .runtime.v1alpha2.LinuxPodSandboxConfig linux_config = 6;
     if (cached_has_bits & 0x00000004u) {
       total_size +=
-          1 + ::google::protobuf::internal::WireFormatLite::MessageSize(*_impl_.linux_);
+          1 + ::google::protobuf::internal::WireFormatLite::MessageSize(*_impl_.linux_config_);
     }
 
   }
@@ -2046,8 +3231,16 @@ void PodSandboxConfig::MergeImpl(::google::protobuf::Message& to_msg, const ::go
   ::uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
-  _this->_impl_.annotations_.MergeFrom(from._impl_.annotations_);
+  _this->_internal_mutable_port_mappings()->MergeFrom(
+      from._internal_port_mappings());
   _this->_impl_.labels_.MergeFrom(from._impl_.labels_);
+  _this->_impl_.annotations_.MergeFrom(from._impl_.annotations_);
+  if (!from._internal_hostname().empty()) {
+    _this->_internal_set_hostname(from._internal_hostname());
+  }
+  if (!from._internal_log_directory().empty()) {
+    _this->_internal_set_log_directory(from._internal_log_directory());
+  }
   cached_has_bits = from._impl_._has_bits_[0];
   if (cached_has_bits & 0x00000007u) {
     if (cached_has_bits & 0x00000001u) {
@@ -2055,12 +3248,12 @@ void PodSandboxConfig::MergeImpl(::google::protobuf::Message& to_msg, const ::go
           from._internal_metadata());
     }
     if (cached_has_bits & 0x00000002u) {
-      _this->_internal_mutable_network()->::runtime::v1alpha2::NetworkConfig::MergeFrom(
-          from._internal_network());
+      _this->_internal_mutable_dns_config()->::runtime::v1alpha2::DNSConfig::MergeFrom(
+          from._internal_dns_config());
     }
     if (cached_has_bits & 0x00000004u) {
-      _this->_internal_mutable_linux()->::runtime::v1alpha2::LinuxConfig::MergeFrom(
-          from._internal_linux());
+      _this->_internal_mutable_linux_config()->::runtime::v1alpha2::LinuxPodSandboxConfig::MergeFrom(
+          from._internal_linux_config());
     }
   }
   _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
@@ -2082,13 +3275,18 @@ PROTOBUF_NOINLINE bool PodSandboxConfig::IsInitialized() const {
 }
 void PodSandboxConfig::InternalSwap(PodSandboxConfig* PROTOBUF_RESTRICT other) {
   using std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
-  _impl_.annotations_.InternalSwap(&other->_impl_.annotations_);
+  _impl_.port_mappings_.InternalSwap(&other->_impl_.port_mappings_);
   _impl_.labels_.InternalSwap(&other->_impl_.labels_);
+  _impl_.annotations_.InternalSwap(&other->_impl_.annotations_);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.hostname_, &other->_impl_.hostname_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.log_directory_, &other->_impl_.log_directory_, arena);
   ::google::protobuf::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.linux_)
-      + sizeof(PodSandboxConfig::_impl_.linux_)
+      PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.linux_config_)
+      + sizeof(PodSandboxConfig::_impl_.linux_config_)
       - PROTOBUF_FIELD_OFFSET(PodSandboxConfig, _impl_.metadata_)>(
           reinterpret_cast<char*>(&_impl_.metadata_),
           reinterpret_cast<char*>(&other->_impl_.metadata_));
@@ -2097,7 +3295,7 @@ void PodSandboxConfig::InternalSwap(PodSandboxConfig* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata PodSandboxConfig::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[2]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[6]);
 }
 // ===================================================================
 
@@ -2371,7 +3569,7 @@ void PodMetadata::InternalSwap(PodMetadata* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata PodMetadata::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[3]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[7]);
 }
 // ===================================================================
 
@@ -2561,7 +3759,7 @@ void NetworkConfig::InternalSwap(NetworkConfig* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata NetworkConfig::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[4]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[8]);
 }
 // ===================================================================
 
@@ -2571,7 +3769,7 @@ LinuxConfig_SysctlsEntry_DoNotUse::LinuxConfig_SysctlsEntry_DoNotUse(::google::p
 ::google::protobuf::Metadata LinuxConfig_SysctlsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[5]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[9]);
 }
 // ===================================================================
 
@@ -2864,14 +4062,38 @@ void LinuxConfig::InternalSwap(LinuxConfig* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata LinuxConfig::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[6]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[10]);
 }
 // ===================================================================
 
 class SecurityContext::_Internal {
  public:
+  using HasBits = decltype(std::declval<SecurityContext>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+    8 * PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_._has_bits_);
+  static const ::runtime::v1alpha2::NamespaceOption& namespace_options(const SecurityContext* msg);
+  static void set_has_namespace_options(HasBits* has_bits) {
+    (*has_bits)[0] |= 1u;
+  }
+  static const ::runtime::v1alpha2::SELinuxOption& selinux_options(const SecurityContext* msg);
+  static void set_has_selinux_options(HasBits* has_bits) {
+    (*has_bits)[0] |= 2u;
+  }
+  static const ::runtime::v1alpha2::RunAsUserOption& run_as_user(const SecurityContext* msg);
+  static void set_has_run_as_user(HasBits* has_bits) {
+    (*has_bits)[0] |= 4u;
+  }
 };
 
+const ::runtime::v1alpha2::NamespaceOption& SecurityContext::_Internal::namespace_options(const SecurityContext* msg) {
+  return *msg->_impl_.namespace_options_;
+}
+const ::runtime::v1alpha2::SELinuxOption& SecurityContext::_Internal::selinux_options(const SecurityContext* msg) {
+  return *msg->_impl_.selinux_options_;
+}
+const ::runtime::v1alpha2::RunAsUserOption& SecurityContext::_Internal::run_as_user(const SecurityContext* msg) {
+  return *msg->_impl_.run_as_user_;
+}
 SecurityContext::SecurityContext(::google::protobuf::Arena* arena)
     : ::google::protobuf::Message(arena) {
   SharedCtor(arena);
@@ -2880,9 +4102,7 @@ SecurityContext::SecurityContext(::google::protobuf::Arena* arena)
 inline PROTOBUF_NDEBUG_INLINE SecurityContext::Impl_::Impl_(
     ::google::protobuf::internal::InternalVisibility visibility, ::google::protobuf::Arena* arena,
     const Impl_& from)
-      : namespace_options_(arena, from.namespace_options_),
-        selinux_options_(arena, from.selinux_options_),
-        run_as_user_(arena, from.run_as_user_),
+      : _has_bits_{from._has_bits_},
         _cached_size_{0} {}
 
 SecurityContext::SecurityContext(
@@ -2894,6 +4114,16 @@ SecurityContext::SecurityContext(
   _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
       from._internal_metadata_);
   new (&_impl_) Impl_(internal_visibility(), arena, from._impl_);
+  ::uint32_t cached_has_bits = _impl_._has_bits_[0];
+  _impl_.namespace_options_ = (cached_has_bits & 0x00000001u)
+                ? CreateMaybeMessage<::runtime::v1alpha2::NamespaceOption>(arena, *from._impl_.namespace_options_)
+                : nullptr;
+  _impl_.selinux_options_ = (cached_has_bits & 0x00000002u)
+                ? CreateMaybeMessage<::runtime::v1alpha2::SELinuxOption>(arena, *from._impl_.selinux_options_)
+                : nullptr;
+  _impl_.run_as_user_ = (cached_has_bits & 0x00000004u)
+                ? CreateMaybeMessage<::runtime::v1alpha2::RunAsUserOption>(arena, *from._impl_.run_as_user_)
+                : nullptr;
   _impl_.privileged_ = from._impl_.privileged_;
 
   // @@protoc_insertion_point(copy_constructor:runtime.v1alpha2.SecurityContext)
@@ -2901,14 +4131,16 @@ SecurityContext::SecurityContext(
 inline PROTOBUF_NDEBUG_INLINE SecurityContext::Impl_::Impl_(
     ::google::protobuf::internal::InternalVisibility visibility,
     ::google::protobuf::Arena* arena)
-      : namespace_options_(arena),
-        selinux_options_(arena),
-        run_as_user_(arena),
-        _cached_size_{0} {}
+      : _cached_size_{0} {}
 
 inline void SecurityContext::SharedCtor(::_pb::Arena* arena) {
   new (&_impl_) Impl_(internal_visibility(), arena);
-  _impl_.privileged_ = {};
+  ::memset(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, namespace_options_),
+           0,
+           offsetof(Impl_, privileged_) -
+               offsetof(Impl_, namespace_options_) +
+               sizeof(Impl_::privileged_));
 }
 SecurityContext::~SecurityContext() {
   // @@protoc_insertion_point(destructor:runtime.v1alpha2.SecurityContext)
@@ -2917,9 +4149,9 @@ SecurityContext::~SecurityContext() {
 }
 inline void SecurityContext::SharedDtor() {
   ABSL_DCHECK(GetArena() == nullptr);
-  _impl_.namespace_options_.Destroy();
-  _impl_.selinux_options_.Destroy();
-  _impl_.run_as_user_.Destroy();
+  delete _impl_.namespace_options_;
+  delete _impl_.selinux_options_;
+  delete _impl_.run_as_user_;
   _impl_.~Impl_();
 }
 
@@ -2930,10 +4162,23 @@ PROTOBUF_NOINLINE void SecurityContext::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  _impl_.namespace_options_.ClearToEmpty();
-  _impl_.selinux_options_.ClearToEmpty();
-  _impl_.run_as_user_.ClearToEmpty();
+  cached_has_bits = _impl_._has_bits_[0];
+  if (cached_has_bits & 0x00000007u) {
+    if (cached_has_bits & 0x00000001u) {
+      ABSL_DCHECK(_impl_.namespace_options_ != nullptr);
+      _impl_.namespace_options_->Clear();
+    }
+    if (cached_has_bits & 0x00000002u) {
+      ABSL_DCHECK(_impl_.selinux_options_ != nullptr);
+      _impl_.selinux_options_->Clear();
+    }
+    if (cached_has_bits & 0x00000004u) {
+      ABSL_DCHECK(_impl_.run_as_user_ != nullptr);
+      _impl_.run_as_user_->Clear();
+    }
+  }
   _impl_.privileged_ = false;
+  _impl_._has_bits_.Clear();
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
 
@@ -2945,55 +4190,52 @@ const char* SecurityContext::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<2, 4, 0, 84, 2> SecurityContext::_table_ = {
+const ::_pbi::TcParseTable<2, 4, 3, 0, 2> SecurityContext::_table_ = {
   {
-    0,  // no _has_bits_
+    PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_._has_bits_),
     0, // no _extensions_
     4, 24,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
     4294967280,  // skipmap
     offsetof(decltype(_table_), field_entries),
     4,  // num_field_entries
-    0,  // num_aux_entries
-    offsetof(decltype(_table_), field_names),  // no aux_entries
+    3,  // num_aux_entries
+    offsetof(decltype(_table_), aux_entries),
     &_SecurityContext_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
   }, {{
     // bool privileged = 4;
     {::_pbi::TcParser::SingularVarintNoZag1<bool, offsetof(SecurityContext, _impl_.privileged_), 63>(),
      {32, 63, 0, PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.privileged_)}},
-    // string namespace_options = 1;
-    {::_pbi::TcParser::FastUS1,
-     {10, 63, 0, PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.namespace_options_)}},
-    // string selinux_options = 2;
-    {::_pbi::TcParser::FastUS1,
-     {18, 63, 0, PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.selinux_options_)}},
-    // string run_as_user = 3;
-    {::_pbi::TcParser::FastUS1,
-     {26, 63, 0, PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.run_as_user_)}},
+    // .runtime.v1alpha2.NamespaceOption namespace_options = 1;
+    {::_pbi::TcParser::FastMtS1,
+     {10, 0, 0, PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.namespace_options_)}},
+    // .runtime.v1alpha2.SELinuxOption selinux_options = 2;
+    {::_pbi::TcParser::FastMtS1,
+     {18, 1, 1, PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.selinux_options_)}},
+    // .runtime.v1alpha2.RunAsUserOption run_as_user = 3;
+    {::_pbi::TcParser::FastMtS1,
+     {26, 2, 2, PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.run_as_user_)}},
   }}, {{
     65535, 65535
   }}, {{
-    // string namespace_options = 1;
-    {PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.namespace_options_), 0, 0,
-    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
-    // string selinux_options = 2;
-    {PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.selinux_options_), 0, 0,
-    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
-    // string run_as_user = 3;
-    {PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.run_as_user_), 0, 0,
-    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // .runtime.v1alpha2.NamespaceOption namespace_options = 1;
+    {PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.namespace_options_), _Internal::kHasBitsOffset + 0, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+    // .runtime.v1alpha2.SELinuxOption selinux_options = 2;
+    {PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.selinux_options_), _Internal::kHasBitsOffset + 1, 1,
+    (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+    // .runtime.v1alpha2.RunAsUserOption run_as_user = 3;
+    {PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.run_as_user_), _Internal::kHasBitsOffset + 2, 2,
+    (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
     // bool privileged = 4;
-    {PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.privileged_), 0, 0,
+    {PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.privileged_), -1, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kBool)},
-  }},
-  // no aux_entries
-  {{
-    "\40\21\17\13\0\0\0\0"
-    "runtime.v1alpha2.SecurityContext"
-    "namespace_options"
-    "selinux_options"
-    "run_as_user"
+  }}, {{
+    {::_pbi::TcParser::GetTable<::runtime::v1alpha2::NamespaceOption>()},
+    {::_pbi::TcParser::GetTable<::runtime::v1alpha2::SELinuxOption>()},
+    {::_pbi::TcParser::GetTable<::runtime::v1alpha2::RunAsUserOption>()},
+  }}, {{
   }},
 };
 
@@ -3004,28 +4246,26 @@ const ::_pbi::TcParseTable<2, 4, 0, 84, 2> SecurityContext::_table_ = {
   ::uint32_t cached_has_bits = 0;
   (void)cached_has_bits;
 
-  // string namespace_options = 1;
-  if (!this->_internal_namespace_options().empty()) {
-    const std::string& _s = this->_internal_namespace_options();
-    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.SecurityContext.namespace_options");
-    target = stream->WriteStringMaybeAliased(1, _s, target);
+  cached_has_bits = _impl_._has_bits_[0];
+  // .runtime.v1alpha2.NamespaceOption namespace_options = 1;
+  if (cached_has_bits & 0x00000001u) {
+    target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+        1, _Internal::namespace_options(this),
+        _Internal::namespace_options(this).GetCachedSize(), target, stream);
   }
 
-  // string selinux_options = 2;
-  if (!this->_internal_selinux_options().empty()) {
-    const std::string& _s = this->_internal_selinux_options();
-    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.SecurityContext.selinux_options");
-    target = stream->WriteStringMaybeAliased(2, _s, target);
+  // .runtime.v1alpha2.SELinuxOption selinux_options = 2;
+  if (cached_has_bits & 0x00000002u) {
+    target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+        2, _Internal::selinux_options(this),
+        _Internal::selinux_options(this).GetCachedSize(), target, stream);
   }
 
-  // string run_as_user = 3;
-  if (!this->_internal_run_as_user().empty()) {
-    const std::string& _s = this->_internal_run_as_user();
-    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.SecurityContext.run_as_user");
-    target = stream->WriteStringMaybeAliased(3, _s, target);
+  // .runtime.v1alpha2.RunAsUserOption run_as_user = 3;
+  if (cached_has_bits & 0x00000004u) {
+    target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+        3, _Internal::run_as_user(this),
+        _Internal::run_as_user(this).GetCachedSize(), target, stream);
   }
 
   // bool privileged = 4;
@@ -3052,24 +4292,27 @@ const ::_pbi::TcParseTable<2, 4, 0, 84, 2> SecurityContext::_table_ = {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // string namespace_options = 1;
-  if (!this->_internal_namespace_options().empty()) {
-    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
-                                    this->_internal_namespace_options());
-  }
+  cached_has_bits = _impl_._has_bits_[0];
+  if (cached_has_bits & 0x00000007u) {
+    // .runtime.v1alpha2.NamespaceOption namespace_options = 1;
+    if (cached_has_bits & 0x00000001u) {
+      total_size +=
+          1 + ::google::protobuf::internal::WireFormatLite::MessageSize(*_impl_.namespace_options_);
+    }
 
-  // string selinux_options = 2;
-  if (!this->_internal_selinux_options().empty()) {
-    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
-                                    this->_internal_selinux_options());
-  }
+    // .runtime.v1alpha2.SELinuxOption selinux_options = 2;
+    if (cached_has_bits & 0x00000002u) {
+      total_size +=
+          1 + ::google::protobuf::internal::WireFormatLite::MessageSize(*_impl_.selinux_options_);
+    }
 
-  // string run_as_user = 3;
-  if (!this->_internal_run_as_user().empty()) {
-    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
-                                    this->_internal_run_as_user());
-  }
+    // .runtime.v1alpha2.RunAsUserOption run_as_user = 3;
+    if (cached_has_bits & 0x00000004u) {
+      total_size +=
+          1 + ::google::protobuf::internal::WireFormatLite::MessageSize(*_impl_.run_as_user_);
+    }
 
+  }
   // bool privileged = 4;
   if (this->_internal_privileged() != 0) {
     total_size += 2;
@@ -3094,14 +4337,20 @@ void SecurityContext::MergeImpl(::google::protobuf::Message& to_msg, const ::goo
   ::uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
-  if (!from._internal_namespace_options().empty()) {
-    _this->_internal_set_namespace_options(from._internal_namespace_options());
-  }
-  if (!from._internal_selinux_options().empty()) {
-    _this->_internal_set_selinux_options(from._internal_selinux_options());
-  }
-  if (!from._internal_run_as_user().empty()) {
-    _this->_internal_set_run_as_user(from._internal_run_as_user());
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (cached_has_bits & 0x00000007u) {
+    if (cached_has_bits & 0x00000001u) {
+      _this->_internal_mutable_namespace_options()->::runtime::v1alpha2::NamespaceOption::MergeFrom(
+          from._internal_namespace_options());
+    }
+    if (cached_has_bits & 0x00000002u) {
+      _this->_internal_mutable_selinux_options()->::runtime::v1alpha2::SELinuxOption::MergeFrom(
+          from._internal_selinux_options());
+    }
+    if (cached_has_bits & 0x00000004u) {
+      _this->_internal_mutable_run_as_user()->::runtime::v1alpha2::RunAsUserOption::MergeFrom(
+          from._internal_run_as_user());
+    }
   }
   if (from._internal_privileged() != 0) {
     _this->_internal_set_privileged(from._internal_privileged());
@@ -3125,19 +4374,780 @@ PROTOBUF_NOINLINE bool SecurityContext::IsInitialized() const {
 }
 void SecurityContext::InternalSwap(SecurityContext* PROTOBUF_RESTRICT other) {
   using std::swap;
-  auto* arena = GetArena();
-  ABSL_DCHECK_EQ(arena, other->GetArena());
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
-  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.namespace_options_, &other->_impl_.namespace_options_, arena);
-  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.selinux_options_, &other->_impl_.selinux_options_, arena);
-  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.run_as_user_, &other->_impl_.run_as_user_, arena);
-        swap(_impl_.privileged_, other->_impl_.privileged_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.privileged_)
+      + sizeof(SecurityContext::_impl_.privileged_)
+      - PROTOBUF_FIELD_OFFSET(SecurityContext, _impl_.namespace_options_)>(
+          reinterpret_cast<char*>(&_impl_.namespace_options_),
+          reinterpret_cast<char*>(&other->_impl_.namespace_options_));
 }
 
 ::google::protobuf::Metadata SecurityContext::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[7]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[11]);
+}
+// ===================================================================
+
+class NamespaceOption::_Internal {
+ public:
+};
+
+NamespaceOption::NamespaceOption(::google::protobuf::Arena* arena)
+    : ::google::protobuf::Message(arena) {
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:runtime.v1alpha2.NamespaceOption)
+}
+NamespaceOption::NamespaceOption(
+    ::google::protobuf::Arena* arena, const NamespaceOption& from)
+    : NamespaceOption(arena) {
+  MergeFrom(from);
+}
+inline PROTOBUF_NDEBUG_INLINE NamespaceOption::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* arena)
+      : _cached_size_{0} {}
+
+inline void NamespaceOption::SharedCtor(::_pb::Arena* arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, host_network_),
+           0,
+           offsetof(Impl_, host_ipc_) -
+               offsetof(Impl_, host_network_) +
+               sizeof(Impl_::host_ipc_));
+}
+NamespaceOption::~NamespaceOption() {
+  // @@protoc_insertion_point(destructor:runtime.v1alpha2.NamespaceOption)
+  _internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  SharedDtor();
+}
+inline void NamespaceOption::SharedDtor() {
+  ABSL_DCHECK(GetArena() == nullptr);
+  _impl_.~Impl_();
+}
+
+PROTOBUF_NOINLINE void NamespaceOption::Clear() {
+// @@protoc_insertion_point(message_clear_start:runtime.v1alpha2.NamespaceOption)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  ::memset(&_impl_.host_network_, 0, static_cast<::size_t>(
+      reinterpret_cast<char*>(&_impl_.host_ipc_) -
+      reinterpret_cast<char*>(&_impl_.host_network_)) + sizeof(_impl_.host_ipc_));
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+const char* NamespaceOption::_InternalParse(
+    const char* ptr, ::_pbi::ParseContext* ctx) {
+  ptr = ::_pbi::TcParser::ParseLoop(this, ptr, ctx, &_table_.header);
+  return ptr;
+}
+
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<2, 3, 0, 0, 2> NamespaceOption::_table_ = {
+  {
+    0,  // no _has_bits_
+    0, // no _extensions_
+    3, 24,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967288,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    3,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    &_NamespaceOption_default_instance_._instance,
+    ::_pbi::TcParser::GenericFallback,  // fallback
+  }, {{
+    {::_pbi::TcParser::MiniParse, {}},
+    // bool host_network = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<bool, offsetof(NamespaceOption, _impl_.host_network_), 63>(),
+     {8, 63, 0, PROTOBUF_FIELD_OFFSET(NamespaceOption, _impl_.host_network_)}},
+    // bool host_pid = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<bool, offsetof(NamespaceOption, _impl_.host_pid_), 63>(),
+     {16, 63, 0, PROTOBUF_FIELD_OFFSET(NamespaceOption, _impl_.host_pid_)}},
+    // bool host_ipc = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<bool, offsetof(NamespaceOption, _impl_.host_ipc_), 63>(),
+     {24, 63, 0, PROTOBUF_FIELD_OFFSET(NamespaceOption, _impl_.host_ipc_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // bool host_network = 1;
+    {PROTOBUF_FIELD_OFFSET(NamespaceOption, _impl_.host_network_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kBool)},
+    // bool host_pid = 2;
+    {PROTOBUF_FIELD_OFFSET(NamespaceOption, _impl_.host_pid_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kBool)},
+    // bool host_ipc = 3;
+    {PROTOBUF_FIELD_OFFSET(NamespaceOption, _impl_.host_ipc_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kBool)},
+  }},
+  // no aux_entries
+  {{
+  }},
+};
+
+::uint8_t* NamespaceOption::_InternalSerialize(
+    ::uint8_t* target,
+    ::google::protobuf::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:runtime.v1alpha2.NamespaceOption)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // bool host_network = 1;
+  if (this->_internal_host_network() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(
+        1, this->_internal_host_network(), target);
+  }
+
+  // bool host_pid = 2;
+  if (this->_internal_host_pid() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(
+        2, this->_internal_host_pid(), target);
+  }
+
+  // bool host_ipc = 3;
+  if (this->_internal_host_ipc() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(
+        3, this->_internal_host_ipc(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:runtime.v1alpha2.NamespaceOption)
+  return target;
+}
+
+::size_t NamespaceOption::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:runtime.v1alpha2.NamespaceOption)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // bool host_network = 1;
+  if (this->_internal_host_network() != 0) {
+    total_size += 2;
+  }
+
+  // bool host_pid = 2;
+  if (this->_internal_host_pid() != 0) {
+    total_size += 2;
+  }
+
+  // bool host_ipc = 3;
+  if (this->_internal_host_ipc() != 0) {
+    total_size += 2;
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::google::protobuf::Message::ClassData NamespaceOption::_class_data_ = {
+    NamespaceOption::MergeImpl,
+    nullptr,  // OnDemandRegisterArenaDtor
+};
+const ::google::protobuf::Message::ClassData* NamespaceOption::GetClassData() const {
+  return &_class_data_;
+}
+
+void NamespaceOption::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
+  auto* const _this = static_cast<NamespaceOption*>(&to_msg);
+  auto& from = static_cast<const NamespaceOption&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:runtime.v1alpha2.NamespaceOption)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from._internal_host_network() != 0) {
+    _this->_internal_set_host_network(from._internal_host_network());
+  }
+  if (from._internal_host_pid() != 0) {
+    _this->_internal_set_host_pid(from._internal_host_pid());
+  }
+  if (from._internal_host_ipc() != 0) {
+    _this->_internal_set_host_ipc(from._internal_host_ipc());
+  }
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void NamespaceOption::CopyFrom(const NamespaceOption& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:runtime.v1alpha2.NamespaceOption)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+PROTOBUF_NOINLINE bool NamespaceOption::IsInitialized() const {
+  return true;
+}
+
+::_pbi::CachedSize* NamespaceOption::AccessCachedSize() const {
+  return &_impl_._cached_size_;
+}
+void NamespaceOption::InternalSwap(NamespaceOption* PROTOBUF_RESTRICT other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(NamespaceOption, _impl_.host_ipc_)
+      + sizeof(NamespaceOption::_impl_.host_ipc_)
+      - PROTOBUF_FIELD_OFFSET(NamespaceOption, _impl_.host_network_)>(
+          reinterpret_cast<char*>(&_impl_.host_network_),
+          reinterpret_cast<char*>(&other->_impl_.host_network_));
+}
+
+::google::protobuf::Metadata NamespaceOption::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[12]);
+}
+// ===================================================================
+
+class SELinuxOption::_Internal {
+ public:
+};
+
+SELinuxOption::SELinuxOption(::google::protobuf::Arena* arena)
+    : ::google::protobuf::Message(arena) {
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:runtime.v1alpha2.SELinuxOption)
+}
+inline PROTOBUF_NDEBUG_INLINE SELinuxOption::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility, ::google::protobuf::Arena* arena,
+    const Impl_& from)
+      : user_(arena, from.user_),
+        role_(arena, from.role_),
+        type_(arena, from.type_),
+        level_(arena, from.level_),
+        _cached_size_{0} {}
+
+SELinuxOption::SELinuxOption(
+    ::google::protobuf::Arena* arena,
+    const SELinuxOption& from)
+    : ::google::protobuf::Message(arena) {
+  SELinuxOption* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_);
+
+  // @@protoc_insertion_point(copy_constructor:runtime.v1alpha2.SELinuxOption)
+}
+inline PROTOBUF_NDEBUG_INLINE SELinuxOption::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* arena)
+      : user_(arena),
+        role_(arena),
+        type_(arena),
+        level_(arena),
+        _cached_size_{0} {}
+
+inline void SELinuxOption::SharedCtor(::_pb::Arena* arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+}
+SELinuxOption::~SELinuxOption() {
+  // @@protoc_insertion_point(destructor:runtime.v1alpha2.SELinuxOption)
+  _internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  SharedDtor();
+}
+inline void SELinuxOption::SharedDtor() {
+  ABSL_DCHECK(GetArena() == nullptr);
+  _impl_.user_.Destroy();
+  _impl_.role_.Destroy();
+  _impl_.type_.Destroy();
+  _impl_.level_.Destroy();
+  _impl_.~Impl_();
+}
+
+PROTOBUF_NOINLINE void SELinuxOption::Clear() {
+// @@protoc_insertion_point(message_clear_start:runtime.v1alpha2.SELinuxOption)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.user_.ClearToEmpty();
+  _impl_.role_.ClearToEmpty();
+  _impl_.type_.ClearToEmpty();
+  _impl_.level_.ClearToEmpty();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+const char* SELinuxOption::_InternalParse(
+    const char* ptr, ::_pbi::ParseContext* ctx) {
+  ptr = ::_pbi::TcParser::ParseLoop(this, ptr, ctx, &_table_.header);
+  return ptr;
+}
+
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<2, 4, 0, 56, 2> SELinuxOption::_table_ = {
+  {
+    0,  // no _has_bits_
+    0, // no _extensions_
+    4, 24,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967280,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    4,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    &_SELinuxOption_default_instance_._instance,
+    ::_pbi::TcParser::GenericFallback,  // fallback
+  }, {{
+    // string level = 4;
+    {::_pbi::TcParser::FastUS1,
+     {34, 63, 0, PROTOBUF_FIELD_OFFSET(SELinuxOption, _impl_.level_)}},
+    // string user = 1;
+    {::_pbi::TcParser::FastUS1,
+     {10, 63, 0, PROTOBUF_FIELD_OFFSET(SELinuxOption, _impl_.user_)}},
+    // string role = 2;
+    {::_pbi::TcParser::FastUS1,
+     {18, 63, 0, PROTOBUF_FIELD_OFFSET(SELinuxOption, _impl_.role_)}},
+    // string type = 3;
+    {::_pbi::TcParser::FastUS1,
+     {26, 63, 0, PROTOBUF_FIELD_OFFSET(SELinuxOption, _impl_.type_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // string user = 1;
+    {PROTOBUF_FIELD_OFFSET(SELinuxOption, _impl_.user_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string role = 2;
+    {PROTOBUF_FIELD_OFFSET(SELinuxOption, _impl_.role_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string type = 3;
+    {PROTOBUF_FIELD_OFFSET(SELinuxOption, _impl_.type_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string level = 4;
+    {PROTOBUF_FIELD_OFFSET(SELinuxOption, _impl_.level_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
+  }},
+  // no aux_entries
+  {{
+    "\36\4\4\4\5\0\0\0"
+    "runtime.v1alpha2.SELinuxOption"
+    "user"
+    "role"
+    "type"
+    "level"
+  }},
+};
+
+::uint8_t* SELinuxOption::_InternalSerialize(
+    ::uint8_t* target,
+    ::google::protobuf::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:runtime.v1alpha2.SELinuxOption)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // string user = 1;
+  if (!this->_internal_user().empty()) {
+    const std::string& _s = this->_internal_user();
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.SELinuxOption.user");
+    target = stream->WriteStringMaybeAliased(1, _s, target);
+  }
+
+  // string role = 2;
+  if (!this->_internal_role().empty()) {
+    const std::string& _s = this->_internal_role();
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.SELinuxOption.role");
+    target = stream->WriteStringMaybeAliased(2, _s, target);
+  }
+
+  // string type = 3;
+  if (!this->_internal_type().empty()) {
+    const std::string& _s = this->_internal_type();
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.SELinuxOption.type");
+    target = stream->WriteStringMaybeAliased(3, _s, target);
+  }
+
+  // string level = 4;
+  if (!this->_internal_level().empty()) {
+    const std::string& _s = this->_internal_level();
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "runtime.v1alpha2.SELinuxOption.level");
+    target = stream->WriteStringMaybeAliased(4, _s, target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:runtime.v1alpha2.SELinuxOption)
+  return target;
+}
+
+::size_t SELinuxOption::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:runtime.v1alpha2.SELinuxOption)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // string user = 1;
+  if (!this->_internal_user().empty()) {
+    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                    this->_internal_user());
+  }
+
+  // string role = 2;
+  if (!this->_internal_role().empty()) {
+    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                    this->_internal_role());
+  }
+
+  // string type = 3;
+  if (!this->_internal_type().empty()) {
+    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                    this->_internal_type());
+  }
+
+  // string level = 4;
+  if (!this->_internal_level().empty()) {
+    total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                    this->_internal_level());
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::google::protobuf::Message::ClassData SELinuxOption::_class_data_ = {
+    SELinuxOption::MergeImpl,
+    nullptr,  // OnDemandRegisterArenaDtor
+};
+const ::google::protobuf::Message::ClassData* SELinuxOption::GetClassData() const {
+  return &_class_data_;
+}
+
+void SELinuxOption::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
+  auto* const _this = static_cast<SELinuxOption*>(&to_msg);
+  auto& from = static_cast<const SELinuxOption&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:runtime.v1alpha2.SELinuxOption)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (!from._internal_user().empty()) {
+    _this->_internal_set_user(from._internal_user());
+  }
+  if (!from._internal_role().empty()) {
+    _this->_internal_set_role(from._internal_role());
+  }
+  if (!from._internal_type().empty()) {
+    _this->_internal_set_type(from._internal_type());
+  }
+  if (!from._internal_level().empty()) {
+    _this->_internal_set_level(from._internal_level());
+  }
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void SELinuxOption::CopyFrom(const SELinuxOption& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:runtime.v1alpha2.SELinuxOption)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+PROTOBUF_NOINLINE bool SELinuxOption::IsInitialized() const {
+  return true;
+}
+
+::_pbi::CachedSize* SELinuxOption::AccessCachedSize() const {
+  return &_impl_._cached_size_;
+}
+void SELinuxOption::InternalSwap(SELinuxOption* PROTOBUF_RESTRICT other) {
+  using std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.user_, &other->_impl_.user_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.role_, &other->_impl_.role_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.type_, &other->_impl_.type_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.level_, &other->_impl_.level_, arena);
+}
+
+::google::protobuf::Metadata SELinuxOption::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[13]);
+}
+// ===================================================================
+
+class RunAsUserOption::_Internal {
+ public:
+};
+
+RunAsUserOption::RunAsUserOption(::google::protobuf::Arena* arena)
+    : ::google::protobuf::Message(arena) {
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:runtime.v1alpha2.RunAsUserOption)
+}
+inline PROTOBUF_NDEBUG_INLINE RunAsUserOption::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility, ::google::protobuf::Arena* arena,
+    const Impl_& from)
+      : additional_gids_{visibility, arena, from.additional_gids_},
+        _additional_gids_cached_byte_size_{0},
+        _cached_size_{0} {}
+
+RunAsUserOption::RunAsUserOption(
+    ::google::protobuf::Arena* arena,
+    const RunAsUserOption& from)
+    : ::google::protobuf::Message(arena) {
+  RunAsUserOption* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_);
+  ::memcpy(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, uid_),
+           reinterpret_cast<const char *>(&from._impl_) +
+               offsetof(Impl_, uid_),
+           offsetof(Impl_, gid_) -
+               offsetof(Impl_, uid_) +
+               sizeof(Impl_::gid_));
+
+  // @@protoc_insertion_point(copy_constructor:runtime.v1alpha2.RunAsUserOption)
+}
+inline PROTOBUF_NDEBUG_INLINE RunAsUserOption::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* arena)
+      : additional_gids_{visibility, arena},
+        _additional_gids_cached_byte_size_{0},
+        _cached_size_{0} {}
+
+inline void RunAsUserOption::SharedCtor(::_pb::Arena* arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, uid_),
+           0,
+           offsetof(Impl_, gid_) -
+               offsetof(Impl_, uid_) +
+               sizeof(Impl_::gid_));
+}
+RunAsUserOption::~RunAsUserOption() {
+  // @@protoc_insertion_point(destructor:runtime.v1alpha2.RunAsUserOption)
+  _internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  SharedDtor();
+}
+inline void RunAsUserOption::SharedDtor() {
+  ABSL_DCHECK(GetArena() == nullptr);
+  _impl_.~Impl_();
+}
+
+PROTOBUF_NOINLINE void RunAsUserOption::Clear() {
+// @@protoc_insertion_point(message_clear_start:runtime.v1alpha2.RunAsUserOption)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.additional_gids_.Clear();
+  ::memset(&_impl_.uid_, 0, static_cast<::size_t>(
+      reinterpret_cast<char*>(&_impl_.gid_) -
+      reinterpret_cast<char*>(&_impl_.uid_)) + sizeof(_impl_.gid_));
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+const char* RunAsUserOption::_InternalParse(
+    const char* ptr, ::_pbi::ParseContext* ctx) {
+  ptr = ::_pbi::TcParser::ParseLoop(this, ptr, ctx, &_table_.header);
+  return ptr;
+}
+
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<2, 3, 0, 0, 2> RunAsUserOption::_table_ = {
+  {
+    0,  // no _has_bits_
+    0, // no _extensions_
+    3, 24,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967288,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    3,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    &_RunAsUserOption_default_instance_._instance,
+    ::_pbi::TcParser::GenericFallback,  // fallback
+  }, {{
+    {::_pbi::TcParser::MiniParse, {}},
+    // int64 uid = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(RunAsUserOption, _impl_.uid_), 63>(),
+     {8, 63, 0, PROTOBUF_FIELD_OFFSET(RunAsUserOption, _impl_.uid_)}},
+    // int64 gid = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(RunAsUserOption, _impl_.gid_), 63>(),
+     {16, 63, 0, PROTOBUF_FIELD_OFFSET(RunAsUserOption, _impl_.gid_)}},
+    // repeated int64 additional_gids = 3;
+    {::_pbi::TcParser::FastV64P1,
+     {26, 63, 0, PROTOBUF_FIELD_OFFSET(RunAsUserOption, _impl_.additional_gids_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // int64 uid = 1;
+    {PROTOBUF_FIELD_OFFSET(RunAsUserOption, _impl_.uid_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt64)},
+    // int64 gid = 2;
+    {PROTOBUF_FIELD_OFFSET(RunAsUserOption, _impl_.gid_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt64)},
+    // repeated int64 additional_gids = 3;
+    {PROTOBUF_FIELD_OFFSET(RunAsUserOption, _impl_.additional_gids_), 0, 0,
+    (0 | ::_fl::kFcRepeated | ::_fl::kPackedInt64)},
+  }},
+  // no aux_entries
+  {{
+  }},
+};
+
+::uint8_t* RunAsUserOption::_InternalSerialize(
+    ::uint8_t* target,
+    ::google::protobuf::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:runtime.v1alpha2.RunAsUserOption)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // int64 uid = 1;
+  if (this->_internal_uid() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt64ToArrayWithField<1>(
+            stream, this->_internal_uid(), target);
+  }
+
+  // int64 gid = 2;
+  if (this->_internal_gid() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt64ToArrayWithField<2>(
+            stream, this->_internal_gid(), target);
+  }
+
+  // repeated int64 additional_gids = 3;
+  {
+    int byte_size = _impl_._additional_gids_cached_byte_size_.Get();
+    if (byte_size > 0) {
+      target = stream->WriteInt64Packed(
+          3, _internal_additional_gids(), byte_size, target);
+    }
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:runtime.v1alpha2.RunAsUserOption)
+  return target;
+}
+
+::size_t RunAsUserOption::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:runtime.v1alpha2.RunAsUserOption)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // repeated int64 additional_gids = 3;
+  {
+    std::size_t data_size = ::_pbi::WireFormatLite::Int64Size(
+        this->_internal_additional_gids())
+    ;
+    _impl_._additional_gids_cached_byte_size_.Set(::_pbi::ToCachedSize(data_size));
+    std::size_t tag_size = data_size == 0
+        ? 0
+        : 1 + ::_pbi::WireFormatLite::Int32Size(
+                            static_cast<int32_t>(data_size))
+    ;
+    total_size += tag_size + data_size;
+  }
+  // int64 uid = 1;
+  if (this->_internal_uid() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+        this->_internal_uid());
+  }
+
+  // int64 gid = 2;
+  if (this->_internal_gid() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+        this->_internal_gid());
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::google::protobuf::Message::ClassData RunAsUserOption::_class_data_ = {
+    RunAsUserOption::MergeImpl,
+    nullptr,  // OnDemandRegisterArenaDtor
+};
+const ::google::protobuf::Message::ClassData* RunAsUserOption::GetClassData() const {
+  return &_class_data_;
+}
+
+void RunAsUserOption::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
+  auto* const _this = static_cast<RunAsUserOption*>(&to_msg);
+  auto& from = static_cast<const RunAsUserOption&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:runtime.v1alpha2.RunAsUserOption)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  _this->_internal_mutable_additional_gids()->MergeFrom(from._internal_additional_gids());
+  if (from._internal_uid() != 0) {
+    _this->_internal_set_uid(from._internal_uid());
+  }
+  if (from._internal_gid() != 0) {
+    _this->_internal_set_gid(from._internal_gid());
+  }
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void RunAsUserOption::CopyFrom(const RunAsUserOption& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:runtime.v1alpha2.RunAsUserOption)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+PROTOBUF_NOINLINE bool RunAsUserOption::IsInitialized() const {
+  return true;
+}
+
+::_pbi::CachedSize* RunAsUserOption::AccessCachedSize() const {
+  return &_impl_._cached_size_;
+}
+void RunAsUserOption::InternalSwap(RunAsUserOption* PROTOBUF_RESTRICT other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  _impl_.additional_gids_.InternalSwap(&other->_impl_.additional_gids_);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(RunAsUserOption, _impl_.gid_)
+      + sizeof(RunAsUserOption::_impl_.gid_)
+      - PROTOBUF_FIELD_OFFSET(RunAsUserOption, _impl_.uid_)>(
+          reinterpret_cast<char*>(&_impl_.uid_),
+          reinterpret_cast<char*>(&other->_impl_.uid_));
+}
+
+::google::protobuf::Metadata RunAsUserOption::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[14]);
 }
 // ===================================================================
 
@@ -3344,7 +5354,7 @@ void CreatePodRequest::InternalSwap(CreatePodRequest* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata CreatePodRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[8]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[15]);
 }
 // ===================================================================
 
@@ -3534,7 +5544,7 @@ void CreatePodResponse::InternalSwap(CreatePodResponse* PROTOBUF_RESTRICT other)
 ::google::protobuf::Metadata CreatePodResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[9]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[16]);
 }
 // ===================================================================
 
@@ -3724,7 +5734,7 @@ void DeletePodRequest::InternalSwap(DeletePodRequest* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata DeletePodRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[10]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[17]);
 }
 // ===================================================================
 
@@ -3759,7 +5769,7 @@ DeletePodResponse::DeletePodResponse(
 ::google::protobuf::Metadata DeletePodResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[11]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[18]);
 }
 // ===================================================================
 
@@ -3966,7 +5976,7 @@ void ListPodRequest::InternalSwap(ListPodRequest* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata ListPodRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[12]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[19]);
 }
 // ===================================================================
 
@@ -3976,7 +5986,7 @@ PodFilter_LabelSelectorEntry_DoNotUse::PodFilter_LabelSelectorEntry_DoNotUse(::g
 ::google::protobuf::Metadata PodFilter_LabelSelectorEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[13]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[20]);
 }
 // ===================================================================
 
@@ -4244,7 +6254,7 @@ void PodFilter::InternalSwap(PodFilter* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata PodFilter::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[14]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[21]);
 }
 // ===================================================================
 
@@ -4427,7 +6437,7 @@ void ListPodResponse::InternalSwap(ListPodResponse* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata ListPodResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[15]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[22]);
 }
 // ===================================================================
 
@@ -4437,7 +6447,7 @@ Pod_LabelsEntry_DoNotUse::Pod_LabelsEntry_DoNotUse(::google::protobuf::Arena* ar
 ::google::protobuf::Metadata Pod_LabelsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[16]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[23]);
 }
 // ===================================================================
 
@@ -4447,7 +6457,7 @@ Pod_AnnotationsEntry_DoNotUse::Pod_AnnotationsEntry_DoNotUse(::google::protobuf:
 ::google::protobuf::Metadata Pod_AnnotationsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[17]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[24]);
 }
 // ===================================================================
 
@@ -4857,7 +6867,7 @@ void Pod::InternalSwap(Pod* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata Pod::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[18]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[25]);
 }
 // ===================================================================
 
@@ -5047,7 +7057,7 @@ void StartPodRequest::InternalSwap(StartPodRequest* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata StartPodRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[19]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[26]);
 }
 // ===================================================================
 
@@ -5082,7 +7092,7 @@ StartPodResponse::StartPodResponse(
 ::google::protobuf::Metadata StartPodResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[20]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[27]);
 }
 // ===================================================================
 
@@ -5272,7 +7282,7 @@ void StopPodRequest::InternalSwap(StopPodRequest* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata StopPodRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[21]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[28]);
 }
 // ===================================================================
 
@@ -5307,7 +7317,7 @@ StopPodResponse::StopPodResponse(
 ::google::protobuf::Metadata StopPodResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[22]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[29]);
 }
 // ===================================================================
 
@@ -5317,7 +7327,7 @@ ContainerConfig_LabelsEntry_DoNotUse::ContainerConfig_LabelsEntry_DoNotUse(::goo
 ::google::protobuf::Metadata ContainerConfig_LabelsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[23]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[30]);
 }
 // ===================================================================
 
@@ -5327,7 +7337,7 @@ ContainerConfig_AnnotationsEntry_DoNotUse::ContainerConfig_AnnotationsEntry_DoNo
 ::google::protobuf::Metadata ContainerConfig_AnnotationsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[24]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[31]);
 }
 // ===================================================================
 
@@ -5836,7 +7846,7 @@ void ContainerConfig::InternalSwap(ContainerConfig* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata ContainerConfig::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[25]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[32]);
 }
 // ===================================================================
 
@@ -6052,7 +8062,7 @@ void ContainerMetadata::InternalSwap(ContainerMetadata* PROTOBUF_RESTRICT other)
 ::google::protobuf::Metadata ContainerMetadata::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[26]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[33]);
 }
 // ===================================================================
 
@@ -6242,7 +8252,7 @@ void ImageSpec::InternalSwap(ImageSpec* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata ImageSpec::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[27]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[34]);
 }
 // ===================================================================
 
@@ -6461,7 +8471,7 @@ void KeyValue::InternalSwap(KeyValue* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata KeyValue::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[28]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[35]);
 }
 // ===================================================================
 
@@ -6706,7 +8716,7 @@ void Mount::InternalSwap(Mount* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata Mount::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[29]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[36]);
 }
 // ===================================================================
 
@@ -7003,7 +9013,7 @@ void CreateContainerRequest::InternalSwap(CreateContainerRequest* PROTOBUF_RESTR
 ::google::protobuf::Metadata CreateContainerRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[30]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[37]);
 }
 // ===================================================================
 
@@ -7193,7 +9203,7 @@ void CreateContainerResponse::InternalSwap(CreateContainerResponse* PROTOBUF_RES
 ::google::protobuf::Metadata CreateContainerResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[31]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[38]);
 }
 // ===================================================================
 
@@ -7383,7 +9393,7 @@ void DeleteContainerRequest::InternalSwap(DeleteContainerRequest* PROTOBUF_RESTR
 ::google::protobuf::Metadata DeleteContainerRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[32]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[39]);
 }
 // ===================================================================
 
@@ -7418,7 +9428,7 @@ DeleteContainerResponse::DeleteContainerResponse(
 ::google::protobuf::Metadata DeleteContainerResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[33]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[40]);
 }
 // ===================================================================
 
@@ -7625,7 +9635,7 @@ void ListContainersRequest::InternalSwap(ListContainersRequest* PROTOBUF_RESTRIC
 ::google::protobuf::Metadata ListContainersRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[34]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[41]);
 }
 // ===================================================================
 
@@ -7635,7 +9645,7 @@ ContainerFilter_LabelSelectorEntry_DoNotUse::ContainerFilter_LabelSelectorEntry_
 ::google::protobuf::Metadata ContainerFilter_LabelSelectorEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[35]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[42]);
 }
 // ===================================================================
 
@@ -7933,7 +9943,7 @@ void ContainerFilter::InternalSwap(ContainerFilter* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata ContainerFilter::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[36]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[43]);
 }
 // ===================================================================
 
@@ -8116,7 +10126,7 @@ void ListContainersResponse::InternalSwap(ListContainersResponse* PROTOBUF_RESTR
 ::google::protobuf::Metadata ListContainersResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[37]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[44]);
 }
 // ===================================================================
 
@@ -8126,7 +10136,7 @@ Container_LabelsEntry_DoNotUse::Container_LabelsEntry_DoNotUse(::google::protobu
 ::google::protobuf::Metadata Container_LabelsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[38]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[45]);
 }
 // ===================================================================
 
@@ -8136,7 +10146,7 @@ Container_AnnotationsEntry_DoNotUse::Container_AnnotationsEntry_DoNotUse(::googl
 ::google::protobuf::Metadata Container_AnnotationsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[39]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[46]);
 }
 // ===================================================================
 
@@ -8651,7 +10661,7 @@ void Container::InternalSwap(Container* PROTOBUF_RESTRICT other) {
 ::google::protobuf::Metadata Container::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[40]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[47]);
 }
 // ===================================================================
 
@@ -8841,7 +10851,7 @@ void StartContainerRequest::InternalSwap(StartContainerRequest* PROTOBUF_RESTRIC
 ::google::protobuf::Metadata StartContainerRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[41]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[48]);
 }
 // ===================================================================
 
@@ -8876,7 +10886,7 @@ StartContainerResponse::StartContainerResponse(
 ::google::protobuf::Metadata StartContainerResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[42]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[49]);
 }
 // ===================================================================
 
@@ -9092,7 +11102,7 @@ void StopContainerRequest::InternalSwap(StopContainerRequest* PROTOBUF_RESTRICT 
 ::google::protobuf::Metadata StopContainerRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[43]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[50]);
 }
 // ===================================================================
 
@@ -9127,7 +11137,7 @@ StopContainerResponse::StopContainerResponse(
 ::google::protobuf::Metadata StopContainerResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_proto_2fruntime_5fservice_2eproto_getter, &descriptor_table_proto_2fruntime_5fservice_2eproto_once,
-      file_level_metadata_proto_2fruntime_5fservice_2eproto[44]);
+      file_level_metadata_proto_2fruntime_5fservice_2eproto[51]);
 }
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace v1alpha2

@@ -15,14 +15,21 @@ PROTOBUF_C__BEGIN_DECLS
 #endif
 
 
+typedef struct _Runtime__V1alpha2__DNSConfig Runtime__V1alpha2__DNSConfig;
+typedef struct _Runtime__V1alpha2__PortMapping Runtime__V1alpha2__PortMapping;
+typedef struct _Runtime__V1alpha2__LinuxPodSandboxConfig Runtime__V1alpha2__LinuxPodSandboxConfig;
+typedef struct _Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry;
 typedef struct _Runtime__V1alpha2__PodSandboxConfig Runtime__V1alpha2__PodSandboxConfig;
-typedef struct _Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry;
 typedef struct _Runtime__V1alpha2__PodSandboxConfig__LabelsEntry Runtime__V1alpha2__PodSandboxConfig__LabelsEntry;
+typedef struct _Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry;
 typedef struct _Runtime__V1alpha2__PodMetadata Runtime__V1alpha2__PodMetadata;
 typedef struct _Runtime__V1alpha2__NetworkConfig Runtime__V1alpha2__NetworkConfig;
 typedef struct _Runtime__V1alpha2__LinuxConfig Runtime__V1alpha2__LinuxConfig;
 typedef struct _Runtime__V1alpha2__LinuxConfig__SysctlsEntry Runtime__V1alpha2__LinuxConfig__SysctlsEntry;
 typedef struct _Runtime__V1alpha2__SecurityContext Runtime__V1alpha2__SecurityContext;
+typedef struct _Runtime__V1alpha2__NamespaceOption Runtime__V1alpha2__NamespaceOption;
+typedef struct _Runtime__V1alpha2__SELinuxOption Runtime__V1alpha2__SELinuxOption;
+typedef struct _Runtime__V1alpha2__RunAsUserOption Runtime__V1alpha2__RunAsUserOption;
 typedef struct _Runtime__V1alpha2__CreatePodRequest Runtime__V1alpha2__CreatePodRequest;
 typedef struct _Runtime__V1alpha2__CreatePodResponse Runtime__V1alpha2__CreatePodResponse;
 typedef struct _Runtime__V1alpha2__DeletePodRequest Runtime__V1alpha2__DeletePodRequest;
@@ -81,15 +88,56 @@ typedef enum _Runtime__V1alpha2__ContainerState {
 
 /* --- messages --- */
 
-struct  _Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry
+struct  _Runtime__V1alpha2__DNSConfig
+{
+  ProtobufCMessage base;
+  size_t n_servers;
+  char **servers;
+  size_t n_searches;
+  char **searches;
+  size_t n_options;
+  char **options;
+};
+#define RUNTIME__V1ALPHA2__DNSCONFIG__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__dnsconfig__descriptor) \
+    , 0,NULL, 0,NULL, 0,NULL }
+
+
+struct  _Runtime__V1alpha2__PortMapping
+{
+  ProtobufCMessage base;
+  char *protocol;
+  int32_t container_port;
+  int32_t host_port;
+  char *host_ip;
+};
+#define RUNTIME__V1ALPHA2__PORT_MAPPING__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__port_mapping__descriptor) \
+    , (char *)protobuf_c_empty_string, 0, 0, (char *)protobuf_c_empty_string }
+
+
+struct  _Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry
 {
   ProtobufCMessage base;
   char *key;
   char *value;
 };
-#define RUNTIME__V1ALPHA2__POD_SANDBOX_CONFIG__ANNOTATIONS_ENTRY__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__pod_sandbox_config__annotations_entry__descriptor) \
+#define RUNTIME__V1ALPHA2__LINUX_POD_SANDBOX_CONFIG__SYSCTLS_ENTRY__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__descriptor) \
     , (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string }
+
+
+struct  _Runtime__V1alpha2__LinuxPodSandboxConfig
+{
+  ProtobufCMessage base;
+  char *cgroup_parent;
+  Runtime__V1alpha2__SecurityContext *security_context;
+  size_t n_sysctls;
+  Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry **sysctls;
+};
+#define RUNTIME__V1ALPHA2__LINUX_POD_SANDBOX_CONFIG__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__linux_pod_sandbox_config__descriptor) \
+    , (char *)protobuf_c_empty_string, NULL, 0,NULL }
 
 
 struct  _Runtime__V1alpha2__PodSandboxConfig__LabelsEntry
@@ -103,6 +151,17 @@ struct  _Runtime__V1alpha2__PodSandboxConfig__LabelsEntry
     , (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string }
 
 
+struct  _Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry
+{
+  ProtobufCMessage base;
+  char *key;
+  char *value;
+};
+#define RUNTIME__V1ALPHA2__POD_SANDBOX_CONFIG__ANNOTATIONS_ENTRY__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__pod_sandbox_config__annotations_entry__descriptor) \
+    , (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string }
+
+
 /*
  * Pod messages
  */
@@ -110,16 +169,20 @@ struct  _Runtime__V1alpha2__PodSandboxConfig
 {
   ProtobufCMessage base;
   Runtime__V1alpha2__PodMetadata *metadata;
-  Runtime__V1alpha2__NetworkConfig *network;
-  Runtime__V1alpha2__LinuxConfig *linux;
-  size_t n_annotations;
-  Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry **annotations;
+  char *hostname;
+  char *log_directory;
+  Runtime__V1alpha2__DNSConfig *dns_config;
+  size_t n_port_mappings;
+  Runtime__V1alpha2__PortMapping **port_mappings;
+  Runtime__V1alpha2__LinuxPodSandboxConfig *linux_config;
   size_t n_labels;
   Runtime__V1alpha2__PodSandboxConfig__LabelsEntry **labels;
+  size_t n_annotations;
+  Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry **annotations;
 };
 #define RUNTIME__V1ALPHA2__POD_SANDBOX_CONFIG__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__pod_sandbox_config__descriptor) \
-    , NULL, NULL, NULL, 0,NULL, 0,NULL }
+    , NULL, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, NULL, 0,NULL, NULL, 0,NULL, 0,NULL }
 
 
 struct  _Runtime__V1alpha2__PodMetadata
@@ -172,14 +235,52 @@ struct  _Runtime__V1alpha2__LinuxConfig
 struct  _Runtime__V1alpha2__SecurityContext
 {
   ProtobufCMessage base;
-  char *namespace_options;
-  char *selinux_options;
-  char *run_as_user;
+  Runtime__V1alpha2__NamespaceOption *namespace_options;
+  Runtime__V1alpha2__SELinuxOption *selinux_options;
+  Runtime__V1alpha2__RunAsUserOption *run_as_user;
   protobuf_c_boolean privileged;
 };
 #define RUNTIME__V1ALPHA2__SECURITY_CONTEXT__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__security_context__descriptor) \
-    , (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, 0 }
+    , NULL, NULL, NULL, 0 }
+
+
+struct  _Runtime__V1alpha2__NamespaceOption
+{
+  ProtobufCMessage base;
+  protobuf_c_boolean host_network;
+  protobuf_c_boolean host_pid;
+  protobuf_c_boolean host_ipc;
+};
+#define RUNTIME__V1ALPHA2__NAMESPACE_OPTION__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__namespace_option__descriptor) \
+    , 0, 0, 0 }
+
+
+struct  _Runtime__V1alpha2__SELinuxOption
+{
+  ProtobufCMessage base;
+  char *user;
+  char *role;
+  char *type;
+  char *level;
+};
+#define RUNTIME__V1ALPHA2__SELINUX_OPTION__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__selinux_option__descriptor) \
+    , (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string }
+
+
+struct  _Runtime__V1alpha2__RunAsUserOption
+{
+  ProtobufCMessage base;
+  int64_t uid;
+  int64_t gid;
+  size_t n_additional_gids;
+  int64_t *additional_gids;
+};
+#define RUNTIME__V1ALPHA2__RUN_AS_USER_OPTION__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&runtime__v1alpha2__run_as_user_option__descriptor) \
+    , 0, 0, 0,NULL }
 
 
 struct  _Runtime__V1alpha2__CreatePodRequest
@@ -604,12 +705,72 @@ struct  _Runtime__V1alpha2__StopContainerResponse
      }
 
 
-/* Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry methods */
-void   runtime__v1alpha2__pod_sandbox_config__annotations_entry__init
-                     (Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry         *message);
+/* Runtime__V1alpha2__DNSConfig methods */
+void   runtime__v1alpha2__dnsconfig__init
+                     (Runtime__V1alpha2__DNSConfig         *message);
+size_t runtime__v1alpha2__dnsconfig__get_packed_size
+                     (const Runtime__V1alpha2__DNSConfig   *message);
+size_t runtime__v1alpha2__dnsconfig__pack
+                     (const Runtime__V1alpha2__DNSConfig   *message,
+                      uint8_t             *out);
+size_t runtime__v1alpha2__dnsconfig__pack_to_buffer
+                     (const Runtime__V1alpha2__DNSConfig   *message,
+                      ProtobufCBuffer     *buffer);
+Runtime__V1alpha2__DNSConfig *
+       runtime__v1alpha2__dnsconfig__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   runtime__v1alpha2__dnsconfig__free_unpacked
+                     (Runtime__V1alpha2__DNSConfig *message,
+                      ProtobufCAllocator *allocator);
+/* Runtime__V1alpha2__PortMapping methods */
+void   runtime__v1alpha2__port_mapping__init
+                     (Runtime__V1alpha2__PortMapping         *message);
+size_t runtime__v1alpha2__port_mapping__get_packed_size
+                     (const Runtime__V1alpha2__PortMapping   *message);
+size_t runtime__v1alpha2__port_mapping__pack
+                     (const Runtime__V1alpha2__PortMapping   *message,
+                      uint8_t             *out);
+size_t runtime__v1alpha2__port_mapping__pack_to_buffer
+                     (const Runtime__V1alpha2__PortMapping   *message,
+                      ProtobufCBuffer     *buffer);
+Runtime__V1alpha2__PortMapping *
+       runtime__v1alpha2__port_mapping__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   runtime__v1alpha2__port_mapping__free_unpacked
+                     (Runtime__V1alpha2__PortMapping *message,
+                      ProtobufCAllocator *allocator);
+/* Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry methods */
+void   runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__init
+                     (Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry         *message);
+/* Runtime__V1alpha2__LinuxPodSandboxConfig methods */
+void   runtime__v1alpha2__linux_pod_sandbox_config__init
+                     (Runtime__V1alpha2__LinuxPodSandboxConfig         *message);
+size_t runtime__v1alpha2__linux_pod_sandbox_config__get_packed_size
+                     (const Runtime__V1alpha2__LinuxPodSandboxConfig   *message);
+size_t runtime__v1alpha2__linux_pod_sandbox_config__pack
+                     (const Runtime__V1alpha2__LinuxPodSandboxConfig   *message,
+                      uint8_t             *out);
+size_t runtime__v1alpha2__linux_pod_sandbox_config__pack_to_buffer
+                     (const Runtime__V1alpha2__LinuxPodSandboxConfig   *message,
+                      ProtobufCBuffer     *buffer);
+Runtime__V1alpha2__LinuxPodSandboxConfig *
+       runtime__v1alpha2__linux_pod_sandbox_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   runtime__v1alpha2__linux_pod_sandbox_config__free_unpacked
+                     (Runtime__V1alpha2__LinuxPodSandboxConfig *message,
+                      ProtobufCAllocator *allocator);
 /* Runtime__V1alpha2__PodSandboxConfig__LabelsEntry methods */
 void   runtime__v1alpha2__pod_sandbox_config__labels_entry__init
                      (Runtime__V1alpha2__PodSandboxConfig__LabelsEntry         *message);
+/* Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry methods */
+void   runtime__v1alpha2__pod_sandbox_config__annotations_entry__init
+                     (Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry         *message);
 /* Runtime__V1alpha2__PodSandboxConfig methods */
 void   runtime__v1alpha2__pod_sandbox_config__init
                      (Runtime__V1alpha2__PodSandboxConfig         *message);
@@ -707,6 +868,63 @@ Runtime__V1alpha2__SecurityContext *
                       const uint8_t       *data);
 void   runtime__v1alpha2__security_context__free_unpacked
                      (Runtime__V1alpha2__SecurityContext *message,
+                      ProtobufCAllocator *allocator);
+/* Runtime__V1alpha2__NamespaceOption methods */
+void   runtime__v1alpha2__namespace_option__init
+                     (Runtime__V1alpha2__NamespaceOption         *message);
+size_t runtime__v1alpha2__namespace_option__get_packed_size
+                     (const Runtime__V1alpha2__NamespaceOption   *message);
+size_t runtime__v1alpha2__namespace_option__pack
+                     (const Runtime__V1alpha2__NamespaceOption   *message,
+                      uint8_t             *out);
+size_t runtime__v1alpha2__namespace_option__pack_to_buffer
+                     (const Runtime__V1alpha2__NamespaceOption   *message,
+                      ProtobufCBuffer     *buffer);
+Runtime__V1alpha2__NamespaceOption *
+       runtime__v1alpha2__namespace_option__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   runtime__v1alpha2__namespace_option__free_unpacked
+                     (Runtime__V1alpha2__NamespaceOption *message,
+                      ProtobufCAllocator *allocator);
+/* Runtime__V1alpha2__SELinuxOption methods */
+void   runtime__v1alpha2__selinux_option__init
+                     (Runtime__V1alpha2__SELinuxOption         *message);
+size_t runtime__v1alpha2__selinux_option__get_packed_size
+                     (const Runtime__V1alpha2__SELinuxOption   *message);
+size_t runtime__v1alpha2__selinux_option__pack
+                     (const Runtime__V1alpha2__SELinuxOption   *message,
+                      uint8_t             *out);
+size_t runtime__v1alpha2__selinux_option__pack_to_buffer
+                     (const Runtime__V1alpha2__SELinuxOption   *message,
+                      ProtobufCBuffer     *buffer);
+Runtime__V1alpha2__SELinuxOption *
+       runtime__v1alpha2__selinux_option__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   runtime__v1alpha2__selinux_option__free_unpacked
+                     (Runtime__V1alpha2__SELinuxOption *message,
+                      ProtobufCAllocator *allocator);
+/* Runtime__V1alpha2__RunAsUserOption methods */
+void   runtime__v1alpha2__run_as_user_option__init
+                     (Runtime__V1alpha2__RunAsUserOption         *message);
+size_t runtime__v1alpha2__run_as_user_option__get_packed_size
+                     (const Runtime__V1alpha2__RunAsUserOption   *message);
+size_t runtime__v1alpha2__run_as_user_option__pack
+                     (const Runtime__V1alpha2__RunAsUserOption   *message,
+                      uint8_t             *out);
+size_t runtime__v1alpha2__run_as_user_option__pack_to_buffer
+                     (const Runtime__V1alpha2__RunAsUserOption   *message,
+                      ProtobufCBuffer     *buffer);
+Runtime__V1alpha2__RunAsUserOption *
+       runtime__v1alpha2__run_as_user_option__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   runtime__v1alpha2__run_as_user_option__free_unpacked
+                     (Runtime__V1alpha2__RunAsUserOption *message,
                       ProtobufCAllocator *allocator);
 /* Runtime__V1alpha2__CreatePodRequest methods */
 void   runtime__v1alpha2__create_pod_request__init
@@ -1285,11 +1503,23 @@ void   runtime__v1alpha2__stop_container_response__free_unpacked
                       ProtobufCAllocator *allocator);
 /* --- per-message closures --- */
 
-typedef void (*Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry_Closure)
-                 (const Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry *message,
+typedef void (*Runtime__V1alpha2__DNSConfig_Closure)
+                 (const Runtime__V1alpha2__DNSConfig *message,
+                  void *closure_data);
+typedef void (*Runtime__V1alpha2__PortMapping_Closure)
+                 (const Runtime__V1alpha2__PortMapping *message,
+                  void *closure_data);
+typedef void (*Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry_Closure)
+                 (const Runtime__V1alpha2__LinuxPodSandboxConfig__SysctlsEntry *message,
+                  void *closure_data);
+typedef void (*Runtime__V1alpha2__LinuxPodSandboxConfig_Closure)
+                 (const Runtime__V1alpha2__LinuxPodSandboxConfig *message,
                   void *closure_data);
 typedef void (*Runtime__V1alpha2__PodSandboxConfig__LabelsEntry_Closure)
                  (const Runtime__V1alpha2__PodSandboxConfig__LabelsEntry *message,
+                  void *closure_data);
+typedef void (*Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry_Closure)
+                 (const Runtime__V1alpha2__PodSandboxConfig__AnnotationsEntry *message,
                   void *closure_data);
 typedef void (*Runtime__V1alpha2__PodSandboxConfig_Closure)
                  (const Runtime__V1alpha2__PodSandboxConfig *message,
@@ -1308,6 +1538,15 @@ typedef void (*Runtime__V1alpha2__LinuxConfig_Closure)
                   void *closure_data);
 typedef void (*Runtime__V1alpha2__SecurityContext_Closure)
                  (const Runtime__V1alpha2__SecurityContext *message,
+                  void *closure_data);
+typedef void (*Runtime__V1alpha2__NamespaceOption_Closure)
+                 (const Runtime__V1alpha2__NamespaceOption *message,
+                  void *closure_data);
+typedef void (*Runtime__V1alpha2__SELinuxOption_Closure)
+                 (const Runtime__V1alpha2__SELinuxOption *message,
+                  void *closure_data);
+typedef void (*Runtime__V1alpha2__RunAsUserOption_Closure)
+                 (const Runtime__V1alpha2__RunAsUserOption *message,
                   void *closure_data);
 typedef void (*Runtime__V1alpha2__CreatePodRequest_Closure)
                  (const Runtime__V1alpha2__CreatePodRequest *message,
@@ -1530,14 +1769,21 @@ void runtime__v1alpha2__runtime_service__stop_container(ProtobufCService *servic
 
 extern const ProtobufCEnumDescriptor    runtime__v1alpha2__pod_state__descriptor;
 extern const ProtobufCEnumDescriptor    runtime__v1alpha2__container_state__descriptor;
+extern const ProtobufCMessageDescriptor runtime__v1alpha2__dnsconfig__descriptor;
+extern const ProtobufCMessageDescriptor runtime__v1alpha2__port_mapping__descriptor;
+extern const ProtobufCMessageDescriptor runtime__v1alpha2__linux_pod_sandbox_config__descriptor;
+extern const ProtobufCMessageDescriptor runtime__v1alpha2__linux_pod_sandbox_config__sysctls_entry__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__pod_sandbox_config__descriptor;
-extern const ProtobufCMessageDescriptor runtime__v1alpha2__pod_sandbox_config__annotations_entry__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__pod_sandbox_config__labels_entry__descriptor;
+extern const ProtobufCMessageDescriptor runtime__v1alpha2__pod_sandbox_config__annotations_entry__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__pod_metadata__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__network_config__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__linux_config__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__linux_config__sysctls_entry__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__security_context__descriptor;
+extern const ProtobufCMessageDescriptor runtime__v1alpha2__namespace_option__descriptor;
+extern const ProtobufCMessageDescriptor runtime__v1alpha2__selinux_option__descriptor;
+extern const ProtobufCMessageDescriptor runtime__v1alpha2__run_as_user_option__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__create_pod_request__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__create_pod_response__descriptor;
 extern const ProtobufCMessageDescriptor runtime__v1alpha2__delete_pod_request__descriptor;
