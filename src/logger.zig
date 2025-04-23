@@ -53,3 +53,5 @@ pub const Logger = struct {
         try self.writer.print("[{s}] {d}: " ++ format ++ "\n", .{ level, timestamp } ++ args);
     }
 };
+
+pub const logger = Logger;
