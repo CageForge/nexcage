@@ -303,16 +303,19 @@ pub const LinuxDeviceCgroup = struct {
 };
 
 pub const LinuxMemory = struct {
-    limit: ?i64 = null,
-    reservation: ?i64 = null,
-    swap: ?i64 = null,
-    kernel: ?i64 = null,
-    kernelTCP: ?i64 = null,
+    limit: ?u64 = null,
+    reservation: ?u64 = null,
+    swap: ?u64 = null,
+    kernel: ?u64 = null,
+    kernelTCP: ?u64 = null,
     swappiness: ?u64 = null,
-    disableOOMKiller: ?bool = null,
+    disableOOMKiller: bool = false,
+    useHierarchy: bool = false,
 
     pub fn deinit(self: *const LinuxMemory, allocator: Allocator) void {
         _ = allocator;
+        _ = self;
+        // Немає динамічно виділеної пам'яті для очищення
     }
 };
 

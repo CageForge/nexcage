@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package oci_runtime;
+
+service Runtime {
+    rpc CreateContainer(CreateContainerRequest) returns (CreateContainerResponse) {}
+    rpc StartContainer(StartContainerRequest) returns (StartContainerResponse) {}
+    rpc StopContainer(StopContainerRequest) returns (StopContainerResponse) {}
+    rpc DeleteContainer(DeleteContainerRequest) returns (DeleteContainerResponse) {}
+    rpc State(StateRequest) returns (StateResponse) {}
+}
+
+message CreateContainerRequest {
+    string id = 1;
+    string bundle = 2;
+}
+
+message CreateContainerResponse {
+    string container_id = 1;
+}
+
+message StartContainerRequest {
+    string id = 1;
+}
+
+message StartContainerResponse {}
+
+message StopContainerRequest {
+    string id = 1;
+    int64 timeout = 2;
+}
+
+message StopContainerResponse {}
+
+message DeleteContainerRequest {
+    string id = 1;
+}
+
+message DeleteContainerResponse {}
+
+message StateRequest {
+    string id = 1;
+}
+
+message StateResponse {
+    string id = 1;
+    string status = 2;
+    int32 pid = 3;
+    string bundle = 4;
+    map<string, string> annotations = 5;
+} 

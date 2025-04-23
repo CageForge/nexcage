@@ -4,14 +4,13 @@ const os = std.os;
 const linux = os.linux;
 const posix = std.posix;
 const logger_mod = @import("logger");
-const config = @import("config");
+//const config = @import("config");
+const config = @import("config.zig");
 const types = @import("types");
 const fs = std.fs;
 const builtin = @import("builtin");
-const log = std.log;
-const proxmox = @import("proxmox.zig").ProxmoxClient;
-const error_module = @import("error");
-const Error = error_module.Error;
+const ProxmoxClient = @import("proxmox").ProxmoxClient;
+const errors = @import("error");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
@@ -19,15 +18,14 @@ const json = std.json;
 const http = std.http;
 const Uri = std.Uri;
 const Client = http.Client;
+const network = @import("network");
+const pod = @import("pod");
+const oci = @import("oci");
+const grpc = @import("grpc");
+const process = std.process;
 
 // Додаємо нові типи помилок
-const RuntimeError = error{
-    SignalHandlerError,
-    NetworkError,
-    ResourceInitError,
-    ConfigurationError,
-    CleanupError,
-} || std.fs.File.OpenError || std.fs.File.ReadError;
+const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadError;
 
 const SIGINT = posix.SIG.INT;
 const SIGTERM = posix.SIG.TERM;
@@ -36,6 +34,7 @@ const SIGHUP = posix.SIG.HUP;
 var shutdown_requested: bool = false;
 var last_signal: c_int = 0;
 var logger_instance: logger_mod.Logger = undefined;
+var proxmox_client: *ProxmoxClient = undefined;
 
 // Додаємо нові типи помилок
 const ConfigError = error{
@@ -47,7 +46,7 @@ const ConfigError = error{
 
 fn printHelp() !void {
     const help_text =
-        \\proxmox-lxcri - Proxmox LXC Container Runtime Interface
+        \\proxmox-lxcri - Proxmox LXC OCI Runtime Interface
         \\
         \\Usage:
         \\  proxmox-lxcri [OPTIONS]
@@ -138,17 +137,9 @@ fn cleanup() !void {
     try logger_instance.info("Starting cleanup process...", .{});
     
     // Зупиняємо всі активні операції
-    if (@hasDecl(proxmox_client, "stopAllOperations")) {
-        proxmox_client.stopAllOperations() catch |err| {
-            try logger_instance.err("Failed to stop all operations: {s}", .{@errorName(err)});
-        };
-    }
-    
-    // Закриваємо всі відкриті з'єднання
-    if (@hasDecl(proxmox_client, "closeConnections")) {
-        proxmox_client.closeConnections() catch |err| {
-            try logger_instance.err("Failed to close connections: {s}", .{@errorName(err)});
-        };
+    if (proxmox_client != undefined) {
+        try proxmox_client.stopAllOperations();
+        try proxmox_client.closeConnections();
     }
     
     try logger_instance.info("Cleanup completed", .{});
@@ -170,17 +161,35 @@ pub fn main() !void {
         const check = gpa.deinit();
         if (check == .leak) {
             std.log.err("Memory leak detected!", .{});
-            os.exit(1);
+            process.exit(1);
         }
     }
     const allocator = gpa.allocator();
 
-    // Parse command line arguments
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    // Отримуємо аргументи командного рядка
+    const args = try process.argsAlloc(allocator);
+    defer process.argsFree(allocator, args);
+
+    // Читаємо конфігурацію
+    const config_path = process.getEnvVarOwned(allocator, "PROXMOX_LXCRI_CONFIG") catch |err| {
+        //logger_instance.warn("Environment variable PROXMOX_LXCRI_CONFIG not found, using default path", .{err});
+        //std.log.err("Missing PROXMOX_LXCRI_CONFIG: {}", .{err});
+        try logger_instance.warn("Missing PROXMOX_LXCRI_CONFIG: {s}", .{@errorName(err)});
+        return err;
+        //return allocator.dupe(u8, "/etc/proxmox-lxcri/config.json") catch return error.OutOfMemory;
+    };
+    defer if (std.mem.eql(u8, config_path, "/etc/proxmox-lxcri/config.json")) {} else allocator.free(config_path);
+
+    // Ініціалізуємо логер
+    logger_instance = try initLogger(allocator, true);
+    defer logger_instance.deinit();
 
     var debug_mode = false;
     var no_daemon = false;
+
+    // Створюємо менеджери
+    var network_manager = network.NetworkManager.init(allocator);
+    defer network_manager.deinit();
 
     for (args[1..]) |arg| {
         if (std.mem.eql(u8, arg, "--debug")) {
@@ -203,23 +212,20 @@ pub fn main() !void {
     try logger_instance.info("Starting proxmox-lxcri...", .{});
 
     // Load configuration
-    const config_path = try getConfigPath(allocator);
-    defer allocator.free(config_path);
+    var cfg = try config.Config.init(allocator, &logger_instance);
+    defer cfg.deinit();
+    try cfg.loadFromFile(config_path);
 
-    var config_instance = loadConfig(allocator, config_path) catch |err| {
-        try logger_instance.err("Failed to load configuration: {s}", .{@errorName(err)});
-        return err;
-    };
-    defer config_instance.deinit();
-
-    proxmox_client = try proxmox.ProxmoxClient.init(
+    // Initialize Proxmox client
+    var client = try ProxmoxClient.init(
         allocator,
-        config_instance.hosts,
-        config_instance.token,
+        cfg.proxmox.hosts,
+        cfg.proxmox.token,
         &logger_instance,
-        config_instance.port,
-        config_instance.node,
+        cfg.proxmox.port,
+        cfg.proxmox.node,
     );
+    proxmox_client = &client;
     defer proxmox_client.deinit();
 
     // List and log all LXC containers
@@ -238,29 +244,41 @@ pub fn main() !void {
         };
     }
 
-    // Setup signal handlers
-    const sa = posix.Sigaction{
+    // Створюємо gRPC сервіс
+    var grpc_service = try grpc.OciRuntimeService.init(allocator);
+    defer grpc_service.deinit();
+
+    // Налаштовуємо обробник сигналів
+    try std.os.sigaction(SIGINT, &std.os.Sigaction{
         .handler = .{ .handler = handleSignal },
-        .mask = posix.empty_sigset,
+        .mask = std.os.empty_sigset,
         .flags = 0,
-    };
+    });
+    try std.os.sigaction(SIGTERM, &std.os.Sigaction{
+        .handler = .{ .handler = handleSignal },
+        .mask = std.os.empty_sigset,
+        .flags = 0,
+    });
 
-    try posix.sigaction(SIGINT, &sa, null);
-    try posix.sigaction(SIGTERM, &sa, null);
-    try posix.sigaction(SIGHUP, &sa, null);
+    // Ініціалізуємо OCI runtime
+    var runtime = try oci.Runtime.init(allocator, proxmox_client);
+    defer runtime.deinit();
 
-    if (!no_daemon) {
-        while (!shutdown_requested) {
-            std.time.sleep(1 * std.time.ns_per_s);
-            if (last_signal != 0) {
-                try logger_instance.info("Received signal {d}, initiating graceful shutdown...", .{last_signal});
-            }
-        }
+    // Запускаємо gRPC сервер
+    var server = try grpc.Server.init(allocator, &runtime);
+    defer server.deinit();
+
+    try server.start();
+    logger_instance.info("gRPC server started on 0.0.0.0:50051", .{});
+
+    // Очікуємо сигнал завершення
+    while (!shutdown_requested) {
+        std.time.sleep(std.time.ns_per_s);
     }
 
-    // Cleanup and shutdown
-    try logger_instance.info("Shutting down proxmox-lxcri...", .{});
+    // Виконуємо очищення
     try cleanup();
+    try logger_instance.info("Shutdown complete", .{});
 }
 
 fn handleSignal(sig: c_int) callconv(.C) void {
@@ -273,16 +291,16 @@ fn handleSignal(sig: c_int) callconv(.C) void {
 
 fn getConfigPath(allocator: std.mem.Allocator) ![]const u8 {
     // Check environment variable first
-    if (std.process.getEnvVarOwned(allocator, "PROXMOX_LXCRI_CONFIG")) |path| {
+    if (process.getEnvVarOwned(allocator, "PROXMOX_LXCRI_CONFIG")) |path| {
         // Verify that the file exists and is accessible
         fs.cwd().access(path, .{}) catch |err| {
             try logger_instance.warn("Config file from env var not accessible: {s}", .{@errorName(err)});
             allocator.free(path);
-            return err;
+            return errors.Error.FileSystemError;
         };
         return path;
-    } else |err| {
-        try logger_instance.debug("Environment variable not set: {s}", .{@errorName(err)});
+    } else |_| {
+        try logger_instance.debug("Environment variable not set, checking default locations", .{});
     }
 
     // Check default locations
@@ -299,5 +317,5 @@ fn getConfigPath(allocator: std.mem.Allocator) ![]const u8 {
         }
     }
 
-    return Error.ConfigNotFound;
+    return errors.Error.ConfigNotFound;
 }

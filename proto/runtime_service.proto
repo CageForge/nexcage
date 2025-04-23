@@ -2,6 +2,10 @@ syntax = "proto3";
 
 package runtime.v1alpha2;
 
+option cc_enable_arenas = true;
+option cc_generic_services = true;
+option optimize_for = CODE_SIZE;
+
 // Runtime service defines the public APIs for remote container runtimes
 service RuntimeService {
   // Pod operations
@@ -19,6 +23,7 @@ service RuntimeService {
   rpc StopContainer(StopContainerRequest) returns (StopContainerResponse) {}
 }
 
+// Basic configuration messages
 message DNSConfig {
   repeated string servers = 1;
   repeated string searches = 2;
@@ -32,24 +37,18 @@ message PortMapping {
   string host_ip = 4;
 }
 
-message LinuxPodSandboxConfig {
-  string cgroup_parent = 1;
-  SecurityContext security_context = 2;
-  map<string, string> sysctls = 3;
+message SecurityContext {
+  bool host_network = 1;
+  bool host_pid = 2;
+  bool host_ipc = 3;
+  bool privileged = 4;
+  int64 run_as_user = 5;
+  int64 run_as_group = 6;
+  repeated int64 supplemental_groups = 7;
+  string selinux_type = 8;
 }
 
-// Pod messages
-message PodSandboxConfig {
-  PodMetadata metadata = 1;
-  string hostname = 2;
-  string log_directory = 3;
-  DNSConfig dns_config = 4;
-  repeated PortMapping port_mappings = 5;
-  LinuxPodSandboxConfig linux_config = 6;
-  map<string, string> labels = 7;
-  map<string, string> annotations = 8;
-}
-
+// Pod related messages
 message PodMetadata {
   string name = 1;
   string uid = 2;
@@ -57,42 +56,98 @@ message PodMetadata {
   uint32 attempt = 4;
 }
 
-message NetworkConfig {
-  string pod_cidr = 1;
+message PodSandboxConfig {
+  PodMetadata metadata = 1;
+  string hostname = 2;
+  string log_directory = 3;
+  DNSConfig dns_config = 4;
+  repeated PortMapping port_mappings = 5;
+  SecurityContext security_context = 6;
+  string cgroup_parent = 7;
+  map<string, string> sysctls = 8;
+  map<string, string> labels = 9;
+  map<string, string> annotations = 10;
 }
 
-message LinuxConfig {
-  string cgroup_parent = 1;
-  SecurityContext security_context = 2;
-  map<string, string> sysctls = 3;
+enum PodState {
+  POD_UNKNOWN = 0;
+  POD_CREATED = 1;
+  POD_RUNNING = 2;
+  POD_STOPPED = 3;
 }
 
-message SecurityContext {
-  NamespaceOption namespace_options = 1;
-  SELinuxOption selinux_options = 2;
-  RunAsUserOption run_as_user = 3;
-  bool privileged = 4;
+message Pod {
+  string id = 1;
+  PodMetadata metadata = 2;
+  PodState state = 3;
+  int64 created_at = 4;
+  map<string, string> labels = 5;
+  map<string, string> annotations = 6;
 }
 
-message NamespaceOption {
-  bool host_network = 1;
-  bool host_pid = 2;
-  bool host_ipc = 3;
+message PodFilter {
+  string id = 1;
+  PodState state = 2;
+  map<string, string> label_selector = 3;
 }
 
-message SELinuxOption {
-  string user = 1;
-  string role = 2;
-  string type = 3;
-  string level = 4;
+// Container related messages
+message ContainerMetadata {
+  string name = 1;
+  uint32 attempt = 2;
 }
 
-message RunAsUserOption {
-  int64 uid = 1;
-  int64 gid = 2;
-  repeated int64 additional_gids = 3;
+message ImageSpec {
+  string image = 1;
 }
 
+message Mount {
+  string container_path = 1;
+  string host_path = 2;
+  bool readonly = 3;
+}
+
+message ContainerConfig {
+  ContainerMetadata metadata = 1;
+  ImageSpec image = 2;
+  repeated string command = 3;
+  repeated string args = 4;
+  string working_dir = 5;
+  map<string, string> env = 6;
+  repeated Mount mounts = 7;
+  map<string, string> labels = 8;
+  map<string, string> annotations = 9;
+}
+
+enum ContainerState {
+  CONTAINER_UNKNOWN = 0;
+  CONTAINER_CREATED = 1;
+  CONTAINER_RUNNING = 2;
+  CONTAINER_STOPPED = 3;
+}
+
+message Container {
+  string id = 1;
+  string pod_id = 2;
+  ContainerMetadata metadata = 3;
+  ImageSpec image = 4;
+  ContainerState state = 5;
+  int64 created_at = 6;
+  int64 started_at = 7;
+  int64 finished_at = 8;
+  int32 exit_code = 9;
+  map<string, string> labels = 10;
+  map<string, string> annotations = 11;
+}
+
+message ContainerFilter {
+  string id = 1;
+  string pod_id = 2;
+  ContainerState state = 3;
+  map<string, string> label_selector = 4;
+}
+
+// Request/Response messages
 message CreatePodRequest {
   PodSandboxConfig config = 1;
 }
@@ -111,30 +166,8 @@ message ListPodRequest {
   PodFilter filter = 1;
 }
 
-message PodFilter {
-  string id = 1;
-  PodState state = 2;
-  map<string, string> label_selector = 3;
-}
-
-enum PodState {
-  UNKNOWN = 0;
-  CREATED = 1;
-  RUNNING = 2;
-  STOPPED = 3;
-}
-
 message ListPodResponse {
   repeated Pod items = 1;
-}
-
-message Pod {
-  string id = 1;
-  PodMetadata metadata = 2;
-  PodState state = 3;
-  int64 created_at = 4;
-  map<string, string> labels = 5;
-  map<string, string> annotations = 6;
 }
 
 message StartPodRequest {
@@ -148,39 +181,6 @@ message StopPodRequest {
 }
 
 message StopPodResponse {}
-
-// Container messages
-message ContainerConfig {
-  ContainerMetadata metadata = 1;
-  ImageSpec image = 2;
-  repeated string command = 3;
-  repeated string args = 4;
-  string working_dir = 5;
-  repeated KeyValue envs = 6;
-  repeated Mount mounts = 7;
-  map<string, string> labels = 8;
-  map<string, string> annotations = 9;
-}
-
-message ContainerMetadata {
-  string name = 1;
-  uint32 attempt = 2;
-}
-
-message ImageSpec {
-  string image = 1;
-}
-
-message KeyValue {
-  string key = 1;
-  string value = 2;
-}
-
-message Mount {
-  string container_path = 1;
-  string host_path = 2;
-  bool readonly = 3;
-}
 
 message CreateContainerRequest {
   string pod_sandbox_id = 1;
@@ -202,34 +202,8 @@ message ListContainersRequest {
   ContainerFilter filter = 1;
 }
 
-message ContainerFilter {
-  string id = 1;
-  string pod_sandbox_id = 2;
-  ContainerState state = 3;
-  map<string, string> label_selector = 4;
-}
-
-enum ContainerState {
-  CONTAINER_UNKNOWN = 0;
-  CONTAINER_CREATED = 1;
-  CONTAINER_RUNNING = 2;
-  CONTAINER_STOPPED = 3;
-}
-
 message ListContainersResponse {
-  repeated Container containers = 1;
-}
-
-message Container {
-  string id = 1;
-  string pod_id = 2;
-  ContainerMetadata metadata = 3;
-  ImageSpec image = 4;
-  string image_ref = 5;
-  ContainerState state = 6;
-  int64 created_at = 7;
-  map<string, string> labels = 8;
-  map<string, string> annotations = 9;
+  repeated Container items = 1;
 }
 
 message StartContainerRequest {

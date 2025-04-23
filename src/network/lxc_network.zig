@@ -1,180 +1,242 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("lxc/lxccontainer.h");
-});
 const Allocator = std.mem.Allocator;
-const oci = @import("../oci/spec.zig");
+const logger = std.log.scoped(.lxc_network);
 
 pub const NetworkError = error{
-    ConfigurationFailed,
-    InterfaceCreationFailed,
-    RouteAdditionFailed,
-    DnsConfigurationFailed,
-    InvalidConfiguration,
+    BridgeCreationFailed,
+    VethCreationFailed,
+    IpAddressFailed,
+    RoutingFailed,
+    DnsConfigFailed,
 };
 
-pub const LxcNetwork = struct {
-    container: *c.struct_lxc_container,
+pub const NetworkConfig = struct {
+    bridge_name: []const u8,
+    veth_name: []const u8,
+    ip_address: []const u8,
+    netmask: []const u8,
+    gateway: []const u8,
+    dns_servers: [][]const u8,
     allocator: Allocator,
 
-    const Self = @This();
+    pub fn init(allocator: Allocator, pod_name: []const u8) !NetworkConfig {
+        const bridge_name = try std.fmt.allocPrint(allocator, "lxcbr-{s}", .{pod_name});
+        const veth_name = try std.fmt.allocPrint(allocator, "veth-{s}", .{pod_name});
 
-    pub fn init(container: *c.struct_lxc_container, allocator: Allocator) Self {
-        return Self{
-            .container = container,
+        return NetworkConfig{
+            .bridge_name = bridge_name,
+            .veth_name = veth_name,
+            .ip_address = try allocator.dupe(u8, "10.0.3.1"),
+            .netmask = try allocator.dupe(u8, "255.255.255.0"),
+            .gateway = try allocator.dupe(u8, "10.0.3.1"),
+            .dns_servers = &[_][]const u8{
+                try allocator.dupe(u8, "8.8.8.8"),
+                try allocator.dupe(u8, "8.8.4.4"),
+            },
             .allocator = allocator,
         };
     }
 
-    pub fn configure(self: *Self, network: oci.LinuxNetwork) NetworkError!void {
-        // Налаштування мережевих інтерфейсів
-        if (network.interfaces) |interfaces| {
-            for (interfaces) |interface| {
-                try self.configureInterface(interface);
-            }
+    pub fn deinit(self: *NetworkConfig) void {
+        self.allocator.free(self.bridge_name);
+        self.allocator.free(self.veth_name);
+        self.allocator.free(self.ip_address);
+        self.allocator.free(self.netmask);
+        self.allocator.free(self.gateway);
+        for (self.dns_servers) |server| {
+            self.allocator.free(server);
+        }
+    }
+};
+
+pub const LxcNetwork = struct {
+    config: NetworkConfig,
+    allocator: Allocator,
+
+    const Self = @This();
+
+    pub fn init(allocator: Allocator, pod_name: []const u8) !*Self {
+        const self = try allocator.create(Self);
+        errdefer allocator.destroy(self);
+
+        self.* = .{
+            .config = try NetworkConfig.init(allocator, pod_name),
+            .allocator = allocator,
+        };
+
+        try self.setupNetwork();
+        return self;
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.config.deinit();
+        self.allocator.destroy(self);
+    }
+
+    fn setupNetwork(self: *Self) !void {
+        logger.info("Setting up network for pod", .{});
+
+        // Створюємо міст
+        try self.createBridge();
+        errdefer self.deleteBridge();
+
+        // Налаштовуємо IP адресу для мосту
+        try self.configureBridgeIp();
+
+        // Налаштовуємо маршрутизацію
+        try self.setupRouting();
+
+        // Налаштовуємо DNS
+        try self.configureDns();
+
+        logger.info("Network setup completed successfully", .{});
+    }
+
+    fn createBridge(self: *Self) !void {
+        const result = try std.ChildProcess.exec(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{
+                "ip",
+                "link",
+                "add",
+                "name",
+                self.config.bridge_name,
+                "type",
+                "bridge",
+            },
+        });
+        defer {
+            self.allocator.free(result.stdout);
+            self.allocator.free(result.stderr);
         }
 
-        // Налаштування маршрутів
-        if (network.routes) |routes| {
-            for (routes) |route| {
-                try self.addRoute(route);
-            }
+        if (result.term.Exited != 0) {
+            logger.err("Failed to create bridge: {s}", .{result.stderr});
+            return NetworkError.BridgeCreationFailed;
         }
 
-        // Налаштування DNS
-        if (network.dnsServers != null or network.dnsSearch != null) {
-            try self.configureDns(network);
+        // Активуємо міст
+        const up_result = try std.ChildProcess.exec(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{
+                "ip",
+                "link",
+                "set",
+                self.config.bridge_name,
+                "up",
+            },
+        });
+        defer {
+            self.allocator.free(up_result.stdout);
+            self.allocator.free(up_result.stderr);
+        }
+
+        if (up_result.term.Exited != 0) {
+            logger.err("Failed to activate bridge: {s}", .{up_result.stderr});
+            return NetworkError.BridgeCreationFailed;
         }
     }
 
-    fn configureInterface(self: *Self, interface: oci.NetworkInterface) NetworkError!void {
-        // Створення конфігурації мережевого інтерфейсу для LXC
-        var key_buf: [256]u8 = undefined;
-        
-        // Базова конфігурація
-        const key = std.fmt.bufPrint(&key_buf, "lxc.net.0.type", .{}) catch return NetworkError.ConfigurationFailed;
-        if (self.container.set_config_item(self.container, key.ptr, "veth") == 0) {
-            return NetworkError.ConfigurationFailed;
+    fn configureBridgeIp(self: *Self) !void {
+        const result = try std.ChildProcess.exec(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{
+                "ip",
+                "addr",
+                "add",
+                self.config.ip_address,
+                "dev",
+                self.config.bridge_name,
+            },
+        });
+        defer {
+            self.allocator.free(result.stdout);
+            self.allocator.free(result.stderr);
         }
 
-        // Ім'я інтерфейсу
-        const name_key = std.fmt.bufPrint(&key_buf, "lxc.net.0.name", .{}) catch return NetworkError.ConfigurationFailed;
-        if (self.container.set_config_item(self.container, name_key.ptr, interface.name.ptr) == 0) {
-            return NetworkError.ConfigurationFailed;
-        }
-
-        // IP адреси
-        if (interface.address) |addresses| {
-            for (addresses) |addr| {
-                const ipv4_key = std.fmt.bufPrint(&key_buf, "lxc.net.0.ipv4.address", .{}) catch return NetworkError.ConfigurationFailed;
-                if (self.container.set_config_item(self.container, ipv4_key.ptr, addr.ptr) == 0) {
-                    return NetworkError.ConfigurationFailed;
-                }
-            }
-        }
-
-        // MAC адреса
-        if (interface.mac) |mac| {
-            const mac_key = std.fmt.bufPrint(&key_buf, "lxc.net.0.hwaddr", .{}) catch return NetworkError.ConfigurationFailed;
-            if (self.container.set_config_item(self.container, mac_key.ptr, mac.ptr) == 0) {
-                return NetworkError.ConfigurationFailed;
-            }
-        }
-
-        // MTU
-        if (interface.mtu) |mtu| {
-            const mtu_str = std.fmt.allocPrint(self.allocator, "{d}", .{mtu}) catch return NetworkError.ConfigurationFailed;
-            defer self.allocator.free(mtu_str);
-            
-            const mtu_key = std.fmt.bufPrint(&key_buf, "lxc.net.0.mtu", .{}) catch return NetworkError.ConfigurationFailed;
-            if (self.container.set_config_item(self.container, mtu_key.ptr, mtu_str.ptr) == 0) {
-                return NetworkError.ConfigurationFailed;
-            }
+        if (result.term.Exited != 0) {
+            logger.err("Failed to configure bridge IP: {s}", .{result.stderr});
+            return NetworkError.IpAddressFailed;
         }
     }
 
-    fn addRoute(self: *Self, route: oci.NetworkRoute) NetworkError!void {
-        var cmd_buf: [512]u8 = undefined;
-        
-        // Формування команди для додавання маршруту
-        const cmd = std.fmt.bufPrint(
-            &cmd_buf,
-            "ip route add {s} via {s} {s}",
-            .{
-                route.destination,
-                route.gateway,
-                if (route.source) |src| src else "",
-            }
-        ) catch return NetworkError.RouteAdditionFailed;
+    fn setupRouting(self: *Self) !void {
+        // Включаємо IP forwarding
+        const sysctl_result = try std.ChildProcess.exec(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{
+                "sysctl",
+                "-w",
+                "net.ipv4.ip_forward=1",
+            },
+        });
+        defer {
+            self.allocator.free(sysctl_result.stdout);
+            self.allocator.free(sysctl_result.stderr);
+        }
 
-        // Виконання команди в контейнері
-        if (self.container.attach_run_wait(
-            self.container,
-            null,
-            null,
-            null,
-            null,
-            null,
-            cmd.ptr,
-            null
-        ) != 0) {
-            return NetworkError.RouteAdditionFailed;
+        if (sysctl_result.term.Exited != 0) {
+            logger.err("Failed to enable IP forwarding: {s}", .{sysctl_result.stderr});
+            return NetworkError.RoutingFailed;
+        }
+
+        // Налаштовуємо NAT
+        const iptables_result = try std.ChildProcess.exec(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{
+                "iptables",
+                "-t",
+                "nat",
+                "-A",
+                "POSTROUTING",
+                "-s",
+                "10.0.3.0/24",
+                "-j",
+                "MASQUERADE",
+            },
+        });
+        defer {
+            self.allocator.free(iptables_result.stdout);
+            self.allocator.free(iptables_result.stderr);
+        }
+
+        if (iptables_result.term.Exited != 0) {
+            logger.err("Failed to configure NAT: {s}", .{iptables_result.stderr});
+            return NetworkError.RoutingFailed;
         }
     }
 
-    fn configureDns(self: *Self, network: oci.LinuxNetwork) NetworkError!void {
-        var resolv_conf = std.ArrayList(u8).init(self.allocator);
-        defer resolv_conf.deinit();
+    fn configureDns(self: *Self) !void {
+        // Створюємо файл resolv.conf для контейнерів
+        const dns_file = try std.fs.createFileAbsolute("/etc/lxc/resolv.conf", .{});
+        defer dns_file.close();
 
-        // Додавання DNS серверів
-        if (network.dnsServers) |servers| {
-            for (servers) |server| {
-                try resolv_conf.appendSlice("nameserver ");
-                try resolv_conf.appendSlice(server);
-                try resolv_conf.append('\n');
-            }
+        const writer = dns_file.writer();
+        for (self.config.dns_servers) |server| {
+            try writer.print("nameserver {s}\n", .{server});
+        }
+    }
+
+    fn deleteBridge(self: *Self) void {
+        const result = std.ChildProcess.exec(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{
+                "ip",
+                "link",
+                "delete",
+                self.config.bridge_name,
+            },
+        }) catch |err| {
+            logger.err("Failed to delete bridge: {}", .{err});
+            return;
+        };
+        defer {
+            self.allocator.free(result.stdout);
+            self.allocator.free(result.stderr);
         }
 
-        // Додавання опцій DNS
-        if (network.dnsOptions) |options| {
-            for (options) |option| {
-                try resolv_conf.appendSlice("options ");
-                try resolv_conf.appendSlice(option);
-                try resolv_conf.append('\n');
-            }
-        }
-
-        // Додавання доменів пошуку
-        if (network.dnsSearch) |search| {
-            try resolv_conf.appendSlice("search");
-            for (search) |domain| {
-                try resolv_conf.append(' ');
-                try resolv_conf.appendSlice(domain);
-            }
-            try resolv_conf.append('\n');
-        }
-
-        // Запис конфігурації в /etc/resolv.conf контейнера
-        const resolv_conf_path = "/etc/resolv.conf";
-        const content = try resolv_conf.toOwnedSlice();
-        defer self.allocator.free(content);
-
-        if (self.container.attach_run_wait(
-            self.container,
-            null,
-            null,
-            null,
-            null,
-            null,
-            "sh",
-            "-c",
-            std.fmt.bufPrint(
-                &[_]u8{512} ** undefined,
-                "echo '{s}' > {s}",
-                .{ content, resolv_conf_path }
-            ) catch return NetworkError.DnsConfigurationFailed
-        ) != 0) {
-            return NetworkError.DnsConfigurationFailed;
+        if (result.term.Exited != 0) {
+            logger.err("Failed to delete bridge: {s}", .{result.stderr});
         }
     }
 }; 

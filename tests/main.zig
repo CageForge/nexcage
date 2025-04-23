@@ -9,4 +9,8 @@ comptime {
 
 test {
     std.testing.refAllDecls(@This());
+    _ = @import("cri/runtime/service_test.zig");
+    _ = @import("network/dns_test.zig");
+    _ = @import("network/port_forward_test.zig");
+    _ = @import("pod/manager_test.zig");
 } 

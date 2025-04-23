@@ -1,7 +1,13 @@
 {
-    "host": "proxmox.example.com",
-    "port": 8006,
-    "token": "root@pam!token=YOUR-TOKEN-HERE",
-    "verify_ssl": false,
-    "debug": false
+    "proxmox": {
+        "hosts": ["localhost"],
+        "port": 8006,
+        "token": "root@pam!capi=",
+        "node": "mgr",
+        "node_cache_duration": 60
+    },
+    "runtime": {
+        "socket_path": "/var/run/proxmox-lxcri.sock",
+        "log_level": "info"
+    }
 } 
