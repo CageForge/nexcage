@@ -78,68 +78,133 @@ pub const Config = struct {
         const content = try file.readToEndAlloc(self.allocator, 1024 * 1024);
         defer self.allocator.free(content);
 
-        const parsed = try json.parseFromSliceLeaky(json.Value, self.allocator, content, .{});
-        //defer parsed.deinit();
-        if (parsed == .object) {
-            if (parsed.object.get("proxmox")) |proxmox_config| {
-                const proxmox = proxmox_config.object;
-                
-                if (proxmox.get("hosts")) |hosts| {
-                    var host_list = std.ArrayList([]const u8).init(self.allocator);
-                    defer host_list.deinit();
-
-                    for (hosts.array.items) |host| {
-                        try host_list.append(try self.allocator.dupe(u8, host.string));
+        var scanner = try std.json.Scanner.initCompleteInput(self.allocator, content);
+        defer scanner.deinit();
+        
+        var count: usize = 0;
+        
+        // Parse root object
+        _ = try scanner.next(); // Skip first {
+        
+        while (true) {
+            const token = try scanner.next();
+            switch (token) {
+                .ObjectEnd => break,
+                .String => |str| {
+                    if (std.mem.eql(u8, str, "proxmox")) {
+                        try self.parseProxmoxConfig(&scanner);
+                    } else if (std.mem.eql(u8, str, "runtime")) {
+                        try self.parseRuntimeConfig(&scanner);
+                    } else {
+                        try skipValue(&scanner); // Skip unknown fields
                     }
-
-                    self.proxmox.hosts = try host_list.toOwnedSlice();
-                } else {
-                    return Error.ProxmoxInvalidConfig;
-                }
-
-                if (proxmox.get("token")) |token| {
-                    self.proxmox.token = try self.allocator.dupe(u8, token.string);
-                } else {
-                    return Error.ProxmoxInvalidConfig;
-                }
-
-                const port = if (proxmox.get("port")) |port_value|
-                    @as(u16, @intCast(port_value.integer))
-                else
-                    8006;
-                self.proxmox.port = port;
-
-                if (proxmox.get("node")) |node| {
-                    self.proxmox.node = try self.allocator.dupe(u8, node.string);
-                } else {
-                    return Error.ProxmoxInvalidConfig;
-                }
-
-                if (proxmox.get("node_cache_duration")) |duration| {
-                    self.proxmox.node_cache_duration = @as(u64, @intCast(duration.integer));
-                } else {
-                    return Error.ProxmoxInvalidConfig;
-                }
-            } else {
-                return Error.ProxmoxInvalidConfig;
+                },
+                else => return error.InvalidJson,
             }
+            count += 1;
+        }
+    }
 
-            if (parsed.object.get("runtime")) |runtime_config| {
-                const runtime = runtime_config.object;
+    fn parseProxmoxConfig(self: *Config, scanner: *std.json.Scanner) !void {
+        _ = try scanner.next(); // Skip {
+        
+        while (true) {
+            const token = try scanner.next();
+            switch (token) {
+                .ObjectEnd => break,
+                .String => |key| {
+                    if (std.mem.eql(u8, key, "hosts")) {
+                        _ = try scanner.next(); // Skip [
+                        var host_list = std.ArrayList([]const u8).init(self.allocator);
+                        errdefer host_list.deinit();
+                        
+                        while (true) {
+                            const host_token = try scanner.next();
+                            switch (host_token) {
+                                .ArrayEnd => break,
+                                .String => |host| {
+                                    try host_list.append(try self.allocator.dupe(u8, host));
+                                },
+                                else => return error.InvalidJson,
+                            }
+                        }
+                        self.proxmox.hosts = try host_list.toOwnedSlice();
+                    } else if (std.mem.eql(u8, key, "port")) {
+                        const port_token = try scanner.next();
+                        switch (port_token) {
+                            .Number => |n| self.proxmox.port = @intFromFloat(n),
+                            else => return error.InvalidJson,
+                        }
+                    } else if (std.mem.eql(u8, key, "token")) {
+                        const token_value = try scanner.next();
+                        switch (token_value) {
+                            .String => |str| self.proxmox.token = try self.allocator.dupe(u8, str),
+                            else => return error.InvalidJson,
+                        }
+                    } else if (std.mem.eql(u8, key, "node")) {
+                        const node_token = try scanner.next();
+                        switch (node_token) {
+                            .String => |str| self.proxmox.node = try self.allocator.dupe(u8, str),
+                            else => return error.InvalidJson,
+                        }
+                    } else if (std.mem.eql(u8, key, "node_cache_duration")) {
+                        const duration_token = try scanner.next();
+                        switch (duration_token) {
+                            .Number => |n| self.proxmox.node_cache_duration = @intFromFloat(n),
+                            else => return error.InvalidJson,
+                        }
+                    } else {
+                        try skipValue(scanner); // Skip unknown fields
+                    }
+                },
+                else => return error.InvalidJson,
+            }
+        }
+    }
 
-                if (runtime.get("socket_path")) |socket_path| {
-                    self.runtime.socket_path = try self.allocator.dupe(u8, socket_path.string);
-                } else {
-                    return Error.ProxmoxInvalidConfig;
-                }
+    fn parseRuntimeConfig(self: *Config, scanner: *std.json.Scanner) !void {
+        _ = try scanner.next(); // Skip {
+        
+        while (true) {
+            const token = try scanner.next();
+            switch (token) {
+                .ObjectEnd => break,
+                .String => |key| {
+                    if (std.mem.eql(u8, key, "socket_path")) {
+                        const path_token = try scanner.next();
+                        switch (path_token) {
+                            .String => |str| self.runtime.socket_path = try self.allocator.dupe(u8, str),
+                            else => return error.InvalidJson,
+                        }
+                    } else if (std.mem.eql(u8, key, "log_level")) {
+                        const level_token = try scanner.next();
+                        switch (level_token) {
+                            .String => |str| self.runtime.log_level = try self.allocator.dupe(u8, str),
+                            else => return error.InvalidJson,
+                        }
+                    } else {
+                        try skipValue(scanner); // Skip unknown fields
+                    }
+                },
+                else => return error.InvalidJson,
+            }
+        }
+    }
 
-                if (runtime.get("log_level")) |log_level| {
-                    self.runtime.log_level = try self.allocator.dupe(u8, log_level.string);
-                } else {
-                    return Error.ProxmoxInvalidConfig;
-                }
-            } else {
-                return Error.ProxmoxInvalidConfig;
+    fn skipValue(scanner: *std.json.Scanner) !void {
+        var depth: usize = 0;
+        while (true) {
+            const token = try scanner.next();
+            switch (token) {
+                .ObjectBegin, .ArrayBegin => depth += 1,
+                .ObjectEnd, .ArrayEnd => {
+                    if (depth == 0) return;
+                    depth -= 1;
+                },
+                .String, .Number, .True, .False, .Null => {
+                    if (depth == 0) return;
+                },
+                else => return error.InvalidJson,
             }
         }
     }

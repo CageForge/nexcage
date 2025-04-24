@@ -36,6 +36,12 @@ const lxc_ops = @import("lxc/operations.zig");
 const node_ops = @import("node/operations.zig");
 const storage_ops = @import("storage/operations.zig");
 const cluster_ops = @import("cluster/operations.zig");
+const vm_ops = @import("vm/operations.zig");
+
+pub const ContainerType = enum {
+    lxc,
+    qemu,
+};
 
 pub const ProxmoxClient = struct {
     client: Client,
@@ -57,18 +63,56 @@ pub const ProxmoxClient = struct {
         self.client.deinit();
     }
 
-    // Node операції
-    pub fn getNodes(self: *ProxmoxClient) ![]node_ops.Node {
-        return node_ops.getNodes(&self.client);
+    // Загальні операції з контейнерами
+    pub fn startContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32) !void {
+        switch (container_type) {
+            .lxc => try lxc_ops.startLXC(&self.client, self.client.node, vmid),
+            .qemu => try vm_ops.startVM(&self.client, self.client.node, vmid),
+        }
     }
 
-    // LXC операції
+    pub fn stopContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32, timeout: ?i64) !void {
+        switch (container_type) {
+            .lxc => try lxc_ops.stopLXC(&self.client, self.client.node, vmid, timeout),
+            .qemu => try vm_ops.stopVM(&self.client, self.client.node, vmid, timeout),
+        }
+    }
+
+    pub fn deleteContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32) !void {
+        switch (container_type) {
+            .lxc => try lxc_ops.deleteLXC(&self.client, self.client.node, vmid),
+            .qemu => try vm_ops.deleteVM(&self.client, self.client.node, vmid),
+        }
+    }
+
+    pub fn getContainerStatus(self: *ProxmoxClient, container_type: ContainerType, vmid: u32) !types.ContainerStatus {
+        return switch (container_type) {
+            .lxc => switch (try lxc_ops.getLXCStatus(&self.client, self.client.node, vmid)) {
+                .running => .running,
+                .stopped => .stopped,
+                .paused => .paused,
+                .unknown => .unknown,
+            },
+            .qemu => try vm_ops.getVMStatus(&self.client, self.client.node, vmid),
+        };
+    }
+
+    // LXC специфічні операції
     pub fn listLXCs(self: *ProxmoxClient) ![]types.LXCContainer {
         return lxc_ops.listLXCs(&self.client);
     }
 
     pub fn createLXC(self: *ProxmoxClient, spec: types.LXCConfig) !types.LXCContainer {
         return lxc_ops.createLXC(&self.client, spec);
+    }
+
+    // VM специфічні операції
+    pub fn listVMs(self: *ProxmoxClient) ![]types.VMContainer {
+        return vm_ops.listVMs(&self.client);
+    }
+
+    pub fn createVM(self: *ProxmoxClient, spec: types.VMConfig) !types.VMContainer {
+        return vm_ops.createVM(&self.client, spec);
     }
 
     // Storage операції
@@ -97,7 +141,9 @@ pub const ProxmoxClient = struct {
 // Реекспортуємо типи для зручності
 pub const LXCContainer = types.LXCContainer;
 pub const LXCConfig = types.LXCConfig;
-pub const LXCStatus = types.LXCStatus;
+pub const VMContainer = types.VMContainer;
+pub const VMConfig = types.VMConfig;
+pub const ContainerStatus = types.ContainerStatus;
 pub const Node = node_ops.Node;
 pub const Storage = storage_ops.Storage;
 pub const Resource = cluster_ops.Resource;

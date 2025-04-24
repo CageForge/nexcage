@@ -5,6 +5,15 @@ const node_ops = @import("../node/operations.zig");
 const json = std.json;
 const fmt = std.fmt;
 const ArrayList = std.ArrayList;
+const Thread = std.Thread;
+const os = std.os;
+
+pub const create = @import("create.zig").createLXC;
+pub const start = @import("start.zig").startLXC;
+pub const stop = @import("stop.zig").stopLXC;
+pub const delete = @import("delete.zig").deleteLXC;
+pub const status = @import("status.zig").getLXCStatus;
+pub const list = @import("list.zig").listLXCs;
 
 pub fn listLXCs(client: *Client) ![]types.LXCContainer {
     const nodes = try node_ops.getNodes(client);
@@ -48,7 +57,7 @@ pub fn listLXCs(client: *Client) ![]types.LXCContainer {
                 try containers.append(types.LXCContainer{
                     .vmid = @intCast(container.object.get("vmid").?.integer),
                     .name = try client.allocator.dupe(u8, container.object.get("name").?.string),
-                    .status = try parseStatus(container.object.get("status").?.string),
+                    .status = try parseContainerStatus(container.object.get("status").?.string),
                     .config = config,
                 });
             }
@@ -148,12 +157,12 @@ pub fn createLXC(client: *Client, spec: types.LXCConfig) !types.LXCContainer {
     };
 }
 
-fn parseStatus(status: []const u8) !types.LXCStatus {
-    if (std.mem.eql(u8, status, "running")) {
+fn parseContainerStatus(status_str: []const u8) !types.LXCStatus {
+    if (std.mem.eql(u8, status_str, "running")) {
         return .running;
-    } else if (std.mem.eql(u8, status, "stopped")) {
+    } else if (std.mem.eql(u8, status_str, "stopped")) {
         return .stopped;
-    } else if (std.mem.eql(u8, status, "paused")) {
+    } else if (std.mem.eql(u8, status_str, "paused")) {
         return .paused;
     } else {
         return .unknown;
@@ -205,8 +214,8 @@ pub fn getLXCStatus(client: *Client, node: []const u8, vmid: u32) !types.LXCStat
     defer parsed.deinit();
 
     if (parsed.value.object.get("data")) |data| {
-        if (data.object.get("status")) |status| {
-            return try parseStatus(status.string);
+        if (data.object.get("status")) |status_str| {
+            return try parseContainerStatus(status_str.string);
         }
     }
 
@@ -250,12 +259,12 @@ pub fn stopLXC(client: *Client, node: []const u8, vmid: u32, timeout: ?i64) !voi
         var attempts: u8 = 0;
         const max_attempts: u8 = 30; // 30 секунд максимум
         while (attempts < max_attempts) : (attempts += 1) {
-            const status = try getLXCStatus(client, node, vmid);
-            if (status == .stopped) {
+            const current_status = try getLXCStatus(client, node, vmid);
+            if (current_status == .stopped) {
                 try client.logger.info("Container {d} stopped successfully", .{vmid});
                 return;
             }
-            try std.time.sleep(1 * std.time.ns_per_s); // Чекаємо 1 секунду між перевірками
+            std.time.sleep(1 * std.time.ns_per_s);
         }
         try client.logger.warn("Container {d} stop timeout after {d} seconds", .{ vmid, max_attempts });
     } else {

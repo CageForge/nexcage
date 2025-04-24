@@ -162,6 +162,7 @@ pub const Spec = struct {
     mounts: []const Mount,
     hooks: ?Hooks = null,
     linux: LinuxSpec,
+    annotations: ?std.StringHashMap([]const u8) = null,
 
     pub fn deinit(self: *const Spec, allocator: Allocator) void {
         allocator.free(self.version);
@@ -176,6 +177,15 @@ pub const Spec = struct {
         
         if (self.hooks) |*hooks| {
             hooks.deinit(allocator);
+        }
+        
+        if (self.annotations) |*annotations| {
+            var it = annotations.iterator();
+            while (it.next()) |entry| {
+                allocator.free(entry.key_ptr.*);
+                allocator.free(entry.value_ptr.*);
+            }
+            annotations.deinit();
         }
         
         self.linux.deinit(allocator);

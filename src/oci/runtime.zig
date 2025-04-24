@@ -5,11 +5,10 @@ const os = std.os;
 const memory = std.mem;
 const Allocator = memory.Allocator;
 const proxmox = @import("proxmox");
-const oci = @import("oci");
+const spec = @import("spec.zig");
 const types = @import("types");
 const errors = @import("error");
 const log = @import("log");
-const pod = @import("pod");
 
 const logger = std.log.scoped(.oci_runtime);
 
@@ -88,7 +87,7 @@ pub const Runtime = struct {
         const config_content = try config_file.readToEndAlloc(self.allocator, 1024 * 1024);
         defer self.allocator.free(config_content);
 
-        var parsed = try std.json.parseFromSlice(oci.Spec, self.allocator, config_content, .{
+        var parsed = try std.json.parseFromSlice(spec.Spec, self.allocator, config_content, .{
             .ignore_unknown_fields = true,
             .allocate = true,
         });
@@ -110,7 +109,7 @@ pub const Runtime = struct {
                 .size = 8 * 1024 * 1024 * 1024, // 8GB default
             },
             .network = .{
-                .name = "vmbr0",
+                .name = "vmbr50",
                 .bridge = true,
                 .firewall = true,
             },
@@ -207,7 +206,7 @@ pub const Runtime = struct {
         self.state.status = "stopped";
     }
 
-    fn getStorageFromConfig(self: *Runtime, config: oci.Spec) ![]const u8 {
+    fn getStorageFromConfig(self: *Runtime, config: spec.Spec) ![]const u8 {
         // Спочатку перевіряємо анотації
         if (config.annotations.get("proxmox.storage")) |storage| {
             return try self.allocator.dupe(u8, storage);
@@ -228,7 +227,7 @@ pub const Runtime = struct {
         return "local";
     }
 
-    fn setupSeccomp(self: *Runtime, container_id: []const u8, seccomp: oci.Seccomp) !void {
+    fn setupSeccomp(self: *Runtime, container_id: []const u8, seccomp: spec.Seccomp) !void {
         logger.info("Setting up seccomp for container {s}", .{container_id});
 
         // Створюємо тимчасовий файл для профілю seccomp

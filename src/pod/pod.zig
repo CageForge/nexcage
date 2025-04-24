@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const logger = std.log.scoped(.pod);
+const json = std.json;
 const oci = @import("../oci/spec.zig");
 const net = @import("network");
 const proxmox = @import("../proxmox/api.zig");
