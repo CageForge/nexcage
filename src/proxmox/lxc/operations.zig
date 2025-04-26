@@ -219,7 +219,8 @@ pub fn stopLXC(client: *Client, node: []const u8, vmid: u32) !void {
     const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/stop", .{ node, vmid });
     defer client.allocator.free(path);
 
-    const response = try client.makeRequest(.POST, path, null);
+    const body = "{}";
+    const response = try client.makeRequest(.POST, path, body);
     defer client.allocator.free(response);
 }
 
