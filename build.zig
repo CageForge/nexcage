@@ -6,6 +6,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const zigJsonDep = b.dependency("zig-json", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Core modules
     const types_mod = b.addModule("types", .{
         .root_source_file = b.path("src/types.zig"),
@@ -92,6 +97,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("pod", pod_mod);
     exe.root_module.addImport("proxmox", proxmox_mod);
     exe.root_module.addImport("oci", oci_mod);
+    exe.root_module.addImport("json", zigJsonDep.module("zig-json"));
 
     // Install
     b.installArtifact(exe);

@@ -119,56 +119,113 @@ fn loadConfig(allocator: Allocator, config_path: []const u8) !config.Config {
     };
     defer allocator.free(config_content);
 
-    var parser = std.json.Parser.init(allocator, false);
-    defer parser.deinit();
+    var scanner = std.json.Scanner.initCompleteInput(allocator, config_content);
+    defer scanner.deinit();
 
-    var tree = try parser.parse(config_content);
-    defer tree.deinit();
+    var token = try scanner.next();
+    if (token != .object_begin) return ConfigError.InvalidConfigFormat;
 
-    const root = tree.root;
-    const proxmox_obj = root.Object.get("proxmox") orelse {
-        try logger_instance.err("Missing proxmox configuration section", .{});
+    var hosts: ?[]const []const u8 = null;
+    var token_str: ?[]const u8 = null;
+    var port: ?u16 = null;
+    var node: ?[]const u8 = null;
+    var node_cache_duration: ?u64 = null;
+
+    while (true) {
+        token = try scanner.next();
+        if (token == .object_end) break;
+        if (token != .string) return ConfigError.InvalidConfigFormat;
+
+        const key = token.string;
+        if (std.mem.eql(u8, key, "proxmox")) {
+            token = try scanner.next();
+            if (token != .object_begin) return ConfigError.InvalidConfigFormat;
+
+            while (true) {
+                token = try scanner.next();
+                if (token == .object_end) break;
+                if (token != .string) return ConfigError.InvalidConfigFormat;
+
+                const proxmox_key = token.string;
+                token = try scanner.next();
+
+                if (std.mem.eql(u8, proxmox_key, "hosts")) {
+                    if (token != .array_begin) return ConfigError.InvalidConfigFormat;
+                    var hosts_list = std.ArrayList([]const u8).init(allocator);
+                    
+                    while (true) {
+                        token = try scanner.next();
+                        if (token == .array_end) break;
+                        if (token != .string) return ConfigError.InvalidConfigFormat;
+                        try hosts_list.append(try allocator.dupe(u8, token.string));
+                    }
+                    
+                    hosts = try hosts_list.toOwnedSlice();
+                } else if (std.mem.eql(u8, proxmox_key, "token")) {
+                    if (token != .string) return ConfigError.InvalidConfigFormat;
+                    token_str = try allocator.dupe(u8, token.string);
+                } else if (std.mem.eql(u8, proxmox_key, "port")) {
+                    if (token != .number) return ConfigError.InvalidConfigFormat;
+                    port = @intCast(try std.fmt.parseInt(i64, token.number, 10));
+                } else if (std.mem.eql(u8, proxmox_key, "node")) {
+                    if (token != .string) return ConfigError.InvalidConfigFormat;
+                    node = try allocator.dupe(u8, token.string);
+                } else if (std.mem.eql(u8, proxmox_key, "node_cache_duration")) {
+                    if (token != .number) return ConfigError.InvalidConfigFormat;
+                    node_cache_duration = @intCast(try std.fmt.parseInt(i64, token.number, 10));
+                } else {
+                    try skipValue(&scanner);
+                }
+            }
+        } else {
+            try skipValue(&scanner);
+        }
+    }
+
+    if (hosts == null or token_str == null or port == null or node == null or node_cache_duration == null) {
+        try logger_instance.err("Missing required configuration fields", .{});
         return ConfigError.InvalidConfigFormat;
-    };
-
-    var hosts = try allocator.alloc([]const u8, 1);
-    errdefer allocator.free(hosts);
-    const hosts_array = proxmox_obj.Object.get("hosts") orelse {
-        try logger_instance.err("Missing hosts configuration", .{});
-        return ConfigError.InvalidConfigFormat;
-    };
-    hosts[0] = try allocator.dupe(u8, hosts_array.Array.items[0].String);
-
-    const token = proxmox_obj.Object.get("token") orelse {
-        try logger_instance.err("Missing token configuration", .{});
-        return ConfigError.InvalidConfigFormat;
-    };
-
-    const port = proxmox_obj.Object.get("port") orelse {
-        try logger_instance.err("Missing port configuration", .{});
-        return ConfigError.InvalidConfigFormat;
-    };
-
-    const node = proxmox_obj.Object.get("node") orelse {
-        try logger_instance.err("Missing node configuration", .{});
-        return ConfigError.InvalidConfigFormat;
-    };
-
-    const node_cache_duration = proxmox_obj.Object.get("node_cache_duration") orelse {
-        try logger_instance.err("Missing node_cache_duration configuration", .{});
-        return ConfigError.InvalidConfigFormat;
-    };
+    }
 
     return config.Config{
         .allocator = allocator,
-        .hosts = hosts,
-        .token = try allocator.dupe(u8, token.String),
-        .port = @intCast(port.Integer),
-        .node = try allocator.dupe(u8, node.String),
-        .node_cache_duration = @intCast(node_cache_duration.Integer),
+        .hosts = hosts.?,
+        .token = token_str.?,
+        .port = port.?,
+        .node = node.?,
+        .node_cache_duration = node_cache_duration.?,
         .timeout = 30_000,
         .logger = &logger_instance,
     };
+}
+
+fn skipValue(scanner: *std.json.Scanner) !void {
+    var token = try scanner.next();
+    switch (token) {
+        .object_begin => {
+            var depth: u32 = 1;
+            while (depth > 0) {
+                token = try scanner.next();
+                switch (token) {
+                    .object_begin => depth += 1,
+                    .object_end => depth -= 1,
+                    else => {},
+                }
+            }
+        },
+        .array_begin => {
+            var depth: u32 = 1;
+            while (depth > 0) {
+                token = try scanner.next();
+                switch (token) {
+                    .array_begin => depth += 1,
+                    .array_end => depth -= 1,
+                    else => {},
+                }
+            }
+        },
+        else => {},
+    }
 }
 
 fn cleanup() !void {
@@ -231,8 +288,10 @@ fn executeCreate(allocator: Allocator, args: []const []const u8) !void {
 
     try oci_commands.create.create(allocator, .{
         .bundle_path = bundle_path.?,
-        .container_id = container_id.?,
+        .id = container_id.?,
         .pid_file = pid_file,
+        .allocator = allocator,
+        .config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path.?, "config.json" }),
     }, proxmox_client);
 }
 
