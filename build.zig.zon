@@ -1,0 +1,15 @@
+.{
+    .name = "proxmox-lxcri",
+    .version = "0.1.0",
+    .paths = .{
+        "src",
+        "build.zig",
+        "build.zig.zon",
+    },
+    .dependencies = .{
+        .@"zig-json" = .{
+            .url = "https://github.com/berdon/zig-json/archive/refs/heads/master.tar.gz",
+            .hash = "1220aaba53d38fd5689b6a29e496ab8a262c54ae8a52321e61ed8da9f1d968c69e7e",
+        },
+    },
+}

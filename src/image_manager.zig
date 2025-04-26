@@ -10,6 +10,7 @@ const types = @import("types");
 const fmt = std.fmt;
 const Uri = std.Uri;
 const Headers = http.Headers;
+const json_helper = @import("json_helper.zig");
 
 pub const ImageManager = struct {
     allocator: Allocator,
@@ -191,71 +192,116 @@ pub const ImageManager = struct {
         try req.reader().readAllArrayList(&body, 1024 * 1024); // 1MB limit
 
         // Parse manifest
-        var parser = json.Parser.init(self.allocator, false);
-        defer parser.deinit();
+        var scanner = try json_helper.createScanner(self.allocator, body.items);
+        defer scanner.deinit();
 
-        const parsed = try parser.parse(body.items);
-        defer parsed.deinit();
+        try json_helper.expectToken(&scanner, .object_begin);
 
-        // Convert to Manifest struct
-        const root = parsed.root;
-        if (root != .object) return error.InvalidManifest;
+        var schema_version: ?i64 = null;
+        var media_type: ?[]const u8 = null;
+        var config_digest: ?[]const u8 = null;
+        var config_media_type: ?[]const u8 = null;
+        var config_size: ?i64 = null;
+        var layers = std.ArrayList(Layer).init(self.allocator);
+        errdefer {
+            for (layers.items) |layer| {
+                self.allocator.free(layer.digest);
+                self.allocator.free(layer.media_type);
+            }
+            layers.deinit();
+        }
 
-        const schema_version = root.object.get("schemaVersion") orelse return error.InvalidManifest;
-        if (schema_version != .integer) return error.InvalidManifest;
+        while (true) {
+            const token = try scanner.next();
+            if (token == .object_end) break;
+            if (token != .string) return error.InvalidManifest;
 
-        const media_type = root.object.get("mediaType") orelse return error.InvalidManifest;
-        if (media_type != .string) return error.InvalidManifest;
+            const key = token.string;
 
-        const config = root.object.get("config") orelse return error.InvalidManifest;
-        if (config != .object) return error.InvalidManifest;
+            if (std.mem.eql(u8, key, "schemaVersion")) {
+                schema_version = try json_helper.parseNumber(scanner, i64);
+            } else if (std.mem.eql(u8, key, "mediaType")) {
+                media_type = try json_helper.parseString(self.allocator, scanner);
+            } else if (std.mem.eql(u8, key, "config")) {
+                try json_helper.expectToken(&scanner, .object_begin);
+                
+                while (true) {
+                    const token = try scanner.next();
+                    if (token == .object_end) break;
+                    if (token != .string) return error.InvalidManifest;
 
-        const layers = root.object.get("layers") orelse return error.InvalidManifest;
-        if (layers != .array) return error.InvalidManifest;
+                    const config_key = token.string;
 
-        // Parse config
-        const config_digest = config.object.get("digest") orelse return error.InvalidManifest;
-        if (config_digest != .string) return error.InvalidManifest;
+                    if (std.mem.eql(u8, config_key, "digest")) {
+                        config_digest = try json_helper.parseString(self.allocator, scanner);
+                    } else if (std.mem.eql(u8, config_key, "mediaType")) {
+                        config_media_type = try json_helper.parseString(self.allocator, scanner);
+                    } else if (std.mem.eql(u8, config_key, "size")) {
+                        config_size = try json_helper.parseNumber(scanner, i64);
+                    } else {
+                        try json_helper.skipValue(&scanner);
+                    }
+                }
+            } else if (std.mem.eql(u8, key, "layers")) {
+                try json_helper.expectToken(&scanner, .array_begin);
 
-        const config_media_type = config.object.get("mediaType") orelse return error.InvalidManifest;
-        if (config_media_type != .string) return error.InvalidManifest;
+                while (true) {
+                    const layer_token = try scanner.next();
+                    if (layer_token == .array_end) break;
+                    if (layer_token != .object_begin) return error.InvalidManifest;
 
-        const config_size = config.object.get("size") orelse return error.InvalidManifest;
-        if (config_size != .integer) return error.InvalidManifest;
+                    var layer_digest: ?[]const u8 = null;
+                    var layer_media_type: ?[]const u8 = null;
+                    var layer_size: ?i64 = null;
 
-        // Parse layers
-        var layer_list = try self.allocator.alloc(Layer, layers.array.items.len);
-        errdefer self.allocator.free(layer_list);
+                    while (true) {
+                        const layer_field_token = try scanner.next();
+                        if (layer_field_token == .object_end) break;
+                        if (layer_field_token != .string) return error.InvalidManifest;
 
-        for (layers.array.items, 0..) |item, i| {
-            if (item != .object) return error.InvalidManifest;
+                        const layer_key = layer_field_token.string;
 
-            const layer_digest = item.object.get("digest") orelse return error.InvalidManifest;
-            if (layer_digest != .string) return error.InvalidManifest;
+                        if (std.mem.eql(u8, layer_key, "digest")) {
+                            layer_digest = try json_helper.parseString(self.allocator, scanner);
+                        } else if (std.mem.eql(u8, layer_key, "mediaType")) {
+                            layer_media_type = try json_helper.parseString(self.allocator, scanner);
+                        } else if (std.mem.eql(u8, layer_key, "size")) {
+                            layer_size = try json_helper.parseNumber(scanner, i64);
+                        } else {
+                            try json_helper.skipValue(&scanner);
+                        }
+                    }
 
-            const layer_media_type = item.object.get("mediaType") orelse return error.InvalidManifest;
-            if (layer_media_type != .string) return error.InvalidManifest;
+                    if (layer_digest == null or layer_media_type == null or layer_size == null) {
+                        return error.InvalidManifest;
+                    }
 
-            const layer_size = item.object.get("size") orelse return error.InvalidManifest;
-            if (layer_size != .integer) return error.InvalidManifest;
+                    try layers.append(Layer{
+                        .digest = layer_digest.?,
+                        .media_type = layer_media_type.?,
+                        .size = @intCast(layer_size.?),
+                        .urls = &.{},
+                    });
+                }
+            } else {
+                try json_helper.skipValue(&scanner);
+            }
+        }
 
-            layer_list[i] = Layer{
-                .digest = try self.allocator.dupe(u8, layer_digest.string),
-                .media_type = try self.allocator.dupe(u8, layer_media_type.string),
-                .size = @intCast(layer_size.integer),
-                .urls = &.{}, // TODO: Implement layer URLs
-            };
+        if (schema_version == null or media_type == null or config_digest == null or 
+            config_media_type == null or config_size == null) {
+            return error.InvalidManifest;
         }
 
         return Manifest{
-            .schema_version = @intCast(schema_version.integer),
-            .media_type = try self.allocator.dupe(u8, media_type.string),
+            .schema_version = @intCast(schema_version.?),
+            .media_type = media_type.?,
             .config = .{
-                .digest = try self.allocator.dupe(u8, config_digest.string),
-                .media_type = try self.allocator.dupe(u8, config_media_type.string),
-                .size = @intCast(config_size.integer),
+                .digest = config_digest.?,
+                .media_type = config_media_type.?,
+                .size = @intCast(config_size.?),
             },
-            .layers = layer_list,
+            .layers = try layers.toOwnedSlice(),
         };
     }
 
@@ -292,78 +338,85 @@ pub const ImageManager = struct {
         try req.reader().readAllArrayList(&body, 1024 * 1024); // 1MB limit
 
         // Parse config
-        var parser = json.Parser.init(self.allocator, false);
-        defer parser.deinit();
+        var scanner = try json_helper.createScanner(self.allocator, body.items);
+        defer scanner.deinit();
 
-        const parsed = try parser.parse(body.items);
-        defer parsed.deinit();
+        try json_helper.expectToken(&scanner, .object_begin);
 
-        // Convert to ImageConfig struct
-        const root = parsed.root;
-        if (root != .object) return error.InvalidConfig;
+        var architecture: ?[]const u8 = null;
+        var os: ?[]const u8 = null;
+        var env_list = std.ArrayList([]const u8).init(self.allocator);
+        var cmd_list = std.ArrayList([]const u8).init(self.allocator);
+        var entrypoint_list = std.ArrayList([]const u8).init(self.allocator);
+        var working_dir: ?[]const u8 = null;
+        var user: ?[]const u8 = null;
 
-        const architecture = root.object.get("architecture") orelse return error.InvalidConfig;
-        if (architecture != .string) return error.InvalidConfig;
-
-        const os = root.object.get("os") orelse return error.InvalidConfig;
-        if (os != .string) return error.InvalidConfig;
-
-        const config = root.object.get("config") orelse return error.InvalidConfig;
-        if (config != .object) return error.InvalidConfig;
-
-        // Parse environment variables
-        const env = config.object.get("Env") orelse &.{};
-        if (env != .array) return error.InvalidConfig;
-
-        var env_list = try self.allocator.alloc([]const u8, env.array.items.len);
-        errdefer self.allocator.free(env_list);
-
-        for (env.array.items, 0..) |item, i| {
-            if (item != .string) return error.InvalidConfig;
-            env_list[i] = try self.allocator.dupe(u8, item.string);
+        errdefer {
+            if (architecture) |a| self.allocator.free(a);
+            if (os) |o| self.allocator.free(o);
+            for (env_list.items) |e| self.allocator.free(e);
+            env_list.deinit();
+            for (cmd_list.items) |c| self.allocator.free(c);
+            cmd_list.deinit();
+            for (entrypoint_list.items) |e| self.allocator.free(e);
+            entrypoint_list.deinit();
+            if (working_dir) |w| self.allocator.free(w);
+            if (user) |u| self.allocator.free(u);
         }
 
-        // Parse command
-        const cmd = config.object.get("Cmd") orelse &.{};
-        if (cmd != .array) return error.InvalidConfig;
+        while (true) {
+            const token = try scanner.next();
+            if (token == .object_end) break;
+            if (token != .string) return error.InvalidConfig;
 
-        var cmd_list = try self.allocator.alloc([]const u8, cmd.array.items.len);
-        errdefer self.allocator.free(cmd_list);
+            const key = token.string;
 
-        for (cmd.array.items, 0..) |item, i| {
-            if (item != .string) return error.InvalidConfig;
-            cmd_list[i] = try self.allocator.dupe(u8, item.string);
+            if (std.mem.eql(u8, key, "architecture")) {
+                architecture = try json_helper.parseString(self.allocator, scanner);
+            } else if (std.mem.eql(u8, key, "os")) {
+                os = try json_helper.parseString(self.allocator, scanner);
+            } else if (std.mem.eql(u8, key, "config")) {
+                try json_helper.expectToken(&scanner, .object_begin);
+
+                while (true) {
+                    const token = try scanner.next();
+                    if (token == .object_end) break;
+                    if (token != .string) return error.InvalidConfig;
+
+                    const config_key = token.string;
+
+                    if (std.mem.eql(u8, config_key, "Env")) {
+                        env_list = try json_helper.parseStringArray(self.allocator, scanner);
+                    } else if (std.mem.eql(u8, config_key, "Cmd")) {
+                        cmd_list = try json_helper.parseStringArray(self.allocator, scanner);
+                    } else if (std.mem.eql(u8, config_key, "Entrypoint")) {
+                        entrypoint_list = try json_helper.parseStringArray(self.allocator, scanner);
+                    } else if (std.mem.eql(u8, config_key, "WorkingDir")) {
+                        working_dir = try json_helper.parseString(self.allocator, scanner);
+                    } else if (std.mem.eql(u8, config_key, "User")) {
+                        user = try json_helper.parseString(self.allocator, scanner);
+                    } else {
+                        try json_helper.skipValue(&scanner);
+                    }
+                }
+            } else {
+                try json_helper.skipValue(&scanner);
+            }
         }
 
-        // Parse entrypoint
-        const entrypoint = config.object.get("Entrypoint") orelse &.{};
-        if (entrypoint != .array) return error.InvalidConfig;
-
-        var entrypoint_list = try self.allocator.alloc([]const u8, entrypoint.array.items.len);
-        errdefer self.allocator.free(entrypoint_list);
-
-        for (entrypoint.array.items, 0..) |item, i| {
-            if (item != .string) return error.InvalidConfig;
-            entrypoint_list[i] = try self.allocator.dupe(u8, item.string);
+        if (architecture == null or os == null) {
+            return error.InvalidConfig;
         }
-
-        // Parse working directory
-        const working_dir = config.object.get("WorkingDir") orelse "/";
-        if (working_dir != .string) return error.InvalidConfig;
-
-        // Parse user
-        const user = config.object.get("User") orelse "";
-        if (user != .string) return error.InvalidConfig;
 
         return ImageConfig{
-            .architecture = try self.allocator.dupe(u8, architecture.string),
-            .os = try self.allocator.dupe(u8, os.string),
+            .architecture = architecture.?,
+            .os = os.?,
             .config = .{
-                .env = env_list,
-                .cmd = cmd_list,
-                .entrypoint = entrypoint_list,
-                .working_dir = try self.allocator.dupe(u8, working_dir.string),
-                .user = try self.allocator.dupe(u8, user.string),
+                .env = try env_list.toOwnedSlice(),
+                .cmd = try cmd_list.toOwnedSlice(),
+                .entrypoint = try entrypoint_list.toOwnedSlice(),
+                .working_dir = working_dir orelse try self.allocator.dupe(u8, "/"),
+                .user = user orelse try self.allocator.dupe(u8, ""),
             },
         };
     }

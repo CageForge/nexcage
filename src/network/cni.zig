@@ -2,6 +2,7 @@ const std = @import("std");
 const json = std.json;
 const net = std.net;
 const os = std.os;
+const json_helper = @import("../json_helper.zig");
 
 pub const CNIError = error{
     InvalidConfig,
@@ -158,15 +159,168 @@ pub const CNIPlugin = struct {
         }
 
         // Парсимо результат
-        var parser = json.Parser.init(self.allocator, false);
-        defer parser.deinit();
+        var scanner = try json_helper.createScanner(self.allocator, result.stdout);
+        defer scanner.deinit();
 
-        var tree = try parser.parse(result.stdout);
-        defer tree.deinit();
+        try json_helper.expectToken(&scanner, .object_begin);
 
-        const root = tree.root;
-        return try json.parse(CNIResult, &root, .{
-            .allocator = self.allocator,
-        });
+        var cni_version: ?[]const u8 = null;
+        var ips = std.ArrayList(IPConfig).init(self.allocator);
+        var dns: ?DNSConfig = null;
+        var routes = std.ArrayList(Route).init(self.allocator);
+
+        errdefer {
+            if (cni_version) |v| self.allocator.free(v);
+            for (ips.items) |ip| {
+                self.allocator.free(ip.version);
+                self.allocator.free(ip.address);
+                if (ip.gateway) |g| self.allocator.free(g);
+            }
+            ips.deinit();
+            if (dns) |d| {
+                for (d.nameservers) |ns| self.allocator.free(ns);
+                for (d.search) |s| self.allocator.free(s);
+                for (d.options) |o| self.allocator.free(o);
+                self.allocator.free(d.nameservers);
+                self.allocator.free(d.search);
+                self.allocator.free(d.options);
+            }
+            for (routes.items) |route| {
+                self.allocator.free(route.dst);
+                if (route.gw) |g| self.allocator.free(g);
+            }
+            routes.deinit();
+        }
+
+        while (true) {
+            const token = try scanner.next();
+            if (token == .object_end) break;
+            if (token != .string) return error.InvalidConfig;
+
+            const key = token.string;
+
+            if (std.mem.eql(u8, key, "cniVersion")) {
+                cni_version = try json_helper.parseString(self.allocator, scanner);
+            } else if (std.mem.eql(u8, key, "ips")) {
+                try json_helper.expectToken(&scanner, .array_begin);
+
+                while (true) {
+                    const ip_token = try scanner.next();
+                    if (ip_token == .array_end) break;
+                    if (ip_token != .object_begin) return error.InvalidConfig;
+
+                    var ip_version: ?[]const u8 = null;
+                    var ip_address: ?[]const u8 = null;
+                    var ip_gateway: ?[]const u8 = null;
+
+                    while (true) {
+                        const ip_field_token = try scanner.next();
+                        if (ip_field_token == .object_end) break;
+                        if (ip_field_token != .string) return error.InvalidConfig;
+
+                        const ip_key = ip_field_token.string;
+
+                        if (std.mem.eql(u8, ip_key, "version")) {
+                            ip_version = try json_helper.parseString(self.allocator, scanner);
+                        } else if (std.mem.eql(u8, ip_key, "address")) {
+                            ip_address = try json_helper.parseString(self.allocator, scanner);
+                        } else if (std.mem.eql(u8, ip_key, "gateway")) {
+                            ip_gateway = try json_helper.parseString(self.allocator, scanner);
+                        } else {
+                            try json_helper.skipValue(&scanner);
+                        }
+                    }
+
+                    if (ip_version == null or ip_address == null) {
+                        return error.InvalidConfig;
+                    }
+
+                    try ips.append(IPConfig{
+                        .version = ip_version.?,
+                        .address = ip_address.?,
+                        .gateway = ip_gateway,
+                    });
+                }
+            } else if (std.mem.eql(u8, key, "dns")) {
+                try json_helper.expectToken(&scanner, .object_begin);
+
+                var nameservers = std.ArrayList([]const u8).init(self.allocator);
+                var search = std.ArrayList([]const u8).init(self.allocator);
+                var options = std.ArrayList([]const u8).init(self.allocator);
+
+                while (true) {
+                    const dns_token = try scanner.next();
+                    if (dns_token == .object_end) break;
+                    if (dns_token != .string) return error.InvalidConfig;
+
+                    const dns_key = dns_token.string;
+
+                    if (std.mem.eql(u8, dns_key, "nameservers")) {
+                        nameservers = try json_helper.parseStringArray(self.allocator, scanner);
+                    } else if (std.mem.eql(u8, dns_key, "search")) {
+                        search = try json_helper.parseStringArray(self.allocator, scanner);
+                    } else if (std.mem.eql(u8, dns_key, "options")) {
+                        options = try json_helper.parseStringArray(self.allocator, scanner);
+                    } else {
+                        try json_helper.skipValue(&scanner);
+                    }
+                }
+
+                dns = DNSConfig{
+                    .nameservers = try nameservers.toOwnedSlice(),
+                    .search = try search.toOwnedSlice(),
+                    .options = try options.toOwnedSlice(),
+                };
+            } else if (std.mem.eql(u8, key, "routes")) {
+                try json_helper.expectToken(&scanner, .array_begin);
+
+                while (true) {
+                    const route_token = try scanner.next();
+                    if (route_token == .array_end) break;
+                    if (route_token != .object_begin) return error.InvalidConfig;
+
+                    var route_dst: ?[]const u8 = null;
+                    var route_gw: ?[]const u8 = null;
+
+                    while (true) {
+                        const route_field_token = try scanner.next();
+                        if (route_field_token == .object_end) break;
+                        if (route_field_token != .string) return error.InvalidConfig;
+
+                        const route_key = route_field_token.string;
+
+                        if (std.mem.eql(u8, route_key, "dst")) {
+                            route_dst = try json_helper.parseString(self.allocator, scanner);
+                        } else if (std.mem.eql(u8, route_key, "gw")) {
+                            route_gw = try json_helper.parseString(self.allocator, scanner);
+                        } else {
+                            try json_helper.skipValue(&scanner);
+                        }
+                    }
+
+                    if (route_dst == null) {
+                        return error.InvalidConfig;
+                    }
+
+                    try routes.append(Route{
+                        .dst = route_dst.?,
+                        .gw = route_gw,
+                    });
+                }
+            } else {
+                try json_helper.skipValue(&scanner);
+            }
+        }
+
+        if (cni_version == null) {
+            return error.InvalidConfig;
+        }
+
+        return CNIResult{
+            .cniVersion = cni_version.?,
+            .ips = if (ips.items.len > 0) try ips.toOwnedSlice() else null,
+            .dns = dns,
+            .routes = if (routes.items.len > 0) try routes.toOwnedSlice() else null,
+        };
     }
 }; 

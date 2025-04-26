@@ -1,5 +1,5 @@
 const std = @import("std");
-const json = std.json;
+const json = @import("json");
 const fs = std.fs;
 const Allocator = std.mem.Allocator;
 const types = @import("types");
@@ -7,115 +7,105 @@ const logger_mod = @import("logger");
 const Error = @import("error").Error;
 const mem = std.mem;
 
-const ConfigFile = struct {
-    proxmox: struct {
-        hosts: []const []const u8,
-        port: u16 = 8006,
-        token: []const u8,
-        node: []const u8,
-        node_cache_duration: u64 = 60,
-    },
-    runtime: struct {
-        log_level: []const u8 = "info",
-        socket_path: []const u8 = "/var/run/proxmox-lxcri.sock",
-    },
+pub const ProxmoxConfig = struct {
+    hosts: []const []const u8,
+    port: u16,
+    token: []const u8,
+    node: []const u8,
+    node_cache_duration: u64,
 };
 
 pub const Config = struct {
-    allocator: Allocator,
-    hosts: []const []const u8,
-    token: []const u8,
-    port: u16,
-    node: []const u8,
-    node_cache_duration: u64,
-    timeout: u64,
+    proxmox: ProxmoxConfig,
+    runtime: struct {
+        socket_path: []const u8,
+        log_level: []const u8,
+    },
     logger: *logger_mod.Logger,
+    timeout: u32,
+    node_cache_duration: u64,
+    allocator: Allocator,
 
     pub fn init(allocator: Allocator, logger_instance: *logger_mod.Logger) !Config {
         return Config{
             .allocator = allocator,
-            .hosts = &[_][]const u8{},
-            .token = "",
-            .port = 8006,
-            .node = "",
-            .node_cache_duration = 300, // 5 minutes
-            .timeout = 30_000, // 30 seconds
+            .proxmox = .{
+                .hosts = &[_][]const u8{},
+                .token = "",
+                .port = 8006,
+                .node = "",
+                .node_cache_duration = 60,
+            },
+            .runtime = .{
+                .socket_path = "/var/run/proxmox-lxcri.sock",
+                .log_level = "info",
+            },
             .logger = logger_instance,
+            .timeout = 30_000,
+            .node_cache_duration = 300,
         };
     }
 
     pub fn deinit(self: *Config) void {
-        for (self.hosts) |host| {
+        for (self.proxmox.hosts) |host| {
             self.allocator.free(host);
         }
-        self.allocator.free(self.hosts);
-        self.allocator.free(self.token);
-        self.allocator.free(self.node);
+        self.allocator.free(self.proxmox.hosts);
+        self.allocator.free(self.proxmox.token);
+        self.allocator.free(self.proxmox.node);
+        self.allocator.free(self.runtime.socket_path);
+        self.allocator.free(self.runtime.log_level);
     }
 
-    pub fn loadFromFile(self: *Config, path: []const u8) !void {
-        const file = try fs.cwd().openFile(path, .{});
+    pub fn loadFromFile(self: *Config, file_path: []const u8) !void {
+        const file = try fs.cwd().openFile(file_path, .{});
         defer file.close();
 
         const content = try file.readToEndAlloc(self.allocator, 1024 * 1024);
         defer self.allocator.free(content);
 
-        const parsed = try json.parseFromSliceLeaky(json.Value, self.allocator, content, .{});
-        defer parsed.deinit();
+        const value = try json.parse(content, self.allocator);
+        defer value.deinit(self.allocator);
 
-        if (parsed.value.object.get("hosts")) |hosts| {
-            var host_list = std.ArrayList([]const u8).init(self.allocator);
-            defer host_list.deinit();
-
-            for (hosts.array.items) |host| {
-                try host_list.append(try self.allocator.dupe(u8, host.string));
+        // Parse proxmox config
+        if (value.object().getOrNull("proxmox")) |proxmox_obj| {
+            if (proxmox_obj.object().getOrNull("hosts")) |hosts_arr| {
+                const arr = hosts_arr.array();
+                const hosts = try self.allocator.alloc([]const u8, arr.len());
+                for (arr.items(), 0..) |host, i| {
+                    hosts[i] = try self.allocator.dupe(u8, host.string());
+                }
+                self.proxmox.hosts = hosts;
             }
 
-            self.hosts = try host_list.toOwnedSlice();
-        } else {
-            return Error.ProxmoxInvalidConfig;
+            if (proxmox_obj.object().getOrNull("port")) |port| {
+                self.proxmox.port = @intCast(port.integer());
+            }
+
+            if (proxmox_obj.object().getOrNull("token")) |token| {
+                self.proxmox.token = try self.allocator.dupe(u8, token.string());
+            }
+
+            if (proxmox_obj.object().getOrNull("node")) |node| {
+                self.proxmox.node = try self.allocator.dupe(u8, node.string());
+            }
+
+            if (proxmox_obj.object().getOrNull("node_cache_duration")) |duration| {
+                self.proxmox.node_cache_duration = @intCast(duration.integer());
+            }
         }
 
-        if (parsed.value.object.get("token")) |token| {
-            self.token = try self.allocator.dupe(u8, token.string);
-        } else {
-            return Error.ProxmoxInvalidConfig;
-        }
+        // Parse runtime config
+        if (value.object().getOrNull("runtime")) |runtime_obj| {
+            if (runtime_obj.object().getOrNull("socket_path")) |socket_path| {
+                self.runtime.socket_path = try self.allocator.dupe(u8, socket_path.string());
+            }
 
-        if (parsed.value.object.get("port")) |port| {
-            self.port = @intCast(port.integer);
-        }
-
-        if (parsed.value.object.get("node")) |node| {
-            self.node = try self.allocator.dupe(u8, node.string);
-        } else {
-            return Error.ProxmoxInvalidConfig;
-        }
-
-        if (parsed.value.object.get("node_cache_duration")) |duration| {
-            self.node_cache_duration = @intCast(duration.integer);
-        }
-
-        if (parsed.value.object.get("timeout")) |timeout| {
-            self.timeout = @intCast(timeout.integer);
+            if (runtime_obj.object().getOrNull("log_level")) |log_level| {
+                self.runtime.log_level = try self.allocator.dupe(u8, log_level.string());
+            }
         }
     }
-
-    pub fn validate(self: *const Config) !void {
-        if (self.hosts.len == 0) return Error.ProxmoxInvalidConfig;
-        if (self.token.len == 0) return Error.ProxmoxInvalidToken;
-        if (self.node.len == 0) return Error.ProxmoxInvalidNode;
-        if (self.port == 0) return Error.ProxmoxInvalidConfig;
-    }
-};
-
-pub const ProxmoxConfig = struct {
-    hosts: []const []const u8,
-    current_host_index: usize,
-    port: u16,
-    token: []const u8,
-    node: []const u8,
-    node_cache_duration: u64, // Cache duration in seconds
 };
 
 pub const RuntimeConfig = struct {

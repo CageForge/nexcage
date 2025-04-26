@@ -31,7 +31,25 @@ Creates a new Pod with the specified configuration:
   * Network settings
   * Resource limits
   * Storage configuration
+  * Image configuration
 Returns a pointer to the created Pod or an error.
+
+#### Create StatefulSet Pod
+```zig
+pub fn createStatefulPod(
+    self: *Self, 
+    config: types.StatefulSetConfig, 
+    ordinal: u32
+) !*StatefulPodIdentity
+```
+
+Creates a new StatefulSet Pod with stable network identity:
+- `config`: StatefulSet configuration including:
+  * Set name and service name
+  * Network configuration with headless service
+  * Pod prefix for naming
+- `ordinal`: Pod index in the StatefulSet
+Returns the pod's stable identity information.
 
 #### Delete Pod
 ```zig
@@ -58,38 +76,63 @@ pub fn listPods(self: *Self) ![]const *Pod
 
 Returns an array of pointers to all existing Pods.
 
-## Pod API
-
-### Pod Lifecycle
-
-#### Start Pod
-```zig
-pub fn start(self: *Self) !void
-```
-
-Starts the Pod and its containers:
-- Configures network
-- Sets up resources
-- Starts LXC container
-
-#### Stop Pod
-```zig
-pub fn stop(self: *Self) !void
-```
-
-Stops the Pod and its containers:
-- Stops LXC container
-- Cleans up network configuration
-
-#### Update Resources
-```zig
-pub fn updateResources(self: *Self, resources: types.ResourceConfig) !void
-```
-
-Updates Pod resource configuration:
-- `resources`: New resource limits and requests
-
 ## Network Manager API
+
+### Bridge Management
+
+#### Create Deployment Bridge
+```zig
+pub fn createDeploymentBridge(
+    self: *Self,
+    config: BridgeConfig,
+) !void
+```
+
+Creates a new bridge for a Deployment:
+- `config`: Bridge configuration including:
+  * Name and deployment ID
+  * MTU and VLAN settings
+  * STP configuration
+
+#### Configure Bridge Security
+```zig
+pub fn configureBridgeSecurity(
+    self: *Self,
+    deployment_id: []const u8,
+) !void
+```
+
+Configures security settings for a deployment bridge:
+- `deployment_id`: Deployment identifier
+Enables VLAN filtering, multicast snooping, and isolation.
+
+### StatefulSet Networking
+
+#### Setup StatefulSet Networking
+```zig
+pub fn setupStatefulSetNetworking(
+    self: *Self,
+    config: StatefulSetConfig,
+) !void
+```
+
+Sets up networking for a StatefulSet:
+- `config`: StatefulSet configuration including:
+  * Headless service settings
+  * Persistent address configuration
+  * DNS policy
+
+#### Setup Headless Service
+```zig
+pub fn setupHeadlessService(
+    self: *Self,
+    config: StatefulSetConfig,
+) !void
+```
+
+Creates and configures a headless service:
+- `config`: Service configuration
+Creates DNS zone and configures service discovery.
 
 ### DNS Configuration
 ```zig
@@ -132,23 +175,35 @@ pub fn prepareImage(
 
 Prepares container image:
 - `url`: Image source URL
-- `config`: Image configuration
+- `config`: Image configuration including:
+  * Format (ZFS/Raw)
+  * Storage options
 Returns path to prepared image.
 
-#### Mount Image
+#### Convert Image
 ```zig
-pub fn mountImage(
+pub fn convertImage(
     self: *Self,
-    image_path: []const u8,
-    mount_point: []const u8,
-    config: ImageConfig
+    source: []const u8,
+    format: ImageFormat
 ) !void
 ```
 
-Mounts container image:
-- `image_path`: Path to image
-- `mount_point`: Mount destination
-- `config`: Mount configuration
+Converts image to specified format:
+- `source`: Source image path
+- `format`: Target format (ZFS/Raw)
+
+#### Cache Management
+```zig
+pub fn prepareImageFromCache(
+    self: *Self,
+    image_info: ImageInfo
+) !ImageId
+```
+
+Retrieves or downloads image using cache:
+- `image_info`: Image metadata
+Returns cached image ID or downloads new one.
 
 ## Error Types
 
@@ -176,6 +231,10 @@ pub const NetworkError = error{
     ConfigurationFailed,
     PortForwardingFailed,
     DNSConfigurationFailed,
+    BridgeCreationFailed,
+    BridgeNotFound,
+    HeadlessServiceFailed,
+    NetworkIdentityError,
 };
 ```
 
@@ -189,44 +248,53 @@ pub const ImageError = error{
     InvalidFormat,
     StorageError,
     ZFSError,
+    CacheError,
+    ReferenceCountError,
 };
 ```
 
 ## Usage Examples
 
-### Creating and Starting a Pod
+### Creating a StatefulSet Pod
 ```zig
-// Initialize managers
-var pod_manager = try PodManager.init(allocator, proxmox_client, network_manager);
-defer pod_manager.deinit();
-
-// Create Pod configuration
-const pod_config = PodConfig{
-    .id = "test-pod",
-    .name = "Test Pod",
-    .namespace = "default",
-    .network = NetworkConfig{...},
-    .resources = ResourceConfig{...},
+// StatefulSet configuration
+const statefulset_config = StatefulSetConfig{
+    .name = "web",
+    .service_name = "nginx",
+    .replicas = 3,
+    .pod_prefix = "web",
+    .network = .{
+        .headless_service = true,
+        .persistent_addresses = true,
+    },
 };
 
-// Create and start Pod
-const pod = try pod_manager.createPod(pod_config);
-try pod.start();
+// Create pod with stable identity
+const pod_identity = try pod_manager.createStatefulPod(statefulset_config, 0);
 ```
 
-### Network Configuration
+### Setting up Deployment Bridge
 ```zig
-// Configure DNS
-try network_manager.configureDNS(
-    &[_][]const u8{"8.8.8.8", "8.8.4.4"},
-    &[_][]const u8{"example.com"},
-    &[_][]const u8{},
-);
-
-// Add port forwarding
-try network_manager.addPortForward(.{
-    .protocol = .tcp,
-    .container_port = 80,
-    .host_port = 8080,
+// Create bridge for deployment
+try network_manager.createDeploymentBridge(.{
+    .name = "web-deployment",
+    .deployment_id = "web-app",
+    .mtu = 1500,
+    .stp = true,
 });
+
+// Configure bridge security
+try network_manager.configureBridgeSecurity("web-app");
+```
+
+### Using Image Cache
+```zig
+// Prepare image using cache
+const image_info = ImageInfo{
+    .name = "ubuntu",
+    .version = "22.04",
+    .hash = "sha256:...",
+};
+
+const image_id = try image_manager.prepareImageFromCache(image_info);
 ``` 
