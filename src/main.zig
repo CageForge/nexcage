@@ -18,9 +18,8 @@ const http = std.http;
 const Uri = std.Uri;
 const Client = http.Client;
 const network = @import("network");
-const oci_commands = @import("oci/commands.zig");
 const process = std.process;
-
+const oci_commands = @import("oci");
 const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadError;
 
 const SIGINT = posix.SIG.INT;
@@ -300,11 +299,9 @@ fn executeStart(container_id: []const u8) !void {
 }
 
 fn executeState(allocator: Allocator, container_id: []const u8) !void {
-    const container_state = try oci_commands.state.state(
-        allocator,
-        container_id,
-        "", // TODO: зберігати bundle_path при створенні
+    const container_state = try oci_commands.state.getState(
         proxmox_client,
+        container_id,
     );
     var container_state_mut = container_state;
     defer container_state_mut.deinit(allocator);
@@ -393,11 +390,11 @@ pub fn main() !void {
     // Initialize Proxmox client
     var client = try ProxmoxClient.init(
         allocator,
-        cfg.proxmox.hosts,
-        cfg.proxmox.token,
-        &logger_instance,
+        cfg.proxmox.hosts[0],
         cfg.proxmox.port,
+        cfg.proxmox.token,
         cfg.proxmox.node,
+        &logger_instance,
     );
     proxmox_client = &client;
     defer proxmox_client.deinit();
@@ -423,12 +420,33 @@ pub fn main() !void {
             try executeState(allocator, args[2]);
         },
         .kill => {
-            if (args.len < 3) {
+            var container_id: ?[]const u8 = null;
+            var signal: ?[]const u8 = null;
+            
+            var i: usize = 2;
+            while (i < args.len) : (i += 1) {
+                const arg = args[i];
+                if (std.mem.eql(u8, arg, "--signal")) {
+                    i += 1;
+                    if (i >= args.len) {
+                        try std.io.getStdErr().writer().writeAll("Error: --signal requires a value\n");
+                        return error.InvalidArguments;
+                    }
+                    signal = args[i];
+                } else if (container_id == null) {
+                    container_id = arg;
+                } else {
+                    try std.io.getStdErr().writer().print("Error: unexpected argument '{s}'\n", .{arg});
+                    return error.InvalidArguments;
+                }
+            }
+
+            if (container_id == null) {
                 try std.io.getStdErr().writer().writeAll("Error: kill requires a container-id argument\n");
                 return error.InvalidArguments;
             }
-            const signal = if (args.len > 3) args[3] else null;
-            try executeKill(args[2], signal);
+
+            try executeKill(container_id.?, signal);
         },
         .delete => {
             if (args.len < 3) {

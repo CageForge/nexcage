@@ -498,6 +498,10 @@ pub const ContainerState = struct {
     annotations: ?[]struct { key: []const u8, value: []const u8 },
 
     pub fn deinit(self: *ContainerState, allocator: std.mem.Allocator) void {
+        allocator.free(self.ociVersion);
+        allocator.free(self.id);
+        allocator.free(self.status);
+        allocator.free(self.bundle);
         if (self.annotations) |annotations| {
             for (annotations) |annotation| {
                 allocator.free(annotation.key);
@@ -505,9 +509,113 @@ pub const ContainerState = struct {
             }
             allocator.free(annotations);
         }
-        allocator.free(self.ociVersion);
-        allocator.free(self.id);
-        allocator.free(self.bundle);
-        allocator.free(self.status);
+    }
+};
+
+pub const RlimitType = enum {
+    RLIMIT_CPU,
+    RLIMIT_FSIZE,
+    RLIMIT_DATA,
+    RLIMIT_STACK,
+    RLIMIT_CORE,
+    RLIMIT_RSS,
+    RLIMIT_NPROC,
+    RLIMIT_NOFILE,
+    RLIMIT_MEMLOCK,
+    RLIMIT_AS,
+    RLIMIT_LOCKS,
+    RLIMIT_SIGPENDING,
+    RLIMIT_MSGQUEUE,
+    RLIMIT_NICE,
+    RLIMIT_RTPRIO,
+    RLIMIT_RTTIME,
+};
+
+pub const Rlimit = struct {
+    type: RlimitType,
+    soft: u64,
+    hard: u64,
+};
+
+pub const User = struct {
+    uid: u32,
+    gid: u32,
+    additionalGids: ?[]const u32 = null,
+
+    pub fn deinit(self: *const User, allocator: Allocator) void {
+        if (self.additionalGids) |gids| {
+            allocator.free(gids);
+        }
+    }
+};
+
+pub const Capabilities = struct {
+    bounding: ?[]const []const u8 = null,
+    effective: ?[]const []const u8 = null,
+    inheritable: ?[]const []const u8 = null,
+    permitted: ?[]const []const u8 = null,
+    ambient: ?[]const []const u8 = null,
+
+    pub fn deinit(self: *const Capabilities, allocator: Allocator) void {
+        if (self.bounding) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+        if (self.effective) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+        if (self.inheritable) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+        if (self.permitted) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+        if (self.ambient) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+    }
+};
+
+pub const Process = struct {
+    terminal: bool = false,
+    user: User,
+    args: []const []const u8,
+    env: []const []const u8,
+    cwd: []const u8,
+    capabilities: ?Capabilities = null,
+    rlimits: ?[]Rlimit = null,
+    no_new_privileges: bool = false,
+
+    pub fn deinit(self: *const Process, allocator: Allocator) void {
+        self.user.deinit(allocator);
+        for (self.args) |arg| {
+            allocator.free(arg);
+        }
+        allocator.free(self.args);
+        for (self.env) |env_var| {
+            allocator.free(env_var);
+        }
+        allocator.free(self.env);
+        allocator.free(self.cwd);
+        if (self.capabilities) |*caps| {
+            caps.deinit(allocator);
+        }
+        if (self.rlimits) |rlimits_| {
+            allocator.free(rlimits_);
+        }
     }
 };

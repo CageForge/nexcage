@@ -39,6 +39,15 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Common module
+    const common_mod = b.addModule("common", .{
+        .root_source_file = b.path("src/common/mod.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+        },
+    });
+
     // Network subsystem
     const network_mod = b.addModule("network", .{
         .root_source_file = b.path("src/network/network.zig"),
@@ -58,6 +67,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "network", .module = network_mod },
             .{ .name = "logger", .module = logger_mod },
             .{ .name = "config", .module = config_mod },
+            .{ .name = "common", .module = common_mod },
         },
     });
 
@@ -68,17 +78,22 @@ pub fn build(b: *std.Build) void {
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
+            .{ .name = "pod", .module = pod_mod },
+            .{ .name = "common", .module = common_mod },
         },
     });
 
     // OCI runtime
     const oci_mod = b.addModule("oci", .{
-        .root_source_file = b.path("src/oci/runtime.zig"),
+        .root_source_file = b.path("src/oci/mod.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
             .{ .name = "pod", .module = pod_mod },
+            .{ .name = "proxmox", .module = proxmox_mod },
+            .{ .name = "json", .module = zigJsonDep.module("zig-json") },
+            .{ .name = "common", .module = common_mod },
         },
     });
 
@@ -98,6 +113,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("proxmox", proxmox_mod);
     exe.root_module.addImport("oci", oci_mod);
     exe.root_module.addImport("json", zigJsonDep.module("zig-json"));
+    exe.root_module.addImport("common", common_mod);
 
     // Install
     b.installArtifact(exe);

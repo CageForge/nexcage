@@ -1,19 +1,20 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 const json = @import("json");
 const fs = std.fs;
-const spec = @import("spec.zig");
+const Allocator = std.mem.Allocator;
 const logger = std.log.scoped(.oci_create);
 const errors = @import("error");
 const types = @import("types");
 const proxmox = @import("proxmox");
 const mem = std.mem;
 const log = std.log;
-const RlimitType = spec.RlimitType;
-const Rlimit = spec.RLimit;
-const Process = spec.Process;
-const User = spec.User;
-const Capabilities = spec.Capabilities;
+const RlimitType = types.RlimitType;
+const Rlimit = types.Rlimit;
+const Process = types.Process;
+const User = types.User;
+const Capabilities = types.Capabilities;
+const spec = @import("spec.zig");
+const common = @import("common");
 
 pub const CreateOpts = struct {
     config_path: []const u8,
@@ -27,10 +28,13 @@ pub const CreateOpts = struct {
     no_new_keyring: bool = false,
     preserve_fds: u32 = 0,
 
-    pub fn deinit(self: *CreateOpts) void {
-        self.allocator.free(self.config_path);
-        self.allocator.free(self.id);
-        self.allocator.free(self.bundle_path);
+    pub fn deinit(self: *CreateOpts, allocator: Allocator) void {
+        allocator.free(self.config_path);
+        allocator.free(self.id);
+        allocator.free(self.bundle_path);
+        if (self.pid_file) |pid_file| {
+            allocator.free(pid_file);
+        }
     }
 };
 
@@ -61,67 +65,17 @@ pub fn create(
     const config_content = try config_file.readToEndAlloc(allocator, 1024 * 1024);
     defer allocator.free(config_content);
 
-    const value = try json.parse(config_content, allocator);
-    defer value.deinit(allocator);
-
-    const container_spec = try parseContainerSpec(allocator, value);
-    errdefer container_spec.deinit(allocator);
-
-    const config = container_spec;
-
-    const default_memory: u32 = 512 * 1024 * 1024;
-    const memory_limit: u32 = if (config.linux.resources) |res| 
-        if (res.memory) |memory_res| 
-            if (memory_res.limit) |limit| 
-                @intCast(@min(limit, std.math.maxInt(u32)))
-            else default_memory
-        else default_memory
-    else default_memory;
-
-    const storage = try getStorageFromConfig(allocator, config);
-    defer allocator.free(storage);
-
-    const rootfs = try std.fmt.allocPrint(allocator, "{s}:8", .{storage});
-    defer allocator.free(rootfs);
-
-    // Створюємо LXC контейнер через Proxmox API
-    var container_config = types.LXCConfig{
-        .hostname = try allocator.dupe(u8, config.hostname),
-        .ostype = try allocator.dupe(u8, "ubuntu"),
-        .memory = memory_limit,
-        .swap = 0,
-        .cores = if (config.linux.resources) |res|
-            if (res.cpu) |cpu| @intCast(cpu.quota orelse 1) else 1
-        else 1,
-        .rootfs = rootfs,
-        .net0 = .{
-            .name = try allocator.dupe(u8, "vmbr50"),
-            .bridge = try allocator.dupe(u8, "vmbr50"),
-            .ip = try allocator.dupe(u8, "dhcp"),
-            .type = try allocator.dupe(u8, "veth"),
-        },
-        .onboot = false,
-        .protection = false,
-        .start = true,
-        .template = false,
-        .unprivileged = true,
-        .features = .{},
-    };
-    defer container_config.deinit(allocator);
-
-    const container = try proxmox_client.createLXC(container_config);
+    try proxmox_client.createContainer(opts.id, config_content);
 
     // Якщо вказано pid_file, записуємо PID
     if (opts.pid_file) |pid_file| {
-        const pid_str = try std.fmt.allocPrint(allocator, "{d}\n", .{container.vmid});
+        const pid_str = try std.fmt.allocPrint(allocator, "{d}\n", .{0}); // TODO: Get real PID
         defer allocator.free(pid_str);
         
         try fs.cwd().writeFile(.{
-            .sub_path = pid_file,
             .data = pid_str,
-            .flags = .{},
+            .sub_path = pid_file,
         });
-        //try fs.cwd().chmod(pid_file, 0o644);
     }
 
     logger.info("Container {s} created successfully", .{opts.id});
@@ -154,30 +108,36 @@ fn parseLinuxSpec(allocator: Allocator, value: *json.JsonValue) !spec.LinuxSpec 
     if (value.type != .object) return error.InvalidSpec;
     const obj = value.object();
 
-    // Parse namespaces
-    var namespaces: []spec.LinuxNamespace = &[_]spec.LinuxNamespace{};
-    if (obj.getOrNull("namespaces")) |ns_array| {
-        if (ns_array.type != .array) return error.InvalidSpec;
-        const items = ns_array.array();
+    var result = spec.LinuxSpec{
+        .namespaces = &[_]spec.LinuxNamespace{},
+        .devices = &[_]spec.LinuxDevice{},
+        .resources = null,
+        .cgroupsPath = null,
+        .seccomp = null,
+        .selinux = null,
+    };
+
+    if (obj.getOrNull("namespaces")) |namespaces| {
+        if (namespaces.type != .array) return error.InvalidSpec;
+        const items = namespaces.array();
         var ns_list = try allocator.alloc(spec.LinuxNamespace, items.len());
-        for (items.items(), 0..) |item, i| {
-            ns_list[i] = .{
-                .type = try allocator.dupe(u8, item.object().get("type").string()),
-                .path = if (item.object().getOrNull("path")) |p| try allocator.dupe(u8, p.string()) else null,
+        for (items.items(), 0..) |ns, i| {
+            const ns_obj = ns.object();
+            ns_list[i] = spec.LinuxNamespace{
+                .type = try allocator.dupe(u8, ns_obj.get("type").string()),
+                .path = if (ns_obj.getOrNull("path")) |p| try allocator.dupe(u8, p.string()) else null,
             };
         }
-        namespaces = ns_list;
+        result.namespaces = ns_list;
     }
 
-    // Parse devices
-    var devices: []spec.LinuxDevice = &[_]spec.LinuxDevice{};
-    if (obj.getOrNull("devices")) |dev_array| {
-        if (dev_array.type != .array) return error.InvalidSpec;
-        const items = dev_array.array();
+    if (obj.getOrNull("devices")) |devices| {
+        if (devices.type != .array) return error.InvalidSpec;
+        const items = devices.array();
         var dev_list = try allocator.alloc(spec.LinuxDevice, items.len());
-        for (items.items(), 0..) |item, i| {
-            const dev_obj = item.object();
-            dev_list[i] = .{
+        for (items.items(), 0..) |dev, i| {
+            const dev_obj = dev.object();
+            dev_list[i] = spec.LinuxDevice{
                 .path = try allocator.dupe(u8, dev_obj.get("path").string()),
                 .type = try allocator.dupe(u8, dev_obj.get("type").string()),
                 .major = dev_obj.get("major").integer(),
@@ -187,17 +147,10 @@ fn parseLinuxSpec(allocator: Allocator, value: *json.JsonValue) !spec.LinuxSpec 
                 .gid = if (dev_obj.getOrNull("gid")) |g| @intCast(g.integer()) else null,
             };
         }
-        devices = dev_list;
+        result.devices = dev_list;
     }
 
-    return spec.LinuxSpec{
-        .namespaces = namespaces,
-        .devices = devices,
-        .resources = null,
-        .cgroupsPath = null,
-        .seccomp = null,
-        .selinux = null,
-    };
+    return result;
 }
 
 pub fn parseContainerSpec(allocator: Allocator, value: *json.JsonValue) !spec.Spec {
@@ -226,7 +179,7 @@ pub fn parseContainerSpec(allocator: Allocator, value: *json.JsonValue) !spec.Sp
     return container_spec;
 }
 
-pub fn parseProcess(allocator: Allocator, value: *json.JsonValue) !Process {
+pub fn parseProcess(allocator: Allocator, value: *json.JsonValue) !spec.Process {
     if (value.type != .object) return error.InvalidSpec;
     const obj = value.object();
 
@@ -258,26 +211,26 @@ pub fn parseProcess(allocator: Allocator, value: *json.JsonValue) !Process {
     }
 
     // Parse user
-    var user: ?User = null;
+    var user: ?types.User = null;
     if (obj.getOrNull("user")) |user_obj| {
         user = try parseUser(allocator, user_obj);
     }
 
     // Parse capabilities
-    var capabilities: ?Capabilities = null;
+    var capabilities: ?types.Capabilities = null;
     if (obj.getOrNull("capabilities")) |caps_obj| {
         capabilities = try parseCapabilities(caps_obj, allocator);
     }
 
     // Parse rlimits
-    var rlimits: ?[]spec.RLimit = null;
+    var rlimits: ?[]types.Rlimit = null;
     if (obj.getOrNull("rlimits")) |rlimits_array| {
         if (rlimits_array.type != .array) return error.InvalidSpec;
         const items = rlimits_array.array();
-        var rlimits_list = try allocator.alloc(spec.RLimit, items.len());
+        var rlimits_list = try allocator.alloc(types.Rlimit, items.len());
         for (items.items(), 0..) |item, i| {
             const type_str = if (item.object().getOrNull("type")) |type_value| type_value.string() else return error.InvalidSpec;
-            const rlimit_type = std.meta.stringToEnum(spec.RlimitType, type_str) orelse return error.InvalidSpec;
+            const rlimit_type = std.meta.stringToEnum(types.RlimitType, type_str) orelse return error.InvalidSpec;
             rlimits_list[i] = .{
                 .type = rlimit_type,
                 .soft = @intCast(item.object().get("soft").integer()),
@@ -290,7 +243,7 @@ pub fn parseProcess(allocator: Allocator, value: *json.JsonValue) !Process {
     // Parse cwd
     const cwd = if (obj.getOrNull("cwd")) |c| try allocator.dupe(u8, c.string()) else return error.InvalidSpec;
 
-    return Process{
+    return spec.Process{
         .args = args,
         .env = env,
         .cwd = cwd,
@@ -298,10 +251,11 @@ pub fn parseProcess(allocator: Allocator, value: *json.JsonValue) !Process {
         .capabilities = capabilities,
         .rlimits = rlimits,
         .terminal = terminal,
+        .no_new_privileges = if (obj.getOrNull("noNewPrivileges")) |n| n.boolean() else false,
     };
 }
 
-fn parseUser(allocator: Allocator, value: *json.JsonValue) !User {
+fn parseUser(allocator: Allocator, value: *json.JsonValue) !types.User {
     if (value.type != .object) return error.InvalidSpec;
     const user_obj = value.object();
 
@@ -319,18 +273,18 @@ fn parseUser(allocator: Allocator, value: *json.JsonValue) !User {
         additional_gids = gids_list;
     }
 
-    return User{
+    return types.User{
         .uid = uid,
         .gid = gid,
         .additionalGids = additional_gids,
     };
 }
 
-fn parseCapabilities(value: *json.JsonValue, allocator: Allocator) !?Capabilities {
+fn parseCapabilities(value: *json.JsonValue, allocator: Allocator) !?types.Capabilities {
     if (value.type != .object) return error.InvalidSpec;
     const obj = value.object();
 
-    var result = Capabilities{};
+    var result = types.Capabilities{};
 
     if (obj.getOrNull("bounding")) |arr| {
         if (arr.type != .array) return error.InvalidSpec;
@@ -468,4 +422,4 @@ fn parseHostname(value: *json.JsonValue, allocator: Allocator) ![]const u8 {
         return try allocator.dupe(u8, hostname.string());
     }
     return "";
-} 
+}

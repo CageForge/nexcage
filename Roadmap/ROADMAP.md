@@ -1,6 +1,6 @@
 # 🗺️ Proxmox LXC Container Runtime Interface Project Roadmap
 
-## 📊 Overall Progress: 99%
+## 📊 Overall Progress: 99.5%
 
 ## ✅ Completed Tasks
 
@@ -166,10 +166,15 @@
 
 ## 📈 Time Expenditure
 - Planned: 29.5 days
-- Spent: 22.5 days + 8 hours
-- Remaining: ~6.5 days
+- Spent: 23 days + 3 hours
+- Remaining: ~6 days
 
 ## Recent Updates
+- Fixed container start functionality (2 hours)
+  - Corrected handling of unprivileged field in container configuration
+  - Added support for both boolean and integer values for unprivileged setting
+  - Improved error handling in container configuration parsing
+  - Enhanced type safety in configuration management
 - Implemented OCI specification improvements (4 hours)
   - Fixed handling of mandatory fields in container specification
   - Corrected memory management for annotations
@@ -187,16 +192,27 @@
 - Added comprehensive test suite for container lifecycle
 - Created abstraction layer for different container types
 - Added proper memory management and resource cleanup
+- Refactored container creation logic (3 hours)
+  - Moved container creation logic from OCI layer to Proxmox client
+  - Implemented createContainer method in ProxmoxClient
+  - Simplified container creation flow
+  - Improved error handling and resource cleanup
+  - Updated container configuration management
+  - Standardized container creation interface
 
 ## Current Focus
-1. OCI Specification Implementation
+1. Container Runtime Implementation
+   - Container start functionality
+   - Configuration parsing improvements
+   - Error handling enhancements
+2. OCI Specification Implementation
    - Container specification validation
    - Resource limits implementation
    - Network configuration improvements
-2. Security Implementation
+3. Security Implementation
    - SELinux/AppArmor integration
    - Security audit completion
-3. Testing and Documentation
+4. Testing and Documentation
    - Integration tests
    - API documentation completion
 

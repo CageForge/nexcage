@@ -1,99 +1,13 @@
 const std = @import("std");
 const json = std.json;
 const Allocator = std.mem.Allocator;
+const types = @import("types");
 
-pub const Process = struct {
-    terminal: bool = false,
-    user: User,
-    args: []const []const u8,
-    env: []const []const u8,
-    cwd: []const u8,
-    capabilities: ?Capabilities = null,
-    rlimits: ?[]const RLimit = null,
-    noNewPrivileges: bool = false,
-
-    pub fn deinit(self: *const Process, allocator: Allocator) void {
-        for (self.args) |arg| {
-            allocator.free(arg);
-        }
-        allocator.free(self.args);
-        
-        for (self.env) |env| {
-            allocator.free(env);
-        }
-        allocator.free(self.env);
-        allocator.free(self.cwd);
-        
-        if (self.capabilities) |caps| {
-            caps.deinit(allocator);
-        }
-        if (self.rlimits) |limits| {
-            for (limits) |limit| {
-                limit.deinit(allocator);
-            }
-            allocator.free(limits);
-        }
-    }
-};
-
-pub const User = struct {
-    uid: u32,
-    gid: u32,
-    additionalGids: ?[]const u32 = null,
-
-    pub fn deinit(self: *const User, allocator: Allocator) void {
-        if (self.additionalGids) |gids| {
-            allocator.free(gids);
-        }
-    }
-};
-
-pub const Capabilities = struct {
-    bounding: ?[]const []const u8 = null,
-    effective: ?[]const []const u8 = null,
-    inheritable: ?[]const []const u8 = null,
-    permitted: ?[]const []const u8 = null,
-    ambient: ?[]const []const u8 = null,
-
-    pub fn deinit(self: *const Capabilities, allocator: Allocator) void {
-        if (self.bounding) |caps| {
-            for (caps) |cap| {
-                allocator.free(cap);
-            }
-            allocator.free(caps);
-        }
-        // Similar deallocation for other capability sets
-    }
-};
-
-pub const RlimitType = enum {
-    RLIMIT_CPU,
-    RLIMIT_FSIZE,
-    RLIMIT_DATA,
-    RLIMIT_STACK,
-    RLIMIT_CORE,
-    RLIMIT_RSS,
-    RLIMIT_NPROC,
-    RLIMIT_NOFILE,
-    RLIMIT_MEMLOCK,
-    RLIMIT_AS,
-    RLIMIT_LOCKS,
-    RLIMIT_SIGPENDING,
-    RLIMIT_MSGQUEUE,
-    RLIMIT_NICE,
-    RLIMIT_RTPRIO,
-    RLIMIT_RTTIME,
-};
-
-pub const RLimit = struct {
-    type: RlimitType,
-    soft: u64,
-    hard: u64,
-
-    pub fn deinit(self: *const RLimit, _: Allocator) void {
-        _ = self;
-    }
-};
+pub const Process = types.Process;
+pub const User = types.User;
+pub const Capabilities = types.Capabilities;
+pub const RlimitType = types.RlimitType;
+pub const Rlimit = types.Rlimit;
 
 pub const Root = struct {
     path: []const u8,

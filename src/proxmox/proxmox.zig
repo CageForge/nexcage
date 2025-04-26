@@ -24,6 +24,7 @@ const net = std.net;
 const logger = logger_mod.Logger;
 const Headers = std.http.Headers;
 const HeaderIterator = std.http.Headers.Iterator;
+const common = @import("common");
 
 const API_PREFIX = "/api2/json";
 
@@ -44,44 +45,104 @@ pub const ContainerType = enum {
 };
 
 pub const ProxmoxClient = struct {
+    allocator: Allocator,
+    host: []const u8,
+    port: u16,
+    token: []const u8,
+    node: []const u8,
+    logger: *logger_mod.Logger,
     client: Client,
 
-    pub fn init(
-        allocator: std.mem.Allocator,
-        hosts: []const []const u8,
-        token: []const u8,
-        logger_instance: *logger_mod.Logger,
-        port: u16,
-        node: []const u8,
-    ) !ProxmoxClient {
+    pub fn init(allocator: Allocator, host: []const u8, port: u16, token: []const u8, node: []const u8, log_instance: *logger_mod.Logger) !ProxmoxClient {
+        const host_copy = try allocator.dupe(u8, host);
+        errdefer allocator.free(host_copy);
+
+        const token_copy = try allocator.dupe(u8, token);
+        errdefer allocator.free(token_copy);
+
+        const node_copy = try allocator.dupe(u8, node);
+        errdefer allocator.free(node_copy);
+
+        const hosts = try allocator.alloc([]const u8, 1);
+        errdefer allocator.free(hosts);
+        hosts[0] = host_copy;
+
+        const client = try Client.init(allocator, hosts, token_copy, log_instance, port, node_copy);
+        errdefer client.deinit();
+
         return ProxmoxClient{
-            .client = try Client.init(allocator, hosts, token, logger_instance, port, node),
+            .allocator = allocator,
+            .host = host_copy,
+            .port = port,
+            .token = token_copy,
+            .node = node_copy,
+            .logger = log_instance,
+            .client = client,
         };
     }
 
     pub fn deinit(self: *ProxmoxClient) void {
         self.client.deinit();
+        self.allocator.free(self.host);
+        self.allocator.free(self.token);
+        self.allocator.free(self.node);
     }
 
-    // Загальні операції з контейнерами
+    pub fn getProxmoxVMID(self: *ProxmoxClient, oci_container_id: []const u8) !u32 {
+        const containers = try self.listContainers();
+        defer {
+            for (containers) |*container| {
+                container.deinit(self.allocator);
+            }
+            self.allocator.free(containers);
+        }
+
+        for (containers) |container| {
+            if (std.mem.eql(u8, container.name, oci_container_id)) {
+                return container.vmid;
+            }
+        }
+
+        try self.logger.err("Container with OCI ID {s} not found", .{oci_container_id});
+        return error.ContainerNotFound;
+    }
+
+    pub fn listContainers(self: *ProxmoxClient) ![]types.LXCContainer {
+        return self.listLXCs();
+    }
+
+    pub fn createContainer(self: *ProxmoxClient, container_id: []const u8, spec: []const u8) !void {
+        const config = common.ContainerConfig{
+            .id = try self.allocator.dupe(u8, container_id),
+            .spec = try self.allocator.dupe(u8, spec),
+        };
+        defer config.deinit(self.allocator);
+
+        try self.logger.info("Creating container {s}", .{config.id});
+        // TODO: Implement container creation
+    }
+
     pub fn startContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32) !void {
+        try self.logger.info("Starting container {d}", .{vmid});
         switch (container_type) {
-            .lxc => try lxc_ops.startLXC(&self.client, self.client.node, vmid),
-            .qemu => try vm_ops.startVM(&self.client, self.client.node, vmid),
+            .lxc => try lxc_ops.startLXC(&self.client, self.node, vmid),
+            .qemu => try vm_ops.startVM(&self.client, self.node, vmid),
         }
     }
 
-    pub fn stopContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32, timeout: ?i64) !void {
+    pub fn stopContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32, force: ?bool) !void {
+        try self.logger.info("Stopping container {d} (force: {?})", .{vmid, force});
         switch (container_type) {
-            .lxc => try lxc_ops.stopLXC(&self.client, self.client.node, vmid, timeout),
-            .qemu => try vm_ops.stopVM(&self.client, self.client.node, vmid, timeout),
+            .lxc => try lxc_ops.stopLXC(&self.client, self.node, vmid),
+            .qemu => try vm_ops.stopVM(&self.client, self.node, vmid, if (force) |f| if (f) @as(?i64, 0) else null else null),
         }
     }
 
     pub fn deleteContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32) !void {
+        try self.logger.info("Deleting container {d}", .{vmid});
         switch (container_type) {
-            .lxc => try lxc_ops.deleteLXC(&self.client, self.client.node, vmid),
-            .qemu => try vm_ops.deleteVM(&self.client, self.client.node, vmid),
+            .lxc => try lxc_ops.deleteLXC(&self.client, self.node, vmid),
+            .qemu => try vm_ops.deleteVM(&self.client, self.node, vmid),
         }
     }
 
@@ -100,10 +161,6 @@ pub const ProxmoxClient = struct {
     // LXC специфічні операції
     pub fn listLXCs(self: *ProxmoxClient) ![]types.LXCContainer {
         return lxc_ops.listLXCs(&self.client);
-    }
-
-    pub fn createLXC(self: *ProxmoxClient, spec: types.LXCConfig) !types.LXCContainer {
-        return lxc_ops.createLXC(&self.client, spec);
     }
 
     // VM специфічні операції
