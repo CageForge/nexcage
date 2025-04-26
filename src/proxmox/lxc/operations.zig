@@ -7,6 +7,8 @@ const fmt = std.fmt;
 const ArrayList = std.ArrayList;
 const Thread = std.Thread;
 const os = std.os;
+const logger = std.log.scoped(.proxmox_lxc);
+const proxmox = @import("../proxmox.zig");
 
 pub const create = @import("create.zig").createLXC;
 pub const start = @import("start.zig").startLXC;
@@ -133,28 +135,39 @@ fn getContainerConfig(client: *Client, node: []const u8, vmid: u32) !types.LXCCo
         .cores = @intCast(config_data.get("cores").?.integer),
         .rootfs = try client.allocator.dupe(u8, config_data.get("rootfs").?.string),
         .net0 = net0,
+        .onboot = if (config_data.get("onboot")) |v| v.bool else false,
+        .protection = if (config_data.get("protection")) |v| v.bool else false,
+        .start = if (config_data.get("start")) |v| v.bool else true,
+        .template = if (config_data.get("template")) |v| v.bool else false,
+        .unprivileged = if (config_data.get("unprivileged")) |v| 
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => true,
+            } else true,
+        .features = .{},
     };
 }
 
-pub fn createLXC(client: *Client, spec: types.LXCConfig) !types.LXCContainer {
-    const body = try json.stringifyAlloc(client.allocator, spec, .{});
-    defer client.allocator.free(body);
+pub fn createLXC(client: *proxmox.ProxmoxClient, vmid: u32, config: types.LXCConfig) !void {
+    logger.info("Creating container with VMID {d}", .{vmid});
 
-    const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc", .{client.node});
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc", .{client.node});
     defer client.allocator.free(path);
 
-    const response = try client.makeRequest(.POST, path, body);
-    defer client.allocator.free(response);
+    var params = std.ArrayList(u8).init(client.allocator);
+    defer params.deinit();
 
-    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
-    defer parsed.deinit();
+    try std.fmt.format(params.writer(), "vmid={d}", .{vmid});
+    try std.fmt.format(params.writer(), "&hostname={s}", .{config.hostname});
+    try std.fmt.format(params.writer(), "&ostemplate={s}", .{config.ostemplate});
+    try std.fmt.format(params.writer(), "&rootfs={s}", .{config.rootfs});
+    try std.fmt.format(params.writer(), "&memory={d}", .{config.memory});
+    try std.fmt.format(params.writer(), "&swap={d}", .{config.swap});
+    try std.fmt.format(params.writer(), "&cores={d}", .{config.cores});
 
-    return types.LXCContainer{
-        .vmid = @intCast(parsed.value.object.get("vmid").?.integer),
-        .name = try client.allocator.dupe(u8, spec.hostname),
-        .status = .stopped,
-        .config = spec,
-    };
+    const response = try client.makeRequest(.POST, path, params.items);
+    defer response.deinit();
 }
 
 fn parseContainerStatus(status_str: []const u8) !types.LXCStatus {
@@ -170,29 +183,34 @@ fn parseContainerStatus(status_str: []const u8) !types.LXCStatus {
 }
 
 pub fn startLXC(client: *Client, node: []const u8, vmid: u32) !void {
-    const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/start", .{ node, vmid });
+    logger.info("Starting container {d}", .{vmid});
+
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/start", .{ node, vmid });
     defer client.allocator.free(path);
 
-    try client.logger.debug("Starting LXC container {d} on node {s}", .{ vmid, node });
-    
+    const body = "{}";
+    const response = try client.makeRequest(.POST, path, body);
+    defer client.allocator.free(response);
+}
+
+pub fn stopLXC(client: *Client, node: []const u8, vmid: u32) !void {
+    logger.info("Stopping container {d}", .{vmid});
+
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/stop", .{ node, vmid });
+    defer client.allocator.free(path);
+
     const response = try client.makeRequest(.POST, path, null);
     defer client.allocator.free(response);
+}
 
-    if (response.len == 0) {
-        try client.logger.err("Empty response when starting container {d}", .{vmid});
-        return error.EmptyResponse;
-    }
+pub fn deleteLXC(client: *Client, node: []const u8, vmid: u32) !void {
+    logger.info("Deleting container {d}", .{vmid});
 
-    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
-    defer parsed.deinit();
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}", .{ node, vmid });
+    defer client.allocator.free(path);
 
-    // Перевіряємо успішність операції
-    if (parsed.value.object.get("data")) |_| {
-        try client.logger.info("Container {d} started successfully", .{vmid});
-    } else {
-        try client.logger.err("Failed to start container {d}: {s}", .{ vmid, response });
-        return error.StartError;
-    }
+    const response = try client.makeRequest(.DELETE, path, null);
+    defer client.allocator.free(response);
 }
 
 // Додаємо функцію для перевірки стану контейнера
@@ -221,80 +239,4 @@ pub fn getLXCStatus(client: *Client, node: []const u8, vmid: u32) !types.LXCStat
 
     try client.logger.err("Invalid response format for container status {d}: {s}", .{ vmid, response });
     return error.InvalidResponse;
-}
-
-pub fn stopLXC(client: *Client, node: []const u8, vmid: u32, timeout: ?i64) !void {
-    // Формуємо параметри для зупинки
-    var query = std.ArrayList(u8).init(client.allocator);
-    defer query.deinit();
-
-    if (timeout) |t| {
-        try query.writer().print("timeout={d}", .{t});
-    }
-
-    const path = if (query.items.len > 0)
-        try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/stop?{s}", .{ node, vmid, query.items })
-    else
-        try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/stop", .{ node, vmid });
-    defer client.allocator.free(path);
-
-    try client.logger.debug("Stopping LXC container {d} on node {s} with timeout {?}", .{ vmid, node, timeout });
-    
-    const response = try client.makeRequest(.POST, path, null);
-    defer client.allocator.free(response);
-
-    if (response.len == 0) {
-        try client.logger.err("Empty response when stopping container {d}", .{vmid});
-        return error.EmptyResponse;
-    }
-
-    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
-    defer parsed.deinit();
-
-    // Перевіряємо успішність операції
-    if (parsed.value.object.get("data")) |_| {
-        try client.logger.info("Container {d} stop initiated successfully", .{vmid});
-
-        // Чекаємо поки контейнер зупиниться
-        var attempts: u8 = 0;
-        const max_attempts: u8 = 30; // 30 секунд максимум
-        while (attempts < max_attempts) : (attempts += 1) {
-            const current_status = try getLXCStatus(client, node, vmid);
-            if (current_status == .stopped) {
-                try client.logger.info("Container {d} stopped successfully", .{vmid});
-                return;
-            }
-            std.time.sleep(1 * std.time.ns_per_s);
-        }
-        try client.logger.warn("Container {d} stop timeout after {d} seconds", .{ vmid, max_attempts });
-    } else {
-        try client.logger.err("Failed to stop container {d}: {s}", .{ vmid, response });
-        return error.StopError;
-    }
-}
-
-pub fn deleteLXC(client: *Client, node: []const u8, vmid: u32) !void {
-    const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}", .{ node, vmid });
-    defer client.allocator.free(path);
-
-    try client.logger.debug("Deleting LXC container {d} on node {s}", .{ vmid, node });
-    
-    const response = try client.makeRequest(.DELETE, path, null);
-    defer client.allocator.free(response);
-
-    if (response.len == 0) {
-        try client.logger.err("Empty response when deleting container {d}", .{vmid});
-        return error.EmptyResponse;
-    }
-
-    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
-    defer parsed.deinit();
-
-    // Перевіряємо успішність операції
-    if (parsed.value.object.get("data")) |_| {
-        try client.logger.info("Container {d} deleted successfully", .{vmid});
-    } else {
-        try client.logger.err("Failed to delete container {d}: {s}", .{ vmid, response });
-        return error.DeleteError;
-    }
 } 

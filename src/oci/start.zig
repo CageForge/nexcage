@@ -6,8 +6,30 @@ const errors = @import("error");
 pub fn start(container_id: []const u8, proxmox_client: *proxmox.ProxmoxClient) !void {
     logger.info("Starting container {s}", .{container_id});
 
-    const vmid = try std.fmt.parseInt(u32, container_id, 10);
-    try proxmox_client.startContainer(.lxc, vmid);
+    // Отримуємо список контейнерів щоб знайти VMID за іменем
+    const containers = try proxmox_client.listLXCs();
+    defer {
+        for (containers) |*container| {
+            container.deinit(proxmox_client.client.allocator);
+        }
+        proxmox_client.client.allocator.free(containers);
+    }
+
+    // Шукаємо контейнер за іменем
+    var vmid: ?u32 = null;
+    for (containers) |container| {
+        if (std.mem.eql(u8, container.name, container_id)) {
+            vmid = container.vmid;
+            break;
+        }
+    }
+
+    if (vmid == null) {
+        logger.err("Container with name {s} not found", .{container_id});
+        return error.ContainerNotFound;
+    }
+
+    try proxmox_client.startContainer(.lxc, vmid.?);
 
     logger.info("Container {s} started successfully", .{container_id});
 } 

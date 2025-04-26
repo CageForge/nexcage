@@ -4,6 +4,9 @@ const Client = @import("../client.zig").Client;
 const json = std.json;
 const fmt = std.fmt;
 const ArrayList = std.ArrayList;
+const logger = std.log.scoped(.proxmox_lxc);
+const ProxmoxClient = @import("../proxmox.zig").ProxmoxClient;
+const proxmox = @import("../proxmox.zig");
 
 pub fn listLXCs(client: *Client) ![]types.LXCContainer {
     const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc", .{client.node});
@@ -102,4 +105,82 @@ fn parseNetworkConfig(allocator: std.mem.Allocator, net_str: []const u8) !types.
     }
 
     return net;
+}
+
+pub fn listLXC(client: *ProxmoxClient) ![]types.LXCContainer {
+    logger.info("Listing all containers", .{});
+
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc", .{client.node});
+    defer client.allocator.free(path);
+
+    const response = try client.makeRequest(.GET, path, null);
+    defer response.deinit();
+
+    var parsed = try json.parseFromSlice(json.Value, client.allocator, response.body, .{});
+    defer parsed.deinit();
+
+    if (!parsed.value.object.contains("data")) {
+        return error.InvalidResponse;
+    }
+
+    const data = parsed.value.object.get("data").?;
+    if (data != .array) {
+        return error.InvalidResponse;
+    }
+
+    var containers = std.ArrayList(types.LXCContainer).init(client.allocator);
+    errdefer containers.deinit();
+
+    for (data.array.items) |container| {
+        if (container != .object) continue;
+
+        const vmid = container.object.get("vmid") orelse continue;
+        if (vmid != .integer) continue;
+
+        const name = container.object.get("name") orelse continue;
+        if (name != .string) continue;
+
+        const status = container.object.get("status") orelse continue;
+        if (status != .string) continue;
+
+        const container_status = try types.ContainerStatus.fromString(status.string);
+
+        try containers.append(.{
+            .vmid = @intCast(vmid.integer),
+            .name = try client.allocator.dupe(u8, name.string),
+            .status = container_status,
+        });
+    }
+
+    return try containers.toOwnedSlice();
+}
+
+pub fn getLXCStatus(client: *ProxmoxClient, oci_container_id: []const u8) !types.ContainerStatus {
+    logger.info("Getting status for container {s}", .{oci_container_id});
+
+    const vmid = try client.getProxmoxVMID(oci_container_id);
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/current", .{ client.node, vmid });
+    defer client.allocator.free(path);
+
+    const response = try client.makeRequest(.GET, path, null);
+    defer response.deinit();
+
+    var parsed = try json.parseFromSlice(json.Value, client.allocator, response.body, .{});
+    defer parsed.deinit();
+
+    if (!parsed.value.object.contains("data")) {
+        return error.InvalidResponse;
+    }
+
+    const data = parsed.value.object.get("data").?;
+    if (data != .object) {
+        return error.InvalidResponse;
+    }
+
+    const status = data.object.get("status") orelse return error.InvalidResponse;
+    if (status != .string) {
+        return error.InvalidResponse;
+    }
+
+    return try types.ContainerStatus.fromString(status.string);
 } 
