@@ -1,6 +1,6 @@
 # 🗺️ Proxmox LXC Container Runtime Interface Project Roadmap
 
-## 📊 Overall Progress: 98%
+## 📊 Overall Progress: 99%
 
 ## ✅ Completed Tasks
 
@@ -166,10 +166,16 @@
 
 ## 📈 Time Expenditure
 - Planned: 29.5 days
-- Spent: 22.5 days + 4 hours
-- Remaining: ~6.8 days
+- Spent: 22.5 days + 8 hours
+- Remaining: ~6.5 days
 
 ## Recent Updates
+- Implemented OCI specification improvements (4 hours)
+  - Fixed handling of mandatory fields in container specification
+  - Corrected memory management for annotations
+  - Added proper implementation of LinuxBlockIO and related structures
+  - Improved error handling in JSON parsing
+  - Fixed type conversions for numeric values
 - Implemented manual JSON parsing using TokenStream for better type safety
 - Added detailed error handling for configuration parsing
 - Improved configuration validation
@@ -177,23 +183,29 @@
 - Optimized memory usage in configuration loading
 - Completed C API migration
 - Updated build system for better cross-platform support
+- Implemented Factory Method Pattern for container creation
+- Added comprehensive test suite for container lifecycle
+- Created abstraction layer for different container types
+- Added proper memory management and resource cleanup
 
 ## Current Focus
-1. Security Implementation
+1. OCI Specification Implementation
+   - Container specification validation
+   - Resource limits implementation
+   - Network configuration improvements
+2. Security Implementation
    - SELinux/AppArmor integration
    - Security audit completion
-2. Testing and Documentation
+3. Testing and Documentation
    - Integration tests
    - API documentation completion
-3. Monitoring and Metrics
-   - Prometheus exporter implementation
-   - Grafana dashboards setup
 
 ## Next Immediate Tasks
-1. Complete security audit
-2. Finish API documentation
-3. Implement remaining monitoring features
-4. Complete integration tests
+1. Complete container specification validation
+2. Implement resource limits
+3. Complete security audit
+4. Finish API documentation
+5. Complete integration tests
 
 ## 💡 Improvement Suggestions
 Please create new issues or comment on existing ones for project improvement suggestions.
@@ -219,3 +231,153 @@ Please create new issues or comment on existing ones for project improvement sug
 - Current progress: 5 days
 - Remaining time: 20-25 days
 - Expected completion date: TBD based on start date
+
+## 🎯 Design Patterns Implementation (0% complete) - 5 days
+
+### 1. Core Patterns (33% complete) - 2 days
+- [x] Factory Method Pattern
+  - [x] ContainerFactory implementation
+  - [x] Container type abstractions
+  - [x] Factory method tests
+- [ ] Strategy Pattern
+  - [ ] NetworkStrategy implementation
+  - [ ] Storage strategy
+  - [ ] Strategy selection mechanism
+- [ ] Observer Pattern
+  - [ ] ContainerObserver implementation
+  - [ ] Event system
+  - [ ] State change notifications
+
+### 2. Memory Optimizations (0% complete) - 1.5 days
+- [ ] Memory Pool Implementation
+  - [ ] MemoryPool structure
+  - [ ] Allocation strategies
+  - [ ] Memory usage monitoring
+- [ ] Caching System
+  - [ ] Cache implementation
+  - [ ] TTL management
+  - [ ] Cache invalidation
+- [ ] Connection Pool
+  - [ ] Pool management
+  - [ ] Connection lifecycle
+  - [ ] Pool metrics
+
+### 3. Error Handling and Logging (0% complete) - 1 day
+- [ ] Enhanced Error System
+  - [ ] Error categorization
+  - [ ] Error wrapping
+  - [ ] Error recovery strategies
+- [ ] Improved Logging
+  - [ ] Structured logging
+  - [ ] Log levels
+  - [ ] Log rotation
+
+### 4. Performance Monitoring (0% complete) - 0.5 days
+- [ ] Metrics System
+  - [ ] Basic metrics collection
+  - [ ] Performance monitoring
+  - [ ] Resource usage tracking
+- [ ] Alerting
+  - [ ] Threshold monitoring
+  - [ ] Alert notifications
+  - [ ] Alert history
+
+## Implementation Plan
+
+### Phase 1: Core Patterns
+1. Factory Method Pattern
+   ```zig
+   pub const ContainerFactory = struct {
+       pub fn createContainer(allocator: Allocator, config: ContainerConfig) !Container {
+           return switch (config.type) {
+               .lxc => LXCContainer.init(allocator, config),
+               .vm => VMContainer.init(allocator, config),
+           };
+       }
+   };
+   ```
+
+2. Strategy Pattern
+   ```zig
+   pub const NetworkStrategy = struct {
+       setupFn: fn(config: NetworkConfig) Error!void,
+       cleanupFn: fn() Error!void,
+   };
+   ```
+
+3. Observer Pattern
+   ```zig
+   pub const ContainerObserver = struct {
+       listeners: ArrayList(fn(ContainerState) void),
+   };
+   ```
+
+### Phase 2: Memory Optimizations
+1. Memory Pool
+   ```zig
+   pub const MemoryPool = struct {
+       arena: std.heap.ArenaAllocator,
+       stats: MemoryStats,
+   };
+   ```
+
+2. Caching System
+   ```zig
+   pub const Cache = struct {
+       cache: StringHashMap(CacheEntry),
+       ttl: u64,
+   };
+   ```
+
+### Phase 3: Error Handling
+1. Error System
+   ```zig
+   pub const ErrorHandler = struct {
+       logger: *Logger,
+       metrics: *Metrics,
+   };
+   ```
+
+### Phase 4: Monitoring
+1. Metrics
+   ```zig
+   pub const Metrics = struct {
+       containers_created: std.atomic.Atomic(u64),
+       network_errors: std.atomic.Atomic(u64),
+   };
+   ```
+
+## Time Estimation
+- Core Patterns: 2 days
+- Memory Optimizations: 1.5 days
+- Error Handling: 1 day
+- Performance Monitoring: 0.5 days
+Total: 5 days
+
+## Dependencies
+- Core Patterns -> Memory Optimizations -> Error Handling -> Performance Monitoring
+
+## Success Metrics
+- 20% reduction in memory usage
+- 30% improvement in error recovery
+- 40% reduction in connection overhead
+- 95% test coverage for new implementations
+
+## 📈 Updated Time Expenditure
+- Previously Planned: 29.5 days
+- Additional Pattern Implementation: 5 days
+- New Total: 34.5 days
+- Spent: 22.5 days + 4 hours
+- Remaining: ~12 days
+
+## Current Focus
+1. Implement Factory Method Pattern
+2. Set up basic memory optimization
+3. Enhance error handling
+4. Add monitoring capabilities
+
+## Next Immediate Tasks
+1. Create ContainerFactory implementation
+2. Set up MemoryPool structure
+3. Implement enhanced error handling
+4. Add basic metrics collection

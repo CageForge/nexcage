@@ -66,13 +66,32 @@ pub const Capabilities = struct {
     }
 };
 
+pub const RlimitType = enum {
+    RLIMIT_CPU,
+    RLIMIT_FSIZE,
+    RLIMIT_DATA,
+    RLIMIT_STACK,
+    RLIMIT_CORE,
+    RLIMIT_RSS,
+    RLIMIT_NPROC,
+    RLIMIT_NOFILE,
+    RLIMIT_MEMLOCK,
+    RLIMIT_AS,
+    RLIMIT_LOCKS,
+    RLIMIT_SIGPENDING,
+    RLIMIT_MSGQUEUE,
+    RLIMIT_NICE,
+    RLIMIT_RTPRIO,
+    RLIMIT_RTTIME,
+};
+
 pub const RLimit = struct {
-    type: []const u8,
+    type: RlimitType,
     soft: u64,
     hard: u64,
 
-    pub fn deinit(self: *const RLimit, allocator: Allocator) void {
-        allocator.free(self.type);
+    pub fn deinit(self: *const RLimit, _: Allocator) void {
+        _ = self;
     }
 };
 
@@ -179,13 +198,14 @@ pub const Spec = struct {
             hooks.deinit(allocator);
         }
         
-        if (self.annotations) |*annotations| {
+        if (self.annotations) |annotations| {
             var it = annotations.iterator();
             while (it.next()) |entry| {
                 allocator.free(entry.key_ptr.*);
                 allocator.free(entry.value_ptr.*);
             }
-            annotations.deinit();
+            var mutable_annotations = annotations;
+            mutable_annotations.deinit();
         }
         
         self.linux.deinit(allocator);
@@ -469,10 +489,67 @@ pub const LinuxHugepageLimit = struct {
 };
 
 pub const LinuxBlockIO = struct {
-    // Implementation needed
-    // This struct is mentioned in the deinit method of LinuxResources
-    // but its implementation is not provided in the original file or the code block
-    // Therefore, we'll keep the struct declaration but not implement the deinit method
+    weight: ?u16 = null,
+    leafWeight: ?u16 = null,
+    weightDevice: ?[]LinuxWeightDevice = null,
+    throttleReadBpsDevice: ?[]LinuxThrottleDevice = null,
+    throttleWriteBpsDevice: ?[]LinuxThrottleDevice = null,
+    throttleReadIOPSDevice: ?[]LinuxThrottleDevice = null,
+    throttleWriteIOPSDevice: ?[]LinuxThrottleDevice = null,
+
+    pub fn deinit(self: *const LinuxBlockIO, allocator: Allocator) void {
+        if (self.weightDevice) |devices| {
+            for (devices) |*device| {
+                device.deinit(allocator);
+            }
+            allocator.free(devices);
+        }
+        if (self.throttleReadBpsDevice) |devices| {
+            for (devices) |*device| {
+                device.deinit(allocator);
+            }
+            allocator.free(devices);
+        }
+        if (self.throttleWriteBpsDevice) |devices| {
+            for (devices) |*device| {
+                device.deinit(allocator);
+            }
+            allocator.free(devices);
+        }
+        if (self.throttleReadIOPSDevice) |devices| {
+            for (devices) |*device| {
+                device.deinit(allocator);
+            }
+            allocator.free(devices);
+        }
+        if (self.throttleWriteIOPSDevice) |devices| {
+            for (devices) |*device| {
+                device.deinit(allocator);
+            }
+            allocator.free(devices);
+        }
+    }
+};
+
+pub const LinuxWeightDevice = struct {
+    major: i64,
+    minor: i64,
+    weight: ?u16 = null,
+    leafWeight: ?u16 = null,
+
+    pub fn deinit(self: *const LinuxWeightDevice, _: Allocator) void {
+        _ = self;
+    }
+};
+
+pub const LinuxThrottleDevice = struct {
+    major: i64,
+    minor: i64,
+    rate: u64,
+
+    pub fn deinit(self: *const LinuxThrottleDevice, _: Allocator) void {
+        _ = self;
+    }
 };
 
 pub const Seccomp = struct {
