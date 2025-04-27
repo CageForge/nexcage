@@ -489,21 +489,26 @@ pub const VMContainer = struct {
     }
 };
 
+pub const Annotation = struct {
+    key: []const u8,
+    value: []const u8,
+};
+
 pub const ContainerState = struct {
     ociVersion: []const u8,
     id: []const u8,
     status: []const u8,
     pid: i32,
     bundle: []const u8,
-    annotations: ?[]struct { key: []const u8, value: []const u8 },
+    annotations: ?[]const Annotation = null,
 
-    pub fn deinit(self: *ContainerState, allocator: std.mem.Allocator) void {
-        allocator.free(self.ociVersion);
-        allocator.free(self.id);
-        allocator.free(self.status);
-        allocator.free(self.bundle);
+    pub fn deinit(self: *ContainerState, allocator: Allocator) void {
+        if (self.ociVersion.len > 0) allocator.free(self.ociVersion);
+        if (self.id.len > 0) allocator.free(self.id);
+        if (self.status.len > 0) allocator.free(self.status);
+        if (self.bundle.len > 0) allocator.free(self.bundle);
         if (self.annotations) |annotations| {
-            for (annotations) |annotation| {
+            for (annotations) |*annotation| {
                 allocator.free(annotation.key);
                 allocator.free(annotation.value);
             }

@@ -33,11 +33,14 @@ pub fn getState(proxmox_client: *proxmox.ProxmoxClient, oci_container_id: []cons
     for (containers) |container| {
         if (container.vmid == vmid) {
             const bundle = try std.fmt.allocPrint(proxmox_client.allocator, "/var/lib/lxc/{s}", .{oci_container_id});
-            const status = containerStatusToString(lxcStatusToContainerStatus(container.status));
+            const status = try proxmox_client.allocator.dupe(u8, containerStatusToString(lxcStatusToContainerStatus(container.status)));
+            const version = try proxmox_client.allocator.dupe(u8, "1.0.2");
+            const id = try proxmox_client.allocator.dupe(u8, oci_container_id);
+
             return types.ContainerState{
-                .ociVersion = "1.0.2",
-                .id = oci_container_id,
-                .status = try proxmox_client.allocator.dupe(u8, status),
+                .ociVersion = version,
+                .id = id,
+                .status = status,
                 .pid = 0, // TODO: отримати реальний PID
                 .bundle = bundle,
                 .annotations = null,

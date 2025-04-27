@@ -135,10 +135,30 @@ fn getContainerConfig(client: *Client, node: []const u8, vmid: u32) !types.LXCCo
         .cores = @intCast(config_data.get("cores").?.integer),
         .rootfs = try client.allocator.dupe(u8, config_data.get("rootfs").?.string),
         .net0 = net0,
-        .onboot = if (config_data.get("onboot")) |v| v.bool else false,
-        .protection = if (config_data.get("protection")) |v| v.bool else false,
-        .start = if (config_data.get("start")) |v| v.bool else true,
-        .template = if (config_data.get("template")) |v| v.bool else false,
+        .onboot = if (config_data.get("onboot")) |v| 
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => false,
+            } else false,
+        .protection = if (config_data.get("protection")) |v| 
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => false,
+            } else false,
+        .start = if (config_data.get("start")) |v| 
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => true,
+            } else true,
+        .template = if (config_data.get("template")) |v| 
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => false,
+            } else false,
         .unprivileged = if (config_data.get("unprivileged")) |v| 
             switch (v) {
                 .bool => |b| b,
@@ -199,7 +219,8 @@ pub fn stopLXC(client: *Client, node: []const u8, vmid: u32) !void {
     const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/stop", .{ node, vmid });
     defer client.allocator.free(path);
 
-    const response = try client.makeRequest(.POST, path, null);
+    const body = "{}";
+    const response = try client.makeRequest(.POST, path, body);
     defer client.allocator.free(response);
 }
 
