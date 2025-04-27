@@ -489,6 +489,11 @@ pub const VMContainer = struct {
     }
 };
 
+pub const Annotation = struct {
+    key: []const u8,
+    value: []const u8,
+};
+
 pub const ContainerState = struct {
     ociVersion: []const u8,
     id: []const u8,
