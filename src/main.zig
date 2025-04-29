@@ -31,6 +31,17 @@ var last_signal: ?c_int = null;
 var logger_instance: logger_mod.Logger = undefined;
 var proxmox_client: *ProxmoxClient = undefined;
 
+const RuntimeOptions = struct {
+    root: ?[]const u8 = null,
+    log: ?[]const u8 = null,
+    log_format: ?[]const u8 = null,
+    systemd_cgroup: bool = false,
+    bundle: ?[]const u8 = null,
+    pid_file: ?[]const u8 = null,
+    console_socket: ?[]const u8 = null,
+    debug: bool = false,
+};
+
 const Command = enum {
     create,
     start,
@@ -81,6 +92,60 @@ fn initLogger(allocator: Allocator, debug_mode: bool) !logger_mod.Logger {
     );
 }
 
+fn parseArgs(allocator: Allocator) !struct { Command, RuntimeOptions, ?[]const u8 } {
+    var args = try process.argsWithAllocator(allocator);
+    defer args.deinit();
+
+    // Пропускаємо ім'я програми
+    _ = args.skip();
+
+    var options = RuntimeOptions{};
+    var command: Command = .unknown;
+    var container_id: ?[]const u8 = null;
+
+    var arg = args.next();
+    while (arg) |current_arg| : (arg = args.next()) {
+        if (std.mem.startsWith(u8, current_arg, "--")) {
+            const option = current_arg[2..];
+            if (std.mem.eql(u8, option, "root")) {
+                if (args.next()) |value| {
+                    options.root = try allocator.dupe(u8, value);
+                }
+            } else if (std.mem.eql(u8, option, "log")) {
+                if (args.next()) |value| {
+                    options.log = try allocator.dupe(u8, value);
+                }
+            } else if (std.mem.eql(u8, option, "log-format")) {
+                if (args.next()) |value| {
+                    options.log_format = try allocator.dupe(u8, value);
+                }
+            } else if (std.mem.eql(u8, option, "systemd-cgroup")) {
+                options.systemd_cgroup = true;
+            } else if (std.mem.eql(u8, option, "bundle") or std.mem.eql(u8, option, "b")) {
+                if (args.next()) |value| {
+                    options.bundle = try allocator.dupe(u8, value);
+                }
+            } else if (std.mem.eql(u8, option, "pid-file")) {
+                if (args.next()) |value| {
+                    options.pid_file = try allocator.dupe(u8, value);
+                }
+            } else if (std.mem.eql(u8, option, "console-socket")) {
+                if (args.next()) |value| {
+                    options.console_socket = try allocator.dupe(u8, value);
+                }
+            } else if (std.mem.eql(u8, option, "debug")) {
+                options.debug = true;
+            }
+        } else if (command == .unknown) {
+            command = Command.fromString(current_arg);
+        } else if (container_id == null) {
+            container_id = try allocator.dupe(u8, current_arg);
+        }
+    }
+
+    return .{ command, options, container_id };
+}
+
 fn printHelp() !void {
     const help_text =
         \\proxmox-lxcri - Proxmox LXC OCI Runtime Interface
@@ -96,11 +161,15 @@ fn printHelp() !void {
         \\  delete     Delete a container
         \\
         \\Options:
-        \\  --bundle value, -b value     Path to the root of the bundle directory
-        \\  --pid-file value            File to write the process id to
-        \\  --console-socket value      Path to an AF_UNIX socket to send the console FD
-        \\  --debug                     Enable debug logging
-        \\  --help, -h                  Show help
+        \\  --root value              Directory for storing container state
+        \\  --log value               Set the log file path
+        \\  --log-format value        Set the log format (text or json)
+        \\  --systemd-cgroup          Use systemd cgroup manager
+        \\  --bundle value, -b value  Path to the root of the bundle directory
+        \\  --pid-file value          File to write the process id to
+        \\  --console-socket value    Path to an AF_UNIX socket to send the console FD
+        \\  --debug                   Enable debug logging
+        \\  --help, -h                Show help
         \\
         \\Example:
         \\  proxmox-lxcri create --bundle /path/to/bundle container-id
@@ -358,110 +427,79 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    const args = try process.argsAlloc(allocator);
-    defer process.argsFree(allocator, args);
+    const parsed = try parseArgs(allocator);
+    const command = parsed[0];
+    const options = parsed[1];
+    const container_id = parsed[2];
 
-    if (args.len < 2) {
-        try printHelp();
-        return;
-    }
-
-    var debug_mode = false;
-    for (args) |arg| {
-        if (std.mem.eql(u8, arg, "--debug")) {
-            debug_mode = true;
-            break;
-        }
-    }
-
-    // Initialize logger
-    logger_instance = try initLogger(allocator, debug_mode);
+    // Ініціалізуємо логер
+    logger_instance = try initLogger(allocator, options.debug);
     defer logger_instance.deinit();
 
-    // Читаємо конфігурацію
-    const config_path = try getConfigPath(allocator);
-    defer allocator.free(config_path);
+    // Якщо вказано --log, налаштовуємо файл логів
+    if (options.log) |log_path| {
+        const log_file = try fs.createFileAbsolute(log_path, .{ .truncate = false });
+        logger_instance.setWriter(log_file.writer());
+    }
 
-    // Load configuration
-    var cfg = try config.Config.init(allocator, &logger_instance);
+    // Якщо вказано --root, створюємо директорію
+    if (options.root) |root_path| {
+        try fs.makeDirAbsolute(root_path);
+    }
+
+    // Завантажуємо конфігурацію
+    const cfg = try loadConfig(allocator, "/etc/proxmox-lxcri/config.json");
     defer cfg.deinit();
-    try cfg.loadFromFile(config_path);
 
-    // Initialize Proxmox client
-    var client = try ProxmoxClient.init(
-        allocator,
-        cfg.proxmox.hosts[0],
-        cfg.proxmox.port,
-        cfg.proxmox.token,
-        cfg.proxmox.node,
-        &logger_instance,
-    );
-    proxmox_client = &client;
+    // Ініціалізуємо клієнт Proxmox
+    proxmox_client = try ProxmoxClient.init(allocator, cfg);
     defer proxmox_client.deinit();
 
-    // Parse command
-    const command = Command.fromString(args[1]);
-
-    // Execute command
     switch (command) {
-        .create => try executeCreate(allocator, args),
-        .start => {
-            if (args.len < 3) {
-                try std.io.getStdErr().writer().writeAll("Error: start requires a container-id argument\n");
-                return error.InvalidArguments;
+        .create => {
+            if (container_id == null or options.bundle == null) {
+                try logger_instance.err("create command requires --bundle and container-id", .{});
+                return 1;
             }
-            try executeStart(args[2]);
+            try oci_commands.create(allocator, container_id.?, options.bundle.?, proxmox_client, &logger_instance);
+        },
+        .start => {
+            if (container_id == null) {
+                try logger_instance.err("start command requires container-id", .{});
+                return 1;
+            }
+            try oci_commands.start(allocator, container_id.?, proxmox_client, &logger_instance);
         },
         .state => {
-            if (args.len < 3) {
-                try std.io.getStdErr().writer().writeAll("Error: state requires a container-id argument\n");
-                return error.InvalidArguments;
+            if (container_id == null) {
+                try logger_instance.err("state command requires container-id", .{});
+                return 1;
             }
-            try executeState(allocator, args[2]);
+            try oci_commands.state(allocator, container_id.?, proxmox_client, &logger_instance);
         },
         .kill => {
-            var container_id: ?[]const u8 = null;
-            var signal: ?[]const u8 = null;
-            
-            var i: usize = 2;
-            while (i < args.len) : (i += 1) {
-                const arg = args[i];
-                if (std.mem.eql(u8, arg, "--signal")) {
-                    i += 1;
-                    if (i >= args.len) {
-                        try std.io.getStdErr().writer().writeAll("Error: --signal requires a value\n");
-                        return error.InvalidArguments;
-                    }
-                    signal = args[i];
-                } else if (container_id == null) {
-                    container_id = arg;
-                } else {
-                    try std.io.getStdErr().writer().print("Error: unexpected argument '{s}'\n", .{arg});
-                    return error.InvalidArguments;
-                }
-            }
-
             if (container_id == null) {
-                try std.io.getStdErr().writer().writeAll("Error: kill requires a container-id argument\n");
-                return error.InvalidArguments;
+                try logger_instance.err("kill command requires container-id", .{});
+                return 1;
             }
-
-            try executeKill(container_id.?, signal);
+            try oci_commands.kill(allocator, container_id.?, proxmox_client, &logger_instance);
         },
         .delete => {
-            if (args.len < 3) {
-                try std.io.getStdErr().writer().writeAll("Error: delete requires a container-id argument\n");
-                return error.InvalidArguments;
+            if (container_id == null) {
+                try logger_instance.err("delete command requires container-id", .{});
+                return 1;
             }
-            try executeDelete(args[2]);
+            try oci_commands.delete(allocator, container_id.?, proxmox_client, &logger_instance);
         },
         .help => try printHelp(),
         .unknown => {
-            try std.io.getStdErr().writer().print("Error: unknown command '{s}'\n", .{args[1]});
+            try logger_instance.err("Unknown command", .{});
             try printHelp();
-            return error.UnknownCommand;
+            return 1;
         },
     }
+
+    return 0;
 }
 
 fn getConfigPath(allocator: Allocator) ![]const u8 {
