@@ -15,6 +15,12 @@ const User = types.User;
 const Capabilities = types.Capabilities;
 const spec = @import("spec.zig");
 const common = @import("common");
+const image = @import("image/manager.zig");
+const zfs = @import("../zfs/manager.zig");
+const lxc = @import("../lxc/container.zig");
+const hooks = @import("hooks.zig");
+const network = @import("../network/mod.zig");
+const NetworkValidator = @import("../network/validator.zig").NetworkValidator;
 
 pub const CreateOpts = struct {
     config_path: []const u8,
@@ -43,6 +49,401 @@ pub const CreateError = error{
     InvalidSpec,
     FileError,
     OutOfMemory,
+    ImageNotFound,
+    BundleNotFound,
+    ContainerExists,
+    ZFSError,
+    LXCError,
+    ProxmoxError,
+    ConfigError,
+    InvalidConfig,
+    InvalidRootfs,
+};
+
+pub const CreateOptions = struct {
+    container_id: []const u8,
+    bundle_path: []const u8,
+    image_name: []const u8,
+    image_tag: []const u8,
+    config: ?types.ImageConfig = null,
+    zfs_dataset: []const u8,
+    proxmox_node: []const u8,
+    proxmox_storage: []const u8,
+};
+
+pub const Create = struct {
+    allocator: std.mem.Allocator,
+    image_manager: *image.ImageManager,
+    zfs_manager: *zfs.ZFSManager,
+    lxc_manager: *lxc.LXCManager,
+    proxmox_client: *proxmox.ProxmoxClient,
+    options: CreateOptions,
+    hook_executor: *hooks.HookExecutor,
+    network_validator: NetworkValidator,
+    
+    const Self = @This();
+    
+    pub fn init(
+        allocator: std.mem.Allocator,
+        image_manager: *image.ImageManager,
+        zfs_manager: *zfs.ZFSManager,
+        lxc_manager: *lxc.LXCManager,
+        proxmox_client: *proxmox.ProxmoxClient,
+        options: CreateOptions,
+    ) !*Self {
+        const self = try allocator.create(Self);
+        self.* = .{
+            .allocator = allocator,
+            .image_manager = image_manager,
+            .zfs_manager = zfs_manager,
+            .lxc_manager = lxc_manager,
+            .proxmox_client = proxmox_client,
+            .options = options,
+            .hook_executor = try hooks.HookExecutor.init(allocator),
+            .network_validator = NetworkValidator.init(allocator),
+        };
+        return self;
+    }
+    
+    pub fn deinit(self: *Self) void {
+        self.hook_executor.deinit();
+        self.allocator.destroy(self);
+    }
+    
+    pub fn create(self: *Self) !void {
+        logger.info("Creating container {s}", .{self.options.container_id});
+
+        // Валідуємо bundle
+        try self.validateBundle();
+
+        // Перевіряємо чи контейнер вже існує
+        if (try self.lxc_manager.containerExists(self.options.container_id)) {
+            logger.err("Container already exists: {s}", .{self.options.container_id});
+            return CreateError.ContainerExists;
+        }
+
+        // Створюємо ZFS dataset
+        try self.createZfsDataset();
+
+        // Налаштовуємо LXC контейнер
+        try self.configureLxcContainer();
+
+        // Виконуємо prestart хуки
+        if (self.options.spec.hooks) |container_hooks| {
+            if (container_hooks.prestart) |prestart| {
+                try self.hook_executor.executeHooks(prestart, .{
+                    .container_id = self.options.container_id,
+                    .bundle = self.options.bundle_path,
+                    .state = "creating",
+                });
+            }
+        }
+
+        // Запускаємо контейнер
+        try self.startContainer();
+
+        // Виконуємо poststart хуки
+        if (self.options.spec.hooks) |container_hooks| {
+            if (container_hooks.poststart) |poststart| {
+                try self.hook_executor.executeHooks(poststart, .{
+                    .container_id = self.options.container_id,
+                    .bundle = self.options.bundle_path,
+                    .state = "running",
+                });
+            }
+        }
+
+        logger.info("Container {s} created successfully", .{self.options.container_id});
+    }
+    
+    fn validateNetworkConfig(self: *Self) !void {
+        const net_config = self.options.spec.linux.?.network orelse return;
+
+        // Валідуємо інтерфейси
+        for (net_config.interfaces) |iface| {
+            try self.network_validator.validateInterface(iface.name);
+            
+            if (iface.bridge) |bridge| {
+                try self.network_validator.validateBridge(bridge);
+            }
+
+            if (iface.vlan) |vlan| {
+                try self.network_validator.validateVLAN(vlan);
+            }
+
+            if (iface.mtu) |mtu| {
+                try self.network_validator.validateMTU(mtu);
+            }
+
+            if (iface.rate) |rate| {
+                try self.network_validator.validateRate(rate);
+            }
+
+            // Валідуємо IP налаштування
+            if (iface.ip) |ip| {
+                try self.network_validator.validateIPRange(ip.address, ip.netmask);
+                
+                if (ip.gateway) |gateway| {
+                    try self.network_validator.validateGateway(gateway);
+                }
+            }
+        }
+
+        // Валідуємо DNS налаштування
+        if (net_config.dns) |dns| {
+            if (dns.servers) |servers| {
+                try self.network_validator.validateDNS(servers);
+            }
+        }
+    }
+    
+    fn validateBundle(self: *Self) !void {
+        logger.info("Validating bundle at {s}", .{self.options.bundle_path});
+        
+        // Перевіряємо чи існує bundle директорія
+        const bundle_dir = std.fs.openDirAbsolute(self.options.bundle_path, .{}) catch {
+            logger.err("Bundle directory not found: {s}", .{self.options.bundle_path});
+            return CreateError.BundleNotFound;
+        };
+        defer bundle_dir.close();
+
+        // Перевіряємо наявність config.json
+        const config_path = try std.fs.path.join(
+            self.allocator,
+            &[_][]const u8{ self.options.bundle_path, "config.json" },
+        );
+        defer self.allocator.free(config_path);
+
+        const config_file = std.fs.openFileAbsolute(config_path, .{}) catch {
+            logger.err("Config file not found: {s}", .{config_path});
+            return CreateError.InvalidConfig;
+        };
+        defer config_file.close();
+
+        // Перевіряємо наявність rootfs
+        const rootfs_path = try std.fs.path.join(
+            self.allocator,
+            &[_][]const u8{ self.options.bundle_path, "rootfs" },
+        );
+        defer self.allocator.free(rootfs_path);
+
+        const rootfs_dir = std.fs.openDirAbsolute(rootfs_path, .{}) catch {
+            logger.err("Rootfs directory not found: {s}", .{rootfs_path});
+            return CreateError.InvalidRootfs;
+        };
+        defer rootfs_dir.close();
+    }
+
+    fn createZfsDataset(self: *Self) !void {
+        logger.info("Creating ZFS dataset for container {s}", .{self.options.container_id});
+
+        const dataset_path = try std.fmt.allocPrint(
+            self.allocator,
+            "{s}/{s}",
+            .{ self.options.zfs_dataset, self.options.container_id },
+        );
+        defer self.allocator.free(dataset_path);
+
+        // Створюємо ZFS dataset
+        try self.zfs_manager.createDataset(dataset_path);
+
+        // Копіюємо rootfs в dataset
+        const rootfs_path = try std.fs.path.join(
+            self.allocator,
+            &[_][]const u8{ self.options.bundle_path, "rootfs" },
+        );
+        defer self.allocator.free(rootfs_path);
+
+        try self.zfs_manager.copyToDataset(rootfs_path, dataset_path);
+    }
+
+    fn configureLxcContainer(self: *Self) !void {
+        logger.info("Configuring LXC container {s}", .{self.options.container_id});
+
+        // Створюємо базову конфігурацію
+        var config = try self.lxc_manager.createConfig();
+        defer config.deinit();
+
+        // Встановлюємо основні параметри
+        try config.setName(self.options.container_id);
+        try config.setRootfs(try std.fmt.allocPrint(
+            self.allocator,
+            "zfs:{s}/{s}",
+            .{ self.options.zfs_dataset, self.options.container_id },
+        ));
+
+        // Встановлюємо hostname з OCI spec
+        if (self.options.spec.hostname) |hostname| {
+            try config.setHostname(hostname);
+        }
+
+        // Налаштовуємо процес
+        if (self.options.spec.process) |process| {
+            // Встановлюємо environment змінні
+            if (process.env) |env| {
+                for (env) |env_var| {
+                    try config.addEnvironmentVariable(env_var);
+                }
+            }
+
+            // Встановлюємо робочу директорію
+            if (process.cwd) |cwd| {
+                try config.setWorkingDirectory(cwd);
+            }
+
+            // Налаштовуємо користувача
+            if (process.user) |user| {
+                try config.setUID(user.uid);
+                try config.setGID(user.gid);
+                
+                if (user.additionalGids) |additional_gids| {
+                    try config.setAdditionalGids(additional_gids);
+                }
+            }
+
+            // Налаштовуємо capabilities
+            if (process.capabilities) |caps| {
+                if (caps.bounding) |bounding| {
+                    try config.setBoundingCapabilities(bounding);
+                }
+                if (caps.effective) |effective| {
+                    try config.setEffectiveCapabilities(effective);
+                }
+            }
+        }
+
+        // Налаштовуємо мережу
+        if (self.options.spec.linux) |linux| {
+            if (linux.network) |net| {
+                for (net.interfaces) |iface| {
+                    try config.addNetworkInterface(.{
+                        .name = iface.name,
+                        .type = iface.type,
+                        .bridge = iface.bridge,
+                        .vlan = iface.vlan,
+                        .mtu = iface.mtu,
+                        .rate = iface.rate,
+                        .ip = if (iface.ip) |ip| .{
+                            .address = ip.address,
+                            .netmask = ip.netmask,
+                            .gateway = ip.gateway,
+                        } else null,
+                    });
+                }
+
+                // Налаштовуємо DNS
+                if (net.dns) |dns| {
+                    if (dns.servers) |servers| {
+                        try config.setDNSServers(servers);
+                    }
+                    if (dns.search) |search| {
+                        try config.setDNSSearchDomains(search);
+                    }
+                }
+            }
+
+            // Налаштовуємо ресурси
+            if (linux.resources) |res| {
+                if (res.memory) |memory| {
+                    if (memory.limit) |limit| {
+                        try config.setMemoryLimit(limit);
+                    }
+                    if (memory.reservation) |reservation| {
+                        try config.setMemoryReservation(reservation);
+                    }
+                    if (memory.swap) |swap| {
+                        try config.setMemorySwap(swap);
+                    }
+                }
+
+                if (res.cpu) |cpu| {
+                    if (cpu.shares) |shares| {
+                        try config.setCpuShares(shares);
+                    }
+                    if (cpu.quota) |quota| {
+                        try config.setCpuQuota(quota);
+                    }
+                    if (cpu.period) |period| {
+                        try config.setCpuPeriod(period);
+                    }
+                    if (cpu.cpus) |cpus| {
+                        try config.setCpus(cpus);
+                    }
+                    if (cpu.mems) |mems| {
+                        try config.setMems(mems);
+                    }
+                }
+
+                // Налаштовуємо блочні пристрої
+                if (res.blockio) |blockio| {
+                    if (blockio.weight) |weight| {
+                        try config.setBlockIOWeight(weight);
+                    }
+                }
+
+                // Налаштовуємо hugepages
+                if (res.hugepageLimits) |hugepages| {
+                    for (hugepages) |hp| {
+                        try config.setHugepageLimit(hp.pageSize, hp.limit);
+                    }
+                }
+            }
+
+            // Налаштовуємо namespaces
+            if (linux.namespaces) |namespaces| {
+                for (namespaces) |ns| {
+                    try config.addNamespace(ns.type, ns.path);
+                }
+            }
+
+            // Налаштовуємо devices
+            if (linux.devices) |devices| {
+                for (devices) |dev| {
+                    try config.addDevice(.{
+                        .path = dev.path,
+                        .type = dev.type,
+                        .major = dev.major,
+                        .minor = dev.minor,
+                        .fileMode = dev.fileMode,
+                        .uid = dev.uid,
+                        .gid = dev.gid,
+                    });
+                }
+            }
+        }
+
+        // Налаштовуємо монтування
+        for (self.options.spec.mounts) |mount| {
+            try config.addMount(.{
+                .source = mount.source,
+                .target = mount.destination,
+                .type = mount.type,
+                .options = mount.options,
+            });
+        }
+
+        // Зберігаємо конфігурацію
+        try self.lxc_manager.saveConfig(self.options.container_id, config);
+    }
+
+    fn startContainer(self: *Self) !void {
+        logger.info("Starting container {s}", .{self.options.container_id});
+
+        // Створюємо контейнер через Proxmox API
+        try self.proxmox_client.createContainer(
+            self.options.proxmox_node,
+            self.options.container_id,
+            .{
+                .ostemplate = try std.fmt.allocPrint(
+                    self.allocator,
+                    "zfs:{s}/{s}",
+                    .{ self.options.zfs_dataset, self.options.container_id },
+                ),
+                .storage = self.options.proxmox_storage,
+                .start = true,
+            },
+        );
+    }
 };
 
 pub fn create(

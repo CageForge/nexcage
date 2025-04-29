@@ -1,6 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 const hooks = @import("oci").hooks;
+const types = @import("oci").types;
 
 test "Hook creation and execution" {
     const allocator = testing.allocator;
@@ -121,4 +122,79 @@ test "Container hooks integration" {
     // Перевіряємо виконання хуків при життєвому циклі контейнера
     try container.start();  // Має виконати prestart та poststart хуки
     try container.stop();   // Має виконати poststop хуки
-}; 
+}
+
+test "HookExecutor initialization and execution" {
+    const allocator = testing.allocator;
+    
+    var executor = try hooks.HookExecutor.init(allocator);
+    defer executor.deinit();
+    
+    // Створюємо тестовий хук
+    const test_hook = types.Hook{
+        .path = "/bin/echo",
+        .args = &[_][]const u8{"test"},
+        .env = &[_][]const u8{"TEST=1"},
+        .timeout = 5,
+    };
+    
+    // Додаємо хук до prestart
+    if (executor.hooks.prestart == null) {
+        executor.hooks.prestart = &[_]types.Hook{test_hook};
+    }
+    
+    // Виконуємо prestart хуки
+    try executor.executePrestart("test-container");
+}
+
+test "HookExecutor error handling" {
+    const allocator = testing.allocator;
+    
+    var executor = try hooks.HookExecutor.init(allocator);
+    defer executor.deinit();
+    
+    // Створюємо хук з неіснуючим шляхом
+    const invalid_hook = types.Hook{
+        .path = "/nonexistent/binary",
+        .args = null,
+        .env = null,
+        .timeout = null,
+    };
+    
+    // Додаємо хук до poststart
+    if (executor.hooks.poststart == null) {
+        executor.hooks.poststart = &[_]types.Hook{invalid_hook};
+    }
+    
+    // Перевіряємо, що виконання призводить до помилки
+    try testing.expectError(
+        hooks.HookError.ExecutionFailed,
+        executor.executePoststart("test-container"),
+    );
+}
+
+test "HookExecutor timeout handling" {
+    const allocator = testing.allocator;
+    
+    var executor = try hooks.HookExecutor.init(allocator);
+    defer executor.deinit();
+    
+    // Створюємо хук, який буде виконуватись довше за таймаут
+    const slow_hook = types.Hook{
+        .path = "/bin/sleep",
+        .args = &[_][]const u8{"2"},
+        .env = null,
+        .timeout = 1,
+    };
+    
+    // Додаємо хук до poststop
+    if (executor.hooks.poststop == null) {
+        executor.hooks.poststop = &[_]types.Hook{slow_hook};
+    }
+    
+    // Перевіряємо, що виконання призводить до помилки таймауту
+    try testing.expectError(
+        hooks.HookError.TimeoutExceeded,
+        executor.executePoststop("test-container"),
+    );
+} 

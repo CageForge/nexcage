@@ -64,11 +64,16 @@ pub const ProxmoxClient = struct {
         errdefer allocator.free(node_copy);
 
         const hosts = try allocator.alloc([]const u8, 1);
-        errdefer allocator.free(hosts);
+        errdefer {
+            allocator.free(hosts);
+        }
         hosts[0] = host_copy;
 
         const client = try Client.init(allocator, hosts, token_copy, log_instance, port, node_copy);
-        errdefer client.deinit();
+        errdefer {
+            client.deinit();
+            allocator.free(hosts);
+        }
 
         return ProxmoxClient{
             .allocator = allocator,
@@ -86,6 +91,7 @@ pub const ProxmoxClient = struct {
         self.allocator.free(self.host);
         self.allocator.free(self.token);
         self.allocator.free(self.node);
+        self.allocator.free(self.client.hosts);
     }
 
     pub fn getProxmoxVMID(self: *ProxmoxClient, oci_container_id: []const u8) !u32 {
