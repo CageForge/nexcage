@@ -1,6 +1,6 @@
 # 🗺️ Proxmox LXC Container Runtime Interface Project Roadmap
 
-## 📊 Overall Progress: 99.5%
+## 📊 Overall Progress: 99.8%
 
 ## ✅ Completed Tasks
 
@@ -165,88 +165,99 @@
 7. Finalize build system optimization
 
 ## 📈 Time Expenditure
-- Planned: 29.5 days
-- Spent: 23 days + 3 hours
-- Remaining: ~6 days
+- Planned: 39 days
+- Spent: 24 days + 0 hours
+- Remaining: ~14.5 days
 
 ## Recent Updates
-- Fixed container start functionality (2 hours)
-  - Corrected handling of unprivileged field in container configuration
-  - Added support for both boolean and integer values for unprivileged setting
-  - Improved error handling in container configuration parsing
+- Implemented OCI create command functionality (6 hours)
+  - Added comprehensive OCI spec validation
+  - Implemented bundle validation
+  - Added ZFS dataset creation and management
+  - Implemented LXC configuration generation from OCI spec
+  - Added proper hooks execution with context
+  - Enhanced error handling and resource cleanup
+- Improved hooks implementation (3 hours)
+  - Added HookContext structure for better hook execution
+  - Implemented proper environment variables handling
+  - Added timeout management
+  - Enhanced error handling and logging
+  - Added comprehensive test suite
+- Fixed memory management issues (2 hours)
+  - Corrected allocator handling in ContainerState
+  - Fixed memory leaks in hooks execution
+  - Improved resource cleanup in error cases
   - Enhanced type safety in configuration management
-- Implemented OCI specification improvements (4 hours)
-  - Fixed handling of mandatory fields in container specification
-  - Corrected memory management for annotations
-  - Added proper implementation of LinuxBlockIO and related structures
-  - Improved error handling in JSON parsing
-  - Fixed type conversions for numeric values
-- Implemented manual JSON parsing using TokenStream for better type safety
-- Added detailed error handling for configuration parsing
-- Improved configuration validation
-- Implemented unknown field skipping for better compatibility
-- Optimized memory usage in configuration loading
-- Completed C API migration
-- Updated build system for better cross-platform support
-- Implemented Factory Method Pattern for container creation
-- Added comprehensive test suite for container lifecycle
-- Created abstraction layer for different container types
-- Added proper memory management and resource cleanup
-- Refactored container creation logic (3 hours)
-  - Moved container creation logic from OCI layer to Proxmox client
-  - Implemented createContainer method in ProxmoxClient
-  - Simplified container creation flow
-  - Improved error handling and resource cleanup
-  - Updated container configuration management
-  - Standardized container creation interface
+- Refactored network configuration (2 hours)
+  - Added comprehensive network validation
+  - Implemented proper IP and MAC address validation
+  - Enhanced DNS configuration support
+  - Improved error handling for network setup
 
-## Current Focus
-1. Container Runtime Implementation
-   - Container start functionality
-   - Configuration parsing improvements
-   - Error handling enhancements
-2. OCI Specification Implementation
-   - Container specification validation
-   - Resource limits implementation
-   - Network configuration improvements
-3. Security Implementation
-   - SELinux/AppArmor integration
-   - Security audit completion
-4. Testing and Documentation
-   - Integration tests
-   - API documentation completion
+### 12. OCI Runtime Specification Compliance (0% complete) - 4 days
+- [ ] Hooks Implementation (1 day)
+  - [ ] createRuntime hooks
+  - [ ] createContainer hooks
+  - [ ] startContainer hooks
+  - [ ] poststart hooks
+  - [ ] poststop hooks
+  - [ ] Hook error handling and timeout support
 
-## Next Immediate Tasks
-1. Complete container specification validation
-2. Implement resource limits
-3. Complete security audit
-4. Finish API documentation
-5. Complete integration tests
+- [ ] Extended Configuration Support (1.5 days)
+  - [ ] Complete annotations support
+  - [ ] Extended network configuration
+  - [ ] Resource limits (cgroups)
+  - [ ] Volume mounting with all options
+  - [ ] User namespace support
+  - [ ] Time namespace support
 
-## 💡 Improvement Suggestions
-Please create new issues or comment on existing ones for project improvement suggestions.
+- [ ] Security Enhancements (1 day)
+  - [ ] Seccomp profiles implementation
+  - [ ] AppArmor integration
+  - [ ] SELinux integration
+  - [ ] Extended capabilities support
 
-## Time Estimation
-### Completed Tasks
-- Network Subsystem: 3 days (16 hours)
-- Security Implementation: 2 days (10 hours)
+- [ ] Testing and Documentation (0.5 days)
+  - [ ] OCI compliance tests
+  - [ ] Hook system documentation
+  - [ ] Security features documentation
+  - [ ] Configuration examples
 
-### Remaining Tasks
-- Container System: ~7 days
-- Proxmox Integration: ~5 days
-- Testing: ~3 days
+### 13. OCI Image Specification Implementation (0% complete) - 3 days
+- [ ] Image Format Support (1 day)
+  - [ ] OCI Image manifest підтримка
+  - [ ] Image configuration файли
+  - [ ] Layer формат та стиснення
+  - [ ] Image індекси
 
-### Overall Progress
-- Completed: ~20%
-- Remaining: ~80%
-- Time spent: 5 days
-- Expected completion time: 20-25 days
+- [ ] OverlayFS Implementation (1.5 days)
+  - [ ] Базова структура для overlay шарів
+  - [ ] Управління overlay шарами
+  - [ ] Оптимізація використання простору
+  - [ ] Реалізація COW (Copy-on-Write)
+  - [ ] Інтеграція з існуючою підсистемою
+  - [ ] Garbage collection для невикористовуваних шарів
+  - [ ] Кешування та оптимізація доступу до шарів
+  - [ ] Міграція даних між пулами
 
-### Total Project Estimation
-- Total estimated time: 25-30 days
-- Current progress: 5 days
-- Remaining time: 20-25 days
-- Expected completion date: TBD based on start date
+- [ ] Registry Integration (1 day)
+  - [ ] Docker Hub підтримка
+  - [ ] Private registry підтримка
+  - [ ] Authentication та авторизація
+  - [ ] SSL/TLS підтримка
+
+- [ ] Image Operations (0.5 days)
+  - [ ] Pull операції
+  - [ ] Push операції
+  - [ ] Image видалення
+  - [ ] Layer кешування
+  - [ ] Garbage collection
+
+- [ ] Testing and Documentation (0.5 days)
+  - [ ] Unit тести для image операцій
+  - [ ] Integration тести з registry
+  - [ ] Performance тести для image operations
+  - [ ] Документація по роботі з images
 
 ## 🎯 Design Patterns Implementation (0% complete) - 5 days
 
@@ -380,20 +391,54 @@ Total: 5 days
 - 95% test coverage for new implementations
 
 ## 📈 Updated Time Expenditure
-- Previously Planned: 29.5 days
+- Previously Planned: 39 days
 - Additional Pattern Implementation: 5 days
-- New Total: 34.5 days
+- New Total: 44 days
 - Spent: 22.5 days + 4 hours
-- Remaining: ~12 days
+- Remaining: ~21.5 days
 
 ## Current Focus
-1. Implement Factory Method Pattern
-2. Set up basic memory optimization
-3. Enhance error handling
-4. Add monitoring capabilities
+
+### Priority 1 - Critical Path (1.5 weeks)
+1. OCI Image Specification Implementation
+   - Image manifest та configuration (2 days)
+   - Layer формат та базові операції (1-2 days)
+   - Інтеграція з create командою (1 day)
+
+2. OverlayFS Base Implementation
+   - Базова структура для overlay шарів (1 day)
+   - Управління overlay шарами (1 day)
+   - Інтеграція з Image Specification (1 day)
+
+3. OCI Create Command Integration
+   - Розгортання образу через OverlayFS (1 day)
+   - Базова конфігурація контейнера (1 day)
+   - Integration тести (0.5 day)
+
+### Priority 2 - Core Features (1 week)
+1. Extended OCI Runtime Features
+   - Hooks Implementation
+   - Resource limits
+   - Volume mounting
+
+2. Advanced OverlayFS Features
+   - Оптимізація простору
+   - Garbage collection
+   - Performance оптимізації
+
+### Priority 3 - Additional Features (1 week)
+1. Registry Integration
+   - Docker Hub підтримка
+   - Authentication
+   - Pull/Push операції
+
+2. Security Features
+   - Seccomp profiles
+   - AppArmor інтеграція
+   - SELinux підтримка
 
 ## Next Immediate Tasks
-1. Create ContainerFactory implementation
-2. Set up MemoryPool structure
-3. Implement enhanced error handling
-4. Add basic metrics collection
+1. Створення базової структури для OCI Image Specification
+2. Імплементація підтримки Image manifest
+3. Розробка базового LayerFS на ZFS
+4. Інтеграція з create командою
