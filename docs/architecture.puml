@@ -1,49 +1,74 @@
-@startuml Proxmox LXCRI Architecture
+@startuml
 
-' Style definitions
-skinparam componentStyle uml2
-skinparam component {
-    BackgroundColor LightBlue
-    BorderColor DarkBlue
-}
+!theme plain
+skinparam backgroundColor transparent
+skinparam componentStyle rectangle
+
+title Proxmox LXCRI Architecture
+
+' Actors and external systems
+actor "User" as user
+component "containerd" as containerd
+component "Proxmox API" as proxmox
+database "ZFS Storage" as zfs
+component "LXC/QEMU" as runtime
 
 ' Main components
-package "Kubernetes" {
-    [kubelet] as Kubelet
-    [CRI API] as CRIAPI
-}
-
-package "Proxmox LXCRI" {
-    [LXCRI Service] as LXCRIService
-    [Pod Manager] as PodManager
-    [Container Manager] as ContainerManager
-    [Proxmox API Client] as ProxmoxClient
-}
-
-package "Proxmox VE" {
-    [Proxmox API] as ProxmoxAPI
-    [LXC Containers] as LXCContainers
+package "proxmox-lxcri" {
+    component "OCI Runtime" as oci {
+        component "State Manager" as state
+        component "Hook System" as hooks
+        component "Bundle Validator" as validator
+    }
+    
+    component "Storage Manager" as storage {
+        component "Dataset Manager" as dataset
+        component "Layer Manager" as layer
+        component "Image Manager" as image
+    }
+    
+    component "Network Manager" as network {
+        component "VLAN Manager" as vlan
+        component "Bridge Manager" as bridge
+        component "IP Manager" as ip
+    }
+    
+    component "Security Module" as security {
+        component "AppArmor/SELinux" as lsm
+        component "Seccomp" as seccomp
+        component "Capabilities" as caps
+    }
 }
 
 ' Relationships
-Kubelet --> CRIAPI : gRPC
-CRIAPI --> LXCRIService : Implements
-LXCRIService --> PodManager : Manages
-LXCRIService --> ContainerManager : Manages
-PodManager --> ProxmoxClient : Uses
-ContainerManager --> ProxmoxClient : Uses
-ProxmoxClient --> ProxmoxAPI : REST API
-ProxmoxAPI --> LXCContainers : Manages
+user --> containerd : commands
+containerd --> oci : OCI spec
+oci --> storage : manage storage
+oci --> network : configure network
+oci --> security : enforce security
+storage --> zfs : manage datasets
+network --> proxmox : configure networking
+security --> runtime : apply profiles
+proxmox --> runtime : manage containers/VMs
+storage ..> proxmox : storage operations
 
-' Notes
-note right of LXCRIService
-  Implements CRI interface
-  for Proxmox LXC
+' Command flow
+note right of oci
+  Commands:
+  - create
+  - start
+  - state
+  - kill
+  - delete
 end note
 
-note right of ProxmoxClient
-  Handles authentication
-  and API communication
+' State management
+note right of state
+  State files:
+  /run/proxmox-lxcri/
+    containers/<id>/
+      - state.json
+      - config.json
 end note
 
 @enduml 
