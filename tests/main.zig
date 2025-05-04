@@ -2,14 +2,22 @@ const std = @import("std");
 
 comptime {
     _ = @import("test_hooks.zig");
+    _ = @import("test_api_and_connection.zig");
     _ = @import("test_lxc.zig");
-    _ = @import("test_api.zig");
-    _ = @import("test_connection.zig");
+    _ = @import("test_network.zig");
+    _ = @import("test_storage.zig");
     _ = @import("test_container.zig");
     _ = @import("test_container_state.zig");
     _ = @import("test_oci_spec.zig");
-    _ = @import("test_workflow.zig");
-    _ = @import("test_storage.zig");
+    
+    // Security tests
+    _ = @import("security/test_security.zig");
+    
+    // Integration tests
+    _ = @import("integration/test_concurrency.zig");
+    
+    // OCI tests
+    _ = @import("oci/mod.zig");
 }
 
 test {

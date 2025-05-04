@@ -2,7 +2,188 @@
 
 ## Overview
 
-Proxmox LXCRI is an OCI-compatible runtime that enables running containers and VMs as pods using Proxmox VE infrastructure. This document describes the architecture and command flow of the runtime implementation.
+Proxmox LXCRI (LXC Runtime Interface) is a container runtime interface that enables running OCI-compliant containers on Proxmox VE using LXC. The system is designed to work with Kubernetes through containerd and provides a complete solution for container management, storage, networking, and security.
+
+## System Context
+
+The system interacts with several external actors:
+
+1. **Kubernetes**: Manages container lifecycle through CRI
+2. **System Administrator**: Configures and manages the runtime
+3. **Developer**: Develops and maintains the system
+
+The system also interacts with Proxmox VE for:
+- Container runtime (LXC)
+- Storage management (ZFS)
+- Network configuration
+
+## Container Architecture
+
+The system consists of several main containers:
+
+1. **containerd**:
+   - CRI Plugin: Implements Kubernetes Container Runtime Interface
+   - OCI Runtime: Manages OCI-compliant containers
+
+2. **Proxmox LXCRI**:
+   - Runtime Service: Manages container lifecycle
+   - Storage Service: Handles container storage
+   - Network Service: Manages container networking
+   - Security Service: Enforces security policies
+
+3. **Proxmox VE**:
+   - LXC Runtime: Executes containers
+   - ZFS Storage: Provides storage backend
+   - Network Stack: Handles networking
+
+## Component Architecture
+
+### Runtime Service
+
+1. **State Manager**:
+   - Container State: Tracks container lifecycle
+   - State Storage: Persists container state
+
+2. **Hook System**:
+   - Hook Executor: Executes container hooks
+   - Hook Context: Provides hook execution context
+
+3. **Bundle Validator**:
+   - Spec Validator: Validates OCI spec
+   - Config Validator: Validates container config
+
+### Storage Service
+
+1. **Dataset Manager**:
+   - ZFS Operations: Manages ZFS datasets
+   - Dataset Config: Handles dataset configuration
+
+2. **Layer Manager**:
+   - Layer Storage: Manages container layers
+   - Layer Operations: Handles layer operations
+
+3. **Image Manager**:
+   - Image Storage: Manages container images
+   - Image Operations: Handles image operations
+
+### Network Service
+
+1. **VLAN Manager**:
+   - VLAN Config: Manages VLAN configuration
+   - VLAN Operations: Handles VLAN operations
+
+2. **Bridge Manager**:
+   - Bridge Config: Manages bridge configuration
+   - Bridge Operations: Handles bridge operations
+
+3. **IP Manager**:
+   - IP Config: Manages IP configuration
+   - IP Operations: Handles IP operations
+
+### Security Service
+
+1. **AppArmor/SELinux**:
+   - Profile Manager: Manages security profiles
+   - Policy Enforcer: Enforces security policies
+
+2. **Seccomp**:
+   - Filter Manager: Manages seccomp filters
+   - Profile Loader: Loads seccomp profiles
+
+3. **Capabilities**:
+   - Cap Manager: Manages Linux capabilities
+   - Cap Enforcer: Enforces capability restrictions
+
+## Code Architecture
+
+### Key Classes
+
+1. **ContainerState**:
+   - Tracks container lifecycle state
+   - Manages container metadata
+   - Handles state persistence
+
+2. **HookExecutor**:
+   - Executes container hooks
+   - Manages hook timeouts
+   - Handles hook errors
+
+3. **HookContext**:
+   - Provides hook execution context
+   - Manages environment variables
+   - Validates context data
+
+4. **DatasetManager**:
+   - Manages ZFS datasets
+   - Handles dataset operations
+   - Provides dataset information
+
+5. **LayerManager**:
+   - Manages container layers
+   - Handles layer operations
+   - Manages layer storage
+
+6. **ImageManager**:
+   - Manages container images
+   - Handles image operations
+   - Manages image storage
+
+## Data Flow
+
+1. **Container Creation**:
+   - Kubernetes sends create request
+   - containerd validates request
+   - Proxmox LXCRI creates container
+   - LXC starts container
+
+2. **Container Lifecycle**:
+   - State Manager tracks state
+   - Hook System executes hooks
+   - Security Service enforces policies
+
+3. **Storage Operations**:
+   - Image Manager pulls images
+   - Layer Manager creates layers
+   - Dataset Manager manages storage
+
+4. **Network Operations**:
+   - Network Service configures network
+   - Proxmox VE sets up networking
+   - Container gets network access
+
+## Security Considerations
+
+1. **Container Isolation**:
+   - LXC provides process isolation
+   - AppArmor/SELinux enforces access control
+   - Seccomp filters system calls
+
+2. **Resource Management**:
+   - ZFS provides storage isolation
+   - Network namespaces provide network isolation
+   - Cgroups manage resource limits
+
+3. **Access Control**:
+   - Linux capabilities restrict privileges
+   - Security profiles enforce policies
+   - Network policies control access
+
+## Performance Considerations
+
+1. **Storage Performance**:
+   - ZFS provides efficient storage
+   - Layer management optimizes space
+   - Caching improves performance
+
+2. **Network Performance**:
+   - VLANs provide network isolation
+   - Bridges optimize network traffic
+   - IP management ensures efficiency
+
+3. **Runtime Performance**:
+   - LXC provides lightweight containers
+   - Hook system minimizes overhead
+   - State management optimizes operations
 
 ## System Architecture
 
@@ -206,23 +387,6 @@ Each operation implements comprehensive error handling:
    - Resource cleanup
    - State restoration
    - Partial completion handling
-
-## Security Considerations
-
-1. **Isolation**
-   - Process namespace isolation
-   - Network namespace separation
-   - Resource constraints
-
-2. **Access Control**
-   - Capability management
-   - SELinux/AppArmor profiles
-   - Seccomp filters
-
-3. **Network Security**
-   - VLAN isolation
-   - Network policy enforcement
-   - Port security
 
 ## Monitoring and Metrics
 
