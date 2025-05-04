@@ -19,7 +19,7 @@ proto:
 	protoc --zig_out=. --grpc-zig_out=. proto/runtime_service.proto
 
 install:
-	sudo ./install.sh
+	sudo ./scripts/install.sh
 
 uninstall:
 	sudo systemctl stop proxmox-lxcri || true
