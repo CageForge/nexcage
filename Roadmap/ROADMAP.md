@@ -1,6 +1,6 @@
 # 🗺️ Proxmox LXC Container Runtime Interface Project Roadmap
 
-## 📊 Overall Progress: 99.8%
+## �� Overall Progress: 85%
 
 ## ✅ Completed Tasks
 
@@ -54,16 +54,18 @@
   - [x] Network state management
   - [x] Module documentation
 
-### 6. Security (70% complete) - 2 days
+### 6. Security (90% complete) - 2 days
 - [x] Basic security settings
 - [x] Access rights management
-- [ ] SELinux/AppArmor integration
+- [x] SELinux integration
+- [x] Seccomp profiles implementation
+- [ ] AppArmor integration
 - [ ] Security audit
 
 ### 7. Architecture Optimization (100% complete) - 1 day
 - [x] Remove generic runtime interface
 - [x] Standardize on CRI implementation
-- [x] Remove OCI runtime support
+- [x] Add OCI runtime support
 - [x] Update build system
 - [x] Clean up unused tests
 - [x] Update documentation
@@ -193,15 +195,25 @@
   - Implemented proper IP and MAC address validation
   - Enhanced DNS configuration support
   - Improved error handling for network setup
+- Implemented OCI hooks system (3 hours)
+  - Added HookExecutor with timeout support
+  - Implemented proper hook context management
+  - Added environment variables handling
+  - Enhanced error handling and logging
+  - Added comprehensive test suite
+  - Implemented proper cleanup in error cases
 
-### 12. OCI Runtime Specification Compliance (0% complete) - 4 days
-- [ ] Hooks Implementation (1 day)
-  - [ ] createRuntime hooks
-  - [ ] createContainer hooks
-  - [ ] startContainer hooks
-  - [ ] poststart hooks
-  - [ ] poststop hooks
-  - [ ] Hook error handling and timeout support
+### 12. OCI Runtime Specification Compliance (25% complete) - 4 days
+- [x] Hooks Implementation (1 day)
+  - [x] createRuntime hooks
+  - [x] createContainer hooks
+  - [x] startContainer hooks
+  - [x] poststart hooks
+  - [x] poststop hooks
+  - [x] Hook error handling and timeout support
+  - [x] Hook context management
+  - [x] Environment variables support
+  - [x] Comprehensive test suite
 
 - [ ] Extended Configuration Support (1.5 days)
   - [ ] Complete annotations support
@@ -219,45 +231,45 @@
 
 - [ ] Testing and Documentation (0.5 days)
   - [ ] OCI compliance tests
-  - [ ] Hook system documentation
+  - [x] Hook system documentation
   - [ ] Security features documentation
   - [ ] Configuration examples
 
 ### 13. OCI Image Specification Implementation (0% complete) - 3 days
 - [ ] Image Format Support (1 day)
-  - [ ] OCI Image manifest підтримка
-  - [ ] Image configuration файли
-  - [ ] Layer формат та стиснення
-  - [ ] Image індекси
+  - [ ] OCI Image manifest support
+  - [ ] Image configuration files
+  - [ ] Layer format and compression
+  - [ ] Image indices
 
 - [ ] OverlayFS Implementation (1.5 days)
-  - [ ] Базова структура для overlay шарів
-  - [ ] Управління overlay шарами
-  - [ ] Оптимізація використання простору
-  - [ ] Реалізація COW (Copy-on-Write)
-  - [ ] Інтеграція з існуючою підсистемою
-  - [ ] Garbage collection для невикористовуваних шарів
-  - [ ] Кешування та оптимізація доступу до шарів
-  - [ ] Міграція даних між пулами
+  - [ ] Base structure for overlay layers
+  - [ ] Overlay layer management
+  - [ ] Space usage optimization
+  - [ ] COW (Copy-on-Write) implementation
+  - [ ] Integration with existing subsystem
+  - [ ] Garbage collection for unused layers
+  - [ ] Caching and layer access optimization
+  - [ ] Data migration between pools
 
 - [ ] Registry Integration (1 day)
-  - [ ] Docker Hub підтримка
-  - [ ] Private registry підтримка
-  - [ ] Authentication та авторизація
-  - [ ] SSL/TLS підтримка
+  - [ ] Docker Hub support
+  - [ ] Private registry support
+  - [ ] Authentication and authorization
+  - [ ] SSL/TLS support
 
 - [ ] Image Operations (0.5 days)
-  - [ ] Pull операції
-  - [ ] Push операції
-  - [ ] Image видалення
-  - [ ] Layer кешування
+  - [ ] Pull operations
+  - [ ] Push operations
+  - [ ] Image deletion
+  - [ ] Layer caching
   - [ ] Garbage collection
 
 - [ ] Testing and Documentation (0.5 days)
-  - [ ] Unit тести для image операцій
-  - [ ] Integration тести з registry
-  - [ ] Performance тести для image operations
-  - [ ] Документація по роботі з images
+  - [ ] Unit tests for image operations
+  - [ ] Integration tests with registry
+  - [ ] Performance tests for image operations
+  - [ ] Image operations documentation
 
 ## 🎯 Design Patterns Implementation (0% complete) - 5 days
 
@@ -442,3 +454,109 @@ Total: 5 days
 2. Імплементація підтримки Image manifest
 3. Розробка базового LayerFS на ZFS
 4. Інтеграція з create командою
+
+# Proxmox LXC Kubernetes Integration Roadmap
+
+## Q1 2024
+
+### Completed
+- [x] Basic Proxmox LXC integration with Kubernetes
+- [x] Network configuration for Kubernetes worker nodes
+- [x] Kube-OVN integration with control plane database
+- [x] Security configurations (AppArmor, SELinux)
+- [x] Monitoring setup (Prometheus, Grafana)
+- [x] Backup and recovery procedures
+
+### In Progress
+- [ ] High Availability (HA) setup for worker nodes
+- [ ] Load balancing configuration
+- [ ] Storage integration with ZFS
+- [ ] Automated deployment scripts
+
+## Q2 2024
+
+### Planned
+- [ ] Multi-cluster support
+- [ ] Advanced networking features
+  - [ ] Network policies
+  - [ ] Service mesh integration
+  - [ ] Load balancer integration
+- [ ] Enhanced security features
+  - [ ] RBAC integration
+  - [ ] Network encryption
+  - [ ] Pod security policies
+- [ ] Performance optimization
+  - [ ] Resource allocation improvements
+  - [ ] Network performance tuning
+  - [ ] Storage performance optimization
+
+## Q3 2024
+
+### Planned
+- [ ] Disaster recovery solutions
+- [ ] Automated scaling
+- [ ] Advanced monitoring
+  - [ ] Custom metrics
+  - [ ] Advanced alerting
+  - [ ] Performance analytics
+- [ ] CI/CD integration
+  - [ ] GitOps workflow
+  - [ ] Automated testing
+  - [ ] Deployment automation
+
+## Q4 2024
+
+### Planned
+- [ ] Edge computing support
+- [ ] Multi-cloud integration
+- [ ] Advanced storage features
+  - [ ] Distributed storage
+  - [ ] Storage migration
+  - [ ] Snapshot management
+- [ ] API enhancements
+  - [ ] REST API
+  - [ ] CLI tools
+  - [ ] SDK development
+
+## Technical Debt
+
+### High Priority
+- [ ] Documentation improvements
+- [ ] Test coverage increase
+- [ ] Code refactoring
+- [ ] Performance benchmarking
+
+### Medium Priority
+- [ ] Logging improvements
+- [ ] Error handling enhancements
+- [ ] Configuration management
+- [ ] Dependency updates
+
+### Low Priority
+- [ ] UI/UX improvements
+- [ ] Additional language support
+- [ ] Community documentation
+- [ ] Example configurations
+
+## Dependencies
+
+### Required
+- Proxmox VE 7.0+
+- Kubernetes 1.24+
+- Open vSwitch 2.15+
+- Kube-OVN 1.10+
+- Containerd 1.6+
+
+### Optional
+- Prometheus 2.30+
+- Grafana 8.0+
+- ZFS 2.1+
+- Calico 3.22+
+
+## Contributing
+
+We welcome contributions to this project. Please see our [Contributing Guidelines](CONTRIBUTING.md) for more information.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

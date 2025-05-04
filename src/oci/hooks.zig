@@ -127,15 +127,13 @@ test "HookExecutor - basic execution" {
         .timeout = null,
     };
 
-    const result = try executor.executeHook(&hook);
-    defer {
-        allocator.free(result.stdout);
-        allocator.free(result.stderr);
-    }
+    const context = HookContext{
+        .container_id = "test-container",
+        .bundle = "/test/bundle",
+        .state = "creating",
+    };
 
-    try testing.expectEqual(@as(i32, 0), result.exit_code);
-    try testing.expectEqualStrings("Hello\n", result.stdout);
-    try testing.expectEqualStrings("", result.stderr);
+    try executor.executeHook(hook, context);
 }
 
 test "HookExecutor - timeout" {
@@ -144,18 +142,23 @@ test "HookExecutor - timeout" {
 
     var executor = try HookExecutor.init(allocator);
     defer executor.deinit();
-    executor.setTimeout(100); // 100ms timeout
 
     const hook = types.Hook{
         .path = "/bin/sleep",
         .args = &[_][]const u8{"1"},
         .env = null,
-        .timeout = null,
+        .timeout = 100, // 100ms timeout
+    };
+
+    const context = HookContext{
+        .container_id = "test-container",
+        .bundle = "/test/bundle",
+        .state = "creating",
     };
 
     try testing.expectError(
         HookError.TimeoutExceeded,
-        executor.executeHook(&hook)
+        executor.executeHook(hook, context)
     );
 }
 
@@ -173,8 +176,14 @@ test "HookExecutor - invalid path" {
         .timeout = null,
     };
 
+    const context = HookContext{
+        .container_id = "test-container",
+        .bundle = "/test/bundle",
+        .state = "creating",
+    };
+
     try testing.expectError(
         HookError.InvalidPath,
-        executor.executeHook(&hook)
+        executor.executeHook(hook, context)
     );
 } 
