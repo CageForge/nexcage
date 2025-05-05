@@ -255,16 +255,25 @@ fn loadConfig(allocator: Allocator, config_path: []const u8) !config.Config {
         return ConfigError.InvalidConfigFormat;
     }
 
-    return config.Config{
-        .allocator = allocator,
-        .hosts = hosts.?,
-        .token = token_str.?,
-        .port = port.?,
-        .node = node.?,
-        .node_cache_duration = node_cache_duration.?,
-        .timeout = 30_000,
+    const config_instance = config.Config{
+        .proxmox = .{
+            .hosts = hosts.?,
+            .port = port.?,
+            .token = token_str.?,
+            .node = node.?,
+            .node_cache_duration = 60,
+        },
+        .runtime = .{
+            .socket_path = "/var/run/proxmox-lxcri.sock",
+            .log_level = "info",
+        },
         .logger = &logger_instance,
+        .timeout = 30_000,
+        .node_cache_duration = 300,
+        .allocator = allocator,
     };
+
+    return config_instance;
 }
 
 fn skipValue(scanner: *std.json.Scanner) !void {
@@ -355,16 +364,17 @@ fn executeCreate(allocator: Allocator, args: []const []const u8) !void {
     }
 
     try oci_commands.create.create(allocator, .{
-        .bundle_path = bundle_path.?,
-        .id = container_id.?,
-        .pid_file = pid_file,
-        .allocator = allocator,
         .config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path.?, "config.json" }),
+        .id = container_id.?,
+        .bundle_path = bundle_path.?,
+        .allocator = allocator,
+        .pid_file = pid_file,
+        .console_socket = null,
     }, proxmox_client);
 }
 
 fn executeStart(container_id: []const u8) !void {
-    try oci_commands.start.start(container_id, proxmox_client);
+    try oci_commands.start.start(container_id.?, proxmox_client);
 }
 
 fn executeState(allocator: Allocator, container_id: []const u8) !void {
@@ -409,7 +419,7 @@ fn executeKill(container_id: []const u8, signal: ?[]const u8) !void {
 }
 
 fn executeDelete(container_id: []const u8) !void {
-    try oci_commands.delete.delete(container_id, proxmox_client);
+    try oci_commands.delete.delete(container_id.?, proxmox_client);
 }
 
 pub fn main() !void {
@@ -433,14 +443,9 @@ pub fn main() !void {
     const container_id = parsed[2];
 
     // Ініціалізуємо логер
-    logger_instance = try initLogger(allocator, options.debug);
+    const log_file = try fs.cwd().openFile(options.log.?, .{ .mode = .write_only });
+    logger_instance = try logger_mod.Logger.init(allocator, log_file.writer(), types.LogLevel.info);
     defer logger_instance.deinit();
-
-    // Якщо вказано --log, налаштовуємо файл логів
-    if (options.log) |log_path| {
-        const log_file = try fs.createFileAbsolute(log_path, .{ .truncate = false });
-        logger_instance.setWriter(log_file.writer());
-    }
 
     // Якщо вказано --root, створюємо директорію
     if (options.root) |root_path| {
@@ -448,58 +453,70 @@ pub fn main() !void {
     }
 
     // Завантажуємо конфігурацію
-    const cfg = try loadConfig(allocator, "/etc/proxmox-lxcri/config.json");
+    var cfg = try loadConfig(allocator, "/etc/proxmox-lxcri/config.json");
     defer cfg.deinit();
 
     // Ініціалізуємо клієнт Proxmox
-    proxmox_client = try ProxmoxClient.init(allocator, cfg);
+    var proxmox_client_instance = try ProxmoxClient.init(
+        allocator,
+        cfg.proxmox.hosts[0],
+        cfg.proxmox.port,
+        cfg.proxmox.token,
+        cfg.proxmox.node,
+        &logger_instance
+    );
+    proxmox_client = &proxmox_client_instance;
     defer proxmox_client.deinit();
 
     switch (command) {
         .create => {
             if (container_id == null or options.bundle == null) {
                 try logger_instance.err("create command requires --bundle and container-id", .{});
-                return 1;
+                return error.InvalidArguments;
             }
-            try oci_commands.create(allocator, container_id.?, options.bundle.?, proxmox_client, &logger_instance);
+            try oci_commands.create.create(allocator, .{
+                .config_path = try std.fs.path.join(allocator, &[_][]const u8{ options.bundle.?, "config.json" }),
+                .id = container_id.?,
+                .bundle_path = options.bundle.?,
+                .allocator = allocator,
+                .pid_file = options.pid_file,
+                .console_socket = options.console_socket,
+            }, proxmox_client);
         },
         .start => {
             if (container_id == null) {
                 try logger_instance.err("start command requires container-id", .{});
-                return 1;
+                return error.InvalidArguments;
             }
-            try oci_commands.start(allocator, container_id.?, proxmox_client, &logger_instance);
+            try oci_commands.start.start(container_id.?, proxmox_client);
         },
         .state => {
             if (container_id == null) {
                 try logger_instance.err("state command requires container-id", .{});
-                return 1;
+                return error.InvalidArguments;
             }
-            try oci_commands.state(allocator, container_id.?, proxmox_client, &logger_instance);
+            try executeState(allocator, container_id.?);
         },
         .kill => {
             if (container_id == null) {
                 try logger_instance.err("kill command requires container-id", .{});
-                return 1;
+                return error.InvalidArguments;
             }
-            try oci_commands.kill(allocator, container_id.?, proxmox_client, &logger_instance);
+            try oci_commands.kill.kill(container_id.?, "SIGTERM", proxmox_client);
         },
         .delete => {
             if (container_id == null) {
                 try logger_instance.err("delete command requires container-id", .{});
-                return 1;
+                return error.InvalidArguments;
             }
-            try oci_commands.delete(allocator, container_id.?, proxmox_client, &logger_instance);
+            try oci_commands.delete.delete(container_id.?, proxmox_client);
         },
         .help => try printHelp(),
         .unknown => {
             try logger_instance.err("Unknown command", .{});
-            try printHelp();
-            return 1;
+            return error.UnknownCommand;
         },
     }
-
-    return 0;
 }
 
 fn getConfigPath(allocator: Allocator) ![]const u8 {
