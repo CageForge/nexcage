@@ -1,5 +1,10 @@
 [allowlist]
 description = "Global allowlist"
+paths = [
+    "tests/**",
+    "docs/**",
+    "examples/**",
+]
 
 [[rules]]
 description = "API keys"
@@ -14,4 +19,9 @@ tags = ["key", "generic"]
 [[rules]]
 description = "Private key"
 regex = '''(?i)-----BEGIN[ A-Z0-9_-]*PRIVATE[ A-Z0-9_-]*KEY-----'''
-tags = ["key", "private"] 
+tags = ["key", "private"]
+
+[[rules]]
+description = "Proxmox API token"
+regex = '''(?i)(proxmox[_-]?token|proxmox[_-]?api[_-]?key)["\s]*[=:]["\s]*[0-9a-zA-Z]{32,}'''
+tags = ["key", "API", "proxmox"] 
