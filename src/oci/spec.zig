@@ -1,7 +1,14 @@
 const std = @import("std");
+const fs = std.fs;
+const mem = std.mem;
 const json = std.json;
-const Allocator = std.mem.Allocator;
+const logger = @import("logger");
 const types = @import("types");
+const errors = @import("error");
+const common = @import("common");
+const create = @import("create.zig");
+const StorageConfig = create.StorageConfig;
+const Allocator = std.mem.Allocator;
 
 pub const Process = types.Process;
 pub const User = types.User;
@@ -93,36 +100,34 @@ pub const Spec = struct {
     root: Root,
     hostname: []const u8,
     mounts: []const Mount,
-    hooks: ?Hooks = null,
+    hooks: ?Hooks,
+    annotations: std.StringHashMap([]const u8),
     linux: LinuxSpec,
-    annotations: ?std.StringHashMap([]const u8) = null,
+    storage: StorageConfig,
 
-    pub fn deinit(self: *const Spec, allocator: Allocator) void {
+    pub fn deinit(self: *Spec, allocator: Allocator) void {
         allocator.free(self.version);
-        self.process.deinit(allocator);
-        self.root.deinit(allocator);
         allocator.free(self.hostname);
-        
         for (self.mounts) |mount| {
             mount.deinit(allocator);
         }
         allocator.free(self.mounts);
-        
-        if (self.hooks) |*hooks| {
+        if (self.hooks) |hooks| {
             hooks.deinit(allocator);
         }
-        
-        if (self.annotations) |annotations| {
-            var it = annotations.iterator();
-            while (it.next()) |entry| {
-                allocator.free(entry.key_ptr.*);
-                allocator.free(entry.value_ptr.*);
-            }
-            var mutable_annotations = annotations;
-            mutable_annotations.deinit();
+        var it = self.annotations.iterator();
+        while (it.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
+            allocator.free(entry.value_ptr.*);
         }
-        
+        self.annotations.deinit();
         self.linux.deinit(allocator);
+        if (self.storage.storage_path) |path| {
+            allocator.free(path);
+        }
+        if (self.storage.storage_pool) |pool| {
+            allocator.free(pool);
+        }
     }
 };
 
@@ -558,6 +563,33 @@ pub const SELinux = struct {
         }
         if (self.level) |level_| {
             allocator.free(level_);
+        }
+    }
+};
+
+pub const OciImageConfig = struct {
+    storage: StorageConfig,
+    raw_image: bool = false,
+    raw_image_size: u64 = 10 * 1024 * 1024 * 1024, // 10GB за замовчуванням
+    registry_url: ?[]const u8 = null,
+    registry_username: ?[]const u8 = null,
+    registry_password: ?[]const u8 = null,
+
+    pub fn deinit(self: *const OciImageConfig, allocator: Allocator) void {
+        if (self.storage.storage_path) |path| {
+            allocator.free(path);
+        }
+        if (self.storage.storage_pool) |pool| {
+            allocator.free(pool);
+        }
+        if (self.registry_url) |url| {
+            allocator.free(url);
+        }
+        if (self.registry_username) |username| {
+            allocator.free(username);
+        }
+        if (self.registry_password) |password| {
+            allocator.free(password);
         }
     }
 }; 
