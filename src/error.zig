@@ -50,6 +50,21 @@ pub const Error = error{
 
     // New error type
     ClusterUnhealthy,
+
+    ContainerAlreadyExists,
+    InvalidContainerID,
+    InvalidContainerName,
+    InvalidContainerConfig,
+    ContainerStartFailed,
+    ContainerStopFailed,
+    ContainerDeleteFailed,
+    ContainerStateError,
+    StorageError,
+    OCIError,
+    OutOfMemory,
+    InvalidArgument,
+    SystemError,
+    UnknownError,
 };
 
 pub fn handleError(err: Error, logger: *Logger) void {
@@ -102,6 +117,21 @@ pub fn handleError(err: Error, logger: *Logger) void {
 
         // New error type
         error.ClusterUnhealthy => logger.err("Cluster unhealthy", .{}),
+
+        error.ContainerAlreadyExists => logger.err("Container already exists", .{}),
+        error.InvalidContainerID => logger.err("Invalid container ID", .{}),
+        error.InvalidContainerName => logger.err("Invalid container name", .{}),
+        error.InvalidContainerConfig => logger.err("Invalid container configuration", .{}),
+        error.ContainerStartFailed => logger.err("Failed to start container", .{}),
+        error.ContainerStopFailed => logger.err("Failed to stop container", .{}),
+        error.ContainerDeleteFailed => logger.err("Failed to delete container", .{}),
+        error.ContainerStateError => logger.err("Error getting container state", .{}),
+        error.StorageError => logger.err("Storage error occurred", .{}),
+        error.OCIError => logger.err("OCI error occurred", .{}),
+        error.OutOfMemory => logger.err("Out of memory", .{}),
+        error.InvalidArgument => logger.err("Invalid argument", .{}),
+        error.SystemError => logger.err("System error occurred", .{}),
+        error.UnknownError => logger.err("Unknown error occurred", .{}),
     }
 }
 
