@@ -17,64 +17,69 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        run: git checkout ${{ github.ref }}
-      - name: Setup Node.js
+      - uses: actions/checkout@v3
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2.1.1
+        with:
+          version: 0.14.0
+
+      - name: Build and Test
         run: |
-          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-          sudo apt-get install -y nodejs
-      - name: Install Dependencies
-        run: npm ci
-      - name: Run Tests
-        run: npm test
+          zig build
+          zig build test
+
       - name: Upload Test Results
-        run: |
-          mkdir -p test-results
-          tar -czf test-results.tar.gz test-results/
-          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/gzip" \
-            --data-binary @test-results.tar.gz \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ github.event.release.id }}/assets?name=test-results.tar.gz"
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: zig-out/test-results/
 
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        run: git checkout ${{ github.ref }}
-      - name: Setup Node.js
-        run: |
-          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-          sudo apt-get install -y nodejs
-      - name: Install Dependencies
-        run: npm ci
-      - name: Run Lint
-        run: npm run lint
+      - uses: actions/checkout@v3
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2.1.1
+        with:
+          version: 0.14.0
+
+      - name: Run Format Check
+        run: zig fmt --check src/*.zig
 
   code-scanning:
     name: Code Scanning
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        run: git checkout ${{ github.ref }}
-      - name: Run CodeQL Analysis
-        run: |
-          wget https://github.com/github/codeql-action/releases/download/codeql-bundle-20230418/codeql-bundle-linux64.tar.gz
-          tar -xvzf codeql-bundle-linux64.tar.gz
-          ./codeql/codeql database create --language=javascript codeql-db
-          ./codeql/codeql database analyze codeql-db --format=sarif-latest --output=codeql-results.sarif
+      - uses: actions/checkout@v3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: cpp
+
+      - name: Build
+        run: zig build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
 
   secrets-scanning:
     name: Secrets Scanning
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        run: git checkout ${{ github.ref }}
-      - name: Run Secret Scanning
-        run: |
-          wget https://github.com/gitleaks/gitleaks/releases/download/v8.16.4/gitleaks_8.16.4_linux_x64.tar.gz
-          tar -xvzf gitleaks_8.16.4_linux_x64.tar.gz
-          ./gitleaks detect --no-git --verbose --report-format json --report-path gitleaks-report.json
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2.3.2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_CONFIG: .gitleaks.toml
 
 #   dependencies:
 #     name: Dependencies

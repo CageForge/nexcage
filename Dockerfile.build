@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:22.04
 
 # Встановлюємо часовий пояс неінтерактивно
 ENV TZ=UTC
@@ -6,23 +6,15 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Встановлюємо необхідні залежності
 RUN apt-get update && apt-get install -y \
-    protobuf-compiler \
-    libgrpc-dev \
-    libprotobuf-dev \
     build-essential \
-    pkg-config \
-    curl \
-    git \
-    xz-utils \
-    wget \
     cmake \
-    libatomic1 \
-    libatomic-ops-dev \
+    git \
+    curl \
+    wget \
+    pkg-config \
     libssl-dev \
-    zlib1g-dev \
-    libc-ares-dev \
-    libre2-dev \
-    libc-ares2 \
+    libprotobuf-dev \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Збираємо та встановлюємо gRPC C
@@ -45,19 +37,19 @@ ENV LIBRARY_PATH="/usr/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu:${LIBRARY_PA
 ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}"
 
 # Встановлюємо Zig
-RUN wget https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz \
-    && tar xf zig-linux-x86_64-0.13.0.tar.xz \
-    && mv zig-linux-x86_64-0.13.0 /opt/zig \
-    && rm zig-linux-x86_64-0.13.0.tar.xz
+RUN wget https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz \
+    && tar xf zig-linux-x86_64-0.14.0.tar.xz \
+    && mv zig-linux-x86_64-0.14.0 /usr/local/zig \
+    && rm zig-linux-x86_64-0.14.0.tar.xz
 
 # Додаємо Zig до PATH
-ENV PATH="/opt/zig:${PATH}"
+ENV PATH="/usr/local/zig:${PATH}"
 
 # Створюємо робочу директорію
-WORKDIR /build
+WORKDIR /app
 
 # Копіюємо файли проекту
 COPY . .
 
 # Збираємо проект
-CMD ["zig", "build"] 
+CMD ["zig", "build", "run"] 

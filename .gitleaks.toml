@@ -1,0 +1,17 @@
+[allowlist]
+description = "Global allowlist"
+
+[[rules]]
+description = "API keys"
+regex = '''(?i)((api[_-]?key|apikey|secret|token)["\s]*[=:]["\s]*)[0-9a-zA-Z]{32,}'''
+tags = ["key", "API", "generic"]
+
+[[rules]]
+description = "Generic secret"
+regex = '''(?i)(secret|password|credential)["\s]*[=:]["\s]*[0-9a-zA-Z]{8,}'''
+tags = ["key", "generic"]
+
+[[rules]]
+description = "Private key"
+regex = '''(?i)-----BEGIN[ A-Z0-9_-]*PRIVATE[ A-Z0-9_-]*KEY-----'''
+tags = ["key", "private"] 
