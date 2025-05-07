@@ -1,0 +1,29 @@
+container:
+  image: debian:bullseye-slim
+  cpu: 2
+  memory: 4G
+
+env:
+  matrix:
+    - ZIG_VERSION: "0.11.0"
+    - ZIG_VERSION: "0.12.0"
+
+install_script:
+  - apt-get update
+  - apt-get install -y curl build-essential git
+  - curl -L https://ziglang.org/download/v${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz -o zig.tar.xz
+  - tar xf zig.tar.xz
+  - mv zig-linux-x86_64-${ZIG_VERSION} /usr/local/zig
+  - ln -s /usr/local/zig/zig /usr/local/bin/zig
+
+build_script:
+  - zig build test
+  - zig build -Doptimize=ReleaseFast
+
+test_script:
+  - zig build test
+  - zig build test -Doptimize=ReleaseFast
+
+artifacts:
+  path: zig-out/bin/*
+  type: files 

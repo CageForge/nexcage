@@ -1,0 +1,33 @@
+{
+    "proxmox": {
+        "host": "proxmox.example.com",
+        "port": 8006,
+        "user": "root@pam",
+        "realm": "pam",
+        "verify_ssl": true,
+        "timeout": 30
+    },
+    "storage": {
+        "default": "local-lvm",
+        "types": ["raw", "zfs"],
+        "zfs_pool": "tank"
+    },
+    "containers": {
+        "default_memory": 512,
+        "default_swap": 512,
+        "default_cores": 1,
+        "default_ostype": "debian",
+        "default_template": "debian-11-standard"
+    },
+    "networking": {
+        "default_bridge": "vmbr0",
+        "default_ip": "dhcp",
+        "default_nameserver": "8.8.8.8"
+    },
+    "logging": {
+        "level": "info",
+        "file": "/var/log/proxmox-lxcri.log",
+        "max_size": 10485760,
+        "max_files": 5
+    }
+} 

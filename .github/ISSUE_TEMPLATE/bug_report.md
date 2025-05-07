@@ -7,30 +7,43 @@ assignees: ''
 
 ---
 
-**Describe the bug**
+## Description
 A clear and concise description of what the bug is.
 
-**To Reproduce**
-Steps to reproduce the behavior:
+## Environment
+- Proxmox VE Version: 7.4+
+- Zig Version: 0.13.0+
+- Proxmox LXCRI Version: [e.g. 0.1.0]
+- containerd Version: 1.7+
+- ZFS Version: 2.1+
+- Linux Kernel Version: 5.15+
+
+## Steps to Reproduce
 1. Go to '...'
 2. Click on '....'
 3. Scroll down to '....'
 4. See error
 
-**Expected behavior**
+## Expected Behavior
 A clear and concise description of what you expected to happen.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+## Actual Behavior
+A clear and concise description of what actually happened.
 
-**Environment:**
- - OS: [e.g. Ubuntu 20.04]
- - Proxmox VE Version: [e.g. 7.0]
- - Zig Version: [e.g. 0.11.0]
- - Proxmox LXCRI Version: [e.g. 0.1.0]
+## Logs
+```
+Paste any relevant logs here
+```
 
-**Additional context**
+## Additional Context
 Add any other context about the problem here.
 
-**Logs**
-If applicable, add logs to help explain your problem. 
+## Screenshots
+If applicable, add screenshots to help explain your problem.
+
+## Checklist
+- [ ] I have checked the documentation
+- [ ] I have searched for similar issues
+- [ ] I have included all required information
+- [ ] I have provided clear steps to reproduce
+- [ ] I have included relevant logs 

@@ -6,7 +6,7 @@ const errors = @import("error");
 pub fn start(container_id: []const u8, proxmox_client: *proxmox.ProxmoxClient) !void {
     logger.info("Starting container {s}", .{container_id});
 
-    // Отримуємо список контейнерів щоб знайти VMID за іменем
+    // Get list of containers to find VMID by name
     const containers = try proxmox_client.listLXCs();
     defer {
         for (containers) |*container| {
@@ -15,7 +15,7 @@ pub fn start(container_id: []const u8, proxmox_client: *proxmox.ProxmoxClient) !
         proxmox_client.client.allocator.free(containers);
     }
 
-    // Шукаємо контейнер за іменем
+    // Find container by name
     var vmid: ?u32 = null;
     for (containers) |container| {
         if (std.mem.eql(u8, container.name, container_id)) {

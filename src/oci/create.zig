@@ -21,6 +21,8 @@ const lxc = @import("../lxc/container.zig");
 const hooks = @import("hooks.zig");
 const network = @import("../network/mod.zig");
 const NetworkValidator = @import("../network/validator.zig").NetworkValidator;
+const registry = @import("../registry/registry.zig");
+const raw = @import("../raw/raw_image.zig");
 
 pub const CreateOpts = struct {
     config_path: []const u8,
@@ -60,6 +62,17 @@ pub const CreateError = error{
     InvalidRootfs,
 };
 
+pub const StorageType = enum {
+    raw,
+    zfs,
+};
+
+pub const StorageConfig = struct {
+    type: StorageType,
+    storage_path: ?[]const u8 = null,
+    storage_pool: ?[]const u8 = null,
+};
+
 pub const CreateOptions = struct {
     container_id: []const u8,
     bundle_path: []const u8,
@@ -77,9 +90,11 @@ pub const Create = struct {
     zfs_manager: *zfs.ZFSManager,
     lxc_manager: *lxc.LXCManager,
     proxmox_client: *proxmox.ProxmoxClient,
+    registry: ?*registry.Registry,
     options: CreateOptions,
     hook_executor: *hooks.HookExecutor,
     network_validator: NetworkValidator,
+    oci_config: spec.OciImageConfig,
     
     const Self = @This();
     
@@ -92,26 +107,68 @@ pub const Create = struct {
         options: CreateOptions,
     ) !*Self {
         const self = try allocator.create(Self);
+
+        // Читаємо конфігурацію OCI образу
+        const oci_config_path = try std.fmt.allocPrint(
+            allocator,
+            "{s}/{s}.json",
+            .{ options.bundle_path, options.container_id },
+        );
+        defer allocator.free(oci_config_path);
+
+        const oci_config_file = try std.fs.openFileAbsolute(oci_config_path, .{});
+        defer oci_config_file.close();
+
+        const oci_config_content = try oci_config_file.readToEndAlloc(allocator, 1024 * 1024);
+        defer allocator.free(oci_config_content);
+
+        const oci_config = try parseOciImageConfig(allocator, oci_config_content);
+
+        var registry_instance: ?*registry.Registry = null;
+        if (oci_config.registry_url) |url| {
+            registry_instance = try registry.Registry.init(
+                allocator,
+                url,
+                oci_config.registry_username,
+                oci_config.registry_password,
+            );
+        }
+
         self.* = .{
             .allocator = allocator,
             .image_manager = image_manager,
             .zfs_manager = zfs_manager,
             .lxc_manager = lxc_manager,
             .proxmox_client = proxmox_client,
+            .registry = registry_instance,
             .options = options,
             .hook_executor = try hooks.HookExecutor.init(allocator),
             .network_validator = NetworkValidator.init(allocator),
+            .oci_config = oci_config,
         };
         return self;
     }
     
     pub fn deinit(self: *Self) void {
+        if (self.registry) |r| {
+            r.deinit();
+        }
         self.hook_executor.deinit();
+        self.oci_config.deinit(self.allocator);
         self.allocator.destroy(self);
     }
     
     pub fn create(self: *Self) !void {
         logger.info("Creating container {s}", .{self.options.container_id});
+
+        // Завантажуємо образ з реєстру якщо потрібно
+        if (self.registry) |r| {
+            try r.downloadImage(
+                self.options.image_name,
+                self.options.image_tag,
+                self.image_manager.images_dir,
+            );
+        }
 
         // Валідуємо bundle
         try self.validateBundle();
@@ -122,11 +179,37 @@ pub const Create = struct {
             return CreateError.ContainerExists;
         }
 
-        // Створюємо ZFS dataset
-        try self.createZfsDataset();
+        if (self.oci_config.raw_image) {
+            // Створюємо .raw файл
+            const raw_path = try std.fmt.allocPrint(
+                self.allocator,
+                "{s}/{s}.raw",
+                .{ self.options.bundle_path, self.options.container_id },
+            );
+            defer self.allocator.free(raw_path);
 
-        // Налаштовуємо LXC контейнер
-        try self.configureLxcContainer();
+            var raw_image = try raw.RawImage.init(
+                self.allocator,
+                self.options.bundle_path,
+                raw_path,
+                self.oci_config.raw_image_size,
+            );
+            defer raw_image.deinit();
+
+            try raw_image.create();
+
+            // Створюємо ZFS dataset
+            try self.createZfsDataset();
+
+            // Налаштовуємо LXC контейнер з .raw файлом
+            try self.configureLxcContainerWithRaw(raw_path);
+        } else {
+            // Створюємо ZFS dataset
+            try self.createZfsDataset();
+
+            // Налаштовуємо LXC контейнер
+            try self.configureLxcContainer();
+        }
 
         // Виконуємо prestart хуки
         if (self.options.spec.hooks) |container_hooks| {
@@ -426,6 +509,100 @@ pub const Create = struct {
         try self.lxc_manager.saveConfig(self.options.container_id, config);
     }
 
+    fn configureLxcContainerWithRaw(self: *Self, raw_path: []const u8) !void {
+        logger.info("Configuring LXC container {s} with raw image", .{self.options.container_id});
+
+        // Створюємо базову конфігурацію
+        var config = try self.lxc_manager.createConfig();
+        defer config.deinit();
+
+        // Встановлюємо основні параметри
+        try config.setName(self.options.container_id);
+
+        // Встановлюємо rootfs в залежності від типу зберігання
+        switch (self.oci_config.storage.type) {
+            .raw => {
+                if (self.oci_config.storage.storage_path) |storage_path| {
+                    const full_path = try std.fmt.allocPrint(
+                        self.allocator,
+                        "{s}/{s}",
+                        .{ storage_path, self.options.container_id },
+                    );
+                    defer self.allocator.free(full_path);
+
+                    // Створюємо директорію для зберігання якщо не існує
+                    try fs.cwd().makePath(full_path);
+
+                    // Копіюємо raw файл в storage path
+                    const output = try std.ChildProcess.exec(.{
+                        .allocator = self.allocator,
+                        .argv = &[_][]const u8{ "cp", raw_path, full_path },
+                    });
+                    defer {
+                        self.allocator.free(output.stdout);
+                        self.allocator.free(output.stderr);
+                    }
+
+                    if (output.term.Exited != 0) {
+                        return CreateError.FileError;
+                    }
+
+                    try config.setRootfs(try std.fmt.allocPrint(
+                        self.allocator,
+                        "{s}/{s}",
+                        .{ full_path, self.options.container_id },
+                    ));
+                } else {
+                    return CreateError.InvalidConfig;
+                }
+            },
+            .zfs => {
+                if (self.oci_config.storage.storage_pool) |pool| {
+                    try config.setRootfs(try std.fmt.allocPrint(
+                        self.allocator,
+                        "zfs:{s}/{s}",
+                        .{ pool, self.options.container_id },
+                    ));
+                } else {
+                    return CreateError.InvalidConfig;
+                }
+            },
+        }
+
+        // Встановлюємо hostname з OCI spec
+        if (self.options.spec.hostname) |hostname| {
+            try config.setHostname(hostname);
+        }
+
+        // Налаштовуємо процес
+        if (self.options.spec.process) |process| {
+            // Встановлюємо environment змінні
+            if (process.env) |env| {
+                for (env) |env_var| {
+                    try config.addEnvironmentVariable(env_var);
+                }
+            }
+
+            // Встановлюємо робочу директорію
+            if (process.cwd) |cwd| {
+                try config.setWorkingDirectory(cwd);
+            }
+
+            // Налаштовуємо користувача
+            if (process.user) |user| {
+                try config.setUID(user.uid);
+                try config.setGID(user.gid);
+                
+                if (user.additionalGids) |additional_gids| {
+                    try config.setAdditionalGids(additional_gids);
+                }
+            }
+        }
+
+        // Зберігаємо конфігурацію
+        try self.lxc_manager.saveConfig(self.options.container_id, config);
+    }
+
     fn startContainer(self: *Self) !void {
         logger.info("Starting container {s}", .{self.options.container_id});
 
@@ -554,6 +731,37 @@ fn parseLinuxSpec(allocator: Allocator, value: *json.JsonValue) !spec.LinuxSpec 
     return result;
 }
 
+fn parseStorageConfig(allocator: Allocator, value: *json.JsonValue) !StorageConfig {
+    if (value.type != .object) return error.InvalidSpec;
+    const obj = value.object();
+
+    const type_str = if (obj.getOrNull("type")) |t| t.string() else return error.InvalidSpec;
+    const storage_type = std.meta.stringToEnum(StorageType, type_str) orelse return error.InvalidSpec;
+
+    var config = StorageConfig{
+        .type = storage_type,
+    };
+
+    switch (storage_type) {
+        .raw => {
+            if (obj.getOrNull("storage_path")) |path| {
+                config.storage_path = try allocator.dupe(u8, path.string());
+            } else {
+                return error.InvalidSpec;
+            }
+        },
+        .zfs => {
+            if (obj.getOrNull("storage_pool")) |pool| {
+                config.storage_pool = try allocator.dupe(u8, pool.string());
+            } else {
+                return error.InvalidSpec;
+            }
+        },
+    }
+
+    return config;
+}
+
 pub fn parseContainerSpec(allocator: Allocator, value: *json.JsonValue) !spec.Spec {
     if (value.type != .object) return error.InvalidSpec;
     const obj = value.object();
@@ -574,6 +782,7 @@ pub fn parseContainerSpec(allocator: Allocator, value: *json.JsonValue) !spec.Sp
             break :blk map;
         } else std.StringHashMap([]const u8).init(allocator),
         .linux = try parseLinuxSpec(allocator, obj.get("linux")),
+        .storage = if (obj.getOrNull("storage")) |s| try parseStorageConfig(allocator, s) else return error.InvalidSpec,
     };
 
     errdefer container_spec.deinit(allocator);
@@ -823,4 +1032,32 @@ fn parseHostname(value: *json.JsonValue, allocator: Allocator) ![]const u8 {
         return try allocator.dupe(u8, hostname.string());
     }
     return "";
+}
+
+fn parseOciImageConfig(allocator: Allocator, content: []const u8) !spec.OciImageConfig {
+    var parser = json.Parser.init(allocator, false);
+    defer parser.deinit();
+
+    var tree = try parser.parse(content);
+    defer tree.deinit();
+
+    if (tree.root.type != .object) return error.InvalidJson;
+    const obj = tree.root.object();
+
+    var config = spec.OciImageConfig{
+        .storage = undefined,
+        .raw_image = if (obj.getOrNull("raw_image")) |r| r.boolean() else false,
+        .raw_image_size = if (obj.getOrNull("raw_image_size")) |s| @intCast(s.integer()) else 10 * 1024 * 1024 * 1024,
+        .registry_url = if (obj.getOrNull("registry_url")) |url| try allocator.dupe(u8, url.string()) else null,
+        .registry_username = if (obj.getOrNull("registry_username")) |username| try allocator.dupe(u8, username.string()) else null,
+        .registry_password = if (obj.getOrNull("registry_password")) |password| try allocator.dupe(u8, password.string()) else null,
+    };
+
+    if (obj.getOrNull("storage")) |storage| {
+        config.storage = try parseStorageConfig(allocator, storage);
+    } else {
+        return error.InvalidJson;
+    }
+
+    return config;
 }
