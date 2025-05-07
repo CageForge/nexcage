@@ -62,23 +62,23 @@ pub const Registry = struct {
     ) !void {
         logger.info("Downloading image {s}:{s}", .{ image_name, tag });
 
-        // Отримуємо маніфест образу
+        // Get image manifest
         const manifest = try self.getManifest(image_name, tag);
         defer manifest.deinit();
 
-        // Створюємо директорію для образу
+        // Create directory for the image
         const image_dir = try fs.path.join(self.allocator, &[_][]const u8{ output_dir, image_name });
         defer self.allocator.free(image_dir);
         try fs.cwd().makePath(image_dir);
 
-        // Завантажуємо конфігурацію
+        // Download configuration
         const config = try self.downloadBlob(
             image_name,
             manifest.value.config.digest,
             image_dir,
         );
 
-        // Завантажуємо шари
+        // Download layers
         for (manifest.value.layers) |layer| {
             try self.downloadBlob(image_name, layer.digest, image_dir);
         }

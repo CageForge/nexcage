@@ -9,7 +9,7 @@ fn lxcStatusToContainerStatus(lxc_status: types.LXCStatus) types.ContainerStatus
     return switch (lxc_status) {
         .running => .running,
         .stopped => .stopped,
-        // LXC не має стану paused, тому всі інші стани вважаємо unknown
+        // LXC doesn't have a paused state, so we consider all other states as unknown
         else => .unknown,
     };
 }
@@ -41,7 +41,7 @@ pub fn getState(proxmox_client: *proxmox.ProxmoxClient, oci_container_id: []cons
                 .ociVersion = version,
                 .id = id,
                 .status = status,
-                .pid = 0, // TODO: отримати реальний PID
+                .pid = 0, // TODO: get real PID
                 .bundle = bundle,
                 .annotations = null,
             };
