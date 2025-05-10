@@ -100,4 +100,4 @@ fn parseNetworkConfig(allocator: std.mem.Allocator, net_str: []const u8) !types.
     }
 
     return net;
-} 
+}

@@ -168,23 +168,10 @@
 
 ## 📈 Time Expenditure
 - Planned: 39 days
-- Spent: 24 days + 0 hours
-- Remaining: ~14.5 days
+- Spent: 24 days + 15 hours
+- Remaining: ~14 days
 
 ## Recent Updates
-- Implemented OCI create command functionality (6 hours)
-  - Added comprehensive OCI spec validation
-  - Implemented bundle validation
-  - Added ZFS dataset creation and management
-  - Implemented LXC configuration generation from OCI spec
-  - Added proper hooks execution with context
-  - Enhanced error handling and resource cleanup
-- Improved hooks implementation (3 hours)
-  - Added HookContext structure for better hook execution
-  - Implemented proper environment variables handling
-  - Added timeout management
-  - Enhanced error handling and logging
-  - Added comprehensive test suite
 - Fixed memory management issues (2 hours)
   - Corrected allocator handling in ContainerState
   - Fixed memory leaks in hooks execution
@@ -202,6 +189,25 @@
   - Enhanced error handling and logging
   - Added comprehensive test suite
   - Implemented proper cleanup in error cases
+- Implemented basic OCI runtime functionality (8 hours)
+  - Added support for create, start, state, kill, delete commands
+  - Implemented OCI specification validation
+  - Added hooks support
+  - Improved error handling and resource management
+- Improved logging (3 hours)
+  - Added support for different log levels
+  - Implemented log rotation
+  - Added contextual logging
+  - Improved log message formatting
+- Improved command processing and testing (2 hours)
+  - Added more informative error messages
+  - Improved argument validation
+  - Added help output for unknown commands
+- Added create command tests (4 hours)
+  - Argument validation tests
+  - Container creation tests
+  - Error handling tests
+  - Test environment preparation
 
 ### 12. OCI Runtime Specification Compliance (25% complete) - 4 days
 - [x] Hooks Implementation (1 day)

@@ -94,10 +94,7 @@ pub const PodResources = struct {
             pod_resources.blockio = .{
                 .weight = blockio.weight,
                 .weightDevice = if (blockio.weightDevice) |devices| blk: {
-                    var weight_devices = try allocator.alloc(
-                        @TypeOf(pod_resources.blockio.?.weightDevice.?[0]),
-                        devices.len
-                    );
+                    var weight_devices = try allocator.alloc(@TypeOf(pod_resources.blockio.?.weightDevice.?[0]), devices.len);
                     for (devices, 0..) |device, i| {
                         weight_devices[i] = .{
                             .major = device.major,
@@ -111,10 +108,7 @@ pub const PodResources = struct {
         }
 
         if (resources.hugepageLimits) |hugepages| {
-            pod_resources.hugepages = try allocator.alloc(
-                @TypeOf(pod_resources.hugepages.?[0]),
-                hugepages.len
-            );
+            pod_resources.hugepages = try allocator.alloc(@TypeOf(pod_resources.hugepages.?[0]), hugepages.len);
             for (hugepages, 0..) |page, i| {
                 pod_resources.hugepages.?[i] = .{
                     .pageSize = page.pageSize,
@@ -127,10 +121,7 @@ pub const PodResources = struct {
             pod_resources.network = .{
                 .classID = net_resources.classID,
                 .priorities = if (net_resources.priorities) |priorities| blk: {
-                    var net_priorities = try allocator.alloc(
-                        @TypeOf(pod_resources.network.?.priorities.?[0]),
-                        priorities.len
-                    );
+                    var net_priorities = try allocator.alloc(@TypeOf(pod_resources.network.?.priorities.?[0]), priorities.len);
                     for (priorities, 0..) |priority, i| {
                         net_priorities[i] = .{
                             .name = try allocator.dupe(u8, priority.name),
@@ -317,13 +308,8 @@ pub const Pod = struct {
         // Створюємо контейнери
         var vmid: u32 = 100; // Початковий VMID
         for (self.spec.containers) |container_spec| {
-            const container = try ProxmoxContainer.create(
-                self.allocator,
-                container_spec.hostname orelse self.spec.metadata.name,
-                self.proxmox_api,
-                "pve", // Ім'я ноди Proxmox
-                vmid
-            );
+            const container = try ProxmoxContainer.create(self.allocator, container_spec.hostname orelse self.spec.metadata.name, self.proxmox_api, "pve", // Ім'я ноди Proxmox
+                vmid);
             errdefer container.deinit();
 
             // Налаштовуємо монтування
@@ -492,4 +478,4 @@ pub const Pod = struct {
             try container.joinNamespace(namespace_type, main_pid);
         }
     }
-}; 
+};

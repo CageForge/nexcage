@@ -1,5 +1,5 @@
 const std = @import("std");
-const Logger = @import("logger").Logger;
+const logger = @import("logger");
 
 pub const Error = error{
     // Configuration errors
@@ -65,83 +65,97 @@ pub const Error = error{
     InvalidArgument,
     SystemError,
     UnknownError,
+
+    InvalidArguments,
+    UnknownCommand,
+    UnexpectedArgument,
+    InvalidConfigFormat,
+    InvalidLogPath,
+    FailedToCreateLogFile,
+    FailedToParseConfig,
+    WriterError,
+    AllocationError,
+    NotInitialized,
 };
 
-pub fn handleError(err: Error, logger: *Logger) void {
-    switch (err) {
-        // Configuration errors
-        error.ConfigNotFound => logger.err("Configuration file not found", .{}),
-        error.ConfigInvalid => logger.err("Invalid configuration", .{}),
-        error.InvalidConfig => logger.err("Invalid configuration", .{}),
-        error.InvalidToken => logger.err("Invalid Proxmox API token", .{}),
+pub const ErrorContext = struct {
+    message: []const u8,
+    error_type: Error,
+    source: ?[]const u8 = null,
+    details: ?[]const u8 = null,
 
-        // Proxmox API errors
-        error.ProxmoxAPIError => logger.err("Proxmox API error", .{}),
-        error.ProxmoxConnectionError => logger.err("Failed to connect to Proxmox", .{}),
-        error.ProxmoxAuthError => logger.err("Proxmox authentication failed", .{}),
-        error.ProxmoxResourceNotFound => logger.err("Proxmox resource not found", .{}),
-        error.ProxmoxOperationFailed => logger.err("Proxmox operation failed", .{}),
-        error.ProxmoxInvalidResponse => logger.err("Invalid response from Proxmox API", .{}),
-        error.ProxmoxInvalidConfig => logger.err("Invalid Proxmox configuration", .{}),
-        error.ProxmoxInvalidNode => logger.err("Invalid Proxmox node", .{}),
-        error.ProxmoxInvalidVMID => logger.err("Invalid VM ID", .{}),
-        error.ProxmoxInvalidToken => logger.err("Invalid Proxmox API token", .{}),
-        error.ProxmoxConnectionFailed => logger.err("Failed to connect to Proxmox", .{}),
-        error.ProxmoxTimeout => logger.err("Proxmox operation timed out", .{}),
-        error.ProxmoxResourceExists => logger.err("Resource already exists in Proxmox", .{}),
-        error.ProxmoxInvalidState => logger.err("Invalid state for Proxmox operation", .{}),
-        error.ProxmoxInvalidParameter => logger.err("Invalid parameter for Proxmox operation", .{}),
-        error.ProxmoxPermissionDenied => logger.err("Permission denied for Proxmox operation", .{}),
-        error.ProxmoxInternalError => logger.err("Internal Proxmox error", .{}),
-
-        // CRI errors
-        error.PodNotFound => logger.err("Pod not found", .{}),
-        error.ContainerNotFound => logger.err("Container not found", .{}),
-        error.InvalidPodSpec => logger.err("Invalid pod specification", .{}),
-        error.InvalidContainerSpec => logger.err("Invalid container specification", .{}),
-        error.PodCreationFailed => logger.err("Failed to create pod", .{}),
-        error.ContainerCreationFailed => logger.err("Failed to create container", .{}),
-        error.PodDeletionFailed => logger.err("Failed to delete pod", .{}),
-        error.ContainerDeletionFailed => logger.err("Failed to delete container", .{}),
-
-        // Runtime errors
-        error.GRPCInitFailed => logger.err("Failed to initialize gRPC server", .{}),
-        error.GRPCBindFailed => logger.err("Failed to bind gRPC server", .{}),
-        error.SocketError => logger.err("Socket error", .{}),
-        error.ResourceLimitExceeded => logger.err("Resource limit exceeded", .{}),
-
-        // System errors
-        error.FileSystemError => logger.err("File system error", .{}),
-        error.PermissionDenied => logger.err("Permission denied", .{}),
-        error.NetworkError => logger.err("Network error", .{}),
-
-        // New error type
-        error.ClusterUnhealthy => logger.err("Cluster unhealthy", .{}),
-
-        error.ContainerAlreadyExists => logger.err("Container already exists", .{}),
-        error.InvalidContainerID => logger.err("Invalid container ID", .{}),
-        error.InvalidContainerName => logger.err("Invalid container name", .{}),
-        error.InvalidContainerConfig => logger.err("Invalid container configuration", .{}),
-        error.ContainerStartFailed => logger.err("Failed to start container", .{}),
-        error.ContainerStopFailed => logger.err("Failed to stop container", .{}),
-        error.ContainerDeleteFailed => logger.err("Failed to delete container", .{}),
-        error.ContainerStateError => logger.err("Error getting container state", .{}),
-        error.StorageError => logger.err("Storage error occurred", .{}),
-        error.OCIError => logger.err("OCI error occurred", .{}),
-        error.OutOfMemory => logger.err("Out of memory", .{}),
-        error.InvalidArgument => logger.err("Invalid argument", .{}),
-        error.SystemError => logger.err("System error occurred", .{}),
-        error.UnknownError => logger.err("Unknown error occurred", .{}),
+    pub fn init(allocator: std.mem.Allocator, message: []const u8, error_type: Error, source: ?[]const u8, details: ?[]const u8) !ErrorContext {
+        return ErrorContext{
+            .message = try allocator.dupe(u8, message),
+            .error_type = error_type,
+            .source = if (source) |s| try allocator.dupe(u8, s) else null,
+            .details = if (details) |d| try allocator.dupe(u8, d) else null,
+        };
     }
+
+    pub fn deinit(self: *ErrorContext, allocator: std.mem.Allocator) void {
+        allocator.free(self.message);
+        if (self.source) |s| allocator.free(s);
+        if (self.details) |d| allocator.free(d);
+    }
+
+    pub fn format(self: ErrorContext, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
+        try writer.print("Error: {s} ({s})", .{ self.message, @errorName(self.error_type) });
+        if (self.source) |s| try writer.print(" in {s}", .{s});
+        if (self.details) |d| try writer.print(": {s}", .{d});
+    }
+};
+
+pub fn handleError(allocator: std.mem.Allocator, err: anyerror, context: []const u8) !void {
+    const error_context = try ErrorContext.init(allocator, @errorName(err), err, context, null);
+    defer error_context.deinit(allocator);
+
+    try logger.err("{any}", .{error_context});
+    return err;
 }
 
-pub fn logError(logger: anytype, err: Error) void {
-    switch (err) {
-        error.ConfigNotFound => logger.err("Configuration file not found", .{}),
-        error.ConfigInvalid => logger.err("Invalid configuration", .{}),
-        error.ProxmoxOperationFailed => logger.err("Proxmox operation failed", .{}),
-        error.ClusterUnhealthy => logger.err("Cluster unhealthy", .{}),
-    }
+pub fn handleErrorWithDetails(allocator: std.mem.Allocator, err: anyerror, context: []const u8, details: []const u8) !void {
+    const error_context = try ErrorContext.init(allocator, @errorName(err), err, context, details);
+    defer error_context.deinit(allocator);
+
+    try logger.err("{any}", .{error_context});
+    return err;
+}
+
+pub fn wrapError(comptime T: type, comptime func: fn () T!void) fn () Error!void {
+    return struct {
+        fn wrapped() Error!void {
+            return func() catch |err| {
+                return switch (err) {
+                    error.OutOfMemory => Error.AllocationError,
+                    error.AccessDenied => Error.FileSystemError,
+                    error.FileNotFound => Error.FileSystemError,
+                    error.InvalidArgument => Error.InvalidArguments,
+                    error.NetworkError => Error.NetworkError,
+                    error.ContainerError => Error.ContainerError,
+                    error.RuntimeError => Error.RuntimeError,
+                    error.ConfigNotFound => Error.ConfigNotFound,
+                    error.UnknownCommand => Error.UnknownCommand,
+                    error.UnexpectedArgument => Error.UnexpectedArgument,
+                    error.InvalidConfigFormat => Error.InvalidConfigFormat,
+                    error.InvalidLogPath => Error.InvalidLogPath,
+                    error.FailedToCreateLogFile => Error.FailedToCreateLogFile,
+                    error.FailedToParseConfig => Error.FailedToParseConfig,
+                    error.WriterError => Error.WriterError,
+                    error.AllocationError => Error.AllocationError,
+                    error.NotInitialized => Error.NotInitialized,
+                    else => Error.RuntimeError,
+                };
+            };
+        }
+    }.wrapped;
+}
+
+pub fn logError(logger_ctx: anytype, err: Error) void {
+    const writer = logger_ctx.writer;
+    writer.print("Error: {s}\n", .{@errorName(err)}) catch {};
 }
 
 pub fn formatError(err: Error) []const u8 {

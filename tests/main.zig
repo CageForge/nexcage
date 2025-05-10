@@ -9,13 +9,13 @@ comptime {
     _ = @import("test_container.zig");
     _ = @import("test_container_state.zig");
     _ = @import("test_oci_spec.zig");
-    
+
     // Security tests
     _ = @import("security/test_security.zig");
-    
+
     // Integration tests
     _ = @import("integration/test_concurrency.zig");
-    
+
     // OCI tests
     _ = @import("oci/mod.zig");
 }
@@ -27,4 +27,4 @@ test {
     _ = @import("oci/mod.zig");
     _ = @import("runtime/mod.zig");
     _ = @import("cri/runtime/service_test.zig");
-} 
+}

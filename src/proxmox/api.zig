@@ -51,11 +51,7 @@ pub const ProxmoxApi = struct {
     pub fn authenticate(self: *Self) !void {
         logger.info("Authenticating with Proxmox VE", .{});
 
-        const url = try std.fmt.allocPrint(
-            self.allocator,
-            "https://{s}:{d}/api2/json/access/ticket",
-            .{ self.config.host, self.config.port }
-        );
+        const url = try std.fmt.allocPrint(self.allocator, "https://{s}:{d}/api2/json/access/ticket", .{ self.config.host, self.config.port });
         defer self.allocator.free(url);
 
         var client = http.Client{ .allocator = self.allocator };
@@ -65,11 +61,7 @@ pub const ProxmoxApi = struct {
         defer headers.deinit();
         try headers.append("Content-Type", "application/x-www-form-urlencoded");
 
-        const body = try std.fmt.allocPrint(
-            self.allocator,
-            "username={s}@{s}&password={s}",
-            .{ self.config.user, self.config.realm, self.config.password }
-        );
+        const body = try std.fmt.allocPrint(self.allocator, "username={s}@{s}&password={s}", .{ self.config.user, self.config.realm, self.config.password });
         defer self.allocator.free(body);
 
         var response = try client.post(url, headers, body);
@@ -99,11 +91,7 @@ pub const ProxmoxApi = struct {
             try self.authenticate();
         }
 
-        const url = try std.fmt.allocPrint(
-            self.allocator,
-            "https://{s}:{d}/api2/json/nodes/{s}/lxc",
-            .{ self.config.host, self.config.port, node }
-        );
+        const url = try std.fmt.allocPrint(self.allocator, "https://{s}:{d}/api2/json/nodes/{s}/lxc", .{ self.config.host, self.config.port, node });
         defer self.allocator.free(url);
 
         var headers = http.Headers.init(self.allocator);
@@ -134,11 +122,7 @@ pub const ProxmoxApi = struct {
             try self.authenticate();
         }
 
-        const url = try std.fmt.allocPrint(
-            self.allocator,
-            "https://{s}:{d}/api2/json/nodes/{s}/lxc/{d}/status/start",
-            .{ self.config.host, self.config.port, node, vmid }
-        );
+        const url = try std.fmt.allocPrint(self.allocator, "https://{s}:{d}/api2/json/nodes/{s}/lxc/{d}/status/start", .{ self.config.host, self.config.port, node, vmid });
         defer self.allocator.free(url);
 
         var headers = http.Headers.init(self.allocator);
@@ -165,11 +149,7 @@ pub const ProxmoxApi = struct {
             try self.authenticate();
         }
 
-        const url = try std.fmt.allocPrint(
-            self.allocator,
-            "https://{s}:{d}/api2/json/nodes/{s}/lxc/{d}/status/stop",
-            .{ self.config.host, self.config.port, node, vmid }
-        );
+        const url = try std.fmt.allocPrint(self.allocator, "https://{s}:{d}/api2/json/nodes/{s}/lxc/{d}/status/stop", .{ self.config.host, self.config.port, node, vmid });
         defer self.allocator.free(url);
 
         var headers = http.Headers.init(self.allocator);
@@ -196,11 +176,7 @@ pub const ProxmoxApi = struct {
             try self.authenticate();
         }
 
-        const url = try std.fmt.allocPrint(
-            self.allocator,
-            "https://{s}:{d}/api2/json/nodes/{s}/lxc/{d}",
-            .{ self.config.host, self.config.port, node, vmid }
-        );
+        const url = try std.fmt.allocPrint(self.allocator, "https://{s}:{d}/api2/json/nodes/{s}/lxc/{d}", .{ self.config.host, self.config.port, node, vmid });
         defer self.allocator.free(url);
 
         var headers = http.Headers.init(self.allocator);
@@ -227,11 +203,7 @@ pub const ProxmoxApi = struct {
             try self.authenticate();
         }
 
-        const url = try std.fmt.allocPrint(
-            self.allocator,
-            "https://{s}:{d}/api2/json/nodes/{s}/lxc/{d}/config",
-            .{ self.config.host, self.config.port, node, vmid }
-        );
+        const url = try std.fmt.allocPrint(self.allocator, "https://{s}:{d}/api2/json/nodes/{s}/lxc/{d}/config", .{ self.config.host, self.config.port, node, vmid });
         defer self.allocator.free(url);
 
         var headers = http.Headers.init(self.allocator);
@@ -242,17 +214,9 @@ pub const ProxmoxApi = struct {
 
         // Формуємо тіло запиту
         const body = if (options) |opts|
-            try std.fmt.allocPrint(
-                self.allocator,
-                "mp0=local:{s},mp={s},{s}",
-                .{ source, mount_point, opts }
-            )
+            try std.fmt.allocPrint(self.allocator, "mp0=local:{s},mp={s},{s}", .{ source, mount_point, opts })
         else
-            try std.fmt.allocPrint(
-                self.allocator,
-                "mp0=local:{s},mp={s}",
-                .{ source, mount_point }
-            );
+            try std.fmt.allocPrint(self.allocator, "mp0=local:{s},mp={s}", .{ source, mount_point });
         defer self.allocator.free(body);
 
         var client = http.Client{ .allocator = self.allocator };
@@ -266,4 +230,4 @@ pub const ProxmoxApi = struct {
             return ProxmoxError.RequestFailed;
         }
     }
-}; 
+};

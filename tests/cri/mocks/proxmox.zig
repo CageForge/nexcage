@@ -107,7 +107,7 @@ pub const MockProxmox = struct {
     } {
         _ = self;
         _ = vmid;
-        
+
         // Mock simple command execution
         if (std.mem.eql(u8, command, "echo test")) {
             return .{
@@ -125,4 +125,4 @@ pub const MockProxmox = struct {
             .timed_out = false,
         };
     }
-}; 
+};

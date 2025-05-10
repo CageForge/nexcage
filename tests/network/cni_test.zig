@@ -67,10 +67,7 @@ test "CNI error handling" {
     }
 
     // Expect error when required annotations are missing
-    try testing.expectError(
-        network.NetworkError.CNIConfigError,
-        proxmox.lxc.create.configureKubeOVNNetwork(allocator, &config, annotations)
-    );
+    try testing.expectError(network.NetworkError.CNIConfigError, proxmox.lxc.create.configureKubeOVNNetwork(allocator, &config, annotations));
 }
 
 test "CNI cleanup on error" {
@@ -98,4 +95,4 @@ test "CNI cleanup on error" {
     };
 
     try testing.expect(false);
-} 
+}

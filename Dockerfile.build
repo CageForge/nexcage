@@ -1,10 +1,10 @@
 FROM ubuntu:22.04
 
-# Встановлюємо часовий пояс неінтерактивно
+# Set Timezone
 ENV TZ=UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Встановлюємо необхідні залежності
+# Dependency
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
@@ -13,43 +13,26 @@ RUN apt-get update && apt-get install -y \
     wget \
     pkg-config \
     libssl-dev \
-    libprotobuf-dev \
-    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
-# Збираємо та встановлюємо gRPC C
-RUN git clone --recurse-submodules -b v1.60.0 --depth 1 https://github.com/grpc/grpc \
-    && cd grpc \
-    && mkdir -p cmake/build \
-    && cd cmake/build \
-    && cmake -DgRPC_INSTALL=ON \
-            -DgRPC_BUILD_TESTS=OFF \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr \
-            ../.. \
-    && make -j$(nproc) \
-    && make install \
-    && cd / && rm -rf grpc
-
-# Налаштовуємо шляхи до бібліотек
+# Path to libs
 ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
 ENV LIBRARY_PATH="/usr/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu:${LIBRARY_PATH}"
 ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}"
 
-# Встановлюємо Zig
+# Install Zig
 RUN wget https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz \
     && tar xf zig-linux-x86_64-0.14.0.tar.xz \
     && mv zig-linux-x86_64-0.14.0 /usr/local/zig \
     && rm zig-linux-x86_64-0.14.0.tar.xz
 
-# Додаємо Zig до PATH
+# Add Zig до PATH
 ENV PATH="/usr/local/zig:${PATH}"
 
-# Створюємо робочу директорію
 WORKDIR /app
 
-# Копіюємо файли проекту
+# Copy project files
 COPY . .
 
-# Збираємо проект
+# Build project
 CMD ["zig", "build", "run"] 

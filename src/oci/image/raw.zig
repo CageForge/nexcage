@@ -184,4 +184,4 @@ pub const RawImage = struct {
 
         try fs.cwd().deleteDir(mount_point);
     }
-}; 
+};

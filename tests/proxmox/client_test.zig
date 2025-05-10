@@ -81,4 +81,4 @@ test "Proxmox client container operations" {
 
     // Перевіряємо чи контейнер видалений
     try testing.expect(!try client.containerExists(node, vmid));
-} 
+}

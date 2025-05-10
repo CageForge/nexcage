@@ -1,6 +1,6 @@
-# Contributing to Proxmox LXCri
+# Contributing to Proxmox-LXCri
 
-Thank you for your interest in contributing to Proxmox LXCri! This document provides information on how you can help the project.
+Thank you for your interest in contributing to Proxmox-LXCri! This document provides information on how you can help the project.
 
 ## How to Contribute
 

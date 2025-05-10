@@ -28,8 +28,7 @@ pub const DNSManager = struct {
     /// Configures DNS for the network namespace
     pub fn configure(self: *Self, servers: []const []const u8, search: []const []const u8, options: []const []const u8) !void {
         // Create path to resolv.conf in the network namespace
-        const resolv_path = try std.fs.path.join(self.allocator, 
-            &[_][]const u8{self.netns_path, "etc/resolv.conf"});
+        const resolv_path = try std.fs.path.join(self.allocator, &[_][]const u8{ self.netns_path, "etc/resolv.conf" });
         defer self.allocator.free(resolv_path);
 
         // Create directory if it doesn't exist
@@ -70,8 +69,7 @@ pub const DNSManager = struct {
 
     /// Cleans up DNS configuration
     pub fn cleanup(self: *Self) !void {
-        const resolv_path = try std.fs.path.join(self.allocator, 
-            &[_][]const u8{self.netns_path, "etc/resolv.conf"});
+        const resolv_path = try std.fs.path.join(self.allocator, &[_][]const u8{ self.netns_path, "etc/resolv.conf" });
         defer self.allocator.free(resolv_path);
 
         std.fs.deleteFileAbsolute(resolv_path) catch |err| {
@@ -81,4 +79,4 @@ pub const DNSManager = struct {
             }
         };
     }
-}; 
+};

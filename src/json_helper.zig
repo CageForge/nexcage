@@ -88,4 +88,4 @@ pub fn getOptionalArray(value: std.json.Value, field: []const u8) !?std.json.Val
         .array => field_value,
         else => error.InvalidType,
     };
-} 
+}

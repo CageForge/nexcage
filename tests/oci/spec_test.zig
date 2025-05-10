@@ -6,7 +6,7 @@ const types = oci.types;
 
 test "Validate minimal spec" {
     const allocator = testing.allocator;
-    
+
     const minimal_spec = types.Spec{
         .version = "1.0.0",
         .root = .{
@@ -27,13 +27,13 @@ test "Validate minimal spec" {
         .mounts = &[_]types.Mount{},
         .linux = null,
     };
-    
+
     try spec.validateSpec(&minimal_spec);
 }
 
 test "Validate full spec" {
     const allocator = testing.allocator;
-    
+
     var full_spec = types.Spec{
         .version = "1.0.0",
         .root = .{
@@ -45,9 +45,9 @@ test "Validate full spec" {
             .user = .{
                 .uid = 1000,
                 .gid = 1000,
-                .additionalGids = &[_]u32{100, 101},
+                .additionalGids = &[_]u32{ 100, 101 },
             },
-            .args = &[_][]const u8{"/bin/bash", "-c", "echo hello"},
+            .args = &[_][]const u8{ "/bin/bash", "-c", "echo hello" },
             .env = &[_][]const u8{
                 "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                 "TERM=xterm",
@@ -75,13 +75,13 @@ test "Validate full spec" {
                 .destination = "/proc",
                 .type = "proc",
                 .source = "proc",
-                .options = &[_][]const u8{"nosuid", "noexec", "nodev"},
+                .options = &[_][]const u8{ "nosuid", "noexec", "nodev" },
             },
             .{
                 .destination = "/dev",
                 .type = "tmpfs",
                 .source = "tmpfs",
-                .options = &[_][]const u8{"nosuid", "strictatime", "mode=755", "size=65536k"},
+                .options = &[_][]const u8{ "nosuid", "strictatime", "mode=755", "size=65536k" },
             },
         },
         .hooks = .{
@@ -148,13 +148,13 @@ test "Validate full spec" {
             .selinux = null,
         },
     };
-    
+
     try spec.validateSpec(&full_spec);
 }
 
 test "Validate invalid spec" {
     const allocator = testing.allocator;
-    
+
     // Специфікація без версії
     const invalid_spec_1 = types.Spec{
         .version = "",
@@ -176,9 +176,9 @@ test "Validate invalid spec" {
         .mounts = &[_]types.Mount{},
         .linux = null,
     };
-    
+
     try testing.expectError(error.InvalidSpec, spec.validateSpec(&invalid_spec_1));
-    
+
     // Специфікація без root path
     const invalid_spec_2 = types.Spec{
         .version = "1.0.0",
@@ -200,9 +200,9 @@ test "Validate invalid spec" {
         .mounts = &[_]types.Mount{},
         .linux = null,
     };
-    
+
     try testing.expectError(error.InvalidSpec, spec.validateSpec(&invalid_spec_2));
-    
+
     // Специфікація без аргументів процесу
     const invalid_spec_3 = types.Spec{
         .version = "1.0.0",
@@ -224,6 +224,6 @@ test "Validate invalid spec" {
         .mounts = &[_]types.Mount{},
         .linux = null,
     };
-    
+
     try testing.expectError(error.InvalidSpec, spec.validateSpec(&invalid_spec_3));
-} 
+}

@@ -24,7 +24,7 @@ test "RuntimeService - basic lifecycle operations" {
         test_allocator.free(version.runtime_version);
         test_allocator.free(version.runtime_api_version);
     }
-    
+
     try testing.expectEqualStrings("0.1.0", version.version);
     try testing.expectEqualStrings("proxmox-lxcri", version.runtime_name);
     try testing.expectEqualStrings("v1alpha2", version.runtime_api_version);
@@ -124,7 +124,7 @@ test "RuntimeService - basic lifecycle operations" {
     });
 
     // Test ExecSync
-    const exec_result = try runtime.ExecSync(container.id, &[_][]const u8{"echo", "test"}, 10);
+    const exec_result = try runtime.ExecSync(container.id, &[_][]const u8{ "echo", "test" }, 10);
     defer {
         test_allocator.free(exec_result.stdout);
         test_allocator.free(exec_result.stderr);
@@ -177,4 +177,4 @@ test "RuntimeService - error handling" {
     try testing.expectError(error.ContainerNotFound, runtime.StartContainer("999999"));
     try testing.expectError(error.ContainerNotFound, runtime.StopContainer("999999", 30));
     try testing.expectError(error.ContainerNotFound, runtime.RemoveContainer("999999"));
-} 
+}

@@ -31,14 +31,14 @@ pub const NetworkManager = struct {
     allocator: Allocator,
     cni_plugin: *cni.CNIPlugin,
     networks: std.StringHashMap(*Network),
-    
+
     const Self = @This();
-    
+
     /// Створює новий менеджер мережі
     pub fn init(allocator: Allocator, plugin_dir: []const u8) !*Self {
         const self = try allocator.create(Self);
         errdefer allocator.destroy(self);
-        
+
         // Створюємо базову конфігурацію CNI
         const config = cni.CNIConfig{
             .name = "proxmox-net",
@@ -57,10 +57,10 @@ pub const NetworkManager = struct {
             .cni_plugin = plugin,
             .networks = std.StringHashMap(*Network).init(allocator),
         };
-        
+
         return self;
     }
-    
+
     /// Звільняє ресурси
     pub fn deinit(self: *Self) void {
         var it = self.networks.iterator();
@@ -73,7 +73,7 @@ pub const NetworkManager = struct {
         self.allocator.destroy(self.cni_plugin);
         self.allocator.destroy(self);
     }
-    
+
     /// Створює нову мережу для Pod-а
     pub fn createNetwork(self: *Self, pod_id: []const u8, config: types.NetworkConfig) !void {
         if (self.networks.get(pod_id)) |_| {
@@ -88,7 +88,7 @@ pub const NetworkManager = struct {
 
         try self.networks.put(pod_id, network);
     }
-    
+
     /// Видаляє мережу Pod-а
     pub fn deleteNetwork(self: *Self, pod_id: []const u8) !void {
         const network = self.networks.get(pod_id) orelse return error.NetworkNotFound;
@@ -97,19 +97,19 @@ pub const NetworkManager = struct {
         self.allocator.destroy(network);
         _ = self.networks.remove(pod_id);
     }
-    
+
     /// Запускає мережу Pod-а
     pub fn startNetwork(self: *Self, pod_id: []const u8) !void {
         const network = self.networks.get(pod_id) orelse return error.NetworkNotFound;
         try network.start();
     }
-    
+
     /// Зупиняє мережу Pod-а
     pub fn stopNetwork(self: *Self, pod_id: []const u8) !void {
         const network = self.networks.get(pod_id) orelse return error.NetworkNotFound;
         try network.stop();
     }
-    
+
     /// Отримує статус мережі Pod-а
     pub fn getNetworkStatus(self: *Self, pod_id: []const u8) !NetworkStatus {
         const network = self.networks.get(pod_id) orelse return error.NetworkNotFound;
@@ -235,7 +235,7 @@ pub const NetworkInterface = struct {
     netmask: []const u8,
     gateway: ?[]const u8,
     mtu: u32,
-    
+
     pub fn init(allocator: Allocator) !NetworkInterface {
         return NetworkInterface{
             .name = try allocator.dupe(u8, "eth0"),
@@ -245,11 +245,11 @@ pub const NetworkInterface = struct {
             .mtu = 1500,
         };
     }
-    
+
     pub fn deinit(self: *NetworkInterface, allocator: Allocator) void {
         allocator.free(self.name);
         allocator.free(self.ip_address);
         allocator.free(self.netmask);
         if (self.gateway) |g| allocator.free(g);
     }
-}; 
+};

@@ -4,6 +4,8 @@ pub const state = @import("state.zig");
 pub const manager = @import("manager.zig");
 pub const dns = @import("dns.zig");
 pub const port_forward = @import("port_forward.zig");
+pub const validator = @import("validator.zig");
+pub usingnamespace @import("network.zig");
 
 pub const NetworkManager = manager.NetworkManager;
 pub const NetworkError = manager.NetworkError;
@@ -61,7 +63,7 @@ pub fn generateMACAddress(allocator: std.mem.Allocator) ![]const u8 {
 
     // Перший байт повинен мати локально адміністрований біт встановленим
     const first_byte = 0x02 | (random.int(u8) & 0xFE);
-    
+
     try std.fmt.bufPrint(mac[0..], "{X:0>2}:{X:0>2}:{X:0>2}:{X:0>2}:{X:0>2}:{X:0>2}", .{
         first_byte,
         random.int(u8),
@@ -80,7 +82,7 @@ test "isValidIPAddress" {
     try testing.expect(try isValidIPAddress("192.168.1.1"));
     try testing.expect(try isValidIPAddress("10.0.0.0"));
     try testing.expect(try isValidIPAddress("172.16.254.1"));
-    
+
     try testing.expect(!try isValidIPAddress("256.1.2.3"));
     try testing.expect(!try isValidIPAddress("1.1.1"));
     try testing.expect(!try isValidIPAddress("192.168.01.1"));
@@ -92,7 +94,7 @@ test "isValidMACAddress" {
     try testing.expect(try isValidMACAddress("00:11:22:33:44:55"));
     try testing.expect(try isValidMACAddress("AA:BB:CC:DD:EE:FF"));
     try testing.expect(try isValidMACAddress("02:00:00:00:00:00"));
-    
+
     try testing.expect(!try isValidMACAddress("00-11-22-33-44-55"));
     try testing.expect(!try isValidMACAddress("00:11:22:33:44"));
     try testing.expect(!try isValidMACAddress("00:11:22:33:44:GG"));
@@ -107,4 +109,4 @@ test "generateMACAddress" {
 
     try testing.expect(try isValidMACAddress(mac));
     try testing.expect(mac[0] == '0' and mac[1] == '2');
-} 
+}

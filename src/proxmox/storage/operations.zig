@@ -114,4 +114,4 @@ pub fn listStorage(client: *Client) ![]Storage {
     }
 
     return try storages.toOwnedSlice();
-} 
+}

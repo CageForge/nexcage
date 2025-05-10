@@ -8,7 +8,7 @@ const Connection = @import("proxmox/connection.zig").Connection;
 
 test "API client operations" {
     const allocator = testing.allocator;
-    
+
     // Get API configuration from environment
     const base_url = std.os.getenv("PROXMOX_API_URL") orelse "https://localhost:8006/api2/json";
     const token = std.os.getenv("PROXMOX_TOKEN") orelse "root@pam!token=test-token-12345";
@@ -17,7 +17,7 @@ test "API client operations" {
     } else {
         false;
     };
-    
+
     var client = try api.Client.init(
         allocator,
         base_url,
@@ -28,16 +28,16 @@ test "API client operations" {
         },
     );
     defer client.deinit();
-    
+
     // Test API version endpoint
     const version = try client.getVersion();
     try testing.expect(version.len > 0);
-    
+
     // Test node list endpoint
     var nodes = try client.getNodes();
     defer nodes.deinit();
     try testing.expect(nodes.items.len > 0);
-    
+
     // Test specific node info
     if (nodes.items.len > 0) {
         const node_name = nodes.items[0].name;
@@ -48,7 +48,7 @@ test "API client operations" {
 
 test "Connection initialization and basic operations" {
     const allocator = testing.allocator;
-    
+
     // Get connection details from environment or use defaults
     const host = std.os.getenv("PROXMOX_HOST") orelse "localhost";
     const port = if (std.os.getenv("PROXMOX_PORT")) |port_str| {
@@ -62,7 +62,7 @@ test "Connection initialization and basic operations" {
     } else {
         false;
     };
-    
+
     var conn = try Connection.init(
         allocator,
         host,
@@ -71,10 +71,10 @@ test "Connection initialization and basic operations" {
         verify_ssl,
     );
     defer conn.deinit();
-    
+
     // Test basic connection operations
     try testing.expect(conn.isConnected());
-    
+
     // Test request sending
     const response = try conn.sendRequest(.GET, "/version", null);
     defer allocator.free(response);
@@ -108,4 +108,4 @@ test "Proxmox client initialization and operations" {
     const response = try client.makeRequest(.GET, "/version", null);
     defer allocator.free(response);
     try testing.expect(response.len > 0);
-} 
+}

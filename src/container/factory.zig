@@ -173,7 +173,7 @@ pub const ContainerConfig = struct {
 
         if (self.process.capabilities) |caps| {
             inline for (.{
-                caps.bounding, caps.effective, caps.inheritable,
+                caps.bounding,  caps.effective, caps.inheritable,
                 caps.permitted, caps.ambient,
             }) |cap_list| {
                 if (cap_list) |list| {
@@ -457,4 +457,4 @@ const VMContainer = struct {
     pub fn state(self: *@This()) Error!types.ContainerState {
         return self.state;
     }
-}; 
+};

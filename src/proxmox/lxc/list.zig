@@ -183,4 +183,4 @@ pub fn getLXCStatus(client: *ProxmoxClient, oci_container_id: []const u8) !types
     }
 
     return try types.ContainerStatus.fromString(status.string);
-} 
+}

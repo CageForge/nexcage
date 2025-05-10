@@ -9,7 +9,7 @@ pub fn getVMStatus(client: *Client, node: []const u8, vmid: u32) !types.Containe
     defer client.allocator.free(path);
 
     try client.logger.debug("Getting status for VM {d} on node {s}", .{ vmid, node });
-    
+
     const response = try client.makeRequest(.GET, path, null);
     defer client.allocator.free(response);
 
@@ -41,4 +41,4 @@ fn parseStatus(status: []const u8) !types.ContainerStatus {
     } else {
         return .unknown;
     }
-} 
+}

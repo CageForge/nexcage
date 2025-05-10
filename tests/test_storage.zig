@@ -107,4 +107,4 @@ test "DiskConfig - create and delete disk" {
 
     try manager.createDisk("local-1", disk_config);
     try manager.deleteDisk("local-1", "/var/lib/lxc/test-container/rootfs.raw");
-} 
+}

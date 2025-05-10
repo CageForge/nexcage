@@ -15,7 +15,7 @@ const NetworkError = error{
 
 pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, spec: *const oci.Spec) !void {
     const vmid = try client.getProxmoxVMID(oci_container_id);
-    
+
     const api_path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc", .{client.node});
     defer client.allocator.free(api_path);
 
@@ -86,7 +86,7 @@ pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, s
         var mp_index: usize = 0;
         for (spec.mounts) |mount| {
             const mp_name = try std.fmt.allocPrint(client.allocator, "mp{d}", .{mp_index});
-            const mp_value = try std.fmt.allocPrint(client.allocator, "{s},mp={s}", .{mount.source, mount.destination});
+            const mp_value = try std.fmt.allocPrint(client.allocator, "{s},mp={s}", .{ mount.source, mount.destination });
             try config.put(mp_name, mp_value);
             mp_index += 1;
         }
@@ -150,7 +150,7 @@ pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, s
             if (linux.devices.len > 0) {
                 for (linux.devices) |device| {
                     const dev_name = try std.fmt.allocPrint(client.allocator, "dev{d}", .{device.major});
-                    const dev_value = try std.fmt.allocPrint(client.allocator, "{s}:{d}:{d}", .{device.type, device.major, device.minor});
+                    const dev_value = try std.fmt.allocPrint(client.allocator, "{s}:{d}:{d}", .{ device.type, device.major, device.minor });
                     try config.put(dev_name, dev_value);
                 }
             }
@@ -223,7 +223,7 @@ fn configureKubeOVNNetwork(allocator: std.mem.Allocator, config: *std.StringHash
     });
 
     if (result.ip) |ip| {
-        try net_config.writer().print("ip={s}/{d},", .{ip.address, ip.prefix_len});
+        try net_config.writer().print("ip={s}/{d},", .{ ip.address, ip.prefix_len });
     }
 
     if (result.gateway) |gw| {
@@ -271,11 +271,11 @@ fn parseCpuCount(cpus: []const u8) !u32 {
     while (it.next()) |range| {
         if (std.mem.indexOf(u8, range, "-")) |sep| {
             const start = try std.fmt.parseInt(u32, range[0..sep], 10);
-            const end = try std.fmt.parseInt(u32, range[sep + 1..], 10);
+            const end = try std.fmt.parseInt(u32, range[sep + 1 ..], 10);
             count += end - start + 1;
         } else {
             count += 1;
         }
     }
     return count;
-} 
+}

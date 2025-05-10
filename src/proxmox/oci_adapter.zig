@@ -127,7 +127,7 @@ pub fn validateOciSpec(spec: *const oci.Spec) !void {
             logger.err("Seccomp default action is required", .{});
             return AdapterError.InvalidSpec;
         }
-        
+
         // Перевіряємо syscalls
         if (seccomp.syscalls) |syscalls| {
             for (syscalls) |syscall| {
@@ -175,4 +175,4 @@ fn isDeviceSupported(device: oci.LinuxDevice) bool {
         }
     }
     return false;
-} 
+}

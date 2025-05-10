@@ -45,7 +45,7 @@ test "create container with raw image and raw storage" {
     const config_file = try fs.cwd().createFile(config_path, .{});
     defer config_file.close();
 
-    const config_content = 
+    const config_content =
         \\{
         \\  "ociVersion": "1.0.0",
         \\  "process": {
@@ -93,7 +93,7 @@ test "create container with raw image and raw storage" {
     const oci_config_file = try fs.cwd().createFile(oci_config_path, .{});
     defer oci_config_file.close();
 
-    const oci_config_content = 
+    const oci_config_content =
         \\{
         \\  "storage": {
         \\    "type": "raw",
@@ -191,7 +191,7 @@ test "create container with zfs storage" {
     const config_file = try fs.cwd().createFile(config_path, .{});
     defer config_file.close();
 
-    const config_content = 
+    const config_content =
         \\{
         \\  "ociVersion": "1.0.0",
         \\  "process": {
@@ -239,7 +239,7 @@ test "create container with zfs storage" {
     const oci_config_file = try fs.cwd().createFile(oci_config_path, .{});
     defer oci_config_file.close();
 
-    const oci_config_content = 
+    const oci_config_content =
         \\{
         \\  "storage": {
         \\    "type": "zfs",
@@ -336,7 +336,7 @@ test "create container with registry image" {
     const config_file = try fs.cwd().createFile(config_path, .{});
     defer config_file.close();
 
-    const config_content = 
+    const config_content =
         \\{
         \\  "ociVersion": "1.0.0",
         \\  "process": {
@@ -384,7 +384,7 @@ test "create container with registry image" {
     const oci_config_file = try fs.cwd().createFile(oci_config_path, .{});
     defer oci_config_file.close();
 
-    const oci_config_content = 
+    const oci_config_content =
         \\{
         \\  "storage": {
         \\    "type": "raw",
@@ -453,4 +453,4 @@ test "create container with registry image" {
     try testing.expect(!try lxc_manager.containerExists("test-container"));
     try testing.expect(!try fs.cwd().access(raw_path, .{}));
     try testing.expect(!try fs.cwd().access(image_path, .{}));
-} 
+}

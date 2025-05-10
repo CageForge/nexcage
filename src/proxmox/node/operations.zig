@@ -71,4 +71,4 @@ pub fn getNodes(client: *Client) ![]Node {
     }
 
     return try nodes.toOwnedSlice();
-} 
+}

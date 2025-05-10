@@ -32,4 +32,4 @@ pub fn start(container_id: []const u8, proxmox_client: *proxmox.ProxmoxClient) !
     try proxmox_client.startContainer(.lxc, vmid.?);
 
     logger.info("Container {s} started successfully", .{container_id});
-} 
+}

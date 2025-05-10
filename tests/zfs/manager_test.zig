@@ -89,4 +89,4 @@ test "ZFS manager properties" {
     // Звільняємо пам'ять
     allocator.free(compression);
     allocator.free(atime);
-} 
+}

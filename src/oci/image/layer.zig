@@ -27,25 +27,25 @@ pub fn createLayer(
 ) !Layer {
     const file = try fs.openFileAbsolute(path, .{});
     defer file.close();
-    
+
     const stat = try file.stat();
     const compressed_size = stat.size;
-    
+
     // Calculate SHA256 of the layer
     var hasher = Sha256.init(.{});
     var buffer: [8192]u8 = undefined;
-    
+
     while (true) {
         const bytes_read = try file.read(&buffer);
         if (bytes_read == 0) break;
         hasher.update(buffer[0..bytes_read]);
     }
-    
+
     var hash: [Sha256.digest_length]u8 = undefined;
     hasher.final(&hash);
-    
+
     const digest = try std.fmt.allocPrint(allocator, "sha256:{s}", .{std.fmt.fmtSliceHexLower(&hash)});
-    
+
     return Layer{
         .path = path,
         .compressed_size = compressed_size,
@@ -68,8 +68,8 @@ pub fn validateLayer(layer: Layer) !void {
     if (layer.compressed_size <= 0 or layer.uncompressed_size <= 0) {
         return LayerError.InvalidLayer;
     }
-    
+
     if (!std.mem.startsWith(u8, layer.media_type, "application/vnd.oci.image.layer.")) {
         return LayerError.InvalidMediaType;
     }
-} 
+}

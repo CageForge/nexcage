@@ -25,7 +25,7 @@ pub fn listTemplates(client: *Client) ![]Template {
     defer client.allocator.free(path);
 
     try client.logger.debug("Requesting templates list from node {s}", .{client.node});
-    
+
     const response = try client.makeRequest(.GET, path, null);
     defer client.allocator.free(response);
 
@@ -52,9 +52,10 @@ pub fn listTemplates(client: *Client) ![]Template {
                     .volid = try client.allocator.dupe(u8, item.object.get("volid").?.string),
                     .format = try client.allocator.dupe(u8, item.object.get("format").?.string),
                     .size = @intCast(item.object.get("size").?.integer),
-                    .hash = if (item.object.get("hash")) |h| 
+                    .hash = if (item.object.get("hash")) |h|
                         try client.allocator.dupe(u8, h.string)
-                    else null,
+                    else
+                        null,
                 });
             }
         }
@@ -71,7 +72,7 @@ pub fn downloadTemplate(client: *Client, url: []const u8) !Template {
     defer client.allocator.free(body);
 
     try client.logger.debug("Downloading template from URL: {s}", .{url});
-    
+
     const response = try client.makeRequest(.POST, path, body);
     defer client.allocator.free(response);
 
@@ -101,7 +102,7 @@ pub fn deleteTemplate(client: *Client, volid: []const u8) !void {
     defer client.allocator.free(path);
 
     try client.logger.debug("Deleting template: {s}", .{volid});
-    
+
     const response = try client.makeRequest(.DELETE, path, null);
     defer client.allocator.free(response);
 
@@ -119,4 +120,4 @@ pub fn deleteTemplate(client: *Client, volid: []const u8) !void {
         try client.logger.err("Failed to delete template {s}: {s}", .{ volid, response });
         return error.DeleteError;
     }
-} 
+}

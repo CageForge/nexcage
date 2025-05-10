@@ -117,8 +117,7 @@ pub const CNIPlugin = struct {
         container_id: []const u8,
         netns: []const u8,
     }) !CNIResult {
-        const plugin_path = try std.fs.path.join(self.allocator, 
-            &[_][]const u8{self.plugin_dir, self.config.type});
+        const plugin_path = try std.fs.path.join(self.allocator, &[_][]const u8{ self.plugin_dir, self.config.type });
         defer self.allocator.free(plugin_path);
 
         // Перевіряємо чи існує плагін
@@ -323,4 +322,4 @@ pub const CNIPlugin = struct {
             .routes = if (routes.items.len > 0) try routes.toOwnedSlice() else null,
         };
     }
-}; 
+};

@@ -71,33 +71,52 @@ pub const HookExecutor = struct {
             }
         }
 
-        var child = std.ChildProcess.init(args.items, self.allocator);
-        defer child.deinit();
+        var env_map = try process.getEnvMap(self.allocator);
+        defer env_map.deinit();
 
         // Встановлюємо environment змінні
         if (hook.env) |env| {
-            child.env_map = try std.process.getEnvMap(self.allocator);
             for (env) |env_var| {
                 const index = std.mem.indexOf(u8, env_var, "=") orelse continue;
                 const key = env_var[0..index];
                 const value = env_var[index + 1 ..];
-                try child.env_map.?.put(key, value);
+                try env_map.put(key, value);
             }
         }
 
+        // Додаємо контекст
+        try env_map.put("OCI_CONTAINER_ID", context.container_id);
+        try env_map.put("OCI_BUNDLE", context.bundle);
+        try env_map.put("OCI_CONTAINER_STATE", context.state);
+
         // Встановлюємо timeout
-        if (hook.timeout) |timeout| {
-            child.term_timeout = timeout;
-        } else {
-            child.term_timeout = self.default_timeout;
+        const timeout = hook.timeout orelse self.default_timeout;
+
+        var child = process.Child.init(args.items, self.allocator);
+
+        child.env_map = &env_map;
+        child.stdin_behavior = .Ignore;
+        child.stdout_behavior = .Pipe;
+        child.stderr_behavior = .Pipe;
+
+        try child.spawn();
+
+        const start_time = std.time.milliTimestamp();
+        const stdout = try child.stdout.?.reader().readAllAlloc(self.allocator, 1024 * 1024);
+        defer self.allocator.free(stdout);
+
+        const stderr = try child.stderr.?.reader().readAllAlloc(self.allocator, 1024 * 1024);
+        defer self.allocator.free(stderr);
+
+        const term = try child.wait();
+        const end_time = std.time.milliTimestamp();
+        const duration = @as(i64, @intCast(end_time - start_time));
+
+        if (duration > timeout) {
+            logger.err("Hook {s} exceeded timeout of {d}ms (took {d}ms)", .{ hook.path, timeout, duration });
+            return error.TimeoutExceeded;
         }
 
-        // Додаємо контекст
-        try child.env_map.?.put("OCI_CONTAINER_ID", context.container_id);
-        try child.env_map.?.put("OCI_BUNDLE", context.bundle);
-        try child.env_map.?.put("OCI_CONTAINER_STATE", context.state);
-
-        const term = try child.spawnAndWait();
         switch (term) {
             .Exited => |code| {
                 if (code != 0) {
@@ -156,10 +175,7 @@ test "HookExecutor - timeout" {
         .state = "creating",
     };
 
-    try testing.expectError(
-        HookError.TimeoutExceeded,
-        executor.executeHook(hook, context)
-    );
+    try testing.expectError(HookError.TimeoutExceeded, executor.executeHook(hook, context));
 }
 
 test "HookExecutor - invalid path" {
@@ -182,8 +198,5 @@ test "HookExecutor - invalid path" {
         .state = "creating",
     };
 
-    try testing.expectError(
-        HookError.InvalidPath,
-        executor.executeHook(hook, context)
-    );
-} 
+    try testing.expectError(HookError.InvalidPath, executor.executeHook(hook, context));
+}

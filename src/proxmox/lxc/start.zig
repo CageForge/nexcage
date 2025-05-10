@@ -9,7 +9,7 @@ pub fn startLXC(client: *Client, node: []const u8, vmid: u32) !void {
     defer client.allocator.free(path);
 
     try client.logger.debug("Starting LXC container {d} on node {s}", .{ vmid, node });
-    
+
     const response = try client.makeRequest(.POST, path, null);
     defer client.allocator.free(response);
 
@@ -27,4 +27,4 @@ pub fn startLXC(client: *Client, node: []const u8, vmid: u32) !void {
         try client.logger.err("Failed to start container {d}: {s}", .{ vmid, response });
         return error.StartError;
     }
-} 
+}

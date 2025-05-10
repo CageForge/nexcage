@@ -21,6 +21,9 @@ const network = @import("network");
 const process = std.process;
 const oci_commands = @import("oci");
 const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadError;
+const image = @import("image");
+const zfs = @import("zfs");
+const lxc = @import("lxc");
 
 const SIGINT = posix.SIG.INT;
 const SIGTERM = posix.SIG.TERM;
@@ -28,7 +31,6 @@ const SIGHUP = posix.SIG.HUP;
 
 var shutdown_requested: bool = false;
 var last_signal: ?c_int = null;
-var logger_instance: logger_mod.Logger = undefined;
 var proxmox_client: *ProxmoxClient = undefined;
 
 const RuntimeOptions = struct {
@@ -40,6 +42,34 @@ const RuntimeOptions = struct {
     pid_file: ?[]const u8 = null,
     console_socket: ?[]const u8 = null,
     debug: bool = false,
+    allocator: Allocator,
+
+    pub fn init(allocator: Allocator) RuntimeOptions {
+        return RuntimeOptions{
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *RuntimeOptions) void {
+        if (self.root) |root| {
+            self.allocator.free(root);
+        }
+        if (self.log) |log| {
+            self.allocator.free(log);
+        }
+        if (self.log_format) |log_format| {
+            self.allocator.free(log_format);
+        }
+        if (self.bundle) |bundle| {
+            self.allocator.free(bundle);
+        }
+        if (self.pid_file) |pid_file| {
+            self.allocator.free(pid_file);
+        }
+        if (self.console_socket) |console_socket| {
+            self.allocator.free(console_socket);
+        }
+    }
 };
 
 const Command = enum {
@@ -69,252 +99,192 @@ const ConfigError = error{
     FailedToParseConfig,
 } || std.fs.File.OpenError || std.fs.File.ReadError;
 
-fn initLogger(allocator: Allocator, debug_mode: bool) !logger_mod.Logger {
-    const log_level = if (debug_mode) types.LogLevel.debug else types.LogLevel.info;
-    
-    const log_file = if (!debug_mode) blk: {
-        const file = fs.cwd().createFile("/var/log/proxmox-lxcri.log", .{ .truncate = false }) catch |err| {
-            std.log.err("Failed to create log file: {s}, falling back to stderr", .{@errorName(err)});
+fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.Config) !void {
+    const log_level = if (options.debug) types.LogLevel.debug else types.LogLevel.info;
+
+    // Determine log file path with priority:
+    // 1. Command line (--log)
+    // 2. Configuration file
+    const log_path = if (options.log) |path| path else cfg.runtime.log_path;
+
+    const log_file = if (!options.debug) blk: {
+        // Create log directory if it doesn't exist
+        const actual_log_path = log_path orelse "/var/log/proxmox-lxcri/runtime.log";
+        const log_dir = std.fs.path.dirname(actual_log_path) orelse ".";
+        fs.cwd().makePath(log_dir) catch |err| {
+            try logger_mod.err("Failed to create log directory: {s}, falling back to stderr", .{@errorName(err)});
+            break :blk null;
+        };
+
+        const file = fs.cwd().openFile(actual_log_path, .{ .mode = .read_write }) catch |err| {
+            // If file doesn't exist, create it
+            if (err == error.FileNotFound) {
+                const new_file = fs.cwd().createFile(actual_log_path, .{ .truncate = false, .mode = 0o644 }) catch |create_err| {
+                    try logger_mod.err("Failed to create log file: {s}, falling back to stderr", .{@errorName(create_err)});
+                    break :blk null;
+                };
+                break :blk new_file;
+            }
+            try logger_mod.err("Failed to open log file: {s}, falling back to stderr", .{@errorName(err)});
+            break :blk null;
+        };
+        // Move cursor to end of file for appending
+        file.seekFromEnd(0) catch |err| {
+            try logger_mod.err("Failed to seek to end of log file: {s}, falling back to stderr", .{@errorName(err)});
+            file.close();
             break :blk null;
         };
         break :blk file;
     } else null;
-    
-    const log_writer = if (debug_mode or log_file == null) 
-        std.io.getStdErr().writer() 
-    else 
-        log_file.?.writer();
-        
-    return try logger_mod.Logger.init(
-        allocator,
-        log_writer,
-        log_level,
-    );
-}
 
-fn parseArgs(allocator: Allocator) !struct { Command, RuntimeOptions, ?[]const u8 } {
-    var args = try process.argsWithAllocator(allocator);
-    defer args.deinit();
-
-    // Пропускаємо ім'я програми
-    _ = args.skip();
-
-    var options = RuntimeOptions{};
-    var command: Command = .unknown;
-    var container_id: ?[]const u8 = null;
-
-    var arg = args.next();
-    while (arg) |current_arg| : (arg = args.next()) {
-        if (std.mem.startsWith(u8, current_arg, "--")) {
-            const option = current_arg[2..];
-            if (std.mem.eql(u8, option, "root")) {
-                if (args.next()) |value| {
-                    options.root = try allocator.dupe(u8, value);
-                }
-            } else if (std.mem.eql(u8, option, "log")) {
-                if (args.next()) |value| {
-                    options.log = try allocator.dupe(u8, value);
-                }
-            } else if (std.mem.eql(u8, option, "log-format")) {
-                if (args.next()) |value| {
-                    options.log_format = try allocator.dupe(u8, value);
-                }
-            } else if (std.mem.eql(u8, option, "systemd-cgroup")) {
-                options.systemd_cgroup = true;
-            } else if (std.mem.eql(u8, option, "bundle") or std.mem.eql(u8, option, "b")) {
-                if (args.next()) |value| {
-                    options.bundle = try allocator.dupe(u8, value);
-                }
-            } else if (std.mem.eql(u8, option, "pid-file")) {
-                if (args.next()) |value| {
-                    options.pid_file = try allocator.dupe(u8, value);
-                }
-            } else if (std.mem.eql(u8, option, "console-socket")) {
-                if (args.next()) |value| {
-                    options.console_socket = try allocator.dupe(u8, value);
-                }
-            } else if (std.mem.eql(u8, option, "debug")) {
-                options.debug = true;
-            }
-        } else if (command == .unknown) {
-            command = Command.fromString(current_arg);
-        } else if (container_id == null) {
-            container_id = try allocator.dupe(u8, current_arg);
-        }
+    if (log_file) |file| {
+        try logger_mod.initWithFile(allocator, file, log_level);
+    } else {
+        try logger_mod.init(allocator, std.io.getStdErr().writer(), log_level);
     }
-
-    return .{ command, options, container_id };
 }
 
-fn printHelp() !void {
-    const help_text =
-        \\proxmox-lxcri - Proxmox LXC OCI Runtime Interface
-        \\
-        \\Usage:
-        \\  proxmox-lxcri <command> [command options] <container-id>
+fn printUsage() !void {
+    const usage =
+        \\Usage: proxmox-lxcri <command> [options] [container_id]
         \\
         \\Commands:
-        \\  create     Create a container
-        \\  start      Start a container
-        \\  state      Query the state of a container
-        \\  kill       Signal a container
-        \\  delete     Delete a container
+        \\  create    Create a new container
+        \\  start     Start a container
+        \\  state     Get container state
+        \\  kill      Kill a container
+        \\  delete    Delete a container
+        \\  help      Show this help message
         \\
         \\Options:
-        \\  --root value              Directory for storing container state
-        \\  --log value               Set the log file path
-        \\  --log-format value        Set the log format (text or json)
-        \\  --systemd-cgroup          Use systemd cgroup manager
-        \\  --bundle value, -b value  Path to the root of the bundle directory
-        \\  --pid-file value          File to write the process id to
-        \\  --console-socket value    Path to an AF_UNIX socket to send the console FD
-        \\  --debug                   Enable debug logging
-        \\  --help, -h                Show help
-        \\
-        \\Example:
-        \\  proxmox-lxcri create --bundle /path/to/bundle container-id
-        \\  proxmox-lxcri start container-id
-        \\  proxmox-lxcri state container-id
+        \\  --help, -h              Show this help message
+        \\  --debug                 Enable debug logging
+        \\  --systemd-cgroup        Use systemd cgroup
+        \\  --root <path>           Root directory for container state
+        \\  --log <path>            Log file path
+        \\  --log-format <format>   Log format
+        \\  --bundle, -b <path>     Path to OCI bundle
+        \\  --pid-file <path>       Path to pid file
+        \\  --console-socket <path> Path to console socket
         \\
     ;
-    try std.io.getStdOut().writeAll(help_text);
+    try std.io.getStdOut().writer().print("{s}", .{usage});
 }
 
-fn loadConfig(allocator: Allocator, config_path: []const u8) !config.Config {
-    const config_content = fs.cwd().readFileAlloc(allocator, config_path, 1024 * 1024) catch |err| {
-        try logger_instance.err("Failed to read config file: {s}", .{@errorName(err)});
-        return ConfigError.FailedToParseConfig;
-    };
-    defer allocator.free(config_content);
+fn parseArgs(allocator: Allocator) !struct {
+    command: Command,
+    options: RuntimeOptions,
+    container_id: ?[]const u8,
+} {
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
 
-    var scanner = std.json.Scanner.initCompleteInput(allocator, config_content);
-    defer scanner.deinit();
+    _ = args.skip(); // Skip program name
 
-    var token = try scanner.next();
-    if (token != .object_begin) return ConfigError.InvalidConfigFormat;
+    var command: ?Command = null;
+    var options = RuntimeOptions.init(allocator);
+    var container_id: ?[]const u8 = null;
 
-    var hosts: ?[]const []const u8 = null;
-    var token_str: ?[]const u8 = null;
-    var port: ?u16 = null;
-    var node: ?[]const u8 = null;
-    var node_cache_duration: ?u64 = null;
-
-    while (true) {
-        token = try scanner.next();
-        if (token == .object_end) break;
-        if (token != .string) return ConfigError.InvalidConfigFormat;
-
-        const key = token.string;
-        if (std.mem.eql(u8, key, "proxmox")) {
-            token = try scanner.next();
-            if (token != .object_begin) return ConfigError.InvalidConfigFormat;
-
-            while (true) {
-                token = try scanner.next();
-                if (token == .object_end) break;
-                if (token != .string) return ConfigError.InvalidConfigFormat;
-
-                const proxmox_key = token.string;
-                token = try scanner.next();
-
-                if (std.mem.eql(u8, proxmox_key, "hosts")) {
-                    if (token != .array_begin) return ConfigError.InvalidConfigFormat;
-                    var hosts_list = std.ArrayList([]const u8).init(allocator);
-                    
-                    while (true) {
-                        token = try scanner.next();
-                        if (token == .array_end) break;
-                        if (token != .string) return ConfigError.InvalidConfigFormat;
-                        try hosts_list.append(try allocator.dupe(u8, token.string));
-                    }
-                    
-                    hosts = try hosts_list.toOwnedSlice();
-                } else if (std.mem.eql(u8, proxmox_key, "token")) {
-                    if (token != .string) return ConfigError.InvalidConfigFormat;
-                    token_str = try allocator.dupe(u8, token.string);
-                } else if (std.mem.eql(u8, proxmox_key, "port")) {
-                    if (token != .number) return ConfigError.InvalidConfigFormat;
-                    port = @intCast(try std.fmt.parseInt(i64, token.number, 10));
-                } else if (std.mem.eql(u8, proxmox_key, "node")) {
-                    if (token != .string) return ConfigError.InvalidConfigFormat;
-                    node = try allocator.dupe(u8, token.string);
-                } else if (std.mem.eql(u8, proxmox_key, "node_cache_duration")) {
-                    if (token != .number) return ConfigError.InvalidConfigFormat;
-                    node_cache_duration = @intCast(try std.fmt.parseInt(i64, token.number, 10));
-                } else {
-                    try skipValue(&scanner);
-                }
+    // Перевіряємо, чи є аргументи
+    var has_args = false;
+    while (args.next()) |arg| {
+        has_args = true;
+        if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            try printUsage();
+            std.process.exit(0);
+        } else if (std.mem.eql(u8, arg, "--debug")) {
+            options.debug = true;
+        } else if (std.mem.eql(u8, arg, "--systemd-cgroup")) {
+            options.systemd_cgroup = true;
+        } else if (std.mem.eql(u8, arg, "--root")) {
+            if (args.next()) |value| {
+                options.root = try allocator.dupe(u8, value);
             }
+        } else if (std.mem.eql(u8, arg, "--log")) {
+            if (args.next()) |value| {
+                options.log = try allocator.dupe(u8, value);
+            }
+        } else if (std.mem.eql(u8, arg, "--log-format")) {
+            if (args.next()) |value| {
+                options.log_format = try allocator.dupe(u8, value);
+            }
+        } else if (std.mem.eql(u8, arg, "--bundle") or std.mem.eql(u8, arg, "-b")) {
+            if (args.next()) |value| {
+                options.bundle = try allocator.dupe(u8, value);
+            }
+        } else if (std.mem.eql(u8, arg, "--pid-file")) {
+            if (args.next()) |value| {
+                options.pid_file = try allocator.dupe(u8, value);
+            }
+        } else if (std.mem.eql(u8, arg, "--console-socket")) {
+            if (args.next()) |value| {
+                options.console_socket = try allocator.dupe(u8, value);
+            }
+        } else if (command == null) {
+            command = std.meta.stringToEnum(Command, arg) orelse {
+                try std.io.getStdErr().writer().print("Unknown command: '{s}'\n", .{arg});
+                try printUsage();
+                return error.UnknownCommand;
+            };
         } else {
-            try skipValue(&scanner);
+            if (container_id == null) {
+                container_id = try allocator.dupe(u8, arg);
+            } else {
+                try logger_mod.err("Unexpected argument: {s}", .{arg});
+                return error.UnexpectedArgument;
+            }
         }
     }
 
-    if (hosts == null or token_str == null or port == null or node == null or node_cache_duration == null) {
-        try logger_instance.err("Missing required configuration fields", .{});
-        return ConfigError.InvalidConfigFormat;
+    if (!has_args or command == null) {
+        try printUsage();
+        std.process.exit(0);
     }
 
-    const config_instance = config.Config{
-        .proxmox = .{
-            .hosts = hosts.?,
-            .port = port.?,
-            .token = token_str.?,
-            .node = node.?,
-            .node_cache_duration = 60,
-        },
-        .runtime = .{
-            .socket_path = "/var/run/proxmox-lxcri.sock",
-            .log_level = "info",
-        },
-        .logger = &logger_instance,
-        .timeout = 30_000,
-        .node_cache_duration = 300,
-        .allocator = allocator,
+    return .{
+        .command = command.?,
+        .options = options,
+        .container_id = container_id,
     };
-
-    return config_instance;
 }
 
-fn skipValue(scanner: *std.json.Scanner) !void {
-    var token = try scanner.next();
-    switch (token) {
-        .object_begin => {
-            var depth: u32 = 1;
-            while (depth > 0) {
-                token = try scanner.next();
-                switch (token) {
-                    .object_begin => depth += 1,
-                    .object_end => depth -= 1,
-                    else => {},
-                }
-            }
-        },
-        .array_begin => {
-            var depth: u32 = 1;
-            while (depth > 0) {
-                token = try scanner.next();
-                switch (token) {
-                    .array_begin => depth += 1,
-                    .array_end => depth -= 1,
-                    else => {},
-                }
-            }
-        },
-        else => {},
-    }
+fn loadConfig(allocator: Allocator, config_path: ?[]const u8) !config.Config {
+    const path = config_path orelse "/etc/proxmox-lxcri/config.json";
+    const file = fs.cwd().openFile(path, .{}) catch |err| {
+        try logger_mod.err("Failed to open config file '{s}': {s}", .{path, @errorName(err)});
+        return error.ConfigError;
+    };
+    defer file.close();
+
+    const content = file.readToEndAlloc(allocator, 1024 * 1024) catch |err| {
+        try logger_mod.err("Failed to read config file: {s}", .{@errorName(err)});
+        return error.ConfigError;
+    };
+    defer allocator.free(content);
+
+    var parsed = json.parseFromSlice(config.JsonConfig, allocator, content, .{}) catch |err| {
+        try logger_mod.err("Failed to parse config file: {s}", .{@errorName(err)});
+        return error.ConfigError;
+    };
+    defer parsed.deinit();
+
+    // Create temporary logger for configuration initialization
+    var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
+    defer temp_logger.deinit();
+
+    return try config.Config.fromJson(allocator, parsed.value, &temp_logger);
 }
 
 fn cleanup() !void {
-    try logger_instance.info("Starting cleanup process...", .{});
-    
-    // Зупиняємо всі активні операції
+    try logger_mod.info("Starting cleanup process...", .{});
+
+    // Stop all active operations
     if (proxmox_client != undefined) {
         try proxmox_client.stopAllOperations();
         try proxmox_client.closeConnections();
     }
-    
-    try logger_instance.info("Cleanup completed", .{});
+
+    try logger_mod.info("Cleanup completed", .{});
 }
 
 fn handleSignal(sig: c_int) callconv(.C) void {
@@ -326,7 +296,13 @@ fn handleSignal(sig: c_int) callconv(.C) void {
     _ = stderr.write(msg) catch return;
 }
 
-fn executeCreate(allocator: Allocator, args: []const []const u8) !void {
+fn executeCreate(
+    allocator: Allocator,
+    args: []const []const u8,
+    image_manager: *image.ImageManager,
+    zfs_manager: *zfs.ZFSManager,
+    lxc_manager: *lxc.LXCManager,
+) !void {
     if (args.len < 4) {
         try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
         return error.InvalidArguments;
@@ -363,14 +339,33 @@ fn executeCreate(allocator: Allocator, args: []const []const u8) !void {
         return error.InvalidArguments;
     }
 
-    try oci_commands.create.create(allocator, .{
-        .config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path.?, "config.json" }),
-        .id = container_id.?,
-        .bundle_path = bundle_path.?,
-        .allocator = allocator,
-        .pid_file = pid_file,
-        .console_socket = null,
-    }, proxmox_client);
+    const cfg = loadConfig(allocator, null) catch |err| {
+        try logger_mod.err("Failed to load config: {s}", .{@errorName(err)});
+        return err;
+    };
+
+    const create = try oci_commands.create.Create.init(
+        allocator,
+        image_manager,
+        zfs_manager,
+        lxc_manager,
+        null,
+        proxmox_client,
+        .{
+            .container_id = container_id.?,
+            .bundle_path = bundle_path.?,
+            .image_name = "test-image",
+            .image_tag = "latest",
+            .zfs_dataset = "rpool/lxc",
+            .proxmox_node = cfg.proxmox.node orelse "pve",
+            .proxmox_storage = "local-lvm",
+        },
+        cfg.logger,
+        .lxc,
+    );
+    defer create.deinit();
+
+    try create.create();
 }
 
 fn executeStart(container_id: []const u8) !void {
@@ -383,23 +378,23 @@ fn executeState(allocator: Allocator, container_id: []const u8) !void {
         container_id,
     );
     var container_state_mut = container_state;
-    defer container_state_mut.deinit(allocator);
+    defer container_state_mut.deinit();
 
     var string = std.ArrayList(u8).init(allocator);
     defer string.deinit();
 
     // Format container state as JSON
     try string.writer().writeAll("{\n");
-    try string.writer().print("  \"ociVersion\": \"{s}\",\n", .{container_state.ociVersion});
     try string.writer().print("  \"id\": \"{s}\",\n", .{container_state.id});
-    try string.writer().print("  \"status\": \"{s}\",\n", .{container_state.status});
-    try string.writer().print("  \"pid\": {d},\n", .{container_state.pid});
+    try string.writer().print("  \"name\": \"{s}\",\n", .{container_state.name});
+    try string.writer().print("  \"status\": \"{s}\",\n", .{@tagName(container_state.state)});
+    try string.writer().print("  \"pid\": {?d},\n", .{container_state.pid});
     try string.writer().print("  \"bundle\": \"{s}\"", .{container_state.bundle});
-    
+
     if (container_state.annotations) |annotations| {
         try string.writer().writeAll(",\n  \"annotations\": {\n");
         for (annotations, 0..) |annotation, i| {
-            try string.writer().print("    \"{s}\": \"{s}\"", .{annotation.key, annotation.value});
+            try string.writer().print("    \"{s}\": \"{s}\"", .{ annotation.key, annotation.value });
             if (i < annotations.len - 1) {
                 try string.writer().writeAll(",\n");
             } else {
@@ -423,97 +418,129 @@ fn executeDelete(container_id: []const u8) !void {
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{
-        .enable_memory_limit = true,
-        .safety = true,
-        .never_unmap = false,
-    }){};
-    defer {
-        const check = gpa.deinit();
-        if (check == .leak) {
-            std.debug.print("Memory leak detected!\n", .{});
-            process.exit(1);
-        }
-    }
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const parsed = try parseArgs(allocator);
-    const command = parsed[0];
-    const options = parsed[1];
-    const container_id = parsed[2];
-
-    // Ініціалізуємо логер
-    const log_file = try fs.cwd().openFile(options.log.?, .{ .mode = .write_only });
-    logger_instance = try logger_mod.Logger.init(allocator, log_file.writer(), types.LogLevel.info);
-    defer logger_instance.deinit();
-
-    // Якщо вказано --root, створюємо директорію
-    if (options.root) |root_path| {
-        try fs.makeDirAbsolute(root_path);
+    // Parse arguments first
+    var args = parseArgs(allocator) catch |err| {
+        if (err == error.UnknownCommand) {
+            std.process.exit(1);
+        }
+        return err;
+    };
+    defer {
+        args.options.deinit();
+        if (args.container_id) |id| {
+            allocator.free(id);
+        }
     }
 
-    // Завантажуємо конфігурацію
-    var cfg = try loadConfig(allocator, "/etc/proxmox-lxcri/config.json");
+    // If help command, show usage and exit
+    if (args.command == .help) {
+        try printUsage();
+        return;
+    }
+
+    // Create temporary logger for configuration initialization
+    var temp_logger = try logger_mod.LogContext.init(allocator, std.io.getStdErr().writer(), .info, "main");
+    defer temp_logger.deinit();
+
+    // Create temporary configuration for logger initialization
+    var temp_config = try config.Config.init(allocator, &temp_logger);
+    defer temp_config.deinit();
+
+    // Initialize logger before loading configuration
+    try initLogger(allocator, args.options, &temp_config);
+
+    // Load main configuration
+    var cfg = loadConfig(allocator, null) catch |err| {
+        if (err == error.ConfigError) {
+            try std.io.getStdErr().writer().writeAll("Error: Failed to load configuration. Check the log file for details.\n");
+            std.process.exit(1);
+        }
+        return err;
+    };
     defer cfg.deinit();
 
-    // Ініціалізуємо клієнт Proxmox
-    var proxmox_client_instance = try ProxmoxClient.init(
-        allocator,
-        cfg.proxmox.hosts[0],
-        cfg.proxmox.port,
-        cfg.proxmox.token,
-        cfg.proxmox.node,
-        &logger_instance
-    );
-    proxmox_client = &proxmox_client_instance;
-    defer proxmox_client.deinit();
+    // Create separate logger for ProxmoxClient
+    var proxmox_logger = try logger_mod.Logger.init(allocator, if (args.options.debug) std.io.getStdErr().writer() else std.io.getStdOut().writer(), if (args.options.debug) types.LogLevel.debug else types.LogLevel.info, "proxmox");
+    defer proxmox_logger.deinit();
 
-    switch (command) {
+    // Check for hosts in configuration
+    if (cfg.proxmox.hosts.len == 0) {
+        try logger_mod.err("No Proxmox hosts configured", .{});
+        return error.InvalidConfig;
+    }
+
+    // If --root is specified, create directory
+    if (args.options.root) |root| {
+        try fs.cwd().makePath(root);
+    }
+
+    // Initialize Proxmox client
+    var proxmox_client_instance = try ProxmoxClient.init(allocator, cfg.proxmox.hosts[0], cfg.proxmox.port, cfg.proxmox.token orelse "", cfg.proxmox.node orelse "pve", &proxmox_logger);
+    proxmox_client = &proxmox_client_instance;
+    defer proxmox_client_instance.deinit();
+
+    // Initialize managers
+    var image_manager_instance = try image.ImageManager.init(allocator, "/var/lib/proxmox-lxcri/images", cfg.logger);
+    defer image_manager_instance.deinit();
+
+    var zfs_manager_instance = try zfs.ZFSManager.init(allocator, cfg.logger);
+    defer zfs_manager_instance.deinit();
+
+    var lxc_manager_instance = try lxc.LXCManager.init(allocator, cfg.logger);
+    defer lxc_manager_instance.deinit();
+
+    // Execute command
+    switch (args.command) {
         .create => {
-            if (container_id == null or options.bundle == null) {
-                try logger_instance.err("create command requires --bundle and container-id", .{});
+            if (args.container_id == null or args.options.bundle == null) {
+                try logger_mod.err("create command requires --bundle and container-id", .{});
                 return error.InvalidArguments;
             }
-            try oci_commands.create.create(allocator, .{
-                .config_path = try std.fs.path.join(allocator, &[_][]const u8{ options.bundle.?, "config.json" }),
-                .id = container_id.?,
-                .bundle_path = options.bundle.?,
-                .allocator = allocator,
-                .pid_file = options.pid_file,
-                .console_socket = options.console_socket,
-            }, proxmox_client);
+            const bundle_path = try std.fs.cwd().realpathAlloc(allocator, args.options.bundle.?);
+            defer allocator.free(bundle_path);
+            const config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path, "config.json" });
+            defer allocator.free(config_path);
+            try executeCreate(allocator, &[_][]const u8{
+                bundle_path,
+                config_path,
+            }, image_manager_instance, zfs_manager_instance, lxc_manager_instance);
         },
         .start => {
-            if (container_id == null) {
-                try logger_instance.err("start command requires container-id", .{});
+            if (args.container_id == null) {
+                try logger_mod.err("start command requires container-id", .{});
                 return error.InvalidArguments;
             }
-            try oci_commands.start.start(container_id.?, proxmox_client);
+            try oci_commands.start.start(args.container_id.?, proxmox_client);
         },
         .state => {
-            if (container_id == null) {
-                try logger_instance.err("state command requires container-id", .{});
+            if (args.container_id == null) {
+                try logger_mod.err("state command requires container-id", .{});
                 return error.InvalidArguments;
             }
-            try executeState(allocator, container_id.?);
+            try executeState(allocator, args.container_id.?);
         },
         .kill => {
-            if (container_id == null) {
-                try logger_instance.err("kill command requires container-id", .{});
+            if (args.container_id == null) {
+                try logger_mod.err("kill command requires container-id", .{});
                 return error.InvalidArguments;
             }
-            try oci_commands.kill.kill(container_id.?, "SIGTERM", proxmox_client);
+            try oci_commands.kill.kill(args.container_id.?, "SIGTERM", proxmox_client);
         },
         .delete => {
-            if (container_id == null) {
-                try logger_instance.err("delete command requires container-id", .{});
+            if (args.container_id == null) {
+                try logger_mod.err("delete command requires container-id", .{});
                 return error.InvalidArguments;
             }
-            try oci_commands.delete.delete(container_id.?, proxmox_client);
+            try oci_commands.delete.delete(args.container_id.?, proxmox_client);
         },
-        .help => try printHelp(),
+        .help => unreachable, // Already handled above
         .unknown => {
-            try logger_instance.err("Unknown command", .{});
+            try logger_mod.err("Unknown command", .{});
+            try printUsage();
             return error.UnknownCommand;
         },
     }
@@ -524,13 +551,13 @@ fn getConfigPath(allocator: Allocator) ![]const u8 {
     if (process.getEnvVarOwned(allocator, "PROXMOX_LXCRI_CONFIG")) |path| {
         // Verify that the file exists and is accessible
         fs.cwd().access(path, .{}) catch |err| {
-            try logger_instance.warn("Config file from env var not accessible: {s}", .{@errorName(err)});
+            try logger_mod.warn("Config file from env var not accessible: {s}", .{@errorName(err)});
             allocator.free(path);
             return errors.Error.FileSystemError;
         };
         return path;
     } else |_| {
-        try logger_instance.debug("Environment variable not set, checking default locations", .{});
+        try logger_mod.debug("Environment variable not set, checking default locations", .{});
     }
 
     // Check default locations

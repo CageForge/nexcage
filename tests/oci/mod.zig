@@ -7,4 +7,4 @@ comptime {
     _ = @import("start_test.zig");
     _ = @import("stop_test.zig");
     _ = @import("kill_test.zig");
-} 
+}

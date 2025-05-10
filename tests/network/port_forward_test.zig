@@ -92,4 +92,4 @@ test "PortForwarder - memory management" {
         try testing.expect(!forwarder.hasRule(rule));
     }
     try testing.expectEqual(forwarder.rules.items.len, 0);
-}; 
+}

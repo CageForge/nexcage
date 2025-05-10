@@ -33,9 +33,10 @@ pub fn kill(container_id: []const u8, signal: []const u8, proxmox_client: *proxm
     // Відповідно до специфікації OCI, runtime ПОВИНЕН підтримувати TERM і KILL
     // з семантикою POSIX. Оскільки Proxmox API не підтримує різні сигнали,
     // ми просто зупиняємо контейнер
-    if (std.mem.eql(u8, signal, "SIGKILL") or 
-        std.mem.eql(u8, signal, "SIGTERM") or 
-        std.mem.eql(u8, signal, "TERM")) {
+    if (std.mem.eql(u8, signal, "SIGKILL") or
+        std.mem.eql(u8, signal, "SIGTERM") or
+        std.mem.eql(u8, signal, "TERM"))
+    {
         try proxmox_client.stopContainer(.lxc, vmid.?, null);
     } else {
         // Інші сигнали наразі не підтримуються
@@ -44,4 +45,4 @@ pub fn kill(container_id: []const u8, signal: []const u8, proxmox_client: *proxm
     }
 
     logger.info("Signal {s} sent to container {s} successfully", .{ signal, container_id });
-} 
+}

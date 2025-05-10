@@ -48,6 +48,56 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Image management
+    const image_mod = b.addModule("image", .{
+        .root_source_file = b.path("src/image/mod.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
+    // ZFS management
+    const zfs_mod = b.addModule("zfs", .{
+        .root_source_file = b.path("src/zfs/mod.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
+    // LXC management
+    const lxc_mod = b.addModule("lxc", .{
+        .root_source_file = b.path("src/lxc/mod.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
+    // Registry management
+    const registry_mod = b.addModule("registry", .{
+        .root_source_file = b.path("src/registry/mod.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
+    // Raw image management
+    const raw_mod = b.addModule("raw", .{
+        .root_source_file = b.path("src/raw/mod.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
     // Network subsystem
     const network_mod = b.addModule("network", .{
         .root_source_file = b.path("src/network/network.zig"),
@@ -83,6 +133,16 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // CRUN management
+    const crun_mod = b.addModule("crun", .{
+        .root_source_file = b.path("src/crun/mod.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
     // OCI runtime
     const oci_mod = b.addModule("oci", .{
         .root_source_file = b.path("src/oci/mod.zig"),
@@ -94,6 +154,14 @@ pub fn build(b: *std.Build) void {
             .{ .name = "proxmox", .module = proxmox_mod },
             .{ .name = "json", .module = zigJsonDep.module("zig-json") },
             .{ .name = "common", .module = common_mod },
+            .{ .name = "image", .module = image_mod },
+            .{ .name = "zfs", .module = zfs_mod },
+            .{ .name = "lxc", .module = lxc_mod },
+            .{ .name = "registry", .module = registry_mod },
+            .{ .name = "raw", .module = raw_mod },
+            .{ .name = "network", .module = network_mod },
+            .{ .name = "config", .module = config_mod },
+            .{ .name = "crun", .module = crun_mod },
         },
     });
 
@@ -114,6 +182,11 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("oci", oci_mod);
     exe.root_module.addImport("json", zigJsonDep.module("zig-json"));
     exe.root_module.addImport("common", common_mod);
+    exe.root_module.addImport("image", image_mod);
+    exe.root_module.addImport("zfs", zfs_mod);
+    exe.root_module.addImport("lxc", lxc_mod);
+    exe.root_module.addImport("registry", registry_mod);
+    exe.root_module.addImport("raw", raw_mod);
 
     // Install
     b.installArtifact(exe);

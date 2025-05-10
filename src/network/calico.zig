@@ -104,7 +104,7 @@ pub const CalicoPlugin = struct {
     fn addNetwork(interface: *plugin.CNIPluginInterface, container_id: []const u8, netns: []const u8) cni.CNIResult {
         const self = @fieldParentPtr(Self, "interface", interface);
         // TODO: реалізувати додавання мережевого інтерфейсу
-        return .{
+        return cni.CNIResult{
             .success = true,
             .error = null,
         };
@@ -114,7 +114,7 @@ pub const CalicoPlugin = struct {
     fn deleteNetwork(interface: *plugin.CNIPluginInterface, container_id: []const u8, netns: []const u8) cni.CNIResult {
         const self = @fieldParentPtr(Self, "interface", interface);
         // TODO: реалізувати видалення мережевого інтерфейсу
-        return .{
+        return cni.CNIResult{
             .success = true,
             .error = null,
         };
@@ -124,7 +124,7 @@ pub const CalicoPlugin = struct {
     fn checkNetwork(interface: *plugin.CNIPluginInterface, container_id: []const u8, netns: []const u8) cni.CNIResult {
         const self = @fieldParentPtr(Self, "interface", interface);
         // TODO: реалізувати перевірку стану мережевого інтерфейсу
-        return .{
+        return cni.CNIResult{
             .success = true,
             .error = null,
         };
