@@ -80,6 +80,7 @@ const Command = enum {
     delete,
     help,
     unknown,
+    generate_config,
 
     pub fn fromString(str: []const u8) Command {
         if (std.mem.eql(u8, str, "create")) return .create;
@@ -88,6 +89,7 @@ const Command = enum {
         if (std.mem.eql(u8, str, "kill")) return .kill;
         if (std.mem.eql(u8, str, "delete")) return .delete;
         if (std.mem.eql(u8, str, "help")) return .help;
+        if (std.mem.eql(u8, str, "generate-config")) return .generate_config;
         return .unknown;
     }
 };
@@ -107,19 +109,26 @@ fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.
     // 2. Configuration file
     const log_path = if (options.log) |path| path else cfg.runtime.log_path;
 
-    const log_file = if (!options.debug) blk: {
+    const log_file = blk: {
         // Create log directory if it doesn't exist
         const actual_log_path = log_path orelse "/var/log/proxmox-lxcri/runtime.log";
         const log_dir = std.fs.path.dirname(actual_log_path) orelse ".";
+        
+        // Try to create directory with proper permissions
         fs.cwd().makePath(log_dir) catch |err| {
             try logger_mod.err("Failed to create log directory: {s}, falling back to stderr", .{@errorName(err)});
             break :blk null;
         };
 
+        // Try to open existing file first
         const file = fs.cwd().openFile(actual_log_path, .{ .mode = .read_write }) catch |err| {
             // If file doesn't exist, create it
             if (err == error.FileNotFound) {
-                const new_file = fs.cwd().createFile(actual_log_path, .{ .truncate = false, .mode = 0o644 }) catch |create_err| {
+                const new_file = fs.cwd().createFile(actual_log_path, .{ 
+                    .truncate = false, 
+                    .mode = 0o644,
+                    .exclusive = false,
+                }) catch |create_err| {
                     try logger_mod.err("Failed to create log file: {s}, falling back to stderr", .{@errorName(create_err)});
                     break :blk null;
                 };
@@ -128,19 +137,23 @@ fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.
             try logger_mod.err("Failed to open log file: {s}, falling back to stderr", .{@errorName(err)});
             break :blk null;
         };
+
         // Move cursor to end of file for appending
         file.seekFromEnd(0) catch |err| {
             try logger_mod.err("Failed to seek to end of log file: {s}, falling back to stderr", .{@errorName(err)});
             file.close();
             break :blk null;
         };
+
         break :blk file;
-    } else null;
+    };
 
     if (log_file) |file| {
-        try logger_mod.initWithFile(allocator, file, log_level);
+        try logger_mod.initWithFile(allocator, file, log_level, "proxmox-lxcri");
+        try logger_mod.info("Logging initialized to file", .{});
     } else {
         try logger_mod.init(allocator, std.io.getStdErr().writer(), log_level);
+        try logger_mod.info("Logging initialized to stderr", .{});
     }
 }
 
@@ -155,6 +168,7 @@ fn printUsage() !void {
         \\  kill      Kill a container
         \\  delete    Delete a container
         \\  help      Show this help message
+        \\  generate-config Generate OCI config for a container
         \\
         \\Options:
         \\  --help, -h              Show this help message
@@ -262,11 +276,15 @@ fn loadConfig(allocator: Allocator, config_path: ?[]const u8) !config.Config {
     };
     defer allocator.free(content);
 
-    var parsed = json.parseFromSlice(config.JsonConfig, allocator, content, .{}) catch |err| {
-        try logger_mod.err("Failed to parse config file: {s}", .{@errorName(err)});
-        return error.ConfigError;
-    };
-    defer parsed.deinit();
+    const json_parser = @import("json_parser");
+    var parsed = try json_parser.parseWithUnknownFields(config.JsonConfig, allocator, content);
+    defer {
+        config.deinitJsonConfig(&parsed.value, allocator);
+        for (parsed.unknown_fields) |field| {
+            allocator.free(field);
+        }
+        allocator.free(parsed.unknown_fields);
+    }
 
     // Create temporary logger for configuration initialization
     var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
@@ -339,10 +357,21 @@ fn executeCreate(
         return error.InvalidArguments;
     }
 
-    const cfg = loadConfig(allocator, null) catch |err| {
-        try logger_mod.err("Failed to load config: {s}", .{@errorName(err)});
-        return err;
+    // Перевіряємо чи існує директорія bundle
+    var bundle_dir = try std.fs.cwd().openDir(bundle_path.?, .{});
+    defer bundle_dir.close();
+
+    // Перевіряємо чи існує config.json
+    const config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path.?, "config.json" });
+    defer allocator.free(config_path);
+
+    bundle_dir.access("config.json", .{}) catch |err| {
+        try logger_mod.err("Failed to access config.json in bundle: {s}", .{@errorName(err)});
+        return error.InvalidBundle;
     };
+
+    var cfg = try loadConfig(allocator, null);
+    defer cfg.deinit();
 
     const create = try oci_commands.create.Create.init(
         allocator,
@@ -373,39 +402,32 @@ fn executeStart(container_id: []const u8) !void {
 }
 
 fn executeState(allocator: Allocator, container_id: []const u8) !void {
-    const container_state = try oci_commands.state.getState(
+    var container_state = try oci_commands.state.getState(
         proxmox_client,
         container_id,
     );
-    var container_state_mut = container_state;
-    defer container_state_mut.deinit();
+    defer container_state.deinit();
 
-    var string = std.ArrayList(u8).init(allocator);
-    defer string.deinit();
+    // Створюємо структуру для серіалізації
+    const StateResponse = struct {
+        ociVersion: []const u8,
+        id: []const u8,
+        status: []const u8,
+        pid: i64,
+        bundle: []const u8,
+    };
 
-    // Format container state as JSON
-    try string.writer().writeAll("{\n");
-    try string.writer().print("  \"id\": \"{s}\",\n", .{container_state.id});
-    try string.writer().print("  \"name\": \"{s}\",\n", .{container_state.name});
-    try string.writer().print("  \"status\": \"{s}\",\n", .{@tagName(container_state.state)});
-    try string.writer().print("  \"pid\": {?d},\n", .{container_state.pid});
-    try string.writer().print("  \"bundle\": \"{s}\"", .{container_state.bundle});
+    const response = StateResponse{
+        .ociVersion = container_state.state.oci_version,
+        .id = container_state.state.id,
+        .status = container_state.state.status,
+        .pid = container_state.state.pid,
+        .bundle = container_state.state.bundle,
+    };
 
-    if (container_state.annotations) |annotations| {
-        try string.writer().writeAll(",\n  \"annotations\": {\n");
-        for (annotations, 0..) |annotation, i| {
-            try string.writer().print("    \"{s}\": \"{s}\"", .{ annotation.key, annotation.value });
-            if (i < annotations.len - 1) {
-                try string.writer().writeAll(",\n");
-            } else {
-                try string.writer().writeAll("\n");
-            }
-        }
-        try string.writer().writeAll("  }\n");
-    }
-    try string.writer().writeAll("}\n");
-
-    try std.io.getStdOut().writeAll(string.items);
+    const state_json = try std.json.stringifyAlloc(allocator, response, .{});
+    defer allocator.free(state_json);
+    try std.io.getStdOut().writer().print("{s}\n", .{state_json});
 }
 
 fn executeKill(container_id: []const u8, signal: ?[]const u8) !void {
@@ -415,6 +437,144 @@ fn executeKill(container_id: []const u8, signal: ?[]const u8) !void {
 
 fn executeDelete(container_id: []const u8) !void {
     try oci_commands.delete.delete(container_id.?, proxmox_client);
+}
+
+fn executeGenerateConfig(
+    allocator: Allocator,
+    args: []const []const u8,
+) !void {
+    if (args.len < 4) {
+        try std.io.getStdErr().writer().writeAll("Error: generate-config requires --bundle and container-id arguments\n");
+        return error.InvalidArguments;
+    }
+
+    var bundle_path: ?[]const u8 = null;
+    var container_id: ?[]const u8 = null;
+    var i: usize = 1;
+
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--bundle") or std.mem.eql(u8, arg, "-b")) {
+            if (i + 1 >= args.len) {
+                try std.io.getStdErr().writer().writeAll("Error: --bundle requires a path argument\n");
+                return error.InvalidArguments;
+            }
+            bundle_path = args[i + 1];
+            i += 1;
+        } else {
+            container_id = arg;
+        }
+    }
+
+    if (bundle_path == null or container_id == null) {
+        try std.io.getStdErr().writer().writeAll("Error: both --bundle and container-id are required\n");
+        return error.InvalidArguments;
+    }
+
+    // Створюємо директорію bundle якщо не існує
+    try std.fs.cwd().makePath(bundle_path.?);
+
+    // Створюємо файл конфігурації OCI
+    const config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path.?, "config.json" });
+    defer allocator.free(config_path);
+
+    const oci_config = try std.json.stringifyAlloc(allocator, .{
+        .ociVersion = "1.0.2",
+        .process = .{
+            .terminal = false,
+            .user = .{
+                .uid = 0,
+                .gid = 0,
+            },
+            .args = &[_][]const u8{ "/bin/sh" },
+            .env = &[_][]const u8{ "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" },
+            .cwd = "/",
+        },
+        .root = .{
+            .path = "rootfs",
+            .readonly = false,
+        },
+        .hostname = container_id.?,
+        .mounts = &[_]struct {
+            destination: []const u8,
+            type: []const u8,
+            source: []const u8,
+            options: []const []const u8,
+        }{
+            .{
+                .destination = "/proc",
+                .type = "proc",
+                .source = "proc",
+                .options = &[_][]const u8{},
+            },
+            .{
+                .destination = "/dev",
+                .type = "tmpfs",
+                .source = "tmpfs",
+                .options = &[_][]const u8{ "nosuid", "strictatime", "mode=755", "size=65536k" },
+            },
+            .{
+                .destination = "/dev/pts",
+                .type = "devpts",
+                .source = "devpts",
+                .options = &[_][]const u8{ "nosuid", "noexec", "newinstance", "ptmxmode=0666", "mode=0620", "gid=5" },
+            },
+            .{
+                .destination = "/dev/shm",
+                .type = "tmpfs",
+                .source = "shm",
+                .options = &[_][]const u8{ "nosuid", "noexec", "nodev", "mode=1777", "size=65536k" },
+            },
+            .{
+                .destination = "/dev/mqueue",
+                .type = "mqueue",
+                .source = "mqueue",
+                .options = &[_][]const u8{ "nosuid", "noexec", "nodev" },
+            },
+            .{
+                .destination = "/sys",
+                .type = "sysfs",
+                .source = "sysfs",
+                .options = &[_][]const u8{ "nosuid", "noexec", "nodev", "ro" },
+            },
+            .{
+                .destination = "/sys/fs/cgroup",
+                .type = "cgroup",
+                .source = "cgroup",
+                .options = &[_][]const u8{ "nosuid", "noexec", "nodev", "relatime", "ro" },
+            },
+        },
+        .linux = .{
+            .namespaces = &[_]struct {
+                type: []const u8,
+            }{
+                .{ .type = "pid" },
+                .{ .type = "network" },
+                .{ .type = "ipc" },
+                .{ .type = "uts" },
+                .{ .type = "mount" },
+            },
+            .resources = .{
+                .devices = &[_]struct {
+                    allow: bool,
+                    access: []const u8,
+                }{
+                    .{
+                        .allow = false,
+                        .access = "rwm",
+                    },
+                },
+            },
+        },
+    }, .{});
+    defer allocator.free(oci_config);
+
+    try std.fs.cwd().writeFile(.{
+        .data = oci_config,
+        .sub_path = config_path,
+    });
+
+    try std.io.getStdOut().writer().print("Generated OCI config at {s}\n", .{config_path});
 }
 
 pub fn main() !void {
@@ -452,6 +612,7 @@ pub fn main() !void {
 
     // Initialize logger before loading configuration
     try initLogger(allocator, args.options, &temp_config);
+    defer logger_mod.deinit();
 
     // Load main configuration
     var cfg = loadConfig(allocator, null) catch |err| {
@@ -505,8 +666,10 @@ pub fn main() !void {
             const config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path, "config.json" });
             defer allocator.free(config_path);
             try executeCreate(allocator, &[_][]const u8{
+                "create",
+                "--bundle",
                 bundle_path,
-                config_path,
+                args.container_id.?,
             }, image_manager_instance, zfs_manager_instance, lxc_manager_instance);
         },
         .start => {
@@ -542,6 +705,14 @@ pub fn main() !void {
             try logger_mod.err("Unknown command", .{});
             try printUsage();
             return error.UnknownCommand;
+        },
+        .generate_config => {
+            try executeGenerateConfig(allocator, &[_][]const u8{
+                "generate-config",
+                "--bundle",
+                "test_bundle",
+                "test-container",
+            });
         },
     }
 }

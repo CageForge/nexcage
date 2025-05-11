@@ -122,7 +122,7 @@ pub const Create = struct {
         // Читаємо конфігурацію OCI образу
         const oci_config_path = try std.fmt.allocPrint(
             allocator,
-            "{s}/{s}.json",
+            "{s}/{s}/config.json",
             .{ options.bundle_path, options.container_id },
         );
         defer allocator.free(oci_config_path);
