@@ -103,9 +103,9 @@ pub const Create = struct {
     oci_config: spec.OciImageConfig,
     logger: *logger_mod.Logger,
     runtime_type: oci_types.RuntimeType,
-
+    
     const Self = @This();
-
+    
     pub fn init(
         allocator: std.mem.Allocator,
         image_manager: *image.ImageManager,
@@ -163,7 +163,7 @@ pub const Create = struct {
         };
         return self;
     }
-
+    
     pub fn deinit(self: *Self) void {
         if (self.registry) |r| {
             r.deinit();
@@ -172,9 +172,9 @@ pub const Create = struct {
         self.oci_config.deinit(self.allocator);
         self.allocator.destroy(self);
     }
-
+    
     pub fn create(self: *Self) !void {
-        try self.logger.info("Creating container {s} with runtime {s}", .{
+        try self.logger.info("Creating container {s} with runtime {s}", .{ 
             self.options.container_id,
             @tagName(self.runtime_type),
         });
@@ -280,14 +280,14 @@ pub const Create = struct {
 
         try self.logger.info("Container {s} created successfully", .{self.options.container_id});
     }
-
+    
     fn validateNetworkConfig(self: *Self) !void {
         const net_config = self.oci_config.linux.?.network orelse return;
 
         // Валідуємо інтерфейси
         for (net_config.interfaces) |iface| {
             try self.network_validator.validateInterface(iface.name);
-
+            
             if (iface.bridge) |bridge| {
                 try self.network_validator.validateBridge(bridge);
             }
@@ -307,7 +307,7 @@ pub const Create = struct {
             // Валідуємо IP налаштування
             if (iface.ip) |ip| {
                 try self.network_validator.validateIPRange(ip.address, ip.netmask);
-
+                
                 if (ip.gateway) |gateway| {
                     try self.network_validator.validateGateway(gateway);
                 }
@@ -321,10 +321,10 @@ pub const Create = struct {
             }
         }
     }
-
+    
     fn validateBundle(self: *Self) !void {
         try self.logger.info("Validating bundle at {s}", .{self.options.bundle_path});
-
+        
         // Перевіряємо чи існує bundle директорія
         var bundle_dir = std.fs.openDirAbsolute(self.options.bundle_path, .{}) catch {
             try self.logger.err("Bundle directory not found: {s}", .{self.options.bundle_path});
@@ -419,7 +419,7 @@ pub const Create = struct {
         if (self.oci_config.user) |user| {
             config.setUID(user.uid);
             config.setGID(user.gid);
-
+            
             if (user.additionalGids) |additional_gids| {
                 try config.setAdditionalGids(additional_gids);
             }
@@ -542,10 +542,10 @@ pub const Create = struct {
         // Налаштовуємо монтування
         if (self.oci_config.linux) |linux| {
             for (linux.mounts) |mount| {
-                try config.addMount(.{
-                    .source = mount.source,
-                    .target = mount.destination,
-                    .type = mount.type,
+            try config.addMount(.{
+                .source = mount.source,
+                .target = mount.destination,
+                .type = mount.type,
                     .options = if (mount.options) |opts| blk: {
                         var new_opts = try self.allocator.alloc([]const u8, opts.len);
                         for (opts, 0..) |opt, i| {
@@ -553,7 +553,7 @@ pub const Create = struct {
                         }
                         break :blk new_opts;
                     } else null,
-                });
+            });
             }
         }
 
@@ -638,7 +638,7 @@ pub const Create = struct {
         if (self.oci_config.user) |user| {
             config.setUID(user.uid);
             config.setGID(user.gid);
-
+            
             if (user.additionalGids) |additional_gids| {
                 try config.setAdditionalGids(additional_gids);
             }
@@ -761,10 +761,10 @@ pub const Create = struct {
         // Налаштовуємо монтування
         if (self.oci_config.linux) |linux| {
             for (linux.mounts) |mount| {
-                try config.addMount(.{
-                    .source = mount.source,
-                    .target = mount.destination,
-                    .type = mount.type,
+            try config.addMount(.{
+                .source = mount.source,
+                .target = mount.destination,
+                .type = mount.type,
                     .options = if (mount.options) |opts| blk: {
                         var new_opts = try self.allocator.alloc([]const u8, opts.len);
                         for (opts, 0..) |opt, i| {
@@ -772,7 +772,7 @@ pub const Create = struct {
                         }
                         break :blk new_opts;
                     } else null,
-                });
+            });
             }
         }
 
@@ -859,7 +859,7 @@ pub fn create(opts: CreateOpts, proxmox_client: *proxmox.ProxmoxClient) !void {
     if (opts.pid_file) |pid_file| {
         const pid_str = try std.fmt.allocPrint(opts.allocator, "{d}\n", .{0}); // TODO: Get real PID
         defer opts.allocator.free(pid_str);
-
+        
         try fs.cwd().writeFile(.{
             .data = pid_str,
             .sub_path = pid_file,
