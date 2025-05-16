@@ -1,0 +1,8 @@
+
+[docs]
+sphinx>=1.6.5
+sphinx_rtd_theme
+
+[tests]
+hypothesis>=3.27.0
+pytest!=3.3.0,>=3.2.1

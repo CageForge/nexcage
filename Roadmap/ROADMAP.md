@@ -1,6 +1,6 @@
 # 🗺️ Proxmox LXC Container Runtime Interface Project Roadmap
 
-## �� Overall Progress: 85%
+## 📊 Overall Progress: 87%
 
 ## ✅ Completed Tasks
 
@@ -158,7 +158,7 @@
 - C API integration and optimization
 
 ## 🔄 Next Steps
-1. Complete C API migration
+1. Complete OCI runtime implementation
 2. Complete API documentation
 3. Implement Prometheus metrics
 4. Enhance CRI implementation
@@ -168,10 +168,16 @@
 
 ## 📈 Time Expenditure
 - Planned: 39 days
-- Spent: 24 days + 15 hours
-- Remaining: ~14 days
+- Spent: 25 days + 6 hours
+- Remaining: ~13 days
 
 ## Recent Updates
+- Implemented OCI container creation (4 hours)
+  - Added support for OCI bundle validation
+  - Implemented config.json parsing
+  - Added rootfs validation
+  - Fixed memory management in config parsing
+  - Added proper error handling for invalid configurations
 - Fixed memory management issues (2 hours)
   - Corrected allocator handling in ContainerState
   - Fixed memory leaks in hooks execution
@@ -198,84 +204,6 @@
   - Added support for different log levels
   - Implemented log rotation
   - Added contextual logging
-  - Improved log message formatting
-- Improved command processing and testing (2 hours)
-  - Added more informative error messages
-  - Improved argument validation
-  - Added help output for unknown commands
-- Added create command tests (4 hours)
-  - Argument validation tests
-  - Container creation tests
-  - Error handling tests
-  - Test environment preparation
-
-### 12. OCI Runtime Specification Compliance (25% complete) - 4 days
-- [x] Hooks Implementation (1 day)
-  - [x] createRuntime hooks
-  - [x] createContainer hooks
-  - [x] startContainer hooks
-  - [x] poststart hooks
-  - [x] poststop hooks
-  - [x] Hook error handling and timeout support
-  - [x] Hook context management
-  - [x] Environment variables support
-  - [x] Comprehensive test suite
-
-- [ ] Extended Configuration Support (1.5 days)
-  - [ ] Complete annotations support
-  - [ ] Extended network configuration
-  - [ ] Resource limits (cgroups)
-  - [ ] Volume mounting with all options
-  - [ ] User namespace support
-  - [ ] Time namespace support
-
-- [ ] Security Enhancements (1 day)
-  - [ ] Seccomp profiles implementation
-  - [ ] AppArmor integration
-  - [ ] SELinux integration
-  - [ ] Extended capabilities support
-
-- [ ] Testing and Documentation (0.5 days)
-  - [ ] OCI compliance tests
-  - [x] Hook system documentation
-  - [ ] Security features documentation
-  - [ ] Configuration examples
-
-### 13. OCI Image Specification Implementation (0% complete) - 3 days
-- [ ] Image Format Support (1 day)
-  - [ ] OCI Image manifest support
-  - [ ] Image configuration files
-  - [ ] Layer format and compression
-  - [ ] Image indices
-
-- [ ] OverlayFS Implementation (1.5 days)
-  - [ ] Base structure for overlay layers
-  - [ ] Overlay layer management
-  - [ ] Space usage optimization
-  - [ ] COW (Copy-on-Write) implementation
-  - [ ] Integration with existing subsystem
-  - [ ] Garbage collection for unused layers
-  - [ ] Caching and layer access optimization
-  - [ ] Data migration between pools
-
-- [ ] Registry Integration (1 day)
-  - [ ] Docker Hub support
-  - [ ] Private registry support
-  - [ ] Authentication and authorization
-  - [ ] SSL/TLS support
-
-- [ ] Image Operations (0.5 days)
-  - [ ] Pull operations
-  - [ ] Push operations
-  - [ ] Image deletion
-  - [ ] Layer caching
-  - [ ] Garbage collection
-
-- [ ] Testing and Documentation (0.5 days)
-  - [ ] Unit tests for image operations
-  - [ ] Integration tests with registry
-  - [ ] Performance tests for image operations
-  - [ ] Image operations documentation
 
 ## 🎯 Design Patterns Implementation (0% complete) - 5 days
 

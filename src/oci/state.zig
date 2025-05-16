@@ -49,12 +49,22 @@ pub fn getState(proxmox_client: *proxmox.ProxmoxClient, oci_container_id: []cons
             const id = try proxmox_client.allocator.dupe(u8, oci_container_id);
             errdefer proxmox_client.allocator.free(id);
 
-            return types.ContainerConfig{
+            const container_state = types.ContainerState{
+                .oci_version = version,
                 .id = id,
-                .name = id,
-                .state = .created,
-                .pid = 0,
+                .status = status,
+                .pid = 0, // TODO: Get actual PID from Proxmox API
                 .bundle = bundle,
+                .annotations = null,
+                .allocator = proxmox_client.allocator,
+            };
+
+            return types.ContainerConfig{
+                .id = try proxmox_client.allocator.dupe(u8, id),
+                .name = try proxmox_client.allocator.dupe(u8, id),
+                .state = container_state,
+                .pid = 0,
+                .bundle = try proxmox_client.allocator.dupe(u8, bundle),
                 .annotations = null,
                 .metadata = null,
                 .image = null,

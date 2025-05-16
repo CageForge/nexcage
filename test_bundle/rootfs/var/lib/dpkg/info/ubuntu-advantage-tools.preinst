@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/update-motd.d/99-esm 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/update-motd.d/80-esm 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/update-motd.d/80-livepatch 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/cron.daily/ubuntu-advantage-tools 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/init/ua-auto-attach.conf 20.2~ ubuntu-advantage-tools -- "$@"
+# End automatically added section

@@ -1,0 +1,1 @@
+{"storage":{"type":"zfs","storage_pool":"rpool/lxc","dataset":"test-container"},"raw_image":false,"network":{"type":"bridge","bridge":"vmbr0","ip":"dhcp"}}

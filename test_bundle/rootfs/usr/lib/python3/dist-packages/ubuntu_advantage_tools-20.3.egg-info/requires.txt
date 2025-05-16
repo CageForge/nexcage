@@ -1,0 +1,9 @@
+
+[test]
+PyHamcrest
+behave
+flake8
+mock
+pycodestyle
+pytest
+pytest-cov

@@ -79,19 +79,8 @@ const Command = enum {
     kill,
     delete,
     help,
-    unknown,
     generate_config,
-
-    pub fn fromString(str: []const u8) Command {
-        if (std.mem.eql(u8, str, "create")) return .create;
-        if (std.mem.eql(u8, str, "start")) return .start;
-        if (std.mem.eql(u8, str, "state")) return .state;
-        if (std.mem.eql(u8, str, "kill")) return .kill;
-        if (std.mem.eql(u8, str, "delete")) return .delete;
-        if (std.mem.eql(u8, str, "help")) return .help;
-        if (std.mem.eql(u8, str, "generate-config")) return .generate_config;
-        return .unknown;
-    }
+    unknown,
 };
 
 const ConfigError = error{
@@ -100,6 +89,17 @@ const ConfigError = error{
     FailedToCreateLogFile,
     FailedToParseConfig,
 } || std.fs.File.OpenError || std.fs.File.ReadError;
+
+fn parseCommand(command: []const u8) Command {
+    if (std.mem.eql(u8, command, "create")) return .create;
+    if (std.mem.eql(u8, command, "start")) return .start;
+    if (std.mem.eql(u8, command, "state")) return .state;
+    if (std.mem.eql(u8, command, "kill")) return .kill;
+    if (std.mem.eql(u8, command, "delete")) return .delete;
+    if (std.mem.eql(u8, command, "help")) return .help;
+    if (std.mem.eql(u8, command, "generate-config")) return .generate_config;
+    return .unknown;
+}
 
 fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.Config) !void {
     const log_level = if (options.debug) types.LogLevel.debug else types.LogLevel.info;
@@ -182,7 +182,7 @@ fn printUsage() !void {
         \\  --console-socket <path> Path to console socket
         \\
     ;
-    try std.io.getStdOut().writer().print("{s}", .{usage});
+    try std.io.getStdOut().writer().writeAll(usage);
 }
 
 fn parseArgs(allocator: Allocator) !struct {
@@ -235,11 +235,12 @@ fn parseArgs(allocator: Allocator) !struct {
                 options.console_socket = try allocator.dupe(u8, value);
             }
         } else if (command == null) {
-            command = std.meta.stringToEnum(Command, arg) orelse {
+            command = parseCommand(arg);
+            if (command.? == .unknown) {
                 try std.io.getStdErr().writer().print("Unknown command: '{s}'\n", .{arg});
                 try printUsage();
                 return error.UnknownCommand;
-            };
+            }
         } else {
             if (container_id == null) {
                 container_id = try allocator.dupe(u8, arg);
@@ -328,7 +329,6 @@ fn executeCreate(
 
     var bundle_path: ?[]const u8 = null;
     var container_id: ?[]const u8 = null;
-    var pid_file: ?[]const u8 = null;
     var i: usize = 1;
 
     while (i < args.len) : (i += 1) {
@@ -339,13 +339,6 @@ fn executeCreate(
                 return error.InvalidArguments;
             }
             bundle_path = args[i + 1];
-            i += 1;
-        } else if (std.mem.eql(u8, arg, "--pid-file")) {
-            if (i + 1 >= args.len) {
-                try std.io.getStdErr().writer().writeAll("Error: --pid-file requires a path argument\n");
-                return error.InvalidArguments;
-            }
-            pid_file = args[i + 1];
             i += 1;
         } else {
             container_id = arg;
@@ -367,6 +360,12 @@ fn executeCreate(
 
     bundle_dir.access("config.json", .{}) catch |err| {
         try logger_mod.err("Failed to access config.json in bundle: {s}", .{@errorName(err)});
+        return error.InvalidBundle;
+    };
+
+    // Перевіряємо чи існує rootfs директорія
+    bundle_dir.access("rootfs", .{}) catch |err| {
+        try logger_mod.err("Failed to access rootfs directory in bundle: {s}", .{@errorName(err)});
         return error.InvalidBundle;
     };
 

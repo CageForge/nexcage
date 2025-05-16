@@ -26,31 +26,28 @@ pub const LoggerError = error{
 
 pub const LogContext = struct {
     allocator: std.mem.Allocator,
-    writer: std.fs.File.Writer,
     level: types.LogLevel,
-    initialized: bool,
     name: []const u8,
-    file: ?std.fs.File,
+    file: ?std.fs.File = null,
+    writer: std.fs.File.Writer,
 
-    pub fn init(allocator: std.mem.Allocator, writer: std.fs.File.Writer, level: types.LogLevel, name: []const u8) LoggerError!LogContext {
+    pub fn init(allocator: std.mem.Allocator, writer: std.fs.File.Writer, level: types.LogLevel, name: []const u8) !LogContext {
         return LogContext{
             .allocator = allocator,
-            .writer = writer,
             .level = level,
-            .initialized = true,
             .name = try allocator.dupe(u8, name),
             .file = null,
+            .writer = writer,
         };
     }
 
-    pub fn initWithFile(allocator: std.mem.Allocator, file: std.fs.File, level: types.LogLevel, name: []const u8) LoggerError!LogContext {
+    pub fn initWithFile(allocator: std.mem.Allocator, file: std.fs.File, level: types.LogLevel, name: []const u8) !LogContext {
         return LogContext{
             .allocator = allocator,
-            .writer = file.writer(),
             .level = level,
-            .initialized = true,
             .name = try allocator.dupe(u8, name),
             .file = file,
+            .writer = file.writer(),
         };
     }
 
@@ -59,11 +56,9 @@ pub const LogContext = struct {
         if (self.file) |file| {
             file.close();
         }
-        self.initialized = false;
     }
 
     pub fn debug(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
-        if (!self.initialized) return LoggerError.NotInitialized;
         if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.debug)) {
             self.writer.print("[DEBUG] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
                 return switch (write_err) {
@@ -88,7 +83,6 @@ pub const LogContext = struct {
     }
 
     pub fn info(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
-        if (!self.initialized) return LoggerError.NotInitialized;
         if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.info)) {
             self.writer.print("[INFO] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
                 return switch (write_err) {
@@ -113,7 +107,6 @@ pub const LogContext = struct {
     }
 
     pub fn warn(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
-        if (!self.initialized) return LoggerError.NotInitialized;
         if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.warn)) {
             self.writer.print("[WARN] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
                 return switch (write_err) {
@@ -138,7 +131,6 @@ pub const LogContext = struct {
     }
 
     pub fn err(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
-        if (!self.initialized) return LoggerError.NotInitialized;
         if (@intFromEnum(self.level) <= @intFromEnum(types.LogLevel.err)) {
             self.writer.print("[ERROR] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
                 return switch (write_err) {
@@ -175,11 +167,11 @@ pub fn init(allocator: std.mem.Allocator, writer: std.fs.File.Writer, level: typ
     global_logger = try LogContext.init(allocator, writer, level, "global");
 }
 
-pub fn initWithFile(allocator: std.mem.Allocator, file: std.fs.File, level: types.LogLevel) LoggerError!void {
+pub fn initWithFile(allocator: std.mem.Allocator, file: std.fs.File, level: types.LogLevel, name: []const u8) !void {
     if (global_logger != null) {
         global_logger.?.deinit();
     }
-    global_logger = try LogContext.initWithFile(allocator, file, level, "global");
+    global_logger = try LogContext.initWithFile(allocator, file, level, name);
 }
 
 pub fn deinit() void {

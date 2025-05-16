@@ -1,0 +1,58 @@
+#!/bin/sh
+
+set -e
+
+
+remove_apt_auth(){
+    # config file created at runtime, needs explicit handling on purge
+    rm -f /etc/apt/auth.conf.d/90ubuntu-advantage
+}
+
+remove_cache_dir(){
+    rm -rf /var/lib/ubuntu-advantage
+}
+
+remove_logs(){
+    rm -f /var/log/ubuntu-advantage.log*
+}
+
+remove_esm(){
+    # config files created in postinst, need explicit handling on purge
+    rm -f /etc/apt/trusted.gpg.d/ubuntu-advantage-esm-infra-trusty.gpg
+    rm -f /etc/apt/sources.list.d/ubuntu-esm-infra-trusty.list
+    rm -f /etc/apt/preferences.d/ubuntu-esm-infra-trusty
+}
+
+case "$1" in
+    purge)
+        remove_apt_auth
+        remove_cache_dir
+        remove_logs
+        remove_esm
+        ;;
+esac
+
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/init/ua-auto-attach.conf 20.2~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/cron.daily/ubuntu-advantage-tools 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/update-motd.d/80-livepatch 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/update-motd.d/80-esm 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/update-motd.d/99-esm 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdebconf/12.10ubuntu1
+if [ "$1" = purge ] && [ -e /usr/share/debconf/confmodule ]; then
+	. /usr/share/debconf/confmodule
+	db_purge
+fi
+# End automatically added section
+
+
+exit 0

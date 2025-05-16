@@ -148,6 +148,7 @@ pub const ContainerConfig = struct {
         if (self.log_path) |path| {
             self.allocator.free(path);
         }
+        self.state.deinit();
     }
 };
 
@@ -554,12 +555,29 @@ pub const Annotation = struct {
     }
 };
 
-pub const ContainerState = enum {
-    created,
-    running,
-    stopped,
-    paused,
-    unknown,
+pub const ContainerState = struct {
+    oci_version: []const u8,
+    id: []const u8,
+    status: []const u8,
+    pid: i64,
+    bundle: []const u8,
+    annotations: ?std.StringHashMap([]const u8) = null,
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: *ContainerState) void {
+        if (self.annotations) |*annotations| {
+            var it = annotations.iterator();
+            while (it.next()) |entry| {
+                self.allocator.free(entry.key_ptr.*);
+                self.allocator.free(entry.value_ptr.*);
+            }
+            annotations.deinit();
+        }
+        self.allocator.free(self.oci_version);
+        self.allocator.free(self.id);
+        self.allocator.free(self.status);
+        self.allocator.free(self.bundle);
+    }
 };
 
 pub const RlimitType = enum {

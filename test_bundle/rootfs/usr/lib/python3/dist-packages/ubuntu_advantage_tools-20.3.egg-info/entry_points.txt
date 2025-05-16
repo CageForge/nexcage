@@ -1,0 +1,4 @@
+[console_scripts]
+ua = uaclient.cli:main
+ubuntu-advantage = uaclient.cli:main
+

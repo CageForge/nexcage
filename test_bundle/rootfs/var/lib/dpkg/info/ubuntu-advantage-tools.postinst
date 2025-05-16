@@ -1,0 +1,156 @@
+#!/bin/sh
+
+set -e
+
+. /etc/os-release  # For VERSION_ID
+
+
+APT_TRUSTED_KEY_DIR="/etc/apt/trusted.gpg.d"
+UA_KEYRING_DIR="/usr/share/keyrings/"
+
+ESM_INFRA_KEY_TRUSTY="ubuntu-advantage-esm-infra-trusty.gpg"
+
+APT_SRC_DIR="/etc/apt/sources.list.d"
+ESM_APT_SOURCE_FILE_PRECISE="$APT_SRC_DIR/ubuntu-esm-precise.list"
+ESM_APT_SOURCE_FILE_TRUSTY="$APT_SRC_DIR/ubuntu-esm-trusty.list"
+ESM_INFRA_APT_SOURCE_FILE_TRUSTY="$APT_SRC_DIR/ubuntu-esm-infra-trusty.list"
+
+ESM_APT_PREF_FILE_TRUSTY="/etc/apt/preferences.d/ubuntu-esm-trusty"
+ESM_INFRA_APT_PREF_FILE_TRUSTY="/etc/apt/preferences.d/ubuntu-esm-infra-trusty"
+
+MYARCH="$(dpkg --print-architecture)"
+ESM_SUPPORTED_ARCHS="i386 amd64"
+
+SYSTEMD_WANTS_AUTO_ATTACH_LINK="/etc/systemd/system/multi-user.target.wants/ua-auto-attach.service"
+SYSTEMD_HELPER_ENABLED_AUTO_ATTACH_DSH="/var/lib/systemd/deb-systemd-helper-enabled/ua-auto-attach.service.dsh-also"
+SYSTEMD_HELPER_ENABLED_WANTS_LINK="/var/lib/systemd/deb-systemd-helper-enabled/multi-user.target.wants/ua-auto-attach.service"
+
+
+unconfigure_esm() {
+    rm -f $APT_TRUSTED_KEY_DIR/ubuntu-esm*gpg  # Remove previous esm keys
+    rm -f $APT_TRUSTED_KEY_DIR/$ESM_INFRA_KEY_TRUSTY
+    rm -f $ESM_INFRA_APT_SOURCE_FILE_TRUSTY
+    rm -f $ESM_APT_PREF_FILE_TRUSTY $ESM_INFRA_APT_PREF_FILE_TRUSTY
+}
+
+configure_esm() {
+    rm -f $APT_TRUSTED_KEY_DIR/ubuntu-esm*gpg  # Remove previous esm keys
+    if [ ! -f "$APT_TRUSTED_KEY_DIR/$ESM_INFRA_KEY_TRUSTY" ]; then
+        cp $UA_KEYRING_DIR/$ESM_INFRA_KEY_TRUSTY $APT_TRUSTED_KEY_DIR
+    fi
+
+    if [ -e "$ESM_APT_SOURCE_FILE_TRUSTY" ]; then
+        mv $ESM_APT_SOURCE_FILE_TRUSTY $ESM_INFRA_APT_SOURCE_FILE_TRUSTY
+    fi
+    if [ -e "$ESM_APT_PREF_FILE_TRUSTY" ]; then
+        mv $ESM_APT_PREF_FILE_TRUSTY $ESM_INFRA_APT_PREF_FILE_TRUSTY
+    fi
+    if [ ! -e "$ESM_INFRA_APT_SOURCE_FILE_TRUSTY" ]; then
+        cat > $ESM_INFRA_APT_SOURCE_FILE_TRUSTY <<EOF
+# Written by ubuntu-advantage-tools
+deb https://esm.ubuntu.com/ubuntu trusty-infra-security main
+# deb-src https://esm.ubuntu.com/ubuntu trusty-infra-security main
+
+deb https://esm.ubuntu.com/ubuntu trusty-infra-updates main
+# deb-src https://esm.ubuntu.com/ubuntu trusty-infra-updates main
+EOF
+        # Automatically disable esm sources via apt preferences until enabled
+        cat > $ESM_INFRA_APT_PREF_FILE_TRUSTY <<EOF
+# Written by ubuntu-advantage-tools
+Package: *
+Pin: release o=UbuntuESM, n=trusty
+Pin-Priority: never
+EOF
+    fi
+}
+
+case "$1" in
+    configure)
+      PREVIOUS_PKG_VER=$2
+      # Special case: legacy precise creds allowed for trusty esm
+      # do-release-upgrade substitutes s/precise/trusty/ in all apt sources.
+      # So all we need to do is rename the precise sources file to trusty.
+      # https://github.com/CanonicalLtd/ubuntu-advantage-client/issues/693
+      if [ -e "$ESM_APT_SOURCE_FILE_PRECISE" ]; then
+          mv $ESM_APT_SOURCE_FILE_PRECISE \
+              $ESM_INFRA_APT_SOURCE_FILE_TRUSTY
+      fi
+
+      # We changed the way we store public files in 19.5
+      if dpkg --compare-versions "$PREVIOUS_PKG_VER" lt-nl "19.5~"; then
+          # Remove all publicly-readable files
+          find /var/lib/ubuntu-advantage/ -maxdepth 1 -type f -delete
+      fi
+
+      # Are we upgrading from a previously release Ubuntu Advantage Pro pkg?
+      # We broke package compatibility in 20.2 for any image with 19.7
+      if dpkg --compare-versions "$PREVIOUS_PKG_VER" lt-nl "20.2~"; then
+          if dpkg --compare-versions "$PREVIOUS_PKG_VER" ge-nl "19.7~"; then
+              # Drop stale symlinks for migrated auto-attach-service
+              rm -f $SYSTEMD_WANTS_AUTO_ATTACH_LINK
+              rm -f $SYSTEMD_HELPER_ENABLED_AUTO_ATTACH_DSH
+              rm -f $SYSTEMD_HELPER_ENABLED_WANTS_LINK
+              # Use debconf to alert the user to the additional
+              # ubuntu-advantage-pro package that should be installed
+              . /usr/share/debconf/confmodule
+              db_input high ubuntu-advantage-tools/suggest_pro_pkg || true
+              db_go
+          fi
+      fi
+
+      # CACHE_DIR is no longer present or used since 19.1
+      rm -rf /var/cache/ubuntu-advantage-tools
+      # machine-access cache files no longer present or used since 20.1
+      rm -f /var/lib/ubuntu-advantage/private/machine-access-*.json
+
+      if [ "14.04" = "$VERSION_ID" ]; then
+        if echo "$ESM_SUPPORTED_ARCHS" | grep -qw "$MYARCH"; then
+          # 14.04 and supported arch
+          configure_esm
+        else
+          # 14.04 and unsupported arch
+          unconfigure_esm
+        fi
+      else
+        # not 14.04, regardless of arch
+        unconfigure_esm
+      fi
+      if [ ! -f /var/log/ubuntu-advantage.log ]; then
+          touch /var/log/ubuntu-advantage.log
+      fi
+      chmod 0600 /var/log/ubuntu-advantage.log
+      chown root:root /var/log/ubuntu-advantage.log
+      private_dir="/var/lib/ubuntu-advantage/private"
+      if [ -d "$private_dir" ]; then
+          chmod 0700 "$private_dir"
+      fi
+      ;;
+esac
+
+
+# Automatically added by dh_python3
+if which py3compile >/dev/null 2>&1; then
+	py3compile -p ubuntu-advantage-tools 
+fi
+if which pypy3compile >/dev/null 2>&1; then
+	pypy3compile -p ubuntu-advantage-tools  || true
+fi
+
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/update-motd.d/99-esm 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/update-motd.d/80-esm 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/update-motd.d/80-livepatch 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/cron.daily/ubuntu-advantage-tools 19.1~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+# Automatically added by dh_installdeb/12.10ubuntu1
+dpkg-maintscript-helper rm_conffile /etc/init/ua-auto-attach.conf 20.2~ ubuntu-advantage-tools -- "$@"
+# End automatically added section
+
+exit 0

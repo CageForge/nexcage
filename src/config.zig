@@ -3,6 +3,12 @@ const json = std.json;
 const logger = @import("logger");
 const types = @import("types");
 const errors = @import("error");
+const container = @import("container");
+
+pub const ConfigError = error{
+    UnknownField,
+    InvalidConfig,
+} || std.mem.Allocator.Error;
 
 pub const Config = struct {
     allocator: std.mem.Allocator,
@@ -11,6 +17,7 @@ pub const Config = struct {
     storage: StorageConfig,
     network: NetworkConfig,
     logger: *logger.LogContext,
+    container_config: ContainerConfig,
 
     pub fn init(allocator: std.mem.Allocator, logger_ctx: *logger.LogContext) !Config {
         return Config{
@@ -20,6 +27,14 @@ pub const Config = struct {
             .storage = try StorageConfig.init(allocator),
             .network = try NetworkConfig.init(allocator),
             .logger = logger_ctx,
+            .container_config = ContainerConfig{
+                .crun_name_patterns = &[_][]const u8{
+                    "crun-*",
+                    "oci-*",
+                    "podman-*",
+                },
+                .default_container_type = .lxc,
+            },
         };
     }
 
@@ -50,7 +65,17 @@ pub const Config = struct {
         // Proxmox config
         if (json_config.proxmox) |proxmox| {
             if (proxmox.hosts) |hosts| {
-                config.proxmox.hosts = try allocator.dupe([]const u8, hosts);
+                var new_hosts = try allocator.alloc([]const u8, hosts.len);
+                errdefer {
+                    for (new_hosts) |host| {
+                        allocator.free(host);
+                    }
+                    allocator.free(new_hosts);
+                }
+                for (hosts, 0..) |host, i| {
+                    new_hosts[i] = try allocator.dupe(u8, host);
+                }
+                config.proxmox.hosts = new_hosts;
             }
             if (proxmox.port) |port| {
                 config.proxmox.port = port;
@@ -79,11 +104,52 @@ pub const Config = struct {
                 config.network.bridge = try allocator.dupe(u8, bridge);
             }
             if (network.dns_servers) |servers| {
-                config.network.dns_servers = try allocator.dupe([]const u8, servers);
+                var new_servers = try allocator.alloc([]const u8, servers.len);
+                errdefer {
+                    for (new_servers) |server| {
+                        allocator.free(server);
+                    }
+                    allocator.free(new_servers);
+                }
+                for (servers, 0..) |server, i| {
+                    new_servers[i] = try allocator.dupe(u8, server);
+                }
+                config.network.dns_servers = new_servers;
+            }
+        }
+        
+        return config;
+    }
+
+    pub fn getContainerType(self: *Config, container_name: []const u8) container.ContainerType {
+        for (self.container_config.crun_name_patterns) |pattern| {
+            if (self.matchesPattern(container_name, pattern)) {
+                return .crun;
+            }
+        }
+        return self.container_config.default_container_type;
+    }
+
+    fn matchesPattern(self: *Config, name: []const u8, pattern: []const u8) bool {
+        var name_idx: usize = 0;
+        var pattern_idx: usize = 0;
+
+        while (pattern_idx < pattern.len) {
+            if (pattern[pattern_idx] == '*') {
+                // Skip until next pattern character or end
+                while (name_idx < name.len and (pattern_idx + 1 >= pattern.len or name[name_idx] != pattern[pattern_idx + 1])) {
+                    name_idx += 1;
+                }
+                pattern_idx += 1;
+            } else if (name_idx < name.len and pattern[pattern_idx] == name[name_idx]) {
+                name_idx += 1;
+                pattern_idx += 1;
+            } else {
+                return false;
             }
         }
 
-        return config;
+        return name_idx == name.len;
     }
 };
 
@@ -91,18 +157,20 @@ pub const RuntimeConfig = struct {
     root_path: ?[]const u8 = null,
     log_path: ?[]const u8 = null,
     log_level: types.LogLevel = .info,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !RuntimeConfig {
-        _ = allocator;
-        return RuntimeConfig{};
+        return RuntimeConfig{
+            .allocator = allocator,
+        };
     }
 
     pub fn deinit(self: *RuntimeConfig) void {
         if (self.root_path) |path| {
-            std.heap.page_allocator.free(path);
+            self.allocator.free(path);
         }
         if (self.log_path) |path| {
-            std.heap.page_allocator.free(path);
+            self.allocator.free(path);
         }
     }
 };
@@ -112,21 +180,26 @@ pub const ProxmoxConfig = struct {
     port: u16 = 8006,
     token: ?[]const u8 = null,
     node: ?[]const u8 = null,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !ProxmoxConfig {
-        _ = allocator;
-        return ProxmoxConfig{};
+        return ProxmoxConfig{
+            .allocator = allocator,
+        };
     }
 
     pub fn deinit(self: *ProxmoxConfig) void {
         for (self.hosts) |host| {
-            std.heap.page_allocator.free(host);
+            self.allocator.free(host);
+        }
+        if (self.hosts.len > 0) {
+            self.allocator.free(self.hosts);
         }
         if (self.token) |token| {
-            std.heap.page_allocator.free(token);
+            self.allocator.free(token);
         }
         if (self.node) |node| {
-            std.heap.page_allocator.free(node);
+            self.allocator.free(node);
         }
     }
 };
@@ -134,18 +207,20 @@ pub const ProxmoxConfig = struct {
 pub const StorageConfig = struct {
     zfs_dataset: ?[]const u8 = null,
     image_path: ?[]const u8 = null,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !StorageConfig {
-        _ = allocator;
-        return StorageConfig{};
+        return StorageConfig{
+            .allocator = allocator,
+        };
     }
 
     pub fn deinit(self: *StorageConfig) void {
         if (self.zfs_dataset) |dataset| {
-            std.heap.page_allocator.free(dataset);
+            self.allocator.free(dataset);
         }
         if (self.image_path) |path| {
-            std.heap.page_allocator.free(path);
+            self.allocator.free(path);
         }
     }
 };
@@ -153,40 +228,76 @@ pub const StorageConfig = struct {
 pub const NetworkConfig = struct {
     bridge: ?[]const u8 = null,
     dns_servers: []const []const u8 = &[_][]const u8{},
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !NetworkConfig {
-        _ = allocator;
-        return NetworkConfig{};
+        return NetworkConfig{
+            .allocator = allocator,
+        };
     }
 
     pub fn deinit(self: *NetworkConfig) void {
         if (self.bridge) |bridge| {
-            std.heap.page_allocator.free(bridge);
+            self.allocator.free(bridge);
         }
         for (self.dns_servers) |server| {
-            std.heap.page_allocator.free(server);
+            self.allocator.free(server);
+        }
+        if (self.dns_servers.len > 0) {
+            self.allocator.free(self.dns_servers);
         }
     }
 };
 
 pub const JsonConfig = struct {
     runtime: ?struct {
-        root_path: ?[]const u8,
-        log_path: ?[]const u8,
-        log_level: ?types.LogLevel,
+        root_path: ?[]const u8 = null,
+        log_path: ?[]const u8 = null,
+        log_level: ?types.LogLevel = null,
     } = null,
     proxmox: ?struct {
-        hosts: ?[]const []const u8,
-        port: ?u16,
-        token: ?[]const u8,
-        node: ?[]const u8,
+        hosts: ?[]const []const u8 = null,
+        port: ?u16 = null,
+        token: ?[]const u8 = null,
+        node: ?[]const u8 = null,
     } = null,
     storage: ?struct {
-        zfs_dataset: ?[]const u8,
-        image_path: ?[]const u8,
+        zfs_dataset: ?[]const u8 = null,
+        image_path: ?[]const u8 = null,
     } = null,
     network: ?struct {
-        bridge: ?[]const u8,
-        dns_servers: ?[]const []const u8,
+        bridge: ?[]const u8 = null,
+        dns_servers: ?[]const []const u8 = null,
     } = null,
+};
+
+pub fn deinitJsonConfig(config_value: *JsonConfig, allocator: std.mem.Allocator) void {
+    if (config_value.runtime) |runtime| {
+        if (runtime.root_path) |path| allocator.free(path);
+        if (runtime.log_path) |path| allocator.free(path);
+    }
+    if (config_value.proxmox) |proxmox| {
+        if (proxmox.hosts) |hosts| {
+            for (hosts) |host| allocator.free(host);
+            allocator.free(hosts);
+        }
+        if (proxmox.token) |token| allocator.free(token);
+        if (proxmox.node) |node| allocator.free(node);
+    }
+    if (config_value.storage) |storage| {
+        if (storage.zfs_dataset) |dataset| allocator.free(dataset);
+        if (storage.image_path) |path| allocator.free(path);
+    }
+    if (config_value.network) |network| {
+        if (network.bridge) |bridge| allocator.free(bridge);
+        if (network.dns_servers) |servers| {
+            for (servers) |server| allocator.free(server);
+            allocator.free(servers);
+        }
+    }
+}
+
+pub const ContainerConfig = struct {
+    crun_name_patterns: []const []const u8,
+    default_container_type: container.ContainerType,
 };

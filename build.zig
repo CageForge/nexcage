@@ -78,26 +78,6 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Registry management
-    const registry_mod = b.addModule("registry", .{
-        .root_source_file = b.path("src/registry/mod.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
-
-    // Raw image management
-    const raw_mod = b.addModule("raw", .{
-        .root_source_file = b.path("src/raw/mod.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
-
     // Network subsystem
     const network_mod = b.addModule("network", .{
         .root_source_file = b.path("src/network/network.zig"),
@@ -133,13 +113,53 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // CRUN management
-    const crun_mod = b.addModule("crun", .{
-        .root_source_file = b.path("src/crun/mod.zig"),
+    // JSON parser module
+    const json_mod = b.addModule("json", .{
+        .root_source_file = b.path("src/json_parser.zig"),
+        .imports = &.{
+            .{ .name = "json", .module = zigJsonDep.module("zig-json") },
+        },
+    });
+
+    // Pause container module
+    const pause_mod = b.addModule("pause", .{
+        .root_source_file = b.path("src/pause/pause.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
+            .{ .name = "image", .module = image_mod },
+            .{ .name = "zfs", .module = zfs_mod },
+        },
+    });
+
+    // Container management
+    const container_mod = b.addModule("container", .{
+        .root_source_file = b.path("src/container/container.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
+    const lxc_container_mod = b.addModule("lxc_container", .{
+        .root_source_file = b.path("src/container/lxc.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "container", .module = container_mod },
+        },
+    });
+
+    const crun_container_mod = b.addModule("crun_container", .{
+        .root_source_file = b.path("src/container/crun.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "container", .module = container_mod },
         },
     });
 
@@ -157,11 +177,13 @@ pub fn build(b: *std.Build) void {
             .{ .name = "image", .module = image_mod },
             .{ .name = "zfs", .module = zfs_mod },
             .{ .name = "lxc", .module = lxc_mod },
-            .{ .name = "registry", .module = registry_mod },
-            .{ .name = "raw", .module = raw_mod },
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },
-            .{ .name = "crun", .module = crun_mod },
+            .{ .name = "json", .module = json_mod },
+            .{ .name = "pause", .module = pause_mod },
+            .{ .name = "container", .module = container_mod },
+            .{ .name = "lxc_container", .module = lxc_container_mod },
+            .{ .name = "crun_container", .module = crun_container_mod },
         },
     });
 
@@ -185,8 +207,11 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("image", image_mod);
     exe.root_module.addImport("zfs", zfs_mod);
     exe.root_module.addImport("lxc", lxc_mod);
-    exe.root_module.addImport("registry", registry_mod);
-    exe.root_module.addImport("raw", raw_mod);
+    exe.root_module.addImport("json", json_mod);
+    exe.root_module.addImport("pause", pause_mod);
+    exe.root_module.addImport("container", container_mod);
+    exe.root_module.addImport("lxc_container", lxc_container_mod);
+    exe.root_module.addImport("crun_container", crun_container_mod);
 
     // Install
     b.installArtifact(exe);

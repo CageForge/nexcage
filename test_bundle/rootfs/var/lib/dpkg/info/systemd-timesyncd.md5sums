@@ -1,0 +1,8 @@
+5736c5d09e71db1bec771b260f0f9524  lib/systemd/ntp-units.d/80-systemd-timesync.list
+c2e95da2f661592f2f164aa689d6cb51  lib/systemd/system/systemd-timesyncd.service
+3bef162d6d0e0a3a95b1fe4ce7a95bd4  lib/systemd/systemd-timesyncd
+944bf01cb68531f5d665c1a6ed7bc9b5  usr/share/dbus-1/system-services/org.freedesktop.timesync1.service
+6728f7de33c531cb056f69cc5120a7c5  usr/share/dbus-1/system.d/org.freedesktop.timesync1.conf
+013021fd8cdd4884a8cf41920e29221b  usr/share/doc/systemd-timesyncd/copyright
+2edc61746c9639ce41329cf80e1a1ec1  usr/share/man/man5/timesyncd.conf.5.gz
+5637271893d8c131b187f934d74d1470  usr/share/man/man8/systemd-timesyncd.service.8.gz
