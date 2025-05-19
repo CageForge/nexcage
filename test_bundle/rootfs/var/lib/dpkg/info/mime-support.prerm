@@ -1,9 +1,0 @@
-#! /bin/sh
-#
-# prerm file for mime-support
-
-set -e
-
-if [ "$1" = "remove" ]; then
-    rm -f /etc/mailcap
-fi

@@ -1,3 +1,0 @@
-# Specify command line options here. This config file is used
-# by the included systemd service file.
-networkd_dispatcher_args="--run-startup-triggers"

@@ -54,5 +54,5 @@ By contributing, you agree that your contributions will be licensed under the Ap
 If you have questions about contributing, please contact us through:
 
 - GitHub Issues
-- [INSERT EMAIL ADDRESS]
+- moriarti@cp.if.ua
 - [INSERT CHAT CHANNEL] 

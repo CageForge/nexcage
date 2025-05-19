@@ -39,38 +39,9 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Common module
-    const common_mod = b.addModule("common", .{
-        .root_source_file = b.path("src/common/mod.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-        },
-    });
-
-    // Image management
-    const image_mod = b.addModule("image", .{
-        .root_source_file = b.path("src/image/mod.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
-
     // ZFS management
     const zfs_mod = b.addModule("zfs", .{
         .root_source_file = b.path("src/zfs/mod.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
-
-    // LXC management
-    const lxc_mod = b.addModule("lxc", .{
-        .root_source_file = b.path("src/lxc/mod.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
@@ -97,7 +68,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "network", .module = network_mod },
             .{ .name = "logger", .module = logger_mod },
             .{ .name = "config", .module = config_mod },
-            .{ .name = "common", .module = common_mod },
         },
     });
 
@@ -109,13 +79,12 @@ pub fn build(b: *std.Build) void {
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
             .{ .name = "pod", .module = pod_mod },
-            .{ .name = "common", .module = common_mod },
         },
     });
 
     // JSON parser module
     const json_mod = b.addModule("json", .{
-        .root_source_file = b.path("src/json_parser.zig"),
+        .root_source_file = b.path("src/custom_json_parser.zig"),
         .imports = &.{
             .{ .name = "json", .module = zigJsonDep.module("zig-json") },
         },
@@ -128,7 +97,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
-            .{ .name = "image", .module = image_mod },
             .{ .name = "zfs", .module = zfs_mod },
         },
     });
@@ -173,10 +141,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "pod", .module = pod_mod },
             .{ .name = "proxmox", .module = proxmox_mod },
             .{ .name = "json", .module = zigJsonDep.module("zig-json") },
-            .{ .name = "common", .module = common_mod },
-            .{ .name = "image", .module = image_mod },
             .{ .name = "zfs", .module = zfs_mod },
-            .{ .name = "lxc", .module = lxc_mod },
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
@@ -203,10 +168,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("proxmox", proxmox_mod);
     exe.root_module.addImport("oci", oci_mod);
     exe.root_module.addImport("json", zigJsonDep.module("zig-json"));
-    exe.root_module.addImport("common", common_mod);
-    exe.root_module.addImport("image", image_mod);
     exe.root_module.addImport("zfs", zfs_mod);
-    exe.root_module.addImport("lxc", lxc_mod);
     exe.root_module.addImport("json", json_mod);
     exe.root_module.addImport("pause", pause_mod);
     exe.root_module.addImport("container", container_mod);

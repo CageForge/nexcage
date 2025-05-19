@@ -3,58 +3,49 @@ const fs = std.fs;
 const mem = std.mem;
 const os = std.os;
 const linux = os.linux;
-const logger = std.log.scoped(.oci_raw);
+const logger = std.log.scoped(.oci_raw_image);
+const types = @import("types.zig");
 
-pub const RawError = error{
-    InvalidImage,
-    InvalidLayer,
-    InvalidConfig,
-    FileError,
-    OutOfMemory,
-    MountError,
-    LoopError,
+pub const RawImageError = error{
+    InvalidFormat,
+    ReadError,
+    WriteError,
 };
 
+/// Raw image format handler
 pub const RawImage = struct {
-    allocator: mem.Allocator,
-    image_dir: []const u8,
-    output_path: []const u8,
+    allocator: std.mem.Allocator,
+    path: []const u8,
     size: u64,
-    loop_device: ?[]const u8,
 
     const Self = @This();
 
+    /// Initialize a new raw image handler
     pub fn init(
-        allocator: mem.Allocator,
-        image_dir: []const u8,
-        output_path: []const u8,
+        allocator: std.mem.Allocator,
+        path: []const u8,
         size: u64,
     ) !*Self {
         const self = try allocator.create(Self);
         self.* = .{
             .allocator = allocator,
-            .image_dir = try allocator.dupe(u8, image_dir),
-            .output_path = try allocator.dupe(u8, output_path),
+            .path = try allocator.dupe(u8, path),
             .size = size,
-            .loop_device = null,
         };
         return self;
     }
 
+    /// Clean up resources
     pub fn deinit(self: *Self) void {
-        if (self.loop_device) |device| {
-            self.allocator.free(device);
-        }
-        self.allocator.free(self.image_dir);
-        self.allocator.free(self.output_path);
+        self.allocator.free(self.path);
         self.allocator.destroy(self);
     }
 
     pub fn create(self: *Self) !void {
-        logger.info("Creating raw image at {s}", .{self.output_path});
+        logger.info("Creating raw image at {s}", .{self.path});
 
         // Створюємо файл
-        const file = try fs.cwd().createFile(self.output_path, .{});
+        const file = try fs.cwd().createFile(self.path, .{});
         defer file.close();
 
         // Встановлюємо розмір файлу
@@ -81,7 +72,7 @@ pub const RawImage = struct {
     fn createLoopDevice(self: *Self) ![]const u8 {
         const output = try std.ChildProcess.exec(.{
             .allocator = self.allocator,
-            .argv = &[_][]const u8{ "losetup", "-f", self.output_path },
+            .argv = &[_][]const u8{ "losetup", "-f", self.path },
         });
         defer {
             self.allocator.free(output.stdout);
@@ -144,7 +135,7 @@ pub const RawImage = struct {
 
         const rootfs = try std.fs.path.join(
             self.allocator,
-            &[_][]const u8{ self.image_dir, "rootfs" },
+            &[_][]const u8{ self.path, "rootfs" },
         );
         defer self.allocator.free(rootfs);
 

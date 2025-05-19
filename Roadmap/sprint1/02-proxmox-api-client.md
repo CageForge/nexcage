@@ -4,9 +4,9 @@
 This task involves implementing a robust Proxmox API client in Zig that will handle all interactions with the Proxmox VE API. The client should support authentication, error handling, and all necessary API endpoints for LXC container management.
 
 ## Objectives
-- [ ] Implement basic HTTP client functionality
-- [ ] Add authentication support (API tokens)
-- [ ] Implement error handling and retry mechanisms
+- [x] Implement basic HTTP client functionality
+- [x] Add authentication support (API tokens)
+- [x] Implement error handling and retry mechanisms
 - [ ] Add support for all required Proxmox API endpoints
 - [ ] Implement connection pooling and timeout handling
 - [ ] Add comprehensive logging
@@ -35,14 +35,14 @@ This task involves implementing a robust Proxmox API client in Zig that will han
 - Timeout handling
 
 ## Dependencies
-- Zig 0.14.0 or later
+- Zig 0.13.0 or later
 - Proxmox VE API access
 - HTTP client library
 - JSON parsing capabilities
 
 ## Acceptance Criteria
-- [ ] Client can successfully authenticate with Proxmox
-- [ ] All basic LXC operations work correctly
+- [x] Client can successfully authenticate with Proxmox
+- [x] All basic LXC operations work correctly
 - [ ] Error handling covers all common scenarios
 - [ ] Unit tests cover all major functionality
 - [ ] Documentation is complete and clear

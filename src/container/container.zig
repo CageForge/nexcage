@@ -36,7 +36,7 @@ pub const Container = struct {
     pid: ?i32,
 
     pub fn init(allocator: Allocator, config: ContainerConfig) !*Container {
-        var container = try allocator.create(Container);
+        const container = try allocator.create(Container);
         container.* = Container{
             .allocator = allocator,
             .config = config,

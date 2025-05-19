@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 # Set Timezone
 ENV TZ=UTC
@@ -21,10 +21,10 @@ ENV LIBRARY_PATH="/usr/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu:${LIBRARY_PA
 ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}"
 
 # Install Zig
-RUN wget https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz \
-    && tar xf zig-linux-x86_64-0.14.0.tar.xz \
-    && mv zig-linux-x86_64-0.14.0 /usr/local/zig \
-    && rm zig-linux-x86_64-0.14.0.tar.xz
+RUN wget https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz \
+    && tar xf zig-linux-x86_64-0.13.0.tar.xz \
+    && mv zig-linux-x86_64-0.13.0 /usr/local/zig \
+    && rm zig-linux-x86_64-0.13.0.tar.xz
 
 # Add Zig до PATH
 ENV PATH="/usr/local/zig:${PATH}"

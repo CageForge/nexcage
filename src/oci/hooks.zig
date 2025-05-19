@@ -45,7 +45,7 @@ pub const HookExecutor = struct {
         const self = try allocator.create(Self);
         self.* = .{
             .allocator = allocator,
-            .default_timeout = 10000, // 10 секунд за замовчуванням
+            .default_timeout = 10000, // 10 seconds by default
         };
         return self;
     }
@@ -74,7 +74,7 @@ pub const HookExecutor = struct {
         var env_map = try process.getEnvMap(self.allocator);
         defer env_map.deinit();
 
-        // Встановлюємо environment змінні
+        // Set environment variables
         if (hook.env) |env| {
             for (env) |env_var| {
                 const index = std.mem.indexOf(u8, env_var, "=") orelse continue;
@@ -84,12 +84,12 @@ pub const HookExecutor = struct {
             }
         }
 
-        // Додаємо контекст
+        // Add context
         try env_map.put("OCI_CONTAINER_ID", context.container_id);
         try env_map.put("OCI_BUNDLE", context.bundle);
         try env_map.put("OCI_CONTAINER_STATE", context.state);
 
-        // Встановлюємо timeout
+        // Set timeout
         const timeout = hook.timeout orelse self.default_timeout;
 
         var child = process.Child.init(args.items, self.allocator);

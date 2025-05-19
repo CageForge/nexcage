@@ -24,6 +24,7 @@ const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadEr
 const image = @import("image");
 const zfs = @import("zfs");
 const lxc = @import("lxc");
+const json_parser = @import("custom_json_parser.zig");
 
 const SIGINT = posix.SIG.INT;
 const SIGTERM = posix.SIG.TERM;
@@ -277,7 +278,6 @@ fn loadConfig(allocator: Allocator, config_path: ?[]const u8) !config.Config {
     };
     defer allocator.free(content);
 
-    const json_parser = @import("json_parser");
     var parsed = try json_parser.parseWithUnknownFields(config.JsonConfig, allocator, content);
     defer {
         config.deinitJsonConfig(&parsed.value, allocator);

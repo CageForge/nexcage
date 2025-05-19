@@ -1,4 +1,0 @@
-/etc/cron.daily/logrotate
-/etc/logrotate.conf
-/etc/logrotate.d/btmp
-/etc/logrotate.d/wtmp

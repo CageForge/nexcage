@@ -1,2 +1,0 @@
-libbsd 0 libbsd0 (>= 0.10.0)
-udeb: libbsd 0 libbsd0-udeb (>= 0.10.0)

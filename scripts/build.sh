@@ -1,30 +1,30 @@
 #!/bin/bash
 
-# Перевіряємо наявність Docker
+# Check if Docker is installed
 if ! command -v docker &> /dev/null; then
-    echo "Помилка: Docker не встановлено"
+    echo "Error: Docker is not installed"
     exit 1
 fi
 
-# Перевіряємо наявність Dockerfile
+# Check if Dockerfile exists
 if [ ! -f "Dockerfile.build" ]; then
-    echo "Помилка: Dockerfile.build не знайдено"
+    echo "Error: Dockerfile.build not found"
     exit 1
 fi
 
-# Збираємо образ для збірки
-echo "Збірка образу для збірки..."
+# Build the builder image
+echo "Building builder image..."
 docker build -t proxmox-lxcri-builder -f Dockerfile.build .
 
-# Запускаємо контейнер для збірки
-echo "Запуск збірки проекту..."
+# Run the build container
+echo "Starting project build..."
 docker run --rm -v $(pwd):/build proxmox-lxcri-builder
 
-# Перевіряємо результат збірки
+# Check build result
 if [ $? -eq 0 ]; then
-    echo "Збірка успішно завершена!"
+    echo "Build completed successfully!"
 else
-    echo "Помилка під час збірки!"
+    echo "Error during build!"
     exit 1
 fi
  
