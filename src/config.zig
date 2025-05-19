@@ -11,6 +11,7 @@ pub const ConfigError = error{
 } || std.mem.Allocator.Error;
 
 pub const Config = struct {
+    const Self = @This();
     allocator: std.mem.Allocator,
     runtime: RuntimeConfig,
     proxmox: ProxmoxConfig,
@@ -130,7 +131,7 @@ pub const Config = struct {
         return self.container_config.default_container_type;
     }
 
-    fn matchesPattern(self: *Config, name: []const u8, pattern: []const u8) bool {
+    fn matchesPattern(_: *Config, name: []const u8, pattern: []const u8) bool {
         var name_idx: usize = 0;
         var pattern_idx: usize = 0;
 
@@ -301,3 +302,8 @@ pub const ContainerConfig = struct {
     crun_name_patterns: []const []const u8,
     default_container_type: container.ContainerType,
 };
+
+const DEFAULT_TIMEOUT_MS: i64 = 10_000;
+
+const IMAGES_DIR = "images";
+const BUNDLE_DIR = "bundle";
