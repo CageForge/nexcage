@@ -224,7 +224,7 @@ pub const ImageManager = struct {
                 media_type = try json_helper.parseString(self.allocator, scanner);
             } else if (std.mem.eql(u8, key, "config")) {
                 try json_helper.expectToken(&scanner, .object_begin);
-                
+
                 while (true) {
                     const token = try scanner.next();
                     if (token == .object_end) break;
@@ -288,8 +288,9 @@ pub const ImageManager = struct {
             }
         }
 
-        if (schema_version == null or media_type == null or config_digest == null or 
-            config_media_type == null or config_size == null) {
+        if (schema_version == null or media_type == null or config_digest == null or
+            config_media_type == null or config_size == null)
+        {
             return error.InvalidManifest;
         }
 

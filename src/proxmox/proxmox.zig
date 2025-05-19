@@ -54,26 +54,21 @@ pub const ProxmoxClient = struct {
     client: Client,
 
     pub fn init(allocator: Allocator, host: []const u8, port: u16, token: []const u8, node: []const u8, log_instance: *logger_mod.Logger) !ProxmoxClient {
-        const host_copy = try allocator.dupe(u8, host);
-        errdefer allocator.free(host_copy);
-
         const token_copy = try allocator.dupe(u8, token);
         errdefer allocator.free(token_copy);
 
         const node_copy = try allocator.dupe(u8, node);
         errdefer allocator.free(node_copy);
 
+        const host_copy = try allocator.dupe(u8, host);
+        errdefer allocator.free(host_copy);
+
         const hosts = try allocator.alloc([]const u8, 1);
-        errdefer {
-            allocator.free(hosts);
-        }
+        errdefer allocator.free(hosts);
         hosts[0] = host_copy;
 
         const client = try Client.init(allocator, hosts, token_copy, log_instance, port, node_copy);
-        errdefer {
-            client.deinit();
-            allocator.free(hosts);
-        }
+        errdefer client.deinit();
 
         return ProxmoxClient{
             .allocator = allocator,
@@ -137,7 +132,7 @@ pub const ProxmoxClient = struct {
     }
 
     pub fn stopContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32, force: ?bool) !void {
-        try self.logger.info("Stopping container {d} (force: {?})", .{vmid, force});
+        try self.logger.info("Stopping container {d} (force: {?})", .{ vmid, force });
         switch (container_type) {
             .lxc => try lxc_ops.stopLXC(&self.client, self.node, vmid),
             .qemu => try vm_ops.stopVM(&self.client, self.node, vmid, if (force) |f| if (f) @as(?i64, 0) else null else null),

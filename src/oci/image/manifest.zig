@@ -13,20 +13,20 @@ pub const ManifestError = error{
 pub fn parseManifest(allocator: std.mem.Allocator, data: []const u8) !types.ImageManifest {
     var parsed = try json.parseFromSlice(types.ImageManifest, allocator, data, .{});
     defer parsed.deinit();
-    
+
     // Validate required fields
     if (parsed.value.schemaVersion != 2) {
         return ManifestError.InvalidManifest;
     }
-    
+
     // Validate config descriptor
     try validateDescriptor(parsed.value.config);
-    
+
     // Validate layers
     for (parsed.value.layers) |layer| {
         try validateDescriptor(layer);
     }
-    
+
     return parsed.value;
 }
 
@@ -44,12 +44,12 @@ pub fn createManifest(
 ) !types.ImageManifest {
     // Validate config descriptor
     try validateDescriptor(config);
-    
+
     // Validate layers
     for (layers) |layer| {
         try validateDescriptor(layer);
     }
-    
+
     return types.ImageManifest{
         .config = config,
         .layers = layers,
@@ -59,4 +59,4 @@ pub fn createManifest(
 
 pub fn serializeManifest(allocator: std.mem.Allocator, manifest: types.ImageManifest) ![]const u8 {
     return try json.stringifyAlloc(allocator, manifest, .{});
-} 
+}

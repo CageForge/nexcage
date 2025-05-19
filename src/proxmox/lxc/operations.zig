@@ -27,7 +27,7 @@ pub fn listLXCs(client: *Client) ![]types.LXCContainer {
         }
         client.allocator.free(nodes);
     }
-    
+
     var containers = ArrayList(types.LXCContainer).init(client.allocator);
     errdefer {
         for (containers.items) |*container| {
@@ -40,8 +40,8 @@ pub fn listLXCs(client: *Client) ![]types.LXCContainer {
         const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc", .{node.name});
         defer client.allocator.free(path);
 
-        try client.logger.info("Requesting LXC containers from node {s} with path: {s}", .{node.name, path});
-        
+        try client.logger.info("Requesting LXC containers from node {s} with path: {s}", .{ node.name, path });
+
         const response = try client.makeRequest(.GET, path, null);
         defer client.allocator.free(response);
 
@@ -55,10 +55,15 @@ pub fn listLXCs(client: *Client) ![]types.LXCContainer {
 
         if (parsed.value.object.get("data")) |data| {
             for (data.array.items) |container| {
-                const config = try getContainerConfig(client, node.name, @intCast(container.object.get("vmid").?.integer));
+                var config = try getContainerConfig(client, node.name, @intCast(container.object.get("vmid").?.integer));
+                errdefer config.deinit(client.allocator);
+
+                const name = try client.allocator.dupe(u8, container.object.get("name").?.string);
+                errdefer client.allocator.free(name);
+
                 try containers.append(types.LXCContainer{
                     .vmid = @intCast(container.object.get("vmid").?.integer),
-                    .name = try client.allocator.dupe(u8, container.object.get("name").?.string),
+                    .name = name,
                     .status = try parseContainerStatus(container.object.get("status").?.string),
                     .config = config,
                 });
@@ -97,16 +102,22 @@ fn getContainerConfig(client: *Client, node: []const u8, vmid: u32) !types.LXCCo
     }
 
     const config_data = data.object;
-    
+
     // Отримуємо мережеву конфігурацію
     var net0 = types.NetworkConfig{
-        .name = "eth0",
-        .bridge = "vmbr0",
-        .ip = "dhcp",
+        .name = try client.allocator.dupe(u8, "eth0"),
+        .bridge = try client.allocator.dupe(u8, "vmbr0"),
+        .ip = try client.allocator.dupe(u8, "dhcp"),
     };
+    errdefer net0.deinit(client.allocator);
 
     if (config_data.get("net0")) |net0_data| {
         if (net0_data == .string) {
+            // Звільняємо дефолтні значення
+            client.allocator.free(net0.name);
+            client.allocator.free(net0.bridge);
+            client.allocator.free(net0.ip);
+
             // Парсимо рядок конфігурації мережі
             const net_str = net0_data.string;
             var net_iter = std.mem.splitScalar(u8, net_str, ',');
@@ -127,44 +138,63 @@ fn getContainerConfig(client: *Client, node: []const u8, vmid: u32) !types.LXCCo
         }
     }
 
+    const hostname = try client.allocator.dupe(u8, config_data.get("hostname").?.string);
+    errdefer client.allocator.free(hostname);
+
+    const ostype = try client.allocator.dupe(u8, config_data.get("ostype").?.string);
+    errdefer client.allocator.free(ostype);
+
+    const rootfs = try client.allocator.dupe(u8, config_data.get("rootfs").?.string);
+    errdefer client.allocator.free(rootfs);
+
     return types.LXCConfig{
-        .hostname = try client.allocator.dupe(u8, config_data.get("hostname").?.string),
-        .ostype = try client.allocator.dupe(u8, config_data.get("ostype").?.string),
+        .hostname = hostname,
+        .ostype = ostype,
         .memory = @intCast(config_data.get("memory").?.integer),
         .swap = @intCast(config_data.get("swap").?.integer),
         .cores = @intCast(config_data.get("cores").?.integer),
-        .rootfs = try client.allocator.dupe(u8, config_data.get("rootfs").?.string),
+        .rootfs = rootfs,
         .net0 = net0,
-        .onboot = if (config_data.get("onboot")) |v| 
+        .onboot = if (config_data.get("onboot")) |v|
             switch (v) {
                 .bool => |b| b,
                 .integer => |i| i != 0,
                 else => false,
-            } else false,
-        .protection = if (config_data.get("protection")) |v| 
+            }
+        else
+            false,
+        .protection = if (config_data.get("protection")) |v|
             switch (v) {
                 .bool => |b| b,
                 .integer => |i| i != 0,
                 else => false,
-            } else false,
-        .start = if (config_data.get("start")) |v| 
+            }
+        else
+            false,
+        .start = if (config_data.get("start")) |v|
             switch (v) {
                 .bool => |b| b,
                 .integer => |i| i != 0,
                 else => true,
-            } else true,
-        .template = if (config_data.get("template")) |v| 
+            }
+        else
+            true,
+        .template = if (config_data.get("template")) |v|
             switch (v) {
                 .bool => |b| b,
                 .integer => |i| i != 0,
                 else => false,
-            } else false,
-        .unprivileged = if (config_data.get("unprivileged")) |v| 
+            }
+        else
+            false,
+        .unprivileged = if (config_data.get("unprivileged")) |v|
             switch (v) {
                 .bool => |b| b,
                 .integer => |i| i != 0,
                 else => true,
-            } else true,
+            }
+        else
+            true,
         .features = .{},
     };
 }
@@ -240,7 +270,7 @@ pub fn getLXCStatus(client: *Client, node: []const u8, vmid: u32) !types.LXCStat
     defer client.allocator.free(path);
 
     try client.logger.debug("Getting status for LXC container {d} on node {s}", .{ vmid, node });
-    
+
     const response = try client.makeRequest(.GET, path, null);
     defer client.allocator.free(response);
 
@@ -260,4 +290,4 @@ pub fn getLXCStatus(client: *Client, node: []const u8, vmid: u32) !types.LXCStat
 
     try client.logger.err("Invalid response format for container status {d}: {s}", .{ vmid, response });
     return error.InvalidResponse;
-} 
+}

@@ -165,8 +165,5 @@ test "NetworkConfig toString" {
     const config_str = try config.toString(allocator);
     defer allocator.free(config_str);
 
-    try testing.expectEqualStrings(
-        "ip=192.168.1.100,gw=192.168.1.1,hwaddr=02:00:00:00:00:01,mtu=1500,vlan=100",
-        config_str
-    );
-} 
+    try testing.expectEqualStrings("ip=192.168.1.100,gw=192.168.1.1,hwaddr=02:00:00:00:00:01,mtu=1500,vlan=100", config_str);
+}

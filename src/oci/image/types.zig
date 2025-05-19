@@ -61,4 +61,4 @@ pub const History = struct {
     created_by: ?[]const u8 = null,
     comment: ?[]const u8 = null,
     empty_layer: ?bool = null,
-}; 
+};

@@ -70,7 +70,7 @@ pub fn startVM(client: *Client, node: []const u8, vmid: u32) !void {
     defer client.allocator.free(path);
 
     try client.logger.debug("Starting VM {d} on node {s}", .{ vmid, node });
-    
+
     const response = try client.makeRequest(.POST, path, null);
     defer client.allocator.free(response);
 
@@ -105,7 +105,7 @@ pub fn stopVM(client: *Client, node: []const u8, vmid: u32, timeout: ?i64) !void
     defer client.allocator.free(path);
 
     try client.logger.debug("Stopping VM {d} on node {s}", .{ vmid, node });
-    
+
     const response = try client.makeRequest(.POST, path, null);
     defer client.allocator.free(response);
 
@@ -130,7 +130,7 @@ pub fn deleteVM(client: *Client, node: []const u8, vmid: u32) !void {
     defer client.allocator.free(path);
 
     try client.logger.debug("Deleting VM {d} on node {s}", .{ vmid, node });
-    
+
     const response = try client.makeRequest(.DELETE, path, null);
     defer client.allocator.free(response);
 
@@ -155,7 +155,7 @@ pub fn getVMStatus(client: *Client, node: []const u8, vmid: u32) !types.Containe
     defer client.allocator.free(path);
 
     try client.logger.debug("Getting status for VM {d} on node {s}", .{ vmid, node });
-    
+
     const response = try client.makeRequest(.GET, path, null);
     defer client.allocator.free(response);
 
@@ -234,4 +234,4 @@ fn parseNetworkConfig(allocator: std.mem.Allocator, net_str: []const u8) !types.
     }
 
     return net;
-} 
+}

@@ -14,9 +14,9 @@ pub const UmociError = error{
 pub const Umoci = struct {
     allocator: std.mem.Allocator,
     binary_path: []const u8,
-    
+
     const Self = @This();
-    
+
     pub fn init(allocator: std.mem.Allocator, binary_path: []const u8) !*Self {
         const self = try allocator.create(Self);
         self.* = .{
@@ -25,12 +25,12 @@ pub const Umoci = struct {
         };
         return self;
     }
-    
+
     pub fn deinit(self: *Self) void {
         self.allocator.free(self.binary_path);
         self.allocator.destroy(self);
     }
-    
+
     pub fn unpack(self: *Self, image_path: []const u8, tag: []const u8, bundle_path: []const u8) !void {
         const args = [_][]const u8{
             self.binary_path,
@@ -39,7 +39,7 @@ pub const Umoci = struct {
             try std.fmt.allocPrint(self.allocator, "{s}:{s}", .{ image_path, tag }),
             bundle_path,
         };
-        
+
         const result = try std.ChildProcess.exec(.{
             .allocator = self.allocator,
             .argv = &args,
@@ -48,12 +48,12 @@ pub const Umoci = struct {
             self.allocator.free(result.stdout);
             self.allocator.free(result.stderr);
         }
-        
+
         if (result.term.Exited != 0) {
             return UmociError.UnpackFailed;
         }
     }
-    
+
     pub fn repack(self: *Self, image_path: []const u8, tag: []const u8, bundle_path: []const u8) !void {
         const args = [_][]const u8{
             self.binary_path,
@@ -62,7 +62,7 @@ pub const Umoci = struct {
             try std.fmt.allocPrint(self.allocator, "{s}:{s}", .{ image_path, tag }),
             bundle_path,
         };
-        
+
         const result = try std.ChildProcess.exec(.{
             .allocator = self.allocator,
             .argv = &args,
@@ -71,12 +71,12 @@ pub const Umoci = struct {
             self.allocator.free(result.stdout);
             self.allocator.free(result.stderr);
         }
-        
+
         if (result.term.Exited != 0) {
             return UmociError.RepackFailed;
         }
     }
-    
+
     pub fn config(
         self: *Self,
         image_path: []const u8,
@@ -85,42 +85,42 @@ pub const Umoci = struct {
     ) !void {
         var args = std.ArrayList([]const u8).init(self.allocator);
         defer args.deinit();
-        
+
         try args.appendSlice(&[_][]const u8{
             self.binary_path,
             "config",
             "--image",
             try std.fmt.allocPrint(self.allocator, "{s}:{s}", .{ image_path, tag }),
         });
-        
+
         if (options.author) |author| {
-            try args.appendSlice(&[_][]const u8{"--author", author});
+            try args.appendSlice(&[_][]const u8{ "--author", author });
         }
-        
+
         if (options.config) |cfg| {
             if (cfg.WorkingDir) |dir| {
-                try args.appendSlice(&[_][]const u8{"--config.workingdir", dir});
+                try args.appendSlice(&[_][]const u8{ "--config.workingdir", dir });
             }
-            
+
             if (cfg.Entrypoint) |entrypoint| {
                 for (entrypoint) |entry| {
-                    try args.appendSlice(&[_][]const u8{"--config.entrypoint", entry});
+                    try args.appendSlice(&[_][]const u8{ "--config.entrypoint", entry });
                 }
             }
-            
+
             if (cfg.Cmd) |cmd| {
                 for (cmd) |arg| {
-                    try args.appendSlice(&[_][]const u8{"--config.cmd", arg});
+                    try args.appendSlice(&[_][]const u8{ "--config.cmd", arg });
                 }
             }
-            
+
             if (cfg.Env) |env| {
                 for (env) |var_| {
-                    try args.appendSlice(&[_][]const u8{"--config.env", var_});
+                    try args.appendSlice(&[_][]const u8{ "--config.env", var_ });
                 }
             }
         }
-        
+
         const result = try std.ChildProcess.exec(.{
             .allocator = self.allocator,
             .argv = args.items,
@@ -129,12 +129,12 @@ pub const Umoci = struct {
             self.allocator.free(result.stdout);
             self.allocator.free(result.stderr);
         }
-        
+
         if (result.term.Exited != 0) {
             return UmociError.ConfigFailed;
         }
     }
-    
+
     pub fn gc(self: *Self, image_path: []const u8) !void {
         const args = [_][]const u8{
             self.binary_path,
@@ -142,7 +142,7 @@ pub const Umoci = struct {
             "--layout",
             image_path,
         };
-        
+
         const result = try std.ChildProcess.exec(.{
             .allocator = self.allocator,
             .argv = &args,
@@ -151,9 +151,9 @@ pub const Umoci = struct {
             self.allocator.free(result.stdout);
             self.allocator.free(result.stderr);
         }
-        
+
         if (result.term.Exited != 0) {
             return UmociError.CommandFailed;
         }
     }
-}; 
+};

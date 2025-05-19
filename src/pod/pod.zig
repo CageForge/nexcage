@@ -6,6 +6,7 @@ const oci = @import("../oci/spec.zig");
 const net = @import("network");
 const proxmox = @import("../proxmox/api.zig");
 const ProxmoxContainer = @import("../proxmox/lxc/container.zig").ProxmoxContainer;
+const PauseContainer = @import("../pause/pause.zig").PauseContainer;
 
 pub const PodError = error{
     CreationFailed,
@@ -94,10 +95,7 @@ pub const PodResources = struct {
             pod_resources.blockio = .{
                 .weight = blockio.weight,
                 .weightDevice = if (blockio.weightDevice) |devices| blk: {
-                    var weight_devices = try allocator.alloc(
-                        @TypeOf(pod_resources.blockio.?.weightDevice.?[0]),
-                        devices.len
-                    );
+                    var weight_devices = try allocator.alloc(@TypeOf(pod_resources.blockio.?.weightDevice.?[0]), devices.len);
                     for (devices, 0..) |device, i| {
                         weight_devices[i] = .{
                             .major = device.major,
@@ -111,10 +109,7 @@ pub const PodResources = struct {
         }
 
         if (resources.hugepageLimits) |hugepages| {
-            pod_resources.hugepages = try allocator.alloc(
-                @TypeOf(pod_resources.hugepages.?[0]),
-                hugepages.len
-            );
+            pod_resources.hugepages = try allocator.alloc(@TypeOf(pod_resources.hugepages.?[0]), hugepages.len);
             for (hugepages, 0..) |page, i| {
                 pod_resources.hugepages.?[i] = .{
                     .pageSize = page.pageSize,
@@ -127,10 +122,7 @@ pub const PodResources = struct {
             pod_resources.network = .{
                 .classID = net_resources.classID,
                 .priorities = if (net_resources.priorities) |priorities| blk: {
-                    var net_priorities = try allocator.alloc(
-                        @TypeOf(pod_resources.network.?.priorities.?[0]),
-                        priorities.len
-                    );
+                    var net_priorities = try allocator.alloc(@TypeOf(pod_resources.network.?.priorities.?[0]), priorities.len);
                     for (priorities, 0..) |priority, i| {
                         net_priorities[i] = .{
                             .name = try allocator.dupe(u8, priority.name),
@@ -244,6 +236,7 @@ pub const PodSpec = struct {
 pub const Pod = struct {
     spec: PodSpec,
     containers: std.ArrayList(*ProxmoxContainer),
+    pause_container: ?*PauseContainer,
     network_manager: *net.NetworkManager,
     proxmox_api: *proxmox.ProxmoxApi,
     allocator: Allocator,
@@ -267,6 +260,7 @@ pub const Pod = struct {
         self.* = .{
             .spec = spec,
             .containers = std.ArrayList(*ProxmoxContainer).init(allocator),
+            .pause_container = null,
             .network_manager = net_manager,
             .proxmox_api = api,
             .allocator = allocator,
@@ -281,6 +275,11 @@ pub const Pod = struct {
             container.deinit();
         }
         self.containers.deinit();
+
+        // Очищуємо pause контейнер
+        if (self.pause_container) |pause| {
+            pause.deinit();
+        }
 
         // Очищуємо мережу
         self.network_manager.deinit();
@@ -303,27 +302,21 @@ pub const Pod = struct {
         // Валідуємо специфікацію
         try self.spec.validateSpec();
 
-        // Виконуємо prestart хуки
-        if (self.spec.hooks) |hooks| {
-            if (hooks.prestart) |prestart| {
-                try self.executeHooks(prestart);
-            }
-        }
+        // Створюємо pause контейнер
+        const pause_config = ContainerConfig{
+            .id = try std.fmt.allocPrint(self.allocator, "{s}-pause", .{self.spec.metadata.name}),
+            .bundle = try std.fmt.allocPrint(self.allocator, "/var/lib/containers/{s}-pause", .{self.spec.metadata.name}),
+            .annotations = &.{},
+        };
 
-        // Налаштовуємо мережу для поду
-        const network_config = try self.network_manager.createNetwork(self.spec.metadata.name);
-        errdefer network_config.deinit();
+        self.pause_container = try PauseContainer.init(self.allocator, pause_config);
+        try self.pause_container.?.start();
 
         // Створюємо контейнери
         var vmid: u32 = 100; // Початковий VMID
         for (self.spec.containers) |container_spec| {
-            const container = try ProxmoxContainer.create(
-                self.allocator,
-                container_spec.hostname orelse self.spec.metadata.name,
-                self.proxmox_api,
-                "pve", // Ім'я ноди Proxmox
-                vmid
-            );
+            const container = try ProxmoxContainer.create(self.allocator, container_spec.hostname orelse self.spec.metadata.name, self.proxmox_api, "pve", // Ім'я ноди Proxmox
+                vmid);
             errdefer container.deinit();
 
             // Налаштовуємо монтування
@@ -427,6 +420,11 @@ pub const Pod = struct {
             };
         }
 
+        // Зупиняємо pause контейнер
+        if (self.pause_container) |pause| {
+            try pause.stop();
+        }
+
         logger.info("Pod stopped successfully", .{});
     }
 
@@ -443,6 +441,13 @@ pub const Pod = struct {
 
         // Видаляємо мережу поду
         self.network_manager.deleteNetwork(self.spec.metadata.name);
+
+        // Видаляємо pause контейнер
+        if (self.pause_container) |pause| {
+            try pause.stop();
+            pause.deinit();
+            self.pause_container = null;
+        }
 
         logger.info("Pod deleted successfully", .{});
     }
@@ -492,4 +497,4 @@ pub const Pod = struct {
             try container.joinNamespace(namespace_type, main_pid);
         }
     }
-}; 
+};

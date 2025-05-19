@@ -117,7 +117,7 @@ pub const NetworkValidator = struct {
             return NetworkValidationError.InvalidIPRange;
         };
 
-        const prefix = std.fmt.parseInt(u8, cidr[slash_pos + 1..], 10) catch {
+        const prefix = std.fmt.parseInt(u8, cidr[slash_pos + 1 ..], 10) catch {
             return NetworkValidationError.InvalidIPRange;
         };
 
@@ -162,18 +162,9 @@ test "NetworkValidator - interface validation" {
     try validator.validateInterface("wlan0");
 
     // Невалідні інтерфейси
-    try testing.expectError(
-        NetworkValidationError.InvalidInterface,
-        validator.validateInterface("")
-    );
-    try testing.expectError(
-        NetworkValidationError.InvalidInterface,
-        validator.validateInterface("very-long-interface-name")
-    );
-    try testing.expectError(
-        NetworkValidationError.InvalidInterface,
-        validator.validateInterface("eth0@123")
-    );
+    try testing.expectError(NetworkValidationError.InvalidInterface, validator.validateInterface(""));
+    try testing.expectError(NetworkValidationError.InvalidInterface, validator.validateInterface("very-long-interface-name"));
+    try testing.expectError(NetworkValidationError.InvalidInterface, validator.validateInterface("eth0@123"));
 }
 
 test "NetworkValidator - bridge validation" {
@@ -188,18 +179,9 @@ test "NetworkValidator - bridge validation" {
     try validator.validateBridge("vmbr255");
 
     // Невалідні мости
-    try testing.expectError(
-        NetworkValidationError.InvalidBridge,
-        validator.validateBridge("")
-    );
-    try testing.expectError(
-        NetworkValidationError.InvalidBridge,
-        validator.validateBridge("br0")
-    );
-    try testing.expectError(
-        NetworkValidationError.InvalidBridge,
-        validator.validateBridge("vmbr256")
-    );
+    try testing.expectError(NetworkValidationError.InvalidBridge, validator.validateBridge(""));
+    try testing.expectError(NetworkValidationError.InvalidBridge, validator.validateBridge("br0"));
+    try testing.expectError(NetworkValidationError.InvalidBridge, validator.validateBridge("vmbr256"));
 }
 
 test "NetworkValidator - network validation" {
@@ -215,20 +197,8 @@ test "NetworkValidator - network validation" {
     try validator.validateRate(1000000);
 
     // Невалідні налаштування
-    try testing.expectError(
-        NetworkValidationError.InvalidVLAN,
-        validator.validateVLAN(0)
-    );
-    try testing.expectError(
-        NetworkValidationError.InvalidVLAN,
-        validator.validateVLAN(4095)
-    );
-    try testing.expectError(
-        NetworkValidationError.InvalidMTU,
-        validator.validateMTU(0)
-    );
-    try testing.expectError(
-        NetworkValidationError.InvalidRate,
-        validator.validateRate(0)
-    );
-} 
+    try testing.expectError(NetworkValidationError.InvalidVLAN, validator.validateVLAN(0));
+    try testing.expectError(NetworkValidationError.InvalidVLAN, validator.validateVLAN(4095));
+    try testing.expectError(NetworkValidationError.InvalidMTU, validator.validateMTU(0));
+    try testing.expectError(NetworkValidationError.InvalidRate, validator.validateRate(0));
+}

@@ -11,17 +11,17 @@ pub const ConfigError = error{
 pub fn parseConfig(allocator: std.mem.Allocator, data: []const u8) !types.ImageConfig {
     var parsed = try json.parseFromSlice(types.ImageConfig, allocator, data, .{});
     defer parsed.deinit();
-    
+
     // Validate required fields
     if (parsed.value.architecture.len == 0 or parsed.value.os.len == 0) {
         return ConfigError.InvalidConfig;
     }
-    
+
     // Validate rootfs
     if (parsed.value.rootfs.type.len == 0 or parsed.value.rootfs.diff_ids.len == 0) {
         return ConfigError.InvalidRootFS;
     }
-    
+
     return parsed.value;
 }
 
@@ -36,11 +36,11 @@ pub fn createConfig(
     if (architecture.len == 0 or os.len == 0) {
         return ConfigError.InvalidConfig;
     }
-    
+
     if (rootfs.type.len == 0 or rootfs.diff_ids.len == 0) {
         return ConfigError.InvalidRootFS;
     }
-    
+
     return types.ImageConfig{
         .architecture = architecture,
         .os = os,
@@ -52,4 +52,4 @@ pub fn createConfig(
 
 pub fn serializeConfig(allocator: std.mem.Allocator, config: types.ImageConfig) ![]const u8 {
     return try json.stringifyAlloc(allocator, config, .{});
-} 
+}

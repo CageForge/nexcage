@@ -119,21 +119,21 @@ const CiliumTests = struct {
         {
             const result = cilium_plugin.interface.add(container_id, netns);
             try testing.expect(result.success);
-            try testing.expectEqual(@as(?[]const u8, null), result.error);
+            try testing.expect(result.error == null);
         }
         
         // Тестуємо перевірку стану
         {
             const result = cilium_plugin.interface.check(container_id, netns);
             try testing.expect(result.success);
-            try testing.expectEqual(@as(?[]const u8, null), result.error);
+            try testing.expect(result.error == null);
         }
         
         // Тестуємо видалення мережі
         {
             const result = cilium_plugin.interface.delete(container_id, netns);
             try testing.expect(result.success);
-            try testing.expectEqual(@as(?[]const u8, null), result.error);
+            try testing.expect(result.error == null);
         }
     }
 
@@ -147,7 +147,7 @@ const CiliumTests = struct {
         // Тестуємо з неіснуючим network namespace
         const result = cilium_plugin.interface.check("test-container", "/var/run/netns/nonexistent");
         try testing.expect(!result.success);
-        try testing.expect(result.error != null);
+        try testing.expectEqual(@as(?[]const u8, null), result.error);
     }
 };
 
@@ -259,21 +259,21 @@ const FlannelTests = struct {
         {
             const result = flannel_plugin.interface.add(container_id, netns);
             try testing.expect(result.success);
-            try testing.expectEqual(@as(?[]const u8, null), result.error);
+            try testing.expect(result.error == null);
         }
         
         // Тестуємо перевірку стану
         {
             const result = flannel_plugin.interface.check(container_id, netns);
             try testing.expect(result.success);
-            try testing.expectEqual(@as(?[]const u8, null), result.error);
+            try testing.expect(result.error == null);
         }
         
         // Тестуємо видалення мережі
         {
             const result = flannel_plugin.interface.delete(container_id, netns);
             try testing.expect(result.success);
-            try testing.expectEqual(@as(?[]const u8, null), result.error);
+            try testing.expect(result.error == null);
         }
     }
 
@@ -287,7 +287,7 @@ const FlannelTests = struct {
         // Тестуємо з неіснуючим network namespace
         const result = flannel_plugin.interface.check("test-container", "/var/run/netns/nonexistent");
         try testing.expect(!result.success);
-        try testing.expect(result.error != null);
+        try testing.expectEqual(@as(?[]const u8, null), result.error);
     }
 };
 

@@ -1,6 +1,6 @@
-# Contributing to Proxmox LXCri
+# Contributing to Proxmox-LXCri
 
-Thank you for your interest in contributing to Proxmox LXCri! This document provides information on how you can help the project.
+Thank you for your interest in contributing to Proxmox-LXCri! This document provides information on how you can help the project.
 
 ## How to Contribute
 
@@ -54,5 +54,5 @@ By contributing, you agree that your contributions will be licensed under the Ap
 If you have questions about contributing, please contact us through:
 
 - GitHub Issues
-- [INSERT EMAIL ADDRESS]
+- moriarti@cp.if.ua
 - [INSERT CHAT CHANNEL] 

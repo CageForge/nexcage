@@ -69,8 +69,7 @@ pub const ImageManager = struct {
 
         // Створюємо фінальний шлях для образу
         const image_name = try std.fs.path.basename(url);
-        const final_path = try std.fs.path.join(self.allocator, 
-            &[_][]const u8{self.storage_path, image_name});
+        const final_path = try std.fs.path.join(self.allocator, &[_][]const u8{ self.storage_path, image_name });
 
         // Копіюємо образ у фінальну локацію
         try std.fs.copyFileAbsolute(converted_path, final_path, .{});
@@ -101,7 +100,7 @@ pub const ImageManager = struct {
                 url,
             },
         });
-        
+
         if (result.term.Exited != 0) {
             return error.DownloadFailed;
         }
@@ -185,7 +184,7 @@ pub const ImageManager = struct {
         defer {
             _ = std.ChildProcess.exec(.{
                 .allocator = self.allocator,
-                .argv = &[_][]const u8{"losetup", "-d", loop_device},
+                .argv = &[_][]const u8{ "losetup", "-d", loop_device },
             }) catch {};
         }
 
@@ -226,4 +225,4 @@ pub const ImageManager = struct {
             return error.MountFailed;
         }
     }
-}; 
+};

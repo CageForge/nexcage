@@ -98,4 +98,4 @@ test "CNI Plugin - basic operations" {
     
     // Test delete operation
     try testing.expectError(error.NetworkCleanupFailed, cni.del(container_id, netns_path));
-}; 
+}

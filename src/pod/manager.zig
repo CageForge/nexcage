@@ -47,7 +47,7 @@ pub const PodManager = struct {
 
     pub fn createPod(self: *Self, spec: Pod.PodSpec) !void {
         const pod_name = spec.metadata.name;
-        
+
         if (self.pods.get(pod_name)) |_| {
             logger.err("Pod {s} already exists", .{pod_name});
             return error.PodAlreadyExists;
@@ -72,7 +72,7 @@ pub const PodManager = struct {
         logger.info("Deleting pod: {s}", .{pod_id});
 
         const pod = self.pods.get(pod_id) orelse return PodError.NotFound;
-        
+
         // Зупиняємо всі контейнери
         for (pod.containers.items) |container| {
             if (container.getState() == .Running) {
@@ -116,4 +116,4 @@ pub const PodManager = struct {
     pub fn getPod(self: *Self, pod_id: []const u8) ?*Pod {
         return self.pods.get(pod_id);
     }
-}; 
+};

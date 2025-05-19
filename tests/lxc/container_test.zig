@@ -30,7 +30,7 @@ test "LXC container memory management" {
     defer fs.cwd().deleteTree("/tmp/lxc-test") catch {};
 
     // Створюємо базову конфігурацію
-    const config_content = 
+    const config_content =
         \\lxc.uts.name = test-container
         \\lxc.rootfs.path = /tmp/lxc-test/rootfs
         \\lxc.net.0.type = empty
@@ -65,7 +65,7 @@ test "LXC container state management" {
     defer fs.cwd().deleteTree("/tmp/lxc-test") catch {};
 
     // Створюємо базову конфігурацію
-    const config_content = 
+    const config_content =
         \\lxc.uts.name = test-container
         \\lxc.rootfs.path = /tmp/lxc-test/rootfs
         \\lxc.net.0.type = empty
@@ -103,7 +103,7 @@ test "LXC container configuration" {
     defer fs.cwd().deleteTree("/tmp/lxc-test") catch {};
 
     // Створюємо базову конфігурацію
-    const config_content = 
+    const config_content =
         \\lxc.uts.name = test-container
         \\lxc.rootfs.path = /tmp/lxc-test/rootfs
         \\lxc.net.0.type = empty
@@ -128,4 +128,4 @@ test "LXC container configuration" {
     // Звільняємо пам'ять
     allocator.free(cap_drop);
     allocator.free(cpu_shares);
-} 
+}

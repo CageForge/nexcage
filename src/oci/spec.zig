@@ -3,18 +3,21 @@ const fs = std.fs;
 const mem = std.mem;
 const json = std.json;
 const logger = @import("logger");
-const types = @import("types");
+const oci_types = @import("types.zig");
 const errors = @import("error");
 const common = @import("common");
 const create = @import("create.zig");
 const StorageConfig = create.StorageConfig;
 const Allocator = std.mem.Allocator;
+const types = @import("types.zig");
 
-pub const Process = types.Process;
-pub const User = types.User;
-pub const Capabilities = types.Capabilities;
-pub const RlimitType = types.RlimitType;
-pub const Rlimit = types.Rlimit;
+pub const Process = oci_types.Process;
+pub const User = oci_types.User;
+pub const Capabilities = oci_types.Capabilities;
+pub const RlimitType = oci_types.RlimitType;
+pub const Rlimit = oci_types.Rlimit;
+pub const Hook = oci_types.Hook;
+pub const Hooks = oci_types.Hooks;
 
 pub const Root = struct {
     path: []const u8,
@@ -40,56 +43,6 @@ pub const Mount = struct {
                 allocator.free(opt);
             }
             allocator.free(opts);
-        }
-    }
-};
-
-pub const Hook = struct {
-    path: []const u8,
-    args: ?[]const []const u8 = null,
-    env: ?[]const []const u8 = null,
-    timeout: ?i64 = null,
-
-    pub fn deinit(self: *const Hook, allocator: Allocator) void {
-        allocator.free(self.path);
-        if (self.args) |args| {
-            for (args) |arg| {
-                allocator.free(arg);
-            }
-            allocator.free(args);
-        }
-        if (self.env) |env| {
-            for (env) |e| {
-                allocator.free(e);
-            }
-            allocator.free(env);
-        }
-    }
-};
-
-pub const Hooks = struct {
-    prestart: ?[]const Hook = null,
-    poststart: ?[]const Hook = null,
-    poststop: ?[]const Hook = null,
-
-    pub fn deinit(self: *const Hooks, allocator: Allocator) void {
-        if (self.prestart) |hooks| {
-            for (hooks) |hook| {
-                hook.deinit(allocator);
-            }
-            allocator.free(hooks);
-        }
-        if (self.poststart) |hooks| {
-            for (hooks) |hook| {
-                hook.deinit(allocator);
-            }
-            allocator.free(hooks);
-        }
-        if (self.poststop) |hooks| {
-            for (hooks) |hook| {
-                hook.deinit(allocator);
-            }
-            allocator.free(hooks);
         }
     }
 };
@@ -138,32 +91,38 @@ pub const LinuxSpec = struct {
     devices: []const LinuxDevice,
     seccomp: ?Seccomp = null,
     selinux: ?SELinux = null,
-    
+    mounts: []const Mount,
+
     pub fn deinit(self: *const LinuxSpec, allocator: Allocator) void {
         for (self.namespaces) |ns| {
             ns.deinit(allocator);
         }
         allocator.free(self.namespaces);
-        
+
         if (self.resources) |res| {
             res.deinit(allocator);
         }
         if (self.cgroupsPath) |path| {
             allocator.free(path);
         }
-        
+
         for (self.devices) |dev| {
             dev.deinit(allocator);
         }
         allocator.free(self.devices);
-        
+
         if (self.seccomp) |*seccomp_| {
             seccomp_.deinit(allocator);
         }
-        
+
         if (self.selinux) |*selinux_| {
             selinux_.deinit(allocator);
         }
+
+        for (self.mounts) |mount| {
+            mount.deinit(allocator);
+        }
+        allocator.free(self.mounts);
     }
 };
 
@@ -296,13 +255,28 @@ pub const LinuxPids = struct {
     }
 };
 
+pub const Network = struct {
+    interfaces: []NetworkInterface,
+    dns: ?DNS = null,
+
+    pub fn deinit(self: *const Network, allocator: Allocator) void {
+        for (self.interfaces) |iface| {
+            iface.deinit(allocator);
+        }
+        allocator.free(self.interfaces);
+        if (self.dns) |dns| {
+            dns.deinit(allocator);
+        }
+    }
+};
+
 pub const NetworkInterface = struct {
     name: []const u8,
     mac: ?[]const u8 = null,
     address: ?[]const []const u8 = null,
     gateway: ?[]const u8 = null,
     mtu: ?u32 = null,
-    
+
     pub fn deinit(self: *const NetworkInterface, allocator: Allocator) void {
         allocator.free(self.name);
         if (self.mac) |mac_| {
@@ -320,17 +294,36 @@ pub const NetworkInterface = struct {
     }
 };
 
-pub const NetworkRoute = struct {
-    destination: []const u8,
-    gateway: []const u8,
-    source: ?[]const u8 = null,
-    metric: ?u32 = null,
-    
-    pub fn deinit(self: *const NetworkRoute, allocator: Allocator) void {
-        allocator.free(self.destination);
-        allocator.free(self.gateway);
-        if (self.source) |src| {
-            allocator.free(src);
+pub const IP = struct {
+    address: []const u8,
+    netmask: []const u8,
+    gateway: ?[]const u8 = null,
+
+    pub fn deinit(self: *const IP, allocator: Allocator) void {
+        allocator.free(self.address);
+        allocator.free(self.netmask);
+        if (self.gateway) |gateway| {
+            allocator.free(gateway);
+        }
+    }
+};
+
+pub const DNS = struct {
+    servers: ?[][]const u8 = null,
+    search: ?[][]const u8 = null,
+
+    pub fn deinit(self: *const DNS, allocator: Allocator) void {
+        if (self.servers) |servers| {
+            for (servers) |s| {
+                allocator.free(s);
+            }
+            allocator.free(servers);
+        }
+        if (self.search) |search| {
+            for (search) |s| {
+                allocator.free(s);
+            }
+            allocator.free(search);
         }
     }
 };
@@ -343,7 +336,7 @@ pub const LinuxNetwork = struct {
     dnsServers: ?[]const []const u8 = null,
     dnsOptions: ?[]const []const u8 = null,
     dnsSearch: ?[]const []const u8 = null,
-    
+
     pub fn deinit(self: *const LinuxNetwork, allocator: Allocator) void {
         if (self.priorities) |p| {
             for (p) |*priority| {
@@ -351,35 +344,35 @@ pub const LinuxNetwork = struct {
             }
             allocator.free(p);
         }
-        
+
         if (self.interfaces) |ifaces| {
             for (ifaces) |*iface| {
                 iface.deinit(allocator);
             }
             allocator.free(ifaces);
         }
-        
+
         if (self.routes) |routes_| {
             for (routes_) |*route| {
                 route.deinit(allocator);
             }
             allocator.free(routes_);
         }
-        
+
         if (self.dnsServers) |servers| {
             for (servers) |server| {
                 allocator.free(server);
             }
             allocator.free(servers);
         }
-        
+
         if (self.dnsOptions) |options| {
             for (options) |option| {
                 allocator.free(option);
             }
             allocator.free(options);
         }
-        
+
         if (self.dnsSearch) |search| {
             for (search) |domain| {
                 allocator.free(domain);
@@ -481,29 +474,29 @@ pub const Seccomp = struct {
 
     pub fn deinit(self: *const Seccomp, allocator: Allocator) void {
         allocator.free(self.defaultAction);
-        
+
         if (self.architectures) |archs| {
             for (archs) |arch| {
                 allocator.free(arch);
             }
             allocator.free(archs);
         }
-        
+
         if (self.flags) |flags_| {
             for (flags_) |flag| {
                 allocator.free(flag);
             }
             allocator.free(flags_);
         }
-        
+
         if (self.listenerPath) |path| {
             allocator.free(path);
         }
-        
+
         if (self.listenerMetadata) |metadata| {
             allocator.free(metadata);
         }
-        
+
         if (self.syscalls) |syscalls_| {
             for (syscalls_) |syscall| {
                 syscall.deinit(allocator);
@@ -524,7 +517,7 @@ pub const SeccompSyscall = struct {
         }
         allocator.free(self.names);
         allocator.free(self.action);
-        
+
         if (self.args) |args_| {
             for (args_) |arg| {
                 arg.deinit(allocator);
@@ -550,7 +543,7 @@ pub const SELinux = struct {
     role: ?[]const u8 = null,
     type: ?[]const u8 = null,
     level: ?[]const u8 = null,
-    
+
     pub fn deinit(self: *const SELinux, allocator: Allocator) void {
         if (self.user) |user_| {
             allocator.free(user_);
@@ -574,6 +567,22 @@ pub const OciImageConfig = struct {
     registry_url: ?[]const u8 = null,
     registry_username: ?[]const u8 = null,
     registry_password: ?[]const u8 = null,
+    hostname: ?[]const u8 = null,
+    env: ?[][]const u8 = null,
+    cwd: ?[]const u8 = null,
+    user: ?User = null,
+    capabilities: ?Capabilities = null,
+    network: ?Network = null,
+    resources: ?LinuxResources = null,
+    linux: ?LinuxSpec = null,
+    hooks: ?oci_types.Hooks = null,
+    exposedPorts: ?*std.StringHashMap(void) = null,
+    entrypoint: ?[][]const u8 = null,
+    cmd: ?[][]const u8 = null,
+    volumes: ?*std.StringHashMap(void) = null,
+    workingDir: ?[]const u8 = null,
+    labels: ?*std.StringHashMap([]const u8) = null,
+    stopSignal: ?[]const u8 = null,
 
     pub fn deinit(self: *const OciImageConfig, allocator: Allocator) void {
         if (self.storage.storage_path) |path| {
@@ -591,5 +600,95 @@ pub const OciImageConfig = struct {
         if (self.registry_password) |password| {
             allocator.free(password);
         }
+        if (self.hostname) |hostname| {
+            allocator.free(hostname);
+        }
+        if (self.env) |env| {
+            for (env) |e| {
+                allocator.free(e);
+            }
+            allocator.free(env);
+        }
+        if (self.cwd) |cwd| {
+            allocator.free(cwd);
+        }
+        if (self.user) |user| {
+            user.deinit(allocator);
+        }
+        if (self.capabilities) |caps| {
+            caps.deinit(allocator);
+        }
+        if (self.network) |net| {
+            net.deinit(allocator);
+        }
+        if (self.resources) |res| {
+            res.deinit(allocator);
+        }
+        if (self.linux) |linux| {
+            linux.deinit(allocator);
+        }
+        if (self.hooks) |hooks_| {
+            hooks_.deinit(allocator);
+        }
+        if (self.exposedPorts) |ports| {
+            ports.deinit();
+        }
+        if (self.entrypoint) |entry| {
+            for (entry) |e| {
+                allocator.free(e);
+            }
+            allocator.free(entry);
+        }
+        if (self.cmd) |cmd| {
+            for (cmd) |c| {
+                allocator.free(c);
+            }
+            allocator.free(cmd);
+        }
+        if (self.volumes) |vols| {
+            vols.deinit();
+        }
+        if (self.workingDir) |dir| {
+            allocator.free(dir);
+        }
+        if (self.labels) |labels| {
+            var it = labels.iterator();
+            while (it.next()) |entry| {
+                allocator.free(entry.value_ptr.*);
+            }
+            labels.deinit();
+        }
+        if (self.stopSignal) |signal| {
+            allocator.free(signal);
+        }
     }
-}; 
+};
+
+pub const NetworkRoute = struct {
+    destination: []const u8,
+    gateway: []const u8,
+    source: ?[]const u8 = null,
+    metric: ?u32 = null,
+
+    pub fn deinit(self: *const NetworkRoute, allocator: Allocator) void {
+        allocator.free(self.destination);
+        allocator.free(self.gateway);
+        if (self.source) |src| {
+            allocator.free(src);
+        }
+    }
+};
+
+pub const OciSpec = struct {
+    process: ?types.Process = null,
+    hooks: ?types.Hooks = null,
+
+    pub fn deinit(self: *const OciSpec, allocator: Allocator) void {
+        if (self.process) |process| {
+            process.deinit(allocator);
+        }
+        if (self.hooks) |hooks| {
+            hooks.deinit(allocator);
+        }
+    }
+};

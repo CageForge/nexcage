@@ -49,10 +49,11 @@ pub const PortForwarder = struct {
         };
 
         // Create iptables command
-        const cmd = try std.fmt.allocPrint(self.allocator,
+        const cmd = try std.fmt.allocPrint(
+            self.allocator,
             "iptables -t nat -A PREROUTING -p {s} " ++
-            "-m {s} --dport {d} -j DNAT " ++
-            "--to-destination {s}:{d}",
+                "-m {s} --dport {d} -j DNAT " ++
+                "--to-destination {s}:{d}",
             .{
                 protocol,
                 protocol,
@@ -78,9 +79,10 @@ pub const PortForwarder = struct {
         }
 
         // Add MASQUERADE rule
-        const masq_cmd = try std.fmt.allocPrint(self.allocator,
+        const masq_cmd = try std.fmt.allocPrint(
+            self.allocator,
             "iptables -t nat -A POSTROUTING -p {s} " ++
-            "-m {s} --dport {d} -j MASQUERADE",
+                "-m {s} --dport {d} -j MASQUERADE",
             .{
                 protocol,
                 protocol,
@@ -120,10 +122,11 @@ pub const PortForwarder = struct {
         };
 
         // Remove DNAT rule
-        const cmd = try std.fmt.allocPrint(self.allocator,
+        const cmd = try std.fmt.allocPrint(
+            self.allocator,
             "iptables -t nat -D PREROUTING -p {s} " ++
-            "-m {s} --dport {d} -j DNAT " ++
-            "--to-destination {s}:{d}",
+                "-m {s} --dport {d} -j DNAT " ++
+                "--to-destination {s}:{d}",
             .{
                 protocol,
                 protocol,
@@ -148,9 +151,10 @@ pub const PortForwarder = struct {
         }
 
         // Remove MASQUERADE rule
-        const masq_cmd = try std.fmt.allocPrint(self.allocator,
+        const masq_cmd = try std.fmt.allocPrint(
+            self.allocator,
             "iptables -t nat -D POSTROUTING -p {s} " ++
-            "-m {s} --dport {d} -j MASQUERADE",
+                "-m {s} --dport {d} -j MASQUERADE",
             .{
                 protocol,
                 protocol,
@@ -173,11 +177,11 @@ pub const PortForwarder = struct {
         }
 
         // Remove rule from the list
-        for (self.rules.items) |rule, i| {
+        for (self.rules.items) |rule| {
             if (std.meta.eql(rule, mapping)) {
-                _ = self.rules.orderedRemove(i);
+                try self.rules.swapRemove(i);
                 break;
             }
         }
     }
-}; 
+};

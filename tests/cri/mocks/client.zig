@@ -17,7 +17,7 @@ pub const MockClient = struct {
             .allocator = allocator,
             .mock_proxmox = mock_proxmox,
             .node = try allocator.dupe(u8, "test-node"),
-            .logger = std.log.scoped(.test),
+            .logger = std.log.scoped("test"),
         };
 
         return client;
@@ -110,4 +110,4 @@ pub const MockClient = struct {
         _ = node;
         return try self.mock_proxmox.execInContainer(vmid, options.command);
     }
-}; 
+};

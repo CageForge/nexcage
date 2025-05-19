@@ -58,10 +58,10 @@ pub fn main() !void {
 
 test "LXC container operations" {
     const allocator = testing.allocator;
-    
+
     // Get token from environment variable or use test token
     const token = std.os.getenv("PROXMOX_TOKEN") orelse "root@pam!token=test-token-12345";
-    
+
     var conn = try Connection.init(
         allocator,
         "localhost",
@@ -70,6 +70,6 @@ test "LXC container operations" {
         false,
     );
     defer conn.deinit();
-    
+
     // ... existing code ...
-} 
+}

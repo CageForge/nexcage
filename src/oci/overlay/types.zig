@@ -15,7 +15,7 @@ pub const OverlayMount = struct {
     upper_dir: []const u8,
     work_dir: []const u8,
     merged_dir: []const u8,
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         container_id: []const u8,
@@ -25,7 +25,7 @@ pub const OverlayMount = struct {
         const upper = try std.fmt.allocPrint(allocator, "{s}/upper/{s}", .{ root_dir, container_id });
         const work = try std.fmt.allocPrint(allocator, "{s}/work/{s}", .{ root_dir, container_id });
         const merged = try std.fmt.allocPrint(allocator, "{s}/merged/{s}", .{ root_dir, container_id });
-        
+
         return OverlayMount{
             .lower_dir = lower,
             .upper_dir = upper,
@@ -33,7 +33,7 @@ pub const OverlayMount = struct {
             .merged_dir = merged,
         };
     }
-    
+
     pub fn deinit(self: *OverlayMount, allocator: std.mem.Allocator) void {
         allocator.free(self.lower_dir);
         allocator.free(self.upper_dir);
@@ -46,7 +46,7 @@ pub const OverlayLayer = struct {
     id: []const u8,
     path: []const u8,
     parent: ?[]const u8,
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         id: []const u8,
@@ -59,10 +59,10 @@ pub const OverlayLayer = struct {
             .parent = if (parent) |p| try allocator.dupe(u8, p) else null,
         };
     }
-    
+
     pub fn deinit(self: *OverlayLayer, allocator: std.mem.Allocator) void {
         allocator.free(self.id);
         allocator.free(self.path);
         if (self.parent) |p| allocator.free(p);
     }
-}; 
+};

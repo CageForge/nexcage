@@ -96,10 +96,10 @@ pub const Image = struct {
     fn calculateDigest(allocator: std.mem.Allocator, data: []const u8) ![]const u8 {
         var hasher = std.crypto.hash.sha2.Sha256.init(.{});
         hasher.update(data);
-        
+
         var hash: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
         hasher.final(&hash);
-        
+
         return try std.fmt.allocPrint(allocator, "sha256:{s}", .{std.fmt.fmtSliceHexLower(&hash)});
     }
-}; 
+};

@@ -10,4 +10,4 @@ pub fn delete(container_id: []const u8, proxmox_client: *proxmox.ProxmoxClient) 
     try proxmox_client.deleteContainer(.lxc, vmid);
 
     try proxmox_client.logger.info("Container {s} deleted successfully", .{container_id});
-} 
+}

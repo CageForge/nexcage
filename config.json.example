@@ -1,13 +1,19 @@
 {
     "proxmox": {
-        "hosts": ["localhost"],
+        "hosts": ["proxmox.example.com"],
         "port": 8006,
-        "token": "root@pam!capi=",
-        "node": "mgr",
+        "token": "your-token",
+        "node": "node1",
         "node_cache_duration": 60
     },
     "runtime": {
         "socket_path": "/var/run/proxmox-lxcri.sock",
-        "log_level": "info"
-    }
+        "log_level": "info",
+        "log_path": "/var/log/proxmox-lxcri/proxmox-lxcri.log",
+        "type": "crun",
+        "path": "/usr/bin/crun",
+        "options": "--systemd-cgroup"
+    },
+    "timeout": 30000,
+    "node_cache_duration": 300
 } 

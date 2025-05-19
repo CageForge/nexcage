@@ -3,13 +3,13 @@ const std = @import("std");
 /// CNI specification version
 pub const Version = struct {
     cniVersion: []const u8,
-    
+
     pub fn init(allocator: std.mem.Allocator, version: []const u8) !Version {
         return Version{
             .cniVersion = try allocator.dupe(u8, version),
         };
     }
-    
+
     pub fn deinit(self: *Version, allocator: std.mem.Allocator) void {
         allocator.free(self.cniVersion);
     }
@@ -25,14 +25,14 @@ pub const NetworkConfig = struct {
     hairpinMode: bool = false,
     ipam: ?IPAM = null,
     dns: ?DNS = null,
-    
+
     pub fn init(allocator: std.mem.Allocator, name: []const u8, plugin_type: []const u8) !NetworkConfig {
         return NetworkConfig{
             .name = try allocator.dupe(u8, name),
             .type = try allocator.dupe(u8, plugin_type),
         };
     }
-    
+
     pub fn deinit(self: *NetworkConfig, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
         allocator.free(self.type);
@@ -47,13 +47,13 @@ pub const IPAM = struct {
     type: []const u8,
     subnet: ?[]const u8 = null,
     routes: ?[]Route = null,
-    
+
     pub fn init(allocator: std.mem.Allocator, ipam_type: []const u8) !IPAM {
         return IPAM{
             .type = try allocator.dupe(u8, ipam_type),
         };
     }
-    
+
     pub fn deinit(self: *IPAM, allocator: std.mem.Allocator) void {
         allocator.free(self.type);
         if (self.subnet) |subnet| allocator.free(subnet);
@@ -68,13 +68,13 @@ pub const IPAM = struct {
 pub const Route = struct {
     dst: []const u8,
     gw: ?[]const u8 = null,
-    
+
     pub fn init(allocator: std.mem.Allocator, dst: []const u8) !Route {
         return Route{
             .dst = try allocator.dupe(u8, dst),
         };
     }
-    
+
     pub fn deinit(self: *Route, allocator: std.mem.Allocator) void {
         allocator.free(self.dst);
         if (self.gw) |gw| allocator.free(gw);
@@ -87,11 +87,11 @@ pub const DNS = struct {
     domain: ?[]const u8 = null,
     search: ?[][]const u8 = null,
     options: ?[][]const u8 = null,
-    
+
     pub fn init() DNS {
         return DNS{};
     }
-    
+
     pub fn deinit(self: *DNS, allocator: std.mem.Allocator) void {
         if (self.nameservers) |ns| {
             for (ns) |server| allocator.free(server);
@@ -107,4 +107,4 @@ pub const DNS = struct {
             allocator.free(options);
         }
     }
-}; 
+};

@@ -23,4 +23,4 @@ pub fn createVM(client: *Client, spec: types.VMConfig) !types.VMContainer {
         .status = .stopped,
         .config = spec,
     };
-} 
+}

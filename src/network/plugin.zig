@@ -8,42 +8,42 @@ const Allocator = std.mem.Allocator;
 pub const CNIPluginType = enum {
     cilium,
     calico,
-    flannel,  // TODO: додати підтримку
-    weave,    // TODO: додати підтримку
+    flannel, // TODO: додати підтримку
+    weave, // TODO: додати підтримку
 };
 
 /// Інтерфейс CNI плагіна
 pub const CNIPluginInterface = struct {
     /// Тип плагіна
     plugin_type: CNIPluginType,
-    
+
     /// Додає мережевий інтерфейс до контейнера
     addFn: *const fn (self: *CNIPluginInterface, container_id: []const u8, netns: []const u8) CNIResult,
-    
+
     /// Видаляє мережевий інтерфейс з контейнера
     deleteFn: *const fn (self: *CNIPluginInterface, container_id: []const u8, netns: []const u8) CNIResult,
-    
+
     /// Перевіряє стан мережевого інтерфейсу
     checkFn: *const fn (self: *CNIPluginInterface, container_id: []const u8, netns: []const u8) CNIResult,
-    
+
     /// Звільняє ресурси
     deinitFn: *const fn (self: *CNIPluginInterface) void,
-    
+
     /// Додає мережевий інтерфейс до контейнера
     pub fn add(self: *CNIPluginInterface, container_id: []const u8, netns: []const u8) CNIResult {
         return self.addFn(self, container_id, netns);
     }
-    
+
     /// Видаляє мережевий інтерфейс з контейнера
     pub fn delete(self: *CNIPluginInterface, container_id: []const u8, netns: []const u8) CNIResult {
         return self.deleteFn(self, container_id, netns);
     }
-    
+
     /// Перевіряє стан мережевого інтерфейсу
     pub fn check(self: *CNIPluginInterface, container_id: []const u8, netns: []const u8) CNIResult {
         return self.checkFn(self, container_id, netns);
     }
-    
+
     /// Звільняє ресурси
     pub fn deinit(self: *CNIPluginInterface) void {
         self.deinitFn(self);
@@ -53,16 +53,16 @@ pub const CNIPluginInterface = struct {
 /// Фабрика для створення CNI плагінів
 pub const CNIPluginFactory = struct {
     allocator: Allocator,
-    
+
     const Self = @This();
-    
+
     /// Створює нову фабрику
     pub fn init(allocator: Allocator) Self {
         return Self{
             .allocator = allocator,
         };
     }
-    
+
     /// Створює новий CNI плагін
     pub fn createPlugin(self: *Self, plugin_type: CNIPluginType) !*CNIPluginInterface {
         switch (plugin_type) {
@@ -86,4 +86,4 @@ pub const CNIPluginFactory = struct {
             },
         }
     }
-}; 
+};

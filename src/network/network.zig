@@ -3,6 +3,24 @@ const Allocator = std.mem.Allocator;
 const logger = std.log.scoped(.network);
 const lxc = @import("lxc_network.zig");
 
+pub const NetworkValidator = struct {
+    allocator: Allocator,
+
+    const Self = @This();
+
+    pub fn init(allocator: Allocator) Self {
+        return .{
+            .allocator = allocator,
+        };
+    }
+
+    pub fn validateNetworkConfig(self: *Self, config: anytype) !void {
+        _ = self;
+        _ = config;
+        // TODO: Implement network config validation
+    }
+};
+
 pub const NetworkManager = struct {
     allocator: Allocator,
     networks: std.StringHashMap(*lxc.LxcNetwork),
@@ -55,4 +73,4 @@ pub const NetworkManager = struct {
     pub fn getNetwork(self: *Self, pod_name: []const u8) ?*lxc.LxcNetwork {
         return self.networks.get(pod_name);
     }
-}; 
+};

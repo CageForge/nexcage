@@ -187,4 +187,4 @@ pub const Registry = struct {
             .{encoded},
         ));
     }
-}; 
+};

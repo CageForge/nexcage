@@ -239,4 +239,4 @@ pub const LxcNetwork = struct {
             logger.err("Failed to delete bridge: {s}", .{result.stderr});
         }
     }
-}; 
+};

@@ -4,4 +4,4 @@ zig-out/*
 .env
 .env.*
 !.env.example
-
+test-bundle/*

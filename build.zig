@@ -39,12 +39,13 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Common module
-    const common_mod = b.addModule("common", .{
-        .root_source_file = b.path("src/common/mod.zig"),
+    // ZFS management
+    const zfs_mod = b.addModule("zfs", .{
+        .root_source_file = b.path("src/zfs/mod.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
         },
     });
 
@@ -67,7 +68,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "network", .module = network_mod },
             .{ .name = "logger", .module = logger_mod },
             .{ .name = "config", .module = config_mod },
-            .{ .name = "common", .module = common_mod },
         },
     });
 
@@ -79,7 +79,55 @@ pub fn build(b: *std.Build) void {
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
             .{ .name = "pod", .module = pod_mod },
-            .{ .name = "common", .module = common_mod },
+        },
+    });
+
+    // JSON parser module
+    const json_mod = b.addModule("json", .{
+        .root_source_file = b.path("src/custom_json_parser.zig"),
+        .imports = &.{
+            .{ .name = "json", .module = zigJsonDep.module("zig-json") },
+        },
+    });
+
+    // Pause container module
+    const pause_mod = b.addModule("pause", .{
+        .root_source_file = b.path("src/pause/pause.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "zfs", .module = zfs_mod },
+        },
+    });
+
+    // Container management
+    const container_mod = b.addModule("container", .{
+        .root_source_file = b.path("src/container/container.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
+    const lxc_container_mod = b.addModule("lxc_container", .{
+        .root_source_file = b.path("src/container/lxc.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "container", .module = container_mod },
+        },
+    });
+
+    const crun_container_mod = b.addModule("crun_container", .{
+        .root_source_file = b.path("src/container/crun.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "container", .module = container_mod },
         },
     });
 
@@ -93,7 +141,14 @@ pub fn build(b: *std.Build) void {
             .{ .name = "pod", .module = pod_mod },
             .{ .name = "proxmox", .module = proxmox_mod },
             .{ .name = "json", .module = zigJsonDep.module("zig-json") },
-            .{ .name = "common", .module = common_mod },
+            .{ .name = "zfs", .module = zfs_mod },
+            .{ .name = "network", .module = network_mod },
+            .{ .name = "config", .module = config_mod },
+            .{ .name = "json", .module = json_mod },
+            .{ .name = "pause", .module = pause_mod },
+            .{ .name = "container", .module = container_mod },
+            .{ .name = "lxc_container", .module = lxc_container_mod },
+            .{ .name = "crun_container", .module = crun_container_mod },
         },
     });
 
@@ -113,7 +168,12 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("proxmox", proxmox_mod);
     exe.root_module.addImport("oci", oci_mod);
     exe.root_module.addImport("json", zigJsonDep.module("zig-json"));
-    exe.root_module.addImport("common", common_mod);
+    exe.root_module.addImport("zfs", zfs_mod);
+    exe.root_module.addImport("json", json_mod);
+    exe.root_module.addImport("pause", pause_mod);
+    exe.root_module.addImport("container", container_mod);
+    exe.root_module.addImport("lxc_container", lxc_container_mod);
+    exe.root_module.addImport("crun_container", crun_container_mod);
 
     // Install
     b.installArtifact(exe);

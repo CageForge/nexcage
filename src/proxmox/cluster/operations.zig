@@ -89,4 +89,4 @@ pub fn getClusterStatus(client: *Client) !struct {
         .quorum = data.object.get("quorum").?.bool,
         .version = version,
     };
-} 
+}

@@ -125,4 +125,4 @@ test "Image manager multiple images" {
     for (image_names) |name| {
         try testing.expect(!try manager.imageExists(name));
     }
-} 
+}

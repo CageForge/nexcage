@@ -47,28 +47,139 @@ pub const EnvVar = struct {
     }
 };
 
-pub const ContainerSpec = struct {
+pub const ContainerConfig = struct {
+    id: []const u8,
     name: []const u8,
-    image: []const u8,
-    command: []const []const u8,
-    args: []const []const u8,
-    env: []EnvVar,
+    state: ContainerState,
+    pid: ?u32,
+    bundle: []const u8,
+    annotations: ?[]Annotation,
+    metadata: ?ContainerMetadata,
+    image: ?ImageSpec,
+    command: ?[]const []const u8,
+    args: ?[]const []const u8,
+    working_dir: ?[]const u8,
+    envs: ?[]EnvVar,
+    mounts: ?[]Mount,
+    devices: ?[]Device,
+    labels: ?*std.StringHashMap([]const u8),
+    linux: ?LinuxContainerConfig,
+    log_path: ?[]const u8,
+    allocator: Allocator,
 
-    pub fn deinit(self: *ContainerSpec, allocator: Allocator) void {
-        allocator.free(self.name);
-        allocator.free(self.image);
-        for (self.command) |cmd| {
-            allocator.free(cmd);
+    pub fn init(allocator: Allocator) !ContainerConfig {
+        return ContainerConfig{
+            .id = "",
+            .name = "",
+            .state = .unknown,
+            .pid = null,
+            .bundle = "",
+            .annotations = null,
+            .metadata = null,
+            .image = null,
+            .command = null,
+            .args = null,
+            .working_dir = null,
+            .envs = null,
+            .mounts = null,
+            .devices = null,
+            .labels = null,
+            .linux = null,
+            .log_path = null,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *ContainerConfig) void {
+        self.allocator.free(self.id);
+        self.allocator.free(self.name);
+        self.allocator.free(self.bundle);
+        if (self.annotations) |annotations| {
+            for (annotations) |*annotation| {
+                annotation.deinit(self.allocator);
+            }
+            self.allocator.free(annotations);
         }
-        allocator.free(self.command);
-        for (self.args) |arg| {
-            allocator.free(arg);
+        if (self.metadata) |*metadata| {
+            metadata.deinit(self.allocator);
         }
-        allocator.free(self.args);
-        for (self.env) |*env| {
-            env.deinit(allocator);
+        if (self.image) |*image| {
+            image.deinit(self.allocator);
         }
-        allocator.free(self.env);
+        if (self.command) |command| {
+            for (command) |cmd| {
+                self.allocator.free(cmd);
+            }
+            self.allocator.free(command);
+        }
+        if (self.args) |args| {
+            for (args) |arg| {
+                self.allocator.free(arg);
+            }
+            self.allocator.free(args);
+        }
+        if (self.working_dir) |dir| {
+            self.allocator.free(dir);
+        }
+        if (self.envs) |envs| {
+            for (envs) |*env| {
+                env.deinit(self.allocator);
+            }
+            self.allocator.free(envs);
+        }
+        if (self.mounts) |mounts| {
+            for (mounts) |*mount| {
+                mount.deinit(self.allocator);
+            }
+            self.allocator.free(mounts);
+        }
+        if (self.devices) |devices| {
+            for (devices) |*device| {
+                device.deinit(self.allocator);
+            }
+            self.allocator.free(devices);
+        }
+        if (self.labels) |labels| {
+            labels.deinit();
+        }
+        if (self.linux) |*linux| {
+            linux.deinit(self.allocator);
+        }
+        if (self.log_path) |path| {
+            self.allocator.free(path);
+        }
+        self.state.deinit();
+    }
+};
+
+pub const ContainerSpec = struct {
+    config: ContainerConfig,
+    network: ?NetworkConfig = null,
+    storage: ?[]const StorageConfig = null,
+    resources: ?ResourceLimits = null,
+    allocator: Allocator,
+
+    pub fn init(allocator: Allocator) !ContainerSpec {
+        return ContainerSpec{
+            .config = try ContainerConfig.init(allocator),
+            .network = null,
+            .storage = null,
+            .resources = null,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *ContainerSpec) void {
+        self.config.deinit();
+        if (self.network) |*network| {
+            network.deinit(self.allocator);
+        }
+        if (self.storage) |storage| {
+            for (storage) |*config| {
+                config.deinit();
+            }
+            self.allocator.free(storage);
+        }
     }
 };
 
@@ -160,7 +271,7 @@ pub const NetworkConfig = struct {
     tag: ?u32 = null,
     rate: ?u32 = null,
     mtu: ?u32 = null,
-    
+
     pub fn deinit(self: *NetworkConfig, allocator: Allocator) void {
         allocator.free(self.name);
         allocator.free(self.bridge);
@@ -239,61 +350,6 @@ pub const ContainerFilter = struct {
         if (self.id) |id| allocator.free(id);
         if (self.pod_id) |pod_id| allocator.free(pod_id);
         if (self.label_selector) |selector| allocator.free(selector);
-    }
-};
-
-pub const ContainerConfig = struct {
-    metadata: ContainerMetadata,
-    image: ImageSpec,
-    command: []const []const u8,
-    args: []const []const u8,
-    working_dir: []const u8,
-    envs: []EnvVar,
-    mounts: []Mount,
-    devices: []Device,
-    labels: std.StringHashMap([]const u8),
-    annotations: std.StringHashMap([]const u8),
-    linux: LinuxContainerConfig,
-    log_path: []const u8,
-
-    pub fn deinit(self: *ContainerConfig, allocator: Allocator) void {
-        self.metadata.deinit(allocator);
-        self.image.deinit(allocator);
-        for (self.command) |cmd| {
-            allocator.free(cmd);
-        }
-        allocator.free(self.command);
-        for (self.args) |arg| {
-            allocator.free(arg);
-        }
-        allocator.free(self.args);
-        allocator.free(self.working_dir);
-        for (self.envs) |*env| {
-            env.deinit(allocator);
-        }
-        allocator.free(self.envs);
-        for (self.mounts) |*mount| {
-            mount.deinit(allocator);
-        }
-        allocator.free(self.mounts);
-        for (self.devices) |*device| {
-            device.deinit(allocator);
-        }
-        allocator.free(self.devices);
-        var labels_it = self.labels.iterator();
-        while (labels_it.next()) |entry| {
-            allocator.free(entry.key_ptr.*);
-            allocator.free(entry.value_ptr.*);
-        }
-        self.labels.deinit();
-        var annotations_it = self.annotations.iterator();
-        while (annotations_it.next()) |entry| {
-            allocator.free(entry.key_ptr.*);
-            allocator.free(entry.value_ptr.*);
-        }
-        self.annotations.deinit();
-        self.linux.deinit(allocator);
-        allocator.free(self.log_path);
     }
 };
 
@@ -492,28 +548,35 @@ pub const VMContainer = struct {
 pub const Annotation = struct {
     key: []const u8,
     value: []const u8,
+
+    pub fn deinit(self: *Annotation, allocator: Allocator) void {
+        allocator.free(self.key);
+        allocator.free(self.value);
+    }
 };
 
 pub const ContainerState = struct {
-    ociVersion: []const u8,
+    oci_version: []const u8,
     id: []const u8,
     status: []const u8,
-    pid: i32,
+    pid: i64,
     bundle: []const u8,
-    annotations: ?[]const Annotation = null,
+    annotations: ?std.StringHashMap([]const u8) = null,
+    allocator: std.mem.Allocator,
 
-    pub fn deinit(self: *ContainerState, allocator: Allocator) void {
-        if (self.ociVersion.len > 0) allocator.free(self.ociVersion);
-        if (self.id.len > 0) allocator.free(self.id);
-        if (self.status.len > 0) allocator.free(self.status);
-        if (self.bundle.len > 0) allocator.free(self.bundle);
-        if (self.annotations) |annotations| {
-            for (annotations) |*annotation| {
-                allocator.free(annotation.key);
-                allocator.free(annotation.value);
+    pub fn deinit(self: *ContainerState) void {
+        if (self.annotations) |*annotations| {
+            var it = annotations.iterator();
+            while (it.next()) |entry| {
+                self.allocator.free(entry.key_ptr.*);
+                self.allocator.free(entry.value_ptr.*);
             }
-            allocator.free(annotations);
+            annotations.deinit();
         }
+        self.allocator.free(self.oci_version);
+        self.allocator.free(self.id);
+        self.allocator.free(self.status);
+        self.allocator.free(self.bundle);
     }
 };
 
@@ -623,4 +686,100 @@ pub const Process = struct {
             allocator.free(rlimits_);
         }
     }
+};
+
+pub const ImageConfig = struct {
+    name: []const u8,
+    tag: []const u8,
+    registry_url: ?[]const u8 = null,
+    registry_username: ?[]const u8 = null,
+    registry_password: ?[]const u8 = null,
+    raw_image: bool = false,
+    raw_image_size: u64 = 0,
+
+    pub fn deinit(self: *ImageConfig, allocator: Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.tag);
+        if (self.registry_url) |url| allocator.free(url);
+        if (self.registry_username) |username| allocator.free(username);
+        if (self.registry_password) |password| allocator.free(password);
+    }
+};
+
+pub const RuntimeType = enum {
+    lxc,
+    vm,
+    crun,
+};
+
+pub const RuntimeConfig = struct {
+    type: RuntimeType,
+    path: []const u8,
+    options: ?[]const u8 = null,
+};
+
+pub const Config = struct {
+    runtime_path: []const u8,
+    bundle_path: []const u8,
+    container_id: []const u8,
+    allocator: Allocator,
+
+    pub fn init(allocator: Allocator, runtime_path: []const u8, bundle_path: []const u8, container_id: []const u8) !Config {
+        return Config{
+            .runtime_path = try allocator.dupe(u8, runtime_path),
+            .bundle_path = try allocator.dupe(u8, bundle_path),
+            .container_id = try allocator.dupe(u8, container_id),
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *Config) void {
+        self.allocator.free(self.runtime_path);
+        self.allocator.free(self.bundle_path);
+        self.allocator.free(self.container_id);
+    }
+};
+
+pub const StorageConfig = struct {
+    type: StorageType,
+    source: []const u8,
+    destination: []const u8,
+    options: ?[]const []const u8 = null,
+    allocator: Allocator,
+
+    pub fn init(allocator: Allocator) !StorageConfig {
+        return StorageConfig{
+            .type = .bind,
+            .source = "",
+            .destination = "",
+            .options = null,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *StorageConfig) void {
+        self.allocator.free(self.source);
+        self.allocator.free(self.destination);
+        if (self.options) |options| {
+            for (options) |option| {
+                self.allocator.free(option);
+            }
+            self.allocator.free(options);
+        }
+    }
+};
+
+pub const StorageType = enum {
+    bind,
+    zfs,
+    lvm,
+    overlay,
+};
+
+pub const ResourceLimits = struct {
+    memory: ?u64 = null,
+    cpu_shares: ?u32 = null,
+    cpu_quota: ?u32 = null,
+    cpu_period: ?u32 = null,
+    pids: ?u32 = null,
 };

@@ -161,17 +161,17 @@ pub const CiliumPlugin = struct {
         
         // Перевіряємо результат виконання
         if (result.term.Exited != 0) {
-            return .{
+            return cni.CNIResult{
                 .success = false,
                 .error = try std.fmt.allocPrint(
                     self.allocator,
-                    "Failed to add network: {s}",
+                    "Failed to add network: {?s}",
                     .{result.stderr}
                 ),
             };
         }
         
-        return .{
+        return cni.CNIResult{
             .success = true,
             .error = null,
         };
@@ -198,17 +198,17 @@ pub const CiliumPlugin = struct {
         
         // Перевіряємо результат виконання
         if (result.term.Exited != 0) {
-            return .{
+            return cni.CNIResult{
                 .success = false,
                 .error = try std.fmt.allocPrint(
                     self.allocator,
-                    "Failed to delete network: {s}",
+                    "Failed to delete network: {?s}",
                     .{result.stderr}
                 ),
             };
         }
         
-        return .{
+        return cni.CNIResult{
             .success = true,
             .error = null,
         };
@@ -243,7 +243,7 @@ pub const CiliumPlugin = struct {
                 .success = false,
                 .error = try std.fmt.allocPrint(
                     self.allocator,
-                    "Network interface not found: {s}",
+                    "Network interface not found: {?s}",
                     .{result.stderr}
                 ),
             };

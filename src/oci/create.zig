@@ -2,27 +2,31 @@ const std = @import("std");
 const json = @import("json");
 const fs = std.fs;
 const Allocator = std.mem.Allocator;
-const logger = std.log.scoped(.oci_create);
 const errors = @import("error");
-const types = @import("types");
+const root_types = @import("types");
+const oci_types = @import("types.zig");
+const image_types = @import("image/types.zig");
 const proxmox = @import("proxmox");
 const mem = std.mem;
 const log = std.log;
-const RlimitType = types.RlimitType;
-const Rlimit = types.Rlimit;
-const Process = types.Process;
-const User = types.User;
-const Capabilities = types.Capabilities;
+const RlimitType = oci_types.RlimitType;
+const Rlimit = oci_types.Rlimit;
+const Process = oci_types.Process;
+const User = oci_types.User;
+const Capabilities = oci_types.Capabilities;
 const spec = @import("spec.zig");
 const common = @import("common");
-const image = @import("image/manager.zig");
-const zfs = @import("../zfs/manager.zig");
-const lxc = @import("../lxc/container.zig");
+const image = @import("image");
+const zfs = @import("zfs");
+const lxc = @import("lxc");
 const hooks = @import("hooks.zig");
-const network = @import("../network/mod.zig");
-const NetworkValidator = @import("../network/validator.zig").NetworkValidator;
-const registry = @import("../registry/registry.zig");
-const raw = @import("../raw/raw_image.zig");
+const network = @import("network");
+const NetworkValidator = network.NetworkValidator;
+const registry = @import("registry");
+const raw = @import("raw");
+const logger_mod = @import("logger");
+const crun = @import("crun");
+const crun_spec = @import("../crun/spec.zig");
 
 pub const CreateOpts = struct {
     config_path: []const u8,
@@ -60,6 +64,7 @@ pub const CreateError = error{
     ConfigError,
     InvalidConfig,
     InvalidRootfs,
+    RuntimeNotAvailable,
 };
 
 pub const StorageType = enum {
@@ -78,7 +83,7 @@ pub const CreateOptions = struct {
     bundle_path: []const u8,
     image_name: []const u8,
     image_tag: []const u8,
-    config: ?types.ImageConfig = null,
+    config: ?image_types.ImageConfig = null,
     zfs_dataset: []const u8,
     proxmox_node: []const u8,
     proxmox_storage: []const u8,
@@ -88,13 +93,16 @@ pub const Create = struct {
     allocator: std.mem.Allocator,
     image_manager: *image.ImageManager,
     zfs_manager: *zfs.ZFSManager,
-    lxc_manager: *lxc.LXCManager,
+    lxc_manager: ?*lxc.LXCManager,
+    crun_manager: ?*crun.CrunManager,
     proxmox_client: *proxmox.ProxmoxClient,
     registry: ?*registry.Registry,
     options: CreateOptions,
     hook_executor: *hooks.HookExecutor,
     network_validator: NetworkValidator,
     oci_config: spec.OciImageConfig,
+    logger: *logger_mod.Logger,
+    runtime_type: oci_types.RuntimeType,
     
     const Self = @This();
     
@@ -102,21 +110,24 @@ pub const Create = struct {
         allocator: std.mem.Allocator,
         image_manager: *image.ImageManager,
         zfs_manager: *zfs.ZFSManager,
-        lxc_manager: *lxc.LXCManager,
+        lxc_manager: ?*lxc.LXCManager,
+        crun_manager: ?*crun.CrunManager,
         proxmox_client: *proxmox.ProxmoxClient,
         options: CreateOptions,
+        logger: *logger_mod.Logger,
+        runtime_type: oci_types.RuntimeType,
     ) !*Self {
         const self = try allocator.create(Self);
 
         // Читаємо конфігурацію OCI образу
         const oci_config_path = try std.fmt.allocPrint(
             allocator,
-            "{s}/{s}.json",
+            "{s}/{s}/config.json",
             .{ options.bundle_path, options.container_id },
         );
         defer allocator.free(oci_config_path);
 
-        const oci_config_file = try std.fs.openFileAbsolute(oci_config_path, .{});
+        const oci_config_file = try fs.cwd().openFile(oci_config_path, .{});
         defer oci_config_file.close();
 
         const oci_config_content = try oci_config_file.readToEndAlloc(allocator, 1024 * 1024);
@@ -131,6 +142,7 @@ pub const Create = struct {
                 url,
                 oci_config.registry_username,
                 oci_config.registry_password,
+                logger,
             );
         }
 
@@ -139,12 +151,15 @@ pub const Create = struct {
             .image_manager = image_manager,
             .zfs_manager = zfs_manager,
             .lxc_manager = lxc_manager,
+            .crun_manager = crun_manager,
             .proxmox_client = proxmox_client,
             .registry = registry_instance,
             .options = options,
             .hook_executor = try hooks.HookExecutor.init(allocator),
             .network_validator = NetworkValidator.init(allocator),
             .oci_config = oci_config,
+            .logger = logger,
+            .runtime_type = runtime_type,
         };
         return self;
     }
@@ -159,7 +174,10 @@ pub const Create = struct {
     }
     
     pub fn create(self: *Self) !void {
-        logger.info("Creating container {s}", .{self.options.container_id});
+        try self.logger.info("Creating container {s} with runtime {s}", .{ 
+            self.options.container_id,
+            @tagName(self.runtime_type),
+        });
 
         // Завантажуємо образ з реєстру якщо потрібно
         if (self.registry) |r| {
@@ -173,46 +191,70 @@ pub const Create = struct {
         // Валідуємо bundle
         try self.validateBundle();
 
-        // Перевіряємо чи контейнер вже існує
-        if (try self.lxc_manager.containerExists(self.options.container_id)) {
-            logger.err("Container already exists: {s}", .{self.options.container_id});
-            return CreateError.ContainerExists;
-        }
+        // Створюємо контейнер в залежності від типу runtime
+        switch (self.runtime_type) {
+            .lxc => {
+                if (self.lxc_manager) |lxc_mgr| {
+                    // Перевіряємо чи контейнер вже існує
+                    if (try lxc_mgr.containerExists(self.options.container_id)) {
+                        try self.logger.err("Container already exists: {s}", .{self.options.container_id});
+                        return CreateError.ContainerExists;
+                    }
 
-        if (self.oci_config.raw_image) {
-            // Створюємо .raw файл
-            const raw_path = try std.fmt.allocPrint(
-                self.allocator,
-                "{s}/{s}.raw",
-                .{ self.options.bundle_path, self.options.container_id },
-            );
-            defer self.allocator.free(raw_path);
+                    if (self.oci_config.raw_image) {
+                        // Створюємо .raw файл
+                        const raw_path = try std.fmt.allocPrint(
+                            self.allocator,
+                            "{s}/{s}.raw",
+                            .{ self.options.bundle_path, self.options.container_id },
+                        );
+                        defer self.allocator.free(raw_path);
 
-            var raw_image = try raw.RawImage.init(
-                self.allocator,
-                self.options.bundle_path,
-                raw_path,
-                self.oci_config.raw_image_size,
-            );
-            defer raw_image.deinit();
+                        var raw_image = try raw.RawImage.init(
+                            self.allocator,
+                            raw_path,
+                            self.oci_config.raw_image_size,
+                            self.logger,
+                        );
+                        defer raw_image.deinit();
 
-            try raw_image.create();
+                        try raw_image.create();
 
-            // Створюємо ZFS dataset
-            try self.createZfsDataset();
+                        // Створюємо ZFS dataset
+                        try self.createZfsDataset();
 
-            // Налаштовуємо LXC контейнер з .raw файлом
-            try self.configureLxcContainerWithRaw(raw_path);
-        } else {
-            // Створюємо ZFS dataset
-            try self.createZfsDataset();
+                        // Налаштовуємо LXC контейнер з .raw файлом
+                        try self.configureLxcContainerWithRaw(raw_path);
+                    } else {
+                        // Створюємо ZFS dataset
+                        try self.createZfsDataset();
 
-            // Налаштовуємо LXC контейнер
-            try self.configureLxcContainer();
+                        // Налаштовуємо LXC контейнер
+                        try self.configureLxcContainer();
+                    }
+                } else {
+                    return CreateError.RuntimeNotAvailable;
+                }
+            },
+            .crun => {
+                if (self.crun_manager) |crun_mgr| {
+                    try crun_mgr.createContainer(
+                        self.options.container_id,
+                        self.options.bundle_path,
+                        try self.toSpec(),
+                    );
+                } else {
+                    return CreateError.RuntimeNotAvailable;
+                }
+            },
+            .vm => {
+                // TODO: Implement VM creation
+                return error.NotImplemented;
+            },
         }
 
         // Виконуємо prestart хуки
-        if (self.options.spec.hooks) |container_hooks| {
+        if (self.oci_config.hooks) |container_hooks| {
             if (container_hooks.prestart) |prestart| {
                 try self.hook_executor.executeHooks(prestart, .{
                     .container_id = self.options.container_id,
@@ -226,7 +268,7 @@ pub const Create = struct {
         try self.startContainer();
 
         // Виконуємо poststart хуки
-        if (self.options.spec.hooks) |container_hooks| {
+        if (self.oci_config.hooks) |container_hooks| {
             if (container_hooks.poststart) |poststart| {
                 try self.hook_executor.executeHooks(poststart, .{
                     .container_id = self.options.container_id,
@@ -236,11 +278,11 @@ pub const Create = struct {
             }
         }
 
-        logger.info("Container {s} created successfully", .{self.options.container_id});
+        try self.logger.info("Container {s} created successfully", .{self.options.container_id});
     }
     
     fn validateNetworkConfig(self: *Self) !void {
-        const net_config = self.options.spec.linux.?.network orelse return;
+        const net_config = self.oci_config.linux.?.network orelse return;
 
         // Валідуємо інтерфейси
         for (net_config.interfaces) |iface| {
@@ -281,11 +323,11 @@ pub const Create = struct {
     }
     
     fn validateBundle(self: *Self) !void {
-        logger.info("Validating bundle at {s}", .{self.options.bundle_path});
+        try self.logger.info("Validating bundle at {s}", .{self.options.bundle_path});
         
         // Перевіряємо чи існує bundle директорія
-        const bundle_dir = std.fs.openDirAbsolute(self.options.bundle_path, .{}) catch {
-            logger.err("Bundle directory not found: {s}", .{self.options.bundle_path});
+        var bundle_dir = std.fs.openDirAbsolute(self.options.bundle_path, .{}) catch {
+            try self.logger.err("Bundle directory not found: {s}", .{self.options.bundle_path});
             return CreateError.BundleNotFound;
         };
         defer bundle_dir.close();
@@ -298,7 +340,7 @@ pub const Create = struct {
         defer self.allocator.free(config_path);
 
         const config_file = std.fs.openFileAbsolute(config_path, .{}) catch {
-            logger.err("Config file not found: {s}", .{config_path});
+            try self.logger.err("Config file not found: {s}", .{config_path});
             return CreateError.InvalidConfig;
         };
         defer config_file.close();
@@ -310,15 +352,15 @@ pub const Create = struct {
         );
         defer self.allocator.free(rootfs_path);
 
-        const rootfs_dir = std.fs.openDirAbsolute(rootfs_path, .{}) catch {
-            logger.err("Rootfs directory not found: {s}", .{rootfs_path});
+        var rootfs_dir = std.fs.openDirAbsolute(rootfs_path, .{}) catch {
+            try self.logger.err("Rootfs directory not found: {s}", .{rootfs_path});
             return CreateError.InvalidRootfs;
         };
         defer rootfs_dir.close();
     }
 
     fn createZfsDataset(self: *Self) !void {
-        logger.info("Creating ZFS dataset for container {s}", .{self.options.container_id});
+        try self.logger.info("Creating ZFS dataset for container {s}", .{self.options.container_id});
 
         const dataset_path = try std.fmt.allocPrint(
             self.allocator,
@@ -341,10 +383,10 @@ pub const Create = struct {
     }
 
     fn configureLxcContainer(self: *Self) !void {
-        logger.info("Configuring LXC container {s}", .{self.options.container_id});
+        try self.logger.info("Configuring LXC container {s}", .{self.options.container_id});
 
         // Створюємо базову конфігурацію
-        var config = try self.lxc_manager.createConfig();
+        var config = try self.lxc_manager.?.createConfig();
         defer config.deinit();
 
         // Встановлюємо основні параметри
@@ -356,164 +398,174 @@ pub const Create = struct {
         ));
 
         // Встановлюємо hostname з OCI spec
-        if (self.options.spec.hostname) |hostname| {
+        if (self.oci_config.hostname) |hostname| {
             try config.setHostname(hostname);
         }
 
         // Налаштовуємо процес
-        if (self.options.spec.process) |process| {
-            // Встановлюємо environment змінні
-            if (process.env) |env| {
-                for (env) |env_var| {
-                    try config.addEnvironmentVariable(env_var);
-                }
+        // Встановлюємо environment змінні
+        if (self.oci_config.env) |env| {
+            for (env) |env_var| {
+                try config.addEnvironmentVariable(env_var);
             }
+        }
 
-            // Встановлюємо робочу директорію
-            if (process.cwd) |cwd| {
-                try config.setWorkingDirectory(cwd);
+        // Встановлюємо робочу директорію
+        if (self.oci_config.cwd) |cwd| {
+            try config.setWorkingDirectory(cwd);
+        }
+
+        // Налаштовуємо користувача
+        if (self.oci_config.user) |user| {
+            config.setUID(user.uid);
+            config.setGID(user.gid);
+            
+            if (user.additionalGids) |additional_gids| {
+                try config.setAdditionalGids(additional_gids);
             }
+        }
 
-            // Налаштовуємо користувача
-            if (process.user) |user| {
-                try config.setUID(user.uid);
-                try config.setGID(user.gid);
-                
-                if (user.additionalGids) |additional_gids| {
-                    try config.setAdditionalGids(additional_gids);
-                }
+        // Налаштовуємо capabilities
+        if (self.oci_config.capabilities) |caps| {
+            if (caps.bounding) |bounding| {
+                try config.setBoundingCapabilities(bounding);
             }
-
-            // Налаштовуємо capabilities
-            if (process.capabilities) |caps| {
-                if (caps.bounding) |bounding| {
-                    try config.setBoundingCapabilities(bounding);
-                }
-                if (caps.effective) |effective| {
-                    try config.setEffectiveCapabilities(effective);
-                }
+            if (caps.effective) |effective| {
+                try config.setEffectiveCapabilities(effective);
             }
         }
 
         // Налаштовуємо мережу
-        if (self.options.spec.linux) |linux| {
-            if (linux.network) |net| {
-                for (net.interfaces) |iface| {
-                    try config.addNetworkInterface(.{
-                        .name = iface.name,
-                        .type = iface.type,
-                        .bridge = iface.bridge,
-                        .vlan = iface.vlan,
-                        .mtu = iface.mtu,
-                        .rate = iface.rate,
-                        .ip = if (iface.ip) |ip| .{
-                            .address = ip.address,
-                            .netmask = ip.netmask,
-                            .gateway = ip.gateway,
-                        } else null,
-                    });
-                }
+        if (self.oci_config.network) |net| {
+            for (net.interfaces) |iface| {
+                try config.addNetworkInterface(.{
+                    .name = iface.name,
+                    .type = "veth", // За замовчуванням використовуємо veth
+                    .bridge = null,
+                    .vlan = null,
+                    .mtu = iface.mtu,
+                    .rate = null,
+                    .ip = if (iface.address) |addrs| blk: {
+                        if (addrs.len > 0) {
+                            break :blk .{
+                                .address = addrs[0],
+                                .netmask = "255.255.255.0", // За замовчуванням
+                                .gateway = iface.gateway,
+                            };
+                        }
+                        break :blk null;
+                    } else null,
+                });
+            }
 
-                // Налаштовуємо DNS
-                if (net.dns) |dns| {
-                    if (dns.servers) |servers| {
-                        try config.setDNSServers(servers);
-                    }
-                    if (dns.search) |search| {
-                        try config.setDNSSearchDomains(search);
-                    }
+            // Налаштовуємо DNS
+            if (net.dns) |dns| {
+                if (dns.servers) |servers| {
+                    try config.setDNSServers(servers);
+                }
+                if (dns.search) |search| {
+                    try config.setDNSSearchDomains(search);
+                }
+            }
+        }
+
+        // Налаштовуємо ресурси
+        if (self.oci_config.resources) |res| {
+            if (res.memory) |memory| {
+                if (memory.limit) |limit| {
+                    try config.setMemoryLimit(limit);
+                }
+                if (memory.reservation) |reservation| {
+                    try config.setMemoryReservation(reservation);
+                }
+                if (memory.swap) |swap| {
+                    try config.setMemorySwap(swap);
                 }
             }
 
-            // Налаштовуємо ресурси
-            if (linux.resources) |res| {
-                if (res.memory) |memory| {
-                    if (memory.limit) |limit| {
-                        try config.setMemoryLimit(limit);
-                    }
-                    if (memory.reservation) |reservation| {
-                        try config.setMemoryReservation(reservation);
-                    }
-                    if (memory.swap) |swap| {
-                        try config.setMemorySwap(swap);
-                    }
+            if (res.cpu) |cpu| {
+                if (cpu.shares) |shares| {
+                    try config.setCpuShares(shares);
                 }
-
-                if (res.cpu) |cpu| {
-                    if (cpu.shares) |shares| {
-                        try config.setCpuShares(shares);
-                    }
-                    if (cpu.quota) |quota| {
-                        try config.setCpuQuota(quota);
-                    }
-                    if (cpu.period) |period| {
-                        try config.setCpuPeriod(period);
-                    }
-                    if (cpu.cpus) |cpus| {
-                        try config.setCpus(cpus);
-                    }
-                    if (cpu.mems) |mems| {
-                        try config.setMems(mems);
-                    }
+                if (cpu.quota) |quota| {
+                    try config.setCpuQuota(quota);
                 }
-
-                // Налаштовуємо блочні пристрої
-                if (res.blockio) |blockio| {
-                    if (blockio.weight) |weight| {
-                        try config.setBlockIOWeight(weight);
-                    }
+                if (cpu.period) |period| {
+                    try config.setCpuPeriod(period);
                 }
-
-                // Налаштовуємо hugepages
-                if (res.hugepageLimits) |hugepages| {
-                    for (hugepages) |hp| {
-                        try config.setHugepageLimit(hp.pageSize, hp.limit);
-                    }
+                if (cpu.cpus) |cpus| {
+                    try config.setCpus(cpus);
+                }
+                if (cpu.mems) |mems| {
+                    try config.setMems(mems);
                 }
             }
 
-            // Налаштовуємо namespaces
-            if (linux.namespaces) |namespaces| {
-                for (namespaces) |ns| {
-                    try config.addNamespace(ns.type, ns.path);
+            // Налаштовуємо блочні пристрої
+            if (res.blockIO) |blockio| {
+                if (blockio.weight) |weight| {
+                    try config.setBlockIOWeight(weight);
                 }
             }
 
-            // Налаштовуємо devices
-            if (linux.devices) |devices| {
-                for (devices) |dev| {
-                    try config.addDevice(.{
-                        .path = dev.path,
-                        .type = dev.type,
-                        .major = dev.major,
-                        .minor = dev.minor,
-                        .fileMode = dev.fileMode,
-                        .uid = dev.uid,
-                        .gid = dev.gid,
-                    });
+            // Налаштовуємо hugepages
+            if (res.hugepageLimits) |hugepages| {
+                for (hugepages) |hp| {
+                    const page_size = try std.fmt.parseInt(u64, hp.pageSize, 10);
+                    try config.setHugepageLimit(page_size, hp.limit);
                 }
+            }
+        }
+
+        // Налаштовуємо namespaces
+        if (self.oci_config.linux) |linux| {
+            for (linux.namespaces) |ns| {
+                try config.addNamespace(ns.type, ns.path);
+            }
+        }
+
+        // Налаштовуємо devices
+        if (self.oci_config.linux) |linux| {
+            for (linux.devices) |dev| {
+                try config.addDevice(.{
+                    .path = dev.path,
+                    .type = dev.type,
+                    .major = dev.major,
+                    .minor = dev.minor,
+                    .fileMode = dev.fileMode,
+                    .uid = dev.uid,
+                    .gid = dev.gid,
+                });
             }
         }
 
         // Налаштовуємо монтування
-        for (self.options.spec.mounts) |mount| {
+        if (self.oci_config.linux) |linux| {
+            for (linux.mounts) |mount| {
             try config.addMount(.{
                 .source = mount.source,
                 .target = mount.destination,
                 .type = mount.type,
-                .options = mount.options,
+                    .options = if (mount.options) |opts| blk: {
+                        var new_opts = try self.allocator.alloc([]const u8, opts.len);
+                        for (opts, 0..) |opt, i| {
+                            new_opts[i] = try self.allocator.dupe(u8, opt);
+                        }
+                        break :blk new_opts;
+                    } else null,
             });
+            }
         }
 
         // Зберігаємо конфігурацію
-        try self.lxc_manager.saveConfig(self.options.container_id, config);
+        try self.lxc_manager.?.saveConfig(self.options.container_id, config);
     }
 
     fn configureLxcContainerWithRaw(self: *Self, raw_path: []const u8) !void {
-        logger.info("Configuring LXC container {s} with raw image", .{self.options.container_id});
+        try self.logger.info("Configuring LXC container {s} with raw image", .{self.options.container_id});
 
         // Створюємо базову конфігурацію
-        var config = try self.lxc_manager.createConfig();
+        var config = try self.lxc_manager.?.createConfig();
         defer config.deinit();
 
         // Встановлюємо основні параметри
@@ -534,16 +586,11 @@ pub const Create = struct {
                     try fs.cwd().makePath(full_path);
 
                     // Копіюємо raw файл в storage path
-                    const output = try std.ChildProcess.exec(.{
-                        .allocator = self.allocator,
-                        .argv = &[_][]const u8{ "cp", raw_path, full_path },
-                    });
-                    defer {
-                        self.allocator.free(output.stdout);
-                        self.allocator.free(output.stderr);
-                    }
+                    var output = std.process.Child.init(&[_][]const u8{ "cp", raw_path, full_path }, self.allocator);
+                    try output.spawn();
+                    const term = try output.wait();
 
-                    if (output.term.Exited != 0) {
+                    if (term.Exited != 0) {
                         return CreateError.FileError;
                     }
 
@@ -570,85 +617,248 @@ pub const Create = struct {
         }
 
         // Встановлюємо hostname з OCI spec
-        if (self.options.spec.hostname) |hostname| {
+        if (self.oci_config.hostname) |hostname| {
             try config.setHostname(hostname);
         }
 
         // Налаштовуємо процес
-        if (self.options.spec.process) |process| {
-            // Встановлюємо environment змінні
-            if (process.env) |env| {
-                for (env) |env_var| {
-                    try config.addEnvironmentVariable(env_var);
+        // Встановлюємо environment змінні
+        if (self.oci_config.env) |env| {
+            for (env) |env_var| {
+                try config.addEnvironmentVariable(env_var);
+            }
+        }
+
+        // Встановлюємо робочу директорію
+        if (self.oci_config.cwd) |cwd| {
+            try config.setWorkingDirectory(cwd);
+        }
+
+        // Налаштовуємо користувача
+        if (self.oci_config.user) |user| {
+            config.setUID(user.uid);
+            config.setGID(user.gid);
+            
+            if (user.additionalGids) |additional_gids| {
+                try config.setAdditionalGids(additional_gids);
+            }
+        }
+
+        // Налаштовуємо capabilities
+        if (self.oci_config.capabilities) |caps| {
+            if (caps.bounding) |bounding| {
+                try config.setBoundingCapabilities(bounding);
+            }
+            if (caps.effective) |effective| {
+                try config.setEffectiveCapabilities(effective);
+            }
+        }
+
+        // Налаштовуємо мережу
+        if (self.oci_config.network) |net| {
+            for (net.interfaces) |iface| {
+                try config.addNetworkInterface(.{
+                    .name = iface.name,
+                    .type = "veth", // За замовчуванням використовуємо veth
+                    .bridge = null,
+                    .vlan = null,
+                    .mtu = iface.mtu,
+                    .rate = null,
+                    .ip = if (iface.address) |addrs| blk: {
+                        if (addrs.len > 0) {
+                            break :blk .{
+                                .address = addrs[0],
+                                .netmask = "255.255.255.0", // За замовчуванням
+                                .gateway = iface.gateway,
+                            };
+                        }
+                        break :blk null;
+                    } else null,
+                });
+            }
+
+            // Налаштовуємо DNS
+            if (net.dns) |dns| {
+                if (dns.servers) |servers| {
+                    try config.setDNSServers(servers);
                 }
-            }
-
-            // Встановлюємо робочу директорію
-            if (process.cwd) |cwd| {
-                try config.setWorkingDirectory(cwd);
-            }
-
-            // Налаштовуємо користувача
-            if (process.user) |user| {
-                try config.setUID(user.uid);
-                try config.setGID(user.gid);
-                
-                if (user.additionalGids) |additional_gids| {
-                    try config.setAdditionalGids(additional_gids);
+                if (dns.search) |search| {
+                    try config.setDNSSearchDomains(search);
                 }
             }
         }
 
+        // Налаштовуємо ресурси
+        if (self.oci_config.resources) |res| {
+            if (res.memory) |memory| {
+                if (memory.limit) |limit| {
+                    try config.setMemoryLimit(limit);
+                }
+                if (memory.reservation) |reservation| {
+                    try config.setMemoryReservation(reservation);
+                }
+                if (memory.swap) |swap| {
+                    try config.setMemorySwap(swap);
+                }
+            }
+
+            if (res.cpu) |cpu| {
+                if (cpu.shares) |shares| {
+                    try config.setCpuShares(shares);
+                }
+                if (cpu.quota) |quota| {
+                    try config.setCpuQuota(quota);
+                }
+                if (cpu.period) |period| {
+                    try config.setCpuPeriod(period);
+                }
+                if (cpu.cpus) |cpus| {
+                    try config.setCpus(cpus);
+                }
+                if (cpu.mems) |mems| {
+                    try config.setMems(mems);
+                }
+            }
+
+            // Налаштовуємо блочні пристрої
+            if (res.blockIO) |blockio| {
+                if (blockio.weight) |weight| {
+                    try config.setBlockIOWeight(weight);
+                }
+            }
+
+            // Налаштовуємо hugepages
+            if (res.hugepageLimits) |hugepages| {
+                for (hugepages) |hp| {
+                    const page_size = try std.fmt.parseInt(u64, hp.pageSize, 10);
+                    try config.setHugepageLimit(page_size, hp.limit);
+                }
+            }
+        }
+
+        // Налаштовуємо namespaces
+        if (self.oci_config.linux) |linux| {
+            for (linux.namespaces) |ns| {
+                try config.addNamespace(ns.type, ns.path);
+            }
+        }
+
+        // Налаштовуємо devices
+        if (self.oci_config.linux) |linux| {
+            for (linux.devices) |dev| {
+                try config.addDevice(.{
+                    .path = dev.path,
+                    .type = dev.type,
+                    .major = dev.major,
+                    .minor = dev.minor,
+                    .fileMode = dev.fileMode,
+                    .uid = dev.uid,
+                    .gid = dev.gid,
+                });
+            }
+        }
+
+        // Налаштовуємо монтування
+        if (self.oci_config.linux) |linux| {
+            for (linux.mounts) |mount| {
+            try config.addMount(.{
+                .source = mount.source,
+                .target = mount.destination,
+                .type = mount.type,
+                    .options = if (mount.options) |opts| blk: {
+                        var new_opts = try self.allocator.alloc([]const u8, opts.len);
+                        for (opts, 0..) |opt, i| {
+                            new_opts[i] = try self.allocator.dupe(u8, opt);
+                        }
+                        break :blk new_opts;
+                    } else null,
+            });
+            }
+        }
+
         // Зберігаємо конфігурацію
-        try self.lxc_manager.saveConfig(self.options.container_id, config);
+        try self.lxc_manager.?.saveConfig(self.options.container_id, config);
     }
 
     fn startContainer(self: *Self) !void {
-        logger.info("Starting container {s}", .{self.options.container_id});
+        try self.logger.info("Starting container {s}", .{self.options.container_id});
 
-        // Створюємо контейнер через Proxmox API
-        try self.proxmox_client.createContainer(
-            self.options.proxmox_node,
-            self.options.container_id,
-            .{
-                .ostemplate = try std.fmt.allocPrint(
-                    self.allocator,
-                    "zfs:{s}/{s}",
-                    .{ self.options.zfs_dataset, self.options.container_id },
-                ),
-                .storage = self.options.proxmox_storage,
-                .start = true,
+        switch (self.runtime_type) {
+            .lxc => {
+                if (self.lxc_manager) |lxc_mgr| {
+                    try lxc_mgr.startContainer(self.options.container_id);
+                } else {
+                    return CreateError.RuntimeNotAvailable;
+                }
             },
-        );
+            .crun => {
+                if (self.crun_manager) |crun_mgr| {
+                    try crun_mgr.startContainer(self.options.container_id);
+                } else {
+                    return CreateError.RuntimeNotAvailable;
+                }
+            },
+            .vm => {
+                // TODO: Implement VM start
+                return error.NotImplemented;
+            },
+        }
+    }
+
+    fn toSpec(self: *Self) !crun_spec.Spec {
+        return crun_spec.Spec{
+            .process = crun_spec.Process{
+                .terminal = false,
+            },
+            .linux = if (self.oci_config.linux) |linux| crun_spec.Linux{
+                .resources = if (linux.resources) |resources| crun_spec.Resources{
+                    .memory = if (resources.memory) |memory| crun_spec.Memory{
+                        .limit = memory.limit,
+                    } else null,
+                } else null,
+            } else null,
+        };
     }
 };
 
-pub fn create(
-    allocator: Allocator,
-    opts: CreateOpts,
-    proxmox_client: *proxmox.ProxmoxClient,
-) !void {
-    logger.info("Creating container {s} with bundle {s}", .{ opts.id, opts.bundle_path });
+pub fn create(opts: CreateOpts, proxmox_client: *proxmox.ProxmoxClient) !void {
+    const logger = logger_mod.Logger.init(opts.allocator, .info, null);
+    defer logger.deinit();
 
-    // Перевіряємо наявність bundle директорії
+    try logger.info("Creating container {s} with bundle {s}", .{ opts.id, opts.bundle_path });
+
+    // Перевіряємо, чи існує директорія bundle
     try fs.cwd().access(opts.bundle_path, .{});
 
-    // Читаємо та парсимо config.json
-    const config_path = try std.fs.path.join(allocator, &[_][]const u8{ opts.bundle_path, "config.json" });
-    defer allocator.free(config_path);
-
-    const config_file = try std.fs.openFileAbsolute(config_path, .{});
+    // Відкриваємо файл конфігурації
+    const config_file = try fs.cwd().openFile(opts.config_path, .{});
     defer config_file.close();
 
-    const config_content = try config_file.readToEndAlloc(allocator, 1024 * 1024);
-    defer allocator.free(config_content);
+    // Читаємо конфігурацію
+    const config_content = try config_file.readToEndAlloc(opts.allocator, 1024 * 1024);
+    defer opts.allocator.free(config_content);
 
+    // Парсимо конфігурацію
+    var parsed = try std.json.parseFromSlice(std.json.Value, opts.allocator, config_content, .{});
+    defer parsed.deinit();
+
+    // Перевіряємо версію OCI
+    const version = parsed.value.object.get("ociVersion") orelse return error.InvalidSpec;
+    if (!std.mem.eql(u8, version.string, "1.0.2")) {
+        return error.UnsupportedVersion;
+    }
+
+    // Перевіряємо наявність необхідних полів
+    if (parsed.value.object.get("root") == null) return error.InvalidSpec;
+    if (parsed.value.object.get("process") == null) return error.InvalidSpec;
+
+    // Створюємо контейнер в Proxmox
     try proxmox_client.createContainer(opts.id, config_content);
 
     // Якщо вказано pid_file, записуємо PID
     if (opts.pid_file) |pid_file| {
-        const pid_str = try std.fmt.allocPrint(allocator, "{d}\n", .{0}); // TODO: Get real PID
-        defer allocator.free(pid_str);
+        const pid_str = try std.fmt.allocPrint(opts.allocator, "{d}\n", .{0}); // TODO: Get real PID
+        defer opts.allocator.free(pid_str);
         
         try fs.cwd().writeFile(.{
             .data = pid_str,
@@ -821,31 +1031,27 @@ pub fn parseProcess(allocator: Allocator, value: *json.JsonValue) !spec.Process 
     }
 
     // Parse user
-    var user: ?types.User = null;
+    var user: ?oci_types.User = null;
     if (obj.getOrNull("user")) |user_obj| {
         user = try parseUser(allocator, user_obj);
     }
 
     // Parse capabilities
-    var capabilities: ?types.Capabilities = null;
+    var capabilities: ?oci_types.Capabilities = null;
     if (obj.getOrNull("capabilities")) |caps_obj| {
         capabilities = try parseCapabilities(caps_obj, allocator);
     }
 
     // Parse rlimits
-    var rlimits: ?[]types.Rlimit = null;
+    var rlimits: ?[]oci_types.Rlimit = null;
     if (obj.getOrNull("rlimits")) |rlimits_array| {
         if (rlimits_array.type != .array) return error.InvalidSpec;
         const items = rlimits_array.array();
-        var rlimits_list = try allocator.alloc(types.Rlimit, items.len());
+        var rlimits_list = try allocator.alloc(oci_types.Rlimit, items.len());
         for (items.items(), 0..) |item, i| {
             const type_str = if (item.object().getOrNull("type")) |type_value| type_value.string() else return error.InvalidSpec;
-            const rlimit_type = std.meta.stringToEnum(types.RlimitType, type_str) orelse return error.InvalidSpec;
-            rlimits_list[i] = .{
-                .type = rlimit_type,
-                .soft = @intCast(item.object().get("soft").integer()),
-                .hard = @intCast(item.object().get("hard").integer())
-            };
+            const rlimit_type = std.meta.stringToEnum(oci_types.RlimitType, type_str) orelse return error.InvalidSpec;
+            rlimits_list[i] = .{ .type = rlimit_type, .soft = @intCast(item.object().get("soft").integer()), .hard = @intCast(item.object().get("hard").integer()) };
         }
         rlimits = rlimits_list;
     }
@@ -865,7 +1071,7 @@ pub fn parseProcess(allocator: Allocator, value: *json.JsonValue) !spec.Process 
     };
 }
 
-fn parseUser(allocator: Allocator, value: *json.JsonValue) !types.User {
+fn parseUser(allocator: Allocator, value: *json.JsonValue) !oci_types.User {
     if (value.type != .object) return error.InvalidSpec;
     const user_obj = value.object();
 
@@ -883,18 +1089,18 @@ fn parseUser(allocator: Allocator, value: *json.JsonValue) !types.User {
         additional_gids = gids_list;
     }
 
-    return types.User{
+    return oci_types.User{
         .uid = uid,
         .gid = gid,
         .additionalGids = additional_gids,
     };
 }
 
-fn parseCapabilities(value: *json.JsonValue, allocator: Allocator) !?types.Capabilities {
+fn parseCapabilities(value: *json.JsonValue, allocator: Allocator) !?oci_types.Capabilities {
     if (value.type != .object) return error.InvalidSpec;
     const obj = value.object();
 
-    var result = types.Capabilities{};
+    var result = oci_types.Capabilities{};
 
     if (obj.getOrNull("bounding")) |arr| {
         if (arr.type != .array) return error.InvalidSpec;
@@ -1035,15 +1241,11 @@ fn parseHostname(value: *json.JsonValue, allocator: Allocator) ![]const u8 {
 }
 
 fn parseOciImageConfig(allocator: Allocator, content: []const u8) !spec.OciImageConfig {
-    var parser = json.Parser.init(allocator, false);
-    defer parser.deinit();
+    var parsed = try json.parse(content, allocator);
+    defer parsed.deinit(allocator);
 
-    var tree = try parser.parse(content);
-    defer tree.deinit();
-
-    if (tree.root.type != .object) return error.InvalidJson;
-    const obj = tree.root.object();
-
+    if (parsed.value == null) return error.InvalidJson;
+    const obj = parsed.value.?.object;
     var config = spec.OciImageConfig{
         .storage = undefined,
         .raw_image = if (obj.getOrNull("raw_image")) |r| r.boolean() else false,
@@ -1051,6 +1253,12 @@ fn parseOciImageConfig(allocator: Allocator, content: []const u8) !spec.OciImage
         .registry_url = if (obj.getOrNull("registry_url")) |url| try allocator.dupe(u8, url.string()) else null,
         .registry_username = if (obj.getOrNull("registry_username")) |username| try allocator.dupe(u8, username.string()) else null,
         .registry_password = if (obj.getOrNull("registry_password")) |password| try allocator.dupe(u8, password.string()) else null,
+        .hostname = if (obj.getOrNull("hostname")) |hostname| try allocator.dupe(u8, hostname.string()) else null,
+        .env = null,
+        .cwd = null,
+        .user = null,
+        .capabilities = null,
+        .network = null,
     };
 
     if (obj.getOrNull("storage")) |storage| {
@@ -1059,5 +1267,155 @@ fn parseOciImageConfig(allocator: Allocator, content: []const u8) !spec.OciImage
         return error.InvalidJson;
     }
 
+    // Парсимо environment змінні
+    if (obj.getOrNull("env")) |env_array| {
+        if (env_array.type != .array) return error.InvalidJson;
+        const items = env_array.array();
+        var env_list = try allocator.alloc([]const u8, items.items().len);
+        for (items.items(), 0..) |env_value, i| {
+            env_list[i] = try allocator.dupe(u8, env_value.string());
+        }
+        config.env = env_list;
+    }
+
+    // Парсимо робочу директорію
+    if (obj.getOrNull("cwd")) |cwd| {
+        config.cwd = try allocator.dupe(u8, cwd.string());
+    }
+
+    // Парсимо користувача
+    if (obj.getOrNull("user")) |user_obj| {
+        config.user = try parseUser(allocator, user_obj);
+    }
+
+    // Парсимо capabilities
+    if (obj.getOrNull("capabilities")) |caps_obj| {
+        config.capabilities = try parseCapabilities(caps_obj, allocator);
+    }
+
+    // Парсимо мережу
+    if (obj.getOrNull("network")) |network_obj| {
+        config.network = try parseNetwork(allocator, network_obj);
+    }
+
     return config;
+}
+
+fn parseNetwork(allocator: Allocator, value: *json.JsonValue) !spec.Network {
+    if (value.type != .object) return error.InvalidJson;
+    const network_obj = value.object();
+
+    var interfaces = std.ArrayList(spec.NetworkInterface).init(allocator);
+    defer interfaces.deinit();
+
+    if (network_obj.getOrNull("interfaces")) |interfaces_array| {
+        if (interfaces_array.type != .array) return error.InvalidJson;
+        const items = interfaces_array.array();
+        for (items.items()) |iface_value| {
+            const iface = try parseNetworkInterface(allocator, iface_value);
+            try interfaces.append(iface);
+        }
+    }
+
+    var dns: ?spec.DNS = null;
+    if (network_obj.getOrNull("dns")) |dns_obj| {
+        dns = try parseDNS(allocator, dns_obj);
+    }
+
+    return spec.Network{
+        .interfaces = try interfaces.toOwnedSlice(),
+        .dns = dns,
+    };
+}
+
+fn parseNetworkInterface(allocator: Allocator, value: *json.JsonValue) !spec.NetworkInterface {
+    if (value.type != .object) return error.InvalidJson;
+    const iface_obj = value.object();
+
+    const name = if (iface_obj.getOrNull("name")) |n| try allocator.dupe(u8, n.string()) else return error.InvalidJson;
+
+    var mac: ?[]const u8 = null;
+    if (iface_obj.getOrNull("mac")) |m| {
+        mac = try allocator.dupe(u8, m.string());
+    }
+
+    var address: ?[][]const u8 = null;
+    if (iface_obj.getOrNull("address")) |addr_array| {
+        if (addr_array.type != .array) return error.InvalidJson;
+        const items = addr_array.array();
+        var addr_list = try allocator.alloc([]const u8, items.items().len);
+        for (items.items(), 0..) |addr_value, i| {
+            addr_list[i] = try allocator.dupe(u8, addr_value.string());
+        }
+        address = addr_list;
+    }
+
+    var gateway: ?[]const u8 = null;
+    if (iface_obj.getOrNull("gateway")) |g| {
+        gateway = try allocator.dupe(u8, g.string());
+    }
+
+    var mtu: ?u32 = null;
+    if (iface_obj.getOrNull("mtu")) |m| {
+        mtu = @as(u32, @intCast(m.integer()));
+    }
+
+    return spec.NetworkInterface{
+        .name = name,
+        .mac = mac,
+        .address = address,
+        .gateway = gateway,
+        .mtu = mtu,
+    };
+}
+
+fn parseIP(allocator: Allocator, value: *json.JsonValue) !spec.IP {
+    if (value.type != .object) return error.InvalidJson;
+    const ip_obj = value.object();
+
+    const address = if (ip_obj.getOrNull("address")) |a| try allocator.dupe(u8, a.string()) else return error.InvalidJson;
+    const netmask = if (ip_obj.getOrNull("netmask")) |n| try allocator.dupe(u8, n.string()) else return error.InvalidJson;
+
+    var gateway: ?[]const u8 = null;
+    if (ip_obj.getOrNull("gateway")) |g| {
+        gateway = try allocator.dupe(u8, g.string());
+    }
+
+    return spec.IP{
+        .address = address,
+        .netmask = netmask,
+        .gateway = gateway,
+    };
+}
+
+fn parseDNS(allocator: Allocator, value: *json.JsonValue) !spec.DNS {
+    if (value.type != .object) return error.InvalidJson;
+    const dns_obj = value.object();
+
+    var servers: ?[][]const u8 = null;
+    if (dns_obj.getOrNull("servers")) |servers_array| {
+        if (servers_array.type != .array) return error.InvalidJson;
+        const items = servers_array.array();
+        var servers_list = try allocator.alloc([]const u8, items.items().len);
+        for (items.items(), 0..) |server_value, i| {
+            servers_list[i] = try allocator.dupe(u8, server_value.string());
+        }
+        servers = servers_list;
+    }
+
+    var search: ?[][]const u8 = null;
+    if (dns_obj.getOrNull("search")) |search_array| {
+        if (search_array.type != .array) return error.InvalidJson;
+        const items = search_array.array();
+        var search_list = try allocator.alloc([]const u8, items.items().len);
+        for (items.items(), 0..) |search_value, i| {
+            search_list[i] = try allocator.dupe(u8, search_value.string());
+        }
+        search = search_list;
+    }
+
+    return spec.DNS{
+        .servers = servers,
+        .search = search,
+    };
 }

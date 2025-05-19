@@ -153,10 +153,10 @@ test "SpecBuilder - basic container spec" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    
+
     var spec_builder = try builder.SpecBuilder.init(allocator);
     defer spec_builder.deinit();
-    
+
     // Встановлюємо процес
     try spec_builder.setProcess(spec.Process{
         .args = &[_][]const u8{ "/bin/sh", "-c", "echo hello" },
@@ -164,19 +164,19 @@ test "SpecBuilder - basic container spec" {
         .cwd = "/",
         .capabilities = null,
     });
-    
+
     // Встановлюємо root
     try spec_builder.setRoot(spec.Root{
         .path = "/rootfs",
         .readonly = false,
     });
-    
+
     // Встановлюємо хостнейм
     try spec_builder.setHostname("test-container");
-    
+
     // Будуємо специфікацію
     const container_spec = try spec_builder.build();
-    
+
     try testing.expectEqualStrings("1.0.0", container_spec.oci_version);
     try testing.expectEqualStrings("/bin/sh", container_spec.process.args[0]);
     try testing.expectEqualStrings("/rootfs", container_spec.root.path);
@@ -187,10 +187,10 @@ test "SpecBuilder - mounts" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    
+
     var spec_builder = try builder.SpecBuilder.init(allocator);
     defer spec_builder.deinit();
-    
+
     // Встановлюємо необхідні поля
     try spec_builder.setProcess(spec.Process{
         .args = &[_][]const u8{"/bin/sh"},
@@ -198,12 +198,12 @@ test "SpecBuilder - mounts" {
         .cwd = "/",
         .capabilities = null,
     });
-    
+
     try spec_builder.setRoot(spec.Root{
         .path = "/rootfs",
         .readonly = false,
     });
-    
+
     // Додаємо точки монтування
     try spec_builder.addMount(spec.Mount{
         .destination = "/proc",
@@ -211,16 +211,16 @@ test "SpecBuilder - mounts" {
         .source = "proc",
         .options = &[_][]const u8{},
     });
-    
+
     try spec_builder.addMount(spec.Mount{
         .destination = "/dev",
         .type = "tmpfs",
         .source = "tmpfs",
-        .options = &[_][]const u8{"nosuid", "strictatime", "mode=755", "size=65536k"},
+        .options = &[_][]const u8{ "nosuid", "strictatime", "mode=755", "size=65536k" },
     });
-    
+
     const container_spec = try spec_builder.build();
-    
+
     try testing.expectEqual(@as(usize, 2), container_spec.mounts.len);
     try testing.expectEqualStrings("/proc", container_spec.mounts[0].destination);
     try testing.expectEqualStrings("/dev", container_spec.mounts[1].destination);
@@ -230,13 +230,13 @@ test "SpecBuilder - validation errors" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    
+
     var spec_builder = try builder.SpecBuilder.init(allocator);
     defer spec_builder.deinit();
-    
+
     // Спроба побудувати без процесу та root
     try testing.expectError(builder.SpecError.InvalidProcess, spec_builder.build());
-    
+
     // Встановлюємо процес без аргументів
     try spec_builder.setProcess(spec.Process{
         .args = &[_][]const u8{},
@@ -244,9 +244,9 @@ test "SpecBuilder - validation errors" {
         .cwd = "/",
         .capabilities = null,
     });
-    
+
     try testing.expectError(builder.SpecError.InvalidProcess, spec_builder.build());
-    
+
     // Встановлюємо процес з аргументами, але без root
     try spec_builder.setProcess(spec.Process{
         .args = &[_][]const u8{"/bin/sh"},
@@ -254,14 +254,14 @@ test "SpecBuilder - validation errors" {
         .cwd = "/",
         .capabilities = null,
     });
-    
+
     try testing.expectError(builder.SpecError.InvalidRoot, spec_builder.build());
-    
+
     // Встановлюємо root з пустим шляхом
     try spec_builder.setRoot(spec.Root{
         .path = "",
         .readonly = false,
     });
-    
+
     try testing.expectError(builder.SpecError.InvalidRoot, spec_builder.build());
-} 
+}
