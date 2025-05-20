@@ -133,7 +133,7 @@ pub fn build(b: *std.Build) void {
     // OCI runtime
     const oci_mod = b.addModule("oci", .{
         .root_source_file = b.path("src/oci/mod.zig"),
-        .imports = &.{
+        .imports = if (use_crun) &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
@@ -146,9 +146,21 @@ pub fn build(b: *std.Build) void {
             .{ .name = "container", .module = container_mod },
             .{ .name = "lxc_container", .module = lxc_container_mod },
             .{ .name = "vm_container", .module = vm_container_mod },
-        } ++ if (use_crun) &.{
             .{ .name = "crun_container", .module = crun_container_mod.? },
-        } else &.{},
+        } else &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "proxmox", .module = proxmox_mod },
+            .{ .name = "json", .module = zigJsonDep.module("zig-json") },
+            .{ .name = "zfs", .module = zfs_mod },
+            .{ .name = "network", .module = network_mod },
+            .{ .name = "config", .module = config_mod },
+            .{ .name = "json", .module = json_mod },
+            .{ .name = "container", .module = container_mod },
+            .{ .name = "lxc_container", .module = lxc_container_mod },
+            .{ .name = "vm_container", .module = vm_container_mod },
+        },
     });
 
     const exe = b.addExecutable(.{

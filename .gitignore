@@ -4,4 +4,6 @@ zig-out/*
 .env
 .env.*
 !.env.example
-test-bundle/*
+test-*/*
+config.json
+

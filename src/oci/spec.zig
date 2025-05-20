@@ -48,39 +48,47 @@ pub const Mount = struct {
 };
 
 pub const Spec = struct {
-    version: []const u8,
+    oci_version: []const u8,
     process: Process,
     root: Root,
     hostname: []const u8,
     mounts: []const Mount,
-    hooks: ?Hooks,
-    annotations: std.StringHashMap([]const u8),
-    linux: LinuxSpec,
+    linux: ?LinuxSpec,
+    annotations: ?std.StringHashMap([]const u8),
     storage: StorageConfig,
 
+    pub fn init(allocator: Allocator) !Spec {
+        return Spec{
+            .oci_version = "1.0.2",
+            .process = try Process.init(allocator),
+            .root = try Root.init(allocator),
+            .hostname = "",
+            .mounts = &[_]Mount{},
+            .linux = null,
+            .annotations = null,
+            .storage = try StorageConfig.init(allocator),
+        };
+    }
+
     pub fn deinit(self: *Spec, allocator: Allocator) void {
-        allocator.free(self.version);
+        allocator.free(self.oci_version);
         allocator.free(self.hostname);
         for (self.mounts) |mount| {
             mount.deinit(allocator);
         }
         allocator.free(self.mounts);
-        if (self.hooks) |hooks| {
-            hooks.deinit(allocator);
+        if (self.linux) |linux| {
+            linux.deinit(allocator);
         }
-        var it = self.annotations.iterator();
-        while (it.next()) |entry| {
-            allocator.free(entry.key_ptr.*);
-            allocator.free(entry.value_ptr.*);
+        if (self.annotations) |*annotations| {
+            var it = annotations.iterator();
+            while (it.next()) |entry| {
+                allocator.free(entry.key_ptr.*);
+                allocator.free(entry.value_ptr.*);
+            }
+            annotations.deinit();
         }
-        self.annotations.deinit();
-        self.linux.deinit(allocator);
-        if (self.storage.storage_path) |path| {
-            allocator.free(path);
-        }
-        if (self.storage.storage_pool) |pool| {
-            allocator.free(pool);
-        }
+        self.storage.deinit(allocator);
     }
 };
 

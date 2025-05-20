@@ -101,7 +101,16 @@ sudo apt-get install -y \
     lxc \
     curl \
     wget \
-    xz-utils
+    xz-utils \
+    libseccomp-dev \
+    libcgroup-dev \
+    libcap-dev
+
+# runc
+sudo apt-get install -y runc
+
+# crun
+sudo apt-get install -y crun
 ```
 
 ### CentOS/RHEL
@@ -113,7 +122,16 @@ sudo yum install -y \
     lxc \
     curl \
     wget \
-    xz
+    xz \
+    libseccomp-devel \
+    libcgroup-devel \
+    libcap-devel
+
+# runc
+sudo yum install -y runc
+
+# crun
+sudo yum install -y crun
 ```
 
 ## Configuration
@@ -125,4 +143,80 @@ sudo yum install -y \
 ### Optional Environment Variables
 - `PROXMOX_API_TOKEN`: Proxmox API token
 - `PROXMOX_NODE`: Proxmox node name
+- `ZFS_DATASET`: ZFS dataset path
+
+## Runtime
+
+### runc
+
+- Version: 1.1.0 or newer
+- Path: `/usr/bin/runc`
+- Dependencies:
+  - libseccomp
+  - libcgroup
+  - libcap
+
+### crun
+
+- Version: 1.0 or newer
+- Path: `/usr/bin/crun`
+- Dependencies:
+  - libseccomp
+  - libcgroup
+  - libcap
+  - yajl
+  - libsystemd
+
+## Verification
+
+```bash
+# Verify runc
+runc --version
+
+# Verify crun
+crun --version
+
+# Verify LXC
+lxc --version
+```
+
+## Configuration
+
+### runc
+
+1. Create container directory:
+```bash
+sudo mkdir -p /var/lib/containers
+```
+
+2. Configure cgroup:
+```bash
+sudo mkdir -p /sys/fs/cgroup/systemd
+sudo mount -t cgroup -o none,name=systemd cgroup /sys/fs/cgroup/systemd
+```
+
+### crun
+
+1. Create container directory:
+```bash
+sudo mkdir -p /var/lib/containers
+```
+
+2. Configure cgroup:
+```bash
+sudo mkdir -p /sys/fs/cgroup/systemd
+sudo mount -t cgroup -o none,name=systemd cgroup /sys/fs/cgroup/systemd
+```
+
+## Troubleshooting
+
+### "cgroup not mounted" error
+
+```bash
+sudo mkdir -p /sys/fs/cgroup/systemd
+sudo mount -t cgroup -o none,name=systemd cgroup /sys/fs/cgroup/systemd
+```
+
+### "permission denied" error
+
 - `ZFS_DATASET`: ZFS dataset path 

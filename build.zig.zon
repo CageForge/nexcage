@@ -11,5 +11,9 @@
             .url = "https://github.com/berdon/zig-json/archive/refs/heads/master.tar.gz",
             .hash = "1220aaba53d38fd5689b6a29e496ab8a262c54ae8a52321e61ed8da9f1d968c69e7e",
         },
+        .crun = .{
+            .url = "https://github.com/containers/crun/releases/download/1.21/crun-1.21.tar.gz",
+            .hash = "1220aaba53d38fd5689b6a29e496ab8a262c54ae8a52321e61ed8da9f1d968c69e7e",
+        },
     },
 }

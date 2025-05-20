@@ -4,6 +4,7 @@ const logger = @import("logger");
 const types = @import("types");
 const errors = @import("error");
 const container = @import("container");
+const RuntimeType = @import("oci/runtime/mod.zig").RuntimeType;
 
 pub const ConfigError = error{
     UnknownField,
@@ -13,17 +14,26 @@ pub const ConfigError = error{
 pub const Config = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
-    runtime: RuntimeConfig,
+    runtime_type: RuntimeType,
+    runtime_path: ?[]const u8,
     proxmox: ProxmoxConfig,
     storage: StorageConfig,
     network: NetworkConfig,
     logger: *logger.LogContext,
     container_config: ContainerConfig,
+    log_path: ?[]const u8,
+    root_path: []const u8,
+    bundle_path: []const u8,
+    pid_file: ?[]const u8,
+    console_socket: ?[]const u8,
+    systemd_cgroup: bool,
+    debug: bool,
 
     pub fn init(allocator: std.mem.Allocator, logger_ctx: *logger.LogContext) !Config {
         return Config{
             .allocator = allocator,
-            .runtime = try RuntimeConfig.init(allocator),
+            .runtime_type = .runc,
+            .runtime_path = null,
             .proxmox = try ProxmoxConfig.init(allocator),
             .storage = try StorageConfig.init(allocator),
             .network = try NetworkConfig.init(allocator),
@@ -36,14 +46,30 @@ pub const Config = struct {
                 },
                 .default_container_type = .lxc,
             },
+            .log_path = null,
+            .root_path = "/var/run/proxmox-lxcri",
+            .bundle_path = "/var/lib/proxmox-lxcri",
+            .pid_file = null,
+            .console_socket = null,
+            .systemd_cgroup = false,
+            .debug = false,
         };
     }
 
     pub fn deinit(self: *Config) void {
-        self.runtime.deinit();
+        self.runtime_path = null;
         self.proxmox.deinit();
         self.storage.deinit();
         self.network.deinit();
+        if (self.log_path) |path| {
+            self.allocator.free(path);
+        }
+        if (self.pid_file) |file| {
+            self.allocator.free(file);
+        }
+        if (self.console_socket) |socket| {
+            self.allocator.free(socket);
+        }
     }
 
     pub fn fromJson(allocator: std.mem.Allocator, json_config: JsonConfig, logger_ctx: *logger.LogContext) !Config {
@@ -53,13 +79,13 @@ pub const Config = struct {
         // Runtime config
         if (json_config.runtime) |runtime| {
             if (runtime.root_path) |path| {
-                config.runtime.root_path = try allocator.dupe(u8, path);
+                config.runtime_path = try allocator.dupe(u8, path);
             }
             if (runtime.log_path) |path| {
-                config.runtime.log_path = try allocator.dupe(u8, path);
+                config.runtime_path = try allocator.dupe(u8, path);
             }
             if (runtime.log_level) |level| {
-                config.runtime.log_level = level;
+                config.runtime_type = level;
             }
         }
 
@@ -151,6 +177,36 @@ pub const Config = struct {
         }
 
         return name_idx == name.len;
+    }
+
+    pub fn setRuntimeType(self: *Config, runtime_type: RuntimeType) void {
+        self.runtime_type = runtime_type;
+    }
+
+    pub fn setRuntimePath(self: *Config, path: []const u8) !void {
+        if (self.runtime_path) |old_path| {
+            self.allocator.free(old_path);
+        }
+        self.runtime_path = try self.allocator.dupe(u8, path);
+    }
+
+    pub fn getRuntimePath(self: *Config) ![]const u8 {
+        if (self.runtime_path) |path| {
+            return path;
+        }
+
+        const default_path = switch (self.runtime_type) {
+            .runc => "/usr/bin/runc",
+            .crun => "/usr/bin/crun",
+        };
+
+        // Перевіряємо чи існує файл
+        const file = std.fs.openFileAbsolute(default_path, .{}) catch {
+            return error.RuntimeNotFound;
+        };
+        defer file.close();
+
+        return try self.allocator.dupe(u8, default_path);
     }
 };
 
