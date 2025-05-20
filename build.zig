@@ -5,17 +5,26 @@ const fs = std.fs;
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-
+   
+    // Add dependency for zig-json
     const zigJsonDep = b.dependency("zig-json", .{
         .target = target,
         .optimize = optimize,
     });
+
+    // Опціональна залежність для crun
+    const use_crun = b.option(bool, "crun", "Enable crun runtime support") orelse false;
+    const crunDep = if (use_crun) b.dependency("crun", .{
+        .target = target,
+        .optimize = optimize,
+    }) else null;
 
     // Core modules
     const types_mod = b.addModule("types", .{
         .root_source_file = b.path("src/types.zig"),
     });
 
+    // Error module
     const error_mod = b.addModule("error", .{
         .root_source_file = b.path("src/error.zig"),
         .imports = &.{
@@ -23,6 +32,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Logger module
     const logger_mod = b.addModule("logger", .{
         .root_source_file = b.path("src/logger.zig"),
         .imports = &.{
@@ -31,6 +41,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Config module
     const config_mod = b.addModule("config", .{
         .root_source_file = b.path("src/config.zig"),
         .imports = &.{
@@ -59,18 +70,6 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Pod management
-    const pod_mod = b.addModule("pod", .{
-        .root_source_file = b.path("src/pod/pod.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "network", .module = network_mod },
-            .{ .name = "logger", .module = logger_mod },
-            .{ .name = "config", .module = config_mod },
-        },
-    });
-
     // Proxmox integration
     const proxmox_mod = b.addModule("proxmox", .{
         .root_source_file = b.path("src/proxmox/proxmox.zig"),
@@ -78,7 +77,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
-            .{ .name = "pod", .module = pod_mod },
         },
     });
 
@@ -87,17 +85,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/custom_json_parser.zig"),
         .imports = &.{
             .{ .name = "json", .module = zigJsonDep.module("zig-json") },
-        },
-    });
-
-    // Pause container module
-    const pause_mod = b.addModule("pause", .{
-        .root_source_file = b.path("src/pause/pause.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-            .{ .name = "zfs", .module = zfs_mod },
         },
     });
 
@@ -121,8 +108,20 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const crun_container_mod = b.addModule("crun_container", .{
+    // Crun container module (опціональний)
+    const crun_container_mod = if (use_crun) b.addModule("crun_container", .{
         .root_source_file = b.path("src/container/crun.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "container", .module = container_mod },
+            .{ .name = "crun", .module = crunDep.?.module("crun") },
+        },
+    }) else null;
+
+    const vm_container_mod = b.addModule("vm_container", .{
+        .root_source_file = b.path("src/container/vm.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
@@ -138,18 +137,18 @@ pub fn build(b: *std.Build) void {
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
-            .{ .name = "pod", .module = pod_mod },
             .{ .name = "proxmox", .module = proxmox_mod },
             .{ .name = "json", .module = zigJsonDep.module("zig-json") },
             .{ .name = "zfs", .module = zfs_mod },
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
-            .{ .name = "pause", .module = pause_mod },
             .{ .name = "container", .module = container_mod },
             .{ .name = "lxc_container", .module = lxc_container_mod },
-            .{ .name = "crun_container", .module = crun_container_mod },
-        },
+            .{ .name = "vm_container", .module = vm_container_mod },
+        } ++ if (use_crun) &.{
+            .{ .name = "crun_container", .module = crun_container_mod.? },
+        } else &.{},
     });
 
     const exe = b.addExecutable(.{
@@ -164,16 +163,18 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("error", error_mod);
     exe.root_module.addImport("logger", logger_mod);
     exe.root_module.addImport("network", network_mod);
-    exe.root_module.addImport("pod", pod_mod);
     exe.root_module.addImport("proxmox", proxmox_mod);
     exe.root_module.addImport("oci", oci_mod);
     exe.root_module.addImport("json", zigJsonDep.module("zig-json"));
     exe.root_module.addImport("zfs", zfs_mod);
     exe.root_module.addImport("json", json_mod);
-    exe.root_module.addImport("pause", pause_mod);
     exe.root_module.addImport("container", container_mod);
     exe.root_module.addImport("lxc_container", lxc_container_mod);
-    exe.root_module.addImport("crun_container", crun_container_mod);
+    exe.root_module.addImport("vm_container", vm_container_mod);
+    if (use_crun) {
+        exe.root_module.addImport("crun_container", crun_container_mod.?);
+        exe.root_module.addImport("crun", crunDep.?.module("crun"));
+    }
 
     // Install
     b.installArtifact(exe);

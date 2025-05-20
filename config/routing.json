@@ -1,0 +1,12 @@
+{
+    "routing": [
+        {
+            "pattern": "^(kube-ovn-.*|cilium-.*)$",
+            "runtime": "crun"
+        },
+        {
+            "pattern": ".*",
+            "runtime": "lxc"
+        }
+    ]
+} 
