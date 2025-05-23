@@ -34,4 +34,11 @@ This task involves setting up the initial project structure and implementing the
 
 ## Related Tasks
 - Proxmox API Client Implementation
-- Basic CRI Interface Implementation 
+- Basic CRI Interface Implementation
+
+### [2024-06-09] Рефакторинг структури та імпортів (code_review_plan.md)
+- Проведено реорганізацію структури src/, винесено спільні модулі у common/
+- Оновлено всі імпорти у коді автоматичним скриптом
+- Додано заглушки для LinuxContainerConfig та ContainerManager
+- Виправлено помилки компіляції, пов'язані з дублюванням типів та некоректними імпортами
+- Витрачено часу: 3 години 
