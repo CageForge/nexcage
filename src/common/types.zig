@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const json = std.json;
+const json = @import("zig-json");
+const container = @import("container");
 
 pub const ContainerStatus = enum {
     running,
@@ -26,6 +27,13 @@ pub const LogLevel = enum {
         try writer.writeByte('"');
         try writer.writeAll(@tagName(self));
         try writer.writeByte('"');
+    }
+
+    pub fn jsonParse(allocator: Allocator, source: anytype, options: json.ParseOptions) !LogLevel {
+        if (source == .string) {
+            return fromString(source.string);
+        }
+        return error.InvalidLogLevel;
     }
 
     pub fn fromString(str: []const u8) !LogLevel {
@@ -66,6 +74,8 @@ pub const ContainerConfig = struct {
     linux: ?LinuxContainerConfig,
     log_path: ?[]const u8,
     allocator: Allocator,
+    crun_name_patterns: []const []const u8,
+    default_container_type: container.ContainerType,
 
     pub fn init(allocator: Allocator) !ContainerConfig {
         return ContainerConfig{
@@ -87,6 +97,12 @@ pub const ContainerConfig = struct {
             .linux = null,
             .log_path = null,
             .allocator = allocator,
+            .crun_name_patterns = &[_][]const u8{
+                "crun-*",
+                "oci-*",
+                "podman-*",
+            },
+            .default_container_type = .lxc,
         };
     }
 
@@ -196,49 +212,6 @@ pub const Container = struct {
     }
 };
 
-pub const PodSpec = struct {
-    name: []const u8,
-    namespace: []const u8,
-    containers: []ContainerSpec,
-
-    pub fn deinit(self: *PodSpec, allocator: Allocator) void {
-        allocator.free(self.name);
-        allocator.free(self.namespace);
-        for (self.containers) |*container| {
-            container.deinit(allocator);
-        }
-        allocator.free(self.containers);
-    }
-};
-
-pub const Pod = struct {
-    id: []const u8,
-    name: []const u8,
-    namespace: []const u8,
-    status: PodStatus,
-    containers: []Container,
-
-    pub fn init(allocator: Allocator, spec: PodSpec, containers: []Container) !Pod {
-        return Pod{
-            .id = try allocator.dupe(u8, spec.name),
-            .name = try allocator.dupe(u8, spec.name),
-            .namespace = try allocator.dupe(u8, spec.namespace),
-            .status = .pending,
-            .containers = containers,
-        };
-    }
-
-    pub fn deinit(self: *Pod, allocator: Allocator) void {
-        allocator.free(self.id);
-        allocator.free(self.name);
-        allocator.free(self.namespace);
-        for (self.containers) |*container| {
-            container.deinit(allocator);
-        }
-        allocator.free(self.containers);
-    }
-};
-
 pub const LXCConfig = struct {
     hostname: []const u8,
     ostype: []const u8,
@@ -271,6 +244,8 @@ pub const NetworkConfig = struct {
     tag: ?u32 = null,
     rate: ?u32 = null,
     mtu: ?u32 = null,
+    dns_servers: ?[]const []const u8 = null,
+    allocator: Allocator,
 
     pub fn deinit(self: *NetworkConfig, allocator: Allocator) void {
         allocator.free(self.name);
@@ -278,6 +253,12 @@ pub const NetworkConfig = struct {
         allocator.free(self.ip);
         if (self.gw) |gw| allocator.free(gw);
         if (self.type) |type_str| allocator.free(type_str);
+        if (self.dns_servers) |servers| {
+            for (servers) |server| {
+                allocator.free(server);
+            }
+            allocator.free(servers);
+        }
     }
 };
 
@@ -455,16 +436,6 @@ pub const Device = struct {
         allocator.free(self.container_path);
         allocator.free(self.host_path);
         allocator.free(self.permissions);
-    }
-};
-
-pub const LinuxContainerConfig = struct {
-    resources: ?ContainerResources = null,
-    security_context: ?LinuxContainerSecurityContext = null,
-
-    pub fn deinit(self: *LinuxContainerConfig, allocator: Allocator) void {
-        if (self.resources) |*res| res.deinit(allocator);
-        if (self.security_context) |*ctx| ctx.deinit(allocator);
     }
 };
 
@@ -707,64 +678,58 @@ pub const ImageConfig = struct {
 };
 
 pub const RuntimeType = enum {
+    runc,
+    crun,
     lxc,
     vm,
-    crun,
 };
 
 pub const RuntimeConfig = struct {
-    type: RuntimeType,
-    path: []const u8,
-    options: ?[]const u8 = null,
-};
-
-pub const Config = struct {
-    runtime_path: []const u8,
-    bundle_path: []const u8,
-    container_id: []const u8,
+    root_path: ?[]const u8 = null,
+    log_path: ?[]const u8 = null,
+    log_level: LogLevel = .info,
     allocator: Allocator,
 
-    pub fn init(allocator: Allocator, runtime_path: []const u8, bundle_path: []const u8, container_id: []const u8) !Config {
-        return Config{
-            .runtime_path = try allocator.dupe(u8, runtime_path),
-            .bundle_path = try allocator.dupe(u8, bundle_path),
-            .container_id = try allocator.dupe(u8, container_id),
+    pub fn init(allocator: Allocator) !RuntimeConfig {
+        return RuntimeConfig{
             .allocator = allocator,
         };
     }
 
-    pub fn deinit(self: *Config) void {
-        self.allocator.free(self.runtime_path);
-        self.allocator.free(self.bundle_path);
-        self.allocator.free(self.container_id);
+    pub fn deinit(self: *RuntimeConfig) void {
+        if (self.root_path) |path| {
+            self.allocator.free(path);
+        }
+        if (self.log_path) |path| {
+            self.allocator.free(path);
+        }
     }
 };
 
+pub const JsonConfig = struct {
+    runtime: ?RuntimeConfig = null,
+    proxmox: ?ProxmoxConfig = null,
+    storage: ?StorageConfig = null,
+    network: ?NetworkConfig = null,
+};
+
 pub const StorageConfig = struct {
-    type: StorageType,
-    source: []const u8,
-    destination: []const u8,
-    options: ?[]const []const u8 = null,
+    zfs_dataset: ?[]const u8 = null,
+    image_path: ?[]const u8 = null,
     allocator: Allocator,
 
     pub fn init(allocator: Allocator) !StorageConfig {
         return StorageConfig{
-            .type = .bind,
-            .source = "",
-            .destination = "",
-            .options = null,
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *StorageConfig) void {
-        self.allocator.free(self.source);
-        self.allocator.free(self.destination);
-        if (self.options) |options| {
-            for (options) |option| {
-                self.allocator.free(option);
-            }
-            self.allocator.free(options);
+        if (self.zfs_dataset) |dataset| {
+            self.allocator.free(dataset);
+        }
+        if (self.image_path) |path| {
+            self.allocator.free(path);
         }
     }
 };
@@ -782,4 +747,470 @@ pub const ResourceLimits = struct {
     cpu_quota: ?u32 = null,
     cpu_period: ?u32 = null,
     pids: ?u32 = null,
+};
+
+pub const RuntimeOptions = struct {
+    root: ?[]const u8 = null,
+    log: ?[]const u8 = null,
+    log_format: ?[]const u8 = null,
+    systemd_cgroup: bool = false,
+    bundle: ?[]const u8 = null,
+    pid_file: ?[]const u8 = null,
+    console_socket: ?[]const u8 = null,
+    debug: bool = false,
+    allocator: Allocator,
+
+    pub fn init(allocator: Allocator) RuntimeOptions {
+        return RuntimeOptions{
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *RuntimeOptions) void {
+        if (self.root) |root| {
+            self.allocator.free(root);
+        }
+        if (self.log) |log| {
+            self.allocator.free(log);
+        }
+        if (self.log_format) |log_format| {
+            self.allocator.free(log_format);
+        }
+        if (self.bundle) |bundle| {
+            self.allocator.free(bundle);
+        }
+        if (self.pid_file) |pid_file| {
+            self.allocator.free(pid_file);
+        }
+        if (self.console_socket) |console_socket| {
+            self.allocator.free(console_socket);
+        }
+    }
+};
+
+pub const Command = enum {
+    create,
+    start,
+    state,
+    kill,
+    delete,
+    help,
+    generate_config,
+    unknown,
+};
+
+pub const ProxmoxConfig = struct {
+    hosts: ?[]const []const u8 = null,
+    port: ?u16 = null,
+    token: ?[]const u8 = null,
+    node: ?[]const u8 = null,
+    allocator: Allocator,
+
+    pub fn init(allocator: Allocator) !ProxmoxConfig {
+        return ProxmoxConfig{
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *ProxmoxConfig) void {
+        if (self.hosts) |hosts| {
+            for (hosts) |host| {
+                self.allocator.free(host);
+            }
+            self.allocator.free(hosts);
+        }
+        if (self.token) |token| {
+            self.allocator.free(token);
+        }
+        if (self.node) |node| {
+            self.allocator.free(node);
+        }
+    }
+};
+
+pub const LoggerError = error{
+    WriterError,
+    AllocationError,
+    NotInitialized,
+    OutOfMemory,
+    DiskQuota,
+    FileTooBig,
+    InputOutput,
+    NoSpaceLeft,
+    DeviceBusy,
+    InvalidArgument,
+    AccessDenied,
+    BrokenPipe,
+    SystemResources,
+    OperationAborted,
+    NotOpenForWriting,
+    LockViolation,
+    WouldBlock,
+    ConnectionResetByPeer,
+    Unexpected,
+};
+
+pub const LogContext = struct {
+    allocator: std.mem.Allocator,
+    level: LogLevel,
+    name: []const u8,
+    file: ?std.fs.File = null,
+    writer: std.fs.File.Writer,
+
+    pub fn init(allocator: std.mem.Allocator, writer: std.fs.File.Writer, level: LogLevel, name: []const u8) !LogContext {
+        return LogContext{
+            .allocator = allocator,
+            .level = level,
+            .name = try allocator.dupe(u8, name),
+            .file = null,
+            .writer = writer,
+        };
+    }
+
+    pub fn initWithFile(allocator: std.mem.Allocator, file: std.fs.File, level: LogLevel, name: []const u8) !LogContext {
+        return LogContext{
+            .allocator = allocator,
+            .level = level,
+            .name = try allocator.dupe(u8, name),
+            .file = file,
+            .writer = file.writer(),
+        };
+    }
+
+    pub fn deinit(self: *LogContext) void {
+        self.allocator.free(self.name);
+        if (self.file) |file| {
+            file.close();
+        }
+    }
+
+    pub fn debug(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
+        if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.debug)) {
+            self.writer.print("[DEBUG] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
+                return switch (write_err) {
+                    error.DiskQuota => LoggerError.DiskQuota,
+                    error.FileTooBig => LoggerError.FileTooBig,
+                    error.InputOutput => LoggerError.InputOutput,
+                    error.NoSpaceLeft => LoggerError.NoSpaceLeft,
+                    error.DeviceBusy => LoggerError.DeviceBusy,
+                    error.InvalidArgument => LoggerError.InvalidArgument,
+                    error.AccessDenied => LoggerError.AccessDenied,
+                    error.BrokenPipe => LoggerError.BrokenPipe,
+                    error.SystemResources => LoggerError.SystemResources,
+                    error.OperationAborted => LoggerError.OperationAborted,
+                    error.NotOpenForWriting => LoggerError.NotOpenForWriting,
+                    error.LockViolation => LoggerError.LockViolation,
+                    error.WouldBlock => LoggerError.WouldBlock,
+                    error.ConnectionResetByPeer => LoggerError.ConnectionResetByPeer,
+                    error.Unexpected => LoggerError.Unexpected,
+                };
+            };
+        }
+    }
+
+    pub fn info(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
+        if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.info)) {
+            self.writer.print("[INFO] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
+                return switch (write_err) {
+                    error.DiskQuota => LoggerError.DiskQuota,
+                    error.FileTooBig => LoggerError.FileTooBig,
+                    error.InputOutput => LoggerError.InputOutput,
+                    error.NoSpaceLeft => LoggerError.NoSpaceLeft,
+                    error.DeviceBusy => LoggerError.DeviceBusy,
+                    error.InvalidArgument => LoggerError.InvalidArgument,
+                    error.AccessDenied => LoggerError.AccessDenied,
+                    error.BrokenPipe => LoggerError.BrokenPipe,
+                    error.SystemResources => LoggerError.SystemResources,
+                    error.OperationAborted => LoggerError.OperationAborted,
+                    error.NotOpenForWriting => LoggerError.NotOpenForWriting,
+                    error.LockViolation => LoggerError.LockViolation,
+                    error.WouldBlock => LoggerError.WouldBlock,
+                    error.ConnectionResetByPeer => LoggerError.ConnectionResetByPeer,
+                    error.Unexpected => LoggerError.Unexpected,
+                };
+            };
+        }
+    }
+
+    pub fn warn(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
+        if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.warn)) {
+            self.writer.print("[WARN] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
+                return switch (write_err) {
+                    error.DiskQuota => LoggerError.DiskQuota,
+                    error.FileTooBig => LoggerError.FileTooBig,
+                    error.InputOutput => LoggerError.InputOutput,
+                    error.NoSpaceLeft => LoggerError.NoSpaceLeft,
+                    error.DeviceBusy => LoggerError.DeviceBusy,
+                    error.InvalidArgument => LoggerError.InvalidArgument,
+                    error.AccessDenied => LoggerError.AccessDenied,
+                    error.BrokenPipe => LoggerError.BrokenPipe,
+                    error.SystemResources => LoggerError.SystemResources,
+                    error.OperationAborted => LoggerError.OperationAborted,
+                    error.NotOpenForWriting => LoggerError.NotOpenForWriting,
+                    error.LockViolation => LoggerError.LockViolation,
+                    error.WouldBlock => LoggerError.WouldBlock,
+                    error.ConnectionResetByPeer => LoggerError.ConnectionResetByPeer,
+                    error.Unexpected => LoggerError.Unexpected,
+                };
+            };
+        }
+    }
+
+    pub fn err(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
+        if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.err)) {
+            self.writer.print("[ERROR] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
+                return switch (write_err) {
+                    error.DiskQuota => LoggerError.DiskQuota,
+                    error.FileTooBig => LoggerError.FileTooBig,
+                    error.InputOutput => LoggerError.InputOutput,
+                    error.NoSpaceLeft => LoggerError.NoSpaceLeft,
+                    error.DeviceBusy => LoggerError.DeviceBusy,
+                    error.InvalidArgument => LoggerError.InvalidArgument,
+                    error.AccessDenied => LoggerError.AccessDenied,
+                    error.BrokenPipe => LoggerError.BrokenPipe,
+                    error.SystemResources => LoggerError.SystemResources,
+                    error.OperationAborted => LoggerError.OperationAborted,
+                    error.NotOpenForWriting => LoggerError.NotOpenForWriting,
+                    error.LockViolation => LoggerError.LockViolation,
+                    error.WouldBlock => LoggerError.WouldBlock,
+                    error.ConnectionResetByPeer => LoggerError.ConnectionResetByPeer,
+                    error.Unexpected => LoggerError.Unexpected,
+                };
+            };
+        }
+    }
+};
+
+pub const ErrorContext = struct {
+    message: []const u8,
+    error_type: Error,
+    source: ?[]const u8 = null,
+    details: ?[]const u8 = null,
+
+    pub fn init(allocator: std.mem.Allocator, message: []const u8, error_type: Error, source: ?[]const u8, details: ?[]const u8) !ErrorContext {
+        return ErrorContext{
+            .message = try allocator.dupe(u8, message),
+            .error_type = error_type,
+            .source = if (source) |s| try allocator.dupe(u8, s) else null,
+            .details = if (details) |d| try allocator.dupe(u8, d) else null,
+        };
+    }
+
+    pub fn deinit(self: *ErrorContext, allocator: std.mem.Allocator) void {
+        allocator.free(self.message);
+        if (self.source) |s| allocator.free(s);
+        if (self.details) |d| allocator.free(d);
+    }
+
+    pub fn format(self: ErrorContext, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
+        try writer.print("Error: {s} ({s})", .{ self.message, @errorName(self.error_type) });
+        if (self.source) |s| try writer.print(" in {s}", .{s});
+        if (self.details) |d| try writer.print(": {s}", .{d});
+    }
+};
+
+pub const Error = error{
+    // Configuration errors
+    ConfigNotFound,
+    ConfigInvalid,
+    InvalidConfig,
+    InvalidToken,
+
+    // Proxmox API errors
+    ProxmoxAPIError,
+    ProxmoxConnectionError,
+    ProxmoxAuthError,
+    ProxmoxResourceNotFound,
+    ProxmoxOperationFailed,
+    ProxmoxInvalidResponse,
+    ProxmoxInvalidConfig,
+    ProxmoxInvalidNode,
+    ProxmoxInvalidVMID,
+    ProxmoxInvalidToken,
+    ProxmoxConnectionFailed,
+    ProxmoxTimeout,
+    ProxmoxResourceExists,
+    ProxmoxInvalidState,
+    ProxmoxInvalidParameter,
+    ProxmoxPermissionDenied,
+    ProxmoxInternalError,
+
+    // CRI errors
+    PodNotFound,
+    ContainerNotFound,
+    InvalidPodSpec,
+    InvalidContainerSpec,
+    PodCreationFailed,
+    ContainerCreationFailed,
+    PodDeletionFailed,
+    ContainerDeletionFailed,
+
+    // Runtime errors
+    GRPCInitFailed,
+    GRPCBindFailed,
+    SocketError,
+    ResourceLimitExceeded,
+
+    // System errors
+    FileSystemError,
+    PermissionDenied,
+    NetworkError,
+
+    // New error type
+    ClusterUnhealthy,
+
+    ContainerAlreadyExists,
+    InvalidContainerID,
+    InvalidContainerName,
+    InvalidContainerConfig,
+    ContainerStartFailed,
+    ContainerStopFailed,
+    ContainerDeleteFailed,
+    ContainerStateError,
+    StorageError,
+    OCIError,
+    OutOfMemory,
+    InvalidArgument,
+    SystemError,
+    UnknownError,
+
+    InvalidArguments,
+    UnknownCommand,
+    UnexpectedArgument,
+    InvalidConfigFormat,
+    InvalidLogPath,
+    FailedToCreateLogFile,
+    FailedToParseConfig,
+    WriterError,
+    AllocationError,
+    NotInitialized,
+};
+
+pub const ContainerFactory = struct {
+    allocator: std.mem.Allocator,
+    logger: *LogContext,
+
+    pub fn init(allocator: std.mem.Allocator, logger_ctx: *LogContext) !ContainerFactory {
+        return ContainerFactory{
+            .allocator = allocator,
+            .logger = logger_ctx,
+        };
+    }
+
+    pub fn createManager(self: *ContainerFactory, spec: ContainerSpec) !ContainerManager {
+        var manager = try ContainerManager.init(self.allocator, self.logger);
+        errdefer manager.deinit();
+
+        try manager.create(spec);
+        return manager;
+    }
+};
+
+pub const ProxmoxContainerConfig = struct {
+    ostemplate: []const u8,
+    hostname: ?[]const u8 = null,
+    memory: ?u64 = null,
+    swap: ?u64 = null,
+    cores: ?u32 = null,
+    cpulimit: ?u32 = null,
+    rootfs: struct {
+        volume: []const u8,
+        size: []const u8,
+    },
+    net0: ?struct {
+        name: []const u8,
+        bridge: []const u8,
+        ip: ?[]const u8 = null,
+        gw: ?[]const u8 = null,
+    } = null,
+    unprivileged: bool = true,
+    features: struct {
+        nesting: bool = false,
+    } = .{ .nesting = false },
+};
+
+pub const Config = struct {
+    allocator: std.mem.Allocator,
+    runtime_type: RuntimeType,
+    runtime_path: ?[]const u8,
+    proxmox: ProxmoxConfig,
+    storage: StorageConfig,
+    network: NetworkConfig,
+    logger: *LogContext,
+    container_config: ContainerConfig,
+    log_path: ?[]const u8,
+    root_path: []const u8,
+    bundle_path: []const u8,
+    pid_file: ?[]const u8,
+    console_socket: ?[]const u8,
+    systemd_cgroup: bool,
+    debug: bool,
+
+    pub fn init(allocator: std.mem.Allocator, logger_ctx: *LogContext) !Config {
+        return Config{
+            .allocator = allocator,
+            .runtime_type = .runc,
+            .runtime_path = null,
+            .proxmox = try ProxmoxConfig.init(allocator),
+            .storage = try StorageConfig.init(allocator),
+            .network = try NetworkConfig.init(allocator),
+            .logger = logger_ctx,
+            .container_config = ContainerConfig{
+                .crun_name_patterns = &[_][]const u8{
+                    "crun-*",
+                    "oci-*",
+                    "podman-*",
+                },
+                .default_container_type = .lxc,
+            },
+            .log_path = null,
+            .root_path = "/var/run/proxmox-lxcri",
+            .bundle_path = "/var/lib/proxmox-lxcri",
+            .pid_file = null,
+            .console_socket = null,
+            .systemd_cgroup = false,
+            .debug = false,
+        };
+    }
+
+    pub fn deinit(self: *Config) void {
+        self.runtime_path = null;
+        self.proxmox.deinit();
+        self.storage.deinit();
+        self.network.deinit();
+        if (self.log_path) |path| {
+            self.allocator.free(path);
+        }
+        if (self.pid_file) |file| {
+            self.allocator.free(file);
+        }
+        if (self.console_socket) |socket| {
+            self.allocator.free(socket);
+        }
+    }
+};
+
+pub const LinuxContainerConfig = struct {
+    // TODO: add fields
+    pub fn deinit(self: *LinuxContainerConfig, allocator: std.mem.Allocator) void {
+        _ = self;
+        _ = allocator;
+    }
+};
+
+pub const ContainerManager = struct {
+    pub fn init(allocator: std.mem.Allocator, logger: *LogContext) !ContainerManager {
+        _ = allocator;
+        _ = logger;
+        return ContainerManager{};
+    }
+    pub fn deinit(self: *ContainerManager) void {
+        _ = self;
+    }
+    pub fn create(self: *ContainerManager, spec: ContainerSpec) !void {
+        _ = self;
+        _ = spec;
+    }
 };

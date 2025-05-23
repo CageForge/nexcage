@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("types.zig");
+const types = @import("types");
 const json = std.json;
 
 pub const ManifestError = error{

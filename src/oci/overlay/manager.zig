@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("types.zig");
+const types = @import("types");
 const overlay = @import("overlay.zig");
 const image = @import("../image.zig");
 

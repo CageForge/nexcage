@@ -1,7 +1,7 @@
 const std = @import("std");
 const os = std.os;
 const fs = std.fs;
-const types = @import("types.zig");
+const types = @import("types");
 
 pub const UmociError = error{
     CommandFailed,

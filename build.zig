@@ -21,12 +21,12 @@ pub fn build(b: *std.Build) void {
 
     // Core modules
     const types_mod = b.addModule("types", .{
-        .root_source_file = b.path("src/types.zig"),
+        .root_source_file = b.path("src/common/types.zig"),
     });
 
     // Error module
     const error_mod = b.addModule("error", .{
-        .root_source_file = b.path("src/error.zig"),
+        .root_source_file = b.path("src/common/error.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
         },
@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) void {
 
     // Logger module
     const logger_mod = b.addModule("logger", .{
-        .root_source_file = b.path("src/logger.zig"),
+        .root_source_file = b.path("src/common/logger.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) void {
 
     // Config module
     const config_mod = b.addModule("config", .{
-        .root_source_file = b.path("src/config.zig"),
+        .root_source_file = b.path("src/common/config.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
@@ -82,7 +82,7 @@ pub fn build(b: *std.Build) void {
 
     // JSON parser module
     const json_mod = b.addModule("json", .{
-        .root_source_file = b.path("src/custom_json_parser.zig"),
+        .root_source_file = b.path("src/common/custom_json_parser.zig"),
         .imports = &.{
             .{ .name = "json", .module = zigJsonDep.module("zig-json") },
         },
@@ -98,16 +98,6 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const lxc_container_mod = b.addModule("lxc_container", .{
-        .root_source_file = b.path("src/container/lxc.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-            .{ .name = "container", .module = container_mod },
-        },
-    });
-
     // Crun container module (опціональний)
     const crun_container_mod = if (use_crun) b.addModule("crun_container", .{
         .root_source_file = b.path("src/container/crun.zig"),
@@ -119,16 +109,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "crun", .module = crunDep.?.module("crun") },
         },
     }) else null;
-
-    const vm_container_mod = b.addModule("vm_container", .{
-        .root_source_file = b.path("src/container/vm.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-            .{ .name = "container", .module = container_mod },
-        },
-    });
 
     // OCI runtime
     const oci_mod = b.addModule("oci", .{
@@ -144,8 +124,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
             .{ .name = "container", .module = container_mod },
-            .{ .name = "lxc_container", .module = lxc_container_mod },
-            .{ .name = "vm_container", .module = vm_container_mod },
             .{ .name = "crun_container", .module = crun_container_mod.? },
         } else &.{
             .{ .name = "types", .module = types_mod },
@@ -158,8 +136,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
             .{ .name = "container", .module = container_mod },
-            .{ .name = "lxc_container", .module = lxc_container_mod },
-            .{ .name = "vm_container", .module = vm_container_mod },
         },
     });
 
@@ -181,8 +157,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("zfs", zfs_mod);
     exe.root_module.addImport("json", json_mod);
     exe.root_module.addImport("container", container_mod);
-    exe.root_module.addImport("lxc_container", lxc_container_mod);
-    exe.root_module.addImport("vm_container", vm_container_mod);
     if (use_crun) {
         exe.root_module.addImport("crun_container", crun_container_mod.?);
         exe.root_module.addImport("crun", crunDep.?.module("crun"));
@@ -198,16 +172,20 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
-
     // Tests
-    const main_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
+    const config_test = b.addTest(.{
+        .root_source_file = b.path("tests/config_test.zig"),
         .target = target,
         .optimize = optimize,
     });
 
+    config_test.root_module.addImport("types", types_mod);
+    config_test.root_module.addImport("error", error_mod);
+    config_test.root_module.addImport("logger", logger_mod);
+    config_test.root_module.addImport("config", config_mod);
+    config_test.root_module.addImport("json", zigJsonDep.module("zig-json"));
+
+    const run_config_test = b.addRunArtifact(config_test);
     const test_step = b.step("test", "Run library tests");
-    test_step.dependOn(&main_tests.step);
+    test_step.dependOn(&run_config_test.step);
 }

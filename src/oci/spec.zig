@@ -3,13 +3,13 @@ const fs = std.fs;
 const mem = std.mem;
 const json = std.json;
 const logger = @import("logger");
-const oci_types = @import("types.zig");
+const oci_types = @import("types");
 const errors = @import("error");
 const common = @import("common");
 const create = @import("create.zig");
 const StorageConfig = create.StorageConfig;
 const Allocator = std.mem.Allocator;
-const types = @import("types.zig");
+const types = @import("types");
 
 pub const Process = oci_types.Process;
 pub const User = oci_types.User;

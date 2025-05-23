@@ -1,5 +1,6 @@
 const std = @import("std");
 const logger = @import("logger");
+const types = @import("types");
 
 pub const Error = error{
     // Configuration errors
@@ -78,38 +79,8 @@ pub const Error = error{
     NotInitialized,
 };
 
-pub const ErrorContext = struct {
-    message: []const u8,
-    error_type: Error,
-    source: ?[]const u8 = null,
-    details: ?[]const u8 = null,
-
-    pub fn init(allocator: std.mem.Allocator, message: []const u8, error_type: Error, source: ?[]const u8, details: ?[]const u8) !ErrorContext {
-        return ErrorContext{
-            .message = try allocator.dupe(u8, message),
-            .error_type = error_type,
-            .source = if (source) |s| try allocator.dupe(u8, s) else null,
-            .details = if (details) |d| try allocator.dupe(u8, d) else null,
-        };
-    }
-
-    pub fn deinit(self: *ErrorContext, allocator: std.mem.Allocator) void {
-        allocator.free(self.message);
-        if (self.source) |s| allocator.free(s);
-        if (self.details) |d| allocator.free(d);
-    }
-
-    pub fn format(self: ErrorContext, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
-        try writer.print("Error: {s} ({s})", .{ self.message, @errorName(self.error_type) });
-        if (self.source) |s| try writer.print(" in {s}", .{s});
-        if (self.details) |d| try writer.print(": {s}", .{d});
-    }
-};
-
 pub fn handleError(allocator: std.mem.Allocator, err: anyerror, context: []const u8) !void {
-    const error_context = try ErrorContext.init(allocator, @errorName(err), err, context, null);
+    const error_context = try types.ErrorContext.init(allocator, @errorName(err), err, context, null);
     defer error_context.deinit(allocator);
 
     try logger.err("{any}", .{error_context});
@@ -117,7 +88,7 @@ pub fn handleError(allocator: std.mem.Allocator, err: anyerror, context: []const
 }
 
 pub fn handleErrorWithDetails(allocator: std.mem.Allocator, err: anyerror, context: []const u8, details: []const u8) !void {
-    const error_context = try ErrorContext.init(allocator, @errorName(err), err, context, details);
+    const error_context = try types.ErrorContext.init(allocator, @errorName(err), err, context, details);
     defer error_context.deinit(allocator);
 
     try logger.err("{any}", .{error_context});
