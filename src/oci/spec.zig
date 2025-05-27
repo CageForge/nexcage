@@ -26,6 +26,13 @@ pub const Root = struct {
     pub fn deinit(self: *const Root, allocator: Allocator) void {
         allocator.free(self.path);
     }
+
+    pub fn init() Root {
+        return Root{
+            .path = "",
+            .readonly = false,
+        };
+    }
 };
 
 pub const Mount = struct {
@@ -60,13 +67,13 @@ pub const Spec = struct {
     pub fn init(allocator: Allocator) !Spec {
         return Spec{
             .oci_version = "1.0.2",
-            .process = try Process.init(allocator),
-            .root = try Root.init(allocator),
+            .process = try Process.init(),
+            .root = Root.init(),
             .hostname = "",
             .mounts = &[_]Mount{},
             .linux = null,
             .annotations = null,
-            .storage = try StorageConfig.init(allocator),
+            .storage = StorageConfig.init(allocator, create.StorageType.zfs, null, null),
         };
     }
 

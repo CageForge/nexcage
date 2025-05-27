@@ -1,8 +1,8 @@
 const std = @import("std");
 const log = @import("logger").log;
 const Allocator = std.mem.Allocator;
-const Container = @import("container").Container;
-const ContainerConfig = @import("container").ContainerConfig;
+// const Container = @import("container").Container;
+// const ContainerConfig = @import("container").ContainerConfig;
 const ContainerState = @import("../types.zig").ContainerState;
 const Error = @import("error").Error;
 const image = @import("../image/mod.zig");

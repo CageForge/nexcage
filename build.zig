@@ -47,6 +47,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
         },
     });
 
@@ -88,16 +89,6 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Container management
-    const container_mod = b.addModule("container", .{
-        .root_source_file = b.path("src/container/container.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
-
     // Crun container module (опціональний)
     const crun_container_mod = if (use_crun) b.addModule("crun_container", .{
         .root_source_file = b.path("src/container/crun.zig"),
@@ -105,7 +96,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
-            .{ .name = "container", .module = container_mod },
             .{ .name = "crun", .module = crunDep.?.module("crun") },
         },
     }) else null;
@@ -123,7 +113,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
-            .{ .name = "container", .module = container_mod },
             .{ .name = "crun_container", .module = crun_container_mod.? },
         } else &.{
             .{ .name = "types", .module = types_mod },
@@ -135,7 +124,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
-            .{ .name = "container", .module = container_mod },
         },
     });
 
@@ -149,6 +137,7 @@ pub fn build(b: *std.Build) void {
     // Add dependencies
     exe.root_module.addImport("types", types_mod);
     exe.root_module.addImport("error", error_mod);
+    exe.root_module.addImport("config", config_mod);
     exe.root_module.addImport("logger", logger_mod);
     exe.root_module.addImport("network", network_mod);
     exe.root_module.addImport("proxmox", proxmox_mod);
@@ -156,7 +145,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("json", zigJsonDep.module("zig-json"));
     exe.root_module.addImport("zfs", zfs_mod);
     exe.root_module.addImport("json", json_mod);
-    exe.root_module.addImport("container", container_mod);
     if (use_crun) {
         exe.root_module.addImport("crun_container", crun_container_mod.?);
         exe.root_module.addImport("crun", crunDep.?.module("crun"));

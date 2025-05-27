@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const log = @import("logger").log;
 const Error = @import("error").Error;
-const ContainerType = @import("container").ContainerType;
+// const ContainerType = @import("container").ContainerType;
 
 const RoutingRule = struct {
     pattern: []const u8,

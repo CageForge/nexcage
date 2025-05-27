@@ -76,6 +76,20 @@ pub const StorageConfig = struct {
     type: StorageType,
     storage_path: ?[]const u8 = null,
     storage_pool: ?[]const u8 = null,
+
+    pub fn init(allocator: std.mem.Allocator, storage_type: StorageType, storage_path: ?[]const u8, storage_pool: ?[]const u8) StorageConfig {
+        return StorageConfig{
+            .type = storage_type,
+            .storage_path = if (storage_path) |sp| allocator.dupe(u8, sp) catch null else null,
+            .storage_pool = if (storage_pool) |sp| allocator.dupe(u8, sp) catch null else null,
+        };
+    }
+
+    pub fn deinit(self: *StorageConfig, allocator: std.mem.Allocator) void {
+        _ = self;
+        _ = allocator;
+        // Nothing to free
+    }
 };
 
 pub const CreateOptions = struct {

@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const json = @import("zig-json");
-const container = @import("container");
 
 pub const ContainerStatus = enum {
     running,
@@ -10,11 +9,10 @@ pub const ContainerStatus = enum {
     unknown,
 };
 
-pub const PodStatus = enum {
-    pending,
-    running,
-    stopped,
-    unknown,
+pub const ContainerType = enum {
+    crun,
+    lxc,
+    vm,
 };
 
 pub const LogLevel = enum {
@@ -29,7 +27,7 @@ pub const LogLevel = enum {
         try writer.writeByte('"');
     }
 
-    pub fn jsonParse(allocator: Allocator, source: anytype, options: json.ParseOptions) !LogLevel {
+    pub fn jsonParse(source: anytype) !LogLevel {
         if (source == .string) {
             return fromString(source.string);
         }
@@ -75,7 +73,7 @@ pub const ContainerConfig = struct {
     log_path: ?[]const u8,
     allocator: Allocator,
     crun_name_patterns: []const []const u8,
-    default_container_type: container.ContainerType,
+    default_container_type: ContainerType,
 
     pub fn init(allocator: Allocator) !ContainerConfig {
         return ContainerConfig{
@@ -200,15 +198,38 @@ pub const ContainerSpec = struct {
 };
 
 pub const Container = struct {
-    id: []const u8,
-    name: []const u8,
-    status: ContainerStatus,
-    spec: ContainerSpec,
+    allocator: Allocator,
+    config: ContainerConfig,
+    state: ContainerState,
+    pid: ?i32,
 
-    pub fn deinit(self: *Container, allocator: Allocator) void {
-        allocator.free(self.id);
-        allocator.free(self.name);
-        self.spec.deinit(allocator);
+    pub fn init(allocator: Allocator, config: *ContainerConfig) !*Container {
+        const container = try allocator.create(Container);
+        container.* = Container{
+            .allocator = allocator,
+            .config = config.*,
+            .state = .created,
+            .pid = null,
+        };
+        return container;
+    }
+
+    pub fn deinit(self: *Container) void {
+        self.allocator.destroy(self);
+    }
+
+    pub fn start(self: *Container, routing_config: anytype) !void {
+        _ = self;
+        _ = routing_config;
+        // TODO: реалізувати запуск контейнера
+    }
+    pub fn stop(self: *Container, routing_config: anytype) !void {
+        _ = self;
+        _ = routing_config;
+        // TODO: реалізувати зупинку контейнера
+    }
+    pub fn getState(self: *Container) ContainerState {
+        return self.state;
     }
 };
 
@@ -246,6 +267,21 @@ pub const NetworkConfig = struct {
     mtu: ?u32 = null,
     dns_servers: ?[]const []const u8 = null,
     allocator: Allocator,
+
+    pub fn init(allocator: Allocator) !NetworkConfig {
+        return NetworkConfig{
+            .name = "",
+            .bridge = "",
+            .ip = "",
+            .gw = null,
+            .type = null,
+            .tag = null,
+            .rate = null,
+            .mtu = null,
+            .dns_servers = null,
+            .allocator = allocator,
+        };
+    }
 
     pub fn deinit(self: *NetworkConfig, allocator: Allocator) void {
         allocator.free(self.name);
@@ -526,29 +562,12 @@ pub const Annotation = struct {
     }
 };
 
-pub const ContainerState = struct {
-    oci_version: []const u8,
-    id: []const u8,
-    status: []const u8,
-    pid: i64,
-    bundle: []const u8,
-    annotations: ?std.StringHashMap([]const u8) = null,
-    allocator: std.mem.Allocator,
-
-    pub fn deinit(self: *ContainerState) void {
-        if (self.annotations) |*annotations| {
-            var it = annotations.iterator();
-            while (it.next()) |entry| {
-                self.allocator.free(entry.key_ptr.*);
-                self.allocator.free(entry.value_ptr.*);
-            }
-            annotations.deinit();
-        }
-        self.allocator.free(self.oci_version);
-        self.allocator.free(self.id);
-        self.allocator.free(self.status);
-        self.allocator.free(self.bundle);
-    }
+pub const ContainerState = enum {
+    created,
+    running,
+    stopped,
+    deleted,
+    unknown,
 };
 
 pub const RlimitType = enum {
@@ -638,6 +657,23 @@ pub const Process = struct {
     capabilities: ?Capabilities = null,
     rlimits: ?[]Rlimit = null,
     no_new_privileges: bool = false,
+
+    pub fn init() !Process {
+        return Process{
+            .terminal = false,
+            .user = User{
+                .uid = 0,
+                .gid = 0,
+                .additionalGids = null,
+            },
+            .args = &[_][]const u8{},
+            .env = &[_][]const u8{},
+            .cwd = "",
+            .capabilities = null,
+            .rlimits = null,
+            .no_new_privileges = false,
+        };
+    }
 
     pub fn deinit(self: *const Process, allocator: Allocator) void {
         self.user.deinit(allocator);

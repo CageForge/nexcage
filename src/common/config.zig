@@ -4,7 +4,7 @@ const logger = @import("logger");
 const types = @import("types");
 const errors = @import("error");
 const RuntimeType = types.RuntimeType;
-const container = @import("container");
+// const container = @import("container");
 
 pub const ConfigError = error{
     UnknownField,
@@ -56,7 +56,7 @@ pub const Config = struct {
     proxmox: ProxmoxConfig,
     storage: StorageConfig,
     network: NetworkConfig,
-    logger: *logger.LogContext,
+    logger: *types.LogContext,
     container_config: ContainerConfig,
     log_path: ?[]const u8,
     root_path: []const u8,
@@ -66,7 +66,14 @@ pub const Config = struct {
     systemd_cgroup: bool,
     debug: bool,
 
-    pub fn init(allocator: std.mem.Allocator, logger_ctx: *logger.LogContext) !Config {
+    pub fn init(allocator: std.mem.Allocator, logger_ctx: *types.LogContext) !Config {
+        var container_cfg = try ContainerConfig.init(allocator);
+        container_cfg.crun_name_patterns = &[_][]const u8{
+            "crun-*",
+            "oci-*",
+            "podman-*",
+        };
+        container_cfg.default_container_type = .lxc;
         return Config{
             .allocator = allocator,
             .runtime_type = .runc,
@@ -75,14 +82,7 @@ pub const Config = struct {
             .storage = try StorageConfig.init(allocator),
             .network = try NetworkConfig.init(allocator),
             .logger = logger_ctx,
-            .container_config = ContainerConfig{
-                .crun_name_patterns = &[_][]const u8{
-                    "crun-*",
-                    "oci-*",
-                    "podman-*",
-                },
-                .default_container_type = .lxc,
-            },
+            .container_config = container_cfg,
             .log_path = null,
             .root_path = "/var/run/proxmox-lxcri",
             .bundle_path = "/var/lib/proxmox-lxcri",
@@ -97,7 +97,7 @@ pub const Config = struct {
         self.runtime_path = null;
         self.proxmox.deinit();
         self.storage.deinit();
-        self.network.deinit();
+        self.network.deinit(self.allocator);
         if (self.log_path) |path| {
             self.allocator.free(path);
         }
@@ -185,7 +185,7 @@ pub const Config = struct {
     return config;
 }
 
-    pub fn getContainerType(self: *Config, container_name: []const u8) container.ContainerType {
+    pub fn getContainerType(self: *Config, container_name: []const u8) types.ContainerType {
         for (self.container_config.crun_name_patterns) |pattern| {
             if (self.matchesPattern(container_name, pattern)) {
                 return .crun;

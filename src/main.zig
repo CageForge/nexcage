@@ -25,7 +25,7 @@ const image = @import("image");
 const zfs = @import("zfs");
 const lxc = @import("lxc");
 const json_parser = @import("json");
-const container_mod = @import("container");
+// const container_mod = @import("container");
 const spec_mod = @import("oci").spec;
 const RuntimeType = @import("oci").runtime.RuntimeType;
 
@@ -597,7 +597,7 @@ pub fn main() !void {
 
     // Створюємо специфікацію контейнера
     var container_spec = try spec_mod.Spec.init(allocator);
-    defer container_spec.deinit();
+    defer container_spec.deinit(allocator);
 
     // Встановлюємо базові параметри
     container_spec.oci_version = "1.0.2";
@@ -607,24 +607,23 @@ pub fn main() !void {
     container_spec.root.path = "/var/lib/containers/rootfs";
     container_spec.root.readonly = false;
 
-    // Створюємо контейнер
-    var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
-    defer container_instance.deinit();
+    // var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
+    // defer container_instance.deinit();
 
-    // Створюємо контейнер
-    try container_instance.create();
+    // // Створюємо контейнер
+    // try container_instance.create();
 
-    // Запускаємо контейнер
-    try container_instance.start();
+    // // Запускаємо контейнер
+    // try container_instance.start();
 
-    // Чекаємо завершення
-    std.time.sleep(std.time.ns_per_s * 5);
+    // // Чекаємо завершення
+    // std.time.sleep(std.time.ns_per_s * 5);
 
-    // Зупиняємо контейнер
-    try container_instance.kill(15);
+    // // Зупиняємо контейнер
+    // try container_instance.kill(15);
 
-    // Видаляємо контейнер
-    try container_instance.delete();
+    // // Видаляємо контейнер
+    // try container_instance.delete();
 }
 
 fn getConfigPath(allocator: Allocator) ![]const u8 {
