@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const oci = @import("../oci/spec.zig");
 const logger = std.log.scoped(.oci_adapter);
+const types = @import("../types.zig");
 
 pub const AdapterError = error{
     ConversionFailed,
@@ -9,28 +10,8 @@ pub const AdapterError = error{
     UnsupportedFeature,
 };
 
-pub const ProxmoxContainerConfig = struct {
-    ostemplate: []const u8,
-    hostname: ?[]const u8 = null,
-    memory: ?u64 = null,
-    swap: ?u64 = null,
-    cores: ?u32 = null,
-    cpulimit: ?u32 = null,
-    rootfs: struct {
-        volume: []const u8,
-        size: []const u8,
-    },
-    net0: ?struct {
-        name: []const u8,
-        bridge: []const u8,
-        ip: ?[]const u8 = null,
-        gw: ?[]const u8 = null,
-    } = null,
-    unprivileged: bool = true,
-    features: struct {
-        nesting: bool = false,
-    } = .{ .nesting = false },
-};
+// Для зворотної сумісності
+pub const ProxmoxContainerConfig = types.ProxmoxContainerConfig;
 
 pub fn convertOciToProxmox(allocator: Allocator, spec: *const oci.Spec) !ProxmoxContainerConfig {
     logger.info("Converting OCI spec to Proxmox config", .{});

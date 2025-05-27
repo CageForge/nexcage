@@ -59,4 +59,89 @@
 
 ## Notes
 - The methods `startLxc`, `startCrun`, `stopLxc`, and `stopCrun` are stubs and require implementation.
-- The `resume` function in the OCI container checks the container's state before resuming. 
+- The `resume` function in the OCI container checks the container's state before resuming.
+
+## Runtime
+
+### Інтерфейс
+
+```zig
+pub const Runtime = struct {
+    pub fn init(allocator: std.mem.Allocator, runtime_type: RuntimeType) !Runtime
+    pub fn deinit(self: *Runtime) void
+    pub fn create(self: *Runtime, spec: *Spec) !void
+    pub fn start(self: *Runtime, id: []const u8) !void
+    pub fn kill(self: *Runtime, id: []const u8, signal: u32) !void
+    pub fn delete(self: *Runtime, id: []const u8) !void
+}
+```
+
+### runc
+
+```zig
+pub const RuncRuntime = struct {
+    pub fn init(allocator: std.mem.Allocator) !RuncRuntime
+    pub fn deinit(self: *RuncRuntime) void
+    pub fn create(self: *RuncRuntime, spec: *Spec) !void
+    pub fn start(self: *RuncRuntime, id: []const u8) !void
+    pub fn kill(self: *RuncRuntime, id: []const u8, signal: u32) !void
+    pub fn delete(self: *RuncRuntime, id: []const u8) !void
+}
+```
+
+### crun
+
+```zig
+pub const CrunRuntime = struct {
+    pub fn init(allocator: std.mem.Allocator) !CrunRuntime
+    pub fn deinit(self: *CrunRuntime) void
+    pub fn create(self: *CrunRuntime, spec: *Spec) !void
+    pub fn start(self: *CrunRuntime, id: []const u8) !void
+    pub fn kill(self: *CrunRuntime, id: []const u8, signal: u32) !void
+    pub fn delete(self: *CrunRuntime, id: []const u8) !void
+}
+```
+
+## Контейнер
+
+```zig
+pub const Container = struct {
+    pub fn init(allocator: std.mem.Allocator, config: *Config, spec: *Spec, id: []const u8) !Container
+    pub fn deinit(self: *Container) void
+    pub fn create(self: *Container) !void
+    pub fn start(self: *Container) !void
+    pub fn kill(self: *Container, signal: u32) !void
+    pub fn delete(self: *Container) !void
+}
+```
+
+## Конфігурація
+
+```zig
+pub const Config = struct {
+    pub fn init(allocator: std.mem.Allocator) !Config
+    pub fn deinit(self: *Config) void
+    pub fn setRuntimeType(self: *Config, runtime_type: RuntimeType) void
+    pub fn setRuntimePath(self: *Config, path: []const u8) !void
+    pub fn getRuntimePath(self: *Config) ![]const u8
+}
+```
+
+## Специфікація
+
+```zig
+pub const Spec = struct {
+    pub fn init(allocator: std.mem.Allocator) !Spec
+    pub fn deinit(self: *Spec) void
+}
+```
+
+## Тести
+
+```zig
+test "runtime init"
+test "runtime create"
+test "runtime start"
+test "runtime kill"
+test "runtime delete"
+``` 

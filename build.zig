@@ -5,37 +5,49 @@ const fs = std.fs;
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-
+   
+    // Add dependency for zig-json
     const zigJsonDep = b.dependency("zig-json", .{
         .target = target,
         .optimize = optimize,
     });
 
+    // Опціональна залежність для crun
+    const use_crun = b.option(bool, "crun", "Enable crun runtime support") orelse false;
+    const crunDep = if (use_crun) b.dependency("crun", .{
+        .target = target,
+        .optimize = optimize,
+    }) else null;
+
     // Core modules
     const types_mod = b.addModule("types", .{
-        .root_source_file = b.path("src/types.zig"),
+        .root_source_file = b.path("src/common/types.zig"),
     });
 
+    // Error module
     const error_mod = b.addModule("error", .{
-        .root_source_file = b.path("src/error.zig"),
+        .root_source_file = b.path("src/common/error.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
         },
     });
 
+    // Logger module
     const logger_mod = b.addModule("logger", .{
-        .root_source_file = b.path("src/logger.zig"),
+        .root_source_file = b.path("src/common/logger.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
         },
     });
 
+    // Config module
     const config_mod = b.addModule("config", .{
-        .root_source_file = b.path("src/config.zig"),
+        .root_source_file = b.path("src/common/config.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
         },
     });
 
@@ -59,18 +71,6 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Pod management
-    const pod_mod = b.addModule("pod", .{
-        .root_source_file = b.path("src/pod/pod.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "network", .module = network_mod },
-            .{ .name = "logger", .module = logger_mod },
-            .{ .name = "config", .module = config_mod },
-        },
-    });
-
     // Proxmox integration
     const proxmox_mod = b.addModule("proxmox", .{
         .root_source_file = b.path("src/proxmox/proxmox.zig"),
@@ -78,77 +78,52 @@ pub fn build(b: *std.Build) void {
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
-            .{ .name = "pod", .module = pod_mod },
         },
     });
 
     // JSON parser module
     const json_mod = b.addModule("json", .{
-        .root_source_file = b.path("src/custom_json_parser.zig"),
+        .root_source_file = b.path("src/common/custom_json_parser.zig"),
         .imports = &.{
             .{ .name = "json", .module = zigJsonDep.module("zig-json") },
         },
     });
 
-    // Pause container module
-    const pause_mod = b.addModule("pause", .{
-        .root_source_file = b.path("src/pause/pause.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-            .{ .name = "zfs", .module = zfs_mod },
-        },
-    });
-
-    // Container management
-    const container_mod = b.addModule("container", .{
-        .root_source_file = b.path("src/container/container.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
-
-    const lxc_container_mod = b.addModule("lxc_container", .{
-        .root_source_file = b.path("src/container/lxc.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-            .{ .name = "container", .module = container_mod },
-        },
-    });
-
-    const crun_container_mod = b.addModule("crun_container", .{
+    // Crun container module (опціональний)
+    const crun_container_mod = if (use_crun) b.addModule("crun_container", .{
         .root_source_file = b.path("src/container/crun.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
-            .{ .name = "container", .module = container_mod },
+            .{ .name = "crun", .module = crunDep.?.module("crun") },
         },
-    });
+    }) else null;
 
     // OCI runtime
     const oci_mod = b.addModule("oci", .{
         .root_source_file = b.path("src/oci/mod.zig"),
-        .imports = &.{
+        .imports = if (use_crun) &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
-            .{ .name = "pod", .module = pod_mod },
             .{ .name = "proxmox", .module = proxmox_mod },
             .{ .name = "json", .module = zigJsonDep.module("zig-json") },
             .{ .name = "zfs", .module = zfs_mod },
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
-            .{ .name = "pause", .module = pause_mod },
-            .{ .name = "container", .module = container_mod },
-            .{ .name = "lxc_container", .module = lxc_container_mod },
-            .{ .name = "crun_container", .module = crun_container_mod },
+            .{ .name = "crun_container", .module = crun_container_mod.? },
+        } else &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "proxmox", .module = proxmox_mod },
+            .{ .name = "json", .module = zigJsonDep.module("zig-json") },
+            .{ .name = "zfs", .module = zfs_mod },
+            .{ .name = "network", .module = network_mod },
+            .{ .name = "config", .module = config_mod },
+            .{ .name = "json", .module = json_mod },
         },
     });
 
@@ -162,18 +137,18 @@ pub fn build(b: *std.Build) void {
     // Add dependencies
     exe.root_module.addImport("types", types_mod);
     exe.root_module.addImport("error", error_mod);
+    exe.root_module.addImport("config", config_mod);
     exe.root_module.addImport("logger", logger_mod);
     exe.root_module.addImport("network", network_mod);
-    exe.root_module.addImport("pod", pod_mod);
     exe.root_module.addImport("proxmox", proxmox_mod);
     exe.root_module.addImport("oci", oci_mod);
     exe.root_module.addImport("json", zigJsonDep.module("zig-json"));
     exe.root_module.addImport("zfs", zfs_mod);
     exe.root_module.addImport("json", json_mod);
-    exe.root_module.addImport("pause", pause_mod);
-    exe.root_module.addImport("container", container_mod);
-    exe.root_module.addImport("lxc_container", lxc_container_mod);
-    exe.root_module.addImport("crun_container", crun_container_mod);
+    if (use_crun) {
+        exe.root_module.addImport("crun_container", crun_container_mod.?);
+        exe.root_module.addImport("crun", crunDep.?.module("crun"));
+    }
 
     // Install
     b.installArtifact(exe);
@@ -185,16 +160,20 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
-
     // Tests
-    const main_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
+    const config_test = b.addTest(.{
+        .root_source_file = b.path("tests/config_test.zig"),
         .target = target,
         .optimize = optimize,
     });
 
+    config_test.root_module.addImport("types", types_mod);
+    config_test.root_module.addImport("error", error_mod);
+    config_test.root_module.addImport("logger", logger_mod);
+    config_test.root_module.addImport("config", config_mod);
+    config_test.root_module.addImport("json", zigJsonDep.module("zig-json"));
+
+    const run_config_test = b.addRunArtifact(config_test);
     const test_step = b.step("test", "Run library tests");
-    test_step.dependOn(&main_tests.step);
+    test_step.dependOn(&run_config_test.step);
 }

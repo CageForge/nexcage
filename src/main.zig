@@ -4,7 +4,7 @@ const os = std.os;
 const linux = os.linux;
 const posix = std.posix;
 const logger_mod = @import("logger");
-const config = @import("config.zig");
+const config = @import("config");
 const types = @import("types");
 const fs = std.fs;
 const builtin = @import("builtin");
@@ -19,12 +19,15 @@ const Uri = std.Uri;
 const Client = http.Client;
 const network = @import("network");
 const process = std.process;
-const oci_commands = @import("oci");
+const oci = @import("oci");
 const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadError;
 const image = @import("image");
 const zfs = @import("zfs");
 const lxc = @import("lxc");
-const json_parser = @import("custom_json_parser.zig");
+const json_parser = @import("json");
+// const container_mod = @import("container");
+const spec_mod = @import("oci").spec;
+const RuntimeType = @import("oci").runtime.RuntimeType;
 
 const SIGINT = posix.SIG.INT;
 const SIGTERM = posix.SIG.TERM;
@@ -372,7 +375,7 @@ fn executeCreate(
     var cfg = try loadConfig(allocator, null);
     defer cfg.deinit();
 
-    const create = try oci_commands.create.Create.init(
+    const create = try oci.create.Create.init(
         allocator,
         image_manager,
         zfs_manager,
@@ -397,11 +400,11 @@ fn executeCreate(
 }
 
 fn executeStart(container_id: []const u8) !void {
-    try oci_commands.start.start(container_id.?, proxmox_client);
+    try oci.start.start(container_id.?, proxmox_client);
 }
 
 fn executeState(allocator: Allocator, container_id: []const u8) !void {
-    var container_state = try oci_commands.state.getState(
+    var container_state = try oci.state.getState(
         proxmox_client,
         container_id,
     );
@@ -431,11 +434,11 @@ fn executeState(allocator: Allocator, container_id: []const u8) !void {
 
 fn executeKill(container_id: []const u8, signal: ?[]const u8) !void {
     const sig = if (signal) |s| s else "SIGTERM";
-    try oci_commands.kill.kill(container_id, sig, proxmox_client);
+    try oci.kill.kill(container_id, sig, proxmox_client);
 }
 
 fn executeDelete(container_id: []const u8) !void {
-    try oci_commands.delete.delete(container_id.?, proxmox_client);
+    try oci.delete.delete(container_id.?, proxmox_client);
 }
 
 fn executeGenerateConfig(
@@ -581,139 +584,46 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // Parse arguments first
-    var args = parseArgs(allocator) catch |err| {
-        if (err == error.UnknownCommand) {
-            std.process.exit(1);
-        }
-        return err;
-    };
-    defer {
-        args.options.deinit();
-        if (args.container_id) |id| {
-            allocator.free(id);
-        }
-    }
-
-    // If help command, show usage and exit
-    if (args.command == .help) {
-        try printUsage();
-        return;
-    }
-
-    // Create temporary logger for configuration initialization
-    var temp_logger = try logger_mod.LogContext.init(allocator, std.io.getStdErr().writer(), .info, "main");
+    // Створюємо тимчасовий логер для ініціалізації конфігурації
+    var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
     defer temp_logger.deinit();
 
-    // Create temporary configuration for logger initialization
-    var temp_config = try config.Config.init(allocator, &temp_logger);
-    defer temp_config.deinit();
-
-    // Initialize logger before loading configuration
-    try initLogger(allocator, args.options, &temp_config);
-    defer logger_mod.deinit();
-
-    // Load main configuration
-    var cfg = loadConfig(allocator, null) catch |err| {
-        if (err == error.ConfigError) {
-            try std.io.getStdErr().writer().writeAll("Error: Failed to load configuration. Check the log file for details.\n");
-            std.process.exit(1);
-        }
-        return err;
-    };
+    // Ініціалізуємо конфігурацію
+    var cfg = try config.Config.init(allocator, &temp_logger);
     defer cfg.deinit();
 
-    // Create separate logger for ProxmoxClient
-    var proxmox_logger = try logger_mod.Logger.init(allocator, if (args.options.debug) std.io.getStdErr().writer() else std.io.getStdOut().writer(), if (args.options.debug) types.LogLevel.debug else types.LogLevel.info, "proxmox");
-    defer proxmox_logger.deinit();
+    // Встановлюємо тип runtime (за замовчуванням runc)
+    cfg.setRuntimeType(.runc);
 
-    // Check for hosts in configuration
-    if (cfg.proxmox.hosts.len == 0) {
-        try logger_mod.err("No Proxmox hosts configured", .{});
-        return error.InvalidConfig;
-    }
+    // Створюємо специфікацію контейнера
+    var container_spec = try spec_mod.Spec.init(allocator);
+    defer container_spec.deinit(allocator);
 
-    // If --root is specified, create directory
-    if (args.options.root) |root| {
-        try fs.cwd().makePath(root);
-    }
+    // Встановлюємо базові параметри
+    container_spec.oci_version = "1.0.2";
+    container_spec.hostname = "container";
+    container_spec.process.args = &[_][]const u8{"/bin/sh"};
+    container_spec.process.cwd = "/";
+    container_spec.root.path = "/var/lib/containers/rootfs";
+    container_spec.root.readonly = false;
 
-    // Initialize Proxmox client
-    var proxmox_client_instance = try ProxmoxClient.init(allocator, cfg.proxmox.hosts[0], cfg.proxmox.port, cfg.proxmox.token orelse "", cfg.proxmox.node orelse "pve", &proxmox_logger);
-    proxmox_client = &proxmox_client_instance;
-    defer proxmox_client_instance.deinit();
+    // var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
+    // defer container_instance.deinit();
 
-    // Initialize managers
-    var image_manager_instance = try image.ImageManager.init(allocator, "/var/lib/proxmox-lxcri/images", cfg.logger);
-    defer image_manager_instance.deinit();
+    // // Створюємо контейнер
+    // try container_instance.create();
 
-    var zfs_manager_instance = try zfs.ZFSManager.init(allocator, cfg.logger);
-    defer zfs_manager_instance.deinit();
+    // // Запускаємо контейнер
+    // try container_instance.start();
 
-    var lxc_manager_instance = try lxc.LXCManager.init(allocator, cfg.logger);
-    defer lxc_manager_instance.deinit();
+    // // Чекаємо завершення
+    // std.time.sleep(std.time.ns_per_s * 5);
 
-    // Execute command
-    switch (args.command) {
-        .create => {
-            if (args.container_id == null or args.options.bundle == null) {
-                try logger_mod.err("create command requires --bundle and container-id", .{});
-                return error.InvalidArguments;
-            }
-            const bundle_path = try std.fs.cwd().realpathAlloc(allocator, args.options.bundle.?);
-            defer allocator.free(bundle_path);
-            const config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path, "config.json" });
-            defer allocator.free(config_path);
-            try executeCreate(allocator, &[_][]const u8{
-                "create",
-                "--bundle",
-                bundle_path,
-                args.container_id.?,
-            }, image_manager_instance, zfs_manager_instance, lxc_manager_instance);
-        },
-        .start => {
-            if (args.container_id == null) {
-                try logger_mod.err("start command requires container-id", .{});
-                return error.InvalidArguments;
-            }
-            try oci_commands.start.start(args.container_id.?, proxmox_client);
-        },
-        .state => {
-            if (args.container_id == null) {
-                try logger_mod.err("state command requires container-id", .{});
-                return error.InvalidArguments;
-            }
-            try executeState(allocator, args.container_id.?);
-        },
-        .kill => {
-            if (args.container_id == null) {
-                try logger_mod.err("kill command requires container-id", .{});
-                return error.InvalidArguments;
-            }
-            try oci_commands.kill.kill(args.container_id.?, "SIGTERM", proxmox_client);
-        },
-        .delete => {
-            if (args.container_id == null) {
-                try logger_mod.err("delete command requires container-id", .{});
-                return error.InvalidArguments;
-            }
-            try oci_commands.delete.delete(args.container_id.?, proxmox_client);
-        },
-        .help => unreachable, // Already handled above
-        .unknown => {
-            try logger_mod.err("Unknown command", .{});
-            try printUsage();
-            return error.UnknownCommand;
-        },
-        .generate_config => {
-            try executeGenerateConfig(allocator, &[_][]const u8{
-                "generate-config",
-                "--bundle",
-                "test_bundle",
-                "test-container",
-            });
-        },
-    }
+    // // Зупиняємо контейнер
+    // try container_instance.kill(15);
+
+    // // Видаляємо контейнер
+    // try container_instance.delete();
 }
 
 fn getConfigPath(allocator: Allocator) ![]const u8 {

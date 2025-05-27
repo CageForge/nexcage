@@ -4,7 +4,7 @@ const mem = std.mem;
 const os = std.os;
 const linux = os.linux;
 const logger = std.log.scoped(.oci_raw_image);
-const types = @import("types.zig");
+const types = @import("types");
 
 pub const RawImageError = error{
     InvalidFormat,

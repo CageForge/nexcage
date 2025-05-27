@@ -1,12 +1,14 @@
 const std = @import("std");
-const log = std.log;
+const log = @import("logger").log;
 const Allocator = std.mem.Allocator;
-const Container = @import("../types.zig").Container;
-const ContainerConfig = @import("../types.zig").ContainerConfig;
+// const Container = @import("container").Container;
+// const ContainerConfig = @import("container").ContainerConfig;
 const ContainerState = @import("../types.zig").ContainerState;
-const Error = @import("../types.zig").Error;
+const Error = @import("error").Error;
 const image = @import("../image/mod.zig");
 const zfs = @import("../zfs/mod.zig");
+const PauseConfig = @import("config").PauseConfig;
+const routing = @import("routing");
 
 pub const PauseContainer = struct {
     allocator: Allocator,
@@ -130,4 +132,41 @@ pub const PauseContainer = struct {
     pub fn getState(self: *PauseContainer) ContainerState {
         return self.state;
     }
-}; 
+};
+
+pub fn createPauseContainer(allocator: Allocator, routing_config: *const routing.RoutingConfig) !*Container {
+    // Створюємо конфігурацію для pause контейнера
+    var pause_config = try PauseConfig.init(allocator);
+    defer pause_config.deinit();
+
+    // Конвертуємо PauseConfig в ContainerConfig
+    var container_config = ContainerConfig{
+        .allocator = allocator,
+        .id = try allocator.dupe(u8, pause_config.id),
+        .name = try allocator.dupe(u8, pause_config.name),
+        .image = try allocator.dupe(u8, pause_config.image),
+        .command = pause_config.command,
+        .env = pause_config.env,
+        .working_dir = try allocator.dupe(u8, pause_config.working_dir),
+        .user = try allocator.dupe(u8, pause_config.user),
+        .type = .crun, // Тип буде перевизначено роутером
+        .hostname = try allocator.dupe(u8, pause_config.hostname),
+        .mounts = pause_config.mounts,
+        .resources = pause_config.resources,
+        .namespaces = pause_config.namespaces,
+    };
+
+    // Створюємо контейнер
+    var container = try Container.init(allocator, container_config);
+    errdefer container.deinit();
+
+    // Запускаємо контейнер
+    try container.start(routing_config);
+
+    return container;
+}
+
+pub fn stopPauseContainer(container: *Container, routing_config: *const routing.RoutingConfig) !void {
+    try container.stop(routing_config);
+    container.deinit();
+} 

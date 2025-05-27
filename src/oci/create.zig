@@ -4,7 +4,7 @@ const fs = std.fs;
 const Allocator = std.mem.Allocator;
 const errors = @import("error");
 const root_types = @import("types");
-const oci_types = @import("types.zig");
+const oci_types = @import("types");
 const image_types = @import("image/types.zig");
 const proxmox = @import("proxmox");
 const mem = std.mem;
@@ -76,6 +76,20 @@ pub const StorageConfig = struct {
     type: StorageType,
     storage_path: ?[]const u8 = null,
     storage_pool: ?[]const u8 = null,
+
+    pub fn init(allocator: std.mem.Allocator, storage_type: StorageType, storage_path: ?[]const u8, storage_pool: ?[]const u8) StorageConfig {
+        return StorageConfig{
+            .type = storage_type,
+            .storage_path = if (storage_path) |sp| allocator.dupe(u8, sp) catch null else null,
+            .storage_pool = if (storage_pool) |sp| allocator.dupe(u8, sp) catch null else null,
+        };
+    }
+
+    pub fn deinit(self: *StorageConfig, allocator: std.mem.Allocator) void {
+        _ = self;
+        _ = allocator;
+        // Nothing to free
+    }
 };
 
 pub const CreateOptions = struct {
