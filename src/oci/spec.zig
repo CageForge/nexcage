@@ -78,8 +78,12 @@ pub const Spec = struct {
     }
 
     pub fn deinit(self: *Spec, allocator: Allocator) void {
-        allocator.free(self.oci_version);
-        allocator.free(self.hostname);
+        if (!std.mem.eql(u8, self.oci_version, "1.0.2")) {
+            allocator.free(self.oci_version);
+        }
+        if (!std.mem.eql(u8, self.hostname, "container")) {
+            allocator.free(self.hostname);
+        }
         for (self.mounts) |mount| {
             mount.deinit(allocator);
         }
