@@ -107,4 +107,13 @@ pub const ImageManager = struct {
             try self.configureImage(image_name, tag, cfg);
         }
     }
+
+    pub fn hasImage(self: *Self, image_name: []const u8, tag: []const u8) bool {
+        // Формуємо шлях до образу: images_dir/image_name/tag
+        const fs = std.fs;
+        const allocator = self.allocator;
+        const image_path = fs.path.join(allocator, &[_][]const u8{ self.images_dir, image_name, tag }) catch return false;
+        defer allocator.free(image_path);
+        return fs.cwd().openDir(image_path, .{}) != null;
+    }
 };

@@ -3,17 +3,26 @@
         "hosts": ["proxmox.example.com"],
         "port": 8006,
         "token": "your-token",
-        "node": "node1",
-        "node_cache_duration": 60
+        "node": "node1"
     },
     "runtime": {
-        "socket_path": "/var/run/proxmox-lxcri.sock",
-        "log_level": "info",
+        "root_path": "/var/lib/proxmox-lxcri",
         "log_path": "/var/log/proxmox-lxcri/proxmox-lxcri.log",
-        "type": "crun",
-        "path": "/usr/bin/crun",
-        "options": "--systemd-cgroup"
+        "log_level": "info"
     },
-    "timeout": 30000,
-    "node_cache_duration": 300
+    "storage": {
+        "zfs_dataset": "rpool/lxc",
+        "image_path": "/var/lib/proxmox-lxcri/images"
+    },
+    "network": {
+        "name": "eth0",
+        "bridge": "vmbr0",
+        "ip": "192.168.1.100/24",
+        "gw": "192.168.1.1",
+        "type": "bridge",
+        "tag": 10,
+        "rate": 1000,
+        "mtu": 1500,
+        "dns_servers": ["8.8.8.8", "8.8.4.4"]
+    }
 } 
