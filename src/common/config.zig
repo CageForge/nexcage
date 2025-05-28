@@ -109,7 +109,7 @@ pub const Config = struct {
         }
     }
 
-    pub fn fromJson(allocator: std.mem.Allocator, json_config: JsonConfig, logger_ctx: *logger.LogContext) !Config {
+    pub fn fromJson(allocator: std.mem.Allocator, json_config: JsonConfig, logger_ctx: *types.LogContext) !Config {
         var config = try Config.init(allocator, logger_ctx);
         errdefer config.deinit();
 
@@ -121,9 +121,10 @@ pub const Config = struct {
         if (runtime.log_path) |path| {
             config.runtime_path = try allocator.dupe(u8, path);
         }
-        if (runtime.log_level) |level| {
-            config.runtime_type = level;
-        }
+        // log_level не optional, працюємо напряму
+        // if (runtime.log_level) |level| {
+        //     ...
+        // }
     }
 
     // Proxmox config
@@ -164,9 +165,7 @@ pub const Config = struct {
 
     // Network config
     if (json_config.network) |network| {
-        if (network.bridge) |bridge| {
-            config.network.bridge = try allocator.dupe(u8, bridge);
-        }
+        allocator.free(network.bridge);
         if (network.dns_servers) |servers| {
             var new_servers = try allocator.alloc([]const u8, servers.len);
             errdefer {
@@ -265,7 +264,6 @@ pub fn deinitJsonConfig(config_value: *JsonConfig, allocator: std.mem.Allocator)
         if (storage.image_path) |path| allocator.free(path);
     }
     if (config_value.network) |network| {
-        if (network.bridge) |bridge| allocator.free(bridge);
         if (network.dns_servers) |servers| {
             for (servers) |server| allocator.free(server);
             allocator.free(servers);

@@ -205,10 +205,10 @@
 - Translated all code comments, documentation, and inline strings to English (project-wide policy) (1 hour)
   - Updated all Zig source files, shell scripts, and docs
   - Ensured consistency and compliance with project language policy
-- Enhanced logging system: added timestamp and tags/context support (30 min)
-  - All log messages now include a timestamp (unix time)
-  - LogContext supports tags (arbitrary key-value context)
-  - Tags are shown in log output for better traceability
+- Unified LXC and Crun managers: created minimal modules, connected in build.zig, removed procedural code, standardized interface (30 min)
+  - src/container/lxc.zig and src/container/crun.zig now have only struct-based minimal interface
+  - All procedural code removed from crun.zig
+  - build.zig updated to import both modules for oci and main
 
 ## 📈 Updated Time Expenditure
 - Previously Planned: 39 days

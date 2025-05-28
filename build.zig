@@ -108,6 +108,33 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    const image_mod = b.addModule("image", .{
+        .root_source_file = b.path("src/container/image_manager.zig"),
+        .imports = &.{
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+        },
+    });
+
+    const lxc_mod = b.addModule("lxc", .{
+        .root_source_file = b.path("src/container/lxc.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
+    const crun_mod = b.addModule("crun", .{
+        .root_source_file = b.path("src/container/crun.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
     // OCI runtime
     const oci_mod = b.addModule("oci", .{
         .root_source_file = b.path("src/oci/mod.zig"),
@@ -123,6 +150,9 @@ pub fn build(b: *std.Build) void {
             .{ .name = "json", .module = json_mod },
             .{ .name = "crun_container", .module = crun_container_mod.? },
             .{ .name = "cli_args", .module = cli_args_mod },
+            .{ .name = "image", .module = image_mod },
+            .{ .name = "lxc", .module = lxc_mod },
+            .{ .name = "crun", .module = crun_mod },
         } else &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
@@ -134,6 +164,9 @@ pub fn build(b: *std.Build) void {
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
             .{ .name = "cli_args", .module = cli_args_mod },
+            .{ .name = "image", .module = image_mod },
+            .{ .name = "lxc", .module = lxc_mod },
+            .{ .name = "crun", .module = crun_mod },
         },
     });
 
@@ -160,6 +193,9 @@ pub fn build(b: *std.Build) void {
         exe.root_module.addImport("crun", crunDep.?.module("crun"));
     }
     exe.root_module.addImport("cli_args", cli_args_mod);
+    exe.root_module.addImport("image", image_mod);
+    exe.root_module.addImport("lxc", lxc_mod);
+    exe.root_module.addImport("crun", crun_mod);
 
     // Install
     b.installArtifact(exe);
@@ -201,7 +237,7 @@ pub fn build(b: *std.Build) void {
     create_test.root_module.addImport("logger", logger_mod);
     create_test.root_module.addImport("zfs", zfs_mod);
     create_test.root_module.addImport("proxmox", proxmox_mod);
-    create_test.root_module.addImport("image", b.addModule("image", .{ .root_source_file = b.path("src/container/image_manager.zig"), .imports = &.{ .{ .name = "logger", .module = logger_mod }, .{ .name = "types", .module = types_mod }, .{ .name = "error", .module = error_mod } } }));
+    create_test.root_module.addImport("image", image_mod);
     const run_create_test = b.addRunArtifact(create_test);
     test_step.dependOn(&run_create_test.step);
 }

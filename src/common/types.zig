@@ -924,8 +924,8 @@ pub const LogContext = struct {
     fn getTimestamp() []u8 {
         var buf: [32]u8 = undefined;
         const ts = std.time.timestamp();
-        const len = std.fmt.bufPrint(&buf, "{d}", .{ts}) catch 0;
-        return buf[0..len];
+        const printed = std.fmt.bufPrint(&buf, "{d}", .{ts}) catch buf[0..0];
+        return printed;
     }
 
     pub fn setTags(self: *LogContext, tags: []const []const u8) void {
@@ -940,7 +940,7 @@ pub const LogContext = struct {
                 if (idx + tag.len + 3 > buf.len) break;
                 buf[idx] = ' ';
                 buf[idx+1] = '[';
-                std.mem.copy(u8, buf[idx+2..], tag);
+                std.mem.copyForwards(u8, buf[idx+2..][0..tag.len], tag);
                 idx += 2 + tag.len;
                 buf[idx] = ']';
                 idx += 1;
@@ -1287,5 +1287,25 @@ pub const ContainerManager = struct {
     pub fn create(self: *ContainerManager, spec: ContainerSpec) !void {
         _ = self;
         _ = spec;
+    }
+};
+
+pub const CrunManager = struct {
+    // TODO: implement crun management logic
+    // You can add fields for configuration, logger, etc.
+
+    pub fn create(self: *CrunManager, ...) !void {
+        // TODO: implement create logic
+        _ = self;
+    }
+
+    pub fn start(self: *CrunManager, ...) !void {
+        // TODO: implement start logic
+        _ = self;
+    }
+
+    pub fn stop(self: *CrunManager, ...) !void {
+        // TODO: implement stop logic
+        _ = self;
     }
 };

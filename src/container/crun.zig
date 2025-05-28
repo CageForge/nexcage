@@ -14,6 +14,26 @@ const json = std.json;
 const OCI_VERSION = "1.0.2";
 const CONTAINER_ROOT = "/var/lib/containers";
 
+pub const CrunManager = struct {
+    // TODO: implement crun management logic
+    // You can add fields for configuration, logger, etc.
+
+    pub fn create(self: *CrunManager, ...) !void {
+        // TODO: implement create logic
+        _ = self;
+    }
+
+    pub fn start(self: *CrunManager, ...) !void {
+        // TODO: implement start logic
+        _ = self;
+    }
+
+    pub fn stop(self: *CrunManager, ...) !void {
+        // TODO: implement stop logic
+        _ = self;
+    }
+};
+
 pub fn createCrunContainer(allocator: Allocator, config: ContainerConfig) !*Container {
     var crun_config = config;
     crun_config.type = .crun;

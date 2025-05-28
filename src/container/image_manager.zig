@@ -1,6 +1,6 @@
 const std = @import("std");
 const http = std.http;
-const json = std.json;
+const json = @import("json");
 const fs = std.fs;
 const mem = std.mem;
 const crypto = std.crypto;
@@ -10,7 +10,6 @@ const types = @import("types");
 const fmt = std.fmt;
 const Uri = std.Uri;
 const Headers = http.Headers;
-const json_helper = @import("json_helper.zig");
 
 pub const ImageManager = struct {
     allocator: Allocator,
@@ -192,10 +191,10 @@ pub const ImageManager = struct {
         try req.reader().readAllArrayList(&body, 1024 * 1024); // 1MB limit
 
         // Parse manifest
-        var scanner = try json_helper.createScanner(self.allocator, body.items);
+        var scanner = try json.createScanner(self.allocator, body.items);
         defer scanner.deinit();
 
-        try json_helper.expectToken(&scanner, .object_begin);
+        try json.expectToken(&scanner, .object_begin);
 
         var schema_version: ?i64 = null;
         var media_type: ?[]const u8 = null;
@@ -217,28 +216,28 @@ pub const ImageManager = struct {
             if (token != .string) return error.InvalidManifest;
             const key = token.string;
             if (std.mem.eql(u8, key, "schemaVersion")) {
-                schema_version = try json_helper.parseNumber(scanner, i64);
+                schema_version = try json.parseNumber(scanner, i64);
             } else if (std.mem.eql(u8, key, "mediaType")) {
-                media_type = try json_helper.parseString(self.allocator, scanner);
+                media_type = try json.parseString(self.allocator, scanner);
             } else if (std.mem.eql(u8, key, "config")) {
-                try json_helper.expectToken(&scanner, .object_begin);
+                try json.expectToken(&scanner, .object_begin);
                 while (true) {
                     const config_token = try scanner.next();
                     if (config_token == .object_end) break;
                     if (config_token != .string) return error.InvalidManifest;
                     const config_key = config_token.string;
                     if (std.mem.eql(u8, config_key, "digest")) {
-                        config_digest = try json_helper.parseString(self.allocator, scanner);
+                        config_digest = try json.parseString(self.allocator, scanner);
                     } else if (std.mem.eql(u8, config_key, "mediaType")) {
-                        config_media_type = try json_helper.parseString(self.allocator, scanner);
+                        config_media_type = try json.parseString(self.allocator, scanner);
                     } else if (std.mem.eql(u8, config_key, "size")) {
-                        config_size = try json_helper.parseNumber(scanner, i64);
+                        config_size = try json.parseNumber(scanner, i64);
                     } else {
-                        try json_helper.skipValue(&scanner);
+                        try json.skipValue(&scanner);
                     }
                 }
             } else if (std.mem.eql(u8, key, "layers")) {
-                try json_helper.expectToken(&scanner, .array_begin);
+                try json.expectToken(&scanner, .array_begin);
                 while (true) {
                     const layer_token = try scanner.next();
                     if (layer_token == .array_end) break;
@@ -252,13 +251,13 @@ pub const ImageManager = struct {
                         if (layer_field_token != .string) return error.InvalidManifest;
                         const layer_key = layer_field_token.string;
                         if (std.mem.eql(u8, layer_key, "digest")) {
-                            layer_digest = try json_helper.parseString(self.allocator, scanner);
+                            layer_digest = try json.parseString(self.allocator, scanner);
                         } else if (std.mem.eql(u8, layer_key, "mediaType")) {
-                            layer_media_type = try json_helper.parseString(self.allocator, scanner);
+                            layer_media_type = try json.parseString(self.allocator, scanner);
                         } else if (std.mem.eql(u8, layer_key, "size")) {
-                            layer_size = try json_helper.parseNumber(scanner, i64);
+                            layer_size = try json.parseNumber(scanner, i64);
                         } else {
-                            try json_helper.skipValue(&scanner);
+                            try json.skipValue(&scanner);
                         }
                     }
                     if (layer_digest == null or layer_media_type == null or layer_size == null) {
@@ -272,7 +271,7 @@ pub const ImageManager = struct {
                     });
                 }
             } else {
-                try json_helper.skipValue(&scanner);
+                try json.skipValue(&scanner);
             }
         }
 
@@ -327,10 +326,10 @@ pub const ImageManager = struct {
         try req.reader().readAllArrayList(&body, 1024 * 1024); // 1MB limit
 
         // Parse config
-        var scanner = try json_helper.createScanner(self.allocator, body.items);
+        var scanner = try json.createScanner(self.allocator, body.items);
         defer scanner.deinit();
 
-        try json_helper.expectToken(&scanner, .object_begin);
+        try json.expectToken(&scanner, .object_begin);
 
         var architecture: ?[]const u8 = null;
         var os: ?[]const u8 = null;
@@ -361,11 +360,11 @@ pub const ImageManager = struct {
             const key = token.string;
 
             if (std.mem.eql(u8, key, "architecture")) {
-                architecture = try json_helper.parseString(self.allocator, scanner);
+                architecture = try json.parseString(self.allocator, scanner);
             } else if (std.mem.eql(u8, key, "os")) {
-                os = try json_helper.parseString(self.allocator, scanner);
+                os = try json.parseString(self.allocator, scanner);
             } else if (std.mem.eql(u8, key, "config")) {
-                try json_helper.expectToken(&scanner, .object_begin);
+                try json.expectToken(&scanner, .object_begin);
 
                 while (true) {
                     const config_token = try scanner.next();
@@ -375,21 +374,21 @@ pub const ImageManager = struct {
                     const config_key = config_token.string;
 
                     if (std.mem.eql(u8, config_key, "Env")) {
-                        env_list = try json_helper.parseStringArray(self.allocator, scanner);
+                        env_list = try json.parseStringArray(self.allocator, scanner);
                     } else if (std.mem.eql(u8, config_key, "Cmd")) {
-                        cmd_list = try json_helper.parseStringArray(self.allocator, scanner);
+                        cmd_list = try json.parseStringArray(self.allocator, scanner);
                     } else if (std.mem.eql(u8, config_key, "Entrypoint")) {
-                        entrypoint_list = try json_helper.parseStringArray(self.allocator, scanner);
+                        entrypoint_list = try json.parseStringArray(self.allocator, scanner);
                     } else if (std.mem.eql(u8, config_key, "WorkingDir")) {
-                        working_dir = try json_helper.parseString(self.allocator, scanner);
+                        working_dir = try json.parseString(self.allocator, scanner);
                     } else if (std.mem.eql(u8, config_key, "User")) {
-                        user = try json_helper.parseString(self.allocator, scanner);
+                        user = try json.parseString(self.allocator, scanner);
                     } else {
-                        try json_helper.skipValue(&scanner);
+                        try json.skipValue(&scanner);
                     }
                 }
             } else {
-                try json_helper.skipValue(&scanner);
+                try json.skipValue(&scanner);
             }
         }
 

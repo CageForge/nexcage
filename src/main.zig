@@ -23,7 +23,6 @@ const oci = @import("oci");
 const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadError;
 const image = @import("image");
 const zfs = @import("zfs");
-const lxc = @import("lxc");
 const json_parser = @import("json");
 // const container_mod = @import("container");
 const spec_mod = @import("oci").spec;
@@ -337,7 +336,7 @@ fn executeCreate(
     args: []const []const u8,
     image_manager: *image.ImageManager,
     zfs_manager: *zfs.ZFSManager,
-    lxc_manager: *lxc.LXCManager,
+    lxc_manager: ?*void,
 ) !void {
     if (args.len < 4) {
         try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
@@ -639,23 +638,19 @@ pub fn main() !void {
     container_spec.root.path = "/var/lib/containers/rootfs";
     container_spec.root.readonly = false;
 
-    // var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
-    // defer container_instance.deinit();
-
-    // // Створюємо контейнер
-    // try container_instance.create();
-
-    // // Запускаємо контейнер
-    // try container_instance.start();
-
-    // // Чекаємо завершення
-    // std.time.sleep(std.time.ns_per_s * 5);
-
-    // // Зупиняємо контейнер
-    // try container_instance.kill(15);
-
-    // // Видаляємо контейнер
-    // try container_instance.delete();
+    // Додаю dispatch для create
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+    if (args.len > 1 and std.mem.eql(u8, args[1], "create")) {
+        const container_id = if (args.len > 2) args[2] else "unknown";
+        // Додаю тег container_id
+        temp_logger.setTags(&[_][]const u8{std.fmt.allocPrint(allocator, "container_id={s}", .{container_id}) catch "container_id=unknown"});
+        executeCreate(allocator, args, undefined, undefined, null) catch |err| {
+            temp_logger.err("Create command failed: {s}", .{@errorName(err)});
+            return err;
+        };
+        return;
+    }
 }
 
 fn getConfigPath(allocator: Allocator) ![]const u8 {

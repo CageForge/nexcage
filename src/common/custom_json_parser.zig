@@ -137,7 +137,7 @@ fn convertValue(comptime T: type, value: *json.JsonValue, allocator: std.mem.All
                         @compileError("Unsupported slice type: " ++ @typeName(ptr_info.child));
                     }
                 },
-                else => @compileError("Unsupported pointer type"),
+                else => return error.UnsupportedType,
             }
         },
         .Int => {
