@@ -17,7 +17,7 @@ pub const PortForwarder = port_forward.PortForwarder;
 
 const std = @import("std");
 
-/// Перевіряє чи є рядок валідною IPv4 адресою
+/// Checks if the string is a valid IPv4 address
 pub fn isValidIPAddress(ip: []const u8) !bool {
     var parts = std.mem.split(u8, ip, ".");
     var count: u8 = 0;
@@ -33,7 +33,7 @@ pub fn isValidIPAddress(ip: []const u8) !bool {
     return count == 4;
 }
 
-/// Перевіряє чи є рядок валідною MAC адресою
+/// Checks if the string is a valid MAC address
 pub fn isValidMACAddress(mac: []const u8) !bool {
     if (mac.len != 17) return false;
 
@@ -53,7 +53,7 @@ pub fn isValidMACAddress(mac: []const u8) !bool {
     return true;
 }
 
-/// Генерує випадкову MAC адресу
+/// Generates a random MAC address
 pub fn generateMACAddress(allocator: std.mem.Allocator) ![]const u8 {
     var mac = try allocator.alloc(u8, 17);
     errdefer allocator.free(mac);

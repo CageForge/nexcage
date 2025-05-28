@@ -215,23 +215,18 @@ pub const ImageManager = struct {
             const token = try scanner.next();
             if (token == .object_end) break;
             if (token != .string) return error.InvalidManifest;
-
             const key = token.string;
-
             if (std.mem.eql(u8, key, "schemaVersion")) {
                 schema_version = try json_helper.parseNumber(scanner, i64);
             } else if (std.mem.eql(u8, key, "mediaType")) {
                 media_type = try json_helper.parseString(self.allocator, scanner);
             } else if (std.mem.eql(u8, key, "config")) {
                 try json_helper.expectToken(&scanner, .object_begin);
-
                 while (true) {
-                    const token = try scanner.next();
-                    if (token == .object_end) break;
-                    if (token != .string) return error.InvalidManifest;
-
-                    const config_key = token.string;
-
+                    const config_token = try scanner.next();
+                    if (config_token == .object_end) break;
+                    if (config_token != .string) return error.InvalidManifest;
+                    const config_key = config_token.string;
                     if (std.mem.eql(u8, config_key, "digest")) {
                         config_digest = try json_helper.parseString(self.allocator, scanner);
                     } else if (std.mem.eql(u8, config_key, "mediaType")) {
@@ -244,23 +239,18 @@ pub const ImageManager = struct {
                 }
             } else if (std.mem.eql(u8, key, "layers")) {
                 try json_helper.expectToken(&scanner, .array_begin);
-
                 while (true) {
                     const layer_token = try scanner.next();
                     if (layer_token == .array_end) break;
                     if (layer_token != .object_begin) return error.InvalidManifest;
-
                     var layer_digest: ?[]const u8 = null;
                     var layer_media_type: ?[]const u8 = null;
                     var layer_size: ?i64 = null;
-
                     while (true) {
                         const layer_field_token = try scanner.next();
                         if (layer_field_token == .object_end) break;
                         if (layer_field_token != .string) return error.InvalidManifest;
-
                         const layer_key = layer_field_token.string;
-
                         if (std.mem.eql(u8, layer_key, "digest")) {
                             layer_digest = try json_helper.parseString(self.allocator, scanner);
                         } else if (std.mem.eql(u8, layer_key, "mediaType")) {
@@ -271,11 +261,9 @@ pub const ImageManager = struct {
                             try json_helper.skipValue(&scanner);
                         }
                     }
-
                     if (layer_digest == null or layer_media_type == null or layer_size == null) {
                         return error.InvalidManifest;
                     }
-
                     try layers.append(Layer{
                         .digest = layer_digest.?,
                         .media_type = layer_media_type.?,
@@ -380,11 +368,11 @@ pub const ImageManager = struct {
                 try json_helper.expectToken(&scanner, .object_begin);
 
                 while (true) {
-                    const token = try scanner.next();
-                    if (token == .object_end) break;
-                    if (token != .string) return error.InvalidConfig;
+                    const config_token = try scanner.next();
+                    if (config_token == .object_end) break;
+                    if (config_token != .string) return error.InvalidConfig;
 
-                    const config_key = token.string;
+                    const config_key = config_token.string;
 
                     if (std.mem.eql(u8, config_key, "Env")) {
                         env_list = try json_helper.parseStringArray(self.allocator, scanner);
@@ -517,6 +505,7 @@ pub const ImageManager = struct {
     }
 
     fn cacheLayer(self: *const Self, src_path: []const u8, dest_path: []const u8) !void {
+        _ = self;
         try fs.cwd().rename(src_path, dest_path);
     }
 

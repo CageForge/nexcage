@@ -36,7 +36,7 @@ pub fn getRuntimeForContainer(allocator: Allocator, container_id: []const u8) !C
     const config = try std.json.parseFromValue(RoutingConfig, allocator, tree.root, .{});
     defer config.deinit();
 
-    // Перевіряємо кожне правило роутингу
+    // Check each routing rule
     for (config.value.routing) |rule| {
         var regex = try std.regex.compile(allocator, rule.pattern);
         defer regex.deinit();
@@ -52,6 +52,6 @@ pub fn getRuntimeForContainer(allocator: Allocator, container_id: []const u8) !C
         }
     }
 
-    // Якщо не знайдено відповідного правила, використовуємо LXC як за замовчуванням
+    // If no matching rule is found, use LXC as default
     return .lxc;
 } 

@@ -7,6 +7,7 @@ const image = @import("image");
 const zfs = @import("zfs");
 const lxc = @import("lxc");
 const ProxmoxClient = @import("proxmox").ProxmoxClient;
+const cli_args = @import("cli_args");
 
 test "create command validation" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -51,7 +52,7 @@ test "create command success" {
 
     // Створюємо тимчасовий bundle для тесту
     const temp_dir = try std.fs.cwd().makeOpenPath("test_bundle", .{});
-    defer temp_dir.close();
+    defer (@constCast(temp_dir)).close();
     defer std.fs.cwd().deleteTree("test_bundle") catch {};
 
     // Створюємо config.json
@@ -123,6 +124,12 @@ fn executeCreate(
     zfs_manager: *zfs.ZFSManager,
     lxc_manager: *lxc.LXCManager,
 ) !void {
+    _ = allocator;
+    _ = image_manager;
+    _ = zfs_manager;
+    _ = lxc_manager;
+    // args використовується у функції, тому не ігноруємо
+
     if (args.len < 4) {
         try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
         return error.InvalidArguments;
@@ -172,4 +179,37 @@ fn executeCreate(
 
     // TODO: Додати реальну імплементацію створення контейнера
     // Наразі просто повертаємо успіх
+}
+
+test "parseArgs parses create command with all options" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    // Імітуємо CLI-аргументи
+    const argv = &[_][]const u8{
+        "proxmox-lxcri", // program name
+        "create",
+        "--bundle", "/tmp/bundle",
+        "--log", "/tmp/log.txt",
+        "--log-format", "json",
+        "--root", "/tmp/root",
+        "--pid-file", "/tmp/pid",
+        "--console-socket", "/tmp/socket",
+        "--systemd-cgroup",
+        "--debug",
+        "test-container"
+    };
+
+    const result = try cli_args.parseArgsFromArray(allocator, argv);
+    try testing.expect(result.command == cli_args.Command.create);
+    try testing.expectEqualStrings(result.options.bundle.?, "/tmp/bundle");
+    try testing.expectEqualStrings(result.options.log.?, "/tmp/log.txt");
+    try testing.expectEqualStrings(result.options.log_format.?, "json");
+    try testing.expectEqualStrings(result.options.root.?, "/tmp/root");
+    try testing.expectEqualStrings(result.options.pid_file.?, "/tmp/pid");
+    try testing.expectEqualStrings(result.options.console_socket.?, "/tmp/socket");
+    try testing.expect(result.options.systemd_cgroup);
+    try testing.expect(result.options.debug);
+    try testing.expectEqualStrings(result.container_id.?, "test-container");
 } 

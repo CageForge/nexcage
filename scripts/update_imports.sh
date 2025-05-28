@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Оновлення імпортів для файлів, які були переміщені в common/
+# Update imports for files moved to common/
 find src -type f -name "*.zig" -exec sed -i \
     -e 's/@import("types")/@import("common\/types")/g' \
     -e 's/@import("types.zig")/@import("common\/types.zig")/g' \
@@ -15,11 +15,11 @@ find src -type f -name "*.zig" -exec sed -i \
     -e 's/@import("json_helper")/@import("common\/json_helper")/g' \
     -e 's/@import("json_helper.zig")/@import("common\/json_helper.zig")/g' {} \;
 
-# Оновлення імпортів для image_manager.zig
+# Update imports for image_manager.zig
 find src -type f -name "*.zig" -exec sed -i \
     -e 's/@import("image_manager")/@import("container\/image_manager")/g' \
     -e 's/@import("image_manager.zig")/@import("container\/image_manager.zig")/g' {} \;
 
-# Оновлення імпортів з common/ на короткі імена (бо модулі підключаються через build.zig)
+# Update imports from common/ to short names (because modules are connected via build.zig)
 find src -type f -name "*.zig" -exec sed -i \
     -e 's/@import("common\/\([a-zA-Z0-9_\.]*\)")/@import("\1")/g' {} \; 

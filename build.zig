@@ -100,6 +100,14 @@ pub fn build(b: *std.Build) void {
         },
     }) else null;
 
+    // CLI args module
+    const cli_args_mod = b.addModule("cli_args", .{
+        .root_source_file = b.path("src/common/cli_args.zig"),
+        .imports = &.{
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
     // OCI runtime
     const oci_mod = b.addModule("oci", .{
         .root_source_file = b.path("src/oci/mod.zig"),
@@ -114,6 +122,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
             .{ .name = "crun_container", .module = crun_container_mod.? },
+            .{ .name = "cli_args", .module = cli_args_mod },
         } else &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
@@ -124,6 +133,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },
             .{ .name = "json", .module = json_mod },
+            .{ .name = "cli_args", .module = cli_args_mod },
         },
     });
 
@@ -149,6 +159,7 @@ pub fn build(b: *std.Build) void {
         exe.root_module.addImport("crun_container", crun_container_mod.?);
         exe.root_module.addImport("crun", crunDep.?.module("crun"));
     }
+    exe.root_module.addImport("cli_args", cli_args_mod);
 
     // Install
     b.installArtifact(exe);
@@ -172,8 +183,25 @@ pub fn build(b: *std.Build) void {
     config_test.root_module.addImport("logger", logger_mod);
     config_test.root_module.addImport("config", config_mod);
     config_test.root_module.addImport("json", zigJsonDep.module("zig-json"));
+    config_test.root_module.addImport("oci", oci_mod);
 
     const run_config_test = b.addRunArtifact(config_test);
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_config_test.step);
+
+    // Тест для create (unit-тести CLI парсера та create)
+    const create_test = b.addTest(.{
+        .root_source_file = b.path("tests/test_create.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    create_test.root_module.addImport("cli_args", cli_args_mod);
+    create_test.root_module.addImport("types", types_mod);
+    create_test.root_module.addImport("error", error_mod);
+    create_test.root_module.addImport("logger", logger_mod);
+    create_test.root_module.addImport("zfs", zfs_mod);
+    create_test.root_module.addImport("proxmox", proxmox_mod);
+    create_test.root_module.addImport("image", b.addModule("image", .{ .root_source_file = b.path("src/container/image_manager.zig"), .imports = &.{ .{ .name = "logger", .module = logger_mod }, .{ .name = "types", .module = types_mod }, .{ .name = "error", .module = error_mod } } }));
+    const run_create_test = b.addRunArtifact(create_test);
+    test_step.dependOn(&run_create_test.step);
 }

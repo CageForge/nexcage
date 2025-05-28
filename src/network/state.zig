@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-/// Стан мережевого інтерфейсу
+/// Network interface state
 pub const NetworkState = struct {
     container_id: []const u8,
     interface_name: []const u8,
@@ -23,7 +23,7 @@ pub const NetworkState = struct {
         interface: []const u8,
     };
 
-    /// Створює новий стан мережевого інтерфейсу
+    /// Creates a new network state
     pub fn init(
         allocator: Allocator,
         container_id: []const u8,
@@ -45,7 +45,7 @@ pub const NetworkState = struct {
         return self;
     }
 
-    /// Звільняє ресурси
+    /// Frees resources
     pub fn deinit(self: *NetworkState, allocator: Allocator) void {
         allocator.free(self.container_id);
         allocator.free(self.interface_name);
@@ -73,7 +73,7 @@ pub const NetworkState = struct {
     }
 };
 
-/// Менеджер мережевого стану
+/// Network state manager
 pub const NetworkStateManager = struct {
     allocator: Allocator,
     states: std.StringHashMap(*NetworkState),
@@ -81,7 +81,7 @@ pub const NetworkStateManager = struct {
 
     const Self = @This();
 
-    /// Створює новий менеджер стану
+    /// Creates a new state manager
     pub fn init(allocator: Allocator, state_dir: []const u8) !*Self {
         const self = try allocator.create(Self);
 
@@ -91,13 +91,13 @@ pub const NetworkStateManager = struct {
             .state_dir = try allocator.dupe(u8, state_dir),
         };
 
-        // Створюємо директорію для стану якщо її немає
+        // Creates directory for state if it doesn't exist
         try std.fs.makeDirAbsolute(state_dir);
 
         return self;
     }
 
-    /// Звільняє ресурси
+    /// Frees resources
     pub fn deinit(self: *Self) void {
         var it = self.states.iterator();
         while (it.next()) |entry| {
@@ -108,18 +108,18 @@ pub const NetworkStateManager = struct {
         self.allocator.destroy(self);
     }
 
-    /// Додає новий стан
+    /// Adds a new state
     pub fn addState(self: *Self, state: *NetworkState) !void {
         try self.states.put(state.container_id, state);
         try self.saveState(state);
     }
 
-    /// Отримує стан за ID контейнера
+    /// Gets state by container ID
     pub fn getState(self: *Self, container_id: []const u8) ?*NetworkState {
         return self.states.get(container_id);
     }
 
-    /// Видаляє стан
+    /// Removes state
     pub fn removeState(self: *Self, container_id: []const u8) void {
         if (self.states.fetchRemove(container_id)) |entry| {
             entry.value.deinit(self.allocator);
@@ -127,7 +127,7 @@ pub const NetworkStateManager = struct {
         }
     }
 
-    /// Зберігає стан на диск
+    /// Saves state to disk
     fn saveState(self: *Self, state: *NetworkState) !void {
         const path = try std.fs.path.join(self.allocator, &[_][]const u8{
             self.state_dir,
@@ -138,7 +138,7 @@ pub const NetworkStateManager = struct {
         const file = try std.fs.createFileAbsolute(path, .{});
         defer file.close();
 
-        // Серіалізуємо стан в JSON
+        // Serializes state in JSON
         var root = std.json.Value{ .object = std.json.ObjectMap.init(self.allocator) };
 
         try root.object.put("container_id", .{ .string = state.container_id });
@@ -191,7 +191,7 @@ pub const NetworkStateManager = struct {
         try file.writeAll(json);
     }
 
-    /// Видаляє файл стану
+    /// Deletes state file
     fn deleteStateFile(self: *Self, container_id: []const u8) !void {
         const path = try std.fs.path.join(self.allocator, &[_][]const u8{
             self.state_dir,

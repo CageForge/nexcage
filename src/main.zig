@@ -189,23 +189,18 @@ fn printUsage() !void {
     try std.io.getStdOut().writer().writeAll(usage);
 }
 
-fn parseArgs(allocator: Allocator) !struct {
+pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struct {
     command: Command,
     options: RuntimeOptions,
     container_id: ?[]const u8,
 } {
-    var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
-
-    _ = args.skip(); // Skip program name
-
+    var i: usize = 1; // Пропускаємо program name
     var command: ?Command = null;
     var options = RuntimeOptions.init(allocator);
     var container_id: ?[]const u8 = null;
-
-    // Перевіряємо, чи є аргументи
     var has_args = false;
-    while (args.next()) |arg| {
+    while (i < argv.len) : (i += 1) {
+        const arg = argv[i];
         has_args = true;
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             try printUsage();
@@ -215,28 +210,34 @@ fn parseArgs(allocator: Allocator) !struct {
         } else if (std.mem.eql(u8, arg, "--systemd-cgroup")) {
             options.systemd_cgroup = true;
         } else if (std.mem.eql(u8, arg, "--root")) {
-            if (args.next()) |value| {
-                options.root = try allocator.dupe(u8, value);
+            if (i + 1 < argv.len) {
+                i += 1;
+                options.root = try allocator.dupe(u8, argv[i]);
             }
         } else if (std.mem.eql(u8, arg, "--log")) {
-            if (args.next()) |value| {
-                options.log = try allocator.dupe(u8, value);
+            if (i + 1 < argv.len) {
+                i += 1;
+                options.log = try allocator.dupe(u8, argv[i]);
             }
         } else if (std.mem.eql(u8, arg, "--log-format")) {
-            if (args.next()) |value| {
-                options.log_format = try allocator.dupe(u8, value);
+            if (i + 1 < argv.len) {
+                i += 1;
+                options.log_format = try allocator.dupe(u8, argv[i]);
             }
         } else if (std.mem.eql(u8, arg, "--bundle") or std.mem.eql(u8, arg, "-b")) {
-            if (args.next()) |value| {
-                options.bundle = try allocator.dupe(u8, value);
+            if (i + 1 < argv.len) {
+                i += 1;
+                options.bundle = try allocator.dupe(u8, argv[i]);
             }
         } else if (std.mem.eql(u8, arg, "--pid-file")) {
-            if (args.next()) |value| {
-                options.pid_file = try allocator.dupe(u8, value);
+            if (i + 1 < argv.len) {
+                i += 1;
+                options.pid_file = try allocator.dupe(u8, argv[i]);
             }
         } else if (std.mem.eql(u8, arg, "--console-socket")) {
-            if (args.next()) |value| {
-                options.console_socket = try allocator.dupe(u8, value);
+            if (i + 1 < argv.len) {
+                i += 1;
+                options.console_socket = try allocator.dupe(u8, argv[i]);
             }
         } else if (command == null) {
             command = parseCommand(arg);
@@ -254,17 +255,30 @@ fn parseArgs(allocator: Allocator) !struct {
             }
         }
     }
-
     if (!has_args or command == null) {
         try printUsage();
         std.process.exit(0);
     }
-
     return .{
         .command = command.?,
         .options = options,
         .container_id = container_id,
     };
+}
+
+fn parseArgs(allocator: Allocator) !struct {
+    command: Command,
+    options: RuntimeOptions,
+    container_id: ?[]const u8,
+} {
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
+    var argv = std.ArrayList([]const u8).init(allocator);
+    defer argv.deinit();
+    while (args.next()) |arg| {
+        try argv.append(arg);
+    }
+    return parseArgsFromArray(allocator, argv.items);
 }
 
 fn loadConfig(allocator: Allocator, config_path: ?[]const u8) !config.Config {
@@ -353,11 +367,11 @@ fn executeCreate(
         return error.InvalidArguments;
     }
 
-    // Перевіряємо чи існує директорія bundle
+    // Create bundle directory if it does not exist
     var bundle_dir = try std.fs.cwd().openDir(bundle_path.?, .{});
     defer bundle_dir.close();
 
-    // Перевіряємо чи існує config.json
+    // Create OCI config file
     const config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path.?, "config.json" });
     defer allocator.free(config_path);
 
@@ -366,15 +380,33 @@ fn executeCreate(
         return error.InvalidBundle;
     };
 
-    // Перевіряємо чи існує rootfs директорія
-    bundle_dir.access("rootfs", .{}) catch |err| {
-        try logger_mod.err("Failed to access rootfs directory in bundle: {s}", .{@errorName(err)});
-        return error.InvalidBundle;
-    };
+    // Create temporary logger for config initialization
+    var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
+    defer temp_logger.deinit();
 
+    // Initialize configuration
     var cfg = try loadConfig(allocator, null);
     defer cfg.deinit();
 
+    // Set runtime type (default runc)
+    cfg.setRuntimeType(.runc);
+
+    // Create container specification
+    var container_spec = try spec_mod.Spec.init(allocator);
+    defer container_spec.deinit(allocator);
+
+    // Set basic parameters
+    container_spec.oci_version = "1.0.2";
+    container_spec.hostname = "container";
+    container_spec.process.args = &[_][]const u8{"/bin/sh"};
+    container_spec.process.cwd = "/";
+    container_spec.root.path = "/var/lib/containers/rootfs";
+    container_spec.root.readonly = false;
+
+    // var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
+    // defer container_instance.deinit();
+
+    // Create container
     const create = try oci.create.Create.init(
         allocator,
         image_manager,

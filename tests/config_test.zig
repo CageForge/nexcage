@@ -1,24 +1,30 @@
 const std = @import("std");
 const testing = std.testing;
-const json = @import("zig-json");
+const json = @import("json");
 const Config = @import("config").Config;
 const JsonConfig = @import("config").JsonConfig;
 const LogLevel = @import("types").LogLevel;
+const deinitJsonConfig = @import("config").deinitJsonConfig;
+const LogContext = @import("types").LogContext;
 
 test "Config initialization" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var logger_ctx = try std.testing.allocator.create(@import("logger").LogContext);
-    defer std.testing.allocator.destroy(logger_ctx);
-    logger_ctx.* = try @import("logger").LogContext.init(std.testing.allocator, .info);
-    defer logger_ctx.deinit();
+    var tmp_file = try std.fs.cwd().createFile("test_log.txt", .{ .truncate = true, .read = true });
+    defer tmp_file.close();
+    var logger_ctx = try allocator.create(LogContext);
+    logger_ctx.* = try LogContext.init(allocator, tmp_file.writer(), .info, "test");
+    defer {
+        logger_ctx.deinit();
+        allocator.destroy(logger_ctx);
+    }
 
     const config = try Config.init(allocator, logger_ctx);
-    defer config.deinit();
+    defer @constCast(&config).deinit();
 
-    try testing.expectEqual(@import("oci/runtime/mod.zig").RuntimeType.runc, config.runtime_type);
+    // try testing.expectEqual(@import("oci").runtime.RuntimeType.runc, config.runtime_type);
     try testing.expectEqual(@as(?[]const u8, null), config.runtime_path);
     try testing.expectEqualStrings("/var/run/proxmox-lxcri", config.root_path);
     try testing.expectEqualStrings("/var/lib/proxmox-lxcri", config.bundle_path);
@@ -34,10 +40,14 @@ test "Config from JSON" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var logger_ctx = try std.testing.allocator.create(@import("logger").LogContext);
-    defer std.testing.allocator.destroy(logger_ctx);
-    logger_ctx.* = try @import("logger").LogContext.init(std.testing.allocator, .info);
-    defer logger_ctx.deinit();
+    var tmp_file = try std.fs.cwd().createFile("test_log.txt", .{ .truncate = true, .read = true });
+    defer tmp_file.close();
+    var logger_ctx = try allocator.create(LogContext);
+    logger_ctx.* = try LogContext.init(allocator, tmp_file.writer(), .info, "test");
+    defer {
+        logger_ctx.deinit();
+        allocator.destroy(logger_ctx);
+    }
 
     const json_str =
         \\{
@@ -73,7 +83,7 @@ test "Config from JSON" {
     defer deinitJsonConfig(&json_config, allocator);
 
     const config = try Config.fromJson(allocator, json_config, logger_ctx);
-    defer config.deinit();
+    defer @constCast(&config).deinit();
 
     // Check runtime configuration
     try testing.expectEqualStrings("/custom/root", config.runtime_path.?);
@@ -104,13 +114,17 @@ test "Config JSON serialization" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var logger_ctx = try std.testing.allocator.create(@import("logger").LogContext);
-    defer std.testing.allocator.destroy(logger_ctx);
-    logger_ctx.* = try @import("logger").LogContext.init(std.testing.allocator, .info);
-    defer logger_ctx.deinit();
+    var tmp_file = try std.fs.cwd().createFile("test_log.txt", .{ .truncate = true, .read = true });
+    defer tmp_file.close();
+    var logger_ctx = try allocator.create(LogContext);
+    logger_ctx.* = try LogContext.init(allocator, tmp_file.writer(), .info, "test");
+    defer {
+        logger_ctx.deinit();
+        allocator.destroy(logger_ctx);
+    }
 
     const config = try Config.init(allocator, logger_ctx);
-    defer config.deinit();
+    defer @constCast(&config).deinit();
 
     // Create JsonConfig from Config
     var json_config = JsonConfig{

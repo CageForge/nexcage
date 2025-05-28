@@ -138,7 +138,7 @@ pub fn validateOciSpec(spec: *const oci.Spec) !void {
 }
 
 fn isDeviceSupported(device: oci.LinuxDevice) bool {
-    // Перевіряємо базові пристрої, які підтримуються в LXC
+    // Check basic devices supported in LXC
     const supported_devices = [_][]const u8{
         "/dev/null",
         "/dev/zero",

@@ -5,11 +5,11 @@ pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, in
     var unknown_fields = std.ArrayList([]const u8).init(allocator);
     defer unknown_fields.deinit();
 
-    // Спочатку парсимо як об'єкт для отримання всіх полів
+    // First, parse as an object to get all fields
     const raw_value = try json.parse(input, allocator);
     defer raw_value.deinit(allocator);
 
-    // Збираємо невідомі поля
+    // Collect unknown fields
     if (raw_value.type == .object) {
         const obj = raw_value.object();
         var it = obj.map.iterator();
@@ -28,11 +28,11 @@ pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, in
         }
     }
 
-    // Тепер парсимо як наш тип
+    // Now parse as our type
     const value = try json.parse(input, allocator);
     defer value.deinit(allocator);
 
-    // Конвертуємо значення в наш тип
+    // Convert value to our type
     var result: T = undefined;
     inline for (std.meta.fields(T)) |field| {
         const obj = value.object();
@@ -43,7 +43,7 @@ pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, in
         }
     }
 
-    // Ініціалізуємо unknown_fields для кожного поля
+    // Initialize unknown_fields for each field
     inline for (std.meta.fields(T)) |field| {
         if (@typeInfo(field.type) == .Struct) {
             if (@hasField(field.type, "unknown_fields")) {
@@ -71,7 +71,7 @@ fn convertValue(comptime T: type, value: *json.JsonValue, allocator: std.mem.All
                     @field(result, field.name) = @as(field.type, undefined);
                 }
             }
-            // Ініціалізуємо unknown_fields для вкладених структур
+            // Initialize unknown_fields for nested structs
             inline for (std.meta.fields(T)) |field| {
                 if (@typeInfo(field.type) == .Struct) {
                     if (@hasField(field.type, "unknown_fields")) {

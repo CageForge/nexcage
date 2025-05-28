@@ -19,7 +19,7 @@ pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, s
     const api_path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc", .{client.node});
     defer client.allocator.free(api_path);
 
-    // Створюємо конфігурацію для Proxmox LXC
+    // Create configuration for Proxmox LXC
     var config = std.StringHashMap([]const u8).init(client.allocator);
     defer {
         var iter = config.iterator();
@@ -29,12 +29,12 @@ pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, s
         config.deinit();
     }
 
-    // Базові налаштування
+    // Basic settings
     try config.put("vmid", try std.fmt.allocPrint(client.allocator, "{d}", .{vmid}));
     try config.put("hostname", try client.allocator.dupe(u8, spec.hostname));
-    try config.put("ostype", try client.allocator.dupe(u8, "ubuntu")); // За замовчуванням використовуємо Ubuntu
+    try config.put("ostype", try client.allocator.dupe(u8, "ubuntu")); // Default to Ubuntu
 
-    // Налаштування процесу
+    // Process settings
     if (spec.process) |process| {
         // User/Group
         try config.put("unprivileged", try std.fmt.allocPrint(client.allocator, "{d}", .{process.user.uid != 0}));
@@ -66,14 +66,14 @@ pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, s
                     try cap_str.append(',');
                 }
                 if (cap_str.items.len > 0) {
-                    _ = cap_str.pop(); // Видаляємо останню кому
+                    _ = cap_str.pop(); // Remove last comma
                 }
                 try config.put("capabilities", try cap_str.toOwnedSlice());
             }
         }
     }
 
-    // Налаштування root filesystem
+    // Root filesystem settings
     if (spec.root) |root| {
         try config.put("rootfs", try client.allocator.dupe(u8, root.path));
         if (root.readonly) {
@@ -81,7 +81,7 @@ pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, s
         }
     }
 
-    // Налаштування монтування
+    // Mount settings
     if (spec.mounts.len > 0) {
         var mp_index: usize = 0;
         for (spec.mounts) |mount| {
@@ -92,13 +92,13 @@ pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, s
         }
     }
 
-    // Linux-специфічні налаштування
+    // Linux-specific settings
     if (spec.linux) |linux| {
         // Namespaces
         for (linux.namespaces) |ns| {
             switch (ns.type[0]) {
                 'n' => if (std.mem.eql(u8, ns.type, "network")) {
-                    // Налаштування мережі через Kube-OVN
+                    // Network configuration via Kube-OVN
                     if (spec.annotations) |annotations| {
                         try configureKubeOVNNetwork(client.allocator, &config, annotations) catch |err| {
                             logger.err("Failed to configure network: {}", .{err});
@@ -162,7 +162,7 @@ pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, s
         }
     }
 
-    // Анотації
+    // Annotations
     if (spec.annotations) |annotations| {
         var it = annotations.iterator();
         while (it.next()) |entry| {
@@ -173,32 +173,32 @@ pub fn createLXC(client: *proxmox.ProxmoxClient, oci_container_id: []const u8, s
         }
     }
 
-    // Перетворюємо конфігурацію в JSON
+    // Convert configuration to JSON
     const body = try std.json.stringifyAlloc(client.allocator, config, .{});
     defer client.allocator.free(body);
 
-    // Відправляємо запит на створення контейнера
+    // Send request to create container
     const response = try client.makeRequest(.POST, api_path, body);
     defer client.allocator.free(response);
 
-    // Перевіряємо відповідь
+    // Check response
     var parsed = try std.json.parseFromSlice(std.json.Value, client.allocator, response, .{});
     defer parsed.deinit();
 
-    // Логуємо успішне створення
+    // Log successful creation
     try logger.info("Created LXC container with VMID: {d}", .{vmid});
 }
 
 fn configureKubeOVNNetwork(allocator: std.mem.Allocator, config: *std.StringHashMap([]const u8), annotations: std.StringHashMap([]const u8)) !void {
-    // Створюємо CNI менеджер
+    // Create CNI manager
     var cni_manager = try network.NetworkManager.init(allocator);
     defer cni_manager.deinit();
 
-    // Отримуємо мережевий namespace контейнера
+    // Get network namespace of container
     const netns = try std.fs.openFileAbsolute("/proc/self/ns/net", .{});
     defer netns.close();
 
-    // Готуємо CNI конфігурацію
+    // Prepare CNI configuration
     var cni_config = network.CNIPlugin.Config{
         .container_id = try allocator.dupe(u8, config.get("vmid").?),
         .netns = netns,
@@ -207,14 +207,14 @@ fn configureKubeOVNNetwork(allocator: std.mem.Allocator, config: *std.StringHash
     };
     defer cni_config.deinit(allocator);
 
-    // Викликаємо CNI ADD
+    // Call CNI ADD
     const result = try cni_manager.add(&cni_config) catch |err| {
         logger.err("Failed to execute CNI ADD: {}", .{err});
         return NetworkError.CNIError;
     };
     defer result.deinit(allocator);
 
-    // Налаштовуємо мережу в LXC на основі результату CNI
+    // Configure network in LXC based on CNI result
     var net_config = std.ArrayList(u8).init(allocator);
     defer net_config.deinit();
 
@@ -238,15 +238,15 @@ fn configureKubeOVNNetwork(allocator: std.mem.Allocator, config: *std.StringHash
         try net_config.writer().print("mtu={d},", .{mtu});
     }
 
-    // Видаляємо останню кому
+    // Remove last comma
     if (net_config.items.len > 0) {
         _ = net_config.pop();
     }
 
-    // Зберігаємо налаштування мережі
+    // Save network configuration
     try config.put("net0", try net_config.toOwnedSlice());
 
-    // Налаштовуємо DNS якщо він є в результаті CNI
+    // Configure DNS if it exists in CNI result
     if (result.dns) |dns| {
         if (dns.nameservers.len > 0) {
             const dns_servers = try std.mem.join(allocator, " ", dns.nameservers);
@@ -261,7 +261,7 @@ fn configureKubeOVNNetwork(allocator: std.mem.Allocator, config: *std.StringHash
         }
     }
 
-    // Логуємо успішне налаштування мережі
+    // Log successful network configuration
     try logger.info("Configured network for container using CNI", .{});
 }
 

@@ -24,7 +24,7 @@ pub const LoggerError = error{
     Unexpected,
 };
 
-// Для зворотної сумісності
+// For backward compatibility
 pub const Logger = types.LogContext;
 
 var global_logger: ?types.LogContext = null;
