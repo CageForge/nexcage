@@ -193,13 +193,16 @@ pub const Create = struct {
             @tagName(self.runtime_type),
         });
 
-        // Завантажуємо образ з реєстру якщо потрібно
-        if (self.registry) |r| {
-            try r.downloadImage(
-                self.options.image_name,
-                self.options.image_tag,
-                self.image_manager.images_dir,
+        // Перевіряємо, чи образ вже є локально
+        if (!self.image_manager.hasImage(self.options.image_name, self.options.image_tag)) {
+            try self.logger.info("Image {s}:{s} not found locally, pulling...", .{self.options.image_name, self.options.image_tag});
+            // Якщо нема — викликаємо pullImage
+            _ = try self.image_manager.pullImage(
+                self.options.image_name ++ ":" ++ self.options.image_tag
             );
+            try self.logger.info("Image {s}:{s} pulled successfully", .{self.options.image_name, self.options.image_tag});
+        } else {
+            try self.logger.info("Image {s}:{s} found locally", .{self.options.image_name, self.options.image_tag});
         }
 
         // Валідуємо bundle
