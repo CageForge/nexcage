@@ -892,6 +892,7 @@ pub const LogContext = struct {
     name: []const u8,
     file: ?std.fs.File = null,
     writer: std.fs.File.Writer,
+    tags: ?[]const []const u8 = null,
 
     pub fn init(allocator: std.mem.Allocator, writer: std.fs.File.Writer, level: LogLevel, name: []const u8) !LogContext {
         return LogContext{
@@ -920,9 +921,41 @@ pub const LogContext = struct {
         }
     }
 
+    fn getTimestamp() []u8 {
+        var buf: [32]u8 = undefined;
+        const ts = std.time.timestamp();
+        const len = std.fmt.bufPrint(&buf, "{d}", .{ts}) catch 0;
+        return buf[0..len];
+    }
+
+    pub fn setTags(self: *LogContext, tags: []const []const u8) void {
+        self.tags = tags;
+    }
+
+    fn formatTags(self: *LogContext) []const u8 {
+        if (self.tags) |tags| {
+            var buf: [256]u8 = undefined;
+            var idx: usize = 0;
+            for (tags) |tag| {
+                if (idx + tag.len + 3 > buf.len) break;
+                buf[idx] = ' ';
+                buf[idx+1] = '[';
+                std.mem.copy(u8, buf[idx+2..], tag);
+                idx += 2 + tag.len;
+                buf[idx] = ']';
+                idx += 1;
+            }
+            return buf[0..idx];
+        } else {
+            return "";
+        }
+    }
+
     pub fn debug(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
         if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.debug)) {
-            self.writer.print("[DEBUG] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
+            const ts = getTimestamp();
+            const tags = self.formatTags();
+            self.writer.print("[{s}] [DEBUG] [{s}]{s} " ++ fmt ++ "\n", .{ts, self.name, tags} ++ args) catch |write_err| {
                 return switch (write_err) {
                     error.DiskQuota => LoggerError.DiskQuota,
                     error.FileTooBig => LoggerError.FileTooBig,
@@ -946,7 +979,9 @@ pub const LogContext = struct {
 
     pub fn info(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
         if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.info)) {
-            self.writer.print("[INFO] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
+            const ts = getTimestamp();
+            const tags = self.formatTags();
+            self.writer.print("[{s}] [INFO] [{s}]{s} " ++ fmt ++ "\n", .{ts, self.name, tags} ++ args) catch |write_err| {
                 return switch (write_err) {
                     error.DiskQuota => LoggerError.DiskQuota,
                     error.FileTooBig => LoggerError.FileTooBig,
@@ -970,7 +1005,9 @@ pub const LogContext = struct {
 
     pub fn warn(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
         if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.warn)) {
-            self.writer.print("[WARN] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
+            const ts = getTimestamp();
+            const tags = self.formatTags();
+            self.writer.print("[{s}] [WARN] [{s}]{s} " ++ fmt ++ "\n", .{ts, self.name, tags} ++ args) catch |write_err| {
                 return switch (write_err) {
                     error.DiskQuota => LoggerError.DiskQuota,
                     error.FileTooBig => LoggerError.FileTooBig,
@@ -994,7 +1031,9 @@ pub const LogContext = struct {
 
     pub fn err(self: *LogContext, comptime fmt: []const u8, args: anytype) LoggerError!void {
         if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.err)) {
-            self.writer.print("[ERROR] [{s}] " ++ fmt ++ "\n", .{self.name} ++ args) catch |write_err| {
+            const ts = getTimestamp();
+            const tags = self.formatTags();
+            self.writer.print("[{s}] [ERROR] [{s}]{s} " ++ fmt ++ "\n", .{ts, self.name, tags} ++ args) catch |write_err| {
                 return switch (write_err) {
                     error.DiskQuota => LoggerError.DiskQuota,
                     error.FileTooBig => LoggerError.FileTooBig,
