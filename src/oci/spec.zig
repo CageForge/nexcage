@@ -1,7 +1,7 @@
 const std = @import("std");
 const fs = std.fs;
 const mem = std.mem;
-const json = std.json;
+const zig_json = @import("zig_json");
 const logger = @import("logger");
 const oci_types = @import("types");
 const errors = @import("error");
@@ -55,39 +55,47 @@ pub const Mount = struct {
 };
 
 pub const Spec = struct {
-    oci_version: []const u8,
-    process: Process,
-    root: Root,
-    hostname: []const u8,
-    mounts: []const Mount,
-    linux: ?LinuxSpec,
+    ociVersion: []const u8,
+    process: ?Process,
+    root: ?Root,
+    hostname: ?[]const u8,
+    mounts: ?[]Mount,
+    hooks: ?Hooks,
     annotations: ?std.StringHashMap([]const u8),
-    storage: StorageConfig,
+    linux: ?Linux,
+    vm: ?VM,
+    ExposedPorts: ?std.StringHashMap(zig_json.JsonValue),
+    Volumes: ?std.StringHashMap(zig_json.JsonValue),
 
-    pub fn init(allocator: Allocator) !Spec {
+    pub fn init() Spec {
         return Spec{
-            .oci_version = "1.0.2",
-            .process = try Process.init(),
-            .root = Root.init(),
-            .hostname = "",
-            .mounts = &[_]Mount{},
-            .linux = null,
+            .ociVersion = "1.0.2",
+            .process = null,
+            .root = null,
+            .hostname = null,
+            .mounts = null,
+            .hooks = null,
             .annotations = null,
-            .storage = StorageConfig.init(allocator, create.StorageType.zfs, null, null),
+            .linux = null,
+            .vm = null,
+            .ExposedPorts = null,
+            .Volumes = null,
         };
     }
 
     pub fn deinit(self: *Spec, allocator: Allocator) void {
-        if (!std.mem.eql(u8, self.oci_version, "1.0.2")) {
-            allocator.free(self.oci_version);
+        if (!std.mem.eql(u8, self.ociVersion, "1.0.2")) {
+            allocator.free(self.ociVersion);
         }
-        if (!std.mem.eql(u8, self.hostname, "container")) {
-            allocator.free(self.hostname);
+        if (self.hostname) |hostname| {
+            allocator.free(hostname);
         }
-        for (self.mounts) |mount| {
-            mount.deinit(allocator);
+        if (self.mounts) |mounts| {
+            for (mounts) |mount| {
+                mount.deinit(allocator);
+            }
+            allocator.free(mounts);
         }
-        allocator.free(self.mounts);
         if (self.linux) |linux| {
             linux.deinit(allocator);
         }
@@ -99,7 +107,12 @@ pub const Spec = struct {
             }
             annotations.deinit();
         }
-        self.storage.deinit(allocator);
+        if (self.ExposedPorts) |ports| {
+            ports.deinit();
+        }
+        if (self.Volumes) |vols| {
+            vols.deinit();
+        }
     }
 };
 
@@ -173,13 +186,13 @@ pub const LinuxDevice = struct {
 };
 
 pub const LinuxResources = struct {
-    devices: ?[]LinuxDeviceCgroup = null,
-    memory: ?LinuxMemory = null,
-    cpu: ?LinuxCPU = null,
-    pids: ?LinuxPids = null,
-    blockIO: ?LinuxBlockIO = null,
-    hugepageLimits: ?[]LinuxHugepageLimit = null,
-    network: ?LinuxNetwork = null,
+    devices: ?[]LinuxDeviceCgroup,
+    memory: ?LinuxMemory,
+    cpu: ?LinuxCPU,
+    pids: ?LinuxPids,
+    blockIO: ?LinuxBlockIO,
+    hugepageLimits: ?[]LinuxHugepageLimit,
+    network: ?LinuxNetwork,
 
     pub fn deinit(self: *const LinuxResources, allocator: Allocator) void {
         if (self.devices) |d| {
@@ -710,4 +723,71 @@ pub const OciSpec = struct {
             hooks.deinit(allocator);
         }
     }
+};
+
+pub const Linux = struct {
+    uidMappings: ?[]LinuxIDMapping,
+    gidMappings: ?[]LinuxIDMapping,
+    sysctl: ?std.StringHashMap([]const u8),
+    resources: ?LinuxResources,
+    cgroupsPath: ?[]const u8,
+    namespaces: ?[]LinuxNamespace,
+    devices: ?[]LinuxDevice,
+    seccomp: ?LinuxSeccomp,
+    rootfsPropagation: ?[]const u8,
+    maskedPaths: ?[][]const u8,
+    readonlyPaths: ?[][]const u8,
+    mountLabel: ?[]const u8,
+    intelRdt: ?LinuxIntelRdt,
+};
+
+pub const LinuxIDMapping = struct {
+    hostID: u32,
+    containerID: u32,
+    size: u32,
+};
+
+pub const VM = struct {
+    hypervisor: VMHypervisor,
+    kernel: VMKernel,
+    image: VMImage,
+};
+
+pub const VMHypervisor = struct {
+    path: []const u8,
+    parameters: ?[][]const u8,
+};
+
+pub const VMKernel = struct {
+    path: []const u8,
+    parameters: ?[][]const u8,
+    initrd: ?[]const u8,
+};
+
+pub const VMImage = struct {
+    path: []const u8,
+    format: []const u8,
+};
+
+pub const LinuxIntelRdt = struct {
+    l3CacheSchema: ?[]const u8,
+};
+
+pub const LinuxSeccomp = struct {
+    defaultAction: []const u8,
+    architectures: ?[][]const u8,
+    syscalls: ?[]LinuxSyscall,
+};
+
+pub const LinuxSyscall = struct {
+    names: [][]const u8,
+    action: []const u8,
+    args: ?[]LinuxSeccompArg,
+};
+
+pub const LinuxSeccompArg = struct {
+    index: u32,
+    value: u64,
+    valueTwo: ?u64,
+    op: []const u8,
 };

@@ -1,91 +1,82 @@
 const std = @import("std");
+const zig_json = @import("zig_json");
 
-pub fn getString(value: std.json.Value, field: []const u8) ![]const u8 {
-    const obj = value.object;
+pub fn getString(value: zig_json.JsonValue, field: []const u8) ![]const u8 {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return error.MissingField;
-    return switch (field_value) {
-        .string => |str| str,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .string) return error.InvalidType;
+    return field_value.string();
 }
 
-pub fn getOptionalString(value: std.json.Value, field: []const u8) !?[]const u8 {
-    const obj = value.object;
+pub fn getOptionalString(value: zig_json.JsonValue, field: []const u8) !?[]const u8 {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return null;
-    return switch (field_value) {
-        .string => |str| str,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .string) return error.InvalidType;
+    return field_value.string();
 }
 
-pub fn getBool(value: std.json.Value, field: []const u8) !bool {
-    const obj = value.object;
+pub fn getBool(value: zig_json.JsonValue, field: []const u8) !bool {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return error.MissingField;
-    return switch (field_value) {
-        .bool => |b| b,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .bool) return error.InvalidType;
+    return field_value.bool();
 }
 
-pub fn getOptionalBool(value: std.json.Value, field: []const u8) !?bool {
-    const obj = value.object;
+pub fn getOptionalBool(value: zig_json.JsonValue, field: []const u8) !?bool {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return null;
-    return switch (field_value) {
-        .bool => |b| b,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .bool) return error.InvalidType;
+    return field_value.bool();
 }
 
-pub fn getInt(value: std.json.Value, field: []const u8) !i64 {
-    const obj = value.object;
+pub fn getInt(value: zig_json.JsonValue, field: []const u8) !i64 {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return error.MissingField;
-    return switch (field_value) {
-        .integer => |i| i,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .integer) return error.InvalidType;
+    return field_value.integer();
 }
 
-pub fn getOptionalInt(value: std.json.Value, field: []const u8) !?i64 {
-    const obj = value.object;
+pub fn getOptionalInt(value: zig_json.JsonValue, field: []const u8) !?i64 {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return null;
-    return switch (field_value) {
-        .integer => |i| i,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .integer) return error.InvalidType;
+    return field_value.integer();
 }
 
-pub fn getObject(value: std.json.Value, field: []const u8) !std.json.Value {
-    const obj = value.object;
+pub fn getObject(value: zig_json.JsonValue, field: []const u8) !zig_json.JsonValue {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return error.MissingField;
-    return switch (field_value) {
-        .object => field_value,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .object) return error.InvalidType;
+    return field_value;
 }
 
-pub fn getOptionalObject(value: std.json.Value, field: []const u8) !?std.json.Value {
-    const obj = value.object;
+pub fn getOptionalObject(value: zig_json.JsonValue, field: []const u8) !?zig_json.JsonValue {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return null;
-    return switch (field_value) {
-        .object => field_value,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .object) return error.InvalidType;
+    return field_value;
 }
 
-pub fn getArray(value: std.json.Value, field: []const u8) !std.json.Value {
-    const obj = value.object;
+pub fn getArray(value: zig_json.JsonValue, field: []const u8) !zig_json.JsonValue {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return error.MissingField;
-    return switch (field_value) {
-        .array => field_value,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .array) return error.InvalidType;
+    return field_value;
 }
 
-pub fn getOptionalArray(value: std.json.Value, field: []const u8) !?std.json.Value {
-    const obj = value.object;
+pub fn getOptionalArray(value: zig_json.JsonValue, field: []const u8) !?zig_json.JsonValue {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
     const field_value = obj.get(field) orelse return null;
-    return switch (field_value) {
-        .array => field_value,
-        else => error.InvalidType,
-    };
+    if (field_value.type != .array) return error.InvalidType;
+    return field_value;
 }

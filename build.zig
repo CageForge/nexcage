@@ -85,7 +85,7 @@ pub fn build(b: *std.Build) void {
     const json_mod = b.addModule("json", .{
         .root_source_file = b.path("src/common/custom_json_parser.zig"),
         .imports = &.{
-            .{ .name = "json", .module = zigJsonDep.module("zig-json") },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
         },
     });
 
@@ -143,7 +143,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
             .{ .name = "proxmox", .module = proxmox_mod },
-            .{ .name = "json", .module = zigJsonDep.module("zig-json") },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
             .{ .name = "zfs", .module = zfs_mod },
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },
@@ -158,7 +158,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "error", .module = error_mod },
             .{ .name = "logger", .module = logger_mod },
             .{ .name = "proxmox", .module = proxmox_mod },
-            .{ .name = "json", .module = zigJsonDep.module("zig-json") },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
             .{ .name = "zfs", .module = zfs_mod },
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },

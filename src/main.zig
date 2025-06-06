@@ -24,9 +24,11 @@ const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadEr
 const image = @import("image");
 const zfs = @import("zfs");
 const json_parser = @import("json");
+const lxc = @import("lxc");
 // const container_mod = @import("container");
 const spec_mod = @import("oci").spec;
 const RuntimeType = @import("oci").runtime.RuntimeType;
+const zig_json = @import("zig_json");
 
 const SIGINT = posix.SIG.INT;
 const SIGTERM = posix.SIG.TERM;
@@ -336,7 +338,7 @@ fn executeCreate(
     args: []const []const u8,
     image_manager: *image.ImageManager,
     zfs_manager: *zfs.ZFSManager,
-    lxc_manager: ?*void,
+    lxc_manager: ?*lxc.LXCManager,
 ) !void {
     if (args.len < 4) {
         try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
@@ -391,16 +393,15 @@ fn executeCreate(
     cfg.setRuntimeType(.runc);
 
     // Create container specification
-    var container_spec = try spec_mod.Spec.init(allocator);
-    defer container_spec.deinit(allocator);
+    var container_spec = spec_mod.Spec.init();
 
     // Set basic parameters
-    container_spec.oci_version = "1.0.2";
+    container_spec.ociVersion = "1.0.2";
     container_spec.hostname = "container";
-    container_spec.process.args = &[_][]const u8{"/bin/sh"};
-    container_spec.process.cwd = "/";
-    container_spec.root.path = "/var/lib/containers/rootfs";
-    container_spec.root.readonly = false;
+    container_spec.process.?.args = &[_][]const u8{"/bin/sh"};
+    container_spec.process.?.cwd = "/";
+    container_spec.root.?.path = "/var/lib/containers/rootfs";
+    container_spec.root.?.readonly = false;
 
     // var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
     // defer container_instance.deinit();
@@ -458,7 +459,7 @@ fn executeState(allocator: Allocator, container_id: []const u8) !void {
         .bundle = container_state.state.bundle,
     };
 
-    const state_json = try std.json.stringifyAlloc(allocator, response, .{});
+    const state_json = try zig_json.stringifyAlloc(allocator, response, .{});
     defer allocator.free(state_json);
     try std.io.getStdOut().writer().print("{s}\n", .{state_json});
 }
@@ -511,7 +512,7 @@ fn executeGenerateConfig(
     const config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path.?, "config.json" });
     defer allocator.free(config_path);
 
-    const oci_config = try std.json.stringifyAlloc(allocator, .{
+    const oci_config = try zig_json.stringifyAlloc(allocator, .{
         .ociVersion = "1.0.2",
         .process = .{
             .terminal = false,
@@ -627,16 +628,15 @@ pub fn main() !void {
     cfg.setRuntimeType(.runc);
 
     // Створюємо специфікацію контейнера
-    var container_spec = try spec_mod.Spec.init(allocator);
-    defer container_spec.deinit(allocator);
+    var container_spec = spec_mod.Spec.init();
 
     // Встановлюємо базові параметри
-    container_spec.oci_version = "1.0.2";
+    container_spec.ociVersion = "1.0.2";
     container_spec.hostname = "container";
-    container_spec.process.args = &[_][]const u8{"/bin/sh"};
-    container_spec.process.cwd = "/";
-    container_spec.root.path = "/var/lib/containers/rootfs";
-    container_spec.root.readonly = false;
+    container_spec.process.?.args = &[_][]const u8{"/bin/sh"};
+    container_spec.process.?.cwd = "/";
+    container_spec.root.?.path = "/var/lib/containers/rootfs";
+    container_spec.root.?.readonly = false;
 
     // Додаю dispatch для create
     const args = try std.process.argsAlloc(allocator);

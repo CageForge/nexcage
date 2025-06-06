@@ -1309,3 +1309,53 @@ pub const CrunManager = struct {
         _ = self;
     }
 };
+
+pub const Hooks = struct {
+    prestart: ?[]Hook = null,
+    poststart: ?[]Hook = null,
+    poststop: ?[]Hook = null,
+
+    pub fn deinit(self: *Hooks, allocator: std.mem.Allocator) void {
+        if (self.prestart) |hooks| {
+            for (hooks) |hook| {
+                hook.deinit(allocator);
+            }
+            allocator.free(hooks);
+        }
+        if (self.poststart) |hooks| {
+            for (hooks) |hook| {
+                hook.deinit(allocator);
+            }
+            allocator.free(hooks);
+        }
+        if (self.poststop) |hooks| {
+            for (hooks) |hook| {
+                hook.deinit(allocator);
+            }
+            allocator.free(hooks);
+        }
+    }
+};
+
+pub const Hook = struct {
+    path: []const u8,
+    args: ?[][]const u8 = null,
+    env: ?[][]const u8 = null,
+    timeout: ?i64 = null,
+
+    pub fn deinit(self: *Hook, allocator: std.mem.Allocator) void {
+        allocator.free(self.path);
+        if (self.args) |args| {
+            for (args) |arg| {
+                allocator.free(arg);
+            }
+            allocator.free(args);
+        }
+        if (self.env) |env| {
+            for (env) |e| {
+                allocator.free(e);
+            }
+            allocator.free(env);
+        }
+    }
+};

@@ -1,12 +1,12 @@
 const std = @import("std");
-const json = @import("json");
+const zig_json = @import("zig_json");
 
 pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !struct { value: T, unknown_fields: []const []const u8 } {
     var unknown_fields = std.ArrayList([]const u8).init(allocator);
     defer unknown_fields.deinit();
 
     // First, parse as an object to get all fields
-    const raw_value = try json.parse(input, allocator);
+    const raw_value = try zig_json.parse(input, allocator);
     defer raw_value.deinit(allocator);
 
     // Collect unknown fields
@@ -29,7 +29,7 @@ pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, in
     }
 
     // Now parse as our type
-    const value = try json.parse(input, allocator);
+    const value = try zig_json.parse(input, allocator);
     defer value.deinit(allocator);
 
     // Convert value to our type
@@ -58,7 +58,7 @@ pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, in
     };
 }
 
-fn convertValue(comptime T: type, value: *json.JsonValue, allocator: std.mem.Allocator) !T {
+fn convertValue(comptime T: type, value: *zig_json.JsonValue, allocator: std.mem.Allocator) !T {
     switch (@typeInfo(T)) {
         .Struct => {
             if (value.type != .object) return error.InvalidType;
@@ -156,7 +156,7 @@ fn convertValue(comptime T: type, value: *json.JsonValue, allocator: std.mem.All
     }
 }
 
-fn parseValue(comptime T: type, allocator: std.mem.Allocator, node: json.Value, unknown_fields: *std.ArrayList([]const u8)) !T {
+fn parseValue(comptime T: type, allocator: std.mem.Allocator, node: zig_json.Value, unknown_fields: *std.ArrayList([]const u8)) !T {
     switch (@typeInfo(T)) {
         .Struct => {
             var result: T = undefined;
@@ -222,7 +222,7 @@ fn parseValue(comptime T: type, allocator: std.mem.Allocator, node: json.Value, 
     }
 }
 
-fn skipValue(stream: *json.TokenStream) !void {
+fn skipValue(stream: *zig_json.TokenStream) !void {
     switch (stream.next()) {
         .object_begin => {
             while (true) {

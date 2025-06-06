@@ -1,64 +1,75 @@
 const std = @import("std");
-const json = std.json;
+const zig_json = @import("zig_json");
 
 pub const ImageManifest = struct {
-    schemaVersion: i32 = 2,
-    mediaType: []const u8 = "application/vnd.oci.image.manifest.v1+json",
+    schemaVersion: i64,
     config: Descriptor,
     layers: []Descriptor,
-    subject: ?Descriptor = null,
-    annotations: ?std.StringHashMap([]const u8) = null,
+    annotations: ?std.StringHashMap([]const u8),
+};
+
+pub const ImageConfig = struct {
+    created: ?[]const u8,
+    author: ?[]const u8,
+    architecture: []const u8,
+    os: []const u8,
+    os_version: ?[]const u8,
+    config: Config,
+    rootfs: Rootfs,
+    history: ?[]History,
+};
+
+pub const Config = struct {
+    user: ?[]const u8,
+    exposed_ports: ?std.StringHashMap(zig_json.JsonValue),
+    env: ?[][]const u8,
+    entrypoint: ?[][]const u8,
+    cmd: ?[][]const u8,
+    volumes: ?std.StringHashMap(zig_json.JsonValue),
+    working_dir: ?[]const u8,
+    labels: ?std.StringHashMap([]const u8),
+    stop_signal: ?[]const u8,
+};
+
+pub const Rootfs = struct {
+    type: []const u8,
+    diff_ids: [][]const u8,
+};
+
+pub const History = struct {
+    created: ?[]const u8,
+    author: ?[]const u8,
+    created_by: ?[]const u8,
+    comment: ?[]const u8,
+    empty_layer: ?bool,
 };
 
 pub const Descriptor = struct {
     mediaType: []const u8,
-    digest: []const u8,
     size: i64,
-    urls: ?[][]const u8 = null,
-    annotations: ?std.StringHashMap([]const u8) = null,
-    data: ?[]const u8 = null,
-    platform: ?Platform = null,
+    digest: []const u8,
+    urls: ?[][]const u8,
+    annotations: ?std.StringHashMap([]const u8),
+    platform: ?Platform,
 };
 
 pub const Platform = struct {
     architecture: []const u8,
     os: []const u8,
-    os_version: ?[]const u8 = null,
-    os_features: ?[][]const u8 = null,
-    variant: ?[]const u8 = null,
+    os_version: ?[]const u8,
+    os_features: ?[][]const u8,
+    variant: ?[]const u8,
+    features: ?[][]const u8,
 };
 
-pub const ImageConfig = struct {
-    created: ?[]const u8 = null,
-    author: ?[]const u8 = null,
-    architecture: []const u8,
-    os: []const u8,
-    config: ?Config = null,
-    rootfs: RootFS,
-    history: ?[]History = null,
+pub const ImageIndex = struct {
+    schemaVersion: i64,
+    manifests: []ManifestDescriptor,
 };
 
-pub const Config = struct {
-    User: ?[]const u8 = null,
-    ExposedPorts: ?std.StringHashMap(std.json.Value) = null,
-    Env: ?[][]const u8 = null,
-    Entrypoint: ?[][]const u8 = null,
-    Cmd: ?[][]const u8 = null,
-    Volumes: ?std.StringHashMap(std.json.Value) = null,
-    WorkingDir: ?[]const u8 = null,
-    Labels: ?std.StringHashMap([]const u8) = null,
-    StopSignal: ?[]const u8 = null,
-};
-
-pub const RootFS = struct {
-    type: []const u8 = "layers",
-    diff_ids: [][]const u8,
-};
-
-pub const History = struct {
-    created: ?[]const u8 = null,
-    author: ?[]const u8 = null,
-    created_by: ?[]const u8 = null,
-    comment: ?[]const u8 = null,
-    empty_layer: ?bool = null,
+pub const ManifestDescriptor = struct {
+    mediaType: []const u8,
+    size: i64,
+    digest: []const u8,
+    platform: ?Platform,
 };
