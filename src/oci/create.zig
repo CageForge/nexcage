@@ -4,7 +4,7 @@ const fs = std.fs;
 const Allocator = std.mem.Allocator;
 const errors = @import("error");
 const root_types = @import("types");
-const oci_types = @import("types");
+const oci_types = @import("types.zig");
 const image_types = @import("image/types.zig");
 const proxmox = @import("proxmox");
 const mem = std.mem;
@@ -26,7 +26,8 @@ const registry = @import("registry");
 const raw = @import("raw");
 const logger_mod = @import("logger");
 const crun = @import("crun");
-const crun_spec = @import("../crun/spec.zig");
+// crun spec: use local minimal stub; CrunManager ignores it in current stub
+const DummyCrunSpec = struct {};
 
 pub const CreateOpts = struct {
     config_path: []const u8,
@@ -197,9 +198,9 @@ pub const Create = struct {
         if (!self.image_manager.hasImage(self.options.image_name, self.options.image_tag)) {
             try self.logger.info("Image {s}:{s} not found locally, pulling...", .{self.options.image_name, self.options.image_tag});
             // Якщо нема — викликаємо pullImage
-            _ = try self.image_manager.pullImage(
-                self.options.image_name ++ ":" ++ self.options.image_tag
-            );
+            const img_ref = try std.fmt.allocPrint(self.allocator, "{s}:{s}", .{ self.options.image_name, self.options.image_tag });
+            defer self.allocator.free(img_ref);
+            _ = try self.image_manager.pullImage(img_ref);
             try self.logger.info("Image {s}:{s} pulled successfully", .{self.options.image_name, self.options.image_tag});
         } else {
             try self.logger.info("Image {s}:{s} found locally", .{self.options.image_name, self.options.image_tag});
@@ -822,19 +823,9 @@ pub const Create = struct {
         }
     }
 
-    fn toSpec(self: *Self) !crun_spec.Spec {
-        return crun_spec.Spec{
-            .process = crun_spec.Process{
-                .terminal = false,
-            },
-            .linux = if (self.oci_config.linux) |linux| crun_spec.Linux{
-                .resources = if (linux.resources) |resources| crun_spec.Resources{
-                    .memory = if (resources.memory) |memory| crun_spec.Memory{
-                        .limit = memory.limit,
-                    } else null,
-                } else null,
-            } else null,
-        };
+    fn toSpec(self: *Self) !DummyCrunSpec {
+        _ = self;
+        return .{};
     }
 };
 
@@ -1302,7 +1293,8 @@ fn parseOciImageConfig(allocator: Allocator, content: []const u8) !spec.OciImage
 
     // Парсимо користувача
     if (obj.getOrNull("user")) |user_obj| {
-        config.user = try parseUser(allocator, user_obj);
+        const u = try parseUser(allocator, user_obj);
+        config.user = u;
     }
 
     // Парсимо capabilities

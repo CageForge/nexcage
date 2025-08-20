@@ -6,4 +6,5 @@ zig-out/*
 !.env.example
 test-*/*
 config.json
+zig-linux-x86_64-0.13.0/*
 

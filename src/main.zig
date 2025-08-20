@@ -23,7 +23,7 @@ const oci = @import("oci");
 const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadError;
 const image = @import("image");
 const zfs = @import("zfs");
-const json_parser = @import("json");
+const json_parser = @import("json_helpers");
 // const container_mod = @import("container");
 const spec_mod = @import("oci").spec;
 const RuntimeType = @import("oci").runtime.RuntimeType;
@@ -336,8 +336,9 @@ fn executeCreate(
     args: []const []const u8,
     image_manager: *image.ImageManager,
     zfs_manager: *zfs.ZFSManager,
-    lxc_manager: ?*void,
+    _lxc_manager: ?*void,
 ) !void {
+    _ = _lxc_manager;
     if (args.len < 4) {
         try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
         return error.InvalidArguments;
@@ -397,7 +398,9 @@ fn executeCreate(
     // Set basic parameters
     container_spec.oci_version = "1.0.2";
     container_spec.hostname = "container";
-    container_spec.process.args = &[_][]const u8{"/bin/sh"};
+    const args_array2 = try allocator.alloc([]const u8, 1);
+    args_array2[0] = "/bin/sh";
+    container_spec.process.args = args_array2;
     container_spec.process.cwd = "/";
     container_spec.root.path = "/var/lib/containers/rootfs";
     container_spec.root.readonly = false;
@@ -410,7 +413,7 @@ fn executeCreate(
         allocator,
         image_manager,
         zfs_manager,
-        lxc_manager,
+        null,
         null,
         proxmox_client,
         .{
@@ -633,7 +636,9 @@ pub fn main() !void {
     // Встановлюємо базові параметри
     container_spec.oci_version = "1.0.2";
     container_spec.hostname = "container";
-    container_spec.process.args = &[_][]const u8{"/bin/sh"};
+    const args_array = try allocator.alloc([]const u8, 1);
+    args_array[0] = "/bin/sh";
+    container_spec.process.args = args_array;
     container_spec.process.cwd = "/";
     container_spec.root.path = "/var/lib/containers/rootfs";
     container_spec.root.readonly = false;
@@ -646,7 +651,7 @@ pub fn main() !void {
         // Додаю тег container_id
         temp_logger.setTags(&[_][]const u8{std.fmt.allocPrint(allocator, "container_id={s}", .{container_id}) catch "container_id=unknown"});
         executeCreate(allocator, args, undefined, undefined, null) catch |err| {
-            temp_logger.err("Create command failed: {s}", .{@errorName(err)});
+            temp_logger.err("Create command failed: {s}", .{@errorName(err)}) catch {};
             return err;
         };
         return;

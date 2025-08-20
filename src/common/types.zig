@@ -426,6 +426,14 @@ pub const ImageFilter = struct {
     }
 };
 
+// OCI hook definition used by oci/hooks.zig
+pub const Hook = struct {
+    path: []const u8,
+    args: ?[]const []const u8 = null,
+    env: ?[]const []const u8 = null,
+    timeout: ?i64 = null,
+};
+
 pub const AuthConfig = struct {
     username: ?[]const u8 = null,
     password: ?[]const u8 = null,

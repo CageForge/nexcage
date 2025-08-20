@@ -4,6 +4,7 @@ const ArrayList = std.ArrayList;
 const json = std.json;
 const fs = std.fs;
 const types = @import("types");
+const oci_types = @import("types.zig");
 const logger = std.log.scoped(.oci_hooks);
 const os = std.os;
 const time = std.time;
@@ -54,13 +55,13 @@ pub const HookExecutor = struct {
         self.allocator.destroy(self);
     }
 
-    pub fn executeHooks(self: *Self, hooks: []const types.Hook, context: HookContext) !void {
+    pub fn executeHooks(self: *Self, hooks: []const oci_types.Hook, context: HookContext) !void {
         for (hooks) |hook| {
             try self.executeHook(hook, context);
         }
     }
 
-    pub fn executeHook(self: *Self, hook: types.Hook, context: HookContext) !void {
+    pub fn executeHook(self: *Self, hook: oci_types.Hook, context: HookContext) !void {
         var args = ArrayList([]const u8).init(self.allocator);
         defer args.deinit();
 

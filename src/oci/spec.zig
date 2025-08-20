@@ -3,7 +3,7 @@ const fs = std.fs;
 const mem = std.mem;
 const json = std.json;
 const logger = @import("logger");
-const oci_types = @import("types");
+const oci_types = @import("types.zig");
 const errors = @import("error");
 const common = @import("common");
 const create = @import("create.zig");
@@ -67,7 +67,7 @@ pub const Spec = struct {
     pub fn init(allocator: Allocator) !Spec {
         return Spec{
             .oci_version = "1.0.2",
-            .process = try Process.init(),
+            .process = Process{},
             .root = Root.init(),
             .hostname = "",
             .mounts = &[_]Mount{},
