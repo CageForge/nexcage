@@ -56,7 +56,7 @@ pub const EnvVar = struct {
 pub const ContainerConfig = struct {
     id: []const u8,
     name: []const u8,
-    state: ContainerState,
+    state: ContainerStateInfo,
     pid: ?u32,
     bundle: []const u8,
     annotations: ?[]Annotation,
@@ -79,7 +79,15 @@ pub const ContainerConfig = struct {
         return ContainerConfig{
             .id = "",
             .name = "",
-            .state = .unknown,
+            .state = ContainerStateInfo{
+                .oci_version = "",
+                .id = "",
+                .status = "",
+                .pid = 0,
+                .bundle = "",
+                .annotations = null,
+                .allocator = allocator,
+            },
             .pid = null,
             .bundle = "",
             .annotations = null,
@@ -107,6 +115,7 @@ pub const ContainerConfig = struct {
     pub fn deinit(self: *ContainerConfig) void {
         self.allocator.free(self.id);
         self.allocator.free(self.name);
+        self.state.deinit(self.allocator);
         self.allocator.free(self.bundle);
         if (self.annotations) |annotations| {
             for (annotations) |*annotation| {
@@ -162,7 +171,6 @@ pub const ContainerConfig = struct {
         if (self.log_path) |path| {
             self.allocator.free(path);
         }
-        self.state.deinit();
     }
 };
 
@@ -576,6 +584,29 @@ pub const ContainerState = enum {
     stopped,
     deleted,
     unknown,
+};
+
+pub const ContainerStateInfo = struct {
+    oci_version: []const u8,
+    id: []const u8,
+    status: []const u8,
+    pid: i64,
+    bundle: []const u8,
+    annotations: ?[]Annotation = null,
+    allocator: Allocator,
+
+    pub fn deinit(self: *ContainerStateInfo, allocator: Allocator) void {
+        allocator.free(self.oci_version);
+        allocator.free(self.id);
+        allocator.free(self.status);
+        allocator.free(self.bundle);
+        if (self.annotations) |annotations| {
+            for (annotations) |*annotation| {
+                annotation.deinit(allocator);
+            }
+            allocator.free(annotations);
+        }
+    }
 };
 
 pub const RlimitType = enum {
