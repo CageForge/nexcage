@@ -23,8 +23,7 @@ const oci = @import("oci");
 const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadError;
 const image = @import("image");
 const zfs = @import("zfs");
-const json_parser = @import("json");
-const lxc = @import("lxc");
+const json_parser = @import("json_helpers");
 // const container_mod = @import("container");
 const spec_mod = @import("oci").spec;
 const RuntimeType = @import("oci").runtime.RuntimeType;
@@ -162,32 +161,42 @@ fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.
     }
 }
 
-fn printUsage() !void {
+fn printUsage() void {
     const usage =
-        \\Usage: proxmox-lxcri <command> [options] [container_id]
+        \\Proxmox LXC Runtime Interface (proxmox-lxcri)
+        \\
+        \\Usage: proxmox-lxcri [OPTIONS] COMMAND [ARGS]...
         \\
         \\Commands:
-        \\  create    Create a new container
-        \\  start     Start a container
-        \\  state     Get container state
-        \\  kill      Kill a container
-        \\  delete    Delete a container
-        \\  help      Show this help message
-        \\  generate-config Generate OCI config for a container
+        \\  create <container_id>    Create a new container
+        \\  start <container_id>     Start a container
+        \\  stop <container_id>      Stop a container
+        \\  delete <container_id>    Delete a container
+        \\  list                     List all containers
+        \\  info <container_id>      Show container information
+        \\  state <container_id>     Get container state
+        \\  kill <container_id>      Kill a container
+        \\  generate-config          Generate OCI config for a container
         \\
         \\Options:
-        \\  --help, -h              Show this help message
-        \\  --debug                 Enable debug logging
-        \\  --systemd-cgroup        Use systemd cgroup
-        \\  --root <path>           Root directory for container state
-        \\  --log <path>            Log file path
-        \\  --log-format <format>   Log format
-        \\  --bundle, -b <path>     Path to OCI bundle
-        \\  --pid-file <path>       Path to pid file
-        \\  --console-socket <path> Path to console socket
+        \\  -h, --help               Show this help message
+        \\  -v, --version            Show version information
+        \\  --debug                  Enable debug logging
+        \\  --systemd-cgroup         Use systemd cgroup
+        \\  --root <path>            Root directory for container state
+        \\  --log <path>             Log file path
+        \\  --log-format <format>    Log format
+        \\  --bundle, -b <path>      Path to OCI bundle
+        \\  --pid-file <path>        Path to pid file
+        \\  --console-socket <path>  Path to console socket
+        \\
+        \\Examples:
+        \\  proxmox-lxcri create my-container
+        \\  proxmox-lxcri start my-container
+        \\  proxmox-lxcri list
         \\
     ;
-    try std.io.getStdOut().writer().writeAll(usage);
+    std.io.getStdOut().writer().print(usage, .{}) catch {};
 }
 
 pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struct {
@@ -338,8 +347,9 @@ fn executeCreate(
     args: []const []const u8,
     image_manager: *image.ImageManager,
     zfs_manager: *zfs.ZFSManager,
-    lxc_manager: ?*lxc.LXCManager,
+    _lxc_manager: ?*void,
 ) !void {
+    _ = _lxc_manager;
     if (args.len < 4) {
         try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
         return error.InvalidArguments;
@@ -398,10 +408,12 @@ fn executeCreate(
     // Set basic parameters
     container_spec.ociVersion = "1.0.2";
     container_spec.hostname = "container";
-    container_spec.process.?.args = &[_][]const u8{"/bin/sh"};
-    container_spec.process.?.cwd = "/";
-    container_spec.root.?.path = "/var/lib/containers/rootfs";
-    container_spec.root.?.readonly = false;
+    const args_array2 = try allocator.alloc([]const u8, 1);
+    args_array2[0] = "/bin/sh";
+    container_spec.process.args = args_array2;
+    container_spec.process.cwd = "/";
+    container_spec.root.path = "/var/lib/containers/rootfs";
+    container_spec.root.readonly = false;
 
     // var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
     // defer container_instance.deinit();
@@ -411,7 +423,7 @@ fn executeCreate(
         allocator,
         image_manager,
         zfs_manager,
-        lxc_manager,
+        null,
         null,
         proxmox_client,
         .{
@@ -432,7 +444,7 @@ fn executeCreate(
 }
 
 fn executeStart(container_id: []const u8) !void {
-    try oci.start.start(container_id.?, proxmox_client);
+    try oci.start.start(container_id, proxmox_client);
 }
 
 fn executeState(allocator: Allocator, container_id: []const u8) !void {
@@ -470,7 +482,7 @@ fn executeKill(container_id: []const u8, signal: ?[]const u8) !void {
 }
 
 fn executeDelete(container_id: []const u8) !void {
-    try oci.delete.delete(container_id.?, proxmox_client);
+    try oci.delete.delete(container_id, proxmox_client);
 }
 
 fn executeGenerateConfig(
@@ -633,24 +645,136 @@ pub fn main() !void {
     // Встановлюємо базові параметри
     container_spec.ociVersion = "1.0.2";
     container_spec.hostname = "container";
-    container_spec.process.?.args = &[_][]const u8{"/bin/sh"};
-    container_spec.process.?.cwd = "/";
-    container_spec.root.?.path = "/var/lib/containers/rootfs";
-    container_spec.root.?.readonly = false;
+    const args_array = try allocator.alloc([]const u8, 1);
+    defer allocator.free(args_array);
+    args_array[0] = "/bin/sh";
+    container_spec.process.args = args_array;
+    container_spec.process.cwd = "/";
+    container_spec.root.path = "/var/lib/containers/rootfs";
+    container_spec.root.readonly = false;
 
-    // Додаю dispatch для create
+    // Додаю dispatch для команд
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
-    if (args.len > 1 and std.mem.eql(u8, args[1], "create")) {
+    
+    if (args.len <= 1) {
+        printUsage();
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "--help") or std.mem.eql(u8, args[1], "-h")) {
+        printUsage();
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "--version") or std.mem.eql(u8, args[1], "-v")) {
+        printVersion();
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "create")) {
         const container_id = if (args.len > 2) args[2] else "unknown";
         // Додаю тег container_id
-        temp_logger.setTags(&[_][]const u8{std.fmt.allocPrint(allocator, "container_id={s}", .{container_id}) catch "container_id=unknown"});
+        const tag = std.fmt.allocPrint(allocator, "container_id={s}", .{container_id}) catch "container_id=unknown";
+        defer allocator.free(tag);
+        temp_logger.setTags(&[_][]const u8{tag});
         executeCreate(allocator, args, undefined, undefined, null) catch |err| {
-            temp_logger.err("Create command failed: {s}", .{@errorName(err)});
+            temp_logger.err("Create command failed: {s}", .{@errorName(err)}) catch {};
             return err;
         };
         return;
     }
+    
+    if (std.mem.eql(u8, args[1], "list")) {
+        executeList(allocator, &temp_logger) catch |err| {
+            temp_logger.err("List command failed: {s}", .{@errorName(err)}) catch {};
+            return err;
+        };
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "start")) {
+        const container_id = if (args.len > 2) args[2] else {
+            std.io.getStdErr().writer().print("Error: container_id required for start command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        executeStart(container_id) catch |err| {
+            temp_logger.err("Start command failed: {s}", .{@errorName(err)}) catch {};
+            return err;
+        };
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "stop")) {
+        const container_id = if (args.len > 2) args[2] else {
+            std.io.getStdErr().writer().print("Error: container_id required for stop command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        std.io.getStdOut().writer().print("Stopping container: {s} (not implemented yet)\n", .{container_id}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "delete")) {
+        const container_id = if (args.len > 2) args[2] else {
+            std.io.getStdErr().writer().print("Error: container_id required for delete command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        executeDelete(container_id) catch |err| {
+            temp_logger.err("Delete command failed: {s}", .{@errorName(err)}) catch {};
+            return err;
+        };
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "info")) {
+        const container_id = if (args.len > 2) args[2] else {
+            std.io.getStdErr().writer().print("Error: container_id required for info command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        executeInfo(allocator, container_id, &temp_logger) catch |err| {
+            temp_logger.err("Info command failed: {s}", .{@errorName(err)}) catch {};
+            return err;
+        };
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "state")) {
+        const container_id = if (args.len > 2) args[2] else {
+            std.io.getStdErr().writer().print("Error: container_id required for state command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        executeState(allocator, container_id) catch |err| {
+            temp_logger.err("State command failed: {s}", .{@errorName(err)}) catch {};
+            return err;
+        };
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "kill")) {
+        const container_id = if (args.len > 2) args[2] else {
+            std.io.getStdErr().writer().print("Error: container_id required for kill command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        const signal = if (args.len > 3) args[3] else null;
+        executeKill(container_id, signal) catch |err| {
+            temp_logger.err("Kill command failed: {s}", .{@errorName(err)}) catch {};
+            return err;
+        };
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[1], "generate-config")) {
+        executeGenerateConfig(allocator, args) catch |err| {
+            temp_logger.err("Generate-config command failed: {s}", .{@errorName(err)}) catch {};
+            return err;
+        };
+        return;
+    }
+    
+    // Якщо команда не розпізнана
+    std.io.getStdErr().writer().print("Unknown command: {s}\n", .{args[1]}) catch {};
+    printUsage();
+    return error.UnknownCommand;
 }
 
 fn getConfigPath(allocator: Allocator) ![]const u8 {
@@ -680,3 +804,23 @@ fn getConfigPath(allocator: Allocator) ![]const u8 {
 
     return errors.Error.ConfigNotFound;
 }
+
+fn printVersion() void {
+    const version = "proxmox-lxcri version 0.1.0\n";
+    std.io.getStdOut().writer().print(version, .{}) catch {};
+}
+
+// Additional command execution functions
+fn executeList(allocator: Allocator, logger: *logger_mod.Logger) !void {
+    _ = allocator;
+    _ = logger;
+    std.io.getStdOut().writer().print("Container list (not implemented yet)\n", .{}) catch {};
+}
+
+fn executeInfo(allocator: Allocator, container_id: []const u8, logger: *logger_mod.Logger) !void {
+    _ = allocator;
+    _ = logger;
+    std.io.getStdOut().writer().print("Container info for: {s} (not implemented yet)\n", .{container_id}) catch {};
+}
+
+

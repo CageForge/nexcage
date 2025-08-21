@@ -9,7 +9,6 @@ const Thread = std.Thread;
 const os = std.os;
 const logger = std.log.scoped(.proxmox_lxc);
 const proxmox = @import("../proxmox.zig");
-
 pub const create = @import("create.zig").createLXC;
 pub const start = @import("start.zig").startLXC;
 pub const stop = @import("stop.zig").stopLXC;
@@ -108,6 +107,7 @@ fn getContainerConfig(client: *Client, node: []const u8, vmid: u32) !types.LXCCo
         .name = try client.allocator.dupe(u8, "eth0"),
         .bridge = try client.allocator.dupe(u8, "vmbr0"),
         .ip = try client.allocator.dupe(u8, "dhcp"),
+        .allocator = client.allocator,
     };
     errdefer net0.deinit(client.allocator);
 

@@ -1,29 +1,27 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const log = @import("logger").log;
-const types = @import("types");
-const Error = @import("error").Error;
-const crun = @import("crun");
-const fs = std.fs;
-const os = std.os;
-const json = std.json;
+
 
 pub const CrunManager = struct {
-    // TODO: implement crun management logic
-    // You can add fields for configuration, logger, etc.
+	allocator: std.mem.Allocator,
 
-    pub fn create(self: *CrunManager, ...) !void {
-        // TODO: implement create logic
-        _ = self;
-    }
+	pub fn init(allocator: std.mem.Allocator) CrunManager {
+		return .{ .allocator = allocator };
+	}
 
-    pub fn start(self: *CrunManager, ...) !void {
-        // TODO: implement start logic
-        _ = self;
-    }
+	pub fn deinit(self: *CrunManager) void {
+		_ = self;
+	}
 
-    pub fn stop(self: *CrunManager, ...) !void {
-        // TODO: implement stop logic
-        _ = self;
-    }
-}; 
+	pub fn createContainer(self: *CrunManager, _id: []const u8, _bundle: []const u8, _spec: anytype) !void {
+		_ = self;
+		_ = _id;
+		_ = _bundle;
+		_ = _spec;
+	}
+
+	pub fn startContainer(self: *CrunManager, _id: []const u8) !void {
+		_ = self;
+		_ = _id;
+	}
+};
+

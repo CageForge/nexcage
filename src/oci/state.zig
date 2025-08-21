@@ -49,7 +49,7 @@ pub fn getState(proxmox_client: *proxmox.ProxmoxClient, oci_container_id: []cons
             const id = try proxmox_client.allocator.dupe(u8, oci_container_id);
             errdefer proxmox_client.allocator.free(id);
 
-            const container_state = types.ContainerState{
+            const container_state = types.ContainerStateInfo{
                 .oci_version = version,
                 .id = id,
                 .status = status,
@@ -78,6 +78,12 @@ pub fn getState(proxmox_client: *proxmox.ProxmoxClient, oci_container_id: []cons
                 .linux = null,
                 .log_path = null,
                 .allocator = proxmox_client.allocator,
+                .crun_name_patterns = &[_][]const u8{
+                    "crun-*",
+                    "oci-*",
+                    "podman-*",
+                },
+                .default_container_type = .lxc,
             };
         }
     }
