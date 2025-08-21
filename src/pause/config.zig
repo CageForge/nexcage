@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const types = @import("../common/types");
+const types = @import("types");
 const routing = @import("routing");
 
 pub const PauseConfig = struct {

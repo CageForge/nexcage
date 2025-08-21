@@ -2,7 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 const proxmox = @import("proxmox");
 const logger = @import("logger");
-const types = @import("../src/common/types");
+const types = @import("types");
 const Connection = @import("proxmox/connection.zig").Connection;
 
 pub fn main() !void {

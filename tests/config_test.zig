@@ -3,7 +3,7 @@ const testing = std.testing;
 const json = @import("json");
 const Config = @import("config").Config;
 const JsonConfig = @import("config").JsonConfig;
-const LogLevel = @import("../src/common/types").LogLevel;
+const LogLevel = @import("types").LogLevel;
 const deinitJsonConfig = @import("config").deinitJsonConfig;
 const LogContext = @import("../src/common/types").LogContext;
 
