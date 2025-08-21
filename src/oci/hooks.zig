@@ -1,9 +1,9 @@
 const std = @import("std");
+const zig_json = @import("zig_json");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const json = std.json;
 const fs = std.fs;
-const types = @import("types");
+const types = @import("types.zig");
 const logger = std.log.scoped(.oci_hooks);
 const os = std.os;
 const time = std.time;
@@ -131,6 +131,71 @@ pub const HookExecutor = struct {
         }
     }
 };
+
+pub fn parseHooks(allocator: std.mem.Allocator, content: []const u8) !types.Hooks {
+    var parsed = try zig_json.parse(allocator, content, .{});
+    defer parsed.deinit();
+
+    if (parsed.value.type != .object) return error.InvalidJson;
+    const obj = parsed.value.object();
+
+    const hooks = types.Hooks{
+        .prestart = try parseHookArray(obj, "prestart", allocator),
+        .poststart = try parseHookArray(obj, "poststart", allocator),
+        .poststop = try parseHookArray(obj, "poststop", allocator),
+    };
+
+    return hooks;
+}
+
+fn parseHookArray(obj: *zig_json.Object, field: []const u8, allocator: std.mem.Allocator) !?[]types.Hook {
+    const value = obj.get(field) orelse return null;
+    if (value.type != .array) return error.InvalidType;
+    const array = value.array();
+
+    const hooks = try allocator.alloc(types.Hook, array.len());
+    for (hooks, 0..) |*hook, i| {
+        const hook_value = array.get(i);
+        if (hook_value.type != .object) return error.InvalidType;
+        const hook_obj = hook_value.object();
+
+        hook.* = types.Hook{
+            .path = try getString(hook_obj, "path"),
+            .args = try parseStringArray(hook_obj, "args", allocator),
+            .env = try parseStringArray(hook_obj, "env", allocator),
+            .timeout = try getOptionalInt(hook_obj, "timeout"),
+        };
+    }
+
+    return hooks;
+}
+
+fn getString(obj: *zig_json.Object, field: []const u8) ![]const u8 {
+    const value = obj.get(field) orelse return error.MissingField;
+    if (value.type != .string) return error.InvalidType;
+    return value.string();
+}
+
+fn getOptionalInt(obj: *zig_json.Object, field: []const u8) !?i64 {
+    const value = obj.get(field) orelse return null;
+    if (value.type != .integer) return error.InvalidType;
+    return value.integer();
+}
+
+fn parseStringArray(obj: *zig_json.Object, field: []const u8, allocator: std.mem.Allocator) !?[][]const u8 {
+    const value = obj.get(field) orelse return null;
+    if (value.type != .array) return error.InvalidType;
+    const array = value.array();
+
+    const result = try allocator.alloc([]const u8, array.len());
+    for (result, 0..) |*entry, i| {
+        const entry_value = array.get(i);
+        if (entry_value.type != .string) return error.InvalidType;
+        entry.* = try allocator.dupe(u8, entry_value.string());
+    }
+
+    return result;
+}
 
 test "HookExecutor - basic execution" {
     const testing = std.testing;
