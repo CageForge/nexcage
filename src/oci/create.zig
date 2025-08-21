@@ -4,7 +4,7 @@ const fs = std.fs;
 const Allocator = std.mem.Allocator;
 const errors = @import("error");
 const root_types = @import("types");
-const oci_types = @import("types.zig");
+const oci_types = @import("types");
 const image_types = @import("image/types.zig");
 const proxmox = @import("proxmox");
 const mem = std.mem;
@@ -267,6 +267,10 @@ pub const Create = struct {
             },
             .vm => {
                 // TODO: Implement VM creation
+                return error.NotImplemented;
+            },
+            .runc => {
+                // TODO: Implement runc runtime
                 return error.NotImplemented;
             },
         }
@@ -818,6 +822,10 @@ pub const Create = struct {
             },
             .vm => {
                 // TODO: Implement VM start
+                return error.NotImplemented;
+            },
+            .runc => {
+                // TODO: Implement runc start
                 return error.NotImplemented;
             },
         }

@@ -7,7 +7,7 @@ const mem = std.mem;
 const crypto = std.crypto;
 const Allocator = std.mem.Allocator;
 const logger = @import("logger");
-const types = @import("types");
+const types = @import("../common/types");
 const fmt = std.fmt;
 const Uri = std.Uri;
 

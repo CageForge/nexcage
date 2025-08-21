@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("types");
+const types = @import("../common/types");
 const logger_mod = @import("logger");
 const error_mod = @import("error");
 const Error = error_mod.Error;

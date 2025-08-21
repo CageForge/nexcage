@@ -2,7 +2,7 @@ const std = @import("std");
 const proxmox = @import("proxmox");
 const logger = @import("logger");
 const oci = @import("oci");
-const types = @import("types");
+const types = @import("../../common/types");
 const network = @import("network");
 
 const NetworkError = error{

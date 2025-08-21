@@ -3,9 +3,9 @@ const testing = std.testing;
 const json = @import("json");
 const Config = @import("config").Config;
 const JsonConfig = @import("config").JsonConfig;
-const LogLevel = @import("types").LogLevel;
+const LogLevel = @import("../src/common/types").LogLevel;
 const deinitJsonConfig = @import("config").deinitJsonConfig;
-const LogContext = @import("types").LogContext;
+const LogContext = @import("../src/common/types").LogContext;
 
 test "Config initialization" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);

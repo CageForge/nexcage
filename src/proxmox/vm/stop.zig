@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("types");
+const types = @import("../../common/types");
 const Client = @import("../client.zig").Client;
 const json = std.json;
 const fmt = std.fmt;

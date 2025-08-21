@@ -440,6 +440,22 @@ pub const Hook = struct {
     args: ?[]const []const u8 = null,
     env: ?[]const []const u8 = null,
     timeout: ?i64 = null,
+
+    pub fn deinit(self: *const Hook, allocator: Allocator) void {
+        allocator.free(self.path);
+        if (self.args) |args| {
+            for (args) |arg| {
+                allocator.free(arg);
+            }
+            allocator.free(args);
+        }
+        if (self.env) |env| {
+            for (env) |e| {
+                allocator.free(e);
+            }
+            allocator.free(env);
+        }
+    }
 };
 
 pub const AuthConfig = struct {
@@ -1326,6 +1342,87 @@ pub const ContainerManager = struct {
     pub fn create(self: *ContainerManager, spec: ContainerSpec) !void {
         _ = self;
         _ = spec;
+    }
+};
+
+// OCI-specific types
+pub const Bundle = struct {
+    arch: []const u8,
+    os: []const u8,
+    hostname: []const u8,
+    memory: u64,
+    cpus: u32,
+    network: NetworkConfig,
+    mounts: []Mount,
+    env: std.StringHashMap([]const u8),
+
+    pub fn deinit(self: *Bundle, allocator: Allocator) void {
+        allocator.free(self.arch);
+        allocator.free(self.os);
+        allocator.free(self.hostname);
+        for (self.mounts) |mount| {
+            mount.deinit(allocator);
+        }
+        allocator.free(self.mounts);
+        self.env.deinit();
+    }
+};
+
+pub const Hooks = struct {
+    prestart: ?[]Hook = null,
+    createRuntime: ?[]Hook = null,
+    createContainer: ?[]Hook = null,
+    startContainer: ?[]Hook = null,
+    poststart: ?[]Hook = null,
+    poststop: ?[]Hook = null,
+
+    pub fn deinit(self: *const Hooks, allocator: Allocator) void {
+        if (self.prestart) |hooks| {
+            for (hooks) |*hook| {
+                hook.deinit(allocator);
+            }
+            allocator.free(hooks);
+        }
+        if (self.createRuntime) |hooks| {
+            for (hooks) |*hook| {
+                hook.deinit(allocator);
+            }
+            allocator.free(hooks);
+        }
+        if (self.createContainer) |hooks| {
+            for (hooks) |*hook| {
+                hook.deinit(allocator);
+            }
+            allocator.free(hooks);
+        }
+        if (self.startContainer) |hooks| {
+            for (hooks) |*hook| {
+                hook.deinit(allocator);
+            }
+            allocator.free(hooks);
+        }
+        if (self.poststart) |hooks| {
+            for (hooks) |*hook| {
+                hook.deinit(allocator);
+            }
+            allocator.free(hooks);
+        }
+        if (self.poststop) |hooks| {
+            for (hooks) |*hook| {
+                hook.deinit(allocator);
+            }
+            allocator.free(hooks);
+        }
+    }
+};
+
+pub const OciContainerState = struct {
+    hooks: ?Hooks = null,
+
+    pub fn deinit(self: *OciContainerState, allocator: Allocator) void {
+        if (self.hooks) |*hooks| {
+            hooks.deinit(allocator);
+        }
     }
 };
 
