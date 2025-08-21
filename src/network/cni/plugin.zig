@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("../../common/types");
+const types = @import("types");
 
 pub const Error = error{
     ConfigurationError,

@@ -5,7 +5,7 @@ const Config = @import("config").Config;
 const JsonConfig = @import("config").JsonConfig;
 const LogLevel = @import("types").LogLevel;
 const deinitJsonConfig = @import("config").deinitJsonConfig;
-const LogContext = @import("../src/common/types").LogContext;
+const LogContext = @import("types").LogContext;
 
 test "Config initialization" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
