@@ -31,8 +31,6 @@ jobs:
         run: npm ci
       - name: Build Plugins
         run: npm run build:plugins
-      - name: Generate gRPC Code
-        run: npm run generate:grpc
       - name: Build Release
         run: npm run build:release
       - name: Create Release Asset

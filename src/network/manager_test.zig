@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const types = @import("../types/pod.zig");
+const types = @import("types");
 const network = @import("manager.zig");
 
 test "NetworkManager basic operations" {

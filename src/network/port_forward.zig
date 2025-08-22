@@ -1,6 +1,6 @@
 const std = @import("std");
 const os = std.os;
-const types = @import("../types/pod.zig");
+const types = @import("types");
 
 pub const Error = error{
     RuleAddFailed,

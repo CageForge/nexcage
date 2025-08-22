@@ -654,10 +654,14 @@ pub const User = struct {
     uid: u32,
     gid: u32,
     additionalGids: ?[]const u32 = null,
+    username: ?[]const u8 = null,
 
     pub fn deinit(self: *const User, allocator: Allocator) void {
         if (self.additionalGids) |gids| {
             allocator.free(gids);
+        }
+        if (self.username) |username| {
+            allocator.free(username);
         }
     }
 };
@@ -720,6 +724,7 @@ pub const Process = struct {
                 .uid = 0,
                 .gid = 0,
                 .additionalGids = null,
+                .username = null,
             },
             .args = &[_][]const u8{},
             .env = &[_][]const u8{},
@@ -1426,6 +1431,63 @@ pub const OciContainerState = struct {
     }
 };
 
+// Additional types needed by OCI
+pub const ConsoleSize = struct {
+    height: u32,
+    width: u32,
+};
+
+pub const LinuxCapabilities = struct {
+    bounding: ?[][]const u8 = null,
+    effective: ?[][]const u8 = null,
+    inheritable: ?[][]const u8 = null,
+    permitted: ?[][]const u8 = null,
+    ambient: ?[][]const u8 = null,
+
+    pub fn deinit(self: *const LinuxCapabilities, allocator: Allocator) void {
+        if (self.bounding) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+        if (self.effective) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+        if (self.inheritable) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+        if (self.permitted) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+        if (self.ambient) |caps| {
+            for (caps) |cap| {
+                allocator.free(cap);
+            }
+            allocator.free(caps);
+        }
+    }
+};
+
+pub const RLimit = struct {
+    type: []const u8,
+    soft: u64,
+    hard: u64,
+
+    pub fn deinit(self: *const RLimit, allocator: Allocator) void {
+        allocator.free(self.type);
+    }
+};
+
 pub const CrunManager = struct {
     // TODO: implement crun management logic
     // You can add fields for configuration, logger, etc.
@@ -1446,52 +1508,4 @@ pub const CrunManager = struct {
     }
 };
 
-pub const Hooks = struct {
-    prestart: ?[]Hook = null,
-    poststart: ?[]Hook = null,
-    poststop: ?[]Hook = null,
 
-    pub fn deinit(self: *Hooks, allocator: std.mem.Allocator) void {
-        if (self.prestart) |hooks| {
-            for (hooks) |hook| {
-                hook.deinit(allocator);
-            }
-            allocator.free(hooks);
-        }
-        if (self.poststart) |hooks| {
-            for (hooks) |hook| {
-                hook.deinit(allocator);
-            }
-            allocator.free(hooks);
-        }
-        if (self.poststop) |hooks| {
-            for (hooks) |hook| {
-                hook.deinit(allocator);
-            }
-            allocator.free(hooks);
-        }
-    }
-};
-
-pub const Hook = struct {
-    path: []const u8,
-    args: ?[][]const u8 = null,
-    env: ?[][]const u8 = null,
-    timeout: ?i64 = null,
-
-    pub fn deinit(self: *Hook, allocator: std.mem.Allocator) void {
-        allocator.free(self.path);
-        if (self.args) |args| {
-            for (args) |arg| {
-                allocator.free(arg);
-            }
-            allocator.free(args);
-        }
-        if (self.env) |env| {
-            for (env) |e| {
-                allocator.free(e);
-            }
-            allocator.free(env);
-        }
-    }
-};

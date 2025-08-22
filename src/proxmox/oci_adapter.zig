@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const oci = @import("../oci/spec.zig");
 const logger = std.log.scoped(.oci_adapter);
-const types = @import("../types.zig");
+const types = @import("types");
 
 pub const AdapterError = error{
     ConversionFailed,

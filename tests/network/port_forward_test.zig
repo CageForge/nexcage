@@ -1,7 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
-const types = @import("../../src/types/pod.zig");
-const port_forward = @import("../../src/network/port_forward.zig");
+const types = @import("types");
+const port_forward = @import("port_forward.zig");
 
 test "PortForwarder - basic operations" {
     const allocator = testing.allocator;

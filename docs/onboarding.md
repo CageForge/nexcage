@@ -64,7 +64,7 @@ sudo dnf install -y \
 
 ```bash
 # Download Zig
-ZIG_VERSION="0.11.0"
+ZIG_VERSION="0.13.0"
 ZIG_DIR="/opt/zig"
 sudo mkdir -p "$ZIG_DIR"
 cd "$ZIG_DIR"
@@ -227,4 +227,4 @@ sudo journalctl -u proxmox-lxcri -f
 3. Follow the [Development Guide](dev_guide.md)
 4. Start with a simple task from the issue tracker
 5. Join the development chat/forum
-6. Attend team meetings and standups 
+6. Attend team meetings and standups

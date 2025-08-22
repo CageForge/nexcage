@@ -1,6 +1,6 @@
 const std = @import("std");
 const proxmox = @import("proxmox.zig");
-const types = @import("../../src/types.zig");
+const types = @import("types");
 
 pub const MockClient = struct {
     allocator: std.mem.Allocator,

@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const logger = std.log.scoped(.network);
+const logger = @import("logger");
 const lxc = @import("lxc_network.zig");
 
 pub const NetworkValidator = struct {

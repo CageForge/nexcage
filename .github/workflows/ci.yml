@@ -22,7 +22,7 @@ jobs:
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.14.0
+          version: 0.13.0
 
       - name: Build and Test
         run: |
@@ -45,7 +45,7 @@ jobs:
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.14.0
+          version: 0.13.0
 
       - name: Run Format Check
         run: zig fmt --check src/*.zig
@@ -80,17 +80,3 @@ jobs:
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
           GITLEAKS_CONFIG: .gitleaks.toml
-
-#   dependencies:
-#     name: Dependencies
-#     runs-on: ubuntu-latest
-#     steps:
-#       - uses: actions/checkout@v4
-
-#       - name: Setup Zig
-#         uses: goto-bus-stop/setup-zig@v2
-#         with:
-#           zig-version: '0.14.0'
-
-#       - name: Check dependencies
-#         run: zig build 

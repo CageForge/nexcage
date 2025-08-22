@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const errors = @import("error");
 const root_types = @import("types");
 const oci_types = @import("types");
+const types = @import("types");
 const image_types = @import("image/types.zig");
 const proxmox = @import("proxmox");
 const mem = std.mem;
@@ -389,9 +390,9 @@ pub const Create = struct {
         // Створюємо LXC контейнер в Proxmox
         try self.logger.info("Creating LXC container in Proxmox", .{});
         
-        const lxc_config = types.LXCConfig{
+        var lxc_config = types.LXCConfig{
             .hostname = self.options.container_id,
-            .ostemplate = "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
+            .ostype = "ubuntu",
             .rootfs = try std.fmt.allocPrint(
                 self.allocator,
                 "volume={s}:{s},size=8G",
@@ -400,11 +401,18 @@ pub const Create = struct {
             .memory = 512, // Default 512MB
             .swap = 512,   // Default 512MB
             .cores = 1,    // Default 1 core
+            .net0 = try types.NetworkConfig.init(self.allocator),
+            .onboot = false,
+            .protection = false,
+            .start = false,
+            .template = false,
             .unprivileged = true,
+            .features = .{},
         };
         defer lxc_config.deinit(self.allocator);
 
-        try self.proxmox_client.createLXC(lxc_config);
+        // TODO: Convert lxc_config to spec string
+        try self.proxmox_client.createContainer(self.options.container_id, "lxc");
     }
 
     fn configureLxcContainer(self: *Self) !void {
@@ -859,7 +867,7 @@ pub fn create(opts: CreateOpts, proxmox_client: *proxmox.ProxmoxClient) !void {
 
     // Парсимо конфігурацію
     var parsed = try zig_json.parse(config_content, opts.allocator);
-    defer parsed.deinit();
+    defer parsed.deinit(opts.allocator);
 
     // Перевіряємо версію OCI
     const version = parsed.value.object.get("ociVersion") orelse return error.InvalidSpec;
@@ -960,9 +968,9 @@ fn parseLinuxSpec(allocator: Allocator, value: *zig_json.JsonValue) !spec.LinuxS
     return result;
 }
 
-fn parseStorageConfig(allocator: Allocator, value: zig_json.JsonValue) !StorageConfig {
-    if (value != .object) return error.InvalidJson;
-    const obj = value.object;
+fn parseStorageConfig(allocator: Allocator, value: *zig_json.JsonValue) !StorageConfig {
+    if (value.type != .object) return error.InvalidJson;
+    const obj = value.object();
 
     var config = StorageConfig{
         .type = undefined,
@@ -970,10 +978,10 @@ fn parseStorageConfig(allocator: Allocator, value: zig_json.JsonValue) !StorageC
         .storage_pool = null,
     };
 
-    if (obj.get("type")) |type_str| {
-        if (std.mem.eql(u8, type_str.string, "raw")) {
+    if (obj.getOrNull("type")) |type_str| {
+        if (std.mem.eql(u8, type_str.string(), "raw")) {
             config.type = .raw;
-        } else if (std.mem.eql(u8, type_str.string, "zfs")) {
+        } else if (std.mem.eql(u8, type_str.string(), "zfs")) {
             config.type = .zfs;
         } else {
             return error.InvalidStorageType;
@@ -982,12 +990,12 @@ fn parseStorageConfig(allocator: Allocator, value: zig_json.JsonValue) !StorageC
         return error.InvalidJson;
     }
 
-    if (obj.get("storage_path")) |path| {
-        config.storage_path = try allocator.dupe(u8, path.string);
+    if (obj.getOrNull("storage_path")) |path| {
+        config.storage_path = try allocator.dupe(u8, path.string());
     }
 
-    if (obj.get("storage_pool")) |pool| {
-        config.storage_pool = try allocator.dupe(u8, pool.string);
+    if (obj.getOrNull("storage_pool")) |pool| {
+        config.storage_pool = try allocator.dupe(u8, pool.string());
     }
 
     return config;
@@ -1041,14 +1049,14 @@ pub fn parseProcess(allocator: Allocator, value: *zig_json.JsonValue) !spec.Proc
     };
 }
 
-fn getOptionalBool(obj: *zig_json.Object, field: []const u8) !?bool {
-    const value = obj.get(field) orelse return null;
+fn getOptionalBool(obj: *zig_json.JsonObject, field: []const u8) !?bool {
+    const value = obj.getOrNull(field) orelse return null;
     if (value.type != .boolean) return error.InvalidType;
     return value.boolean();
 }
 
-fn parseConsoleSize(obj: *zig_json.Object, field: []const u8) !?types.ConsoleSize {
-    const value = obj.get(field) orelse return null;
+fn parseConsoleSize(obj: *zig_json.JsonObject, field: []const u8) !?types.ConsoleSize {
+    const value = obj.getOrNull(field) orelse return null;
     if (value.type != .object) return error.InvalidType;
     const size_obj = value.object();
 
@@ -1058,8 +1066,8 @@ fn parseConsoleSize(obj: *zig_json.Object, field: []const u8) !?types.ConsoleSiz
     };
 }
 
-fn parseStringArray(obj: *zig_json.Object, field: []const u8, allocator: Allocator) !?[][]const u8 {
-    const value = obj.get(field) orelse return null;
+fn parseStringArray(obj: *zig_json.JsonObject, field: []const u8, allocator: Allocator) !?[][]const u8 {
+    const value = obj.getOrNull(field) orelse return null;
     if (value.type != .array) return error.InvalidType;
     const array = value.array();
 
@@ -1073,12 +1081,12 @@ fn parseStringArray(obj: *zig_json.Object, field: []const u8, allocator: Allocat
     return result;
 }
 
-fn parseCapabilities(obj: *zig_json.Object, field: []const u8, allocator: Allocator) !?types.LinuxCapabilities {
-    const value = obj.get(field) orelse return null;
+fn parseCapabilities(obj: *zig_json.JsonObject, field: []const u8, allocator: Allocator) !?types.Capabilities {
+    const value = obj.getOrNull(field) orelse return null;
     if (value.type != .object) return error.InvalidType;
     const caps_obj = value.object();
 
-    return types.LinuxCapabilities{
+    return types.Capabilities{
         .bounding = try parseStringArray(caps_obj, "bounding", allocator),
         .effective = try parseStringArray(caps_obj, "effective", allocator),
         .inheritable = try parseStringArray(caps_obj, "inheritable", allocator),
@@ -1087,8 +1095,8 @@ fn parseCapabilities(obj: *zig_json.Object, field: []const u8, allocator: Alloca
     };
 }
 
-fn parseRLimits(obj: *zig_json.Object, field: []const u8, allocator: Allocator) !?[]types.RLimit {
-    const value = obj.get(field) orelse return null;
+fn parseRLimits(obj: *zig_json.JsonObject, field: []const u8, allocator: Allocator) !?[]types.RLimit {
+    const value = obj.getOrNull(field) orelse return null;
     if (value.type != .array) return error.InvalidType;
     const array = value.array();
 
@@ -1108,16 +1116,16 @@ fn parseRLimits(obj: *zig_json.Object, field: []const u8, allocator: Allocator) 
     return result;
 }
 
-fn getOptionalInt(obj: *zig_json.Object, field: []const u8) !?i64 {
-    const value = obj.get(field) orelse return null;
+fn getOptionalInt(obj: *zig_json.JsonObject, field: []const u8) !?i64 {
+    const value = obj.getOrNull(field) orelse return null;
     if (value.type != .integer) return error.InvalidType;
     return value.integer();
 }
 
-fn getString(obj: *zig_json.Object, field: []const u8) ![]const u8 {
-    const value = obj.get(field) orelse return error.MissingField;
-    if (value.type != .string) return error.InvalidType;
-    return value.string();
+fn getString(obj: *zig_json.JsonObject, field: []const u8) ![]const u8 {
+    const value = obj.getOrNull(field) orelse return error.MissingField;
+    if (value.type != .string) return value.string();
+    return error.InvalidType;
 }
 
 fn parseUser(allocator: Allocator, value: *zig_json.JsonValue) !types.User {
@@ -1134,20 +1142,20 @@ fn parseUser(allocator: Allocator, value: *zig_json.JsonValue) !types.User {
     return user;
 }
 
-fn getInt(obj: *zig_json.Object, field: []const u8) !u32 {
-    const value = obj.get(field) orelse return error.MissingField;
+fn getInt(obj: *zig_json.JsonObject, field: []const u8) !u32 {
+    const value = obj.getOrNull(field) orelse return error.MissingField;
     if (value.type != .integer) return error.InvalidType;
     return @intCast(value.integer());
 }
 
-fn getOptionalString(obj: *zig_json.Object, field: []const u8) !?[]const u8 {
-    const value = obj.get(field) orelse return null;
+fn getOptionalString(obj: *zig_json.JsonObject, field: []const u8) !?[]const u8 {
+    const value = obj.getOrNull(field) orelse return null;
     if (value.type != .string) return error.InvalidType;
     return value.string();
 }
 
-fn parseIntArray(obj: *zig_json.Object, field: []const u8, allocator: Allocator) !?[]u32 {
-    const value = obj.get(field) orelse return null;
+fn parseIntArray(obj: *zig_json.JsonObject, field: []const u8, allocator: Allocator) !?[]u32 {
+    const value = obj.getOrNull(field) orelse return null;
     if (value.type != .array) return error.InvalidType;
     const array = value.array();
 
@@ -1248,18 +1256,19 @@ fn parseHostname(value: *zig_json.JsonValue, allocator: Allocator) ![]const u8 {
 
 fn parseOciImageConfig(allocator: Allocator, content: []const u8) !spec.OciImageConfig {
     var parsed = try zig_json.parse(content, allocator);
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
 
-    if (parsed.value.? != .object) return error.InvalidJson;
-    const obj = parsed.value.object;
-    const config = spec.OciImageConfig{
+    if (parsed.value == null) return error.InvalidJson;
+    const value = parsed.value.?;
+    const obj = value.object;
+    var config = spec.OciImageConfig{
         .storage = undefined,
-        .raw_image = if (obj.get("raw_image")) |r| r.bool else false,
-        .raw_image_size = if (obj.get("raw_image_size")) |s| @intCast(s.integer) else 10 * 1024 * 1024 * 1024,
-        .registry_url = if (obj.get("registry_url")) |url| try allocator.dupe(u8, url.string) else null,
-        .registry_username = if (obj.get("registry_username")) |username| try allocator.dupe(u8, username.string) else null,
-        .registry_password = if (obj.get("registry_password")) |password| try allocator.dupe(u8, password.string) else null,
-        .hostname = if (obj.get("hostname")) |hostname| try allocator.dupe(u8, hostname.string) else null,
+        .raw_image = if (obj.getOrNull("raw_image")) |r| r.boolean() else false,
+        .raw_image_size = if (obj.getOrNull("raw_image_size")) |s| @intCast(s.integer()) else 10 * 1024 * 1024 * 1024,
+        .registry_url = if (obj.getOrNull("registry_url")) |url| try allocator.dupe(u8, url.string()) else null,
+        .registry_username = if (obj.getOrNull("registry_username")) |username| try allocator.dupe(u8, username.string()) else null,
+        .registry_password = if (obj.getOrNull("registry_password")) |password| try allocator.dupe(u8, password.string()) else null,
+        .hostname = if (obj.getOrNull("hostname")) |hostname| try allocator.dupe(u8, hostname.string()) else null,
         .env = null,
         .cwd = null,
         .user = null,
@@ -1267,26 +1276,27 @@ fn parseOciImageConfig(allocator: Allocator, content: []const u8) !spec.OciImage
         .network = null,
     };
 
-    if (obj.get("storage")) |storage| {
+    if (obj.getOrNull("storage")) |storage| {
         config.storage = try parseStorageConfig(allocator, storage);
     } else {
         return error.InvalidJson;
     }
 
     // Парсимо environment змінні
-    if (obj.get("env")) |env_array| {
-        if (!std.mem.eql(u8, @tagName(env_array), "array")) return error.InvalidJson;
-        const items = env_array.array;
-        const env_list = try allocator.alloc([]const u8, items.items.len);
-        for (items.items, 0..) |env_value, i| {
-            env_list[i] = try allocator.dupe(u8, env_value.string);
+    if (obj.getOrNull("env")) |env_array| {
+        if (env_array.type != .array) return error.InvalidJson;
+        const items = env_array.array();
+        const env_list = try allocator.alloc([]const u8, items.len());
+        for (env_list, 0..) |*env_value, i| {
+            const item = items.get(i);
+            env_value.* = try allocator.dupe(u8, item.string());
         }
         config.env = env_list;
     }
 
     // Парсимо робочу директорію
-    if (obj.get("cwd")) |cwd| {
-        config.cwd = try allocator.dupe(u8, cwd.string);
+    if (obj.getOrNull("cwd")) |cwd| {
+        config.cwd = try allocator.dupe(u8, cwd.string());
     }
 
     // Парсимо користувача
@@ -1296,12 +1306,12 @@ fn parseOciImageConfig(allocator: Allocator, content: []const u8) !spec.OciImage
     }
 
     // Парсимо capabilities
-    if (obj.get("capabilities")) |caps_obj| {
-        config.capabilities = try parseCapabilities(caps_obj, allocator);
+    if (obj.getOrNull("capabilities")) |caps_obj| {
+        config.capabilities = try parseCapabilities(caps_obj.object(), "capabilities", allocator);
     }
 
     // Парсимо мережу
-    if (obj.get("network")) |network_obj| {
+    if (obj.getOrNull("network")) |network_obj| {
         config.network = try parseNetwork(allocator, network_obj);
     }
 

@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: goto-bus-stop/setup-zig@v2
         with:
-          version: '0.14.0'
+          version: '0.13.0'
       - name: Check dependencies
         run: zig build test-workflow
         
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: goto-bus-stop/setup-zig@v2
         with:
-          version: '0.14.0'
+          version: '0.13.0'
       - name: Run Zig Security Checks
         run: |
           zig build -Doptimize=ReleaseSafe
