@@ -1,7 +1,14 @@
 const std = @import("std");
 const zig_json = @import("zig_json");
 
-pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !struct { value: T, unknown_fields: []const []const u8 } {
+pub fn ParsedResult(comptime T: type) type {
+    return struct {
+        value: T,
+        unknown_fields: []const []const u8,
+    };
+}
+
+pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !ParsedResult(T) {
     var unknown_fields = std.ArrayList([]const u8).init(allocator);
     defer unknown_fields.deinit();
 
@@ -57,6 +64,8 @@ pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, in
         .unknown_fields = try unknown_fields.toOwnedSlice(),
     };
 }
+
+
 
 fn convertValue(comptime T: type, value: *zig_json.JsonValue, allocator: std.mem.Allocator) !T {
     switch (@typeInfo(T)) {

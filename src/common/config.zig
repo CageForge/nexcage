@@ -94,7 +94,9 @@ pub const Config = struct {
     }
 
     pub fn deinit(self: *Config) void {
-        self.runtime_path = null;
+        if (self.runtime_path) |path| {
+            self.allocator.free(path);
+        }
         self.proxmox.deinit();
         self.storage.deinit();
         self.network.deinit(self.allocator);
@@ -119,7 +121,7 @@ pub const Config = struct {
             config.runtime_path = try allocator.dupe(u8, path);
         }
         if (runtime.log_path) |path| {
-            config.runtime_path = try allocator.dupe(u8, path);
+            config.log_path = try allocator.dupe(u8, path);
         }
         // log_level не optional, працюємо напряму
         // if (runtime.log_level) |level| {
@@ -165,7 +167,9 @@ pub const Config = struct {
 
     // Network config
     if (json_config.network) |network| {
-        allocator.free(network.bridge);
+        if (network.bridge.len > 0) {
+            config.network.bridge = try allocator.dupe(u8, network.bridge);
+        }
         if (network.dns_servers) |servers| {
             var new_servers = try allocator.alloc([]const u8, servers.len);
             errdefer {
@@ -264,6 +268,7 @@ pub fn deinitJsonConfig(config_value: *JsonConfig, allocator: std.mem.Allocator)
         if (storage.image_path) |path| allocator.free(path);
     }
     if (config_value.network) |network| {
+        if (network.bridge.len > 0) allocator.free(network.bridge);
         if (network.dns_servers) |servers| {
             for (servers) |server| allocator.free(server);
             allocator.free(servers);

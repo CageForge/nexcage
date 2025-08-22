@@ -113,10 +113,10 @@ pub const ContainerConfig = struct {
     }
 
     pub fn deinit(self: *ContainerConfig) void {
-        self.allocator.free(self.id);
-        self.allocator.free(self.name);
+        if (self.id.len > 0) self.allocator.free(self.id);
+        if (self.name.len > 0) self.allocator.free(self.name);
         self.state.deinit(self.allocator);
-        self.allocator.free(self.bundle);
+        if (self.bundle.len > 0) self.allocator.free(self.bundle);
         if (self.annotations) |annotations| {
             for (annotations) |*annotation| {
                 annotation.deinit(self.allocator);
@@ -292,9 +292,9 @@ pub const NetworkConfig = struct {
     }
 
     pub fn deinit(self: *NetworkConfig, allocator: Allocator) void {
-        allocator.free(self.name);
-        allocator.free(self.bridge);
-        allocator.free(self.ip);
+        if (self.name.len > 0) allocator.free(self.name);
+        if (self.bridge.len > 0) allocator.free(self.bridge);
+        if (self.ip.len > 0) allocator.free(self.ip);
         if (self.gw) |gw| allocator.free(gw);
         if (self.type) |type_str| allocator.free(type_str);
         if (self.dns_servers) |servers| {
@@ -612,10 +612,10 @@ pub const ContainerStateInfo = struct {
     allocator: Allocator,
 
     pub fn deinit(self: *ContainerStateInfo, allocator: Allocator) void {
-        allocator.free(self.oci_version);
-        allocator.free(self.id);
-        allocator.free(self.status);
-        allocator.free(self.bundle);
+        if (self.oci_version.len > 0) allocator.free(self.oci_version);
+        if (self.id.len > 0) allocator.free(self.id);
+        if (self.status.len > 0) allocator.free(self.status);
+        if (self.bundle.len > 0) allocator.free(self.bundle);
         if (self.annotations) |annotations| {
             for (annotations) |*annotation| {
                 annotation.deinit(allocator);
