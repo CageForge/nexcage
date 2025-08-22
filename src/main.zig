@@ -77,9 +77,22 @@ const RuntimeOptions = struct {
 const Command = enum {
     create,
     start,
+    stop,
     state,
     kill,
     delete,
+    list,
+    info,
+    pause,
+    resume,
+    exec,
+    ps,
+    events,
+    spec,
+    checkpoint,
+    restore,
+    update,
+    features,
     help,
     generate_config,
     unknown,
@@ -95,9 +108,22 @@ const ConfigError = error{
 fn parseCommand(command: []const u8) Command {
     if (std.mem.eql(u8, command, "create")) return .create;
     if (std.mem.eql(u8, command, "start")) return .start;
+    if (std.mem.eql(u8, command, "stop")) return .stop;
     if (std.mem.eql(u8, command, "state")) return .state;
     if (std.mem.eql(u8, command, "kill")) return .kill;
     if (std.mem.eql(u8, command, "delete")) return .delete;
+    if (std.mem.eql(u8, command, "list")) return .list;
+    if (std.mem.eql(u8, command, "info")) return .info;
+    if (std.mem.eql(u8, command, "pause")) return .pause;
+    if (std.mem.eql(u8, command, "resume")) return .resume;
+    if (std.mem.eql(u8, command, "exec")) return .exec;
+    if (std.mem.eql(u8, command, "ps")) return .ps;
+    if (std.mem.eql(u8, command, "events")) return .events;
+    if (std.mem.eql(u8, command, "spec")) return .spec;
+    if (std.mem.eql(u8, command, "checkpoint")) return .checkpoint;
+    if (std.mem.eql(u8, command, "restore")) return .restore;
+    if (std.mem.eql(u8, command, "update")) return .update;
+    if (std.mem.eql(u8, command, "features")) return .features;
     if (std.mem.eql(u8, command, "help")) return .help;
     if (std.mem.eql(u8, command, "generate-config")) return .generate_config;
     return .unknown;
@@ -165,7 +191,7 @@ fn printUsage() void {
         \\
         \\Usage: proxmox-lxcri [OPTIONS] COMMAND [ARGS]...
         \\
-        \\Commands:
+        \\COMMANDS:
         \\  create <container_id>    Create a new container
         \\  start <container_id>     Start a container
         \\  stop <container_id>      Stop a container
@@ -174,20 +200,30 @@ fn printUsage() void {
         \\  info <container_id>      Show container information
         \\  state <container_id>     Get container state
         \\  kill <container_id>      Kill a container
+        \\  pause <container_id>     Pause a running container
+        \\  resume <container_id>    Resume a paused container
+        \\  exec <container_id>      Execute new process inside the container
+        \\  ps <container_id>        Display processes running inside a container
+        \\  events <container_id>    Display container events and statistics
+        \\  spec                     Create a new specification file
+        \\  checkpoint <container_id> Create a checkpoint of a running container
+        \\  restore <container_id>   Restore a container from a checkpoint
+        \\  update <container_id>    Update container resource constraints
+        \\  features                 Show the enabled features
         \\  generate-config          Generate OCI config for a container
         \\
-        \\Options:
-        \\  -h, --help               Show this help message
-        \\  -v, --version            Show version information
-        \\  --config <path>          Path to configuration file
+        \\GLOBAL OPTIONS:
         \\  --debug                  Enable debug logging
-        \\  --systemd-cgroup         Use systemd cgroup
-        \\  --root <path>            Root directory for container state
-        \\  --log <path>             Log file path
-        \\  --log-format <format>    Log format
+        \\  --log <path>             Set the log file to write logs to (default: '/dev/stderr')
+        \\  --log-format <format>    Set the log format ('text' (default), or 'json') (default: "text")
+        \\  --root <path>            Root directory for storage of container state (default: "/run/proxmox-lxcri")
+        \\  --systemd-cgroup         Enable systemd cgroup support
+        \\  --config <path>          Path to configuration file
         \\  --bundle, -b <path>      Path to OCI bundle
         \\  --pid-file <path>        Path to pid file
         \\  --console-socket <path>  Path to console socket
+        \\  --help, -h               Show this help message
+        \\  --version, -v            Print the version
         \\
         \\Examples:
         \\  proxmox-lxcri --config /path/to/config.json create my-container
@@ -219,6 +255,9 @@ pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struc
         has_args = true;
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             try printUsage();
+            std.process.exit(0);
+        } else if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
+            printVersion();
             std.process.exit(0);
         } else if (std.mem.eql(u8, arg, "--debug")) {
             options.debug = true;
@@ -896,6 +935,88 @@ pub fn main() !void {
         return;
     }
     
+    if (std.mem.eql(u8, args[i], "pause")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
+            std.io.getStdErr().writer().print("Error: container_id required for pause command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        temp_logger.info("Pausing container: {s} (not implemented yet)", .{container_id}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[i], "resume")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
+            std.io.getStdErr().writer().print("Error: container_id required for resume command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        temp_logger.info("Resuming container: {s} (not implemented yet)", .{container_id}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[i], "exec")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
+            std.io.getStdErr().writer().print("Error: container_id required for exec command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        temp_logger.info("Executing command in container: {s} (not implemented yet)", .{container_id}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[i], "ps")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
+            std.io.getStdErr().writer().print("Error: container_id required for ps command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        temp_logger.info("Listing processes in container: {s} (not implemented yet)", .{container_id}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[i], "events")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
+            std.io.getStdErr().writer().print("Error: container_id required for events command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        temp_logger.info("Showing events for container: {s} (not implemented yet)", .{container_id}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[i], "spec")) {
+        temp_logger.info("Creating new specification file (not implemented yet)", .{}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[i], "checkpoint")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
+            std.io.getStdErr().writer().print("Error: container_id required for checkpoint command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        temp_logger.info("Creating checkpoint for container: {s} (not implemented yet)", .{container_id}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[i], "restore")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
+            std.io.getStdErr().writer().print("Error: container_id required for restore command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        temp_logger.info("Restoring container: {s} (not implemented yet)", .{container_id}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[i], "update")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
+            std.io.getStdErr().writer().print("Error: container_id required for update command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        temp_logger.info("Updating container: {s} (not implemented yet)", .{container_id}) catch {};
+        return;
+    }
+    
+    if (std.mem.eql(u8, args[i], "features")) {
+        temp_logger.info("Showing enabled features (not implemented yet)", .{}) catch {};
+        return;
+    }
+    
     if (std.mem.eql(u8, args[i], "generate-config")) {
         executeGenerateConfig(allocator, args) catch |err| {
             temp_logger.err("Generate-config command failed: {s}", .{@errorName(err)}) catch {};
@@ -936,7 +1057,7 @@ fn getConfigPath(allocator: Allocator) ![]const u8 {
 }
 
 fn printVersion() void {
-    const version = "proxmox-lxcri version 0.1.0\n";
+    const version = "proxmox-lxcri version 0.1.1\n";
     std.io.getStdOut().writer().print(version, .{}) catch {};
 }
 
