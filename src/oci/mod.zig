@@ -13,9 +13,12 @@ pub const Hooks = types.Hooks;
 
 pub const create = @import("create.zig");
 pub const start = @import("start.zig");
+pub const stop = @import("stop.zig");
 pub const state = @import("state.zig");
 pub const kill = @import("kill.zig");
 pub const delete = @import("delete.zig");
+pub const list = @import("list.zig");
+pub const info = @import("info.zig");
 
 pub const Spec = spec.Spec;
 pub const Root = spec.Root;

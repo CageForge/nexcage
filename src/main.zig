@@ -84,7 +84,7 @@ const Command = enum {
     list,
     info,
     pause,
-    resume,
+    resume_container,
     exec,
     ps,
     events,
@@ -115,7 +115,7 @@ fn parseCommand(command: []const u8) Command {
     if (std.mem.eql(u8, command, "list")) return .list;
     if (std.mem.eql(u8, command, "info")) return .info;
     if (std.mem.eql(u8, command, "pause")) return .pause;
-    if (std.mem.eql(u8, command, "resume")) return .resume;
+    if (std.mem.eql(u8, command, "resume")) return .resume_container;
     if (std.mem.eql(u8, command, "exec")) return .exec;
     if (std.mem.eql(u8, command, "ps")) return .ps;
     if (std.mem.eql(u8, command, "events")) return .events;
@@ -578,43 +578,8 @@ fn executeState(allocator: Allocator, container_id: []const u8) !void {
 }
 
 fn executeStop(container_id: []const u8, logger_ctx: *types.LogContext) !void {
-    const id = container_id;
-    try logger_ctx.info("Stopping container: {s}", .{id});
-    
-    // Отримуємо список контейнерів щоб знайти VMID за іменем
-    const containers = try proxmox_client.listLXCs();
-    defer {
-        for (containers) |*container| {
-            container.deinit(proxmox_client.allocator);
-        }
-        proxmox_client.allocator.free(containers);
-    }
-
-    // Шукаємо контейнер за іменем
-    var vmid: ?u32 = null;
-    for (containers) |container| {
-        if (std.mem.eql(u8, container.name, id)) {
-            vmid = container.vmid;
-            break;
-        }
-    }
-
-    if (vmid == null) {
-        try logger_ctx.err("Container with name {s} not found", .{id});
-        return error.ContainerNotFound;
-    }
-
-    // Отримуємо поточний статус контейнера
-    const status = try proxmox_client.getContainerStatus(.lxc, vmid.?);
-    
-    if (status == .stopped) {
-        try logger_ctx.info("Container {s} is already stopped", .{id});
-        return;
-    }
-
-    // Зупиняємо контейнер
-    try proxmox_client.stopContainer(.lxc, vmid.?, null);
-    try logger_ctx.info("Container {s} stopped successfully", .{id});
+    _ = logger_ctx; // Використовуємо логер з proxmox_client
+    try oci.stop.stop(container_id, proxmox_client);
 }
 
 fn executeKill(container_id: []const u8, signal: ?[]const u8) !void {
@@ -1065,13 +1030,13 @@ fn printVersion() void {
 fn executeList(allocator: Allocator, logger: *logger_mod.Logger) !void {
     _ = allocator;
     _ = logger;
-    std.io.getStdOut().writer().print("Container list (not implemented yet)\n", .{}) catch {};
+    try oci.list.list(proxmox_client);
 }
 
 fn executeInfo(allocator: Allocator, container_id: []const u8, logger: *logger_mod.Logger) !void {
     _ = allocator;
     _ = logger;
-    std.io.getStdOut().writer().print("Container info for: {s} (not implemented yet)\n", .{container_id}) catch {};
+    try oci.info.info(container_id, proxmox_client);
 }
 
 
