@@ -23,8 +23,8 @@ pub const Root = struct {
     path: []const u8,
     readonly: bool = false,
 
-    pub fn deinit(self: *const Root, allocator: Allocator) void {
-        allocator.free(self.path);
+    pub fn deinit(_: *const Root, _: Allocator) void {
+        // path is a literal, don't free it
     }
 
     pub fn init() Root {
@@ -84,9 +84,7 @@ pub const Spec = struct {
     }
 
     pub fn deinit(self: *Spec, allocator: Allocator) void {
-        if (!std.mem.eql(u8, self.ociVersion, "1.0.2")) {
-            allocator.free(self.ociVersion);
-        }
+        // ociVersion is a literal, don't free it
         if (self.hostname) |hostname| {
             allocator.free(hostname);
         }

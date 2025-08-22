@@ -737,15 +737,8 @@ pub const Process = struct {
 
     pub fn deinit(self: *const Process, allocator: Allocator) void {
         self.user.deinit(allocator);
-        for (self.args) |arg| {
-            allocator.free(arg);
-        }
-        allocator.free(self.args);
-        for (self.env) |env_var| {
-            allocator.free(env_var);
-        }
-        allocator.free(self.env);
-        allocator.free(self.cwd);
+        // args and env are literals from init(), don't free them
+        // cwd is a literal from init(), don't free it
         if (self.capabilities) |*caps| {
             caps.deinit(allocator);
         }
