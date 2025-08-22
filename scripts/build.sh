@@ -7,14 +7,14 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Check if Dockerfile exists
-if [ ! -f "Dockerfile.build" ]; then
+if [ ! -f "Dockerfile" ]; then
     echo "Error: Dockerfile.build not found"
     exit 1
 fi
 
 # Build the builder image
 echo "Building builder image..."
-docker build -t proxmox-lxcri-builder -f Dockerfile.build .
+docker build -t proxmox-lxcri-builder -f Dockerfile .
 
 # Run the build container
 echo "Starting project build..."

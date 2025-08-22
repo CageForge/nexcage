@@ -1,6 +1,5 @@
 const std = @import("std");
 
-
 pub const CrunManager = struct {
 	allocator: std.mem.Allocator,
 

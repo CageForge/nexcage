@@ -24,10 +24,8 @@ const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadEr
 const image = @import("image");
 const zfs = @import("zfs");
 const json_parser = @import("json_helpers");
-// const container_mod = @import("container");
 const spec_mod = @import("oci").spec;
 const RuntimeType = @import("oci").runtime.RuntimeType;
-const zig_json = @import("zig_json");
 
 const SIGINT = posix.SIG.INT;
 const SIGTERM = posix.SIG.TERM;
@@ -181,6 +179,7 @@ fn printUsage() void {
         \\Options:
         \\  -h, --help               Show this help message
         \\  -v, --version            Show version information
+        \\  --config <path>          Path to configuration file
         \\  --debug                  Enable debug logging
         \\  --systemd-cgroup         Use systemd cgroup
         \\  --root <path>            Root directory for container state
@@ -191,9 +190,15 @@ fn printUsage() void {
         \\  --console-socket <path>  Path to console socket
         \\
         \\Examples:
-        \\  proxmox-lxcri create my-container
-        \\  proxmox-lxcri start my-container
+        \\  proxmox-lxcri --config /path/to/config.json create my-container
+        \\  proxmox-lxcri --config /path/to/config.json start my-container
         \\  proxmox-lxcri list
+        \\
+        \\Configuration files are loaded in this order:
+        \\  1. File specified with --config
+        \\  2. ./config.json (current directory)
+        \\  3. /etc/proxmox-lxcri/config.json
+        \\  4. /etc/proxmox-lxcri/proxmox-lxcri.json
         \\
     ;
     std.io.getStdOut().writer().print(usage, .{}) catch {};
@@ -292,7 +297,37 @@ fn parseArgs(allocator: Allocator) !struct {
 }
 
 fn loadConfig(allocator: Allocator, config_path: ?[]const u8) !config.Config {
-    const path = config_path orelse "/etc/proxmox-lxcri/config.json";
+    // Якщо вказано конкретний шлях, використовуємо його
+    if (config_path) |path| {
+        return try loadConfigFromPath(allocator, path);
+    }
+
+    // Інакше перевіряємо файли за замовчуванням у порядку пріоритету
+    const default_paths = [_][]const u8{
+        "./config.json",                           // Поточна директорія
+        "/etc/proxmox-lxcri/config.json",         // Системний конфіг
+        "/etc/proxmox-lxcri/proxmox-lxcri.json",  // Альтернативний системний конфіг
+    };
+
+    for (default_paths) |path| {
+        const result = loadConfigFromPath(allocator, path) catch |err| {
+            // Логуємо помилку, але продовжуємо перевіряти наступні файли
+            logger_mod.warn("Failed to load config from '{s}': {s}", .{path, @errorName(err)}) catch {};
+            continue;
+        };
+        // Якщо успішно завантажили, повертаємо результат
+        return result;
+    }
+
+    // Якщо жоден файл не знайдено, повертаємо помилку
+    try logger_mod.err("No configuration file found. Tried: {s}", .{default_paths[0]});
+    for (default_paths[1..]) |path| {
+        try logger_mod.err("  {s}", .{path});
+    }
+    return error.ConfigError;
+}
+
+fn loadConfigFromPath(allocator: Allocator, path: []const u8) !config.Config {
     const file = fs.cwd().openFile(path, .{}) catch |err| {
         try logger_mod.err("Failed to open config file '{s}': {s}", .{path, @errorName(err)});
         return error.ConfigError;
@@ -405,15 +440,42 @@ fn executeCreate(
     // Create container specification
     var container_spec = spec_mod.Spec.init();
 
+    // Create Process and Root
+    var container_process = try types.Process.init();
+    defer container_process.deinit(allocator);
+    
+    var container_root = spec_mod.Root.init();
+    defer container_root.deinit(allocator);
+
     // Set basic parameters
-    container_spec.ociVersion = "1.0.2";
-    container_spec.hostname = "container";
+    const oci_version = try allocator.dupe(u8, "1.0.2");
+    defer allocator.free(oci_version);
+    container_spec.ociVersion = oci_version;
+    
+    const hostname = try allocator.dupe(u8, "container");
+    defer allocator.free(hostname);
+    container_spec.hostname = hostname;
+    
     const args_array2 = try allocator.alloc([]const u8, 1);
-    args_array2[0] = "/bin/sh";
-    container_spec.process.args = args_array2;
-    container_spec.process.cwd = "/";
-    container_spec.root.path = "/var/lib/containers/rootfs";
-    container_spec.root.readonly = false;
+    defer allocator.free(args_array2);
+    
+    const shell_path = try allocator.dupe(u8, "/bin/sh");
+    defer allocator.free(shell_path);
+    args_array2[0] = shell_path;
+    
+    container_process.args = args_array2;
+    
+    const cwd_path = try allocator.dupe(u8, "/");
+    defer allocator.free(cwd_path);
+    container_process.cwd = cwd_path;
+    
+    container_spec.process = container_process;
+    
+    const root_path = try allocator.dupe(u8, "/var/lib/containers/rootfs");
+    defer allocator.free(root_path);
+    container_root.path = root_path;
+    container_root.readonly = false;
+    container_spec.root = container_root;
 
     // var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
     // defer container_instance.deinit();
@@ -471,7 +533,7 @@ fn executeState(allocator: Allocator, container_id: []const u8) !void {
         .bundle = container_state.state.bundle,
     };
 
-    const state_json = try zig_json.stringifyAlloc(allocator, response, .{});
+            const state_json = try std.json.stringifyAlloc(allocator, response, .{});
     defer allocator.free(state_json);
     try std.io.getStdOut().writer().print("{s}\n", .{state_json});
 }
@@ -524,7 +586,7 @@ fn executeGenerateConfig(
     const config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path.?, "config.json" });
     defer allocator.free(config_path);
 
-    const oci_config = try zig_json.stringifyAlloc(allocator, .{
+            const oci_config = try std.json.stringifyAlloc(allocator, .{
         .ociVersion = "1.0.2",
         .process = .{
             .terminal = false,
@@ -632,27 +694,6 @@ pub fn main() !void {
     var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
     defer temp_logger.deinit();
 
-    // Ініціалізуємо конфігурацію
-    var cfg = try config.Config.init(allocator, &temp_logger);
-    defer cfg.deinit();
-
-    // Встановлюємо тип runtime (за замовчуванням runc)
-    cfg.setRuntimeType(.runc);
-
-    // Створюємо специфікацію контейнера
-    var container_spec = spec_mod.Spec.init();
-
-    // Встановлюємо базові параметри
-    container_spec.ociVersion = "1.0.2";
-    container_spec.hostname = "container";
-    const args_array = try allocator.alloc([]const u8, 1);
-    defer allocator.free(args_array);
-    args_array[0] = "/bin/sh";
-    container_spec.process.args = args_array;
-    container_spec.process.cwd = "/";
-    container_spec.root.path = "/var/lib/containers/rootfs";
-    container_spec.root.readonly = false;
-
     // Додаю dispatch для команд
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
@@ -662,18 +703,67 @@ pub fn main() !void {
         return;
     }
     
-    if (std.mem.eql(u8, args[1], "--help") or std.mem.eql(u8, args[1], "-h")) {
+    // Обробляємо глобальні опції
+    var config_path: ?[]const u8 = null;
+    var i: usize = 1;
+    
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--config")) {
+            if (i + 1 >= args.len) {
+                std.io.getStdErr().writer().print("Error: --config requires a path argument\n", .{}) catch {};
+                return error.InvalidArguments;
+            }
+            config_path = args[i + 1];
+            i += 1;
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            printUsage();
+            return;
+        } else if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
+            printVersion();
+            return;
+        } else {
+            // Це команда, виходимо з циклу
+            break;
+        }
+    }
+    
+    if (i >= args.len) {
         printUsage();
         return;
     }
-    
-    if (std.mem.eql(u8, args[1], "--version") or std.mem.eql(u8, args[1], "-v")) {
-        printVersion();
-        return;
+
+    // Ініціалізуємо конфігурацію
+    var cfg: config.Config = undefined;
+    if (config_path) |path| {
+        cfg = try loadConfig(allocator, path);
+    } else {
+        cfg = try loadConfig(allocator, null); // Завантажуємо з файлів за замовчуванням
     }
+    defer cfg.deinit();
+
+    // Ініціалізуємо ProxmoxClient
+    const default_host = "localhost";
+    const host = if (cfg.proxmox.hosts) |hosts| hosts[0] else default_host;
+    var proxmox_client_instance = try ProxmoxClient.init(
+        allocator,
+        host,
+        cfg.proxmox.port orelse 8006,
+        cfg.proxmox.token orelse "default-token",
+        cfg.proxmox.node orelse "pve",
+        &temp_logger,
+    );
+    defer proxmox_client_instance.deinit();
     
-    if (std.mem.eql(u8, args[1], "create")) {
-        const container_id = if (args.len > 2) args[2] else "unknown";
+    // Присвоюємо глобальну змінну
+    proxmox_client = &proxmox_client_instance;
+
+    // Встановлюємо тип runtime (за замовчуванням runc)
+    cfg.setRuntimeType(.runc);
+
+    // Обробляємо команди
+    if (std.mem.eql(u8, args[i], "create")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else "unknown";
         // Додаю тег container_id
         const tag = std.fmt.allocPrint(allocator, "container_id={s}", .{container_id}) catch "container_id=unknown";
         defer allocator.free(tag);
@@ -685,7 +775,7 @@ pub fn main() !void {
         return;
     }
     
-    if (std.mem.eql(u8, args[1], "list")) {
+    if (std.mem.eql(u8, args[i], "list")) {
         executeList(allocator, &temp_logger) catch |err| {
             temp_logger.err("List command failed: {s}", .{@errorName(err)}) catch {};
             return err;
@@ -693,8 +783,8 @@ pub fn main() !void {
         return;
     }
     
-    if (std.mem.eql(u8, args[1], "start")) {
-        const container_id = if (args.len > 2) args[2] else {
+    if (std.mem.eql(u8, args[i], "start")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
             std.io.getStdErr().writer().print("Error: container_id required for start command\n", .{}) catch {};
             return error.MissingContainerId;
         };
@@ -705,8 +795,8 @@ pub fn main() !void {
         return;
     }
     
-    if (std.mem.eql(u8, args[1], "stop")) {
-        const container_id = if (args.len > 2) args[2] else {
+    if (std.mem.eql(u8, args[i], "stop")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
             std.io.getStdErr().writer().print("Error: container_id required for stop command\n", .{}) catch {};
             return error.MissingContainerId;
         };
@@ -714,8 +804,8 @@ pub fn main() !void {
         return;
     }
     
-    if (std.mem.eql(u8, args[1], "delete")) {
-        const container_id = if (args.len > 2) args[2] else {
+    if (std.mem.eql(u8, args[i], "delete")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
             std.io.getStdErr().writer().print("Error: container_id required for delete command\n", .{}) catch {};
             return error.MissingContainerId;
         };
@@ -726,8 +816,8 @@ pub fn main() !void {
         return;
     }
     
-    if (std.mem.eql(u8, args[1], "info")) {
-        const container_id = if (args.len > 2) args[2] else {
+    if (std.mem.eql(u8, args[i], "info")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
             std.io.getStdErr().writer().print("Error: container_id required for info command\n", .{}) catch {};
             return error.MissingContainerId;
         };
@@ -738,8 +828,8 @@ pub fn main() !void {
         return;
     }
     
-    if (std.mem.eql(u8, args[1], "state")) {
-        const container_id = if (args.len > 2) args[2] else {
+    if (std.mem.eql(u8, args[i], "state")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
             std.io.getStdErr().writer().print("Error: container_id required for state command\n", .{}) catch {};
             return error.MissingContainerId;
         };
@@ -750,12 +840,12 @@ pub fn main() !void {
         return;
     }
     
-    if (std.mem.eql(u8, args[1], "kill")) {
-        const container_id = if (args.len > 2) args[2] else {
+    if (std.mem.eql(u8, args[i], "kill")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
             std.io.getStdErr().writer().print("Error: container_id required for kill command\n", .{}) catch {};
             return error.MissingContainerId;
         };
-        const signal = if (args.len > 3) args[3] else null;
+        const signal = if (args.len > i + 2) args[i + 2] else null;
         executeKill(container_id, signal) catch |err| {
             temp_logger.err("Kill command failed: {s}", .{@errorName(err)}) catch {};
             return err;
@@ -763,7 +853,7 @@ pub fn main() !void {
         return;
     }
     
-    if (std.mem.eql(u8, args[1], "generate-config")) {
+    if (std.mem.eql(u8, args[i], "generate-config")) {
         executeGenerateConfig(allocator, args) catch |err| {
             temp_logger.err("Generate-config command failed: {s}", .{@errorName(err)}) catch {};
             return err;
@@ -771,10 +861,7 @@ pub fn main() !void {
         return;
     }
     
-    // Якщо команда не розпізнана
-    std.io.getStdErr().writer().print("Unknown command: {s}\n", .{args[1]}) catch {};
-    printUsage();
-    return error.UnknownCommand;
+
 }
 
 fn getConfigPath(allocator: Allocator) ![]const u8 {

@@ -24,9 +24,17 @@ const net = std.net;
 const logger = logger_mod.Logger;
 const Headers = std.http.Headers;
 const HeaderIterator = std.http.Headers.Iterator;
-const common = @import("common");
-
 const API_PREFIX = "/api2/json";
+
+const ContainerConfig = struct {
+    id: []const u8,
+    spec: []const u8,
+
+    pub fn deinit(self: *ContainerConfig, allocator: Allocator) void {
+        allocator.free(self.id);
+        allocator.free(self.spec);
+    }
+};
 
 const Options = struct {
     timeout: ?u64 = null,
@@ -113,7 +121,7 @@ pub const ProxmoxClient = struct {
     }
 
     pub fn createContainer(self: *ProxmoxClient, container_id: []const u8, spec: []const u8) !void {
-        const config = common.ContainerConfig{
+        var config = ContainerConfig{
             .id = try self.allocator.dupe(u8, container_id),
             .spec = try self.allocator.dupe(u8, spec),
         };

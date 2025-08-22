@@ -28,7 +28,7 @@
 - [ ] Network configuration
 - [ ] StatefulSet support
 
-### 4. Image System (100% complete) - 3 days
+### 4. Image System (90% complete) - 3 days
 - [x] Image Manager implementation
 - [x] LXC templates support
 - [x] Rootfs image support
