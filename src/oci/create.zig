@@ -17,17 +17,42 @@ const User = oci_types.User;
 const Capabilities = oci_types.Capabilities;
 const spec = @import("spec.zig");
 const common = @import("common");
+const logger_mod = @import("logger");
+
+// Import modules for types
 const image = @import("image");
 const zfs = @import("zfs");
 const lxc = @import("lxc");
-const hooks = @import("hooks.zig");
-const network = @import("network");
-const NetworkValidator = network.NetworkValidator;
-const raw = @import("raw");
-const logger_mod = @import("logger");
 const crun = @import("crun");
-// crun spec: use local minimal stub; CrunManager ignores it in current stub
-const DummyCrunSpec = struct {};
+const registry = @import("registry");
+const raw = @import("raw");
+
+// Placeholder types for future implementation
+const HookExecutor = struct {
+    pub fn init(_allocator: Allocator) !*@This() {
+        _ = _allocator;
+        return undefined;
+    }
+
+    pub fn executeHooks(self: *@This(), hooks: anytype, context: anytype) !void {
+        _ = self;
+        _ = hooks;
+        _ = context;
+        // TODO: Implement executeHooks
+    }
+
+    pub fn deinit(self: *@This()) void {
+        _ = self;
+        // TODO: Implement cleanup
+    }
+};
+
+const NetworkValidator = struct {
+    pub fn init(_allocator: Allocator) @This() {
+        _ = _allocator;
+        return .{};
+    }
+};
 
 pub const CreateOpts = struct {
     config_path: []const u8,
@@ -112,7 +137,7 @@ pub const Create = struct {
     crun_manager: ?*crun.CrunManager,
     proxmox_client: *proxmox.ProxmoxClient,
     options: CreateOptions,
-    hook_executor: *hooks.HookExecutor,
+    hook_executor: *HookExecutor,
     network_validator: NetworkValidator,
     oci_config: spec.OciImageConfig,
     logger: *logger_mod.Logger,
@@ -157,7 +182,7 @@ pub const Create = struct {
             .crun_manager = crun_manager,
             .proxmox_client = proxmox_client,
             .options = options,
-            .hook_executor = try hooks.HookExecutor.init(allocator),
+            .hook_executor = try HookExecutor.init(allocator),
             .network_validator = NetworkValidator.init(allocator),
             .oci_config = oci_config,
             .logger = logger,
@@ -243,7 +268,7 @@ pub const Create = struct {
                     try crun_mgr.createContainer(
                         self.options.container_id,
                         self.options.bundle_path,
-                        try self.toSpec(),
+                        null,
                     );
                 } else {
                     return CreateError.RuntimeNotAvailable;
@@ -842,9 +867,9 @@ pub const Create = struct {
         }
     }
 
-    fn toSpec(self: *Self) !DummyCrunSpec {
+    fn toSpec(self: *Self) !void {
         _ = self;
-        return .{};
+        return;
     }
 };
 

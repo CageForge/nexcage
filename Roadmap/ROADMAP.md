@@ -1,6 +1,6 @@
 # 🗺️ Proxmox LXC Container Runtime Interface Project Roadmap
 
-## 📊 Overall Progress: 87%
+## 📊 Overall Progress: 90%
 
 ## ✅ Completed Tasks
 
@@ -69,7 +69,36 @@
 - [x] Clean up unused tests
 - [x] Update documentation
 
-### 8. C API Migration (100% complete) - 3 days
+### 8. Sprint 2: Code Quality & Architecture (95% complete) - 4 days
+- [x] Fix memory leaks and improve memory management (2.75 hours)
+  - [x] Resolved memory leaks in configuration management
+  - [x] Fixed type deinitialization issues
+  - [x] Improved resource cleanup
+- [x] Implement missing stop command functionality (2.25 hours)
+  - [x] Added container stopping via Proxmox API
+  - [x] Integrated with OCI stop module
+- [x] Update CLI commands and help system to OCI standards (3 hours)
+  - [x] Enhanced help system with new commands
+  - [x] Aligned with OCI specifications
+  - [x] Added version and global options
+- [x] Refactor code into modular OCI components (3.5 hours)
+  - [x] Moved command logic to dedicated OCI modules
+  - [x] Created clean separation of concerns
+  - [x] Improved code maintainability
+- [x] Clean up unused files and improve project structure (4 hours)
+  - [x] Removed 48 unused files and modules
+  - [x] Created placeholder system for future implementation
+  - [x] Updated build system and dependencies
+- [x] Enhance info command with professional JSON output (5.5 hours)
+  - [x] Implemented JSON format similar to runc/crun
+  - [x] Added comprehensive runtime information
+  - [x] Support for both runtime and container-specific info
+- [x] Test analysis and cleanup (2 hours)
+  - [x] Cleaned up test structure
+  - [x] Removed unused tests
+  - [x] Improved test organization
+
+### 9. C API Migration (100% complete) - 3 days
 - [x] Replace gRPC C++ with gRPC-C
   - [x] Update .proto files for C code generation
   - [x] Remove C++ dependencies
@@ -213,9 +242,10 @@
 ## 📈 Updated Time Expenditure
 - Previously Planned: 39 days
 - Additional Pattern Implementation: 5 days
-- New Total: 44 days
-- Spent: 22.5 days + 4 hours
-- Remaining: ~21.5 days
+- Sprint 2 Completion: 4 days
+- New Total: 48 days
+- Spent: 26.5 days + 4 hours
+- Remaining: ~17.5 days
 
 ## Current Focus
 
