@@ -578,8 +578,8 @@ fn executeState(allocator: Allocator, container_id: []const u8) !void {
     try std.io.getStdOut().writer().print("{s}\n", .{state_json});
 }
 
-fn executeStop(container_id: []const u8, logger_ctx: *types.LogContext) !void {
-    try oci.stop.stop(container_id, logger_ctx, proxmox_client);
+fn executeStop(container_id: []const u8) !void {
+    try oci.stop.stop(container_id, proxmox_client);
 }
 
 fn executeKill(container_id: []const u8, signal: ?[]const u8) !void {
@@ -844,7 +844,7 @@ pub fn main() !void {
             std.io.getStdErr().writer().print("Error: container_id required for stop command\n", .{}) catch {};
             return error.MissingContainerId;
         };
-        executeStop(container_id, &temp_logger) catch |err| {
+        executeStop(container_id) catch |err| {
             temp_logger.err("Stop command failed: {s}", .{@errorName(err)}) catch {};
             return err;
         };
