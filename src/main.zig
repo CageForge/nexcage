@@ -864,10 +864,7 @@ pub fn main() !void {
     }
     
     if (std.mem.eql(u8, args[i], "info")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for info command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
+        const container_id = if (args.len > i + 1) args[i + 1] else null;
         executeInfo(allocator, container_id, &temp_logger) catch |err| {
             temp_logger.err("Info command failed: {s}", .{@errorName(err)}) catch {};
             return err;
@@ -1033,7 +1030,7 @@ fn executeList(allocator: Allocator, logger: *logger_mod.Logger) !void {
     try oci.list.list(proxmox_client);
 }
 
-fn executeInfo(allocator: Allocator, container_id: []const u8, logger: *logger_mod.Logger) !void {
+fn executeInfo(allocator: Allocator, container_id: ?[]const u8, logger: *logger_mod.Logger) !void {
     _ = allocator;
     _ = logger;
     try oci.info.info(container_id, proxmox_client);
