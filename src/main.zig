@@ -920,7 +920,21 @@ pub fn main() !void {
             std.io.getStdErr().writer().print("Error: container_id required for exec command\n", .{}) catch {};
             return error.MissingContainerId;
         };
-        temp_logger.info("Executing command in container: {s} (not implemented yet)", .{container_id}) catch {};
+        const command = if (args.len > i + 2) args[i + 2] else {
+            std.io.getStdErr().writer().print("Error: command required for exec command\n", .{}) catch {};
+            return error.MissingCommand;
+        };
+        
+        // Збираємо аргументи команди
+        var command_args: ?[]const []const u8 = null;
+        if (args.len > i + 3) {
+            command_args = args[i + 3..];
+        }
+        
+        executeExec(allocator, container_id, command, command_args, &temp_logger) catch |err| {
+            temp_logger.err("Exec command failed: {s}", .{@errorName(err)}) catch {};
+            return err;
+        };
         return;
     }
     
@@ -1034,6 +1048,41 @@ fn executeInfo(allocator: Allocator, container_id: ?[]const u8, logger: *logger_
     _ = allocator;
     _ = logger;
     try oci.info.info(container_id, proxmox_client);
+}
+
+fn executeExec(allocator: Allocator, container_id: []const u8, command: []const u8, args: ?[]const []const u8, logger: *logger_mod.Logger) !void {
+    _ = allocator;
+    _ = logger;
+    
+    // Створюємо опції для exec
+    const exec_options = oci.exec.ExecOptions{
+        .container_id = container_id,
+        .command = command,
+        .args = args,
+        .working_dir = null,
+        .env = null,
+        .user = null,
+        .tty = false,
+        .privileged = false,
+    };
+    
+    // Виконуємо команду
+    const result = try oci.exec.exec(exec_options, proxmox_client);
+    defer result.deinit(proxmox_client.allocator);
+    
+    // Виводимо результат
+    if (result.stdout.len > 0) {
+        try std.io.getStdOut().writer().print("{s}", .{result.stdout});
+    }
+    
+    if (result.stderr.len > 0) {
+        try std.io.getStdErr().writer().print("{s}", .{result.stderr});
+    }
+    
+    // Встановлюємо код виходу
+    if (result.exit_code != 0) {
+        std.process.exit(@intCast(result.exit_code));
+    }
 }
 
 
