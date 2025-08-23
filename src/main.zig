@@ -20,12 +20,10 @@ const Client = http.Client;
 const network = @import("network");
 const process = std.process;
 const oci = @import("oci");
-const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadError;
 const image = @import("image");
-const zfs = @import("zfs");
+const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadError;
 const json_parser = @import("json_helpers");
 const spec_mod = @import("oci").spec;
-const RuntimeType = @import("oci").runtime.RuntimeType;
 
 const SIGINT = posix.SIG.INT;
 const SIGTERM = posix.SIG.TERM;
@@ -416,12 +414,15 @@ fn handleSignal(sig: c_int) callconv(.C) void {
     _ = stderr.write(msg) catch return;
 }
 
+// Import zfs module for ZFSManager type
+const zfs = @import("zfs");
+
 fn executeCreate(
     allocator: Allocator,
     args: []const []const u8,
-    image_manager: *image.ImageManager,
-    zfs_manager: *zfs.ZFSManager,
-    _lxc_manager: ?*void,
+    _image_manager: *image.ImageManager,
+    _zfs_manager: *zfs.ZFSManager,
+    _lxc_manager: ?*anyopaque,
 ) !void {
     _ = _lxc_manager;
     if (args.len < 4) {
@@ -522,8 +523,8 @@ fn executeCreate(
     // Create container
     const create = try oci.create.Create.init(
         allocator,
-        image_manager,
-        zfs_manager,
+        _image_manager,
+        _zfs_manager,
         null,
         null,
         proxmox_client,
@@ -578,43 +579,7 @@ fn executeState(allocator: Allocator, container_id: []const u8) !void {
 }
 
 fn executeStop(container_id: []const u8, logger_ctx: *types.LogContext) !void {
-    const id = container_id;
-    try logger_ctx.info("Stopping container: {s}", .{id});
-    
-    // Отримуємо список контейнерів щоб знайти VMID за іменем
-    const containers = try proxmox_client.listLXCs();
-    defer {
-        for (containers) |*container| {
-            container.deinit(proxmox_client.allocator);
-        }
-        proxmox_client.allocator.free(containers);
-    }
-
-    // Шукаємо контейнер за іменем
-    var vmid: ?u32 = null;
-    for (containers) |container| {
-        if (std.mem.eql(u8, container.name, id)) {
-            vmid = container.vmid;
-            break;
-        }
-    }
-
-    if (vmid == null) {
-        try logger_ctx.err("Container with name {s} not found", .{id});
-        return error.ContainerNotFound;
-    }
-
-    // Отримуємо поточний статус контейнера
-    const status = try proxmox_client.getContainerStatus(.lxc, vmid.?);
-    
-    if (status == .stopped) {
-        try logger_ctx.info("Container {s} is already stopped", .{id});
-        return;
-    }
-
-    // Зупиняємо контейнер
-    try proxmox_client.stopContainer(.lxc, vmid.?, null);
-    try logger_ctx.info("Container {s} stopped successfully", .{id});
+    try oci.stop.stop(container_id, logger_ctx, proxmox_client);
 }
 
 fn executeKill(container_id: []const u8, signal: ?[]const u8) !void {
