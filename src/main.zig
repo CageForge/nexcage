@@ -938,6 +938,29 @@ pub fn main() !void {
         return;
     }
     
+    if (std.mem.eql(u8, args[i], "benchmark")) {
+        const container_id = if (args.len > i + 1) args[i + 1] else {
+            std.io.getStdErr().writer().print("Error: container_id required for benchmark command\n", .{}) catch {};
+            return error.MissingContainerId;
+        };
+        const command = if (args.len > i + 2) args[i + 2] else {
+            std.io.getStdErr().writer().print("Error: command required for benchmark command\n", .{}) catch {};
+            return error.MissingCommand;
+        };
+        
+        // Збираємо аргументи команди
+        var command_args: ?[]const []const u8 = null;
+        if (args.len > i + 3) {
+            command_args = args[i + 3..];
+        }
+        
+        executeBenchmark(allocator, container_id, command, command_args, &temp_logger) catch |err| {
+            temp_logger.err("Benchmark command failed: {s}", .{@errorName(err)}) catch {};
+            return err;
+        };
+        return;
+    }
+    
     if (std.mem.eql(u8, args[i], "ps")) {
         const container_id = if (args.len > i + 1) args[i + 1] else {
             std.io.getStdErr().writer().print("Error: container_id required for ps command\n", .{}) catch {};
@@ -1064,6 +1087,7 @@ fn executeExec(allocator: Allocator, container_id: []const u8, command: []const 
         .user = null,
         .tty = false,
         .privileged = false,
+        .method = .auto, // Автоматичний вибір найкращого методу
     };
     
     // Виконуємо команду
@@ -1079,10 +1103,19 @@ fn executeExec(allocator: Allocator, container_id: []const u8, command: []const 
         try std.io.getStdErr().writer().print("{s}", .{result.stderr});
     }
     
+    // Показуємо час виконання
+    result.printTiming();
+    
     // Встановлюємо код виходу
     if (result.exit_code != 0) {
         std.process.exit(@intCast(result.exit_code));
     }
 }
 
+fn executeBenchmark(allocator: Allocator, container_id: []const u8, command: []const u8, args: ?[]const []const u8, logger: *logger_mod.Logger) !void {
+    _ = allocator;
+    _ = logger;
+    
+    try oci.exec.benchmarkExecution(container_id, command, args, proxmox_client);
+}
 
