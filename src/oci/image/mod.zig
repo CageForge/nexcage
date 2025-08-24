@@ -25,6 +25,11 @@ pub const Volume = config.Volume;
 pub const MountPoint = config.MountPoint;
 pub const ConfigError = config.ConfigError;
 
+// Re-export layer types
+pub const Layer = layer.Layer;
+pub const LayerManager = layer.LayerManager;
+pub const LayerError = layer.LayerError;
+
 // Re-export commonly used functions
 pub const parseManifest = manifest.parseManifest;
 pub const createManifest = manifest.createManifest;
@@ -43,6 +48,18 @@ pub const validateContainerConfig = config.validateContainerConfig;
 pub const validateImageConfig = config.validateImageConfig;
 pub const parseExposedPortsFromArray = config.parseExposedPortsFromArray;
 pub const parseVolumesFromArray = config.parseVolumesFromArray;
+
+// Re-export layer functions
+pub const createLayer = layer.Layer.createLayer;
+pub const createLayerWithMetadata = layer.Layer.createLayerWithMetadata;
+pub const createDescriptor = layer.Layer.createDescriptor;
+pub const validate = layer.Layer.validate;
+pub const verifyIntegrity = layer.Layer.verifyIntegrity;
+pub const addDependency = layer.Layer.addDependency;
+pub const removeDependency = layer.Layer.removeDependency;
+pub const dependsOn = layer.Layer.dependsOn;
+pub const clone = layer.Layer.clone;
+pub const initLayerManager = layer.LayerManager.init;
 
 // Test exports
 test {
