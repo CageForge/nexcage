@@ -249,21 +249,23 @@
 
 ## Current Focus
 
-### Priority 1 - Critical Path (1.5 weeks)
+### Priority 1 - Critical Path (This Week - August 19-25)
 1. OCI Image Specification Implementation
    - Image manifest та configuration (2 days)
-   - Layer format та base operations (1-2 days)
-   - Інтеграція з create command (1 day)
+   - Layer format та base operations (1 day)
+   - Integration with existing image manager
 
 2. LayerFS Base Implementation
    - Basic structure for layers (1 day)
-   - Managment layers (1 day)
-   - Integration with Image Specification (1 day)
+   - Layer management operations (1 day)
+   - ZFS integration for layer storage
 
 3. OCI Create Command Integration
-   - Setup image over LayerFS (1 day)
-   - Basic container configuration (1 day)
-   - Integration tests (0.5 day)
+   - Connect image system with container creation (1 day)
+   - Basic container configuration from image
+   - End-to-end testing and validation
+
+**Goal**: Complete core image functionality to enable full OCI runtime compliance
 
 ### Priority 2 - Core Features (1 week)
 1. Extended OCI Runtime Features
