@@ -108,14 +108,14 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Placeholder modules for future implementation
+    // OCI Image module
     const image_mod = b.addModule("image", .{
-        .root_source_file = b.path("src/image_placeholder.zig"),
+        .root_source_file = b.path("src/oci/image/mod.zig"),
         .imports = &.{
             .{ .name = "logger", .module = logger_mod },
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
-            .{ .name = "json", .module = json_mod },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
         },
     });
 

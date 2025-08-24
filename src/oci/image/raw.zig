@@ -80,7 +80,7 @@ pub const RawImage = struct {
         }
 
         if (output.term.Exited != 0) {
-            return RawError.LoopError;
+            return RawImageError.ReadError;
         }
 
         // Видаляємо новий рядок з кінця
@@ -99,7 +99,7 @@ pub const RawImage = struct {
         }
 
         if (output.term.Exited != 0) {
-            return RawError.FileError;
+            return RawImageError.WriteError;
         }
     }
 
@@ -122,7 +122,7 @@ pub const RawImage = struct {
         }
 
         if (output.term.Exited != 0) {
-            return RawError.MountError;
+            return RawImageError.WriteError;
         }
     }
 
@@ -149,7 +149,7 @@ pub const RawImage = struct {
         }
 
         if (output.term.Exited != 0) {
-            return RawError.FileError;
+            return RawImageError.WriteError;
         }
     }
 
@@ -170,7 +170,7 @@ pub const RawImage = struct {
         }
 
         if (output.term.Exited != 0) {
-            return RawError.MountError;
+            return RawImageError.WriteError;
         }
 
         try fs.cwd().deleteDir(mount_point);

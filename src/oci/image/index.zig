@@ -9,7 +9,7 @@ pub fn parseIndex(allocator: std.mem.Allocator, content: []const u8) !types.Imag
     if (parsed.value.type != .object) return error.InvalidJson;
     const obj = parsed.value.object();
 
-    var index = types.ImageIndex{
+    const index = types.ImageIndex{
         .schemaVersion = try getInt(obj, "schemaVersion"),
         .manifests = try parseManifests(obj, "manifests", allocator),
     };
@@ -28,7 +28,7 @@ fn parseManifests(obj: *zig_json.Object, field: []const u8, allocator: std.mem.A
     if (value.type != .array) return error.InvalidType;
     const array = value.array();
 
-    var manifests = try allocator.alloc(types.ManifestDescriptor, array.len());
+    const manifests = try allocator.alloc(types.ManifestDescriptor, array.len());
     for (manifests, 0..) |*manifest, i| {
         const manifest_value = array.get(i);
         if (manifest_value.type != .object) return error.InvalidType;
@@ -77,7 +77,7 @@ fn parseStringArray(obj: *zig_json.Object, field: []const u8, allocator: std.mem
     if (value.type != .array) return error.InvalidType;
     const array = value.array();
 
-    var result = try allocator.alloc([]const u8, array.len());
+    const result = try allocator.alloc([]const u8, array.len());
     for (result, 0..) |*entry, i| {
         const entry_value = array.get(i);
         if (entry_value.type != .string) return error.InvalidType;

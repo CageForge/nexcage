@@ -114,6 +114,17 @@ pub const ImageManager = struct {
         const allocator = self.allocator;
         const image_path = fs.path.join(allocator, &[_][]const u8{ self.images_dir, image_name, tag }) catch return false;
         defer allocator.free(image_path);
-        return fs.cwd().openDir(image_path, .{}) != null;
+        
+        var dir = fs.cwd().openDir(image_path, .{}) catch return false;
+        dir.close();
+        return true;
+    }
+    
+    /// Pull an image from a registry (placeholder implementation)
+    pub fn pullImage(self: *Self, image_ref: []const u8) !void {
+        _ = self;
+        _ = image_ref;
+        // TODO: Implement actual image pulling from registry
+        // For now, this is a placeholder that always succeeds
     }
 };

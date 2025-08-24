@@ -36,7 +36,7 @@ fn parseStringArray(obj: *zig_json.Object, field: []const u8, allocator: std.mem
     if (value.type != .array) return error.InvalidType;
     const array = value.array();
 
-    var result = try allocator.alloc([]const u8, array.len());
+    const result = try allocator.alloc([]const u8, array.len());
     for (result, 0..) |*entry, i| {
         const entry_value = array.get(i);
         if (entry_value.type != .string) return error.InvalidType;
