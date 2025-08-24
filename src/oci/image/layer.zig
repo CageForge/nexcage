@@ -1,10 +1,27 @@
 const std = @import("std");
 const types = @import("types");
+const crypto = std.crypto;
+const hash = crypto.hash;
+const mem = std.mem;
+const fs = std.fs;
+const path = std.fs.path;
 
 pub const LayerError = error{
     InvalidLayer,
     InvalidDigest,
     InvalidSize,
+    InvalidMediaType,
+    InvalidDigestFormat,
+    InvalidDigestLength,
+    InvalidAnnotations,
+    LayerNotFound,
+    LayerCorrupted,
+    UnsupportedMediaType,
+    InvalidLayerOrder,
+    DependencyNotFound,
+    IntegrityCheckFailed,
+    MetadataError,
+    StorageError,
 };
 
 /// OCI image layer

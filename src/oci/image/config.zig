@@ -6,6 +6,34 @@ pub const ConfigError = error{
     InvalidConfig,
     InvalidRootFS,
     InvalidHistory,
+    InvalidJson,
+    MissingField,
+    InvalidType,
+    InvalidUser,
+    InvalidWorkingDir,
+    InvalidEntrypoint,
+    InvalidCmd,
+    InvalidEnv,
+    InvalidExposedPorts,
+    InvalidVolumes,
+    InvalidLabels,
+    InvalidStopSignal,
+    InvalidHealthCheck,
+    InvalidMountPoint,
+    InvalidVolumePath,
+    InvalidPortFormat,
+    InvalidSignalFormat,
+    InvalidLabelFormat,
+    InvalidArchitecture,
+    InvalidOS,
+    InvalidOSVersion,
+    InvalidTimestamp,
+    InvalidAuthor,
+    InvalidComment,
+    InvalidCreatedBy,
+    InvalidEmptyLayer,
+    InvalidDiffIds,
+    InvalidRootFSType,
 };
 
 pub fn parseConfig(allocator: std.mem.Allocator, content: []const u8) !types.ImageConfig {
@@ -102,7 +130,7 @@ fn parseVolumes(obj: *zig_json.Object, field: []const u8, allocator: std.mem.All
 
 fn parseLabels(obj: *zig_json.Object, field: []const u8, allocator: std.mem.Allocator) !?std.StringHashMap([]const u8) {
     const value = obj.get(field) orelse return null;
-    if (value.type != .object) return error.InvalidType;
+    if (value.type != .string) return error.InvalidType;
     const labels_obj = value.object();
 
     var labels = std.StringHashMap([]const u8).init(allocator);
@@ -160,7 +188,7 @@ pub fn createConfig(
     architecture: []const u8,
     os: []const u8,
     config: ?types.Config,
-    rootfs: types.RootFS,
+    rootfs: types.Rootfs,
     history: ?[]types.History,
 ) !types.ImageConfig {
     if (architecture.len == 0 or os.len == 0) {
