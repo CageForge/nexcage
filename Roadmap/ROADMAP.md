@@ -148,7 +148,7 @@
   - [x] Resource cleanup on errors
   - [x] Unit tests for core operations
   - **Status**: ✅ **COMPLETED** (August 19, 2024)
-- [ ] **Issue #50**: Implement Advanced LayerFS Operations (4 hours)
+- [ ] **Issue #50**: Implement Advanced LayerFS Operations (4 hours) - 🔄 **IN PROGRESS**
 - [ ] **Issue #51**: Integrate Image System with Create Command (4 hours)
 - [ ] **Issue #52**: Add Comprehensive Testing Suite (3 hours)
 - [ ] **Issue #53**: Update Documentation (2 hours)

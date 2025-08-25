@@ -8,6 +8,11 @@ const LayerOperation = @import("../../src/oci/image/layerfs.zig").LayerOperation
 const GarbageCollectionResult = @import("../../src/oci/image/layerfs.zig").GarbageCollectionResult;
 const DetailedLayerFSStats = @import("../../src/oci/image/layerfs.zig").DetailedLayerFSStats;
 const BatchOperationResult = @import("../../src/oci/image/layerfs.zig").BatchOperationResult;
+const MetadataCache = @import("../../src/oci/image/layerfs.zig").MetadataCache;
+const MetadataCacheEntry = @import("../../src/oci/image/layerfs.zig").MetadataCacheEntry;
+const LayerObjectPool = @import("../../src/oci/image/layerfs.zig").LayerObjectPool;
+const ParallelProcessingContext = @import("../../src/oci/image/layerfs.zig").ParallelProcessingContext;
+const AdvancedFileOps = @import("../../src/oci/image/layerfs.zig").AdvancedFileOps;
 
 fn createTestDigest() []const u8 {
     return "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
@@ -695,4 +700,123 @@ test "LayerFS performance optimization features" {
     // All layers should be removed (they're all unused)
     try testing.expectEqual(@as(u32, 100), gc_result.layers_removed);
     try testing.expectEqual(@as(usize, 0), layerfs.layers.count());
+}
+
+// Advanced LayerFS Operations Tests
+
+test "MetadataCache initialization and basic operations" {
+    var cache = MetadataCache.init(allocator, 10);
+    defer cache.deinit();
+    
+    try testing.expectEqual(@as(usize, 0), cache.entries.count());
+    try testing.expectEqual(@as(usize, 10), cache.max_entries);
+}
+
+test "MetadataCache put and get operations" {
+    var cache = MetadataCache.init(allocator, 5);
+    defer cache.deinit();
+    
+    const entry = try allocator.create(MetadataCacheEntry);
+    entry.* = .{
+        .digest = try allocator.dupe(u8, createTestDigest()),
+        .media_type = try allocator.dupe(u8, "application/vnd.oci.image.layer.v1.tar"),
+        .size = 1024,
+        .created = null,
+        .author = null,
+        .comment = null,
+        .dependencies = null,
+        .order = 0,
+        .compressed = false,
+        .compression_type = null,
+        .validated = true,
+        .last_validated = null,
+        .last_accessed = std.time.timestamp(),
+        .access_count = 0,
+    };
+    defer entry.deinit(allocator);
+    defer allocator.destroy(entry);
+    
+    try cache.put(entry.digest, entry);
+    try testing.expectEqual(@as(usize, 1), cache.entries.count());
+    
+    const retrieved = cache.get(entry.digest);
+    try testing.expect(retrieved != null);
+    try testing.expectEqual(entry, retrieved.?);
+    try testing.expectEqual(@as(u32, 1), retrieved.?.access_count);
+}
+
+test "LayerObjectPool initialization and operations" {
+    var pool = LayerObjectPool.init(allocator, 5);
+    defer pool.deinit();
+    
+    try testing.expectEqual(@as(u32, 0), pool.total_allocated);
+    try testing.expectEqual(@as(u32, 5), pool.max_pool_size);
+    
+    const layer1 = try pool.getLayer();
+    defer layer1.deinit(allocator);
+    
+    try testing.expectEqual(@as(u32, 1), pool.total_allocated);
+    
+    pool.returnLayer(layer1);
+    try testing.expectEqual(@as(usize, 1), pool.available_layers.items.len);
+}
+
+test "ParallelProcessingContext initialization" {
+    const context = ParallelProcessingContext.init(allocator, 4);
+    try testing.expectEqual(@as(u32, 4), context.max_workers);
+}
+
+test "AdvancedFileOps copy operation" {
+    var file_ops = AdvancedFileOps.init(allocator);
+    
+    // Create a test file
+    const test_file = try std.fs.cwd().createFile("/tmp/test_source.txt", .{});
+    defer test_file.close();
+    defer std.fs.cwd().deleteFile("/tmp/test_source.txt") catch {};
+    
+    try test_file.writer().writeAll("Hello, World!");
+    
+    const result = try file_ops.copyLayerData("/tmp/test_source.txt", "/tmp/test_dest.txt");
+    defer result.deinit(allocator);
+    defer std.fs.cwd().deleteFile("/tmp/test_dest.txt") catch {};
+    
+    try testing.expectEqual(true, result.success);
+    try testing.expectEqual(@as(u64, 13), result.bytes_processed);
+    try testing.expectEqual(null, result.error_message);
+}
+
+test "AdvancedFileOps move operation" {
+    var file_ops = AdvancedFileOps.init(allocator);
+    
+    // Create a test file
+    const test_file = try std.fs.cwd().createFile("/tmp/test_move.txt", .{});
+    defer test_file.close();
+    
+    try test_file.writer().writeAll("Test content");
+    
+    const result = try file_ops.moveLayerData("/tmp/test_move.txt", "/tmp/test_moved.txt");
+    defer result.deinit(allocator);
+    defer std.fs.cwd().deleteFile("/tmp/test_moved.txt") catch {};
+    
+    try testing.expectEqual(true, result.success);
+    try testing.expectEqual(@as(u64, 0), result.bytes_processed);
+    try testing.expectEqual(null, result.error_message);
+}
+
+test "AdvancedFileOps sync operation" {
+    var file_ops = AdvancedFileOps.init(allocator);
+    
+    // Create a test file
+    const test_file = try std.fs.cwd().createFile("/tmp/test_sync.txt", .{});
+    defer test_file.close();
+    defer std.fs.cwd().deleteFile("/tmp/test_sync.txt") catch {};
+    
+    try test_file.writer().writeAll("Test content");
+    
+    const result = try file_ops.syncLayerData("/tmp/test_sync.txt");
+    defer result.deinit(allocator);
+    
+    try testing.expectEqual(true, result.success);
+    try testing.expectEqual(@as(u64, 0), result.bytes_processed);
+    try testing.expectEqual(null, result.error_message);
 }

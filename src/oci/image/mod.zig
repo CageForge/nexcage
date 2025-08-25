@@ -45,6 +45,14 @@ pub const LayerOperation = layerfs.LayerOperation;
 pub const BatchOperationResult = layerfs.BatchOperationResult;
 pub const LayerOperationError = layerfs.LayerOperationError;
 
+// New Advanced LayerFS types
+pub const MetadataCacheEntry = layerfs.MetadataCacheEntry;
+pub const MetadataCache = layerfs.MetadataCache;
+pub const LayerObjectPool = layerfs.LayerObjectPool;
+pub const ParallelProcessingContext = layerfs.ParallelProcessingContext;
+pub const FileOperationResult = layerfs.FileOperationResult;
+pub const AdvancedFileOps = layerfs.AdvancedFileOps;
+
 // Re-export commonly used functions
 pub const parseManifest = manifest.parseManifest;
 pub const createManifest = manifest.createManifest;
@@ -84,6 +92,12 @@ pub const initLayerFS = layerfs.initLayerFS;
 pub const garbageCollect = layerfs.garbageCollect;
 pub const getDetailedStats = layerfs.getDetailedStats;
 pub const batchLayerOperations = layerfs.batchLayerOperations;
+
+// New Advanced LayerFS functions
+pub const createMetadataCache = layerfs.MetadataCache.init;
+pub const createLayerObjectPool = layerfs.LayerObjectPool.init;
+pub const createParallelProcessingContext = layerfs.ParallelProcessingContext.init;
+pub const createAdvancedFileOps = layerfs.AdvancedFileOps.init;
 
 // Test exports
 test {

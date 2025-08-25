@@ -646,76 +646,399 @@ pub const BatchOperationResult = struct {
         self.errors.deinit();
     }
 };
+
+/// Metadata cache entry for fast layer access
+pub const MetadataCacheEntry = struct {
+    digest: []const u8,
+    media_type: []const u8,
+    size: u64,
+    created: ?[]const u8,
+    author: ?[]const u8,
+    comment: ?[]const u8,
+    dependencies: ?[][]const u8,
+    order: u32,
+    compressed: bool,
+    compression_type: ?[]const u8,
+    validated: bool,
+    last_validated: ?[]const u8,
+    last_accessed: i64,
+    access_count: u32,
     
-    /// Performance optimization: Batch layer operations
-    pub fn batchLayerOperations(self: *Self, operations: []LayerOperation) !BatchOperationResult {
-        var result = BatchOperationResult{
-            .successful = 0,
-            .failed = 0,
-            .errors = std.ArrayList(LayerOperationError).init(self.allocator),
-        };
-        defer result.deinit();
+    pub fn deinit(self: *MetadataCacheEntry, allocator: std.mem.Allocator) void {
+        allocator.free(self.digest);
+        allocator.free(self.media_type);
+        if (self.created) |c| allocator.free(c);
+        if (self.author) |a| allocator.free(a);
+        if (self.comment) |c| allocator.free(c);
+        if (self.compression_type) |ct| allocator.free(ct);
+        if (self.last_validated) |lv| allocator.free(lv);
         
-        for (operations) |operation| {
-            switch (operation) {
-                .add => |add_op| {
-                    if (self.layers.contains(add_op.digest)) {
-                        try result.errors.append(LayerOperationError{
-                            .operation = try self.allocator.dupe(u8, "add"),
-                            .digest = try self.allocator.dupe(u8, add_op.digest),
-                            .error_message = try self.allocator.dupe(u8, "Layer already exists"),
-                        });
-                        result.failed += 1;
-                    } else {
-                        try self.addLayer(add_op.layer);
-                        result.successful += 1;
-                    }
-                },
-                .remove => |remove_op| {
-                    if (!self.layers.contains(remove_op.digest)) {
-                        try result.errors.append(LayerOperationError{
-                            .operation = try self.allocator.dupe(u8, "remove"),
-                            .digest = try self.allocator.dupe(u8, remove_op.digest),
-                            .error_message = try self.allocator.dupe(u8, "Layer not found"),
-                        });
-                        result.failed += 1;
-                    } else {
-                        try self.removeLayer(remove_op.digest);
-                        result.successful += 1;
-                    }
-                },
-                .mount => |mount_op| {
-                    if (!self.layers.contains(mount_op.digest)) {
-                        try result.errors.append(LayerOperationError{
-                            .operation = try self.allocator.dupe(u8, "mount"),
-                            .digest = try self.allocator.dupe(u8, mount_op.digest),
-                            .error_message = try self.allocator.dupe(u8, "Layer not found"),
-                        });
-                        result.failed += 1;
-                    } else {
-                        try self.mountOverlay(mount_op.digest, mount_op.mount_path);
-                        result.successful += 1;
-                    }
-                },
-                .unmount => |unmount_op| {
-                    if (!self.overlay_mounts.contains(unmount_op.digest)) {
-                        try result.errors.append(LayerOperationError{
-                            .operation = try self.allocator.dupe(u8, "unmount"),
-                            .digest = try self.allocator.dupe(u8, unmount_op.digest),
-                            .error_message = try self.allocator.dupe(u8, "Layer not mounted"),
-                        });
-                        result.failed += 1;
-                    } else {
-                        self.unmountOverlay(unmount_op.digest);
-                        result.successful += 1;
-                    }
-                },
+        if (self.dependencies) |deps| {
+            for (deps) |dep| {
+                allocator.free(dep);
+            }
+            allocator.free(deps);
+        }
+    }
+    
+    pub fn clone(self: *const MetadataCacheEntry, allocator: std.mem.Allocator) !*MetadataCacheEntry {
+        const entry = try allocator.create(MetadataCacheEntry);
+        entry.* = .{
+            .digest = try allocator.dupe(u8, self.digest),
+            .media_type = try allocator.dupe(u8, self.media_type),
+            .size = self.size,
+            .created = if (self.created) |c| try allocator.dupe(u8, c) else null,
+            .author = if (self.author) |a| try allocator.dupe(u8, a) else null,
+            .comment = if (self.comment) |c| try allocator.dupe(u8, c) else null,
+            .dependencies = if (self.dependencies) |deps| try self.cloneStringArray(deps) else null,
+            .order = self.order,
+            .compressed = self.compressed,
+            .compression_type = if (self.compression_type) |ct| try allocator.dupe(u8, ct) else null,
+            .validated = self.validated,
+            .last_validated = if (self.last_validated) |lv| try allocator.dupe(u8, lv) else null,
+            .last_accessed = self.last_accessed,
+            .access_count = self.access_count,
+        };
+        return entry;
+    }
+};
+
+/// Metadata cache for fast layer access
+pub const MetadataCache = struct {
+    entries: std.StringHashMap(*MetadataCacheEntry),
+    max_entries: usize,
+    allocator: std.mem.Allocator,
+    
+    const Self = @This();
+    
+    pub fn init(allocator: std.mem.Allocator, max_entries: usize) Self {
+        return .{
+            .entries = std.StringHashMap(*MetadataCacheEntry).init(allocator),
+            .max_entries = max_entries,
+            .allocator = allocator,
+        };
+    }
+    
+    pub fn deinit(self: *Self) void {
+        var it = self.entries.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.*.deinit(self.allocator);
+            self.allocator.destroy(entry.value_ptr.*);
+        }
+        self.entries.deinit();
+    }
+    
+    pub fn get(self: *Self, digest: []const u8) ?*MetadataCacheEntry {
+        if (self.entries.get(digest)) |entry| {
+            entry.last_accessed = std.time.timestamp();
+            entry.access_count += 1;
+            return entry;
+        }
+        return null;
+    }
+    
+    pub fn put(self: *Self, digest: []const u8, entry: *MetadataCacheEntry) !void {
+        // Evict least recently used entry if cache is full
+        if (self.entries.count() >= self.max_entries) {
+            try self.evictLRU();
+        }
+        
+        try self.entries.put(try self.allocator.dupe(u8, digest), entry);
+    }
+    
+    fn evictLRU(self: *Self) !void {
+        var oldest_time: i64 = std.math.maxInt(i64);
+        var oldest_digest: ?[]const u8 = null;
+        
+        var it = self.entries.iterator();
+        while (it.next()) |entry| {
+            if (entry.value_ptr.*.last_accessed < oldest_time) {
+                oldest_time = entry.value_ptr.*.last_accessed;
+                oldest_digest = entry.key_ptr.*;
             }
         }
         
-        return result;
+        if (oldest_digest) |digest| {
+            if (self.entries.fetchRemove(digest)) |removed| {
+                removed.value.deinit(self.allocator);
+                self.allocator.destroy(removed.value);
+                self.allocator.free(removed.key);
+            }
+        }
+    }
+    
+    fn cloneStringArray(strings: [][]const u8, allocator: std.mem.Allocator) ![][]const u8 {
+        var cloned = try allocator.alloc([]const u8, strings.len);
+        for (strings, 0..) |str, i| {
+            cloned[i] = try allocator.dupe(u8, str);
+        }
+        return cloned;
     }
 };
+
+/// Object pool for efficient Layer allocation
+pub const LayerObjectPool = struct {
+    available_layers: std.ArrayList(*Layer),
+    total_allocated: u32,
+    max_pool_size: u32,
+    allocator: std.mem.Allocator,
+    
+    const Self = @This();
+    
+    pub fn init(allocator: std.mem.Allocator, max_pool_size: u32) Self {
+        return .{
+            .available_layers = std.ArrayList(*Layer).init(allocator),
+            .total_allocated = 0,
+            .max_pool_size = max_pool_size,
+            .allocator = allocator,
+        };
+    }
+    
+    pub fn deinit(self: *Self) void {
+        for (self.available_layers.items) |layer| {
+            layer.deinit(self.allocator);
+            self.allocator.destroy(layer);
+        }
+        self.available_layers.deinit();
+    }
+    
+    pub fn getLayer(self: *Self) !*Layer {
+        if (self.available_layers.popOrNull()) |layer| {
+            return layer;
+        }
+        
+        if (self.total_allocated < self.max_pool_size) {
+            self.total_allocated += 1;
+            return try Layer.createLayer(
+                self.allocator,
+                "application/vnd.oci.image.layer.v1.tar",
+                "",
+                0,
+                null
+            );
+        }
+        
+        return error.PoolExhausted;
+    }
+    
+    pub fn returnLayer(self: *Self, layer: *Layer) void {
+        if (self.available_layers.items.len < self.max_pool_size) {
+            // Reset layer state
+            layer.* = .{
+                .media_type = "",
+                .digest = "",
+                .size = 0,
+                .annotations = null,
+                .created = null,
+                .author = null,
+                .comment = null,
+                .dependencies = null,
+                .order = 0,
+                .storage_path = null,
+                .compressed = false,
+                .compression_type = null,
+                .validated = false,
+                .last_validated = null,
+            };
+            self.available_layers.append(layer) catch {};
+        } else {
+            // Pool is full, destroy the layer
+            layer.deinit(self.allocator);
+            self.allocator.destroy(layer);
+        }
+    }
+};
+
+/// Parallel layer processing context
+pub const ParallelProcessingContext = struct {
+    max_workers: u32,
+    allocator: std.mem.Allocator,
+    
+    const Self = @This();
+    
+    pub fn init(allocator: std.mem.Allocator, max_workers: u32) Self {
+        return .{
+            .max_workers = max_workers,
+            .allocator = allocator,
+        };
+    }
+    
+    pub fn processLayersParallel(self: *Self, layers: [][]const u8, processor: fn([]const u8) anyerror!void) !void {
+        const worker_count = @min(self.max_workers, @as(u32, @intCast(layers.len)));
+        if (worker_count == 0) return;
+        
+        var threads = try self.allocator.alloc(std.Thread, worker_count);
+        defer self.allocator.free(threads);
+        
+        const layers_per_worker = layers.len / worker_count;
+        const remaining_layers = layers.len % worker_count;
+        var start_index: usize = 0;
+        
+        for (0..worker_count) |i| {
+            const end_index = start_index + layers_per_worker + if (i < remaining_layers) 1 else 0;
+            const worker_layers = layers[start_index..end_index];
+            
+            threads[i] = try std.Thread.spawn(.{}, processLayersWorker, .{ worker_layers, processor });
+            start_index = end_index;
+        }
+        
+        // Wait for all workers to complete
+        for (threads) |thread| {
+            thread.join();
+        }
+    }
+    
+    fn processLayersWorker(layers: [][]const u8, processor: fn([]const u8) anyerror!void) void {
+        for (layers) |layer| {
+            processor(layer) catch |err| {
+                // Log error but continue processing other layers
+                std.debug.print("Error processing layer {s}: {any}\n", .{ layer, err });
+            };
+        }
+    }
+};
+
+/// File operation result
+pub const FileOperationResult = struct {
+    success: bool,
+    bytes_processed: u64,
+    error_message: ?[]const u8,
+    
+    pub fn deinit(self: *FileOperationResult, allocator: std.mem.Allocator) void {
+        if (self.error_message) |msg| {
+            allocator.free(msg);
+        }
+    }
+};
+
+/// Advanced file operations for layers
+pub const AdvancedFileOps = struct {
+    allocator: std.mem.Allocator,
+    
+    const Self = @This();
+    
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return .{ .allocator = allocator };
+    }
+    
+    pub fn copyLayerData(_: *Self, source_path: []const u8, dest_path: []const u8) !FileOperationResult {
+        const source_file = try std.fs.cwd().openFile(source_path, .{});
+        defer source_file.close();
+        
+        const dest_file = try std.fs.cwd().createFile(dest_path, .{});
+        defer dest_file.close();
+        
+        _ = try source_file.stat();
+        var buffer: [8192]u8 = undefined;
+        var total_copied: u64 = 0;
+        
+        while (true) {
+            const bytes_read = try source_file.reader().read(&buffer);
+            if (bytes_read == 0) break;
+            
+            try dest_file.writer().writeAll(buffer[0..bytes_read]);
+            total_copied += bytes_read;
+        }
+        
+        return FileOperationResult{
+            .success = true,
+            .bytes_processed = total_copied,
+            .error_message = null,
+        };
+    }
+    
+    pub fn moveLayerData(_: *Self, source_path: []const u8, dest_path: []const u8) !FileOperationResult {
+        try std.fs.rename(source_path, dest_path);
+        
+        return FileOperationResult{
+            .success = true,
+            .bytes_processed = 0,
+            .error_message = null,
+        };
+    }
+    
+    pub fn syncLayerData(_: *Self, path: []const u8) !FileOperationResult {
+        const file = try std.fs.cwd().openFile(path, .{});
+        defer file.close();
+        
+        try file.sync();
+        
+        return FileOperationResult{
+            .success = true,
+            .bytes_processed = 0,
+            .error_message = null,
+        };
+    }
+};
+
+/// Performance optimization: Batch layer operations
+pub fn batchLayerOperations(self: *LayerFS, operations: []LayerOperation) !BatchOperationResult {
+    var result = BatchOperationResult{
+        .successful = 0,
+        .failed = 0,
+        .errors = std.ArrayList(LayerOperationError).init(self.allocator),
+    };
+    defer result.deinit();
+    
+    for (operations) |operation| {
+        switch (operation) {
+            .add => |add_op| {
+                if (self.layers.contains(add_op.digest)) {
+                    try result.errors.append(LayerOperationError{
+                        .operation = try self.allocator.dupe(u8, "add"),
+                        .digest = try self.allocator.dupe(u8, add_op.digest),
+                        .error_message = try self.allocator.dupe(u8, "Layer already exists"),
+                    });
+                    result.failed += 1;
+                } else {
+                    try self.addLayer(add_op.layer);
+                    result.successful += 1;
+                }
+            },
+            .remove => |remove_op| {
+                if (!self.layers.contains(remove_op.digest)) {
+                    try result.errors.append(LayerOperationError{
+                        .operation = try self.allocator.dupe(u8, "remove"),
+                        .digest = try self.allocator.dupe(u8, remove_op.digest),
+                        .error_message = try self.allocator.dupe(u8, "Layer not found"),
+                    });
+                    result.failed += 1;
+                } else {
+                    try self.removeLayer(remove_op.digest);
+                    result.successful += 1;
+                }
+            },
+            .mount => |mount_op| {
+                if (!self.layers.contains(mount_op.digest)) {
+                    try result.errors.append(LayerOperationError{
+                        .operation = try self.allocator.dupe(u8, "mount"),
+                        .digest = try self.allocator.dupe(u8, mount_op.digest),
+                        .error_message = try self.allocator.dupe(u8, "Layer not found"),
+                    });
+                    result.failed += 1;
+                } else {
+                    try self.mountOverlay(mount_op.digest, mount_op.mount_path);
+                    result.successful += 1;
+                }
+            },
+            .unmount => |unmount_op| {
+                if (!self.overlay_mounts.contains(unmount_op.digest)) {
+                    try result.errors.append(LayerOperationError{
+                        .operation = try self.allocator.dupe(u8, "unmount"),
+                        .digest = try self.allocator.dupe(u8, unmount_op.digest),
+                        .error_message = try self.allocator.dupe(u8, "Layer not mounted"),
+                    });
+                    result.failed += 1;
+                } else {
+                    self.unmountOverlay(unmount_op.digest);
+                    result.successful += 1;
+                }
+            },
+        }
+    }
+    
+    return result;
+}
 
 /// Statistics for LayerFS
 pub const LayerFSStats = struct {
