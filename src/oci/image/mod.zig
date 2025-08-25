@@ -99,6 +99,9 @@ pub const createLayerObjectPool = layerfs.LayerObjectPool.init;
 pub const createParallelProcessingContext = layerfs.ParallelProcessingContext.init;
 pub const createAdvancedFileOps = layerfs.AdvancedFileOps.init;
 
+// ImageManager functions
+pub const createContainerFromImage = manager.ImageManager.createContainerFromImage;
+
 // Test exports
 test {
     _ = types;
