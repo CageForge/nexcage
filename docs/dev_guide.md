@@ -251,7 +251,7 @@ perf report
 ### 1. Version Bumping
 ```bash
 # Update version in build.zig
-version = "0.1.0";
+version = "0.2.0";
 ```
 
 ### 2. Changelog
@@ -262,8 +262,8 @@ git log --pretty=format:"%h %s" v0.0.9..HEAD
 
 ### 3. Release Tag
 ```bash
-git tag -a v0.1.0 -m "Release v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "Release v0.2.0"
+git push origin v0.2.0
 ```
 
 ### 4. Documentation

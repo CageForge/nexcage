@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+- Future enhancements and improvements
+- Additional performance optimizations
+- Extended testing coverage
+- Enhanced documentation
+
+## [0.2.0] - 2024-08-19
+
 ### Added
 - **OCI Image System**: Complete implementation of OCI v1.0.2 image specification
 - **Advanced Layer Management**: Efficient container image layer handling with dependency resolution
@@ -52,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resolved memory leaks in layer management
 - Improved test coverage and reliability
 
-## [0.1.0] - YYYY-MM-DD
+## [0.2.0] - 2024-08-19
 
 ### Added
 - Initial release

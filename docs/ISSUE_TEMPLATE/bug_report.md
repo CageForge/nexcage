@@ -13,7 +13,7 @@ A clear and concise description of what the bug is.
 ## Environment
 - Proxmox VE Version: 7.4+
 - Zig Version: 0.13.0+
-- Proxmox LXCRI Version: [e.g. 0.1.0]
+- Proxmox LXCRI Version: [e.g. 0.2.0]
 - containerd Version: 1.7+
 - ZFS Version: 2.1+
 - Linux Kernel Version: 5.15+
