@@ -36,6 +36,15 @@ pub const LayerFS = layerfs.LayerFS;
 pub const LayerFSStats = layerfs.LayerFSStats;
 pub const LayerFSError = layerfs.LayerFSError;
 
+// Advanced LayerFS types
+pub const GarbageCollectionResult = layerfs.GarbageCollectionResult;
+pub const GarbageCollectionError = layerfs.GarbageCollectionError;
+pub const DetailedLayerFSStats = layerfs.DetailedLayerFSStats;
+pub const LayerDetail = layerfs.LayerDetail;
+pub const LayerOperation = layerfs.LayerOperation;
+pub const BatchOperationResult = layerfs.BatchOperationResult;
+pub const LayerOperationError = layerfs.LayerOperationError;
+
 // Re-export commonly used functions
 pub const parseManifest = manifest.parseManifest;
 pub const createManifest = manifest.createManifest;
@@ -70,6 +79,11 @@ pub const initLayerManager = layer.LayerManager.init;
 // Re-export layerfs functions
 pub const createLayerFS = layerfs.createLayerFS;
 pub const initLayerFS = layerfs.initLayerFS;
+
+// Advanced LayerFS functions
+pub const garbageCollect = layerfs.garbageCollect;
+pub const getDetailedStats = layerfs.getDetailedStats;
+pub const batchLayerOperations = layerfs.batchLayerOperations;
 
 // Test exports
 test {

@@ -1,12 +1,16 @@
 const std = @import("std");
 const testing = std.testing;
 const allocator = testing.allocator;
-const LayerFS = @import("image").LayerFS;
-const Layer = @import("image").Layer;
-const LayerFSError = @import("image").LayerFSError;
+const LayerFS = @import("../../src/oci/image/layerfs.zig").LayerFS;
+const Layer = @import("../../src/oci/image/layer.zig").Layer;
+const LayerFSError = @import("../../src/oci/image/layerfs.zig").LayerFSError;
+const LayerOperation = @import("../../src/oci/image/layerfs.zig").LayerOperation;
+const GarbageCollectionResult = @import("../../src/oci/image/layerfs.zig").GarbageCollectionResult;
+const DetailedLayerFSStats = @import("../../src/oci/image/layerfs.zig").DetailedLayerFSStats;
+const BatchOperationResult = @import("../../src/oci/image/layerfs.zig").BatchOperationResult;
 
 fn createTestDigest() []const u8 {
-    return "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+    return "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
 }
 
 test "LayerFS initialization" {
@@ -396,4 +400,299 @@ test "LayerFS memory management" {
     
     // Cleanup should not leak memory
     layerfs.deinit();
+}
+
+test "LayerFS garbage collection" {
+    const layerfs = try LayerFS.init(allocator, "/tmp/test-layers");
+    defer layerfs.deinit();
+    
+    // Create multiple layers
+    const layer1 = try Layer.createLayer(
+        allocator,
+        "application/vnd.oci.image.layer.v1.tar",
+        "sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        1024,
+        null
+    );
+    defer layer1.deinit(allocator);
+    
+    const layer2 = try Layer.createLayer(
+        allocator,
+        "application/vnd.oci.image.layer.v1.tar",
+        "sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        2048,
+        null
+    );
+    defer layer2.deinit(allocator);
+    
+    const layer3 = try Layer.createLayer(
+        allocator,
+        "application/vnd.oci.image.layer.v1.tar",
+        "sha256:layer3abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        4096,
+        null
+    );
+    defer layer3.deinit(allocator);
+    
+    // Add layers to filesystem
+    try layerfs.addLayer(layer1);
+    try layerfs.addLayer(layer2);
+    try layerfs.addLayer(layer3);
+    
+    // Mount layer1 (will be protected from GC)
+    try layerfs.mountOverlay("sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", "/tmp/mounted");
+    
+    // Set layer2 as dependency of layer3 (will be protected from GC)
+    try layer3.addDependency(allocator, "sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+    
+    // Verify initial state
+    try testing.expectEqual(@as(usize, 3), layerfs.layers.count());
+    
+    // Run garbage collection
+    const gc_result = try layerfs.garbageCollect(false);
+    defer gc_result.deinit();
+    
+    // Only layer3 should be removed (unused, not mounted, not referenced)
+    try testing.expectEqual(@as(u32, 1), gc_result.layers_removed);
+    try testing.expectEqual(@as(u64, 4096), gc_result.space_freed);
+    
+    // Verify final state
+    try testing.expectEqual(@as(usize, 2), layerfs.layers.count());
+    
+    // layer1 should still exist (mounted)
+    try testing.expect(layerfs.getLayer("sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890") != null);
+    
+    // layer2 should still exist (referenced by layer3)
+    try testing.expect(layerfs.getLayer("sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890") != null);
+    
+    // layer3 should be removed
+    try testing.expect(layerfs.getLayer("sha256:layer3abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890") == null);
+}
+
+test "LayerFS detailed statistics" {
+    const layerfs = try LayerFS.init(allocator, "/tmp/test-layers");
+    defer layerfs.deinit();
+    
+    // Create layers with different states
+    const layer1 = try Layer.createLayer(
+        allocator,
+        "application/vnd.oci.image.layer.v1.tar",
+        "sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        1024,
+        null
+    );
+    defer layer1.deinit(allocator);
+    
+    const layer2 = try Layer.createLayer(
+        allocator,
+        "application/vnd.oci.image.layer.v1.tar",
+        "sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        2048,
+        null
+    );
+    defer layer2.deinit(allocator);
+    
+    const layer3 = try Layer.createLayer(
+        allocator,
+        "application/vnd.oci.image.layer.v1.tar",
+        "sha256:layer3abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        4096,
+        null
+    );
+    defer layer3.deinit(allocator);
+    
+    // Add all layers
+    try layerfs.addLayer(layer1);
+    try layerfs.addLayer(layer2);
+    try layerfs.addLayer(layer3);
+    
+    // Mount layer1
+    try layerfs.mountOverlay("sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", "/tmp/mounted");
+    
+    // Set layer2 as dependency of layer3
+    try layer3.addDependency(allocator, "sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+    
+    // Get detailed statistics
+    const stats = try layerfs.getDetailedStats();
+    defer stats.deinit(allocator);
+    
+    // Verify statistics
+    try testing.expectEqual(@as(u32, 3), stats.total_layers);
+    try testing.expectEqual(@as(u32, 1), stats.mounted_layers);
+    try testing.expectEqual(@as(u32, 1), stats.referenced_layers);
+    try testing.expectEqual(@as(u32, 1), stats.unused_layers);
+    
+    try testing.expectEqual(@as(u64, 7168), stats.total_size); // 1024 + 2048 + 4096
+    try testing.expectEqual(@as(u64, 1024), stats.mounted_size);
+    try testing.expectEqual(@as(u64, 2048), stats.referenced_size);
+    try testing.expectEqual(@as(u64, 4096), stats.unused_size);
+    
+    // Verify layer details
+    try testing.expectEqual(@as(usize, 3), stats.layer_details.items.len);
+    
+    // Find layer1 (mounted)
+    var found_mounted = false;
+    for (stats.layer_details.items) |detail| {
+        if (std.mem.eql(u8, detail.digest, "sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")) {
+            try testing.expectEqual(true, detail.is_mounted);
+            try testing.expectEqual(false, detail.is_referenced);
+            try testing.expectEqual(@as(u64, 1024), detail.size);
+            found_mounted = true;
+        }
+    }
+    try testing.expect(found_mounted);
+    
+    // Find layer2 (referenced)
+    var found_referenced = false;
+    for (stats.layer_details.items) |detail| {
+        if (std.mem.eql(u8, detail.digest, "sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")) {
+            try testing.expectEqual(false, detail.is_mounted);
+            try testing.expectEqual(true, detail.is_referenced);
+            try testing.expectEqual(@as(u64, 2048), detail.size);
+            found_referenced = true;
+        }
+    }
+    try testing.expect(found_referenced);
+    
+    // Find layer3 (unused)
+    var found_unused = false;
+    for (stats.layer_details.items) |detail| {
+        if (std.mem.eql(u8, detail.digest, "sha256:layer3abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")) {
+            try testing.expectEqual(false, detail.is_mounted);
+            try testing.expectEqual(false, detail.is_referenced);
+            try testing.expectEqual(@as(u64, 4096), detail.size);
+            found_unused = true;
+        }
+    }
+    try testing.expect(found_unused);
+}
+
+test "LayerFS batch operations" {
+    const layerfs = try LayerFS.init(allocator, "/tmp/test-layers");
+    defer layerfs.deinit();
+    
+    // Create test layers
+    const layer1 = try Layer.createLayer(
+        allocator,
+        "application/vnd.oci.image.layer.v1.tar",
+        "sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        1024,
+        null
+    );
+    defer layer1.deinit(allocator);
+    
+    const layer2 = try Layer.createLayer(
+        allocator,
+        "application/vnd.oci.image.layer.v1.tar",
+        "sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        2048,
+        null
+    );
+    defer layer2.deinit(allocator);
+    
+    // Create batch operations
+    const operations = [_]LayerOperation{
+        .{ .add = .{ .digest = "sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", .layer = layer1 } },
+        .{ .add = .{ .digest = "sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", .layer = layer2 } },
+        .{ .mount = .{ .digest = "sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", .mount_path = "/tmp/mounted" } },
+        .{ .remove = .{ .digest = "sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890" } },
+    };
+    
+    // Execute batch operations
+    const result = try layerfs.batchLayerOperations(&operations);
+    defer result.deinit();
+    
+    // Verify results
+    try testing.expectEqual(@as(u32, 4), result.successful);
+    try testing.expectEqual(@as(u32, 0), result.failed);
+    try testing.expectEqual(@as(usize, 0), result.errors.items.len);
+    
+    // Verify final state
+    try testing.expectEqual(@as(usize, 1), layerfs.layers.count());
+    try testing.expectEqual(@as(usize, 1), layerfs.overlay_mounts.count());
+    
+    // layer1 should exist and be mounted
+    try testing.expect(layerfs.getLayer("sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890") != null);
+    try testing.expect(layerfs.overlay_mounts.contains("sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"));
+    
+    // layer2 should be removed
+    try testing.expect(layerfs.getLayer("sha256:layer2abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890") == null);
+}
+
+test "LayerFS batch operations with errors" {
+    const layerfs = try LayerFS.init(allocator, "/tmp/test-layers");
+    defer layerfs.deinit();
+    
+    // Create test layer
+    const layer1 = try Layer.createLayer(
+        allocator,
+        "application/vnd.oci.image.layer.v1.tar",
+        "sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        1024,
+        null
+    );
+    defer layer1.deinit(allocator);
+    
+    // Create batch operations with some errors
+    const operations = [_]LayerOperation{
+        .{ .add = .{ .digest = "sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", .layer = layer1 } },
+        .{ .add = .{ .digest = "sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", .layer = layer1 } }, // Duplicate
+        .{ .remove = .{ .digest = "sha256:nonexistent" } }, // Non-existent
+        .{ .mount = .{ .digest = "sha256:nonexistent", .mount_path = "/tmp/mounted" } }, // Non-existent
+    };
+    
+    // Execute batch operations
+    const result = try layerfs.batchLayerOperations(&operations);
+    defer result.deinit();
+    
+    // Verify results
+    try testing.expectEqual(@as(u32, 1), result.successful);
+    try testing.expectEqual(@as(u32, 3), result.failed);
+    try testing.expectEqual(@as(usize, 3), result.errors.items.len);
+    
+    // Verify final state
+    try testing.expectEqual(@as(usize, 1), layerfs.layers.count());
+    
+    // layer1 should exist
+    try testing.expect(layerfs.getLayer("sha256:layer1abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890") != null);
+}
+
+test "LayerFS performance optimization features" {
+    const layerfs = try LayerFS.init(allocator, "/tmp/test-layers");
+    defer layerfs.deinit();
+    
+    // Test with many layers for performance
+    var i: u32 = 0;
+    while (i < 100) : (i += 1) {
+        var digest: [128]u8 = undefined;
+        _ = std.fmt.bufPrint(&digest, "sha256:layer{}abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", .{i}) catch unreachable;
+        
+        const layer = try Layer.createLayer(
+            allocator,
+            "application/vnd.oci.image.layer.v1.tar",
+            &digest,
+            @as(u64, i) * 1024,
+            null
+        );
+        defer layer.deinit(allocator);
+        
+        try layerfs.addLayer(layer);
+    }
+    
+    // Verify all layers were added
+    try testing.expectEqual(@as(usize, 100), layerfs.layers.count());
+    
+    // Test garbage collection performance
+    const start_time = std.time.milliTimestamp();
+    const gc_result = try layerfs.garbageCollect(false);
+    defer gc_result.deinit();
+    const end_time = std.time.milliTimestamp();
+    
+    // Garbage collection should complete in reasonable time (< 100ms)
+    const duration = @as(i64, end_time - start_time);
+    try testing.expect(duration < 100);
+    
+    // All layers should be removed (they're all unused)
+    try testing.expectEqual(@as(u32, 100), gc_result.layers_removed);
+    try testing.expectEqual(@as(usize, 0), layerfs.layers.count());
 }

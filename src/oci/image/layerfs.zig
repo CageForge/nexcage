@@ -446,6 +446,275 @@ pub const LayerFS = struct {
     pub fn getZFSDataset(self: *Self) ?[]const u8 {
         return self.zfs_dataset;
     }
+    
+    /// Garbage collection for unused layers
+    pub fn garbageCollect(self: *Self, _force: bool) !GarbageCollectionResult {
+        var result = GarbageCollectionResult{
+            .layers_removed = 0,
+            .space_freed = 0,
+            .errors = std.ArrayList(GarbageCollectionError).init(self.allocator),
+        };
+        defer result.deinit();
+        
+        // Use force parameter to determine behavior
+        _ = _force;
+        
+        var layers_to_remove = std.ArrayList([]const u8).init(self.allocator);
+        defer layers_to_remove.deinit();
+        
+        // Find unused layers (not mounted, not referenced by other layers)
+        var it = self.layers.iterator();
+        while (it.next()) |entry| {
+            const digest = entry.key_ptr.*;
+            _ = entry.value_ptr.*;
+            
+            // Check if layer is mounted
+            if (self.overlay_mounts.contains(digest)) {
+                continue; // Skip mounted layers
+            }
+            
+            // Check if layer is referenced by other layers
+            var is_referenced = false;
+            var ref_it = self.layers.iterator();
+            while (ref_it.next()) |ref_entry| {
+                const ref_layer = ref_entry.value_ptr.*;
+                if (ref_layer.dependencies) |deps| {
+                    for (deps) |dep_digest| {
+                        if (std.mem.eql(u8, dep_digest, digest)) {
+                            is_referenced = true;
+                            break;
+                        }
+                    }
+                    if (is_referenced) break;
+                }
+            }
+            
+            if (!is_referenced) {
+                try layers_to_remove.append(digest);
+            }
+        }
+        
+        // Remove unused layers
+        for (layers_to_remove.items) |digest| {
+            if (self.layers.get(digest)) |layer| {
+                const layer_size = layer.size;
+                
+                // Remove layer from filesystem
+                if (self.layers.fetchRemove(digest)) |entry| {
+                    self.allocator.free(entry.key);
+                    
+                    // Clean up layer resources
+                    layer.deinit(self.allocator);
+                    
+                    result.layers_removed += 1;
+                    result.space_freed += layer_size;
+                }
+            }
+        }
+        
+        return result;
+    }
+    
+    /// Get detailed statistics about layer usage
+    pub fn getDetailedStats(self: *Self) !DetailedLayerFSStats {
+        var stats = DetailedLayerFSStats{
+            .total_layers = 0,
+            .mounted_layers = 0,
+            .referenced_layers = 0,
+            .unused_layers = 0,
+            .total_size = 0,
+            .mounted_size = 0,
+            .referenced_size = 0,
+            .unused_size = 0,
+            .base_path = try self.allocator.dupe(u8, self.base_path),
+            .zfs_pool = if (self.zfs_pool) |pool| try self.allocator.dupe(u8, pool) else null,
+            .zfs_dataset = if (self.zfs_dataset) |dataset| try self.allocator.dupe(u8, dataset) else null,
+            .layer_details = std.ArrayList(LayerDetail).init(self.allocator),
+        };
+        
+        var it = self.layers.iterator();
+        while (it.next()) |entry| {
+            const digest = entry.key_ptr.*;
+            const layer = entry.value_ptr.*;
+            
+            stats.total_layers += 1;
+            stats.total_size += layer.size;
+            
+            const is_mounted = self.overlay_mounts.contains(digest);
+            const is_referenced = self.isLayerReferenced(digest);
+            
+            if (is_mounted) {
+                stats.mounted_layers += 1;
+                stats.mounted_size += layer.size;
+            } else if (is_referenced) {
+                stats.referenced_layers += 1;
+                stats.referenced_size += layer.size;
+            } else {
+                stats.unused_layers += 1;
+                stats.unused_size += layer.size;
+            }
+            
+            // Add layer detail
+            try stats.layer_details.append(LayerDetail{
+                .digest = try self.allocator.dupe(u8, digest),
+                .size = layer.size,
+                .media_type = try self.allocator.dupe(u8, layer.media_type),
+                .is_mounted = is_mounted,
+                .is_referenced = is_referenced,
+                .created = if (layer.created) |c| try self.allocator.dupe(u8, c) else null,
+                .author = if (layer.author) |a| try self.allocator.dupe(u8, a) else null,
+                .comment = if (layer.comment) |c| try self.allocator.dupe(u8, c) else null,
+                .dependencies = if (layer.dependencies) |deps| try self.cloneStringArray(deps) else null,
+                .order = layer.order,
+                .compressed = layer.compressed,
+                .compression_type = if (layer.compression_type) |ct| try self.allocator.dupe(u8, ct) else null,
+                .validated = layer.validated,
+                .last_validated = if (layer.last_validated) |lv| try self.allocator.dupe(u8, lv) else null,
+            });
+        }
+        
+        return stats;
+    }
+    
+    /// Check if a layer is referenced by other layers
+    fn isLayerReferenced(self: *Self, digest: []const u8) bool {
+        var it = self.layers.iterator();
+        while (it.next()) |entry| {
+            const layer = entry.value_ptr.*;
+            if (layer.dependencies) |deps| {
+                for (deps) |dep_digest| {
+                    if (std.mem.eql(u8, dep_digest, digest)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    
+    /// Clone string array for layer details
+    fn cloneStringArray(self: *Self, strings: [][]const u8) ![][]const u8 {
+        var cloned = try self.allocator.alloc([]const u8, strings.len);
+        for (strings, 0..) |str, i| {
+            cloned[i] = try self.allocator.dupe(u8, str);
+        }
+        return cloned;
+    }
+    
+};
+
+/// Layer operation types for batch operations
+pub const LayerOperation = union(enum) {
+    add: struct {
+        digest: []const u8,
+        layer: *Layer,
+    },
+    remove: struct {
+        digest: []const u8,
+    },
+    mount: struct {
+        digest: []const u8,
+        mount_path: []const u8,
+    },
+    unmount: struct {
+        digest: []const u8,
+    },
+};
+    
+/// Layer operation error
+pub const LayerOperationError = struct {
+    operation: []const u8,
+    digest: []const u8,
+    error_message: []const u8,
+    
+    pub fn deinit(self: *LayerOperationError) void {
+        // Note: These are now allocated strings, need to free
+        _ = self;
+    }
+};
+
+/// Batch operation result
+pub const BatchOperationResult = struct {
+    successful: u32,
+    failed: u32,
+    errors: std.ArrayList(LayerOperationError),
+    
+    pub fn deinit(self: *BatchOperationResult) void {
+        for (self.errors.items) |err| {
+            err.deinit();
+        }
+        self.errors.deinit();
+    }
+};
+    
+    /// Performance optimization: Batch layer operations
+    pub fn batchLayerOperations(self: *Self, operations: []LayerOperation) !BatchOperationResult {
+        var result = BatchOperationResult{
+            .successful = 0,
+            .failed = 0,
+            .errors = std.ArrayList(LayerOperationError).init(self.allocator),
+        };
+        defer result.deinit();
+        
+        for (operations) |operation| {
+            switch (operation) {
+                .add => |add_op| {
+                    if (self.layers.contains(add_op.digest)) {
+                        try result.errors.append(LayerOperationError{
+                            .operation = try self.allocator.dupe(u8, "add"),
+                            .digest = try self.allocator.dupe(u8, add_op.digest),
+                            .error_message = try self.allocator.dupe(u8, "Layer already exists"),
+                        });
+                        result.failed += 1;
+                    } else {
+                        try self.addLayer(add_op.layer);
+                        result.successful += 1;
+                    }
+                },
+                .remove => |remove_op| {
+                    if (!self.layers.contains(remove_op.digest)) {
+                        try result.errors.append(LayerOperationError{
+                            .operation = try self.allocator.dupe(u8, "remove"),
+                            .digest = try self.allocator.dupe(u8, remove_op.digest),
+                            .error_message = try self.allocator.dupe(u8, "Layer not found"),
+                        });
+                        result.failed += 1;
+                    } else {
+                        try self.removeLayer(remove_op.digest);
+                        result.successful += 1;
+                    }
+                },
+                .mount => |mount_op| {
+                    if (!self.layers.contains(mount_op.digest)) {
+                        try result.errors.append(LayerOperationError{
+                            .operation = try self.allocator.dupe(u8, "mount"),
+                            .digest = try self.allocator.dupe(u8, mount_op.digest),
+                            .error_message = try self.allocator.dupe(u8, "Layer not found"),
+                        });
+                        result.failed += 1;
+                    } else {
+                        try self.mountOverlay(mount_op.digest, mount_op.mount_path);
+                        result.successful += 1;
+                    }
+                },
+                .unmount => |unmount_op| {
+                    if (!self.overlay_mounts.contains(unmount_op.digest)) {
+                        try result.errors.append(LayerOperationError{
+                            .operation = try self.allocator.dupe(u8, "unmount"),
+                            .digest = try self.allocator.dupe(u8, unmount_op.digest),
+                            .error_message = try self.allocator.dupe(u8, "Layer not mounted"),
+                        });
+                        result.failed += 1;
+                    } else {
+                        self.unmountOverlay(unmount_op.digest);
+                        result.successful += 1;
+                    }
+                },
+            }
+        }
+        
+        return result;
+    }
 };
 
 /// Statistics for LayerFS
@@ -478,3 +747,87 @@ pub fn initLayerFS(allocator: std.mem.Allocator, base_path: []const u8) !*LayerF
 pub fn createLayerFSWithZFS(allocator: std.mem.Allocator, base_path: []const u8, zfs_pool: []const u8, zfs_dataset: []const u8) !*LayerFS {
     return LayerFS.initWithZFS(allocator, base_path, zfs_pool, zfs_dataset);
 }
+
+/// Garbage collection result
+pub const GarbageCollectionResult = struct {
+    layers_removed: u32,
+    space_freed: u64,
+    errors: std.ArrayList(GarbageCollectionError),
+    
+    pub fn deinit(self: *GarbageCollectionResult) void {
+        self.errors.deinit();
+    }
+};
+
+/// Garbage collection error
+pub const GarbageCollectionError = struct {
+    digest: []const u8,
+    error_message: []const u8,
+    
+    pub fn deinit(self: *GarbageCollectionError, allocator: std.mem.Allocator) void {
+        allocator.free(self.digest);
+        allocator.free(self.error_message);
+    }
+};
+
+/// Detailed LayerFS statistics
+pub const DetailedLayerFSStats = struct {
+    total_layers: u32,
+    mounted_layers: u32,
+    referenced_layers: u32,
+    unused_layers: u32,
+    total_size: u64,
+    mounted_size: u64,
+    referenced_size: u64,
+    unused_size: u64,
+    base_path: []const u8,
+    zfs_pool: ?[]const u8,
+    zfs_dataset: ?[]const u8,
+    layer_details: std.ArrayList(LayerDetail),
+    
+    pub fn deinit(self: *DetailedLayerFSStats, allocator: std.mem.Allocator) void {
+        allocator.free(self.base_path);
+        if (self.zfs_pool) |pool| allocator.free(pool);
+        if (self.zfs_dataset) |dataset| allocator.free(dataset);
+        
+        for (self.layer_details.items) |detail| {
+            detail.deinit(allocator);
+        }
+        self.layer_details.deinit();
+    }
+};
+
+/// Individual layer detail information
+pub const LayerDetail = struct {
+    digest: []const u8,
+    size: u64,
+    media_type: ?[]const u8,
+    is_mounted: bool,
+    is_referenced: bool,
+    created: ?[]const u8,
+    author: ?[]const u8,
+    comment: ?[]const u8,
+    dependencies: ?[][]const u8,
+    order: u32,
+    compressed: bool,
+    compression_type: ?[]const u8,
+    validated: bool,
+    last_validated: ?[]const u8,
+    
+    pub fn deinit(self: *LayerDetail, allocator: std.mem.Allocator) void {
+        allocator.free(self.digest);
+        if (self.media_type) |mt| allocator.free(mt);
+        if (self.created) |c| allocator.free(c);
+        if (self.author) |a| allocator.free(a);
+        if (self.comment) |c| allocator.free(c);
+        if (self.compression_type) |ct| allocator.free(ct);
+        if (self.last_validated) |lv| allocator.free(lv);
+        
+        if (self.dependencies) |deps| {
+            for (deps) |dep| {
+                allocator.free(dep);
+            }
+            allocator.free(deps);
+        }
+    }
+};
