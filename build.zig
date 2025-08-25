@@ -293,6 +293,28 @@ pub fn build(b: *std.Build) void {
 
     const run_performance_test = b.addRunArtifact(performance_test);
     
+    // Optimized performance tests
+    const optimized_performance_test = b.addTest(.{
+        .root_source_file = b.path("tests/performance/optimized_performance_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    optimized_performance_test.root_module.addImport("types", types_mod);
+    optimized_performance_test.root_module.addImport("error", error_mod);
+    optimized_performance_test.root_module.addImport("logger", logger_mod);
+    optimized_performance_test.root_module.addImport("image", image_mod);
+    optimized_performance_test.root_module.addImport("layer", b.addModule("layer", .{
+        .root_source_file = b.path("src/oci/image/layer.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
+        },
+    }));
+    optimized_performance_test.root_module.addImport("zig_json", zigJsonDep.module("zig-json"));
+
+    const run_optimized_performance_test = b.addRunArtifact(optimized_performance_test);
+    
     // Memory leak tests
     const memory_test = b.addTest(.{
         .root_source_file = b.path("tests/memory/memory_leak_test.zig"),
@@ -366,6 +388,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_config_test.step);
     test_step.dependOn(&run_layerfs_test.step);
     test_step.dependOn(&run_performance_test.step);
+    test_step.dependOn(&run_optimized_performance_test.step);
     test_step.dependOn(&run_memory_test.step);
     test_step.dependOn(&run_integration_test.step);
     test_step.dependOn(&run_comprehensive_test.step);
@@ -373,6 +396,10 @@ pub fn build(b: *std.Build) void {
     // Performance test step
     const performance_step = b.step("test-performance", "Run performance tests");
     performance_step.dependOn(&run_performance_test.step);
+    
+    // Optimized performance test step
+    const optimized_performance_step = b.step("test-optimized-performance", "Run optimized performance tests");
+    optimized_performance_step.dependOn(&run_optimized_performance_test.step);
     
     // Memory test step
     const memory_step = b.step("test-memory", "Run memory leak tests");

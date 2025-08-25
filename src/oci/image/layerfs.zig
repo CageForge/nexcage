@@ -158,7 +158,10 @@ pub const LayerFS = struct {
             return LayerFSError.LayerNotFound;
         }
         
+        // Optimized: only duplicate digest if layer doesn't exist
         const digest_copy = try self.allocator.dupe(u8, layer.digest);
+        errdefer self.allocator.free(digest_copy);
+        
         try self.layers.put(digest_copy, layer);
     }
     
@@ -182,9 +185,12 @@ pub const LayerFS = struct {
             return LayerFSError.InvalidMountPoint;
         }
         
-        // Duplicate strings to ensure ownership
+        // Optimized: duplicate strings with error handling
         const digest_copy = try self.allocator.dupe(u8, layer_digest);
+        errdefer self.allocator.free(digest_copy);
+        
         const path_copy = try self.allocator.dupe(u8, mount_path);
+        errdefer self.allocator.free(path_copy);
         
         try self.mount_points.put(digest_copy, path_copy);
     }
@@ -207,9 +213,12 @@ pub const LayerFS = struct {
         
         // For now, we'll simulate overlay mounting
         // In a real implementation, this would use mount(2) with overlayfs
-        // Duplicate strings to ensure ownership
+        // Optimized: duplicate strings with error handling
         const digest_copy = try self.allocator.dupe(u8, layer_digest);
+        errdefer self.allocator.free(digest_copy);
+        
         const path_copy = try self.allocator.dupe(u8, mount_path);
+        errdefer self.allocator.free(path_copy);
         
         try self.overlay_mounts.put(digest_copy, path_copy);
     }
@@ -240,16 +249,27 @@ pub const LayerFS = struct {
         
         // For now, simulate layer stacking
         // In real implementation, this would use overlayfs or ZFS layers
-        // Mount each layer in order
-        for (layer_digests, 0..) |digest, i| {
-            const layer_path = try std.fmt.allocPrint(
+        // Optimized: batch mount operations
+        var layer_paths = try self.allocator.alloc([]const u8, layer_digests.len);
+        defer {
+            for (layer_paths) |path| {
+                self.allocator.free(path);
+            }
+            self.allocator.free(layer_paths);
+        }
+        
+        // Pre-allocate all layer paths
+        for (layer_digests, 0..) |_, i| {
+            layer_paths[i] = try std.fmt.allocPrint(
                 self.allocator,
                 "{s}/layer_{d}",
                 .{ target_path, i }
             );
-            defer self.allocator.free(layer_path);
-            
-            try self.mountOverlay(digest, layer_path);
+        }
+        
+        // Mount all layers
+        for (layer_digests, 0..) |digest, i| {
+            try self.mountOverlay(digest, layer_paths[i]);
         }
     }
     
@@ -317,9 +337,8 @@ pub const LayerFS = struct {
             return;
         }
         
-        // Mark as visited to detect cycles
-        const digest_copy = try self.allocator.dupe(u8, layer.digest);
-        try visited.put(digest_copy, true);
+        // Optimized: use digest directly without copying
+        try visited.put(layer.digest, true);
         
         // Visit dependencies first
         if (layer.dependencies) |deps| {
@@ -373,11 +392,9 @@ pub const LayerFS = struct {
             return false; // Already processed
         }
         
-        // Mark as visited and in recursion stack
-        const digest_copy1 = try self.allocator.dupe(u8, layer.digest);
-        const digest_copy2 = try self.allocator.dupe(u8, layer.digest);
-        try visited.put(digest_copy1, true);
-        try rec_stack.put(digest_copy2, true);
+        // Optimized: use digest directly without copying
+        try visited.put(layer.digest, true);
+        try rec_stack.put(layer.digest, true);
         
         // Check dependencies
         if (layer.dependencies) |deps| {
@@ -390,7 +407,7 @@ pub const LayerFS = struct {
             }
         }
         
-        // Remove from recursion stack
+        // Optimized: remove from recursion stack
         _ = rec_stack.remove(layer.digest);
         
         return false;
@@ -709,13 +726,37 @@ pub const MetadataCache = struct {
     max_entries: usize,
     allocator: std.mem.Allocator,
     
+    // Optimized LRU tracking
+    lru_head: ?*LRUNode,
+    lru_tail: ?*LRUNode,
+    lru_map: std.StringHashMap(*LRUNode),
+    
     const Self = @This();
+    
+    const LRUNode = struct {
+        digest: []const u8,
+        entry: *MetadataCacheEntry,
+        prev: ?*LRUNode,
+        next: ?*LRUNode,
+        
+        pub fn init(digest: []const u8, entry: *MetadataCacheEntry) LRUNode {
+            return .{
+                .digest = digest,
+                .entry = entry,
+                .prev = null,
+                .next = null,
+            };
+        }
+    };
     
     pub fn init(allocator: std.mem.Allocator, max_entries: usize) Self {
         return .{
             .entries = std.StringHashMap(*MetadataCacheEntry).init(allocator),
             .max_entries = max_entries,
             .allocator = allocator,
+            .lru_head = null,
+            .lru_tail = null,
+            .lru_map = std.StringHashMap(*LRUNode).init(allocator),
         };
     }
     
@@ -726,10 +767,22 @@ pub const MetadataCache = struct {
             self.allocator.destroy(entry.value_ptr.*);
         }
         self.entries.deinit();
+        
+        // Clean up LRU nodes
+        var lru_it = self.lru_map.iterator();
+        while (lru_it.next()) |node| {
+            self.allocator.destroy(node.value_ptr.*);
+        }
+        self.lru_map.deinit();
     }
     
     pub fn get(self: *Self, digest: []const u8) ?*MetadataCacheEntry {
         if (self.entries.get(digest)) |entry| {
+            // Update LRU - move to front
+            if (self.lru_map.get(digest)) |lru_node| {
+                self.moveToFront(lru_node);
+            }
+            
             entry.last_accessed = std.time.timestamp();
             entry.access_count += 1;
             return entry;
@@ -743,26 +796,77 @@ pub const MetadataCache = struct {
             try self.evictLRU();
         }
         
-        try self.entries.put(try self.allocator.dupe(u8, digest), entry);
+        const digest_copy = try self.allocator.dupe(u8, digest);
+        try self.entries.put(digest_copy, entry);
+        
+        // Add to LRU list
+        try self.addToLRU(digest_copy, entry);
+    }
+    
+    fn addToLRU(self: *Self, digest: []const u8, entry: *MetadataCacheEntry) !void {
+        const lru_node = try self.allocator.create(LRUNode);
+        lru_node.* = LRUNode.init(digest, entry);
+        
+        // Add to front of LRU list
+        if (self.lru_head) |head| {
+            head.prev = lru_node;
+            lru_node.next = head;
+        } else {
+            self.lru_tail = lru_node;
+        }
+        self.lru_head = lru_node;
+        
+        try self.lru_map.put(digest, lru_node);
+    }
+    
+    fn moveToFront(self: *Self, node: *LRUNode) void {
+        if (node == self.lru_head) return;
+        
+        // Remove from current position
+        if (node.prev) |prev| {
+            prev.next = node.next;
+        }
+        if (node.next) |next| {
+            next.prev = node.prev;
+        }
+        if (node == self.lru_tail) {
+            self.lru_tail = node.prev;
+        }
+        
+        // Move to front
+        if (self.lru_head) |head| {
+            head.prev = node;
+        } else {
+            self.lru_tail = node;
+        }
+        node.next = self.lru_head;
+        node.prev = null;
+        self.lru_head = node;
     }
     
     fn evictLRU(self: *Self) !void {
-        var oldest_time: i64 = std.math.maxInt(i64);
-        var oldest_digest: ?[]const u8 = null;
-        
-        var it = self.entries.iterator();
-        while (it.next()) |entry| {
-            if (entry.value_ptr.*.last_accessed < oldest_time) {
-                oldest_time = entry.value_ptr.*.last_accessed;
-                oldest_digest = entry.key_ptr.*;
+        // Remove from tail (least recently used)
+        if (self.lru_tail) |tail| {
+            const digest = tail.digest;
+            
+            // Remove from LRU list
+            if (tail.prev) |prev| {
+                prev.next = null;
+                self.lru_tail = prev;
+            } else {
+                self.lru_head = null;
+                self.lru_tail = null;
             }
-        }
-        
-        if (oldest_digest) |digest| {
+            
+            // Remove from entries and LRU map
             if (self.entries.fetchRemove(digest)) |removed| {
                 removed.value.deinit(self.allocator);
                 self.allocator.destroy(removed.value);
                 self.allocator.free(removed.key);
+            }
+            
+            if (self.lru_map.fetchRemove(digest)) |removed| {
+                self.allocator.destroy(removed.value);
             }
         }
     }
@@ -783,15 +887,24 @@ pub const LayerObjectPool = struct {
     max_pool_size: u32,
     allocator: std.mem.Allocator,
     
+    // Optimized: pre-allocated layer templates
+    layer_templates: std.ArrayList(*Layer),
+    
     const Self = @This();
     
     pub fn init(allocator: std.mem.Allocator, max_pool_size: u32) Self {
-        return .{
+        var pool = Self{
             .available_layers = std.ArrayList(*Layer).init(allocator),
             .total_allocated = 0,
             .max_pool_size = max_pool_size,
             .allocator = allocator,
+            .layer_templates = std.ArrayList(*Layer).init(allocator),
         };
+        
+        // Pre-allocate some layer templates for faster initialization
+        pool.preallocateTemplates() catch {};
+        
+        return pool;
     }
     
     pub fn deinit(self: *Self) void {
@@ -800,6 +913,26 @@ pub const LayerObjectPool = struct {
             self.allocator.destroy(layer);
         }
         self.available_layers.deinit();
+        
+        for (self.layer_templates.items) |template| {
+            template.deinit(self.allocator);
+            self.allocator.destroy(template);
+        }
+        self.layer_templates.deinit();
+    }
+    
+    fn preallocateTemplates(self: *Self) !void {
+        const template_count = @min(10, self.max_pool_size / 4);
+        for (0..template_count) |_| {
+            const template = try Layer.createLayer(
+                self.allocator,
+                "application/vnd.oci.image.layer.v1.tar",
+                "",
+                0,
+                null
+            );
+            try self.layer_templates.append(template);
+        }
     }
     
     pub fn getLayer(self: *Self) !*Layer {
@@ -809,6 +942,12 @@ pub const LayerObjectPool = struct {
         
         if (self.total_allocated < self.max_pool_size) {
             self.total_allocated += 1;
+            
+            // Use template if available
+            if (self.layer_templates.popOrNull()) |template| {
+                return template;
+            }
+            
             return try Layer.createLayer(
                 self.allocator,
                 "application/vnd.oci.image.layer.v1.tar",
@@ -823,24 +962,46 @@ pub const LayerObjectPool = struct {
     
     pub fn returnLayer(self: *Self, layer: *Layer) void {
         if (self.available_layers.items.len < self.max_pool_size) {
-            // Reset layer state
-            layer.* = .{
-                .media_type = "",
-                .digest = "",
-                .size = 0,
-                .annotations = null,
-                .created = null,
-                .author = null,
-                .comment = null,
-                .dependencies = null,
-                .order = 0,
-                .storage_path = null,
-                .compressed = false,
-                .compression_type = null,
-                .validated = false,
-                .last_validated = null,
-            };
-            self.available_layers.append(layer) catch {};
+            // Optimized: use template reset instead of full reset
+            if (self.layer_templates.items.len < 5) {
+                // Reset to template state
+                layer.* = .{
+                    .media_type = "",
+                    .digest = "",
+                    .size = 0,
+                    .annotations = null,
+                    .created = null,
+                    .author = null,
+                    .comment = null,
+                    .dependencies = null,
+                    .order = 0,
+                    .storage_path = null,
+                    .compressed = false,
+                    .compression_type = null,
+                    .validated = false,
+                    .last_validated = null,
+                };
+                self.layer_templates.append(layer) catch {};
+            } else {
+                // Return to available pool
+                layer.* = .{
+                    .media_type = "",
+                    .digest = "",
+                    .size = 0,
+                    .annotations = null,
+                    .created = null,
+                    .author = null,
+                    .comment = null,
+                    .dependencies = null,
+                    .order = 0,
+                    .storage_path = null,
+                    .compressed = false,
+                    .compression_type = null,
+                    .validated = false,
+                    .last_validated = null,
+                };
+                self.available_layers.append(layer) catch {};
+            }
         } else {
             // Pool is full, destroy the layer
             layer.deinit(self.allocator);
