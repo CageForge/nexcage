@@ -155,23 +155,21 @@
 - [x] **Issue #54**: Performance Optimization (3 hours) - ✅ **COMPLETED**
 - [x] **Issue #55**: Prepare Release v0.2.0 (2 hours) - ✅ **COMPLETED**
 
-### 10. Sprint 4: Advanced Features & Production Deployment (0% complete) - 5 days
+### 10. Sprint 4: Advanced Features & Production Deployment (0% complete) - 6 days
 
-**Status**: 🚀 **PLANNING** - Ready to Start
+**Status**: 🚀 **ACTIVE** - In Progress
 
 **Planned Issues**:
-- **Issue #56**: Advanced Performance Monitoring (8 hours)
-- **Issue #57**: Cloud Integration & Deployment (10 hours)
-- **Issue #58**: Advanced Security Features (8 hours)
-- **Issue #59**: Production Readiness & Monitoring (8 hours)
-- **Issue #60**: Community Engagement & Documentation (6 hours)
+- **Issue #56**: Fix CreateContainer Implementation (16 hours) - 🚀 **ACTIVE**
+- **Issue #57**: CRI Integration & Runtime Selection (16 hours) - 🚀 **ACTIVE**
+- **Issue #58**: OCI Bundle Generation & Configuration (16 hours) - 🚀 **ACTIVE**
 
 **Goals**:
-- Production deployment readiness
-- Advanced performance monitoring
-- Cloud integration capabilities
-- Enhanced security features
-- Community expansion
+- Fix CreateContainer command according to technical requirements
+- Implement proper CRI integration
+- Add runtime selection logic (crun vs Proxmox LXC)
+- Fix OCI bundle generation
+- Ensure container creation works correctly
 
 ### 11. C API Migration (100% complete) - 3 days
 - [x] Replace gRPC C++ with gRPC-C
