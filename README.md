@@ -28,6 +28,15 @@ An OCI-compatible runtime implementation that transforms Proxmox VE into a conta
 - Live migration capabilities
 - Node caching for improved performance
 
+### OCI Image System
+- **Advanced Layer Management**: Efficient container image layer handling with dependency resolution
+- **LayerFS**: High-performance filesystem abstraction for container layers
+- **Metadata Caching**: LRU-based caching system for improved performance
+- **Object Pooling**: Memory-efficient layer object reuse
+- **Parallel Processing**: Multi-threaded layer operations
+- **Image Validation**: Comprehensive OCI image manifest and configuration validation
+- **Container Creation**: Integrated container creation from OCI images with LayerFS support
+
 
 ## Requirements
 
@@ -95,9 +104,23 @@ cd proxmox-lxcri
 ./zig-out/bin/proxmox-lxcri image delete my-image
 ```
 
-### Development
+### Testing
 
 ```bash
+# Run all tests
+./zig-linux-x86_64-0.13.0/zig build test
+
+# Run specific test categories
+./zig-linux-x86_64-0.13.0/zig build test-performance
+./zig-linux-x86_64-0.13.0/zig build test-memory
+./zig-linux-x86_64-0.13.0/zig build test-integration
+./zig-linux-x86_64-0.13.0/zig build test-comprehensive
+
+# Run individual test files
+./zig-linux-x86_64-0.13.0/zig test tests/oci/image/layerfs_test.zig
+```
+
+### Development
 # Run tests
 zig build test
 
