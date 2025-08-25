@@ -248,8 +248,32 @@ pub fn build(b: *std.Build) void {
     config_test.root_module.addImport("oci", oci_mod);
 
     const run_config_test = b.addRunArtifact(config_test);
+    
+    // LayerFS test
+    const layerfs_test = b.addTest(.{
+        .root_source_file = b.path("tests/oci/image/layerfs_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    layerfs_test.root_module.addImport("types", types_mod);
+    layerfs_test.root_module.addImport("error", error_mod);
+    layerfs_test.root_module.addImport("logger", logger_mod);
+    layerfs_test.root_module.addImport("image", image_mod);
+    layerfs_test.root_module.addImport("layer", b.addModule("layer", .{
+        .root_source_file = b.path("src/oci/image/layer.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
+        },
+    }));
+    layerfs_test.root_module.addImport("zig_json", zigJsonDep.module("zig-json"));
+
+    const run_layerfs_test = b.addRunArtifact(layerfs_test);
+    
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_config_test.step);
+    test_step.dependOn(&run_layerfs_test.step);
 
     // TODO: Add new tests for remaining functionality
 }

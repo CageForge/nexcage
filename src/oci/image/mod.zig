@@ -7,6 +7,7 @@ pub const config = @import("config.zig");
 pub const descriptor = @import("descriptor.zig");
 pub const index = @import("index.zig");
 pub const layer = @import("layer.zig");
+pub const layerfs = @import("layerfs.zig");
 pub const manager = @import("manager.zig");
 pub const raw = @import("raw.zig");
 pub const umoci = @import("umoci.zig");
@@ -29,6 +30,11 @@ pub const ConfigError = config.ConfigError;
 pub const Layer = layer.Layer;
 pub const LayerManager = layer.LayerManager;
 pub const LayerError = layer.LayerError;
+
+// Re-export layerfs types
+pub const LayerFS = layerfs.LayerFS;
+pub const LayerFSStats = layerfs.LayerFSStats;
+pub const LayerFSError = layerfs.LayerFSError;
 
 // Re-export commonly used functions
 pub const parseManifest = manifest.parseManifest;
@@ -61,6 +67,10 @@ pub const dependsOn = layer.Layer.dependsOn;
 pub const clone = layer.Layer.clone;
 pub const initLayerManager = layer.LayerManager.init;
 
+// Re-export layerfs functions
+pub const createLayerFS = layerfs.createLayerFS;
+pub const initLayerFS = layerfs.initLayerFS;
+
 // Test exports
 test {
     _ = types;
@@ -69,6 +79,7 @@ test {
     _ = descriptor;
     _ = index;
     _ = layer;
+    _ = layerfs;
     _ = manager;
     _ = raw;
     _ = umoci;

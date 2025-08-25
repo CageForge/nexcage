@@ -146,12 +146,15 @@ pub const Layer = struct {
         if (self.storage_path) |sp| allocator.free(sp);
         if (self.compression_type) |ct| allocator.free(ct);
         
+        if (self.last_validated) |timestamp| allocator.free(timestamp);
+        
         if (self.annotations) |annotations| {
             var it = annotations.iterator();
             while (it.next()) |entry| {
-                allocator.free(entry.value);
+                allocator.free(entry.value_ptr.*);
             }
-            annotations.deinit();
+            var mutable_annotations = annotations;
+            mutable_annotations.deinit();
         }
         
         allocator.destroy(self);
@@ -193,19 +196,25 @@ pub const Layer = struct {
         
         // Validate annotations if present
         if (self.annotations) |annotations| {
-            try self.validateAnnotations(annotations);
+            try self.validateAnnotations(&annotations);
         }
         
         // Mark as validated
         self.validated = true;
+        
+        // Free previous timestamp if it exists
+        if (self.last_validated) |prev_timestamp| {
+            allocator.free(prev_timestamp);
+        }
+        
         self.last_validated = try self.getCurrentTimestamp(allocator);
     }
     
     /// Validate layer annotations
-    fn validateAnnotations(_: *Self, annotations: std.StringHashMap([]const u8)) !void {
+    fn validateAnnotations(_: *Self, annotations: *const std.StringHashMap([]const u8)) !void {
         var it = annotations.iterator();
         while (it.next()) |entry| {
-            if (entry.key.len == 0 or entry.value.len == 0) {
+            if (entry.key_ptr.*.len == 0 or entry.value_ptr.*.len == 0) {
                 return LayerError.InvalidAnnotations;
             }
         }
@@ -292,6 +301,12 @@ pub const Layer = struct {
         }
         
         self.validated = true;
+        
+        // Free previous timestamp if it exists
+        if (self.last_validated) |prev_timestamp| {
+            allocator.free(prev_timestamp);
+        }
+        
         self.last_validated = try self.getCurrentTimestamp(allocator);
     }
     
