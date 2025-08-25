@@ -3,296 +3,267 @@
 ## 🎯 Sprint Overview
 - **Назва**: Advanced Features & Production Deployment
 - **Статус**: 🚀 **PLANNING** - Ready to Start
-- **Тривалість**: 5 днів
-- **Дата початку**: 20 серпня 2024
-- **Дата завершення**: 24 серпня 2024
-- **Загальний час**: 40 годин
+- **Тривалість**: 6 днів
+- **Дата початку**: 25 серпня 2025
+- **Дата завершення**: 30 серпня 2025
+- **Загальний час**: 48 годин
 
 ## 🚀 Sprint Goals
 
 ### Primary Objectives
-- **Advanced Performance Monitoring**: Real-time metrics and optimization
-- **Cloud Integration**: Enhanced deployment capabilities
-- **Advanced Security Features**: Enhanced security and compliance
-- **Production Readiness**: Production deployment and monitoring
-- **Community Engagement**: User feedback and improvement
+- **Fix CreateContainer Implementation**: Correct command create according to technical requirements
+- **CRI Integration**: Implement proper CRI → Runtime → crun/Proxmox LXC flow
+- **Runtime Selection Logic**: Implement runtime selection algorithm
+- **OCI Bundle Generation**: Proper OCI bundle creation and configuration
+- **Integration Testing**: Test complete CreateContainer workflow
 
 ### Success Criteria
-- [ ] All 5 issues completed successfully
-- [ ] Advanced performance monitoring implemented
-- [ ] Cloud integration capabilities ready
-- [ ] Enhanced security features implemented
-- [ ] Production deployment ready
-- [ ] Community engagement started
+- [ ] CreateContainer command working correctly
+- [ ] CRI integration properly implemented
+- [ ] Runtime selection logic working
+- [ ] OCI bundle generation correct
+- [ ] Integration testing passed
+- [ ] Ready for StartContainer workflow
 
 ## 📋 Issue Breakdown
 
-### 🎯 Issue #56: Advanced Performance Monitoring (8 hours)
-**Priority**: High
-**Effort**: 8 hours
+### 🎯 Issue #56: Fix CreateContainer Implementation (16 hours)
+**Priority**: Critical
+**Effort**: 16 hours
 **Dependencies**: Sprint 3 completion
 
 #### Objectives
-- Implement real-time performance metrics collection
-- Create performance dashboard and monitoring
-- Add performance optimization recommendations
-- Implement automated performance testing
+- Fix CreateContainer command according to technical requirements
+- Implement proper CRI integration
+- Add runtime selection logic (crun vs Proxmox LXC)
+- Fix OCI bundle generation
 
 #### Acceptance Criteria
-- [ ] Real-time metrics collection working
-- [ ] Performance dashboard accessible
-- [ ] Optimization recommendations generated
-- [ ] Automated testing implemented
+- [ ] CreateContainer command working correctly
+- [ ] CRI integration properly implemented
+- [ ] Runtime selection logic working
+- [ ] OCI bundle generation correct
 
-### 🎯 Issue #57: Cloud Integration & Deployment (10 hours)
-**Priority**: High
-**Effort**: 10 hours
+### 🎯 Issue #57: CRI Integration & Runtime Selection (16 hours)
+**Priority**: Critical
+**Effort**: 16 hours
 **Dependencies**: Issue #56
 
 #### Objectives
-- Implement cloud deployment capabilities
-- Add multi-cloud support
-- Create deployment automation scripts
-- Implement cloud monitoring integration
+- Implement CRI CreateContainerRequest handling
+- Add PodSandbox validation
+- Implement ContainerConfig and SandboxConfig validation
+- Add runtime selection algorithm
 
 #### Acceptance Criteria
-- [ ] Cloud deployment working
-- [ ] Multi-cloud support implemented
-- [ ] Deployment scripts ready
-- [ ] Cloud monitoring integrated
+- [ ] CRI request handling working
+- [ ] PodSandbox validation implemented
+- [ ] Configuration validation working
+- [ ] Runtime selection algorithm working
 
-### 🎯 Issue #58: Advanced Security Features (8 hours)
-**Priority**: High
-**Effort**: 8 hours
+### 🎯 Issue #58: OCI Bundle Generation & Configuration (16 hours)
+**Priority**: Critical
+**Effort**: 16 hours
 **Dependencies**: Issue #57
 
 #### Objectives
-- Implement advanced security features
-- Add security compliance checks
-- Create security audit tools
-- Implement security monitoring
+- Fix OCI bundle directory structure
+- Generate proper config.json
+- Implement rootfs preparation
+- Add proper mount configuration
 
 #### Acceptance Criteria
-- [ ] Advanced security features working
-- [ ] Compliance checks implemented
-- [ ] Audit tools ready
-- [ ] Security monitoring active
-
-### 🎯 Issue #59: Production Readiness & Monitoring (8 hours)
-**Priority**: High
-**Effort**: 8 hours
-**Dependencies**: Issue #58
-
-#### Objectives
-- Prepare for production deployment
-- Implement production monitoring
-- Create production deployment guide
-- Add production testing
-
-#### Acceptance Criteria
-- [ ] Production deployment ready
-- [ ] Production monitoring active
-- [ ] Deployment guide complete
-- [ ] Production testing passed
-
-### 🎯 Issue #60: Community Engagement & Documentation (6 hours)
-**Priority**: Medium
-**Effort**: 6 hours
-**Dependencies**: Issue #59
-
-#### Objectives
-- Start community engagement
-- Update documentation for new features
-- Create user guides
-- Implement feedback collection
-
-#### Acceptance Criteria
-- [ ] Community engagement started
-- [ ] Documentation updated
-- [ ] User guides created
-- [ ] Feedback collection working
+- [ ] OCI bundle structure correct
+- [ ] config.json generation working
+- [ ] rootfs preparation implemented
+- [ ] Mount configuration correct
 
 ## 🔄 Sprint Flow
 
-### Day 1: Performance Monitoring
-- **Morning**: Issue #56 planning and setup
-- **Afternoon**: Real-time metrics implementation
-- **Evening**: Performance dashboard creation
+### Day 1 (August 25): CreateContainer Fix Planning
+- **Morning**: Issue #56 planning and analysis
+- **Afternoon**: Current implementation review
+- **Evening**: Technical requirements analysis
 
-### Day 2: Cloud Integration
-- **Morning**: Issue #57 planning and cloud setup
-- **Afternoon**: Multi-cloud implementation
-- **Evening**: Deployment automation
+### Day 2 (August 26): CRI Integration
+- **Morning**: Issue #57 planning and CRI setup
+- **Afternoon**: CreateContainerRequest handling
+- **Evening**: PodSandbox validation
 
-### Day 3: Security Features
-- **Morning**: Issue #58 planning and security setup
-- **Afternoon**: Advanced security implementation
-- **Evening**: Security testing and validation
+### Day 3 (August 27): Runtime Selection
+- **Morning**: Runtime selection algorithm
+- **Afternoon**: crun vs Proxmox LXC logic
+- **Evening**: Integration testing
 
-### Day 4: Production Readiness
-- **Morning**: Issue #59 planning and production setup
-- **Afternoon**: Production monitoring implementation
-- **Evening**: Production testing
+### Day 4 (August 28): OCI Bundle Generation
+- **Morning**: Issue #58 planning and OCI setup
+- **Afternoon**: Bundle directory structure
+- **Evening**: config.json generation
 
-### Day 5: Community & Documentation
-- **Morning**: Issue #60 planning and documentation setup
-- **Afternoon**: User guides creation
-- **Evening**: Community engagement start
+### Day 5 (August 29): Configuration & Mounts
+- **Morning**: Process configuration
+- **Afternoon**: Mount configuration
+- **Evening**: Security context integration
+
+### Day 6 (August 30): Testing & Integration
+- **Morning**: Integration testing
+- **Afternoon**: End-to-end workflow testing
+- **Evening**: Documentation and cleanup
 
 ## 🎯 Technical Requirements
 
-### Performance Monitoring
-- **Real-time Metrics**: CPU, memory, disk, network usage
-- **Performance Dashboard**: Web-based monitoring interface
-- **Optimization Engine**: AI-powered performance recommendations
-- **Automated Testing**: Continuous performance validation
+### CRI Integration
+- **CreateContainerRequest**: Handle CRI request properly
+- **PodSandbox Validation**: Validate existing sandbox
+- **ContainerConfig**: Parse and validate container configuration
+- **SandboxConfig**: Parse and validate sandbox configuration
 
-### Cloud Integration
-- **Multi-cloud Support**: AWS, Azure, GCP, DigitalOcean
-- **Deployment Automation**: Infrastructure as Code (IaC)
-- **Cloud Monitoring**: Integration with cloud provider monitoring
-- **Auto-scaling**: Automatic resource scaling
+### Runtime Selection
+- **Algorithm Logic**: Implement runtime selection algorithm
+- **crun Support**: Standard container runtime support
+- **Proxmox LXC**: Special case LXC container support
+- **Image Pattern Matching**: Match image names to runtime type
 
-### Security Features
-- **Advanced Authentication**: Multi-factor authentication
-- **Security Compliance**: SOC2, ISO27001 compliance checks
-- **Security Auditing**: Comprehensive audit trails
-- **Threat Detection**: Real-time threat monitoring
+### OCI Bundle Generation
+- **Directory Structure**: Proper bundle directory layout
+- **rootfs Preparation**: Container filesystem setup
+- **config.json**: OCI Runtime Spec generation
+- **Mount Configuration**: Volume and secret mounts
 
-### Production Readiness
-- **High Availability**: 99.9% uptime guarantee
-- **Load Balancing**: Automatic load distribution
-- **Backup & Recovery**: Automated backup systems
-- **Disaster Recovery**: Business continuity planning
-
-### Community Engagement
-- **User Forums**: Community discussion platforms
-- **Documentation**: Comprehensive user guides
-- **Feedback System**: User feedback collection
-- **Support System**: Technical support infrastructure
+### Container Creation
+- **crun Integration**: Proper crun command execution
+- **LXC API Integration**: Proxmox LXC API calls
+- **State Management**: Container state tracking
+- **Error Handling**: Comprehensive error handling
 
 ## 🔧 Implementation Strategy
 
-### Phase 1: Foundation (Days 1-2)
-- Performance monitoring infrastructure
-- Cloud integration setup
-- Basic security framework
+### Phase 1: Analysis & Planning (Day 1)
+- Current implementation review
+- Technical requirements analysis
+- Issue identification and planning
 
-### Phase 2: Enhancement (Days 3-4)
-- Advanced security features
-- Production monitoring
-- Testing and validation
+### Phase 2: CRI Integration (Days 2-3)
+- CRI request handling implementation
+- Runtime selection algorithm
+- Basic integration testing
 
-### Phase 3: Deployment (Day 5)
-- Community engagement
-- Documentation updates
-- Production deployment
+### Phase 3: OCI Bundle & Configuration (Days 4-5)
+- OCI bundle structure implementation
+- config.json generation
+- Mount and process configuration
+
+### Phase 4: Testing & Integration (Day 6)
+- End-to-end testing
+- Integration validation
+- Documentation and cleanup
 
 ## 📊 Success Metrics
 
-### Performance Metrics
-- **Response Time**: < 100ms for all operations
-- **Throughput**: > 1000 operations/second
-- **Resource Usage**: < 80% of available resources
-- **Uptime**: > 99.9% availability
+### Functional Metrics
+- **CreateContainer Success**: 100% successful container creation
+- **CRI Integration**: Proper CRI request handling
+- **Runtime Selection**: Correct runtime selection logic
+- **OCI Bundle**: Valid OCI bundle generation
 
 ### Quality Metrics
-- **Test Coverage**: > 95% for all components
-- **Bug Rate**: < 1 bug per 1000 lines of code
-- **Documentation**: 100% API coverage
-- **User Satisfaction**: > 4.5/5 rating
+- **Test Coverage**: > 90% for CreateContainer components
+- **Error Handling**: Comprehensive error handling
+- **Validation**: Proper input validation
+- **Integration**: End-to-end workflow working
 
-### Business Metrics
-- **Deployment Success**: > 99% successful deployments
-- **Security Compliance**: 100% compliance score
-- **Community Growth**: > 100 active users
-- **Feature Adoption**: > 80% feature usage
+### Performance Metrics
+- **Container Creation Time**: < 5 seconds for standard containers
+- **LXC Creation Time**: < 10 seconds for LXC containers
+- **Bundle Generation**: < 2 seconds for OCI bundle
+- **Response Time**: < 100ms for CRI operations
 
 ## 🚨 Risk Assessment
 
 ### High Risk
-- **Cloud Integration Complexity**: Multi-cloud setup challenges
-- **Security Implementation**: Advanced security feature complexity
-- **Performance Optimization**: Real-time monitoring overhead
+- **CRI Integration Complexity**: CRI protocol implementation challenges
+- **Runtime Selection Logic**: Complex runtime selection algorithm
+- **OCI Bundle Generation**: OCI specification compliance
 
 ### Medium Risk
-- **Production Deployment**: Production environment setup
-- **Community Engagement**: User adoption challenges
-- **Documentation Quality**: Comprehensive documentation effort
+- **Proxmox LXC Integration**: LXC API integration complexity
+- **Error Handling**: Comprehensive error handling implementation
+- **Testing Coverage**: End-to-end testing complexity
 
 ### Low Risk
-- **Basic Features**: Core functionality already implemented
-- **Testing Framework**: Existing testing infrastructure
+- **Basic Container Creation**: Core container creation already implemented
+- **Testing Framework**: Existing testing infrastructure available
 - **Code Quality**: High code quality from previous sprints
 
 ## 🔧 Mitigation Strategies
 
 ### High Risk Mitigation
-- **Cloud Integration**: Start with single cloud provider
-- **Security Features**: Implement basic security first
-- **Performance Monitoring**: Use lightweight monitoring initially
+- **CRI Integration**: Start with basic CRI request handling
+- **Runtime Selection**: Implement simple runtime selection first
+- **OCI Bundle**: Use existing OCI bundle structure as base
 
 ### Medium Risk Mitigation
-- **Production Deployment**: Use staging environment first
-- **Community Engagement**: Start with basic documentation
-- **Documentation Quality**: Focus on essential guides first
+- **LXC Integration**: Start with basic LXC API calls
+- **Error Handling**: Implement basic error handling first
+- **Testing**: Focus on core functionality testing first
 
 ## 📅 Timeline
 
-### Week 1 (August 20-24)
-- **Day 1**: Performance monitoring foundation
-- **Day 2**: Cloud integration setup
-- **Day 3**: Security features implementation
-- **Day 4**: Production readiness
-- **Day 5**: Community engagement
+### Week 1 (August 25-30)
+- **Day 1 (August 25)**: CreateContainer fix planning and analysis
+- **Day 2 (August 26)**: CRI integration and request handling
+- **Day 3 (August 27)**: Runtime selection algorithm
+- **Day 4 (August 28)**: OCI bundle generation
+- **Day 5 (August 29)**: Configuration and mounts
+- **Day 6 (August 30)**: Testing and integration
 
-### Week 2 (August 27-31)
+### Week 2 (September 2-6)
 - **Testing & Validation**: Comprehensive testing
 - **Documentation**: Complete documentation updates
-- **Deployment**: Production deployment preparation
-- **Community**: Community launch
+- **Integration**: End-to-end workflow validation
+- **Deployment**: Production readiness preparation
 
 ## 🎯 Next Steps
 
 ### Immediate Actions
-1. **Review Planning**: Team review of sprint planning
-2. **Resource Allocation**: Assign team members to issues
-3. **Environment Setup**: Prepare development environments
-4. **Tool Selection**: Choose monitoring and deployment tools
+1. **Review Current Implementation**: Analyze existing CreateContainer code
+2. **Technical Requirements Review**: Review CRI specification requirements
+3. **Environment Setup**: Prepare CRI testing environment
+4. **Tool Selection**: Choose CRI and OCI testing tools
 
 ### Preparation Tasks
-1. **Performance Tools**: Select performance monitoring tools
-2. **Cloud Accounts**: Set up cloud provider accounts
-3. **Security Tools**: Choose security implementation tools
-4. **Documentation Tools**: Select documentation platforms
+1. **CRI Tools**: Set up CRI testing tools and frameworks
+2. **OCI Tools**: Prepare OCI bundle validation tools
+3. **Proxmox Setup**: Configure Proxmox LXC testing environment
+4. **Testing Framework**: Set up integration testing framework
 
 ## 🏆 Success Criteria
 
 ### Sprint Completion
-- [ ] All 5 issues completed successfully
+- [ ] All 3 issues completed successfully
 - [ ] All acceptance criteria met
-- [ ] Performance targets achieved
-- [ ] Security requirements satisfied
-- [ ] Production readiness confirmed
+- [ ] CreateContainer working correctly
+- [ ] CRI integration working
+- [ ] OCI bundle generation correct
 
 ### Quality Gates
 - [ ] Code review completed
 - [ ] Testing passed
 - [ ] Documentation updated
-- [ ] Performance validated
-- [ ] Security audited
+- [ ] CRI integration validated
+- [ ] OCI compliance verified
 
-### Deployment Ready
-- [ ] Production environment configured
-- [ ] Monitoring systems active
-- [ ] Backup systems ready
-- [ ] Disaster recovery tested
-- [ ] Community platform active
+### CreateContainer Ready
+- [ ] CRI request handling working
+- [ ] Runtime selection logic working
+- [ ] OCI bundle generation working
+- [ ] Integration testing passed
+- [ ] Ready for StartContainer workflow
 
 ---
 
 **Sprint 4 Status**: 🚀 **PLANNING** - Ready to Start
 
-**Next Action**: Team review and resource allocation
-**Start Date**: August 20, 2024
-**Target Completion**: August 24, 2024
+**Next Action**: Current implementation review and technical requirements analysis
+**Start Date**: August 25, 2025
+**Target Completion**: August 30, 2025
