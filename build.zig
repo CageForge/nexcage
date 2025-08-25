@@ -271,9 +271,118 @@ pub fn build(b: *std.Build) void {
 
     const run_layerfs_test = b.addRunArtifact(layerfs_test);
     
+    // Performance tests
+    const performance_test = b.addTest(.{
+        .root_source_file = b.path("tests/performance/layerfs_performance_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    performance_test.root_module.addImport("types", types_mod);
+    performance_test.root_module.addImport("error", error_mod);
+    performance_test.root_module.addImport("logger", logger_mod);
+    performance_test.root_module.addImport("image", image_mod);
+    performance_test.root_module.addImport("layer", b.addModule("layer", .{
+        .root_source_file = b.path("src/oci/image/layer.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
+        },
+    }));
+    performance_test.root_module.addImport("zig_json", zigJsonDep.module("zig-json"));
+
+    const run_performance_test = b.addRunArtifact(performance_test);
+    
+    // Memory leak tests
+    const memory_test = b.addTest(.{
+        .root_source_file = b.path("tests/memory/memory_leak_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    memory_test.root_module.addImport("types", types_mod);
+    memory_test.root_module.addImport("error", error_mod);
+    memory_test.root_module.addImport("logger", logger_mod);
+    memory_test.root_module.addImport("image", image_mod);
+    memory_test.root_module.addImport("layer", b.addModule("layer", .{
+        .root_source_file = b.path("src/oci/image/layer.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
+        },
+    }));
+    memory_test.root_module.addImport("zig_json", zigJsonDep.module("zig-json"));
+
+    const run_memory_test = b.addRunArtifact(memory_test);
+    
+    // Integration tests
+    const integration_test = b.addTest(.{
+        .root_source_file = b.path("tests/integration/end_to_end_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    integration_test.root_module.addImport("types", types_mod);
+    integration_test.root_module.addImport("error", error_mod);
+    integration_test.root_module.addImport("logger", logger_mod);
+    integration_test.root_module.addImport("image", image_mod);
+    integration_test.root_module.addImport("manager", b.addModule("manager", .{
+        .root_source_file = b.path("src/oci/image/manager.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "image", .module = image_mod },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
+        },
+    }));
+    integration_test.root_module.addImport("zig_json", zigJsonDep.module("zig-json"));
+
+    const run_integration_test = b.addRunArtifact(integration_test);
+    
+    // Simple comprehensive test
+    const comprehensive_test = b.addTest(.{
+        .root_source_file = b.path("tests/simple_comprehensive_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    comprehensive_test.root_module.addImport("types", types_mod);
+    comprehensive_test.root_module.addImport("error", error_mod);
+    comprehensive_test.root_module.addImport("logger", logger_mod);
+    comprehensive_test.root_module.addImport("image", image_mod);
+    comprehensive_test.root_module.addImport("layer", b.addModule("layer", .{
+        .root_source_file = b.path("src/oci/image/layer.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "zig_json", .module = zigJsonDep.module("zig-json") },
+        },
+    }));
+    comprehensive_test.root_module.addImport("zig_json", zigJsonDep.module("zig-json"));
+
+    const run_comprehensive_test = b.addRunArtifact(comprehensive_test);
+    
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_config_test.step);
     test_step.dependOn(&run_layerfs_test.step);
+    test_step.dependOn(&run_performance_test.step);
+    test_step.dependOn(&run_memory_test.step);
+    test_step.dependOn(&run_integration_test.step);
+    test_step.dependOn(&run_comprehensive_test.step);
 
-    // TODO: Add new tests for remaining functionality
+    // Performance test step
+    const performance_step = b.step("test-performance", "Run performance tests");
+    performance_step.dependOn(&run_performance_test.step);
+    
+    // Memory test step
+    const memory_step = b.step("test-memory", "Run memory leak tests");
+    memory_step.dependOn(&run_memory_test.step);
+    
+    // Integration test step
+    const integration_step = b.step("test-integration", "Run integration tests");
+    integration_step.dependOn(&run_integration_test.step);
+    
+    // Comprehensive test step
+    const comprehensive_step = b.step("test-comprehensive", "Run comprehensive tests");
+    comprehensive_step.dependOn(&run_comprehensive_test.step);
 }
