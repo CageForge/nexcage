@@ -1,6 +1,6 @@
 # 🗺️ Proxmox LXC Container Runtime Interface Project Roadmap
 
-## 📊 Overall Progress: 99%
+## 📊 Overall Progress: 99.5%
 
 
 ## ✅ Completed Tasks
@@ -99,7 +99,7 @@
   - [x] Removed unused tests
   - [x] Improved test organization
 
-### 9. Sprint 3: OCI Image System Implementation (85% complete) - 6 days
+### 9. Sprint 3: OCI Image System Implementation (90% complete) - 6 days
 - [x] Fix Zig 0.13.0 compatibility issues (1 hour)
   - [x] Updated ChildProcess API usage
   - [x] Fixed import statements
@@ -148,7 +148,7 @@
   - [x] Resource cleanup on errors
   - [x] Unit tests for core operations
   - **Status**: ✅ **COMPLETED** (August 19, 2024)
-- [ ] **Issue #50**: Implement Advanced LayerFS Operations (4 hours) - 🔄 **IN PROGRESS**
+- [x] **Issue #50**: Implement Advanced LayerFS Operations (4 hours) - ✅ **COMPLETED**
 - [ ] **Issue #51**: Integrate Image System with Create Command (4 hours)
 - [ ] **Issue #52**: Add Comprehensive Testing Suite (3 hours)
 - [ ] **Issue #53**: Update Documentation (2 hours)
