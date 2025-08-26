@@ -201,6 +201,16 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Add system libraries for crun support
+    exe.linkSystemLibrary("c");
+    exe.linkSystemLibrary("cap");
+    exe.linkSystemLibrary("seccomp");
+    exe.linkSystemLibrary("yajl");
+    
+    // Add include paths for crun headers
+    exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
+    exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+
     // Add dependencies
     exe.root_module.addImport("types", types_mod);
     exe.root_module.addImport("error", error_mod);
@@ -315,6 +325,20 @@ pub fn build(b: *std.Build) void {
 
     const run_optimized_performance_test = b.addRunArtifact(optimized_performance_test);
     
+    // Crun module test
+    const crun_test = b.addTest(.{
+        .root_source_file = b.path("tests/oci/crun_simple_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    crun_test.root_module.addImport("oci", oci_mod);
+    crun_test.root_module.addImport("types", types_mod);
+    crun_test.root_module.addImport("error", error_mod);
+    crun_test.root_module.addImport("logger", logger_mod);
+
+    const run_crun_test = b.addRunArtifact(crun_test);
+    
     // Memory leak tests
     const memory_test = b.addTest(.{
         .root_source_file = b.path("tests/memory/memory_leak_test.zig"),
@@ -392,6 +416,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_memory_test.step);
     test_step.dependOn(&run_integration_test.step);
     test_step.dependOn(&run_comprehensive_test.step);
+    test_step.dependOn(&run_crun_test.step);
 
     // Performance test step
     const performance_step = b.step("test-performance", "Run performance tests");

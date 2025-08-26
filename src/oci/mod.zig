@@ -21,6 +21,9 @@ pub const list = @import("list.zig");
 pub const info = @import("info.zig");
 pub const exec = @import("exec.zig");
 
+// New crun module
+pub const crun = @import("crun.zig");
+
 pub const Spec = spec.Spec;
 pub const Root = spec.Root;
 pub const Mount = spec.Mount;
@@ -34,6 +37,12 @@ pub const createContainer = create.create;
 
 pub const ContainerState = state.ContainerState;
 pub const getState = state.getState;
+
+// Export crun types
+pub const CrunManager = crun.CrunManager;
+pub const CrunError = crun.CrunError;
+pub const CrunContainerState = crun.ContainerState;
+pub const ContainerStatus = crun.ContainerStatus;
 
 test {
     @import("std").testing.refAllDecls(@This());
