@@ -107,14 +107,32 @@ fi
 # Get current dependency version from build.zig.zon
 get_current_version() {
     local dep_name=$1
-    local current_url=$(grep -A 3 "\.$dep_name = \." "$BUILD_FILE" | grep '\.url' | sed 's/.*"\([^"]*\)".*/\1/')
+    local current_url=""
+    
+    if [[ "$dep_name" == "zig-json" ]]; then
+        # For zig-json, get the URL from the dependencies section
+        current_url=$(grep -A 5 "\.dependencies = \." "$BUILD_FILE" | grep -A 3 "\.@\"zig-json\"" | grep '\.url' | sed 's/.*"\([^"]*\)".*/\1/')
+    else
+        # For other dependencies, use the standard approach
+        current_url=$(grep -A 3 "\.$dep_name = \." "$BUILD_FILE" | grep '\.url' | sed 's/.*"\([^"]*\)".*/\1/')
+    fi
+    
     echo "$current_url"
 }
 
 # Get current hash from build.zig.zon
 get_current_hash() {
     local dep_name=$1
-    local current_hash=$(grep -A 3 "\.$dep_name = \." "$BUILD_FILE" | grep '\.hash' | sed 's/.*"\([^"]*\)".*/\1/')
+    local current_hash=""
+    
+    if [[ "$dep_name" == "zig-json" ]]; then
+        # For zig-json, get the hash from the dependencies section
+        current_hash=$(grep -A 5 "\.dependencies = \." "$BUILD_FILE" | grep -A 3 "\.@\"zig-json\"" | grep '\.hash' | sed 's/.*"\([^"]*\)".*/\1/')
+    else
+        # For other dependencies, use the standard approach
+        current_hash=$(grep -A 3 "\.$dep_name = \." "$BUILD_FILE" | grep '\.hash' | sed 's/.*"\([^"]*\)".*/\1/')
+    fi
+    
     echo "$current_hash"
 }
 
@@ -204,10 +222,21 @@ check_dependency_status() {
 check_build_file() {
     log_info "Checking build.zig.zon syntax..."
     
-    if zig build --dry-run > /dev/null 2>&1; then
-        log_success "build.zig.zon syntax is valid"
+    # Try to find Zig in common locations
+    local zig_path=""
+    if command -v zig > /dev/null 2>&1; then
+        zig_path="zig"
+    elif [[ -f "./zig-linux-x86_64-0.13.0/zig" ]]; then
+        zig_path="./zig-linux-x86_64-0.13.0/zig"
     else
-        log_error "build.zig.zon has syntax errors"
+        log_error "Zig not found. Please ensure Zig is installed or in the project directory."
+        return 1
+    fi
+    
+    if $zig_path build --help > /dev/null 2>&1; then
+        log_success "Zig is accessible and build.zig.zon syntax is valid"
+    else
+        log_error "Zig is not accessible or build.zig.zon has syntax errors"
         return 1
     fi
 }

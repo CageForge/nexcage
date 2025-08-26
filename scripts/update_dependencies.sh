@@ -121,7 +121,16 @@ fi
 # Get current dependency version from build.zig.zon
 get_current_version() {
     local dep_name=$1
-    local current_url=$(grep -A 3 "\.$dep_name = \." "$BUILD_FILE" | grep '\.url' | sed 's/.*"\([^"]*\)".*/\1/')
+    local current_url=""
+    
+    if [[ "$dep_name" == "zig-json" ]]; then
+        # For zig-json, get the URL from the dependencies section
+        current_url=$(grep -A 5 "\.dependencies = \." "$BUILD_FILE" | grep -A 3 "\.@\"zig-json\"" | grep '\.url' | sed 's/.*"\([^"]*\)".*/\1/')
+    else
+        # For other dependencies, use the standard approach
+        current_url=$(grep -A 3 "\.$dep_name = \." "$BUILD_FILE" | grep '\.url' | sed 's/.*"\([^"]*\)".*/\1/')
+    fi
+    
     echo "$current_url"
 }
 
@@ -262,7 +271,7 @@ update_dependency() {
     fi
     
     # Check compatibility for crun
-    if [[ "$dep_name" == "crun" && "$FORCE_UPDATE" == false" ]]; then
+    if [[ "$dep_name" == "crun" && "$FORCE_UPDATE" == false ]]; then
         if ! check_crun_compatibility "$latest_version"; then
             log_warning "$dep_name $latest_version has compatibility issues with Zig"
             log_warning "Current version $current_version will be kept"
