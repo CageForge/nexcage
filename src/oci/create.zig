@@ -22,8 +22,8 @@ const logger_mod = @import("logger");
 // Import modules for types
 const image = @import("image");
 const zfs = @import("zfs");
-const lxc = @import("lxc");
-const crun = @import("crun");
+const lxc = @import("lxc.zig");
+const crun = @import("crun.zig");
 const registry = @import("registry");
 const raw = @import("raw");
 

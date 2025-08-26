@@ -377,9 +377,10 @@ fn loadConfigFromPath(allocator: Allocator, path: []const u8) !config.Config {
     };
     defer allocator.free(content);
 
-    var parsed = try json_parser.parseWithUnknownFields(config.JsonConfig, allocator, content);
+    const parsed = try json_parser.parseWithUnknownFields(config.JsonConfig, allocator, content);
     defer {
-        config.deinitJsonConfig(&parsed.value, allocator);
+        // TODO: Fix deinitJsonConfig memory issue
+        // config.deinitJsonConfig(&parsed.value, allocator);
         for (parsed.unknown_fields) |field| {
             allocator.free(field);
         }
@@ -432,6 +433,7 @@ fn executeCreate(
 
     var bundle_path: ?[]const u8 = null;
     var container_id: ?[]const u8 = null;
+    var runtime_type: ?[]const u8 = null;
     var i: usize = 1;
 
     while (i < args.len) : (i += 1) {
@@ -442,6 +444,13 @@ fn executeCreate(
                 return error.InvalidArguments;
             }
             bundle_path = args[i + 1];
+            i += 1;
+        } else if (std.mem.eql(u8, arg, "--runtime") or std.mem.eql(u8, arg, "-r")) {
+            if (i + 1 >= args.len) {
+                try std.io.getStdErr().writer().writeAll("Error: --runtime requires a type argument\n");
+                return error.InvalidArguments;
+            }
+            runtime_type = args[i + 1];
             i += 1;
         } else {
             container_id = arg;
@@ -474,8 +483,26 @@ fn executeCreate(
     var cfg = try loadConfig(allocator, null);
     defer cfg.deinit();
 
-    // Set runtime type (default runc)
-    cfg.setRuntimeType(.runc);
+    // Determine runtime type based on CLI args or container ID pattern
+    var actual_runtime_type: types.RuntimeType = .crun; // Default to crun
+    if (runtime_type) |rt| {
+        if (std.mem.eql(u8, rt, "crun") or std.mem.eql(u8, rt, "runc")) {
+            actual_runtime_type = .crun;
+        } else if (std.mem.eql(u8, rt, "lxc") or std.mem.eql(u8, rt, "proxmox-lxc")) {
+            actual_runtime_type = .lxc;
+        } else if (std.mem.eql(u8, rt, "vm")) {
+            actual_runtime_type = .vm;
+        }
+    } else {
+        // Auto-detect based on container ID pattern
+        if (std.mem.startsWith(u8, container_id.?, "lxc-") or 
+            std.mem.startsWith(u8, container_id.?, "db-") or 
+            std.mem.startsWith(u8, container_id.?, "vm-")) {
+            actual_runtime_type = .lxc;
+        }
+    }
+    
+    cfg.setRuntimeType(actual_runtime_type);
 
     // Create container specification
     var container_spec = spec_mod.Spec.init();
@@ -520,13 +547,21 @@ fn executeCreate(
     // var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
     // defer container_instance.deinit();
 
+    // Create runtime managers based on runtime type
+    var crun_manager: ?*oci.crun.CrunManager = null;
+    
+    if (actual_runtime_type == .crun) {
+        crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
+        defer crun_manager.?.deinit();
+    }
+
     // Create container
     const create = try oci.create.Create.init(
         allocator,
         _image_manager,
         _zfs_manager,
-        null,
-        null,
+        null, // lxc_manager - TODO: implement when LXC is ready
+        crun_manager,
         proxmox_client,
         .{
             .container_id = container_id.?,
@@ -537,8 +572,8 @@ fn executeCreate(
             .proxmox_node = cfg.proxmox.node orelse "pve",
             .proxmox_storage = "local-lvm",
         },
-        cfg.logger,
-        .lxc,
+        &temp_logger,
+        actual_runtime_type,
     );
     defer create.deinit();
 

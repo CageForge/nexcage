@@ -119,23 +119,24 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const lxc_mod = b.addModule("lxc", .{
-        .root_source_file = b.path("src/lxc_placeholder.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
+    // LXC and crun modules are now part of the oci module
+    // const lxc_mod = b.addModule("lxc", .{
+    //     .root_source_file = b.path("src/oci/lxc.zig"),
+    //     .imports = &.{
+    //         .{ .name = "types", .module = types_mod },
+    //         .{ .name = "error", .module = error_mod },
+    //         .{ .name = "logger", .module = logger_mod },
+    //     },
+    // });
 
-    const crun_mod = b.addModule("crun", .{
-        .root_source_file = b.path("src/crun_placeholder.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
+    // const crun_mod = b.addModule("crun", .{
+    //     .root_source_file = b.path("src/oci/crun.zig"),
+    //     .imports = &.{
+    //         .{ .name = "types", .module = types_mod },
+    //         .{ .name = "error", .module = error_mod },
+    //         .{ .name = "logger", .module = logger_mod },
+    //     },
+    // });
 
     const registry_mod = b.addModule("registry", .{
         .root_source_file = b.path("src/registry_placeholder.zig"),
@@ -172,8 +173,8 @@ pub fn build(b: *std.Build) void {
             .{ .name = "crun_container", .module = crun_container_mod.? },
             .{ .name = "cli_args", .module = cli_args_mod },
             .{ .name = "image", .module = image_mod },
-            .{ .name = "lxc", .module = lxc_mod },
-            .{ .name = "crun", .module = crun_mod },
+            // .{ .name = "lxc", .module = lxc_mod },
+            // .{ .name = "crun", .module = crun_mod },
             .{ .name = "registry", .module = registry_mod },
         } else &.{
             .{ .name = "types", .module = types_mod },
@@ -187,8 +188,8 @@ pub fn build(b: *std.Build) void {
             .{ .name = "json_helpers", .module = json_mod },
             .{ .name = "cli_args", .module = cli_args_mod },
             .{ .name = "image", .module = image_mod },
-            .{ .name = "lxc", .module = lxc_mod },
-            .{ .name = "crun", .module = crun_mod },
+            // .{ .name = "lxc", .module = lxc_mod },
+            // .{ .name = "crun", .module = crun_mod },
             .{ .name = "registry", .module = registry_mod },
             .{ .name = "raw", .module = raw_mod },
         },
@@ -228,8 +229,8 @@ pub fn build(b: *std.Build) void {
     }
     exe.root_module.addImport("cli_args", cli_args_mod);
     exe.root_module.addImport("image", image_mod);
-    exe.root_module.addImport("lxc", lxc_mod);
-    exe.root_module.addImport("crun", crun_mod);
+    // exe.root_module.addImport("lxc", lxc_mod);
+    // exe.root_module.addImport("crun", crun_mod);
     exe.root_module.addImport("registry", registry_mod);
     exe.root_module.addImport("raw", raw_mod);
 
