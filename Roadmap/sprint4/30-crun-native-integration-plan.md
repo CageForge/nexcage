@@ -49,8 +49,44 @@
 ### **Phase 6: libcrun Header Integration** 🚧 PENDING
 
 #### **Prerequisites**
-- Install `libcrun-dev` package or build `crun` with shared library support
+- Download `crun-1.23.1.tar.gz` from [GitHub releases](https://github.com/containers/crun/releases/download/1.23.1/crun-1.23.1.tar.gz)
+- Extract the archive to get access to `crun.h` headers
 - Verify `crun.h` headers are available in system include paths
+
+#### **Installation Steps**
+1. **Download crun source**:
+   ```bash
+   wget https://github.com/containers/crun/releases/download/1.23.1/crun-1.23.1.tar.gz
+   ```
+
+2. **Extract the archive**:
+   ```bash
+   tar -xzf crun-1.23.1.tar.gz
+   cd crun-1.23.1
+   ```
+
+3. **Install development headers**:
+   ```bash
+   # Option 1: Install system-wide
+   sudo cp -r libcrun /usr/local/include/
+   sudo cp libcrun/crun.h /usr/local/include/
+   
+   # Option 2: Use local include path
+   # Update build.zig to include ./crun-1.23.1/libcrun
+   ```
+
+4. **Verify headers availability**:
+   ```bash
+   ls -la /usr/local/include/crun.h
+   ls -la /usr/local/include/libcrun/
+   ```
+
+#### **Build System Updates**
+```zig
+// Update build.zig to include local crun headers
+exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1" });
+exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/libcrun" });
+```
 
 #### **Implementation Tasks**
 1. **Replace Placeholder Functions**
@@ -113,7 +149,7 @@
 
 ### **Technical Debt**
 1. **Memory Issues**: Some JSON parser memory leaks identified (bypassed for now)
-2. **Header Dependencies**: Need proper `libcrun-dev` installation
+2. **Header Dependencies**: Need to download and extract crun-1.23.1.tar.gz for headers
 3. **Integration Testing**: Limited to unit tests, no real container testing
 
 ## 🎯 Success Criteria for Phase 6
@@ -137,7 +173,7 @@
 ## 🔄 Implementation Timeline
 
 ### **Phase 6: Real C API Integration** (2-3 days)
-- **Day 1**: Install dependencies, integrate real headers
+- **Day 1**: Download crun-1.23.1.tar.gz, extract headers, integrate real headers
 - **Day 2**: Replace placeholder functions with real C calls
 - **Day 3**: Testing and validation, error handling improvements
 
@@ -148,9 +184,10 @@
 ## 📝 Next Steps
 
 ### **Immediate Actions**
-1. **Install Dependencies**: `sudo apt install libcrun-dev` or equivalent
-2. **Verify Headers**: Check `crun.h` availability in `/usr/include`
-3. **Test Integration**: Verify `@cImport` works with real headers
+1. **Download crun source**: `wget https://github.com/containers/crun/releases/download/1.23.1/crun-1.23.1.tar.gz`
+2. **Extract and install headers**: Extract archive and copy headers to include paths
+3. **Update build system**: Add local include paths for crun headers
+4. **Test Integration**: Verify `@cImport` works with real headers
 
 ### **Validation Steps**
 1. **Compilation**: Ensure project builds with real C imports
@@ -170,7 +207,7 @@
 **Next Milestone**: **Phase 6 - Real C API Integration** 🚧
 - **Goal**: Replace placeholders with real `crun` functionality
 - **Timeline**: 2-3 days
-- **Dependencies**: `libcrun-dev` installation
+- **Dependencies**: Download and extract crun-1.23.1.tar.gz for headers
 
 ---
 
