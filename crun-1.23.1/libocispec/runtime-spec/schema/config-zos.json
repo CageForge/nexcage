@@ -1,0 +1,18 @@
+{
+    "zos": {
+        "description": "z/OS platform-specific configurations",
+        "type": "object",
+        "properties": {
+            "namespaces": {
+                "type": "array",
+                "items": {
+                    "anyOf": [
+                        {
+                            "$ref": "defs-zos.json#/definitions/NamespaceReference"
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}

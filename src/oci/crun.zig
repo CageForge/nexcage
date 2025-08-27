@@ -3,14 +3,13 @@ const Allocator = std.mem.Allocator;
 const Logger = @import("logger").Logger;
 const OciSpec = @import("spec.zig").Spec;
 
-// TODO: Import C headers for libcrun when headers are available
-// For now, we'll create a placeholder implementation
-// pub const c = @cImport({
-//     @cInclude("crun.h");
-//     @cInclude("libcrun/container.h");
-//     @cInclude("libcrun/error.h");
-//     @cInclude("libcrun/context.h");
-// });
+// Import C headers for libcrun
+pub const c = @cImport({
+    @cInclude("crun.h");
+    @cInclude("container.h");
+    @cInclude("error.h");
+    @cInclude("status.h");
+});
 
 // Error types for crun operations
 pub const CrunError = error{
@@ -101,9 +100,10 @@ pub const CrunManager = struct {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
         if (bundle_path.len == 0) return CrunError.InvalidBundlePath;
 
-        // TODO: Implement actual crun integration when headers are available
-        try self.logger.info("crun integration not yet implemented - container creation skipped", .{});
-        try self.logger.info("Successfully created crun container: {s} (placeholder)", .{container_id});
+        // TODO: Implement actual crun integration using C API
+        // For now, we'll simulate the creation process
+        try self.logger.info("crun C API integration in progress - container creation simulated", .{});
+        try self.logger.info("Successfully created crun container: {s} (simulated)", .{container_id});
     }
 
     // Start a container
@@ -112,9 +112,10 @@ pub const CrunManager = struct {
 
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration when headers are available
-        try self.logger.info("crun integration not yet implemented - container start skipped", .{});
-        try self.logger.info("Successfully started crun container: {s} (placeholder)", .{container_id});
+        // TODO: Implement actual crun integration using C API
+        // For now, we'll simulate the start process
+        try self.logger.info("crun C API integration in progress - container start simulated", .{});
+        try self.logger.info("Successfully started crun container: {s} (simulated)", .{container_id});
     }
 
     // Delete a container
@@ -123,9 +124,10 @@ pub const CrunManager = struct {
 
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration when headers are available
-        try self.logger.info("crun integration not yet implemented - container deletion skipped", .{});
-        try self.logger.info("Successfully deleted crun container: {s} (placeholder)", .{container_id});
+        // TODO: Implement actual crun integration using C API
+        // For now, we'll simulate the deletion process
+        try self.logger.info("crun C API integration in progress - container deletion simulated", .{});
+        try self.logger.info("Successfully deleted crun container: {s} (simulated)", .{container_id});
     }
 
     // Run a container (create + start)
@@ -145,18 +147,20 @@ pub const CrunManager = struct {
     pub fn containerExists(self: *Self, container_id: []const u8) !bool {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration when headers are available
-        try self.logger.info("crun integration not yet implemented - container existence check skipped", .{});
-        return false; // Placeholder: assume container doesn't exist
+        // TODO: Implement actual crun integration using C API
+        // For now, we'll simulate the existence check
+        try self.logger.info("crun C API integration in progress - container existence check simulated", .{});
+        return false; // Simulated: assume container doesn't exist
     }
 
     // Get container state
     pub fn getContainerState(self: *Self, container_id: []const u8) !ContainerState {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration when headers are available
-        try self.logger.info("crun integration not yet implemented - container state check skipped", .{});
-        return ContainerState.unknown; // Placeholder: return unknown state
+        // TODO: Implement actual crun integration using C API
+        // For now, we'll simulate the state check
+        try self.logger.info("crun C API integration in progress - container state check simulated", .{});
+        return ContainerState.unknown; // Simulated: return unknown state
     }
 
     // Kill a container
@@ -165,8 +169,9 @@ pub const CrunManager = struct {
 
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration when headers are available
-        try self.logger.info("crun integration not yet implemented - container kill skipped", .{});
-        try self.logger.info("Successfully killed crun container: {s} (placeholder)", .{container_id});
+        // TODO: Implement actual crun integration using C API
+        // For now, we'll simulate the kill process
+        try self.logger.info("crun C API integration in progress - container kill simulated", .{});
+        try self.logger.info("Successfully killed crun container: {s} (simulated)", .{container_id});
     }
 };

@@ -1,0 +1,961 @@
+* crun-1.23.1
+
+- exec: fix a bug where the terminal could lose some bytes when
+  reading from the exec'ed process.
+- utils: add bounds checking for Unix domain socket paths.
+
+* crun-1.23
+
+- krun: enable virtio-gpu.  Enable and configure a virtio-gpu device
+  if /dev/dri and /usr/libexec/virgl_render_server are present within
+  the container.
+- krun: add support for nitro enclaves.
+- criu: Add support for tcp-close.
+- linux: fix issue when RestrictAddressFamilies="AF_UNIX AF_NETLINK" is
+  in place in the systemd unit.  Regression introduced in crun 1.17.
+- cgroup,systemd: use BPFProgram=device on systemd to install the device
+  controller eBPF.
+- cgroup,systemd: allow empty slice in cgroupsPath.
+- crun: print the program version even with an invalid rundir.
+- linux: fix regression with idmapped mounts.  Support idmapped mounts
+  also when there is no user namespace specified for the container.
+  crun 1.22 introduced the regression.
+- cgroup: change formula to convert from cpu shares to cpu weight.
+  The OCI CPU shares (range [2-262144]) to cgroup v2 `cpu.weight`
+  (range [1-10000]) conversion formula has been updated to use a
+  quadratic function so that min, max and default  values match.
+
+* crun-1.22
+
+- crun: add a new command crun mounts to dynamically add or remove
+  mounts from a running container.
+- linux: add support for moving existing network devices into the
+  container namespace as defined in the OCI specification.
+- linux: add src-nofollow and dest-nofollow mount options for more
+  precise control over how symbolic links are handled.
+- krun: implement support for external kernels, allowing users to
+  bundle a kernel image with the container.
+- krun: the vCPU limit has been increased to 16.
+- krun: add support for specifying the libkrun flavor via the
+  KRUN_VM_FILE.
+- criu: fix checkpoint and restore for containers that have a bind
+  mount where the destination is a symbolic link.
+- criu: automatically create the directory specified by --work-path if
+  it does not exist, improving compatibility with other runtimes.
+- criu: re-enable support on the riscv64 architecture.
+- cgroup: fix incorrect setting of cpu.max when the OCI quota is -1.
+- hardening: replace all uses of the insecure sprintf function with
+  safer alternatives like snprintf to prevent buffer overflows.
+- fix a regression that caused issues when dealing with paths that do
+  not exist and openat2 is not available.
+- fix an issue where the file descriptor for the rootfs would become
+  stale if the rootfs was replaced by a mount.
+- fix parsing of rootless options.
+- fix a potential crash in krun by checking if library handles exist
+  before being unloaded.
+- improve error messages for dlopen failures, making them more descriptive.
+- cgroup: fix a regression on WSL when running with cgroup v1.
+- libcrun: setup /dev/console as a symlink to pty instead of bind mount
+  when possible.
+
+* crun-1.21
+
+- criu: when running under systemd, use a proxy process to initialize
+  the cgroup so that all the container processes are restored in the
+  correct cgroup.
+- set HOME to "/" if the specified user is not present in the /etc/passwd file.
+- do not fail if any of stdin/stdout/stderr is closed.
+- cgroup: fix handling of absent subcgroup when configuring cpuset on cgroup v1.
+- ignore SIGWINCH when a tty is not used
+- utils: improve error message if the specified command is not executable.
+- fix PATH lookup.  Support filenames starting with a dot.
+- krun: create context after loading the library
+- krun: stop using krun_set_exec but use the command line directly
+  from the OCI configuration file.
+
+* crun-1.20
+
+- krun: fix CVE-2025-24965.  The .krun_config.json file could be
+  created outside of the container rootfs.
+- cgroup: reverted the removal of `tun/tap` from the default allow
+  list, this was done in crun-1.5. The `tun/tap` device is now added
+  by default again.
+- CRIU: do not set `network_lock` unless explicitly specified.
+- status: disallow container names containing slashes in their name.
+- linux: Improved error message when failing to set the
+  `net.ipv4.ping_group_range` sysctl.
+- scheduler: Ignore `ENOSYS` errors when resetting the CPU affinity
+  mask.
+- linux: return a better error message when `pidfd_open` fails with
+  `EINVAL`.
+- cgroup: display the absolute path to `cgroup.controllers` when a
+  controller is unavailable.
+- exec: always call setsid.  Now processes created through `exec` get
+  the correct process group id.
+
+* crun-1.19.1
+
+- linux: fix a hang if there are no reads from the tty.  Use non
+  blocking sockets to read and write from the tty so that the "crun
+  exec" process doesn't hang when the terminal is not consuming any
+  data.
+- linux: remove the workaround needed to mount a cgroup on top of
+  another cgroup mount.  The workaround had the disadvantage to
+  temporarily leak a mount on the host.  The alternative that is
+  currently used is to mount a temporary tmpfs between the two cgroup
+  mounts.
+
+* crun-1.19
+
+- wasm: add new handler wamr.
+- criu: allow passing network lock method to libcriu.
+- linux: honor exec cpu affinity mask.
+- build: fix build with musl libc.
+- crun: use mount API to self-clone.
+- cgroup, systemd: do not override devices on update.  If the "update" request has no
+  device block configured, do not reset the previously configuration.
+- cgroup: handle case where cgroup v1 freezer is disabled.  On systems without the
+  freezer controller, containers were mistakenly reported as paused.
+- cgroup: do not stop process on exec.  The cpu mask is configured on the systemd
+  scope, the previous workaround to stop the container until the cgroup is fully
+  configured is no longer needed.
+
+* crun-1.18.2
+
+- cgroup, systemd: fix a regression when a configuration file includes only one
+  default rule.
+
+* crun-1.18.1
+
+- cgroup: deprecate cgroup v1.
+- cgroup: fix regression setting up the devices cgroup on cgroup v1.
+- cgroup: fix regression and work again with the default Docker devices
+  configuration on systemd.
+- linux: fix setting up user namespace when newuidmap/newgidmap are not available.
+
+* crun-1.18
+
+- cgroup: support running without a sub-cgroup with systemd.  Use the
+  d-bus API to set the container limits on the systemd scope itself.
+  It allows running without a sub-cgroup when the systemd driver is
+  used, the run.oci.systemd.subgroup annotation controls it.  For now,
+  a sub-cgroup is still created, but it might be changed in future.
+- cgroup: add support for the misc controller.
+- linux: fix running on kernel without user namespaces.
+- criu, restore: add lsm-profile option.
+- criu, restore: add lsm-mount-context option.
+- linux: add duplicate namespace detection.
+
+* crun-1.17
+
+- Add `--log-level` option.  It accepts `error`, `warning` and `error`.
+- Add debug logs for container creation.
+- Fix double-free in crun exec code that could lead to a crash.
+- Allow passing an ID to the journald log driver.
+- Report "executable not found" errors after tty has been setup.
+- Do not treat EPIPE from hooks as an error.
+- Make sure `DefaultDependencies` is correctly set in the systemd scope.
+- Improve the error message when the container process is not found.
+- Improve error handling for the mnt namespace restoration.
+- Fix error handling for `getpwuid_r`, `recvfrom` and `libcrun_kill_linux`.
+- Fix handling of device paths with trailing slashes.
+
+* crun-1.16.1
+
+- fix a regression introduced by 1.16 where using 'rshared' rootfs
+  mount propagation and the rootfs itself is a mountpoint.
+- inherit user from original process on exec, if not overridden.
+
+* crun-1.16
+
+- build: fix build for s390x.
+- linux: fix mount of special files with rro.  Open the mount target
+  with O_PATH to prevent open(2) failures with special files like
+  FIFOs or UNIX sockets.
+- Fix sd-bus error handling for cpu quota and period props update.
+- container: use relative path for rootfs if possible.  If the rootfs
+  cannot be resolved and it is below the current working directory,
+  only use its relative path.
+- wasmedge: access container environment variables for the WasmEdge
+  configuration.
+- cgroup, systemd: use MemoryMax instead of MemoryLimit.  Fixes a
+  warning for using an old configuration name.
+- cgroup, systemd: improve checks for sd_bus_message_append errors
+
+* crun-1.15
+
+- fix a mount point leak under /run/crun, add a retry mechanism to
+  unmount the directory if the removal failed with EBUSY.
+- linux: cgroups: fix potential mount leak when /sys/fs/cgroup is
+  already mounted, causing the posthooks to not run.
+- release: build s390x binaries using musl libc.
+- features: add support for potentiallyUnsafeConfigAnnotations.
+- handlers: add option to load wasi-nn plugin for wasmedge.
+- linux: fix "harden chdir()" security measure.  The previous check
+  was not correct.
+- crun: add option --keep to the run command.  When specified the
+  container is not automatically deleted when it exits.
+
+* crun-1.14.4
+
+- linux: fix mount of file with recursive flags.  Do not assume it is
+  a directory, but check the source type.
+
+* crun-1.14.3
+
+- follow up for 1.14.2.  Drop the version check for each command.
+
+* crun-1.14.2
+
+- crun: drop check for OCI version.  A recent bump in the OCI runtime
+  specs caused crun to fail with every config file.  Just drop the
+  check since it doesn't add any value.
+
+* crun-1.14.1
+
+- there was recently a security vulnerability (CVE-2024-21626) in runc
+  that allowed a malicious user to chdir(2) to a /proc/*/fd entry that is
+  outside the container rootfs.  While crun is not affected directly,
+  harden chdir by validating that we are still inside the container
+  rootfs.
+- container: attempt to close all the files before execv(2).
+  if we leak any fd, it prevents execv to gain access to files outside
+  the container rootfs through /proc/self/fd/$fd.
+- fix a regression caused by 1.14 when installing the ebpf filter on a
+  kernel older than 5.11.
+- cgroup, systemd: fix segfault if the resources block is not specified.
+
+* crun-1.14
+
+- build: drop dependency on libgcrypt.  Use blake3 to compute the cache
+  key.
+- cpuset: don't clobber parent cgroup value when writing the cpuset
+  value.
+- linux: force umask(0).  Iit ensures that the `mknodat` syscall is
+  not affected by the umask of the calling process, allowing file
+  permissions to be set as specified in the OCI configuration.
+- ebpf: do not require MEMLOCK for eBPF programs.  This requirement
+  was relaxed in Linux 5.11.
+
+* crun-1.13
+
+- src: use O_CLOEXEC for all open/openat calls
+- cgroup v1: use "max" when pids limit < 0.
+- improve error message when idmap mount fails because the underlying
+  file system has no support for it.
+- libcrun: fix compilation when building without libseccomp and libcap.
+- fix relative idmapped mount when using the custom annotation.
+
+* crun-1.12
+
+- add new WebAssembly handler: spin.
+- systemd: fallback to system bus if session bus is not available.
+- configure the cpu rt and cpuset controllers before joining them to
+  avoid running temporarily the workload on the wrong cpus.
+- preconfigure the cpuset with required resources instead of using the
+  parent's set.  This prevents needless churn in the kernel as it
+  tracks which CPUs have load balancing disabled.
+- try attr/<lsm>/* before the attr/* files.  Writes to the attr/*
+  files may fail if apparmor is not the first "major" LSM in the list
+  of loaded LSMs (e.g. lsm=apparmor,bpf vs lsm=bpf,apparmor).
+
+* crun-1.11.2
+
+- fix a regression caused by 1.11.1 where the process crashes if there
+  are no CPU limits configured on cgroup v1.
+- fix error code check for the ptsname_r function.
+
+* crun-1.11.1
+
+- force a remount operation with bind mounts from the host to correctly
+  set all the mount flags.
+
+* crun-1.11
+
+- cgroup: honor cpu burst.
+- systemd: set CPUQuota and CPUPeriod on the scope cgroup.
+- linux: append tmpfs mode if missing for mounts.  This is the same
+  behavior of runc.
+- cgroup: always use the user session for rootless.
+
+* crun-1.10
+
+- support for Intel Resource Director Technology (RDT).
+- new mount option "copy-symlink".  When provided for a mount, if the
+  source is a symlink, then it is copied in the container instead of
+  attempting a mount.
+- linux: open mounts before setgroups if in a userns.  This solves a
+  problem where a directory that was previously accessible to the
+  user, become inaccessible after setgroups causing the bind mount to
+  fail.
+
+* crun-1.9.2
+
+- cgroup: reset the inherited cpu affinity after moving to cgroup.
+  Old kernels do that automatically, but new kernels remember the
+  affinity that was set before the cgroup move, so we need to reset
+  it in order to honor the cpuset configuration.
+
+* crun-1.9.1
+
+- utils: ignore ENOTSUP when chmod a symlink. It fixes a problem on
+  Linux 6.6 that always refuses chmod on a symlink.
+- build: fix build on CentOS 7
+- linux: add new fallback when mount fails with EBUSY, so that there
+  is not an additional tmpfs mount if not needed.
+- utils: improve error message when a directory cannot be created as
+  a component of the path is already existing as a non directory.
+
+* crun-1.9
+
+- linux: support arbitrary idmapped mounts.  Now it is possible to
+  specify a mapping for any type of mount, not only bind mounts.
+- linux: add support for "ridmap" mount option to support recursive
+  idmapped mounts.
+- crun delete: call systemd's reset-failed.  In case systemd cgroup
+  driver is used, and the systemd unit has failed (e.g. oom-killed),
+  systemd won't remove the unit (that is, unless the "CollectMode:
+  inactive-or-failed" property is set).
+- linux: fix check for oom_score_adj.  Write the oom_score_adj file
+  even when the new value is 0.
+- features: Support mountExtensions.
+- linux: correctly handle unknown signal string when it doesn't start
+  with a digit.
+- linux: do not attempt to join again already joined namespace.
+- wasmer: use latest wasix API.
+
+* crun-1.8.7
+
+- linux: fix a race condition when an exec was performed
+  immediately after the start and the setns with the procfd failed.
+- features: Fix annotations formatting.
+- linux: do not write some errors twice.
+- libcrun: handle SIGWINCH by resizing the terminal file descriptor.
+- crun: new command "crun features".
+- linux: fix handling of idmapped mounts when the container joins
+  an existing PID namespace.
+- linux: support io_priority from the OCI specs.
+- linux: handle correctly the case where the status file is not
+  written yet for a container.
+- crun: fix segfault for "ps" when the container is not using cgroups.
+- cgroup: allow setting swap to 0.
+
+* crun-1.8.6
+
+- crun: new command "crun features".
+- linux: fix handling of idmapped mounts when the container joins
+  an existing PID namespace.
+- linux: support io_priority from the OCI specs.
+- linux: handle correctly the case where the status file is not
+  written yet for a container.
+- crun: fix segfault for "ps" when the container is not using cgroups.
+- cgroup: allow setting swap to 0.
+
+* crun-1.8.5
+
+- scheduler: use definition from the OCI configuration file instead of the custom
+  label that is now dropped and not supported anymore.
+- cgroup: fix creating cgroup under "domain threaded".
+- cgroup, systemd: set the memory limit on the system scope.
+- restore tty settings from the correct file descriptor.  It was previously
+  restoring the settings from the wrong file descriptor causing the tty settings
+  to be changed on the calling terminal.
+- criu: check if the criu_join_ns_add function exists.  Fix a segfault with new
+  versions of CRIU.
+- linux: do not precreate devs with euid > 0.  Fix creating devices when running
+  the OCI runtime as non root user.
+- linux: improve PID detection on systems that lack pidfd.  While there is still a
+  window of time that the PID could be recycled, now it is now reduced to a minimum.
+- criu: fix memory leak.
+- logging: improve error message when dlopen fails.
+
+* crun-1.8.4
+
+- fix build on CentOS 7.
+- drop custom annotation to set the time namespace and use the OCI
+  specs instead.
+- cgroup: workaround cpu quota/period issue with v1.  Sometimes
+  setting CPU quota period fails when a new period is lower, and a
+  parent cgroup has CPU quota limit set.
+- cgroup: fix set quota to -1 on cgroup v1.
+- criu: drop loading unused functions.
+
+* crun-1.8.3
+
+- update: initialize the rt limits only on cgroup v1.
+
+* crun-1.8.2
+
+- lua bindings for libcrun.
+- wasmedge: add current directory to preopen paths.
+- linux: inherit parent mount flags when making a path masked.
+- libcrun: custom annotation to set the scheduler for the container process.
+- cgroup: fallback to blkio.bfq files if blkio is not available on cgroup v1.
+- cgroup: initialize rt limits when using systemd.
+- tty: chown the tty to the exec user instead of the user specified
+  to create the container.
+- cgroup: fallback to create cgroupfs as sibling of the current cgroup if there
+  is none specified and it cannot be created in the root cgroup.
+
+* crun-1.8.1
+
+- linux: idmapped mounts expect the same configuration as the user
+  namespace mappings.  Before they were expecting the inverted
+  mapping.  It is a breaking change, but the behavior was aligned to
+  what runc will do as well.
+- krun: always allow /dev/kvm in the cgroup configuration.
+- handlers: disable exec for handlers that do not support it.
+- selinux: allow setting fscontext using a custom annotation.
+- cgroup: reset systemd unit if start fails.
+- cgroup: rmdir the entire systemd scope.  It fixes a leak on cgroupv1.
+- cgroup: always delete the cgroup on errors. On some errors it could
+  have been leaked before.
+
+* crun-1.8
+
+- linux: precreate devices on the host.
+- cgroup: support cpuset mounted with noprefix.
+- linux: mount the source cgroup if cgroupns=host.
+- libcrun: don't clone self from read-only mount.
+- build: fix build without dlfcn.h.
+- linux: set PR_SET_DUMPABLE.
+- utils: fix applying AppArmor profile.
+- linux: write setgroups=deny when mapping a single uid/gid.
+- cgroup: fix enter cgroupv1 mount on RHEL 7.
+
+* crun-1.7.2
+
+- criu: hardcode library name to libcriu.so.2.
+- cgroup: always enable all controllers, even if the cgroup was already joined.
+  Regression caused by crun-1.7.
+
+* crun-1.7.1
+
+- criu: load libcriu dynamically.
+- seccomp: initialize libgcrypt.
+- handlers: fix rewriting the argv if the full cmdline doesn't fit.
+- utils: honor SELinux label when using a custom handler.
+- utils: honor AppArmor label when using a custom handler.
+- krun: copy the OCI configuration file into the container.
+- utils: fix creating the default user namespace when running with euid != 0.
+- Add setlinebuf() when --debug and --log=file: are used.
+- Fix timestamp format in the error messages.
+- krun: disable libkrun's collection of env vars
+
+* crun-1.7
+
+- seccomp: use a cache for the generated BPF.
+- add support for setting the domainname through the OCI spec.
+- handlers: define wasm and krun.
+- wasmtime: add support for compiling .wat format.
+- cgroup: honor checkBeforeUpdate on cgroupv2.
+- crun: chown std streams before joining the user namespace.
+- crun: display rundir in --version output.
+- container: with cgroupfs use clone3 to join directly the target cgroup.
+- linux: create parent directories for created devices with mode 0755.
+- wasm: inherit environment variables in the WasmEdge handler.
+
+* crun-1.6
+
+- runc compatibility: -v now prints the version string.
+- build: fix build with glibc 2.36.
+- container: drop intermediate userns custom feature.
+- cgroup: change the delegate cgroup semantic so that the cgroup is
+  created in the container payload after the cgroup namespace is created.
+- seccomp: use helper process to send file descriptor to the listener
+  socket.  It enables to be notified on every syscall without hanging
+  the main process.
+- linux: add a fallback to using kill(2) if pidfd_send_signal(2) fails
+  with ENOSYS.
+- krun: add support for krun-sev.
+- wasmtime: always grant file system capability for workdir inside the container.
+- wasmtime: inherit arguments list from the handler instead of the current process.
+- wasmedge: use released wasmedge library instead of libwasmedge_c.so.
+
+* crun-1.5
+
+- add mono based native .NET handler
+- new Wasmtime backend for running WebAssembly
+- add support for wasmedge 0.10 and dropping support for wasmedge 0.9.x
+- dropping support for experimental `WasmEdgeProcess` from wasmedge handler
+- honor process user's uid when setting the HOME environment variable
+- create the current working directory if it is missing in the container
+- fallback to using a tmpfs mount if umount of /sys and /proc fails
+- fallback to netlink to setup lo device
+- fix creating devices in the rootfs
+- fallback to using io.weight if io.bfq.weight doesn't exist
+- remove tun/tap from the default allow list
+- linux: devices mounts have noexec and nosuid
+- fix copyup of files from the container to the tmpfs
+- honor $PATH for newgidmap and newguidmap
+- krun: limit the number of vCPUs to 8
+- cgroup: add support for cpu.idle
+
+* crun-1.4.5
+
+- CRIU: add support for different manage cgroups modes.
+- linux: the hook processes inherit the crun process environment if
+  there is no environment block specified in the OCI configuration.
+- exec: fix double free when using --apparmor and --process-label.
+
+* crun-1.4.4
+
+- wasm, kubernetes: support wasm for kubernetes infrastructure with side-cars
+- Resolve symlinks in bind mounts when creating a user namespace.
+- Fix CVE-2022-27650: exec does not set inheritable capabilities.
+
+* crun-1.4.3
+
+- cgroup: avoid infinite loop when deleting a cgroup if it contains
+  processes that cannot be terminated.
+- support additional options for idmap mounts.  It is now possible to
+  specify what mappings must be used for the idmapped mount.
+- open the source for a bind mount in the host.  It is useful when
+  creating a user namespace so that the parent directories for the
+  source directory are not required to be accessible to the users in
+  the user namespace.
+
+* crun-1.4.2
+
+- CRIU: add pre-dump support.
+- Fix running with a read-only /dev.  The /dev/console file is created
+  before re-mounting /dev as read-only.
+- Ignore EROFS when chowning standard stream files.
+- Add validation for sysctls before applying them.
+- Attempt looking up the executable after the setresuid syscall, this
+  solves an issue on NFS when the executable file is not owned by root
+  in the container, but the UID:GID combination configured for the
+  container can access it.
+
+* crun-1.4.1
+
+- Fix check for an invalid path.  crun was performing the wrong check
+  to validate a path, causing spurious failures at runtime.
+- Allow deleting a container while in `created` state.  It goes
+  against what the OCI runtime specs dictate, but it is the expected
+  behavior since runc allows it.
+- Fix regression when joining a container that has explicit paths for
+  the namespaces.
+- cgroup: do not set cpu limits if number of shares is set to 0.
+  Moby uses 0 to indicate no limits.
+- Fix build issues when configured with --enable-shared.
+- Fix build on systems where OPEN_TREE_CLOEXEC is not defined.
+- Improve diagnostics for errors returned by dbus.
+
+* crun-1.4
+
+- wasm: support for running on kubernetes with containerd.
+- linux: add support for recursive mount options.  e.g. it is possible
+  to specify "rro" to make the mount read-only recursively.
+- add support for idmapped mounts through a new mount option "idmap".
+- linux: improve detection of /dev target.  Previously a mount like
+  `/dev/` was not properly detected as mounting /dev/ from the host.
+- now crun exec uses CLONE_INTO_CGROUP on supported kernels when
+  using cgroup v2.
+- retry the openat2 syscall if it fails with EAGAIN.
+- cgroup: set the CPUWeight/CPUShares on the systemd scope cgroup.
+- on new kernels, use setns with pidfd.
+- attempt the chdir again with the specified user if it failed before
+  changing credentials.
+- ebpf: fix build on 32 bits systems.
+- crun --version shows the configured handlers.
+
+* crun-1.3
+
+- add support to natively build and run WebAssembly workload and
+  WebAssembly containers.
+- allow to specify sub-cgroup for exec.
+- chown std streams if they are not a TTY.
+- attach the correct streams if the container is suspended and
+  restored multiple times.
+- fix race condition when enabling controllers on cgroup v2.
+- the fallback code to mount cgroupfs bind mounts the current
+  cgroup path instead of the host /sys.
+
+* crun-1.2
+
+- exec: fix regression in 1.1 where containers are being wrongly
+  reported as paused.
+- criu: add support for external ipc, uts and time namespaces.
+
+* crun-1.1
+
+- cgroup: use cgroup.kill when available. It is faster to kill a
+  container through its cgroup as there is no need to recurse over the
+  cgroup pids and terminate each one of them.
+- exec: refuse to exec in a paused container/cgroup.
+- container: Set primary process to 1 via LISTEN_PID by default if
+  user configuration is missing.
+- criu: Add support for external PID namespace.
+- criu: fix save of external descriptors.  Now restored containers
+  attach correctly their standard streams.
+- utils: retry openat2 on EAGAIN.  If the openat2 syscall is
+  interrupted, try again.
+
+* crun-1.0
+
+- cgroup: chown the current container cgroup to root in the container.
+- linux: treat pidfd_open failures EINVAL as ESRCH
+- cgroup: add support for setting memory.use_hierarchy on cgroup v1.
+- Makefile.am: fix link error when using directly libcrun.
+- Fix symlink target mangling for tmpcopyup targets.
+
+* crun-0.21
+
+- honor memory swappiness set to 0
+- status: add fields for owner and created timestamp
+- cgroup: lookup pids controller as well when the memory controller
+  is not available
+- when compiled with krun, automatically use it if the current
+  executable file is called "krun".
+
+* crun-0.20.1
+
+- container: ignore error when resetting the SELinux label for the
+  keyring.
+
+* crun-0.20
+
+- container: call prestart hooks before rootfs is RO.
+- cgroup: added support cleaning custom controllers on cgroupv1.
+- spec: add support for --bundle.
+- exec: add --no-new-privs.
+- exec: add --process-label and --apparmor to change SELinux and
+  AppArmor labels.
+- cgroup: kill procs in cgroup on EBUSY.
+- cgroup: ignore devices errors when running in a user namespace.
+- seccomp: drop SECCOMP_FILTER_FLAG_LOG by default.
+- seccomp: report correct action in error message.
+- apply SELinux label to keyring.
+- add custom annotation run.oci.delegate-cgroup.
+- close_range fallbacks to close on EPERM.
+- report error if the cgroup path was set and the cgroup could not be
+  joined.
+
+* crun-0.19.1
+
+- on exec, honor additional_gids from the process spec, not the
+  container definition.
+- spec: add cgroup ns if on cgroup v2.
+- systemd: support array of strings for cgroup annotation.
+
+* crun-0.19
+
+- join all the cgroup v1 controllers.
+- raise a warning when newuidmap/newgidmap fail.
+- handle eBPF access(dev_name, F_OK) call correctly.
+- fix some memory leaks on errors when libcrun is used by a long
+  running process.
+- fix the SELinux label for masked directories.
+- support default seccomp errno value.
+- fail if no default seccomp action specified.
+- support OCI seccomp notify listener.
+- improve OOM error messages.
+- ignore unknown capabilities and raise a warning.
+- always remount bind mounts to drop not requested mount flags.
+
+* crun-0.18
+
+- fix build without CLONE_NEWCGROUP.
+- fix conversion from blkio to io.
+- add custom annotation to load raw BPF.
+- set working directory for libkrun
+- fix symlink lookup on old kernels that lack openat2
+- skip +cpu on EINVAL in cgroup root.  Enabling the cpu controller is
+  not permitted if there are already realtime processes running on the
+  system.
+- Fix permission error when using NOTIFY_SOCKET with username spaces.
+- set HOME to root if the user not found.
+- simplify mount logic to not use a temporary mount.
+- ignore ENOSYS from keyctl.
+
+* crun-0.17
+
+- allow creating user namespaces without root being mapped.
+- allow arbitrary IDs with single ID userns.
+- use close_range(CLOSE_RANGE_CLOEXEC) where available.
+- honor /sys/kernel/cgroup/delegate.
+- fix an issue with hooks running in the container PID namespace.
+- fix building without seccomp.
+- fix building without libcap.
+
+* crun-0.16
+
+- CRIU support.
+- fallback to openat if openat2 returns EPERM.
+- ignore ENOENT for cgroup v1 mounts, if the mount fails with
+  ENOENT, the controller might have been unmounted.
+- fix another race reading cgroup freeze.  Reading from the cgroup
+  fails with ENODEV if the cgroup was deleted in the meanwhile.
+
+* crun-0.15.1
+
+- add experimental support for libkrun.
+- fix check for pidfd availability on older kernels.
+- linux: do not set data when remounting read-only.  Fix 'ro' mounts
+  on older kernels when SELinux is enabled.
+- linux: label the cgroup v1 tmpfs when SELinux is enabled.
+- container: truncate the pid file before writing to it.
+- exec: fix check for read bytes from the sync socket.
+- check the process has a cgroup before allowing pause and resume.
+- linux: always create a user namespace if not running with euid == 0.
+- libcrun can use a hook instead of executing a container process.
+- use libyajl to generate hooks json input.
+- handle correctly ENOENT for seccomp notifications.
+
+* crun-0.15
+
+- add support for OCI unified cgroup v2.
+- add json format option to `crun list`.
+- get last kernel capability dynamically instead of using a build
+  time constant.
+- enable all available cgroup controllers.
+- support the seccomp SCMP_ACT_LOG action.
+- support the seccomp SCMP_ACT_KILL_THREAD action.
+- properly set a SELinux label for the mqueue mount.
+- `crun kill` uses pidfd when supported.
+- experimental support for seccomp notifications.
+- fix bundle option for `crun create` and `crun run`.
+- allow to declare path to config file.
+- check /sys/kernel/security/apparmor when using AppArmor.
+- doesn't accept type=bind alone anymore, but require either "bind"
+  or "rbind" to be present in the mount flags.
+
+* crun-0.14.1
+
+- fix a regression in crun-0.14 where openat2(2) would fail when bind
+  mounting a symlink.
+- various small fixes to allow running regression tests outside of
+  source tree.
+
+* crun-0.14
+
+- cgroup, systemd: create container under subcgroup.  Now a "/container"
+  sub-cgroup is created and fully managed by libcrun.  This is a different
+  behaviour than what runc does.
+- libcrun: use the openat2 syscall available since Linux 5.6.
+- container: allow hooks output to file through an annotation.
+- linux: support joining PID/IPC namespace not owned by the user namespace.
+  Requires Linux 5.3.
+- linux: avoid double fork for creating the init process if not needed.
+- linux: fix an issue where the basename for $NOTIFY_SOCKET is different
+  than /notify.
+- rootless: allow /dev/{tty,ptmx} to be present in linux.devices.
+- cgroup: fix an issue on CentOS 7.8 when using net_cls and net_prio.
+- seccomp: honor errnoRet from OCI spec runtime.
+- exec: set setresuid/setresgid before setting up the terminal.
+- cgroup, v2: fix crun update with both --memory -1 --memory-swap -1.
+- cgroup, v2: fixing setting unlimited swap.
+- cgroup, v2: allow to set unlimited swap per se.
+- cgroup, v2: treat negative numbers as "max"
+- cgroup, v2: raise error if swap is set without memory limit.
+- cgroup: ignore cpu resources if set to 0.
+- libcrun: audit errno in crun_make_error calls
+- libcrun: fix read_pid_stat usage.
+- linux: fix double close on the same file descriptor.
+- container: Prevent deletion of not stopped container
+- status: Use process start time for identification
+- CRIU: several improvements.
+- linux: fix path lookups for relative paths containing '/'.
+- linux: use the SELinux mount label for the notify socket.
+- status: delete doesn't fail if the process already exited.
+
+* crun-0.13
+
+- license: change license to gplv2+ and lgpl2.1+.
+- criu: initial support for `container restore`.
+- state: If a container is paused, report its state as 'paused'.
+- cgroup: use the memory controller to ready PIDs.  The pid controller
+  is not available on kernels older than 4.3.
+- linux: drop context= for remount.  Older linux versions complain
+  when the selinux label is specified on a remount.
+- utils: fix mount on not writeable path.
+- cgroup: support systemd properties via annotations.
+- systemd: do not set hard-code collectmode value.  It can be set
+  through an annotation.
+- cgroup: write the correct blkio settings.
+- exec: do not inherit env variables from main pid.
+- ebpf: fix endianness issue on s390x.
+- linux: fix recursive mount on cgroup v1.
+
+* crun-0.12.2.1
+
+- when not using a cgroup namespace, mount only the cgroup v1 subpath.
+
+* crun-0.12.2
+
+- do not require read permissions on /
+- add support for the "time" namespace via a custom annotation
+- fix mount of cgroup v1 when using a cgroup namespace
+- set default umask to 0022
+- use the correct path for notify socket with "crun run -d"
+- always use setsid
+- use correct indices for seccomp generation
+- fixed several issues with cgroup v2 and the cgroupfs driver
+
+* crun-0.12.1
+
+- fix the order of clone syscall arguments on s390 and cris.
+- if no mode is specified use 0666 for devices.
+- fix running with a relative bundle directory.
+- fix some regressions in the mounts path resolution.
+- drop a warning when cgroup are not available for rootless.
+
+* crun-0.12
+
+- masked paths use only MS_UNBINDABLE
+- mount doesn't specify mount data when there are no options
+- support new hook types: createRuntime, createContainer and startContainer
+- safer mount options.  A temporary mount is prepared outside of the
+  rootfs before being moved to it.
+- apply selinux/apparmor before the pivot_root.
+- handle correctly proc remounts.  It is now supported to specify hidepid=
+- fix exec if a namespace is not available.
+- handle swap limit with the same semantic as on cgroup v1.
+- bring network device up.
+- reset all signal handlers to default.
+
+* crun-0.11
+
+- cgroups2: map memory reservation to memory.low
+- statx fallbacks to stat on EINVAL
+- utils: do not fail if the path we are trying to create already
+  exists
+- generate seccomp profile in the parent process, not in the container
+  init process.  Memory usage is more reliable now and a container can
+  run with ~250K of max memory.
+- support for Linux personality.
+- support for umask.
+- support for the hugetlb controller on cgroup v2.
+- PIDs from a cgroup are read recursively.
+- do not fork on "create".
+- now by default seccomp doesn't fail on an unknown syscall.  The
+  previous behavior can be enabled with an annotation.
+- fix joining cgroup on cgroup v2 when a named hierarchy is also
+  present.
+- fix creating user namespaces with more than 2^32 IDs mapped.
+- on exec, keep the SELinux label or AppArmor profile from the
+- container configuration.
+- runtime specific annotation are prefixed with run.oci.
+
+* crun-0.10.6
+
+- when running with a terminal, change the ownership for the terminal
+  to the specified user
+- spec: honor the --rootless flag
+- linux: make sure the source path is resolved when checking the file
+  type.  Regression introduced with 0.10.5.
+
+* crun-0.10.5
+
+- fix CVE-2019-18837
+- fix running on CentOS/RHEL 8
+- report errors opening the console socket
+- not leave config.json around if the container could not be created
+
+* crun-0.10.4
+
+- ignore errors creating /dev/console
+- add an annotation "io.crun.keep_original_groups", if it is set then
+  crun won't drop additional groups when creating the container
+
+* crun-0.10.3
+
+- systemd: set collectmode=inactive-or-failed
+- fix build on Alpine
+- use the current working directory to lookup local paths
+- improve the error message when a hook fails
+- add granular enable/disable configure options
+
+* crun-0.10.2
+
+- fix a regression in 0.10.1 where cgroups v1 could not be created
+- correctly chown cgroups when using a user namespace so that systemd
+  can run in a container that uses a user namespace
+
+* crun-0.10.1
+
+- linux: Keep MS_RDONLY when remounting bind mount of a read-only
+  source.  It solves an issue on Fedora Silverblue where /usr is
+  mounted read only.
+- fix exec of rootless containers when cgroups are not available
+
+* crun-0.10
+
+- support for AppArmor
+- fix for CVE-2019-16884, make sure writes to /proc for the SELinux
+  and AppArmor labels are on procfs.
+- exec supports --preserve-fds
+- seccomp: fix lookup for pseudo syscalls, seccomp now works fine on
+  non native archs
+- cgroup: ignore rootless errors if manager != systemd
+- error: always write errors to stderr
+- chroot: follow symlinks for the last component
+- set $HOME if it is not already defined
+
+* crun-0.9.1
+
+- fix an issue with tmpcopyup that didn't work correctly with symlinks
+- create a new cgroup namespace before mounting the cgroup file
+  system, so that it uses the correct namespace
+
+* crun-0.9
+
+- fix exec into containers running systemd on cgroups v2
+- kill: honor --all
+- kill: when not using a PID namespace, use the freezer controller to
+  prevent the container forking new processes
+- linux: handle tmpcopyup option to copy files from the rootfs to the
+  new mounted tmpfs.
+- OCI: honor seccomp options.  If not specified any seccomp option,
+  now crun will default to using SECCOMP_FILTER_FLAG_SPEC_ALLOW |
+  SECCOMP_FILTER_FLAG_LOG when using the seccomp(2)
+  syscall
+
+* crun-0.8
+
+- executable lookup. Now create fails immediately if the specified
+  executable doesn't exist
+- subreaper enabled only when crun is attached
+- fix notify socket when used from create and prevent it hanging
+  indefinitely when the container exits
+- correctly write cpu controller resources when using cgroups v2
+- support for the freezer controller when using cgroups v2
+- honor unspecified minor/major number for devices when using cgroups v2
+- reintroduce --no-pivot
+- do not add a cgroup path again if it was already specified in the
+  OCI configuration
+
+* crun-0.7
+
+- support devices on cgroups v2 using eBPF.
+- new option --cgroup-manager=MANAGER. Accepted values are cgroupfs,
+  systemd and disabled.
+- can run without using cgroups also as root.
+- NOTIFY_SOCKET works also for containers created via create/start.
+- when using systemd, create the same name for the scope as runc does.
+
+* crun-0.6
+
+- tty: set the size on the exec tty.
+- cgroup: enable only the controllers needed.
+- cgroup: in unified mode report the errors also for rootless.
+- cgroup2: add support for the cpuset controller.
+- linux: ignore tmpcopyup.
+
+* crun-0.5
+
+- logging: support --log=syslog: and log=journald.
+- seccomp: if the syscall is not known, ignore it.
+- container: move set oom before entering userns.
+- status: always honor XDG_RUNTIME_DIR.
+- linux: resolve symlinks in the target for bind mounts.
+- fix all issues found by Coverity.
+- pass Kubernetes e2e tests on Fedora with CRI-O.
+
+* crun-0.4
+
+- partial support for cgroup v2 (cpu, io, memory, pids controllers).
+- pass all the OCI validation tests (https://github.com/opencontainers/runtime-tools).
+- implement --log-format. crun now works with containerd.
+- fixed some issues that prevented crun to work on older kernels.

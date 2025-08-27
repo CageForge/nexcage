@@ -157,6 +157,8 @@ pub fn build(b: *std.Build) void {
     // Add include paths for crun headers
     exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
     exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+    exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
+    exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
 
     // Add dependencies
     exe.root_module.addImport("types", types_mod);
@@ -214,7 +216,26 @@ pub fn build(b: *std.Build) void {
 
     const run_crun_test = b.addRunArtifact(crun_test);
     
+    // Crun integration test
+    const crun_integration_test = b.addTest(.{
+        .root_source_file = b.path("tests/crun_integration_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    crun_integration_test.root_module.addImport("oci", oci_mod);
+    crun_integration_test.root_module.addImport("types", types_mod);
+    crun_integration_test.root_module.addImport("error", error_mod);
+    crun_integration_test.root_module.addImport("logger", logger_mod);
+
+    const run_crun_integration_test = b.addRunArtifact(crun_integration_test);
+    
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_config_test.step);
     test_step.dependOn(&run_crun_test.step);
+    test_step.dependOn(&run_crun_integration_test.step);
+    
+    // Separate step for crun integration test
+    const crun_integration_step = b.step("crun_integration", "Run crun integration tests");
+    crun_integration_step.dependOn(&run_crun_integration_test.step);
 }

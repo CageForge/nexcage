@@ -1,0 +1,27 @@
+{
+    "definitions": {
+        "NamespaceType": {
+            "type": "string",
+            "enum": [
+                "mount",
+                "pid",
+                "uts",
+                "ipc"
+            ]
+        },
+        "NamespaceReference": {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "$ref": "#/definitions/NamespaceType"
+                },
+                "path": {
+                    "$ref": "defs.json#/definitions/FilePath"
+                }
+            },
+            "required": [
+                "type"
+            ]
+        }
+    }
+}
