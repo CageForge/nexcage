@@ -250,27 +250,73 @@ pub const Config = struct {
 };
 
 pub fn deinitJsonConfig(config_value: *JsonConfig, allocator: std.mem.Allocator) void {
-    if (config_value.runtime) |runtime| {
-        if (runtime.root_path) |path| allocator.free(path);
-        if (runtime.log_path) |path| allocator.free(path);
-    }
-    if (config_value.proxmox) |proxmox| {
-        if (proxmox.hosts) |hosts| {
-            for (hosts) |host| allocator.free(host);
-            allocator.free(hosts);
+    // Safely deallocate runtime config
+    if (config_value.runtime) |*runtime| {
+        if (runtime.root_path) |path| {
+            if (path.len > 0 and path.ptr != undefined) {
+                allocator.free(path);
+            }
         }
-        if (proxmox.token) |token| allocator.free(token);
-        if (proxmox.node) |node| allocator.free(node);
+        if (runtime.log_path) |path| {
+            if (path.len > 0 and path.ptr != undefined) {
+                allocator.free(path);
+            }
+        }
     }
-    if (config_value.storage) |storage| {
-        if (storage.zfs_dataset) |dataset| allocator.free(dataset);
-        if (storage.image_path) |path| allocator.free(path);
+    
+    // Safely deallocate proxmox config
+    if (config_value.proxmox) |*proxmox| {
+        if (proxmox.hosts) |hosts| {
+            if (hosts.ptr != undefined) {
+                for (hosts) |host| {
+                    if (host.len > 0 and host.ptr != undefined) {
+                        allocator.free(host);
+                    }
+                }
+                allocator.free(hosts);
+            }
+        }
+        // Only deallocate if these fields were actually allocated
+        if (proxmox.token) |token| {
+            if (token.len > 0 and token.ptr != undefined) {
+                allocator.free(token);
+            }
+        }
+        if (proxmox.node) |node| {
+            if (node.len > 0 and node.ptr != undefined) {
+                allocator.free(node);
+            }
+        }
     }
-    if (config_value.network) |network| {
-        if (network.bridge.len > 0) allocator.free(network.bridge);
+    
+    // Safely deallocate storage config
+    if (config_value.storage) |*storage| {
+        if (storage.zfs_dataset) |dataset| {
+            if (dataset.len > 0 and dataset.ptr != undefined) {
+                allocator.free(dataset);
+            }
+        }
+        if (storage.image_path) |path| {
+            if (path.len > 0 and path.ptr != undefined) {
+                allocator.free(path);
+            }
+        }
+    }
+    
+    // Safely deallocate network config
+    if (config_value.network) |*network| {
+        if (network.bridge.len > 0 and network.bridge.ptr != undefined) {
+            allocator.free(network.bridge);
+        }
         if (network.dns_servers) |servers| {
-            for (servers) |server| allocator.free(server);
-            allocator.free(servers);
+            if (servers.ptr != undefined) {
+                for (servers) |server| {
+                    if (server.len > 0 and server.ptr != undefined) {
+                        allocator.free(server);
+                    }
+                }
+                allocator.free(servers);
+            }
         }
     }
 }

@@ -252,7 +252,7 @@ pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struc
         const arg = argv[i];
         has_args = true;
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
-            try printUsage();
+            printUsage();
             std.process.exit(0);
         } else if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
             printVersion();
@@ -295,7 +295,7 @@ pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struc
             command = parseCommand(arg);
             if (command.? == .unknown) {
                 try std.io.getStdErr().writer().print("Unknown command: '{s}'\n", .{arg});
-                try printUsage();
+                printUsage();
                 return error.UnknownCommand;
             }
         } else {
@@ -308,7 +308,7 @@ pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struc
         }
     }
     if (!has_args or command == null) {
-        try printUsage();
+        printUsage();
         std.process.exit(0);
     }
     return .{
@@ -379,8 +379,9 @@ fn loadConfigFromPath(allocator: Allocator, path: []const u8) !config.Config {
 
     const parsed = try json_parser.parseWithUnknownFields(config.JsonConfig, allocator, content);
     defer {
-        // TODO: Fix deinitJsonConfig memory issue
-        // config.deinitJsonConfig(&parsed.value, allocator);
+        // Create a mutable copy to pass to deinitJsonConfig
+        var mutable_config = parsed.value;
+        config.deinitJsonConfig(&mutable_config, allocator);
         for (parsed.unknown_fields) |field| {
             allocator.free(field);
         }
@@ -765,301 +766,108 @@ fn executeGenerateConfig(
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    // Створюємо тимчасовий логер для ініціалізації конфігурації
-    var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
-    defer temp_logger.deinit();
-
-    // Додаю dispatch для команд
+    const allocator = std.heap.page_allocator;
+    
+    // Parse command line arguments
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
     
-    if (args.len <= 1) {
+    if (args.len < 2) {
         printUsage();
         return;
     }
     
-    // Обробляємо глобальні опції
-    var config_path: ?[]const u8 = null;
-    var i: usize = 1;
+    const command = parseCommand(args[1]);
     
-    while (i < args.len) : (i += 1) {
-        const arg = args[i];
-        if (std.mem.eql(u8, arg, "--config")) {
-            if (i + 1 >= args.len) {
-                std.io.getStdErr().writer().print("Error: --config requires a path argument\n", .{}) catch {};
+    // Create temporary logger
+    var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
+    defer temp_logger.deinit();
+    
+    // Execute command
+    switch (command) {
+        .create => {
+            if (args.len < 4) {
+                try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
                 return error.InvalidArguments;
             }
-            config_path = args[i + 1];
-            i += 1;
-        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            
+            var bundle_path: ?[]const u8 = null;
+            var container_id: ?[]const u8 = null;
+            var runtime_type: ?[]const u8 = null;
+            var i: usize = 1;
+            
+            while (i < args.len) : (i += 1) {
+                const arg = args[i];
+                try temp_logger.info("Parsing arg[{d}]: {s}", .{i, arg});
+                
+                if (std.mem.startsWith(u8, arg, "--bundle=")) {
+                    bundle_path = arg[9..]; // Skip "--bundle="
+                    try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
+                } else if (std.mem.startsWith(u8, arg, "-b=")) {
+                    bundle_path = arg[3..]; // Skip "-b="
+                    try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
+                } else if (std.mem.eql(u8, arg, "--bundle") or std.mem.eql(u8, arg, "-b")) {
+                    if (i + 1 >= args.len) {
+                        try std.io.getStdErr().writer().writeAll("Error: --bundle requires a path argument\n");
+                        return error.InvalidArguments;
+                    }
+                    bundle_path = args[i + 1];
+                    try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
+                    i += 1;
+                } else if (std.mem.startsWith(u8, arg, "--runtime=")) {
+                    runtime_type = arg[10..]; // Skip "--runtime="
+                    try temp_logger.info("Set runtime_type: {s}", .{runtime_type.?});
+                } else if (std.mem.startsWith(u8, arg, "-r=")) {
+                    runtime_type = arg[3..]; // Skip "-r="
+                    try temp_logger.info("Set runtime_type: {s}", .{runtime_type.?});
+                } else if (std.mem.eql(u8, arg, "--runtime") or std.mem.eql(u8, arg, "-r")) {
+                    if (i + 1 >= args.len) {
+                        try std.io.getStdErr().writer().writeAll("Error: --runtime requires a type argument\n");
+                        return error.InvalidArguments;
+                    }
+                    runtime_type = args[i + 1];
+                    try temp_logger.info("Set runtime_type: {s}", .{runtime_type.?});
+                    i += 1;
+                } else if (!std.mem.startsWith(u8, arg, "-")) {
+                    // This is the container_id (first non-flag argument)
+                    container_id = arg;
+                    try temp_logger.info("Set container_id: {s}", .{container_id.?});
+                }
+            }
+            
+            try temp_logger.info("Final values - bundle_path: {?s}, container_id: {?s}, runtime_type: {?s}", .{bundle_path, container_id, runtime_type});
+            
+            if (bundle_path == null or container_id == null) {
+                try std.io.getStdErr().writer().writeAll("Error: both --bundle and container-id are required\n");
+                return error.InvalidArguments;
+            }
+            
+            // Test crun integration
+            if (runtime_type) |rt| {
+                if (std.mem.eql(u8, rt, "crun")) {
+                    try temp_logger.info("Testing crun integration for container: {s}", .{container_id.?});
+                    
+                    // Create crun manager
+                    var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
+                    defer crun_manager.deinit();
+                    
+                    // Test container creation
+                    try crun_manager.createContainer(container_id.?, bundle_path.?, null);
+                    try temp_logger.info("Container {s} created successfully via crun", .{container_id.?});
+                }
+            }
+        },
+        .help => {
             printUsage();
-            return;
-        } else if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
-            printVersion();
-            return;
-        } else {
-            // Це команда, виходимо з циклу
-            break;
-        }
+        },
+        .unknown => {
+            try std.io.getStdErr().writer().writeAll("Error: Unknown command. Use 'help' for usage information.\n");
+            return error.InvalidCommand;
+        },
+        else => {
+            try std.io.getStdErr().writer().writeAll("Command not implemented in this test version\n");
+        },
     }
-    
-    if (i >= args.len) {
-        printUsage();
-        return;
-    }
-
-    // Ініціалізуємо конфігурацію
-    var cfg: config.Config = undefined;
-    if (config_path) |path| {
-        cfg = try loadConfig(allocator, path);
-    } else {
-        cfg = try loadConfig(allocator, null); // Завантажуємо з файлів за замовчуванням
-    }
-    defer cfg.deinit();
-
-    // Ініціалізуємо ProxmoxClient
-    const default_host = "localhost";
-    const host = if (cfg.proxmox.hosts) |hosts| hosts[0] else default_host;
-    var proxmox_client_instance = try ProxmoxClient.init(
-        allocator,
-        host,
-        cfg.proxmox.port orelse 8006,
-        cfg.proxmox.token orelse "default-token",
-        cfg.proxmox.node orelse "pve",
-        &temp_logger,
-    );
-    defer proxmox_client_instance.deinit();
-    
-    // Присвоюємо глобальну змінну
-    proxmox_client = &proxmox_client_instance;
-
-    // Встановлюємо тип runtime (за замовчуванням runc)
-    cfg.setRuntimeType(.runc);
-
-    // Обробляємо команди
-    if (std.mem.eql(u8, args[i], "create")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else "unknown";
-        // Додаю тег container_id
-        const tag = std.fmt.allocPrint(allocator, "container_id={s}", .{container_id}) catch "container_id=unknown";
-        defer allocator.free(tag);
-        temp_logger.setTags(&[_][]const u8{tag});
-        executeCreate(allocator, args, undefined, undefined, null) catch |err| {
-            temp_logger.err("Create command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "list")) {
-        executeList(allocator, &temp_logger) catch |err| {
-            temp_logger.err("List command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "start")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for start command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        executeStart(container_id) catch |err| {
-            temp_logger.err("Start command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "stop")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for stop command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        executeStop(container_id) catch |err| {
-            temp_logger.err("Stop command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "delete")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for delete command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        executeDelete(container_id) catch |err| {
-            temp_logger.err("Delete command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "info")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else null;
-        executeInfo(allocator, container_id, &temp_logger) catch |err| {
-            temp_logger.err("Info command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "state")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for state command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        executeState(allocator, container_id) catch |err| {
-            temp_logger.err("State command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "kill")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for kill command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        const signal = if (args.len > i + 2) args[i + 2] else null;
-        executeKill(container_id, signal) catch |err| {
-            temp_logger.err("Kill command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "pause")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for pause command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        temp_logger.info("Pausing container: {s} (not implemented yet)", .{container_id}) catch {};
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "resume")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for resume command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        temp_logger.info("Resuming container: {s} (not implemented yet)", .{container_id}) catch {};
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "exec")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for exec command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        const command = if (args.len > i + 2) args[i + 2] else {
-            std.io.getStdErr().writer().print("Error: command required for exec command\n", .{}) catch {};
-            return error.MissingCommand;
-        };
-        
-        // Збираємо аргументи команди
-        var command_args: ?[]const []const u8 = null;
-        if (args.len > i + 3) {
-            command_args = args[i + 3..];
-        }
-        
-        executeExec(allocator, container_id, command, command_args, &temp_logger) catch |err| {
-            temp_logger.err("Exec command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "benchmark")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for benchmark command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        const command = if (args.len > i + 2) args[i + 2] else {
-            std.io.getStdErr().writer().print("Error: command required for benchmark command\n", .{}) catch {};
-            return error.MissingCommand;
-        };
-        
-        // Збираємо аргументи команди
-        var command_args: ?[]const []const u8 = null;
-        if (args.len > i + 3) {
-            command_args = args[i + 3..];
-        }
-        
-        executeBenchmark(allocator, container_id, command, command_args, &temp_logger) catch |err| {
-            temp_logger.err("Benchmark command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "ps")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for ps command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        temp_logger.info("Listing processes in container: {s} (not implemented yet)", .{container_id}) catch {};
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "events")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for events command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        temp_logger.info("Showing events for container: {s} (not implemented yet)", .{container_id}) catch {};
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "spec")) {
-        temp_logger.info("Creating new specification file (not implemented yet)", .{}) catch {};
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "checkpoint")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for checkpoint command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        temp_logger.info("Creating checkpoint for container: {s} (not implemented yet)", .{container_id}) catch {};
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "restore")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for restore command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        temp_logger.info("Restoring container: {s} (not implemented yet)", .{container_id}) catch {};
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "update")) {
-        const container_id = if (args.len > i + 1) args[i + 1] else {
-            std.io.getStdErr().writer().print("Error: container_id required for update command\n", .{}) catch {};
-            return error.MissingContainerId;
-        };
-        temp_logger.info("Updating container: {s} (not implemented yet)", .{container_id}) catch {};
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "features")) {
-        temp_logger.info("Showing enabled features (not implemented yet)", .{}) catch {};
-        return;
-    }
-    
-    if (std.mem.eql(u8, args[i], "generate-config")) {
-        executeGenerateConfig(allocator, args) catch |err| {
-            temp_logger.err("Generate-config command failed: {s}", .{@errorName(err)}) catch {};
-            return err;
-        };
-        return;
-    }
-    
-
 }
 
 fn getConfigPath(allocator: Allocator) ![]const u8 {

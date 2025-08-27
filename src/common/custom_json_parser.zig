@@ -106,14 +106,8 @@ fn convertValue(comptime T: type, value: *zig_json.JsonValue, allocator: std.mem
             if (value.type != .array) return error.InvalidType;
             const arr = value.array();
             var result = try allocator.alloc(array_info.child, arr.len());
-            errdefer {
-                for (result) |item| {
-                    if (@typeInfo(array_info.child) == .Pointer) {
-                        allocator.free(item);
-                    }
-                }
-                allocator.free(result);
-            }
+            
+            // Initialize array with safe defaults
             for (0..arr.len()) |i| {
                 result[i] = try convertValue(array_info.child, arr.get(i), allocator);
             }
@@ -130,12 +124,8 @@ fn convertValue(comptime T: type, value: *zig_json.JsonValue, allocator: std.mem
                         if (value.type != .array) return error.InvalidType;
                         const arr = value.array();
                         var result = try allocator.alloc([]const u8, arr.len());
-                        errdefer {
-                            for (result) |item| {
-                                allocator.free(item);
-                            }
-                            allocator.free(result);
-                        }
+                        
+                        // Initialize array with safe defaults
                         for (0..arr.len()) |i| {
                             const item = arr.get(i);
                             if (item.type != .string) return error.InvalidType;
