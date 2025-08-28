@@ -101,6 +101,15 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Performance monitoring and optimization module
+    const performance_mod = b.addModule("performance", .{
+        .root_source_file = b.path("src/performance/mod.zig"),
+        .imports = &.{
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "types", .module = types_mod },
+        },
+    });
+
     // Registry module
     const registry_mod = b.addModule("registry", .{
         .root_source_file = b.path("src/registry_placeholder.zig"),
@@ -230,10 +239,24 @@ pub fn build(b: *std.Build) void {
 
     const run_crun_integration_test = b.addRunArtifact(crun_integration_test);
     
+    // Performance module test
+    const performance_test = b.addTest(.{
+        .root_source_file = b.path("tests/performance_simple_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    performance_test.root_module.addImport("performance", performance_mod);
+    performance_test.root_module.addImport("types", types_mod);
+    performance_test.root_module.addImport("logger", logger_mod);
+
+    const run_performance_test = b.addRunArtifact(performance_test);
+    
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_config_test.step);
     test_step.dependOn(&run_crun_test.step);
     test_step.dependOn(&run_crun_integration_test.step);
+    test_step.dependOn(&run_performance_test.step);
     
     // Separate step for crun integration test
     const crun_integration_step = b.step("crun_integration", "Run crun integration tests");
