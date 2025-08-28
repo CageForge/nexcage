@@ -2,14 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Logger = @import("logger").Logger;
 const OciSpec = @import("spec.zig").Spec;
-
-// Import C headers for libcrun
-pub const c = @cImport({
-    @cInclude("crun.h");
-    @cInclude("container.h");
-    @cInclude("error.h");
-    @cInclude("status.h");
-});
+const process = std.process;
+const fs = std.fs;
 
 // Error types for crun operations
 pub const CrunError = error{
@@ -25,6 +19,11 @@ pub const CrunError = error{
     InvalidBundlePath,
     ContextInitFailed,
     ContainerLoadFailed,
+    ContainerLoadError,
+    ContainerStateError,
+    ContainerKillError,
+    CommandExecutionFailed,
+    CrunNotFound,
 };
 
 // Container state enum
@@ -60,6 +59,7 @@ pub const CrunManager = struct {
     logger: *Logger,
     root_path: ?[]const u8,
     log_path: ?[]const u8,
+    crun_path: []const u8,
 
     const Self = @This();
 
@@ -70,6 +70,7 @@ pub const CrunManager = struct {
             .logger = logger,
             .root_path = null,
             .log_path = null,
+            .crun_path = "/usr/bin/crun",
         };
         return self;
     }
@@ -92,6 +93,53 @@ pub const CrunManager = struct {
         self.log_path = try self.allocator.dupe(u8, log_path);
     }
 
+    // Set crun binary path
+    pub fn setCrunPath(self: *Self, crun_path: []const u8) !void {
+        self.crun_path = try self.allocator.dupe(u8, crun_path);
+    }
+
+    // Check if crun is available
+    fn checkCrunAvailable(self: *Self) !void {
+        const file = fs.openFileAbsolute(self.crun_path, .{}) catch |err| {
+            try self.logger.err("crun not found at {s}: {s}", .{self.crun_path, @errorName(err)});
+            return CrunError.CrunNotFound;
+        };
+        defer file.close();
+    }
+
+    // Execute crun command
+    fn executeCrunCommand(self: *Self, args: []const []const u8) !void {
+        try self.checkCrunAvailable();
+
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        // Build command with crun path
+        var cmd_args = std.ArrayList([]const u8).init(arena_allocator);
+        try cmd_args.append(self.crun_path);
+        try cmd_args.appendSlice(args);
+
+        try self.logger.info("Executing crun command: {s}", .{std.mem.join(arena_allocator, " ", cmd_args.items) catch "unknown"});
+
+        // Execute command using Child
+        var child = process.Child.init(cmd_args.items, arena_allocator);
+        child.stderr_behavior = .Inherit;
+        child.stdout_behavior = .Inherit;
+
+        const term = child.spawnAndWait() catch |err| {
+            try self.logger.err("Failed to execute crun command: {s}", .{@errorName(err)});
+            return CrunError.CommandExecutionFailed;
+        };
+
+        if (term.Exited != 0) {
+            try self.logger.err("crun command failed with exit code: {d}", .{term.Exited});
+            return CrunError.CommandExecutionFailed;
+        }
+
+        try self.logger.info("crun command executed successfully", .{});
+    }
+
     // Create a new container
     pub fn createContainer(self: *Self, container_id: []const u8, bundle_path: []const u8, _: ?*const OciSpec) !void {
         try self.logger.info("Creating crun container: {s} in bundle: {s}", .{ container_id, bundle_path });
@@ -100,10 +148,28 @@ pub const CrunManager = struct {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
         if (bundle_path.len == 0) return CrunError.InvalidBundlePath;
 
-        // TODO: Implement actual crun integration using C API
-        // For now, we'll simulate the creation process
-        try self.logger.info("crun C API integration in progress - container creation simulated", .{});
-        try self.logger.info("Successfully created crun container: {s} (simulated)", .{container_id});
+        // Build crun create command
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var args = std.ArrayList([]const u8).init(arena_allocator);
+        try args.append("create");
+        
+        // Add bundle option
+        try args.append("--bundle");
+        try args.append(bundle_path);
+        
+        // Add root path if specified
+        if (self.root_path) |root| {
+            try args.append("--root");
+            try args.append(root);
+        }
+        
+        try args.append(container_id);
+
+        try self.executeCrunCommand(args.items);
+        try self.logger.info("Successfully created crun container: {s}", .{container_id});
     }
 
     // Start a container
@@ -112,10 +178,24 @@ pub const CrunManager = struct {
 
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration using C API
-        // For now, we'll simulate the start process
-        try self.logger.info("crun C API integration in progress - container start simulated", .{});
-        try self.logger.info("Successfully started crun container: {s} (simulated)", .{container_id});
+        // Build crun start command
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var args = std.ArrayList([]const u8).init(arena_allocator);
+        try args.append("start");
+        
+        // Add root path if specified
+        if (self.root_path) |root| {
+            try args.append("--root");
+            try args.append(root);
+        }
+        
+        try args.append(container_id);
+
+        try self.executeCrunCommand(args.items);
+        try self.logger.info("Successfully started crun container: {s}", .{container_id});
     }
 
     // Delete a container
@@ -124,10 +204,24 @@ pub const CrunManager = struct {
 
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration using C API
-        // For now, we'll simulate the deletion process
-        try self.logger.info("crun C API integration in progress - container deletion simulated", .{});
-        try self.logger.info("Successfully deleted crun container: {s} (simulated)", .{container_id});
+        // Build crun delete command
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var args = std.ArrayList([]const u8).init(arena_allocator);
+        try args.append("delete");
+        
+        // Add root path if specified
+        if (self.root_path) |root| {
+            try args.append("--root");
+            try args.append(root);
+        }
+        
+        try args.append(container_id);
+
+        try self.executeCrunCommand(args.items);
+        try self.logger.info("Successfully deleted crun container: {s}", .{container_id});
     }
 
     // Run a container (create + start)
@@ -147,20 +241,49 @@ pub const CrunManager = struct {
     pub fn containerExists(self: *Self, container_id: []const u8) !bool {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration using C API
-        // For now, we'll simulate the existence check
-        try self.logger.info("crun C API integration in progress - container existence check simulated", .{});
-        return false; // Simulated: assume container doesn't exist
+        // Try to get container state - if it succeeds, container exists
+        const state = self.getContainerState(container_id) catch |err| {
+            if (err == CrunError.ContainerStateError) {
+                return false; // Container doesn't exist
+            }
+            return err;
+        };
+
+        return state != ContainerState.unknown;
     }
 
     // Get container state
     pub fn getContainerState(self: *Self, container_id: []const u8) !ContainerState {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration using C API
-        // For now, we'll simulate the state check
-        try self.logger.info("crun C API integration in progress - container state check simulated", .{});
-        return ContainerState.unknown; // Simulated: return unknown state
+        // Build crun state command
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var args = std.ArrayList([]const u8).init(arena_allocator);
+        try args.append("state");
+        
+        // Add root path if specified
+        if (self.root_path) |root| {
+            try args.append("--root");
+            try args.append(root);
+        }
+        
+        try args.append(container_id);
+
+        // For now, we'll use a simple approach - try to get state
+        // In a real implementation, we'd parse the JSON output
+        _ = self.executeCrunCommand(args.items) catch |err| {
+            if (err == CrunError.CommandExecutionFailed) {
+                return ContainerState.unknown;
+            }
+            return err;
+        };
+
+        // For now, assume container is running if state command succeeds
+        // In a real implementation, we'd parse the JSON output to get actual state
+        return ContainerState.running;
     }
 
     // Kill a container
@@ -169,9 +292,46 @@ pub const CrunManager = struct {
 
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // TODO: Implement actual crun integration using C API
-        // For now, we'll simulate the kill process
-        try self.logger.info("crun C API integration in progress - container kill simulated", .{});
-        try self.logger.info("Successfully killed crun container: {s} (simulated)", .{container_id});
+        // Build crun kill command
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var args = std.ArrayList([]const u8).init(arena_allocator);
+        try args.append("kill");
+        
+        // Add root path if specified
+        if (self.root_path) |root| {
+            try args.append("--root");
+            try args.append(root);
+        }
+        
+        try args.append(container_id);
+        try args.append(signal);
+
+        try self.executeCrunCommand(args.items);
+        try self.logger.info("Successfully killed crun container: {s}", .{container_id});
+    }
+
+    // Generate OCI spec
+    pub fn generateSpec(self: *Self, bundle_path: []const u8) !void {
+        try self.logger.info("Generating OCI spec in bundle: {s}", .{bundle_path});
+
+        if (bundle_path.len == 0) return CrunError.InvalidBundlePath;
+
+        // Build crun spec command
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var args = std.ArrayList([]const u8).init(arena_allocator);
+        try args.append("spec");
+        
+        // Add bundle option
+        try args.append("--bundle");
+        try args.append(bundle_path);
+
+        try self.executeCrunCommand(args.items);
+        try self.logger.info("Successfully generated OCI spec in bundle: {s}", .{bundle_path});
     }
 };
