@@ -160,6 +160,12 @@ pub const CrunManager = struct {
         try args.append("--bundle");
         try args.append(bundle_path);
         
+        // Add options to avoid common issues
+        try args.append("--no-new-keyring");
+        try args.append("--no-pivot");
+        try args.append("--console-socket");
+        try args.append("/tmp/console.sock");
+        
         // Add root path if specified
         if (self.root_path) |root| {
             try args.append("--root");
