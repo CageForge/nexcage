@@ -12,7 +12,7 @@
 
 ### Primary Goals
 - Implement cloud deployment capabilities
-- Add multi-cloud support (AWS, Azure, GCP, DigitalOcean)
+- Add multi-cloud support (Hetzner, DigitalOcean)
 - Create deployment automation scripts
 - Implement cloud monitoring integration
 
