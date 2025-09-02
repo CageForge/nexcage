@@ -863,6 +863,33 @@ pub fn main() !void {
                 }
             }
         },
+        .list => {
+            try temp_logger.info("Listing containers...", .{});
+            
+            // Create crun manager
+            var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
+            defer crun_manager.deinit();
+            
+            // List containers using crun
+            try crun_manager.listContainers();
+        },
+        .state => {
+            if (args.len < 3) {
+                try std.io.getStdErr().writer().writeAll("Error: state requires container-id argument\n");
+                return error.InvalidArguments;
+            }
+            
+            const container_id = args[2];
+            try temp_logger.info("Getting state for container: {s}", .{container_id});
+            
+            // Create crun manager
+            var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
+            defer crun_manager.deinit();
+            
+            // Get container state using crun
+            const state = try crun_manager.getContainerState(container_id);
+            try temp_logger.info("Container {s} state: {s}", .{ container_id, @tagName(state) });
+        },
         .help => {
             printUsage();
         },

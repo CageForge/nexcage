@@ -340,4 +340,26 @@ pub const CrunManager = struct {
         try self.executeCrunCommand(args.items);
         try self.logger.info("Successfully generated OCI spec in bundle: {s}", .{bundle_path});
     }
+
+    // List all containers
+    pub fn listContainers(self: *Self) !void {
+        try self.logger.info("Listing all containers...", .{});
+
+        // Build crun list command
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var args = std.ArrayList([]const u8).init(arena_allocator);
+        try args.append("list");
+        
+        // Add root path if specified
+        if (self.root_path) |root| {
+            try args.append("--root");
+            try args.append(root);
+        }
+
+        try self.executeCrunCommand(args.items);
+        try self.logger.info("Successfully listed containers", .{});
+    }
 };
