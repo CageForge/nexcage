@@ -866,12 +866,48 @@ pub fn main() !void {
         .list => {
             try temp_logger.info("Listing containers...", .{});
             
-            // Create crun manager
+            // Create crun manager  
             var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
             defer crun_manager.deinit();
             
+            try std.io.getStdOut().writer().print("\n=== CRUN Containers ===\n", .{});
             // List containers using crun
             try crun_manager.listContainers();
+            
+            try std.io.getStdOut().writer().print("\n=== PROXMOX LXC Containers ===\n", .{});
+            // Try to load configuration and create proxmox client
+            var cfg = loadConfig(allocator, null) catch |err| {
+                try temp_logger.info("Could not load config for proxmox: {s}", .{@errorName(err)});
+                try std.io.getStdOut().writer().print("No proxmox configuration found\n", .{});
+                return;
+            };
+            defer cfg.deinit();
+            
+            // Create proxmox client
+            const host = if (cfg.proxmox.hosts) |hosts| (if (hosts.len > 0) hosts[0] else "localhost") else "localhost";
+            const port = cfg.proxmox.port orelse 8006;
+            const token = cfg.proxmox.token orelse "";
+            const node = cfg.proxmox.node orelse "localhost";
+            
+            var local_proxmox_client = ProxmoxClient.init(
+                allocator, 
+                host, 
+                port, 
+                token, 
+                node, 
+                &temp_logger
+            ) catch |err| {
+                try temp_logger.info("Could not create proxmox client: {s}", .{@errorName(err)});
+                try std.io.getStdOut().writer().print("Could not connect to proxmox\n", .{});
+                return;
+            };
+            defer local_proxmox_client.deinit();
+            
+            // List containers using proxmox
+            oci.list.list(&local_proxmox_client) catch |err| {
+                try temp_logger.info("Could not list proxmox containers: {s}", .{@errorName(err)});
+                try std.io.getStdOut().writer().print("Error listing proxmox containers\n", .{});
+            };
         },
         .state => {
             if (args.len < 3) {
@@ -889,6 +925,23 @@ pub fn main() !void {
             // Get container state using crun
             const state = try crun_manager.getContainerState(container_id);
             try temp_logger.info("Container {s} state: {s}", .{ container_id, @tagName(state) });
+        },
+        .start => {
+            if (args.len < 3) {
+                try std.io.getStdErr().writer().writeAll("Error: start requires container-id argument\n");
+                return error.InvalidArguments;
+            }
+            
+            const container_id = args[2];
+            try temp_logger.info("Starting container: {s}", .{container_id});
+            
+            // Create crun manager
+            var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
+            defer crun_manager.deinit();
+            
+            // Start container using crun
+            try crun_manager.startContainer(container_id);
+            try temp_logger.info("Successfully started container: {s}", .{container_id});
         },
         .help => {
             printUsage();
