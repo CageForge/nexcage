@@ -44,27 +44,12 @@ const Command = types.Command;
 const ConfigError = types.ConfigError;
 
 fn parseCommand(command: []const u8) Command {
-    if (std.mem.eql(u8, command, "create")) return .create;
-    if (std.mem.eql(u8, command, "start")) return .start;
-    if (std.mem.eql(u8, command, "stop")) return .stop;
-    if (std.mem.eql(u8, command, "state")) return .state;
-    if (std.mem.eql(u8, command, "kill")) return .kill;
-    if (std.mem.eql(u8, command, "delete")) return .delete;
-    if (std.mem.eql(u8, command, "list")) return .list;
-    if (std.mem.eql(u8, command, "info")) return .info;
-    if (std.mem.eql(u8, command, "pause")) return .pause;
-    if (std.mem.eql(u8, command, "resume")) return .resume_container;
-    if (std.mem.eql(u8, command, "exec")) return .exec;
-    if (std.mem.eql(u8, command, "ps")) return .ps;
-    if (std.mem.eql(u8, command, "events")) return .events;
-    if (std.mem.eql(u8, command, "spec")) return .spec;
-    if (std.mem.eql(u8, command, "checkpoint")) return .checkpoint;
-    if (std.mem.eql(u8, command, "restore")) return .restore;
-    if (std.mem.eql(u8, command, "update")) return .update;
-    if (std.mem.eql(u8, command, "features")) return .features;
-    if (std.mem.eql(u8, command, "help")) return .help;
+    // Handle special case for generate-config (hyphen to underscore)
     if (std.mem.eql(u8, command, "generate-config")) return .generate_config;
-    return .unknown;
+    if (std.mem.eql(u8, command, "resume")) return .resume_container;
+    
+    // Use meta.stringToEnum for automatic enum parsing
+    return std.meta.stringToEnum(Command, command) orelse .unknown;
 }
 
 fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.Config) !void {
