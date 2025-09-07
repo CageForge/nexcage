@@ -25,83 +25,23 @@ const RuntimeError = errors.Error || std.fs.File.OpenError || std.fs.File.ReadEr
 const json_parser = @import("json_helpers");
 const spec_mod = @import("oci").spec;
 
-const SIGINT = posix.SIG.INT;
-const SIGTERM = posix.SIG.TERM;
-const SIGHUP = posix.SIG.HUP;
+// Signal constants moved to types.zig
+const SIGINT = types.SIGINT;
+const SIGTERM = types.SIGTERM;
+const SIGHUP = types.SIGHUP;
 
 var shutdown_requested: bool = false;
 var last_signal: ?c_int = null;
 var proxmox_client: *ProxmoxClient = undefined;
 
-const RuntimeOptions = struct {
-    root: ?[]const u8 = null,
-    log: ?[]const u8 = null,
-    log_format: ?[]const u8 = null,
-    systemd_cgroup: bool = false,
-    bundle: ?[]const u8 = null,
-    pid_file: ?[]const u8 = null,
-    console_socket: ?[]const u8 = null,
-    debug: bool = false,
-    allocator: Allocator,
+// RuntimeOptions moved to types.zig
+const RuntimeOptions = types.RuntimeOptions;
 
-    pub fn init(allocator: Allocator) RuntimeOptions {
-        return RuntimeOptions{
-            .allocator = allocator,
-        };
-    }
+// Command enum moved to types.zig
+const Command = types.Command;
 
-    pub fn deinit(self: *RuntimeOptions) void {
-        if (self.root) |root| {
-            self.allocator.free(root);
-        }
-        if (self.log) |log| {
-            self.allocator.free(log);
-        }
-        if (self.log_format) |log_format| {
-            self.allocator.free(log_format);
-        }
-        if (self.bundle) |bundle| {
-            self.allocator.free(bundle);
-        }
-        if (self.pid_file) |pid_file| {
-            self.allocator.free(pid_file);
-        }
-        if (self.console_socket) |console_socket| {
-            self.allocator.free(console_socket);
-        }
-    }
-};
-
-const Command = enum {
-    create,
-    start,
-    stop,
-    state,
-    kill,
-    delete,
-    list,
-    info,
-    pause,
-    resume_container,
-    exec,
-    ps,
-    events,
-    spec,
-    checkpoint,
-    restore,
-    update,
-    features,
-    help,
-    generate_config,
-    unknown,
-};
-
-const ConfigError = error{
-    InvalidConfigFormat,
-    InvalidLogPath,
-    FailedToCreateLogFile,
-    FailedToParseConfig,
-} || std.fs.File.OpenError || std.fs.File.ReadError;
+// ConfigError moved to types.zig
+const ConfigError = types.ConfigError;
 
 fn parseCommand(command: []const u8) Command {
     if (std.mem.eql(u8, command, "create")) return .create;

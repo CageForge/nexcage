@@ -880,9 +880,22 @@ pub const RuntimeOptions = struct {
 pub const Command = enum {
     create,
     start,
+    stop,
     state,
     kill,
     delete,
+    list,
+    info,
+    pause,
+    resume_container,
+    exec,
+    ps,
+    events,
+    spec,
+    checkpoint,
+    restore,
+    update,
+    features,
     help,
     generate_config,
     unknown,
@@ -1501,4 +1514,20 @@ pub const CrunManager = struct {
     }
 };
 
+// ============================================================================
+// Signal constants moved from main.zig for better organization
+// ============================================================================
+
+// Signal constants
+pub const SIGINT = std.posix.SIG.INT;
+pub const SIGTERM = std.posix.SIG.TERM;
+pub const SIGHUP = std.posix.SIG.HUP;
+
+// Configuration error types moved from main.zig
+pub const ConfigError = error{
+    InvalidConfigFormat,
+    InvalidLogPath,
+    FailedToCreateLogFile,
+    FailedToParseConfig,
+} || std.fs.File.OpenError || std.fs.File.ReadError;
 
