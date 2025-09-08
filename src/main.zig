@@ -133,8 +133,6 @@ fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.
     }
 }
 
-// printUsage moved to src/oci/help.zig
-
 pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struct {
     command: Command,
     options: RuntimeOptions,
@@ -442,9 +440,6 @@ fn executeCreate(
     container_root.readonly = false;
     container_spec.root = container_root;
 
-    // var container_instance = try container_mod.Container.init(allocator, &cfg, &container_spec, "test-container");
-    // defer container_instance.deinit();
-
     // Create runtime managers based on runtime type
     var crun_manager: ?*oci.crun.CrunManager = null;
     
@@ -662,11 +657,152 @@ fn executeGenerateConfig(
     try std.io.getStdOut().writer().print("Generated OCI config at {s}\n", .{config_path});
 }
 
+// Helper function to execute create command logic
+fn executeCreateCommand(allocator: Allocator, args: []const []const u8, temp_logger: *logger_mod.Logger) !void {
+    if (args.len < 4) {
+        try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
+        return error.InvalidArguments;
+    }
+    
+    var bundle_path: ?[]const u8 = null;
+    var container_id: ?[]const u8 = null;
+    var runtime_type: ?[]const u8 = null;
+    var i: usize = 1;
+    
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        try temp_logger.info("Parsing arg[{d}]: {s}", .{i, arg});
+        
+        if (std.mem.startsWith(u8, arg, "--bundle=")) {
+            bundle_path = arg[9..]; // Skip "--bundle="
+            try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
+        } else if (std.mem.startsWith(u8, arg, "-b=")) {
+            bundle_path = arg[3..]; // Skip "-b="
+            try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
+        } else if (std.mem.eql(u8, arg, "--bundle") or std.mem.eql(u8, arg, "-b")) {
+            if (i + 1 >= args.len) {
+                try std.io.getStdErr().writer().writeAll("Error: --bundle requires a path argument\n");
+                return error.InvalidArguments;
+            }
+            bundle_path = args[i + 1];
+            try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
+            i += 1;
+        } else if (std.mem.startsWith(u8, arg, "--runtime=")) {
+            runtime_type = arg[10..]; // Skip "--runtime="
+            try temp_logger.info("Set runtime_type: {s}", .{runtime_type.?});
+        } else if (std.mem.eql(u8, arg, "--runtime")) {
+            if (i + 1 >= args.len) {
+                try std.io.getStdErr().writer().writeAll("Error: --runtime requires a type argument\n");
+                return error.InvalidArguments;
+            }
+            runtime_type = args[i + 1];
+            try temp_logger.info("Set runtime_type: {s}", .{runtime_type.?});
+            i += 1;
+        } else if (!std.mem.eql(u8, arg, "create")) {
+            // This should be the container ID
+            if (container_id == null) {
+                container_id = arg;
+                try temp_logger.info("Set container_id: {s}", .{container_id.?});
+            }
+        }
+    }
+    
+    if (bundle_path == null) {
+        try std.io.getStdErr().writer().writeAll("Error: --bundle argument is required\n");
+        return error.InvalidArguments;
+    }
+    
+    if (container_id == null) {
+        try std.io.getStdErr().writer().writeAll("Error: container-id argument is required\n");
+        return error.InvalidArguments;
+    }
+    
+    try temp_logger.info("Creating container: {s} with bundle: {s}", .{container_id.?, bundle_path.?});
+    
+    // Load configuration
+    var cfg = try loadConfig(allocator, null);
+    defer cfg.deinit();
+
+    // Determine runtime type
+    var actual_runtime_type: types.RuntimeType = .crun; // Default to crun
+    if (runtime_type) |rt| {
+        if (std.mem.eql(u8, rt, "crun") or std.mem.eql(u8, rt, "runc")) {
+            actual_runtime_type = .crun;
+        } else if (std.mem.eql(u8, rt, "lxc") or std.mem.eql(u8, rt, "proxmox-lxc")) {
+            actual_runtime_type = .lxc;
+        } else if (std.mem.eql(u8, rt, "vm")) {
+            actual_runtime_type = .vm;
+        }
+    }
+    
+    cfg.setRuntimeType(actual_runtime_type);
+    
+    // Create crun manager for container operations
+    var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
+    defer crun_manager.deinit();
+    
+    // Execute create
+    try crun_manager.createContainer(container_id.?, bundle_path.?, null);
+    try temp_logger.info("Successfully created container: {s}", .{container_id.?});
+}
+
+// Helper function to execute start command logic
+fn executeStartCommand(allocator: Allocator, args: []const []const u8, temp_logger: *logger_mod.Logger) !void {
+    if (args.len < 3) {
+        try std.io.getStdErr().writer().writeAll("Error: start requires container-id argument\n");
+        return error.InvalidArguments;
+    }
+    
+    const container_id = args[2];
+    try executeStartContainerById(allocator, container_id, temp_logger);
+}
+
+// Helper function to start a container by ID (for reuse in run command)
+fn executeStartContainerById(allocator: Allocator, container_id: []const u8, temp_logger: *logger_mod.Logger) !void {
+    try temp_logger.info("Starting container: {s}", .{container_id});
+    
+    // Create crun manager
+    var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
+    defer crun_manager.deinit();
+    
+    // Start container using crun
+    try crun_manager.startContainer(container_id);
+    try temp_logger.info("Successfully started container: {s}", .{container_id});
+}
+
+// Helper function to create a container with specific parameters (for reuse in run command)
+fn executeCreateContainerWithParams(allocator: Allocator, container_id: []const u8, bundle_path: []const u8, runtime_type: ?[]const u8, temp_logger: *logger_mod.Logger) !void {
+    try temp_logger.info("Creating container: {s} with bundle: {s}", .{container_id, bundle_path});
+    
+    // Load configuration
+    var cfg = try loadConfig(allocator, null);
+    defer cfg.deinit();
+    
+    // Determine runtime type
+    var actual_runtime_type: types.RuntimeType = .crun; // Default to crun
+    if (runtime_type) |rt| {
+        if (std.mem.eql(u8, rt, "crun") or std.mem.eql(u8, rt, "runc")) {
+            actual_runtime_type = .crun;
+        } else if (std.mem.eql(u8, rt, "lxc") or std.mem.eql(u8, rt, "proxmox-lxc")) {
+            actual_runtime_type = .lxc;
+        } else if (std.mem.eql(u8, rt, "vm")) {
+            actual_runtime_type = .vm;
+        }
+    }
+    
+    cfg.setRuntimeType(actual_runtime_type);
+    
+    // Create crun manager for container operations
+    var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
+    defer crun_manager.deinit();
+    
+    // Execute create
+    try crun_manager.createContainer(container_id, bundle_path, null);
+    try temp_logger.info("Successfully created container: {s}", .{container_id});
+}
+
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
-    
-    // StaticStringMap requires no runtime initialization - it's compile-time!
-    
     // Parse command line arguments
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
@@ -685,82 +821,7 @@ pub fn main() !void {
     // Execute command
     switch (command) {
         .create => {
-            if (args.len < 4) {
-                try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
-                return error.InvalidArguments;
-            }
-            
-            var bundle_path: ?[]const u8 = null;
-            var container_id: ?[]const u8 = null;
-            var runtime_type: ?[]const u8 = null;
-            var i: usize = 1;
-            
-            while (i < args.len) : (i += 1) {
-                const arg = args[i];
-                try temp_logger.info("Parsing arg[{d}]: {s}", .{i, arg});
-                
-                if (std.mem.startsWith(u8, arg, "--bundle=")) {
-                    bundle_path = arg[9..]; // Skip "--bundle="
-                    try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
-                } else if (std.mem.startsWith(u8, arg, "-b=")) {
-                    bundle_path = arg[3..]; // Skip "-b="
-                    try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
-                } else if (std.mem.eql(u8, arg, "--bundle") or std.mem.eql(u8, arg, "-b")) {
-                    if (i + 1 >= args.len) {
-                        try std.io.getStdErr().writer().writeAll("Error: --bundle requires a path argument\n");
-                        return error.InvalidArguments;
-                    }
-                    bundle_path = args[i + 1];
-                    try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
-                    i += 1;
-                } else if (std.mem.startsWith(u8, arg, "--runtime=")) {
-                    runtime_type = arg[10..]; // Skip "--runtime="
-                    try temp_logger.info("Set runtime_type: {s}", .{runtime_type.?});
-                } else if (std.mem.startsWith(u8, arg, "-r=")) {
-                    runtime_type = arg[3..]; // Skip "-r="
-                    try temp_logger.info("Set runtime_type: {s}", .{runtime_type.?});
-                } else if (std.mem.eql(u8, arg, "--runtime") or std.mem.eql(u8, arg, "-r")) {
-                    if (i + 1 >= args.len) {
-                        try std.io.getStdErr().writer().writeAll("Error: --runtime requires a type argument\n");
-                        return error.InvalidArguments;
-                    }
-                    runtime_type = args[i + 1];
-                    try temp_logger.info("Set runtime_type: {s}", .{runtime_type.?});
-                    i += 1;
-                } else if (!std.mem.startsWith(u8, arg, "-")) {
-                    // This is the container_id (first non-flag argument)
-                    container_id = arg;
-                    try temp_logger.info("Set container_id: {s}", .{container_id.?});
-                }
-            }
-            
-            try temp_logger.info("Final values - bundle_path: {?s}, container_id: {?s}, runtime_type: {?s}", .{bundle_path, container_id, runtime_type});
-            
-            if (bundle_path == null or container_id == null) {
-                try std.io.getStdErr().writer().writeAll("Error: both --bundle and container-id are required\n");
-                return error.InvalidArguments;
-            }
-            
-            // Test crun integration
-            if (runtime_type) |rt| {
-                if (std.mem.eql(u8, rt, "crun")) {
-                    try temp_logger.info("Testing crun integration for container: {s}", .{container_id.?});
-                    
-                    // Create crun manager
-                    var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
-                    defer crun_manager.deinit();
-                    
-                    // Test spec generation first (this should work without cgroup permissions)
-                    try crun_manager.generateSpec(bundle_path.?);
-                    try temp_logger.info("OCI spec generated successfully for container: {s}", .{container_id.?});
-                    
-                    // Test container creation (this may fail due to cgroup permissions)
-                    crun_manager.createContainer(container_id.?, bundle_path.?, null) catch |err| {
-                        try temp_logger.info("Container creation failed (expected due to cgroup permissions): {s}", .{@errorName(err)});
-                    };
-                    try temp_logger.info("Container {s} testing completed via crun", .{container_id.?});
-                }
-            }
+            try executeCreateCommand(allocator, args, &temp_logger);
         },
         .list => {
             try temp_logger.info("Listing containers...", .{});
@@ -798,7 +859,7 @@ pub fn main() !void {
             ) catch |err| {
                 try temp_logger.info("Could not create proxmox client: {s}", .{@errorName(err)});
                 try std.io.getStdOut().writer().print("Could not connect to proxmox\n", .{});
-                return;
+        return;
             };
             defer local_proxmox_client.deinit();
             
@@ -826,21 +887,7 @@ pub fn main() !void {
             try temp_logger.info("Container {s} state: {s}", .{ container_id, @tagName(state) });
         },
         .start => {
-            if (args.len < 3) {
-                try std.io.getStdErr().writer().writeAll("Error: start requires container-id argument\n");
-                return error.InvalidArguments;
-            }
-            
-            const container_id = args[2];
-            try temp_logger.info("Starting container: {s}", .{container_id});
-            
-            // Create crun manager
-            var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
-            defer crun_manager.deinit();
-            
-            // Start container using crun
-            try crun_manager.startContainer(container_id);
-            try temp_logger.info("Successfully started container: {s}", .{container_id});
+            try executeStartCommand(allocator, args, &temp_logger);
         },
         .run => {
             if (args.len < 4) {
@@ -856,7 +903,6 @@ pub fn main() !void {
             // Parse arguments similar to create command
             while (i < args.len) : (i += 1) {
                 const arg = args[i];
-                try temp_logger.info("Parsing arg[{d}]: {s}", .{i, arg});
                 
                 if (std.mem.startsWith(u8, arg, "--bundle=")) {
                     bundle_path = arg[9..]; // Skip "--bundle="
@@ -898,44 +944,24 @@ pub fn main() !void {
             
             try temp_logger.info("Running container: {s} with bundle: {s}", .{container_id.?, bundle_path.?});
             
-            // Step 1: Create container
+            // Step 1/2: Create container using reusable function
             try temp_logger.info("Step 1/2: Creating container...", .{});
+            try executeCreateContainerWithParams(allocator, container_id.?, bundle_path.?, runtime_type, &temp_logger);
             
-            // Load configuration
-            var cfg = try loadConfig(allocator, null);
-            defer cfg.deinit();
-            
-            // Determine runtime type
-            var actual_runtime_type: types.RuntimeType = .crun; // Default to crun
-            if (runtime_type) |rt| {
-                if (std.mem.eql(u8, rt, "crun") or std.mem.eql(u8, rt, "runc")) {
-                    actual_runtime_type = .crun;
-                } else if (std.mem.eql(u8, rt, "lxc") or std.mem.eql(u8, rt, "proxmox-lxc")) {
-                    actual_runtime_type = .lxc;
-                } else if (std.mem.eql(u8, rt, "vm")) {
-                    actual_runtime_type = .vm;
-                }
-            }
-            
-            cfg.setRuntimeType(actual_runtime_type);
-            
-            // Create crun manager for container operations
-            var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
-            defer crun_manager.deinit();
-            
-            // Execute create
-            try crun_manager.createContainer(container_id.?, bundle_path.?, null);
-            try temp_logger.info("Container created successfully", .{});
-            
-            // Step 2: Start container
+            // Step 2/2: Start container using reusable function  
             try temp_logger.info("Step 2/2: Starting container...", .{});
-            try crun_manager.startContainer(container_id.?);
-            try temp_logger.info("Container started successfully", .{});
+            try executeStartContainerById(allocator, container_id.?, &temp_logger);
             
             try temp_logger.info("Successfully ran container: {s}", .{container_id.?});
         },
         .help => {
-            oci.help.printUsage();
+            if (args.len >= 3) {
+                // Show help for specific command: help <command>
+                oci.help.printCommandHelp(args[2]);
+            } else {
+                // Show general help
+                oci.help.printUsage();
+            }
         },
         .version => {
             oci.help.printVersion();
