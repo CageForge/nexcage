@@ -814,6 +814,64 @@ fn executeSpecCommand(allocator: Allocator, args: []const []const u8, temp_logge
     try temp_logger.info("Successfully generated OCI spec in bundle: {s}", .{bundle_path.?});
 }
 
+// Helper function to execute restore command logic
+fn executeRestoreCommand(allocator: Allocator, args: []const []const u8, temp_logger: *logger_mod.Logger) !void {
+    if (args.len < 3) {
+        try std.io.getStdErr().writer().writeAll("Error: restore requires container-id argument\n");
+        return error.InvalidArguments;
+    }
+    
+    var container_id: ?[]const u8 = null;
+    var checkpoint_path: ?[]const u8 = null;
+    var snapshot_name: ?[]const u8 = null;
+    var i: usize = 1;
+    
+    // Parse arguments
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        
+        if (std.mem.startsWith(u8, arg, "--image-path=")) {
+            checkpoint_path = arg[13..]; // Skip "--image-path="
+        } else if (std.mem.eql(u8, arg, "--image-path")) {
+            if (i + 1 >= args.len) {
+                try std.io.getStdErr().writer().writeAll("Error: --image-path requires a path argument\n");
+                return error.InvalidArguments;
+            }
+            checkpoint_path = args[i + 1];
+            i += 1;
+        } else if (std.mem.startsWith(u8, arg, "--snapshot=")) {
+            snapshot_name = arg[11..]; // Skip "--snapshot="
+        } else if (std.mem.eql(u8, arg, "--snapshot")) {
+            if (i + 1 >= args.len) {
+                try std.io.getStdErr().writer().writeAll("Error: --snapshot requires a name argument\n");
+                return error.InvalidArguments;
+            }
+            snapshot_name = args[i + 1];
+            i += 1;
+        } else if (!std.mem.eql(u8, arg, "restore") and !std.mem.startsWith(u8, arg, "-")) {
+            // This should be the container ID
+            if (container_id == null) {
+                container_id = arg;
+            }
+        }
+    }
+    
+    if (container_id == null) {
+        try std.io.getStdErr().writer().writeAll("Error: container-id argument is required\n");
+        return error.InvalidArguments;
+    }
+    
+    try temp_logger.info("Restoring container from checkpoint: {s}", .{container_id.?});
+    
+    // Create crun manager
+    var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
+    defer crun_manager.deinit();
+    
+    // Restore container
+    try crun_manager.restoreContainer(container_id.?, checkpoint_path, snapshot_name);
+    try temp_logger.info("Successfully restored container: {s}", .{container_id.?});
+}
+
 // Helper function to execute checkpoint command logic
 fn executeCheckpointCommand(allocator: Allocator, args: []const []const u8, temp_logger: *logger_mod.Logger) !void {
     if (args.len < 3) {
@@ -1063,6 +1121,9 @@ pub fn main() !void {
         },
         .checkpoint => {
             try executeCheckpointCommand(allocator, args, &temp_logger);
+        },
+        .restore => {
+            try executeRestoreCommand(allocator, args, &temp_logger);
         },
         .unknown => {
             try std.io.getStdErr().writer().writeAll("Error: Unknown command. Use 'help' for usage information.\n");

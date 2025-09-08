@@ -81,6 +81,8 @@ pub fn printCommandHelp(command: []const u8) void {
         printSpecHelp();
     } else if (std.mem.eql(u8, command, "checkpoint")) {
         printCheckpointHelp();
+    } else if (std.mem.eql(u8, command, "restore")) {
+        printRestoreHelp();
     } else {
         std.io.getStdOut().writer().print("Help for command '{s}' is not available yet.\n", .{command}) catch {};
         printUsage();
@@ -243,6 +245,45 @@ fn printCheckpointHelp() void {
         \\  proxmox-lxcri checkpoint container1
         \\  proxmox-lxcri checkpoint --image-path /tmp/checkpoint container1
         \\  proxmox-lxcri --config ./config.json checkpoint my-container
+        \\
+    ;
+    std.io.getStdOut().writer().print(help, .{}) catch {};
+}
+
+fn printRestoreHelp() void {
+    const help =
+        \\Restore a container from checkpoint
+        \\
+        \\Usage: proxmox-lxcri restore [OPTIONS] <container_id>
+        \\
+        \\Options:
+        \\  --image-path <path>      Path to checkpoint image (for CRIU)
+        \\  --snapshot <name>        ZFS snapshot name to restore from
+        \\  --config <path>          Path to configuration file
+        \\  --debug                  Enable debug logging
+        \\
+        \\Description:
+        \\  Restores a container from a previously created checkpoint. This command
+        \\  supports both ZFS snapshots and CRIU-based checkpoints:
+        \\  
+        \\  - ZFS Mode: Automatically detects and uses ZFS snapshots for restore
+        \\    * Uses dataset pattern: tank/containers/<container_id>
+        \\    * Automatically finds latest checkpoint if --snapshot not specified
+        \\    * Fast, filesystem-level restore
+        \\  
+        \\  - CRIU Mode: Falls back to CRIU-based restore if ZFS unavailable
+        \\    * Requires CRIU (Checkpoint/Restore In Userspace) support
+        \\    * Uses --image-path for checkpoint location
+        \\
+        \\Examples:
+        \\  # ZFS restore (automatic latest checkpoint)
+        \\  proxmox-lxcri restore container1
+        \\  
+        \\  # ZFS restore from specific snapshot
+        \\  proxmox-lxcri restore --snapshot checkpoint-1691234567 container1
+        \\  
+        \\  # CRIU restore (fallback)
+        \\  proxmox-lxcri restore --image-path /tmp/checkpoint container1
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};

@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const Logger = @import("logger").Logger;
 const types = @import("types");
 const OciSpec = @import("spec.zig").Spec;
+const zfs = @import("zfs");
 const process = std.process;
 const fs = std.fs;
 
@@ -25,6 +26,7 @@ pub const CrunError = error{
     ContainerKillError,
     CommandExecutionFailed,
     CrunNotFound,
+    SnapshotNotFound,
 };
 
 // Container state enum
@@ -41,24 +43,39 @@ pub const CrunManager = struct {
     root_path: ?[]const u8,
     log_path: ?[]const u8,
     crun_path: []const u8,
+    zfs_manager: ?*zfs.ZFSManager,
 
     const Self = @This();
 
     pub fn init(allocator: Allocator, logger: *Logger) !*Self {
         const self = try allocator.create(Self);
+        
+        // Try to initialize ZFS manager (optional)
+        const zfs_manager = zfs.ZFSManager.init(allocator, logger) catch |err| blk: {
+            try logger.info("ZFS not available, falling back to CRIU-only checkpoint: {s}", .{@errorName(err)});
+            break :blk null;
+        };
+        
         self.* = .{
             .allocator = allocator,
             .logger = logger,
             .root_path = null,
             .log_path = null,
             .crun_path = "/usr/bin/crun",
+            .zfs_manager = zfs_manager,
         };
+
+        try self.logger.info("CrunManager initialized with crun path: {s}", .{self.crun_path});
+        if (self.zfs_manager != null) {
+            try self.logger.info("ZFS checkpoint/restore support enabled", .{});
+        }
         return self;
     }
 
     pub fn deinit(self: *Self) void {
         if (self.root_path) |path| self.allocator.free(path);
         if (self.log_path) |path| self.allocator.free(path);
+        if (self.zfs_manager) |zfs_mgr| zfs_mgr.deinit();
         self.allocator.destroy(self);
     }
 
@@ -323,13 +340,56 @@ pub const CrunManager = struct {
     }
 
     // Create checkpoint of a running container
-    // Note: This requires CRIU (Checkpoint/Restore In Userspace) support
+    // Tries ZFS snapshots first, falls back to CRIU if ZFS unavailable
     pub fn checkpointContainer(self: *Self, container_id: []const u8, checkpoint_path: ?[]const u8) !void {
         try self.logger.info("Creating checkpoint for container: {s}", .{container_id});
 
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
-        // Check if crun supports checkpoint (requires CRIU)
+        // Try ZFS snapshot first if available
+        if (self.zfs_manager) |zfs_mgr| {
+            return self.checkpointWithZFS(zfs_mgr, container_id, checkpoint_path);
+        }
+
+        // Fall back to CRIU-based checkpoint
+        return self.checkpointWithCRIU(container_id, checkpoint_path);
+    }
+
+    // ZFS-based checkpoint implementation
+    fn checkpointWithZFS(self: *Self, zfs_mgr: *zfs.ZFSManager, container_id: []const u8, checkpoint_path: ?[]const u8) !void {
+        try self.logger.info("Using ZFS snapshot for checkpoint: {s}", .{container_id});
+
+        // Determine the ZFS dataset for this container
+        // This could be configured per container, but for now we'll use a convention
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        // Default dataset pattern: tank/containers/<container_id>
+        // This can be made configurable later
+        const dataset = if (checkpoint_path) |path| 
+            path 
+        else 
+            try std.fmt.allocPrint(arena_allocator, "tank/containers/{s}", .{container_id});
+
+        // Generate snapshot name with timestamp
+        const timestamp = std.time.timestamp();
+        const snapshot_name = try std.fmt.allocPrint(arena_allocator, "checkpoint-{d}", .{timestamp});
+
+        // Note: Should stop the container before taking snapshot (to ensure consistency)
+        // TODO: Implement stopContainer method
+        try self.logger.info("Note: Container should be stopped manually for consistent checkpoint", .{});
+
+        // Create ZFS snapshot
+        try zfs_mgr.createSnapshot(dataset, snapshot_name);
+        
+        try self.logger.info("Successfully created ZFS checkpoint snapshot: {s}@{s}", .{ dataset, snapshot_name });
+    }
+
+    // CRIU-based checkpoint implementation (fallback)
+    fn checkpointWithCRIU(self: *Self, container_id: []const u8, checkpoint_path: ?[]const u8) !void {
+        try self.logger.info("Using CRIU for checkpoint: {s}", .{container_id});
+
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
@@ -348,12 +408,126 @@ pub const CrunManager = struct {
 
         // Execute checkpoint command and handle potential failure
         self.executeCrunCommand(args.items) catch |err| {
-            try self.logger.warn("Checkpoint failed - CRIU support may not be available: {s}", .{@errorName(err)});
-            try self.logger.info("Alternative: Consider using LXC checkpoints or manual container state management", .{});
+            try self.logger.warn("CRIU checkpoint failed - CRIU support may not be available: {s}", .{@errorName(err)});
+            try self.logger.info("Alternative: Use ZFS datasets for checkpoint/restore functionality", .{});
             return err;
         };
         
-        try self.logger.info("Successfully created checkpoint for container: {s}", .{container_id});
+        try self.logger.info("Successfully created CRIU checkpoint for container: {s}", .{container_id});
+    }
+
+    // Restore container from checkpoint
+    // Tries ZFS snapshots first, falls back to CRIU if ZFS unavailable
+    pub fn restoreContainer(self: *Self, container_id: []const u8, checkpoint_path: ?[]const u8, snapshot_name: ?[]const u8) !void {
+        try self.logger.info("Restoring container from checkpoint: {s}", .{container_id});
+
+        if (container_id.len == 0) return CrunError.InvalidContainerId;
+
+        // Try ZFS restore first if available
+        if (self.zfs_manager) |zfs_mgr| {
+            return self.restoreWithZFS(zfs_mgr, container_id, checkpoint_path, snapshot_name);
+        }
+
+        // Fall back to CRIU-based restore
+        return self.restoreWithCRIU(container_id, checkpoint_path);
+    }
+
+    // ZFS-based restore implementation
+    fn restoreWithZFS(self: *Self, zfs_mgr: *zfs.ZFSManager, container_id: []const u8, checkpoint_path: ?[]const u8, snapshot_name: ?[]const u8) !void {
+        try self.logger.info("Using ZFS snapshot for restore: {s}", .{container_id});
+
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        // Determine the ZFS dataset for this container
+        const dataset = if (checkpoint_path) |path| 
+            path 
+        else 
+            try std.fmt.allocPrint(arena_allocator, "tank/containers/{s}", .{container_id});
+
+        // Determine snapshot name
+        const restore_snapshot = if (snapshot_name) |name|
+            name
+        else blk: {
+            // Find the latest checkpoint snapshot
+            const snapshots = try zfs_mgr.listSnapshots(dataset);
+            defer {
+                for (snapshots) |snapshot| {
+                    self.allocator.free(snapshot);
+                }
+                self.allocator.free(snapshots);
+            }
+
+            // Filter for checkpoint snapshots and find the latest
+            var latest_checkpoint: ?[]const u8 = null;
+            var latest_timestamp: i64 = 0;
+
+            for (snapshots) |snapshot| {
+                // Extract snapshot name (after the @)
+                if (std.mem.indexOf(u8, snapshot, "@")) |at_index| {
+                    const snap_name = snapshot[at_index + 1..];
+                    if (std.mem.startsWith(u8, snap_name, "checkpoint-")) {
+                        if (std.mem.eql(u8, snap_name, "checkpoint-")) continue; // Skip malformed
+                        
+                        // Extract timestamp
+                        const timestamp_str = snap_name[11..]; // Skip "checkpoint-"
+                        const timestamp = std.fmt.parseInt(i64, timestamp_str, 10) catch continue;
+                        
+                        if (timestamp > latest_timestamp) {
+                            latest_timestamp = timestamp;
+                            latest_checkpoint = snap_name;
+                        }
+                    }
+                }
+            }
+
+            if (latest_checkpoint) |latest| {
+                break :blk try self.allocator.dupe(u8, latest);
+            } else {
+                try self.logger.err("No checkpoint snapshots found for container: {s}", .{container_id});
+                return CrunError.SnapshotNotFound;
+            }
+        };
+
+        // Note: Should stop the container if it's running before restore
+        // TODO: Implement stopContainer method  
+        try self.logger.info("Note: Container should be stopped manually before restore", .{});
+
+        // Restore from ZFS snapshot
+        try zfs_mgr.restoreFromSnapshot(dataset, restore_snapshot);
+        
+        try self.logger.info("Successfully restored from ZFS snapshot: {s}@{s}", .{ dataset, restore_snapshot });
+    }
+
+    // CRIU-based restore implementation (fallback)
+    fn restoreWithCRIU(self: *Self, container_id: []const u8, checkpoint_path: ?[]const u8) !void {
+        try self.logger.info("Using CRIU for restore: {s}", .{container_id});
+
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        // Try using crun's restore if available (with CRIU support)
+        var args = std.ArrayList([]const u8).init(arena_allocator);
+        try args.append("restore");
+        
+        // Add checkpoint path if provided
+        if (checkpoint_path) |path| {
+            try args.append("--image-path");
+            try args.append(path);
+        }
+        
+        try args.append(container_id);
+
+        // Execute restore command and handle potential failure
+        self.executeCrunCommand(args.items) catch |err| {
+            try self.logger.warn("CRIU restore failed - CRIU support may not be available: {s}", .{@errorName(err)});
+            try self.logger.info("Alternative: Use ZFS datasets for checkpoint/restore functionality", .{});
+            return err;
+        };
+        
+        try self.logger.info("Successfully restored from CRIU checkpoint for container: {s}", .{container_id});
     }
 
     // List all containers

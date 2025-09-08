@@ -46,7 +46,7 @@ pub fn build(b: *std.Build) void {
 
     // ZFS management - placeholder for future implementation
     const zfs_mod = b.addModule("zfs", .{
-        .root_source_file = b.path("src/zfs_placeholder.zig"),
+        .root_source_file = b.path("src/zfs/mod.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
@@ -82,13 +82,13 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // CLI args module
-    const cli_args_mod = b.addModule("cli_args", .{
-        .root_source_file = b.path("src/common/cli_args.zig"),
-        .imports = &.{
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
+    // CLI args module (disabled - file removed)
+    // const cli_args_mod = b.addModule("cli_args", .{
+    //     .root_source_file = b.path("src/common/cli_args.zig"),
+    //     .imports = &.{
+    //         .{ .name = "logger", .module = logger_mod },
+    //     },
+    // });
 
     // OCI Image module
     const image_mod = b.addModule("image", .{
@@ -143,7 +143,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "network", .module = network_mod },
             .{ .name = "config", .module = config_mod },
             .{ .name = "json_helpers", .module = json_mod },
-            .{ .name = "cli_args", .module = cli_args_mod },
+            // .{ .name = "cli_args", .module = cli_args_mod }, // disabled - file removed
             .{ .name = "image", .module = image_mod },
             .{ .name = "registry", .module = registry_mod },
             .{ .name = "raw", .module = raw_mod },
@@ -180,7 +180,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("zig_json", zigJsonDep.module("zig-json"));
     exe.root_module.addImport("zfs", zfs_mod);
     exe.root_module.addImport("json_helpers", json_mod);
-    exe.root_module.addImport("cli_args", cli_args_mod);
+    // exe.root_module.addImport("cli_args", cli_args_mod); // disabled - file removed
     exe.root_module.addImport("image", image_mod);
     exe.root_module.addImport("registry", registry_mod);
     exe.root_module.addImport("raw", raw_mod);
