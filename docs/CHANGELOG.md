@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+- Future enhancements and improvements
+- Additional performance optimizations
+- Extended testing coverage
+- Enhanced documentation
+
+## [0.3.0] - 2024-12-29
+
 ### Added
 - **ZFS Checkpoint/Restore System**: Complete implementation of ZFS-based container state management
   - **Hybrid Architecture**: ZFS snapshots (primary) + CRIU fallback (secondary)
@@ -20,12 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ZFS Module**: Complete ZFS management implementation with error handling
 - **Help System**: Comprehensive help documentation for all new commands
 - **Code Refactoring**: Optimized command parsing with StaticStringMap (300% performance improvement)
-
-### Planned
-- Future enhancements and improvements
-- Additional performance optimizations
-- Extended testing coverage
-- Enhanced documentation
+- **Comprehensive Documentation**: Complete ZFS configuration and usage guide
+- **Architecture Updates**: Enhanced documentation with ZFS integration diagrams
 
 ## [0.2.0] - 2024-08-19
 

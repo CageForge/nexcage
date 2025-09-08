@@ -189,10 +189,10 @@ The system consists of several main containers:
 
 ```
 containerd -> proxmox-lxcri -> Proxmox API -> LXC/QEMU
-     |                             |
-     |                             v
-     |                        ZFS Storage
-     v
+     |              |              |
+     |              |              v
+     |              v          ZFS Storage
+     v          ZFS Pool
 OCI Bundle
 ```
 
