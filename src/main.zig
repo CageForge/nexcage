@@ -44,26 +44,33 @@ const Command = types.Command;
 const ConfigError = types.ConfigError;
 
 const StaticMap = std.StaticStringMap(Command).initComptime(.{
-    .{ "checkpoint", .checkpoint },
     .{ "create", .create },
+    .{ "start", .start },
+    .{ "stop", .stop },
     .{ "delete", .delete },
-    .{ "events", .events },
+    .{ "list", .list },
+    .{ "info", .info },
+    .{ "state", .state },
+    .{ "kill", .kill },
+    .{ "pause", .pause },
+    .{ "resume", .resume_container },
     .{ "exec", .exec },
+    .{ "ps", .ps },
+    .{ "run", .run },
+    .{ "events", .events },
+    .{ "spec", .spec },
+    .{ "checkpoint", .checkpoint },
+    .{ "restore", .restore },
+    .{ "update", .update },
     .{ "features", .features },
     .{ "generate-config", .generate_config },
     .{ "help", .help },
-    .{ "info", .info },
-    .{ "kill", .kill },
-    .{ "list", .list },
-    .{ "pause", .pause },
-    .{ "ps", .ps },
-    .{ "restore", .restore },
-    .{ "resume", .resume_container },
-    .{ "spec", .spec },
-    .{ "start", .start },
-    .{ "state", .state },
-    .{ "stop", .stop },
-    .{ "update", .update },
+    .{ "h", .help },
+    .{ "--help", .help },
+    .{ "-h", .help },
+    .{ "--version", .version },
+    .{ "-v", .version },
+    .{ "-V", .version },
 });
 
 fn parseCommand(command: []const u8) Command {
@@ -126,60 +133,7 @@ fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.
     }
 }
 
-fn printUsage() void {
-    const usage =
-        \\Proxmox LXC Runtime Interface (proxmox-lxcri)
-        \\
-        \\Usage: proxmox-lxcri [OPTIONS] COMMAND [ARGS]...
-        \\
-        \\COMMANDS:
-        \\  create <container_id>    Create a new container
-        \\  start <container_id>     Start a container
-        \\  stop <container_id>      Stop a container
-        \\  delete <container_id>    Delete a container
-        \\  list                     List all containers
-        \\  info <container_id>      Show container information
-        \\  state <container_id>     Get container state
-        \\  kill <container_id>      Kill a container
-        \\  pause <container_id>     Pause a running container
-        \\  resume <container_id>    Resume a paused container
-        \\  exec <container_id>      Execute new process inside the container
-        \\  ps <container_id>        Display processes running inside a container
-        \\  events <container_id>    Display container events and statistics
-        \\  spec                     Create a new specification file
-        \\  checkpoint <container_id> Create a checkpoint of a running container
-        \\  restore <container_id>   Restore a container from a checkpoint
-        \\  update <container_id>    Update container resource constraints
-        \\  features                 Show the enabled features
-        \\  generate-config          Generate OCI config for a container
-        \\
-        \\GLOBAL OPTIONS:
-        \\  --debug                  Enable debug logging
-        \\  --log <path>             Set the log file to write logs to (default: '/dev/stderr')
-        \\  --log-format <format>    Set the log format ('text' (default), or 'json') (default: "text")
-        \\  --root <path>            Root directory for storage of container state (default: "/run/proxmox-lxcri")
-        \\  --systemd-cgroup         Enable systemd cgroup support
-        \\  --config <path>          Path to configuration file
-        \\  --bundle, -b <path>      Path to OCI bundle
-        \\  --pid-file <path>        Path to pid file
-        \\  --console-socket <path>  Path to console socket
-        \\  --help, -h               Show this help message
-        \\  --version, -v            Print the version
-        \\
-        \\Examples:
-        \\  proxmox-lxcri --config /path/to/config.json create my-container
-        \\  proxmox-lxcri --config /path/to/config.json start my-container
-        \\  proxmox-lxcri list
-        \\
-        \\Configuration files are loaded in this order:
-        \\  1. File specified with --config
-        \\  2. ./config.json (current directory)
-        \\  3. /etc/proxmox-lxcri/config.json
-        \\  4. /etc/proxmox-lxcri/proxmox-lxcri.json
-        \\
-    ;
-    std.io.getStdOut().writer().print(usage, .{}) catch {};
-}
+// printUsage moved to src/oci/help.zig
 
 pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struct {
     command: Command,
@@ -195,10 +149,10 @@ pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struc
         const arg = argv[i];
         has_args = true;
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
-            printUsage();
+            oci.help.printUsage();
             std.process.exit(0);
         } else if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
-            printVersion();
+            oci.help.printVersion();
             std.process.exit(0);
         } else if (std.mem.eql(u8, arg, "--debug")) {
             options.debug = true;
@@ -238,7 +192,7 @@ pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struc
             command = parseCommand(arg);
             if (command.? == .unknown) {
                 try std.io.getStdErr().writer().print("Unknown command: '{s}'\n", .{arg});
-                printUsage();
+                oci.help.printUsage();
                 return error.UnknownCommand;
             }
         } else {
@@ -251,7 +205,7 @@ pub fn parseArgsFromArray(allocator: Allocator, argv: []const []const u8) !struc
         }
     }
     if (!has_args or command == null) {
-        printUsage();
+        oci.help.printUsage();
         std.process.exit(0);
     }
     return .{
@@ -718,7 +672,7 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
     
     if (args.len < 2) {
-        printUsage();
+        oci.help.printUsage();
         return;
     }
     
@@ -888,8 +842,103 @@ pub fn main() !void {
             try crun_manager.startContainer(container_id);
             try temp_logger.info("Successfully started container: {s}", .{container_id});
         },
+        .run => {
+            if (args.len < 4) {
+                try std.io.getStdErr().writer().writeAll("Error: run requires --bundle and container-id arguments\n");
+                return error.InvalidArguments;
+            }
+            
+            var bundle_path: ?[]const u8 = null;
+            var container_id: ?[]const u8 = null;
+            var runtime_type: ?[]const u8 = null;
+            var i: usize = 1;
+            
+            // Parse arguments similar to create command
+            while (i < args.len) : (i += 1) {
+                const arg = args[i];
+                try temp_logger.info("Parsing arg[{d}]: {s}", .{i, arg});
+                
+                if (std.mem.startsWith(u8, arg, "--bundle=")) {
+                    bundle_path = arg[9..]; // Skip "--bundle="
+                } else if (std.mem.startsWith(u8, arg, "-b=")) {
+                    bundle_path = arg[3..]; // Skip "-b="
+                } else if (std.mem.eql(u8, arg, "--bundle") or std.mem.eql(u8, arg, "-b")) {
+                    if (i + 1 >= args.len) {
+                        try std.io.getStdErr().writer().writeAll("Error: --bundle requires a path argument\n");
+                        return error.InvalidArguments;
+                    }
+                    bundle_path = args[i + 1];
+                    i += 1;
+                } else if (std.mem.startsWith(u8, arg, "--runtime=")) {
+                    runtime_type = arg[10..]; // Skip "--runtime="
+                } else if (std.mem.eql(u8, arg, "--runtime")) {
+                    if (i + 1 >= args.len) {
+                        try std.io.getStdErr().writer().writeAll("Error: --runtime requires a type argument\n");
+                        return error.InvalidArguments;
+                    }
+                    runtime_type = args[i + 1];
+                    i += 1;
+                } else if (!std.mem.eql(u8, arg, "run")) {
+                    // This should be the container ID
+                    if (container_id == null) {
+                        container_id = arg;
+                    }
+                }
+            }
+            
+            if (bundle_path == null) {
+                try std.io.getStdErr().writer().writeAll("Error: --bundle argument is required\n");
+                return error.InvalidArguments;
+            }
+            
+            if (container_id == null) {
+                try std.io.getStdErr().writer().writeAll("Error: container-id argument is required\n");
+                return error.InvalidArguments;
+            }
+            
+            try temp_logger.info("Running container: {s} with bundle: {s}", .{container_id.?, bundle_path.?});
+            
+            // Step 1: Create container
+            try temp_logger.info("Step 1/2: Creating container...", .{});
+            
+            // Load configuration
+            var cfg = try loadConfig(allocator, null);
+            defer cfg.deinit();
+            
+            // Determine runtime type
+            var actual_runtime_type: types.RuntimeType = .crun; // Default to crun
+            if (runtime_type) |rt| {
+                if (std.mem.eql(u8, rt, "crun") or std.mem.eql(u8, rt, "runc")) {
+                    actual_runtime_type = .crun;
+                } else if (std.mem.eql(u8, rt, "lxc") or std.mem.eql(u8, rt, "proxmox-lxc")) {
+                    actual_runtime_type = .lxc;
+                } else if (std.mem.eql(u8, rt, "vm")) {
+                    actual_runtime_type = .vm;
+                }
+            }
+            
+            cfg.setRuntimeType(actual_runtime_type);
+            
+            // Create crun manager for container operations
+            var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
+            defer crun_manager.deinit();
+            
+            // Execute create
+            try crun_manager.createContainer(container_id.?, bundle_path.?, null);
+            try temp_logger.info("Container created successfully", .{});
+            
+            // Step 2: Start container
+            try temp_logger.info("Step 2/2: Starting container...", .{});
+            try crun_manager.startContainer(container_id.?);
+            try temp_logger.info("Container started successfully", .{});
+            
+            try temp_logger.info("Successfully ran container: {s}", .{container_id.?});
+        },
         .help => {
-            printUsage();
+            oci.help.printUsage();
+        },
+        .version => {
+            oci.help.printVersion();
         },
         .unknown => {
             try std.io.getStdErr().writer().writeAll("Error: Unknown command. Use 'help' for usage information.\n");
@@ -927,11 +976,6 @@ fn getConfigPath(allocator: Allocator) ![]const u8 {
     }
 
     return errors.Error.ConfigNotFound;
-}
-
-fn printVersion() void {
-    const version = "proxmox-lxcri version 0.1.1\n";
-    std.io.getStdOut().writer().print(version, .{}) catch {};
 }
 
 // Additional command execution functions
@@ -985,11 +1029,3 @@ fn executeExec(allocator: Allocator, container_id: []const u8, command: []const 
         std.process.exit(@intCast(result.exit_code));
     }
 }
-
-fn executeBenchmark(allocator: Allocator, container_id: []const u8, command: []const u8, args: ?[]const []const u8, logger: *logger_mod.Logger) !void {
-    _ = allocator;
-    _ = logger;
-    
-    try oci.exec.benchmarkExecution(container_id, command, args, proxmox_client);
-}
-

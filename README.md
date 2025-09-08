@@ -1,11 +1,11 @@
-# Proxmox LXCRI v0.2.0
+# Proxmox LXCRI
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CNCF Sandbox](https://img.shields.io/badge/CNCF-Sandbox-blue.svg)](https://www.cncf.io/sandbox-projects/)
 [![Version](https://img.shields.io/badge/Version-0.2.0-green.svg)](https://github.com/kubebsd/proxmox-lxcri/releases/tag/v0.2.0)
 
 
-A high-performance OCI-compatible runtime implementation that transforms Proxmox VE into a container and VM orchestration worker. **v0.2.0** introduces a complete OCI Image System with advanced performance optimizations, making this project a feature-rich drop-in replacement for runc, enabling native LXC containers and VMs to run as pods through containerd or other OCI-compatible container engines.
+A high-performance OCI-compatible runtime implementation that transforms Proxmox VE into a container and VM orchestration worker. A complete OCI Image System with advanced performance optimizations, making this project a feature-rich drop-in replacement for runc, enabling native LXC containers and VMs to run as pods through containerd or other OCI-compatible container engines.
 
 ## Key Benefits
 

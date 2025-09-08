@@ -18,6 +18,7 @@ pub const state = @import("state.zig");
 pub const kill = @import("kill.zig");
 pub const delete = @import("delete.zig");
 pub const list = @import("list.zig");
+pub const help = @import("help.zig");
 pub const info = @import("info.zig");
 pub const exec = @import("exec.zig");
 

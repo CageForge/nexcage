@@ -910,6 +910,7 @@ pub const Command = enum {
     resume_container,
     exec,
     ps,
+    run,        // Create and start container in one operation
     events,
     spec,
     checkpoint,
@@ -918,6 +919,7 @@ pub const Command = enum {
     features,
     help,
     generate_config,
+    version,        // Show version information
     unknown,
 };
 
