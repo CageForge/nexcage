@@ -61,7 +61,7 @@ pub fn printUsage() void {
 
 /// Print version information
 pub fn printVersion() void {
-    const version = "proxmox-lxcri version 0.2.0-beta\n";
+    const version = "proxmox-lxcri version 0.3.0\n";
     std.io.getStdOut().writer().print(version, .{}) catch {};
 }
 
