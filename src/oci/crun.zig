@@ -31,23 +31,8 @@ pub const CrunError = error{
 // ContainerState moved to types.zig
 pub const ContainerState = types.ContainerState;
 
-// Container status structure
-pub const ContainerStatus = struct {
-    id: []const u8,
-    state: ContainerState,
-    pid: ?u32,
-    exit_code: ?u32,
-    created_at: ?[]const u8,
-    started_at: ?[]const u8,
-    finished_at: ?[]const u8,
-
-    pub fn deinit(self: *ContainerStatus, allocator: Allocator) void {
-        allocator.free(self.id);
-        if (self.created_at) |time| allocator.free(time);
-        if (self.started_at) |time| allocator.free(time);
-        if (self.finished_at) |time| allocator.free(time);
-    }
-};
+// ContainerStatus moved to types.zig
+pub const ContainerStatus = types.ContainerStatus;
 
 // Main CrunManager struct
 pub const CrunManager = struct {

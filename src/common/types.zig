@@ -2,7 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const json = @import("zig-json");
 
-pub const ContainerStatus = enum {
+// Simple container status enum (for filtering and queries)
+pub const SimpleContainerStatus = enum {
     running,
     stopped,
     paused,
@@ -367,7 +368,7 @@ pub const ContainerResources = struct {
 
 pub const ContainerFilter = struct {
     id: ?[]const u8 = null,
-    state: ?ContainerStatus = null,
+    state: ?SimpleContainerStatus = null,
     pod_id: ?[]const u8 = null,
     label_selector: ?[]const u8 = null,
 
@@ -575,7 +576,7 @@ pub const VMConfig = struct {
 pub const VMContainer = struct {
     vmid: u32,
     name: []const u8,
-    status: ContainerStatus,
+    status: SimpleContainerStatus,
     config: VMConfig,
 
     pub fn deinit(self: *VMContainer, allocator: Allocator) void {
@@ -601,6 +602,24 @@ pub const ContainerState = enum {
     paused,    // Added from crun.zig
     deleted,
     unknown,
+};
+
+// Detailed container status information (moved from crun.zig)
+pub const ContainerStatus = struct {
+    id: []const u8,
+    state: ContainerState,
+    pid: ?u32,
+    exit_code: ?u32,
+    created_at: ?[]const u8,
+    started_at: ?[]const u8,
+    finished_at: ?[]const u8,
+
+    pub fn deinit(self: *ContainerStatus, allocator: Allocator) void {
+        allocator.free(self.id);
+        if (self.created_at) |time| allocator.free(time);
+        if (self.started_at) |time| allocator.free(time);
+        if (self.finished_at) |time| allocator.free(time);
+    }
 };
 
 pub const ContainerStateInfo = struct {
