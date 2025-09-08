@@ -10,3 +10,8 @@ zig-linux-x86_64-0.13.0/*
 .cursor/*
 crun-*/*
 crun-*.tar.gz
+
+# Ignore everything in zig directory except download.sh and .gitkeep
+/zig/*
+!/zig/download.sh
+!/zig/.gitkeep
