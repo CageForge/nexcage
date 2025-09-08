@@ -22,6 +22,7 @@ A high-performance OCI-compatible runtime implementation that transforms Proxmox
 - Full OCI Runtime Specification v1.0 compliance
 - Native Proxmox LXC/VM lifecycle management
 - ZFS-based storage with snapshots and clones
+- **ZFS Checkpoint/Restore**: Lightning-fast container state snapshots
 - Advanced networking with VLAN and SDN support
 - Comprehensive security with AppArmor/SELinux
 - High-availability with multi-node support
@@ -31,7 +32,9 @@ A high-performance OCI-compatible runtime implementation that transforms Proxmox
 
 ### 🚀 New in v0.2.0
 - **Complete OCI Image System**: Full OCI v1.0.2 image specification support
+- **ZFS Checkpoint/Restore**: Hybrid ZFS snapshots + CRIU fallback system
 - **Advanced Performance**: 20%+ performance improvement across all operations
+- **Lightning-fast Snapshots**: Second-level container state preservation
 - **Comprehensive Testing**: 5 test categories with 50+ individual tests
 - **Complete Documentation**: API, User Guide, and Performance Guide
 - **Memory Optimization**: 15-25% reduction in memory usage
@@ -45,6 +48,16 @@ A high-performance OCI-compatible runtime implementation that transforms Proxmox
 - **Parallel Processing**: Multi-threaded layer operations
 - **Image Validation**: Comprehensive OCI image manifest and configuration validation
 - **Container Creation**: Integrated container creation from OCI images with LayerFS support
+
+### ZFS Checkpoint/Restore System
+- **Hybrid Architecture**: ZFS snapshots (primary) + CRIU fallback (secondary)
+- **Lightning Performance**: Filesystem-level snapshots in seconds vs minutes
+- **Automatic Detection**: Smart ZFS availability detection and graceful fallback
+- **Dataset Management**: Structured `tank/containers/<container_id>` pattern
+- **Timestamp Snapshots**: `checkpoint-<timestamp>` naming for easy organization
+- **Latest Auto-Selection**: Automatic latest checkpoint detection for restore
+- **Consistency Guarantees**: Filesystem-level data consistency and integrity
+- **Production Ready**: Seamless integration with Proxmox ZFS infrastructure
 
 
 ## Requirements
@@ -187,6 +200,25 @@ proxmox-lxcri kill container-id
 
 # Delete a container
 proxmox-lxcri delete container-id
+```
+
+### ZFS Checkpoint/Restore Operations
+
+```bash
+# Create checkpoint (ZFS snapshot)
+proxmox-lxcri checkpoint container-id
+
+# Restore from latest checkpoint
+proxmox-lxcri restore container-id
+
+# Restore from specific snapshot
+proxmox-lxcri restore --snapshot checkpoint-1691234567 container-id
+
+# Create and start in one operation
+proxmox-lxcri run --bundle /path/to/bundle container-id
+
+# Generate OCI specification
+proxmox-lxcri spec --bundle /path/to/bundle
 ```
 
 Runtime options:

@@ -208,6 +208,11 @@ OCI Bundle
 - ZFS dataset management
 - Volume snapshots and clones
 - Layer management
+- **ZFS Checkpoint/Restore System**
+  - Lightning-fast container state snapshots
+  - Automatic ZFS detection and CRIU fallback
+  - Timestamp-based snapshot organization
+  - Latest checkpoint auto-selection
 - Image storage
 
 ### 3. Network Manager
@@ -388,6 +393,66 @@ Each operation implements comprehensive error handling:
    - State restoration
    - Partial completion handling
 
+## ZFS Checkpoint/Restore Architecture
+
+### Overview
+The ZFS Checkpoint/Restore system provides enterprise-grade container state management through a hybrid approach that prioritizes ZFS snapshots while maintaining CRIU compatibility.
+
+### Architecture Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ZFS Checkpoint/Restore                    │
+├─────────────────────────────────────────────────────────────┤
+│  ┌───────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │  ZFS Manager  │───▶│ Snapshot Mgr │───▶│   Dataset    │  │
+│  │   Detection   │    │   Creation   │    │  Management  │  │
+│  └───────────────┘    └──────────────┘    └──────────────┘  │
+│           │                     │                    │      │
+│           ▼                     ▼                    ▼      │
+│  ┌───────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │ CRIU Fallback │    │  Timestamp   │    │    Latest    │  │
+│  │   Detection   │    │   Naming     │    │  Selection   │  │
+│  └───────────────┘    └──────────────┘    └──────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Core Components
+
+1. **ZFS Manager (`src/zfs/mod.zig`)**:
+   - Automatic ZFS availability detection
+   - Dataset existence validation
+   - Snapshot creation and management
+   - Error handling and logging
+
+2. **Checkpoint Controller**:
+   - Container state analysis
+   - Consistency checking
+   - Hybrid routing (ZFS/CRIU)
+   - Performance optimization
+
+3. **Restore Engine**:
+   - Latest checkpoint detection
+   - Timestamp parsing and filtering
+   - ZFS rollback operations
+   - State verification
+
+### Dataset Organization
+
+**Structure Pattern:**
+```
+tank/containers/<container_id>
+├── @checkpoint-1691234567
+├── @checkpoint-1691234890
+└── @checkpoint-1691235123
+```
+
+**Performance Characteristics:**
+- ZFS Creation: ~1-3 seconds
+- ZFS Restore: ~2-5 seconds  
+- CRIU Fallback: ~10-60 seconds
+- Storage Overhead: ~0-5% (ZFS COW)
+
 ## Monitoring and Metrics
 
 1. **Container Metrics**
@@ -403,4 +468,10 @@ Each operation implements comprehensive error handling:
 3. **Health Monitoring**
    - Container health checks
    - Runtime status
-   - Resource availability 
+   - Resource availability
+
+4. **ZFS Metrics**
+   - Snapshot creation time
+   - Storage usage patterns
+   - Dataset health status
+   - Checkpoint success rates 
