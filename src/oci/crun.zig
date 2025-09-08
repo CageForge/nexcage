@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Logger = @import("logger").Logger;
+const types = @import("types");
 const OciSpec = @import("spec.zig").Spec;
 const process = std.process;
 const fs = std.fs;
@@ -27,13 +28,8 @@ pub const CrunError = error{
 };
 
 // Container state enum
-pub const ContainerState = enum {
-    created,
-    running,
-    stopped,
-    paused,
-    unknown,
-};
+// ContainerState moved to types.zig
+pub const ContainerState = types.ContainerState;
 
 // Container status structure
 pub const ContainerStatus = struct {

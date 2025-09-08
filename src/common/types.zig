@@ -598,6 +598,7 @@ pub const ContainerState = enum {
     created,
     running,
     stopped,
+    paused,    // Added from crun.zig
     deleted,
     unknown,
 };
