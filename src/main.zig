@@ -770,6 +770,98 @@ fn executeStartContainerById(allocator: Allocator, container_id: []const u8, tem
     try temp_logger.info("Successfully started container: {s}", .{container_id});
 }
 
+// Helper function to execute spec command logic
+fn executeSpecCommand(allocator: Allocator, args: []const []const u8, temp_logger: *logger_mod.Logger) !void {
+    var bundle_path: ?[]const u8 = null;
+    var i: usize = 1;
+    
+    // Parse arguments
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        
+        if (std.mem.startsWith(u8, arg, "--bundle=")) {
+            bundle_path = arg[9..]; // Skip "--bundle="
+        } else if (std.mem.startsWith(u8, arg, "-b=")) {
+            bundle_path = arg[3..]; // Skip "-b="
+        } else if (std.mem.eql(u8, arg, "--bundle") or std.mem.eql(u8, arg, "-b")) {
+            if (i + 1 >= args.len) {
+                try std.io.getStdErr().writer().writeAll("Error: --bundle requires a path argument\n");
+                return error.InvalidArguments;
+            }
+            bundle_path = args[i + 1];
+            i += 1;
+        } else if (!std.mem.eql(u8, arg, "spec") and !std.mem.startsWith(u8, arg, "-")) {
+            // If no --bundle specified, treat as bundle path
+            if (bundle_path == null) {
+                bundle_path = arg;
+            }
+        }
+    }
+    
+    // Default to current directory if no bundle specified
+    if (bundle_path == null) {
+        bundle_path = ".";
+    }
+    
+    try temp_logger.info("Generating OCI spec in bundle: {s}", .{bundle_path.?});
+    
+    // Create crun manager
+    var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
+    defer crun_manager.deinit();
+    
+    // Generate spec
+    try crun_manager.generateSpec(bundle_path.?);
+    try temp_logger.info("Successfully generated OCI spec in bundle: {s}", .{bundle_path.?});
+}
+
+// Helper function to execute checkpoint command logic
+fn executeCheckpointCommand(allocator: Allocator, args: []const []const u8, temp_logger: *logger_mod.Logger) !void {
+    if (args.len < 3) {
+        try std.io.getStdErr().writer().writeAll("Error: checkpoint requires container-id argument\n");
+        return error.InvalidArguments;
+    }
+    
+    var container_id: ?[]const u8 = null;
+    var checkpoint_path: ?[]const u8 = null;
+    var i: usize = 1;
+    
+    // Parse arguments
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        
+        if (std.mem.startsWith(u8, arg, "--image-path=")) {
+            checkpoint_path = arg[13..]; // Skip "--image-path="
+        } else if (std.mem.eql(u8, arg, "--image-path")) {
+            if (i + 1 >= args.len) {
+                try std.io.getStdErr().writer().writeAll("Error: --image-path requires a path argument\n");
+                return error.InvalidArguments;
+            }
+            checkpoint_path = args[i + 1];
+            i += 1;
+        } else if (!std.mem.eql(u8, arg, "checkpoint") and !std.mem.startsWith(u8, arg, "-")) {
+            // This should be the container ID
+            if (container_id == null) {
+                container_id = arg;
+            }
+        }
+    }
+    
+    if (container_id == null) {
+        try std.io.getStdErr().writer().writeAll("Error: container-id argument is required\n");
+        return error.InvalidArguments;
+    }
+    
+    try temp_logger.info("Creating checkpoint for container: {s}", .{container_id.?});
+    
+    // Create crun manager
+    var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
+    defer crun_manager.deinit();
+    
+    // Create checkpoint
+    try crun_manager.checkpointContainer(container_id.?, checkpoint_path);
+    try temp_logger.info("Successfully created checkpoint for container: {s}", .{container_id.?});
+}
+
 // Helper function to create a container with specific parameters (for reuse in run command)
 fn executeCreateContainerWithParams(allocator: Allocator, container_id: []const u8, bundle_path: []const u8, runtime_type: ?[]const u8, temp_logger: *logger_mod.Logger) !void {
     try temp_logger.info("Creating container: {s} with bundle: {s}", .{container_id, bundle_path});
@@ -965,6 +1057,12 @@ pub fn main() !void {
         },
         .version => {
             oci.help.printVersion();
+        },
+        .spec => {
+            try executeSpecCommand(allocator, args, &temp_logger);
+        },
+        .checkpoint => {
+            try executeCheckpointCommand(allocator, args, &temp_logger);
         },
         .unknown => {
             try std.io.getStdErr().writer().writeAll("Error: Unknown command. Use 'help' for usage information.\n");

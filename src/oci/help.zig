@@ -77,6 +77,10 @@ pub fn printCommandHelp(command: []const u8) void {
         printStopHelp();
     } else if (std.mem.eql(u8, command, "run")) {
         printRunHelp();
+    } else if (std.mem.eql(u8, command, "spec")) {
+        printSpecHelp();
+    } else if (std.mem.eql(u8, command, "checkpoint")) {
+        printCheckpointHelp();
     } else {
         std.io.getStdOut().writer().print("Help for command '{s}' is not available yet.\n", .{command}) catch {};
         printUsage();
@@ -186,6 +190,59 @@ fn printRunHelp() void {
         \\  proxmox-lxcri run --bundle ./my-bundle container1
         \\  proxmox-lxcri run --runtime=crun --bundle ./bundle container2
         \\  proxmox-lxcri --config ./config.json run -b ./bundle my-container
+        \\
+    ;
+    std.io.getStdOut().writer().print(help, .{}) catch {};
+}
+
+fn printSpecHelp() void {
+    const help =
+        \\Generate OCI specification file
+        \\
+        \\Usage: proxmox-lxcri spec [OPTIONS] [bundle-path]
+        \\
+        \\Options:
+        \\  --bundle, -b <path>      Path to OCI bundle directory [default: .]
+        \\  --config <path>          Path to configuration file
+        \\  --debug                  Enable debug logging
+        \\
+        \\Description:
+        \\  Generates a new OCI specification file (config.json) in the specified
+        \\  bundle directory. This file defines the container configuration including
+        \\  process, mounts, and security settings.
+        \\
+        \\Examples:
+        \\  proxmox-lxcri spec                    # Generate in current directory
+        \\  proxmox-lxcri spec ./my-bundle       # Generate in specific directory
+        \\  proxmox-lxcri spec --bundle ./bundle # Using --bundle flag
+        \\
+    ;
+    std.io.getStdOut().writer().print(help, .{}) catch {};
+}
+
+fn printCheckpointHelp() void {
+    const help =
+        \\Create a checkpoint of a running container
+        \\
+        \\Usage: proxmox-lxcri checkpoint [OPTIONS] <container_id>
+        \\
+        \\Options:
+        \\  --image-path <path>      Path to save checkpoint image
+        \\  --config <path>          Path to configuration file
+        \\  --debug                  Enable debug logging
+        \\
+        \\Description:
+        \\  Creates a checkpoint (snapshot) of a running container that can be
+        \\  restored later using the restore command. The checkpoint includes
+        \\  the container's memory state and process information.
+        \\  
+        \\  Note: Requires CRIU (Checkpoint/Restore In Userspace) support.
+        \\  If CRIU is not available, this command will fail gracefully.
+        \\
+        \\Examples:
+        \\  proxmox-lxcri checkpoint container1
+        \\  proxmox-lxcri checkpoint --image-path /tmp/checkpoint container1
+        \\  proxmox-lxcri --config ./config.json checkpoint my-container
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};

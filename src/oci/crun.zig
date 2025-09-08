@@ -322,6 +322,40 @@ pub const CrunManager = struct {
         try self.logger.info("Successfully generated OCI spec in bundle: {s}", .{bundle_path});
     }
 
+    // Create checkpoint of a running container
+    // Note: This requires CRIU (Checkpoint/Restore In Userspace) support
+    pub fn checkpointContainer(self: *Self, container_id: []const u8, checkpoint_path: ?[]const u8) !void {
+        try self.logger.info("Creating checkpoint for container: {s}", .{container_id});
+
+        if (container_id.len == 0) return CrunError.InvalidContainerId;
+
+        // Check if crun supports checkpoint (requires CRIU)
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        // Try using crun's checkpoint if available (with CRIU support)
+        var args = std.ArrayList([]const u8).init(arena_allocator);
+        try args.append("checkpoint");
+        
+        // Add checkpoint path if provided
+        if (checkpoint_path) |path| {
+            try args.append("--image-path");
+            try args.append(path);
+        }
+        
+        try args.append(container_id);
+
+        // Execute checkpoint command and handle potential failure
+        self.executeCrunCommand(args.items) catch |err| {
+            try self.logger.warn("Checkpoint failed - CRIU support may not be available: {s}", .{@errorName(err)});
+            try self.logger.info("Alternative: Consider using LXC checkpoints or manual container state management", .{});
+            return err;
+        };
+        
+        try self.logger.info("Successfully created checkpoint for container: {s}", .{container_id});
+    }
+
     // List all containers
     pub fn listContainers(self: *Self) !void {
         try self.logger.info("Listing all containers...", .{});
