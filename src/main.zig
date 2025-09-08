@@ -34,46 +34,6 @@ var shutdown_requested: bool = false;
 var last_signal: ?c_int = null;
 var proxmox_client: *ProxmoxClient = undefined;
 
-// Global command map for maximum efficiency
-var command_map: ?StringHashMap(Command) = null;
-
-// Initialize command map for O(1) command parsing
-fn initCommandMap(allocator: Allocator) !void {
-    var map = StringHashMap(Command).init(allocator);
-    
-    // Add all commands to the map
-    try map.put("create", .create);
-    try map.put("start", .start);
-    try map.put("stop", .stop);
-    try map.put("state", .state);
-    try map.put("kill", .kill);
-    try map.put("delete", .delete);
-    try map.put("list", .list);
-    try map.put("info", .info);
-    try map.put("pause", .pause);
-    try map.put("resume", .resume_container);
-    try map.put("exec", .exec);
-    try map.put("ps", .ps);
-    try map.put("events", .events);
-    try map.put("spec", .spec);
-    try map.put("checkpoint", .checkpoint);
-    try map.put("restore", .restore);
-    try map.put("update", .update);
-    try map.put("features", .features);
-    try map.put("help", .help);
-    try map.put("generate-config", .generate_config);
-    
-    command_map = map;
-}
-
-// Cleanup command map
-fn deinitCommandMap() void {
-    if (command_map) |*map| {
-        map.deinit();
-        command_map = null;
-    }
-}
-
 // RuntimeOptions moved to types.zig
 const RuntimeOptions = types.RuntimeOptions;
 
@@ -83,14 +43,31 @@ const Command = types.Command;
 // ConfigError moved to types.zig
 const ConfigError = types.ConfigError;
 
+const StaticMap = std.StaticStringMap(Command).initComptime(.{
+    .{ "checkpoint", .checkpoint },
+    .{ "create", .create },
+    .{ "delete", .delete },
+    .{ "events", .events },
+    .{ "exec", .exec },
+    .{ "features", .features },
+    .{ "generate-config", .generate_config },
+    .{ "help", .help },
+    .{ "info", .info },
+    .{ "kill", .kill },
+    .{ "list", .list },
+    .{ "pause", .pause },
+    .{ "ps", .ps },
+    .{ "restore", .restore },
+    .{ "resume", .resume_container },
+    .{ "spec", .spec },
+    .{ "start", .start },
+    .{ "state", .state },
+    .{ "stop", .stop },
+    .{ "update", .update },
+});
+
 fn parseCommand(command: []const u8) Command {
-    // Use HashMap for O(1) command lookup
-    if (command_map) |map| {
-        return map.get(command) orelse .unknown;
-    }
-    
-    // Fallback to stringToEnum if map not initialized (shouldn't happen)
-    return std.meta.stringToEnum(Command, command) orelse .unknown;
+    return StaticMap.get(command) orelse .unknown;
 }
 
 fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.Config) !void {
@@ -734,9 +711,7 @@ fn executeGenerateConfig(
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
     
-    // Initialize command map for optimal parsing performance
-    try initCommandMap(allocator);
-    defer deinitCommandMap();
+    // StaticStringMap requires no runtime initialization - it's compile-time!
     
     // Parse command line arguments
     const args = try std.process.argsAlloc(allocator);
