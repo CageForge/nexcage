@@ -1,0 +1,51 @@
+#!/usr/bin/make -f
+
+# Debian package build rules for proxmox-lxcri
+# Uses Zig build system
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	# No configuration needed for Zig build
+
+override_dh_auto_build:
+	# Build with Zig for release optimization
+	zig build -Doptimize=ReleaseFast
+
+override_dh_auto_test:
+	# Run Zig tests
+	zig build test
+
+override_dh_auto_install:
+	# Install binary to /usr/bin
+	install -D -m 755 zig-out/bin/proxmox-lxcri debian/proxmox-lxcri/usr/bin/proxmox-lxcri
+	
+	# Install configuration files
+	install -D -m 644 packaging/config/proxmox-lxcri.json debian/proxmox-lxcri/etc/proxmox-lxcri/proxmox-lxcri.json
+	install -D -m 644 packaging/config/config.json debian/proxmox-lxcri/etc/proxmox-lxcri/config.json
+	
+	# Install systemd service file
+	install -D -m 644 packaging/systemd/proxmox-lxcri.service debian/proxmox-lxcri/lib/systemd/system/proxmox-lxcri.service
+	
+	# Install man page
+	install -D -m 644 packaging/man/proxmox-lxcri.1 debian/proxmox-lxcri/usr/share/man/man1/proxmox-lxcri.1
+	
+	# Install documentation
+	install -D -m 644 docs/zfs-checkpoint-guide.md debian/proxmox-lxcri/usr/share/doc/proxmox-lxcri/zfs-checkpoint-guide.md
+	install -D -m 644 docs/architecture.md debian/proxmox-lxcri/usr/share/doc/proxmox-lxcri/architecture.md
+	install -D -m 644 README.md debian/proxmox-lxcri/usr/share/doc/proxmox-lxcri/README.md
+	
+	# Install bash completion
+	install -D -m 644 packaging/completion/proxmox-lxcri.bash debian/proxmox-lxcri/usr/share/bash-completion/completions/proxmox-lxcri
+
+override_dh_auto_clean:
+	# Clean build artifacts
+	rm -rf zig-out/
+	rm -rf zig-cache/
+
+# Skip debug symbols extraction (Zig handles this differently)
+override_dh_strip:
+
+# Skip shared library dependencies analysis (static binary)
+override_dh_shlibdeps:

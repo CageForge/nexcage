@@ -1,0 +1,44 @@
+#!/bin/bash
+set -e
+
+# Post-removal script for proxmox-lxcri
+
+case "$1" in
+    purge)
+        # Remove user and group
+        if getent passwd proxmox-lxcri >/dev/null; then
+            deluser proxmox-lxcri || true
+        fi
+        
+        # Remove configuration files and data (only on purge)
+        rm -rf /etc/proxmox-lxcri
+        rm -rf /var/lib/proxmox-lxcri
+        rm -rf /var/log/proxmox-lxcri
+        rm -f /etc/logrotate.d/proxmox-lxcri
+        
+        # Clean up runtime directory
+        rm -rf /run/proxmox-lxcri
+        
+        echo "Proxmox LXCRI has been completely removed."
+        echo "Note: ZFS datasets and snapshots were not automatically removed."
+        echo "Manual cleanup may be required for ZFS datasets under tank/containers/"
+        ;;
+    
+    remove)
+        # Keep configuration files on remove (not purge)
+        echo "Proxmox LXCRI removed but configuration preserved."
+        echo "Use 'apt purge proxmox-lxcri' to remove all configuration and data."
+        ;;
+    
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+    
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

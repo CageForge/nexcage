@@ -1,0 +1,222 @@
+.TH PROXMOX-LXCRI 1 "December 2024" "proxmox-lxcri 0.3.0" "User Commands"
+
+.SH NAME
+proxmox-lxcri \- OCI-compatible container runtime for Proxmox VE
+
+.SH SYNOPSIS
+.B proxmox-lxcri
+[\fIOPTIONS\fR] \fICOMMAND\fR [\fIARGS\fR]...
+
+.SH DESCRIPTION
+Proxmox LXCRI is a high-performance OCI-compatible runtime implementation that transforms Proxmox VE into a container and VM orchestration worker. It provides revolutionary ZFS checkpoint/restore functionality with lightning-fast filesystem-level snapshots.
+
+.SH COMMANDS
+.TP
+.B create \fIcontainer_id\fR
+Create a new container from an OCI bundle.
+
+.TP
+.B start \fIcontainer_id\fR
+Start a previously created container.
+
+.TP
+.B stop \fIcontainer_id\fR
+Stop a running container.
+
+.TP
+.B delete \fIcontainer_id\fR
+Delete a container and its associated resources.
+
+.TP
+.B list
+List all containers managed by proxmox-lxcri.
+
+.TP
+.B state \fIcontainer_id\fR
+Get the current state of a container.
+
+.TP
+.B checkpoint \fIcontainer_id\fR
+Create a checkpoint (snapshot) of a running container using ZFS or CRIU.
+
+.TP
+.B restore \fIcontainer_id\fR
+Restore a container from a previously created checkpoint.
+
+.TP
+.B run \fIcontainer_id\fR
+Create and start a container in one operation.
+
+.TP
+.B spec
+Generate an OCI specification file.
+
+.TP
+.B kill \fIcontainer_id\fR [\fISIGNAL\fR]
+Send a signal to a container process.
+
+.TP
+.B pause \fIcontainer_id\fR
+Pause a running container.
+
+.TP
+.B resume \fIcontainer_id\fR
+Resume a paused container.
+
+.SH OPTIONS
+.TP
+.B \-\-config \fIPATH\fR
+Path to configuration file (default: /etc/proxmox-lxcri/proxmox-lxcri.json).
+
+.TP
+.B \-\-root \fIPATH\fR
+Root directory for storage of container state (default: /run/proxmox-lxcri).
+
+.TP
+.B \-\-log \fIPATH\fR
+Set the log file path (default: stderr).
+
+.TP
+.B \-\-log-format \fIFORMAT\fR
+Set the log format: 'text' or 'json' (default: text).
+
+.TP
+.B \-\-debug
+Enable debug logging.
+
+.TP
+.B \-\-systemd-cgroup
+Enable systemd cgroup support.
+
+.TP
+.B \-\-bundle, \-b \fIPATH\fR
+Path to OCI bundle directory.
+
+.TP
+.B \-\-pid-file \fIPATH\fR
+Path to write process ID to.
+
+.TP
+.B \-\-console-socket \fIPATH\fR
+Path to console socket for container I/O.
+
+.TP
+.B \-\-help, \-h
+Show help message.
+
+.TP
+.B \-\-version, \-v
+Print version information.
+
+.SH ZFS CHECKPOINT/RESTORE
+Proxmox LXCRI features revolutionary ZFS checkpoint/restore functionality:
+
+.TP
+.B Hybrid Architecture
+ZFS snapshots (primary) with CRIU fallback (secondary) for maximum compatibility.
+
+.TP
+.B Lightning Performance
+Filesystem-level snapshots in 1-3 seconds vs 10-60 seconds with traditional methods.
+
+.TP
+.B Dataset Organization
+Uses structured pattern: tank/containers/<container_id> with timestamp-based snapshots.
+
+.TP
+.B Automatic Detection
+Smart ZFS availability detection with graceful fallback to CRIU when needed.
+
+.SH CHECKPOINT OPTIONS
+.TP
+.B \-\-image-path \fIPATH\fR
+Path to save checkpoint image (CRIU mode).
+
+.SH RESTORE OPTIONS
+.TP
+.B \-\-snapshot \fINAME\fR
+ZFS snapshot name to restore from (format: checkpoint-<timestamp>).
+
+.TP
+.B \-\-image-path \fIPATH\fR
+Path to checkpoint image (CRIU mode).
+
+.SH CONFIGURATION
+Configuration files are loaded in this order:
+.IP 1. 4
+File specified with \-\-config
+.IP 2. 4
+./config.json (current directory)
+.IP 3. 4
+/etc/proxmox-lxcri/config.json
+.IP 4. 4
+/etc/proxmox-lxcri/proxmox-lxcri.json
+
+.SH EXAMPLES
+.TP
+Create and start a container:
+.B proxmox-lxcri create --bundle /path/to/bundle container1
+.br
+.B proxmox-lxcri start container1
+
+.TP
+Create checkpoint and restore:
+.B proxmox-lxcri checkpoint container1
+.br
+.B proxmox-lxcri restore container1
+
+.TP
+Restore from specific ZFS snapshot:
+.B proxmox-lxcri restore --snapshot checkpoint-1703851200 container1
+
+.TP
+Create and start in one operation:
+.B proxmox-lxcri run --bundle /path/to/bundle container1
+
+.SH FILES
+.TP
+.I /etc/proxmox-lxcri/proxmox-lxcri.json
+Main configuration file.
+
+.TP
+.I /etc/proxmox-lxcri/config.json
+Alternative configuration file.
+
+.TP
+.I /run/proxmox-lxcri
+Default runtime directory.
+
+.TP
+.I /var/lib/proxmox-lxcri
+Data directory for checkpoints and storage.
+
+.TP
+.I /var/log/proxmox-lxcri
+Log directory.
+
+.SH DEPENDENCIES
+.TP
+.B Required:
+zfsutils-linux (>= 2.1), criu (>= 3.15)
+
+.TP
+.B Recommended:
+proxmox-ve (>= 7.0), containerd (>= 1.6)
+
+.TP
+.B Optional:
+kubernetes-cni, docker.io
+
+.SH SEE ALSO
+.BR zfs (8),
+.BR criu (8),
+.BR containerd (1),
+.BR runc (1)
+
+Online documentation: https://github.com/kubebsd/proxmox-lxcri
+
+.SH AUTHOR
+Proxmox LXCRI Team <maintainers@proxmox-lxcri.io>
+
+.SH BUGS
+Report bugs at: https://github.com/kubebsd/proxmox-lxcri/issues

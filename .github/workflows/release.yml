@@ -17,9 +17,11 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-linux
+            arch: amd64
             artifact_name: proxmox-lxcri-linux-x86_64
           - os: ubuntu-latest
             target: aarch64-linux
+            arch: arm64
             artifact_name: proxmox-lxcri-linux-aarch64
 
     steps:
@@ -51,10 +53,106 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: dist/${{ matrix.artifact_name }}
 
+  build-deb:
+    name: Build DEB Packages
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: amd64
+            target: x86_64-linux
+          - os: ubuntu-22.04
+            arch: arm64
+            target: aarch64-linux
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debhelper \
+            devscripts \
+            build-essential \
+            fakeroot \
+            lintian \
+            dh-systemd
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Set up cross-compilation for ARM64
+        if: matrix.arch == 'arm64'
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "debian_version=${VERSION}-1" >> $GITHUB_OUTPUT
+
+      - name: Update changelog for current version
+        run: |
+          sed -i "1s/0\.3\.0-1/${{ steps.get_version.outputs.debian_version }}/" packaging/debian/changelog
+
+      - name: Build DEB package
+        run: |
+          # Create build environment
+          mkdir -p build-deb
+          cp -r . build-deb/proxmox-lxcri-${{ steps.get_version.outputs.version }}
+          cd build-deb/proxmox-lxcri-${{ steps.get_version.outputs.version }}
+          
+          # Build package
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -us -uc -a${{ matrix.arch }} --host-arch=${{ matrix.arch }}
+          else
+            dpkg-buildpackage -us -uc
+          fi
+          
+          # Move packages to dist
+          cd ..
+          mkdir -p ../dist
+          cp *.deb ../dist/
+          cp *.dsc ../dist/ || true
+          cp *.tar.* ../dist/ || true
+          cp *.changes ../dist/ || true
+
+      - name: Test DEB package
+        if: matrix.arch == 'amd64'
+        run: |
+          # Install the package in a test environment
+          sudo apt-get install -y ./dist/*.deb || true
+          
+          # Basic functionality test
+          proxmox-lxcri version
+          
+          # Check if service is available
+          systemctl status proxmox-lxcri || true
+          
+          # Test help
+          proxmox-lxcri help
+
+      - name: Run lintian checks
+        run: |
+          lintian dist/*.deb || echo "Lintian warnings found (non-fatal)"
+
+      - name: Upload DEB artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.deb
+          path: dist/*.deb
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, build-deb]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -106,6 +204,28 @@ jobs:
           - **300%+ Command Parsing**: StaticStringMap optimization
           - **Filesystem-Level Consistency**: ZFS copy-on-write guarantees
           - **Minimal Storage Overhead**: ~0-5% with ZFS deduplication
+          
+          ## 📦 Installation Options
+          
+          ### DEB Packages (Ubuntu/Debian)
+          ```bash
+          # Download and install DEB package
+          wget https://github.com/kubebsd/proxmox-lxcri/releases/download/v$VERSION/proxmox-lxcri_$VERSION-1_amd64.deb
+          sudo dpkg -i proxmox-lxcri_$VERSION-1_amd64.deb
+          sudo apt-get install -f  # Fix dependencies if needed
+          
+          # Configure and start
+          sudo systemctl enable proxmox-lxcri
+          sudo systemctl start proxmox-lxcri
+          ```
+          
+          ### Binary Installation
+          ```bash
+          # Download binary
+          wget https://github.com/kubebsd/proxmox-lxcri/releases/download/v$VERSION/proxmox-lxcri-linux-x86_64
+          chmod +x proxmox-lxcri-linux-x86_64
+          sudo mv proxmox-lxcri-linux-x86_64 /usr/local/bin/proxmox-lxcri
+          ```
           
           ## 📚 Documentation
           - Complete ZFS configuration and usage guide

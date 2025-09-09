@@ -1,0 +1,45 @@
+{
+  "proxmox": {
+    "hosts": ["localhost"],
+    "port": 8006,
+    "token": "",
+    "node": "proxmox",
+    "node_cache_duration": 60,
+    "verify_ssl": false
+  },
+  "runtime": {
+    "root": "/run/proxmox-lxcri",
+    "log_level": "info",
+    "log_format": "text",
+    "systemd_cgroup": true
+  },
+  "zfs": {
+    "enabled": true,
+    "auto_detect": true,
+    "base_dataset": "tank/containers",
+    "compression": "lz4",
+    "deduplication": false,
+    "snapshot_retention": {
+      "max_snapshots": 10,
+      "retention_days": 30,
+      "auto_cleanup": true
+    }
+  },
+  "checkpoint": {
+    "default_mode": "zfs",
+    "fallback_to_criu": true,
+    "criu_path": "/usr/sbin/criu",
+    "image_path": "/var/lib/proxmox-lxcri/checkpoints"
+  },
+  "networking": {
+    "bridge": "vmbr0",
+    "vlan_aware": true,
+    "mtu": 1500
+  },
+  "security": {
+    "apparmor": true,
+    "seccomp": true,
+    "no_new_privileges": true,
+    "readonly_rootfs": false
+  }
+}

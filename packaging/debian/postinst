@@ -1,0 +1,90 @@
+#!/bin/bash
+set -e
+
+# Post-installation script for proxmox-lxcri
+
+case "$1" in
+    configure)
+        # Create system user for proxmox-lxcri if it doesn't exist
+        if ! getent passwd proxmox-lxcri >/dev/null; then
+            adduser --system --group --home /var/lib/proxmox-lxcri \
+                    --no-create-home --shell /bin/false \
+                    --gecos "Proxmox LXCRI runtime" proxmox-lxcri
+        fi
+        
+        # Create necessary directories
+        mkdir -p /var/lib/proxmox-lxcri
+        mkdir -p /var/lib/proxmox-lxcri/checkpoints
+        mkdir -p /var/log/proxmox-lxcri
+        mkdir -p /run/proxmox-lxcri
+        
+        # Set proper ownership and permissions
+        chown -R proxmox-lxcri:proxmox-lxcri /var/lib/proxmox-lxcri
+        chown -R proxmox-lxcri:proxmox-lxcri /var/log/proxmox-lxcri
+        chown -R proxmox-lxcri:proxmox-lxcri /run/proxmox-lxcri
+        
+        chmod 755 /var/lib/proxmox-lxcri
+        chmod 755 /var/log/proxmox-lxcri
+        chmod 755 /run/proxmox-lxcri
+        
+        # Set up logrotate
+        cat > /etc/logrotate.d/proxmox-lxcri << 'EOF'
+/var/log/proxmox-lxcri/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    su proxmox-lxcri proxmox-lxcri
+}
+EOF
+        
+        # Enable and start systemd service if systemd is available
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload
+            systemctl enable proxmox-lxcri.service
+            
+            # Don't start automatically on first install to allow configuration
+            echo "Proxmox LXCRI installed successfully!"
+            echo ""
+            echo "Next steps:"
+            echo "1. Configure Proxmox API credentials in /etc/proxmox-lxcri/proxmox-lxcri.json"
+            echo "2. Start the service: systemctl start proxmox-lxcri"
+            echo "3. Check status: systemctl status proxmox-lxcri"
+            echo ""
+            echo "For ZFS checkpoint/restore functionality:"
+            echo "- Ensure ZFS is installed and configured"
+            echo "- Create datasets following the pattern: tank/containers/<container-id>"
+            echo "- See documentation: /usr/share/doc/proxmox-lxcri/zfs-checkpoint-guide.md"
+        fi
+        
+        # Check if ZFS is available
+        if command -v zfs >/dev/null 2>&1; then
+            echo "✅ ZFS detected - ZFS checkpoint/restore will be available"
+        else
+            echo "⚠️  ZFS not found - install zfsutils-linux for optimal checkpoint/restore performance"
+        fi
+        
+        # Check if CRIU is available
+        if command -v criu >/dev/null 2>&1; then
+            echo "✅ CRIU detected - CRIU fallback available"
+        else
+            echo "⚠️  CRIU not found - install criu package for checkpoint/restore fallback"
+        fi
+        
+        ;;
+    
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

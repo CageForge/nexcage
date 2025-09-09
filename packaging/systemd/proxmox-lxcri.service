@@ -1,0 +1,48 @@
+[Unit]
+Description=Proxmox LXCRI - OCI Container Runtime for Proxmox VE
+Documentation=https://github.com/kubebsd/proxmox-lxcri
+Documentation=man:proxmox-lxcri(1)
+After=network.target
+After=zfs.target
+Wants=zfs.target
+Requires=network.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/proxmox-lxcri daemon
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/proxmox-lxcri /var/lib/proxmox-lxcri /var/log/proxmox-lxcri
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=false
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Environment
+Environment=PROXMOX_LXCRI_CONFIG=/etc/proxmox-lxcri/proxmox-lxcri.json
+Environment=PROXMOX_LXCRI_ROOT=/run/proxmox-lxcri
+Environment=PROXMOX_LXCRI_LOG=/var/log/proxmox-lxcri/proxmox-lxcri.log
+
+# Resource limits
+LimitNOFILE=1048576
+LimitNPROC=1048576
+LimitCORE=infinity
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target

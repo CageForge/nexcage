@@ -69,26 +69,37 @@ A high-performance OCI-compatible runtime implementation that transforms Proxmox
 
 ## Installation
 
-1. Clone the repository:
+### 📦 Quick Install (DEB Package - Recommended)
+
 ```bash
-git clone https://github.com/yourusername/proxmox-lxcri.git
+# Ubuntu/Debian - Download and install DEB package
+wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/download/proxmox-lxcri_0.3.0-1_amd64.deb
+sudo dpkg -i proxmox-lxcri_0.3.0-1_amd64.deb
+sudo apt-get install -f
+
+# Configure and start
+sudo systemctl enable proxmox-lxcri
+sudo systemctl start proxmox-lxcri
+```
+
+### 🔧 Binary Installation
+
+```bash
+# Download binary
+wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/download/proxmox-lxcri-linux-x86_64
+chmod +x proxmox-lxcri-linux-x86_64
+sudo mv proxmox-lxcri-linux-x86_64 /usr/local/bin/proxmox-lxcri
+```
+
+### 🛠️ Build from Source
+
+```bash
+git clone https://github.com/kubebsd/proxmox-lxcri.git
 cd proxmox-lxcri
+zig build -Doptimize=ReleaseFast
 ```
 
-2. Install dependencies:
-```bash
-./scripts/install-deps.sh
-```
-
-3. Build the project:
-```bash
-./scripts/build.sh
-```
-
-4. Configure the project:
-```bash
-# Edit proxmox-config.json with your settings
-```
+**📖 Complete installation guide**: [docs/INSTALLATION.md](docs/INSTALLATION.md)
 
 ## Usage
 
