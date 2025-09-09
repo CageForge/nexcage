@@ -340,6 +340,11 @@ Current progress: **100% Sprint 3 Complete** 🎉
 4. Push to the branch
 5. Create a Pull Request
 
+### For Maintainers
+
+- **📋 Release Process**: [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) - Complete step-by-step release guide
+- **⚡ Quick Release**: [docs/RELEASE_QUICKSTART.md](docs/RELEASE_QUICKSTART.md) - Fast reference for experienced maintainers
+
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
