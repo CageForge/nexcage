@@ -61,6 +61,36 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Error recovery module
+    const error_recovery_mod = b.addModule("error_recovery", .{
+        .root_source_file = b.path("src/common/error_recovery.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "performance_monitor", .module = perf_monitor_mod },
+        },
+    });
+
+    // Security audit module
+    const security_audit_mod = b.addModule("security_audit", .{
+        .root_source_file = b.path("src/common/security_audit.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "performance_monitor", .module = perf_monitor_mod },
+        },
+    });
+
+    // Advanced container manager module
+    const advanced_container_mod = b.addModule("advanced_container_manager", .{
+        .root_source_file = b.path("src/oci/advanced_container_manager.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "logger", .module = logger_mod },
+            .{ .name = "performance_monitor", .module = perf_monitor_mod },
+        },
+    });
+
     // Config module
     const config_mod = b.addModule("config", .{
         .root_source_file = b.path("src/common/config.zig"),
@@ -203,6 +233,9 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("logger", logger_mod);
     exe.root_module.addImport("performance_monitor", perf_monitor_mod);
     exe.root_module.addImport("config_validator", config_validator_mod);
+    exe.root_module.addImport("error_recovery", error_recovery_mod);
+    exe.root_module.addImport("security_audit", security_audit_mod);
+    exe.root_module.addImport("advanced_container_manager", advanced_container_mod);
     exe.root_module.addImport("network", network_mod);
     exe.root_module.addImport("proxmox", proxmox_mod);
     exe.root_module.addImport("oci", oci_mod);
