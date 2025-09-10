@@ -1,0 +1,308 @@
+# Multi-stage Dockerfile for Proxmox LXCRI Runtime
+# Optimized for production deployment with security hardening
+
+# ============================================================================
+# BUILD STAGE - Build Proxmox LXCRI from source
+# ============================================================================
+FROM debian:bookworm-slim AS builder
+
+# Build arguments
+ARG TARGETARCH
+ARG VERSION=dev
+ARG COMMIT_SHA=unknown
+ARG BUILD_DATE=unknown
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    xz-utils \
+    build-essential \
+    libseccomp-dev \
+    libsystemd-dev \
+    pkg-config \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Zig compiler
+RUN case ${TARGETARCH} in \
+    "amd64") ZIG_ARCH="x86_64" ;; \
+    "arm64") ZIG_ARCH="aarch64" ;; \
+    *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+    esac && \
+    curl -L "https://ziglang.org/download/0.12.0/zig-linux-${ZIG_ARCH}-0.12.0.tar.xz" \
+    | tar -xJ -C /usr/local --strip-components=1
+
+# Set working directory
+WORKDIR /build
+
+# Copy source code
+COPY . .
+
+# Build Proxmox LXCRI
+RUN zig build \
+    -Dtarget=${TARGETARCH}-linux \
+    -Doptimize=ReleaseSafe \
+    -Dcpu=baseline \
+    --cache-dir /tmp/zig-cache \
+    --global-cache-dir /tmp/zig-global-cache
+
+# Build additional tools
+RUN zig build tools \
+    -Dtarget=${TARGETARCH}-linux \
+    -Doptimize=ReleaseSafe
+
+# Create version information
+RUN echo "VERSION=${VERSION}" > /build/version.env && \
+    echo "COMMIT_SHA=${COMMIT_SHA}" >> /build/version.env && \
+    echo "BUILD_DATE=${BUILD_DATE}" >> /build/version.env && \
+    echo "TARGET_ARCH=${TARGETARCH}" >> /build/version.env
+
+# ============================================================================
+# RUNTIME DEPENDENCIES STAGE - Prepare runtime environment
+# ============================================================================
+FROM debian:bookworm-slim AS runtime-deps
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    # Container runtime dependencies
+    crun \
+    runc \
+    uidmap \
+    # Security tools
+    libseccomp2 \
+    apparmor \
+    # Network tools
+    iptables \
+    iproute2 \
+    bridge-utils \
+    # Storage tools
+    zfsutils-linux \
+    btrfs-progs \
+    # System tools
+    systemd \
+    dbus \
+    ca-certificates \
+    # Debugging tools (minimal)
+    strace \
+    tcpdump \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================================
+# FINAL STAGE - Production runtime image
+# ============================================================================
+FROM runtime-deps AS runtime
+
+# Metadata labels
+LABEL org.opencontainers.image.title="Proxmox LXCRI"
+LABEL org.opencontainers.image.description="High-performance OCI container runtime for Proxmox VE"
+LABEL org.opencontainers.image.vendor="Proxmox LXCRI Team"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.source="https://github.com/kubebsd/proxmox-lxcri"
+LABEL org.opencontainers.image.documentation="https://docs.proxmox-lxcri.org"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.revision="${COMMIT_SHA}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+
+# Create non-root user for security
+RUN groupadd -r proxmox-lxcri && \
+    useradd -r -g proxmox-lxcri -s /bin/false -c "Proxmox LXCRI Runtime" proxmox-lxcri
+
+# Create necessary directories
+RUN mkdir -p \
+    /var/lib/proxmox-lxcri \
+    /var/log/proxmox-lxcri \
+    /etc/proxmox-lxcri \
+    /run/proxmox-lxcri \
+    /opt/proxmox-lxcri/bin \
+    /opt/proxmox-lxcri/lib \
+    && chown -R proxmox-lxcri:proxmox-lxcri \
+        /var/lib/proxmox-lxcri \
+        /var/log/proxmox-lxcri \
+        /run/proxmox-lxcri
+
+# Copy binaries from builder
+COPY --from=builder /build/zig-out/bin/proxmox-lxcri /opt/proxmox-lxcri/bin/
+COPY --from=builder /build/zig-out/bin/proxmox-lxcri-* /opt/proxmox-lxcri/bin/
+COPY --from=builder /build/zig-out/lib/* /opt/proxmox-lxcri/lib/
+
+# Copy configuration and scripts
+COPY --from=builder /build/configs/container-runtime.json /etc/proxmox-lxcri/default.json
+COPY --from=builder /build/scripts/container-entrypoint.sh /opt/proxmox-lxcri/bin/
+COPY --from=builder /build/scripts/healthcheck.sh /opt/proxmox-lxcri/bin/
+COPY --from=builder /build/version.env /opt/proxmox-lxcri/
+
+# Copy security profiles
+COPY --from=builder /build/configs/security/ /etc/proxmox-lxcri/security/
+
+# Make binaries executable
+RUN chmod +x /opt/proxmox-lxcri/bin/*
+
+# Create symlinks for easier access
+RUN ln -s /opt/proxmox-lxcri/bin/proxmox-lxcri /usr/local/bin/proxmox-lxcri && \
+    ln -s /opt/proxmox-lxcri/bin/container-entrypoint.sh /usr/local/bin/container-entrypoint
+
+# Set up systemd service
+COPY configs/systemd/proxmox-lxcri.service /etc/systemd/system/
+RUN systemctl enable proxmox-lxcri
+
+# Configure security
+RUN echo 'proxmox-lxcri ALL=(ALL) NOPASSWD: /opt/proxmox-lxcri/bin/proxmox-lxcri' > /etc/sudoers.d/proxmox-lxcri
+
+# Set up logging
+RUN mkdir -p /etc/logrotate.d && \
+    echo '/var/log/proxmox-lxcri/*.log {' > /etc/logrotate.d/proxmox-lxcri && \
+    echo '    daily' >> /etc/logrotate.d/proxmox-lxcri && \
+    echo '    rotate 30' >> /etc/logrotate.d/proxmox-lxcri && \
+    echo '    compress' >> /etc/logrotate.d/proxmox-lxcri && \
+    echo '    delaycompress' >> /etc/logrotate.d/proxmox-lxcri && \
+    echo '    missingok' >> /etc/logrotate.d/proxmox-lxcri && \
+    echo '    notifempty' >> /etc/logrotate.d/proxmox-lxcri && \
+    echo '}' >> /etc/logrotate.d/proxmox-lxcri
+
+# Configure environment
+ENV PATH="/opt/proxmox-lxcri/bin:${PATH}"
+ENV PROXMOX_LXCRI_CONFIG="/etc/proxmox-lxcri/default.json"
+ENV PROXMOX_LXCRI_DATA_DIR="/var/lib/proxmox-lxcri"
+ENV PROXMOX_LXCRI_LOG_DIR="/var/log/proxmox-lxcri"
+
+# Expose default ports
+EXPOSE 8080/tcp 8443/tcp 9090/tcp
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD /opt/proxmox-lxcri/bin/healthcheck.sh
+
+# Volume for persistent data
+VOLUME ["/var/lib/proxmox-lxcri", "/var/log/proxmox-lxcri"]
+
+# Use non-root user by default (can be overridden)
+USER proxmox-lxcri
+
+# Default command
+ENTRYPOINT ["/opt/proxmox-lxcri/bin/container-entrypoint.sh"]
+CMD ["daemon"]
+
+# ============================================================================
+# DEVELOPMENT VARIANT
+# ============================================================================
+FROM runtime AS development
+
+# Switch back to root for development tools installation
+USER root
+
+# Install development and debugging tools
+RUN apt-get update && apt-get install -y \
+    # Development tools
+    vim \
+    nano \
+    curl \
+    wget \
+    jq \
+    yq \
+    # Debugging tools
+    gdb \
+    valgrind \
+    ltrace \
+    htop \
+    iotop \
+    nethogs \
+    # Network debugging
+    netcat-openbsd \
+    nmap \
+    telnet \
+    dig \
+    # Container debugging
+    skopeo \
+    buildah \
+    podman \
+    # Performance analysis
+    perf-tools-unstable \
+    sysstat \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install additional container runtimes for testing
+RUN apt-get update && apt-get install -y \
+    containerd \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy development configuration
+COPY configs/development.json /etc/proxmox-lxcri/development.json
+
+# Enable debug logging by default in development
+ENV PROXMOX_LXCRI_CONFIG="/etc/proxmox-lxcri/development.json"
+ENV PROXMOX_LXCRI_LOG_LEVEL="debug"
+ENV PROXMOX_LXCRI_ENABLE_PROFILING="true"
+
+# Development entrypoint that starts additional services
+COPY scripts/development-entrypoint.sh /opt/proxmox-lxcri/bin/
+RUN chmod +x /opt/proxmox-lxcri/bin/development-entrypoint.sh
+
+# Switch back to proxmox-lxcri user
+USER proxmox-lxcri
+
+# Override entrypoint for development
+ENTRYPOINT ["/opt/proxmox-lxcri/bin/development-entrypoint.sh"]
+
+# ============================================================================
+# DEBUG VARIANT - Includes debugging symbols and tools
+# ============================================================================
+FROM builder AS debug-build
+
+# Build debug version with symbols
+RUN zig build \
+    -Dtarget=${TARGETARCH}-linux \
+    -Doptimize=Debug \
+    -Dcpu=baseline \
+    --cache-dir /tmp/zig-cache \
+    --global-cache-dir /tmp/zig-global-cache
+
+FROM runtime AS debug
+
+# Switch to root for tool installation
+USER root
+
+# Install comprehensive debugging tools
+RUN apt-get update && apt-get install -y \
+    gdb \
+    gdbserver \
+    valgrind \
+    strace \
+    ltrace \
+    tcpdump \
+    wireshark-common \
+    tshark \
+    perf-tools-unstable \
+    linux-perf \
+    sysstat \
+    procps \
+    psmisc \
+    lsof \
+    ss \
+    netstat \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy debug binaries with symbols
+COPY --from=debug-build /build/zig-out/bin/proxmox-lxcri /opt/proxmox-lxcri/bin/proxmox-lxcri-debug
+COPY --from=debug-build /build/zig-out/lib/* /opt/proxmox-lxcri/lib/
+
+# Enable core dumps
+RUN echo 'kernel.core_pattern=/var/lib/proxmox-lxcri/core.%e.%p.%t' >> /etc/sysctl.conf
+RUN echo '* soft core unlimited' >> /etc/security/limits.conf
+RUN echo '* hard core unlimited' >> /etc/security/limits.conf
+
+# Configure debug environment
+ENV PROXMOX_LXCRI_LOG_LEVEL="trace"
+ENV PROXMOX_LXCRI_ENABLE_PROFILING="true"
+ENV PROXMOX_LXCRI_DEBUG_MODE="true"
+ENV PROXMOX_LXCRI_CORE_DUMPS="true"
+
+# Debug-specific volumes
+VOLUME ["/var/lib/proxmox-lxcri/debug", "/var/lib/proxmox-lxcri/cores"]
+
+# Switch back to runtime user
+USER proxmox-lxcri
+
+# Use debug binary by default
+CMD ["/opt/proxmox-lxcri/bin/proxmox-lxcri-debug", "daemon", "--debug"]

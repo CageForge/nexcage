@@ -1,0 +1,182 @@
+apiVersion: v2
+name: proxmox-lxcri
+description: |
+  High-performance OCI container runtime for Kubernetes with Proxmox VE integration.
+  
+  This Helm chart deploys Proxmox LXCRI as a container runtime in Kubernetes clusters,
+  providing enterprise-grade container management with advanced security, monitoring,
+  and integration capabilities.
+
+type: application
+version: 0.3.0
+appVersion: "0.3.0"
+
+# Kubernetes version compatibility
+kubeVersion: ">=1.24.0"
+
+# Home and source information
+home: https://docs.proxmox-lxcri.org
+sources:
+  - https://github.com/kubebsd/proxmox-lxcri
+  - https://charts.proxmox-lxcri.org
+
+# Maintainer information
+maintainers:
+  - name: Proxmox LXCRI Team
+    email: maintainers@proxmox-lxcri.org
+    url: https://github.com/kubebsd/proxmox-lxcri
+
+# Chart keywords for discoverability
+keywords:
+  - container-runtime
+  - oci
+  - proxmox
+  - kubernetes
+  - cri
+  - runtime
+  - virtualization
+  - enterprise
+  - security
+  - monitoring
+
+# Chart annotations
+annotations:
+  # Category for Artifact Hub
+  category: Infrastructure
+  
+  # Artifact Hub specific annotations
+  artifacthub.io/license: MIT
+  artifacthub.io/readme: |
+    # Proxmox LXCRI Helm Chart
+    
+    This chart installs Proxmox LXCRI container runtime in a Kubernetes cluster.
+    
+    ## Features
+    - High-performance OCI runtime
+    - Enterprise security and compliance
+    - Real-time monitoring and metrics
+    - Proxmox VE integration
+    - Advanced lifecycle management
+    
+    ## Quick Start
+    ```bash
+    helm repo add proxmox-lxcri https://charts.proxmox-lxcri.org
+    helm install proxmox-lxcri proxmox-lxcri/proxmox-lxcri
+    ```
+    
+    For detailed configuration options, see the [documentation](https://docs.proxmox-lxcri.org/kubernetes/).
+  
+  artifacthub.io/crds: |
+    - kind: RuntimeClass
+      version: v1
+      name: proxmox-lxcri
+      displayName: Proxmox LXCRI Runtime Class
+      description: Runtime class for Proxmox LXCRI container runtime
+  
+  artifacthub.io/crdsExamples: |
+    - apiVersion: node.k8s.io/v1
+      kind: RuntimeClass
+      metadata:
+        name: proxmox-lxcri-secure
+      handler: proxmox-lxcri
+      overhead:
+        podFixed:
+          memory: 64Mi
+          cpu: 100m
+      scheduling:
+        nodeClassificationPolicy: RestrictedTopologyPolicy
+        tolerations:
+        - effect: NoSchedule
+          key: proxmox-lxcri
+          operator: Equal
+          value: "true"
+  
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial Helm chart for Proxmox LXCRI v0.3.0
+    - kind: added
+      description: Support for multiple security profiles
+    - kind: added
+      description: Comprehensive monitoring and metrics
+    - kind: added
+      description: Advanced container lifecycle management
+    - kind: added
+      description: ZFS integration for checkpoints
+    - kind: added
+      description: Multi-platform support (amd64, arm64)
+  
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/images: |
+    - name: proxmox-lxcri
+      image: ghcr.io/kubebsd/proxmox-lxcri:0.3.0
+      whitelisted: true
+    - name: node-setup
+      image: ghcr.io/kubebsd/proxmox-lxcri-node-setup:0.3.0
+      whitelisted: true
+    - name: monitoring
+      image: ghcr.io/kubebsd/proxmox-lxcri-monitoring:0.3.0
+      whitelisted: true
+  
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://docs.proxmox-lxcri.org
+    - name: Chart Repository
+      url: https://charts.proxmox-lxcri.org
+    - name: Support
+      url: https://github.com/kubebsd/proxmox-lxcri/issues
+    - name: Security Policy
+      url: https://github.com/kubebsd/proxmox-lxcri/security/policy
+  
+  artifacthub.io/operator: "false"
+  artifacthub.io/operatorCapabilities: Basic Install
+  
+  # Security scanning
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/signKey: |
+    -----BEGIN PGP PUBLIC KEY BLOCK-----
+    [PGP public key for chart signing]
+    -----END PGP PUBLIC KEY BLOCK-----
+
+# Chart dependencies
+dependencies:
+  # Prometheus monitoring stack (optional)
+  - name: kube-prometheus-stack
+    version: "~45.0.0"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: monitoring.prometheus.enabled
+    tags:
+      - monitoring
+  
+  # Grafana dashboards (optional)
+  - name: grafana
+    version: "~6.50.0"
+    repository: https://grafana.github.io/helm-charts
+    condition: monitoring.grafana.enabled
+    tags:
+      - monitoring
+      - dashboards
+  
+  # Service mesh integration (optional)
+  - name: istio-base
+    version: "~1.19.0"
+    repository: https://istio-release.storage.googleapis.com/charts
+    condition: serviceMesh.istio.enabled
+    tags:
+      - service-mesh
+  
+  # Certificate management (optional)
+  - name: cert-manager
+    version: "~1.13.0"
+    repository: https://charts.jetstack.io
+    condition: security.certManager.enabled
+    tags:
+      - security
+      - certificates
+
+# Deprecated fields (for backward compatibility)
+deprecated: false
+tillerVersion: ">=2.12.0"
+engine: gotpl
+
+# Chart icon for UI display
+icon: https://docs.proxmox-lxcri.org/assets/logo.svg
