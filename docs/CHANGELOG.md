@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extended testing coverage
 - Enhanced documentation
 
-## [0.3.0] - 2024-12-29
+## [0.3.0] - 2025-09-08
 
 ### Added
 - **ZFS Checkpoint/Restore System**: Complete implementation of ZFS-based container state management
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Comprehensive Documentation**: Complete ZFS configuration and usage guide
 - **Architecture Updates**: Enhanced documentation with ZFS integration diagrams
 
-## [0.2.0] - 2024-08-19
+## [0.2.0] - 2025-08-19
 
 ### Added
 - **OCI Image System**: Complete implementation of OCI v1.0.2 image specification
@@ -78,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resolved memory leaks in layer management
 - Improved test coverage and reliability
 
-## [0.2.0] - 2024-08-19
+## [0.2.0] - 2025-08-19
 
 ### Added
 - Initial release

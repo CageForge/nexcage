@@ -54,28 +54,62 @@ pub const EnvVar = struct {
     }
 };
 
+/// Comprehensive container configuration structure
+/// 
+/// Contains all necessary information to create, configure, and manage
+/// a container instance. Supports both OCI-compliant and Proxmox-specific
+/// configuration options with proper memory management.
 pub const ContainerConfig = struct {
+    /// Unique identifier for the container
     id: []const u8,
+    /// Human-readable name for the container
     name: []const u8,
+    /// Current state information of the container
     state: ContainerStateInfo,
+    /// Process ID of the container's main process (if running)
     pid: ?u32,
+    /// Path to the OCI bundle directory
     bundle: []const u8,
+    /// Optional annotations for metadata
     annotations: ?[]Annotation,
+    /// Additional metadata associated with the container
     metadata: ?ContainerMetadata,
+    /// Container image specification
     image: ?ImageSpec,
+    /// Command to execute in the container
     command: ?[]const []const u8,
+    /// Arguments for the container command
     args: ?[]const []const u8,
+    /// Working directory inside the container
     working_dir: ?[]const u8,
+    /// Environment variables for the container
     envs: ?[]EnvVar,
+    /// Mount points to be created in the container
     mounts: ?[]Mount,
+    /// Devices to be made available in the container
     devices: ?[]Device,
+    /// Key-value labels for the container
     labels: ?*std.StringHashMap([]const u8),
+    /// Linux-specific container configuration
     linux: ?LinuxContainerConfig,
+    /// Path for container logs
     log_path: ?[]const u8,
+    /// Memory allocator for dynamic allocations
     allocator: Allocator,
+    /// Patterns to identify crun-managed containers
     crun_name_patterns: []const []const u8,
+    /// Default container runtime type to use
     default_container_type: ContainerType,
 
+    /// Initializes a new ContainerConfig with default values
+    /// 
+    /// Creates a properly initialized container configuration with safe defaults
+    /// and proper memory management setup.
+    /// 
+    /// Arguments:
+    /// - allocator: Memory allocator for dynamic allocations
+    /// 
+    /// Returns: Initialized ContainerConfig or error if allocation fails
     pub fn init(allocator: Allocator) !ContainerConfig {
         return ContainerConfig{
             .id = "",
@@ -198,8 +232,8 @@ pub const ContainerSpec = struct {
             network.deinit(self.allocator);
         }
         if (self.storage) |storage| {
-            for (storage) |*config| {
-                config.deinit();
+            for (storage) |*storage_config| {
+                storage_config.deinit();
             }
             self.allocator.free(storage);
         }

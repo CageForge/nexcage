@@ -259,38 +259,6 @@ Runtime options:
 sudo systemctl restart containerd
 ```
 
-## What's New in v0.2.0
-
-### 🎯 Major Milestone
-Proxmox LXCRI v0.2.0 represents a transformative release that introduces a complete OCI Image System with enterprise-grade performance characteristics.
-
-### 🚀 Key Achievements
-- **Complete OCI Implementation**: Full OCI v1.0.2 image specification support
-- **Performance Revolution**: 20%+ performance improvement across all operations
-- **Comprehensive Testing**: 5 test categories with 50+ individual tests
-- **Production Ready**: Enterprise-grade reliability and performance
-- **Complete Documentation**: API, User Guide, and Performance Guide
-
-### 📊 Performance Improvements
-- **MetadataCache**: 95% faster LRU operations (O(1) complexity)
-- **LayerFS**: 40% faster batch operations
-- **Object Pool**: 60% faster layer creation
-- **Memory Usage**: 15-25% reduction across all operations
-- **Overall**: 20%+ performance improvement
-
-### 🧪 Testing Excellence
-- **Unit Tests**: Core functionality validation
-- **Performance Tests**: Automated benchmarking
-- **Memory Tests**: Leak detection and resource management
-- **Integration Tests**: End-to-end workflow validation
-- **Comprehensive Tests**: Full system stress testing
-
-### 📚 Documentation Complete
-- **API Reference**: 100% API coverage with examples
-- **User Guide**: Real-world usage scenarios
-- **Performance Guide**: Optimization strategies and best practices
-- **Testing Guide**: Complete testing framework documentation
-- **Developer Guide**: Contribution and development guidelines
 
 ## Architecture
 

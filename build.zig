@@ -34,6 +34,15 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Performance monitor module
+    const perf_monitor_mod = b.addModule("performance_monitor", .{
+        .root_source_file = b.path("src/common/performance_monitor.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
     // Config module
     const config_mod = b.addModule("config", .{
         .root_source_file = b.path("src/common/config.zig"),
@@ -174,6 +183,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("error", error_mod);
     exe.root_module.addImport("config", config_mod);
     exe.root_module.addImport("logger", logger_mod);
+    exe.root_module.addImport("performance_monitor", perf_monitor_mod);
     exe.root_module.addImport("network", network_mod);
     exe.root_module.addImport("proxmox", proxmox_mod);
     exe.root_module.addImport("oci", oci_mod);
@@ -252,11 +262,43 @@ pub fn build(b: *std.Build) void {
 
     const run_performance_test = b.addRunArtifact(performance_test);
     
+    // Edge cases test
+    const edge_cases_test = b.addTest(.{
+        .root_source_file = b.path("tests/edge_cases_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    edge_cases_test.root_module.addImport("types", types_mod);
+    edge_cases_test.root_module.addImport("error", error_mod);
+    edge_cases_test.root_module.addImport("logger", logger_mod);
+    edge_cases_test.root_module.addImport("config", config_mod);
+    edge_cases_test.root_module.addImport("oci", oci_mod);
+
+    const run_edge_cases_test = b.addRunArtifact(edge_cases_test);
+    
+    // Container lifecycle integration test
+    const container_lifecycle_test = b.addTest(.{
+        .root_source_file = b.path("tests/integration/container_lifecycle_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    container_lifecycle_test.root_module.addImport("types", types_mod);
+    container_lifecycle_test.root_module.addImport("error", error_mod);
+    container_lifecycle_test.root_module.addImport("logger", logger_mod);
+    container_lifecycle_test.root_module.addImport("config", config_mod);
+    container_lifecycle_test.root_module.addImport("oci", oci_mod);
+
+    const run_container_lifecycle_test = b.addRunArtifact(container_lifecycle_test);
+    
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_config_test.step);
     test_step.dependOn(&run_crun_test.step);
     test_step.dependOn(&run_crun_integration_test.step);
     test_step.dependOn(&run_performance_test.step);
+    test_step.dependOn(&run_edge_cases_test.step);
+    test_step.dependOn(&run_container_lifecycle_test.step);
     
     // Separate step for crun integration test
     const crun_integration_step = b.step("crun_integration", "Run crun integration tests");

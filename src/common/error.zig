@@ -1,7 +1,19 @@
+/// Error handling module for Proxmox LXCRI container runtime
+/// 
+/// This module provides comprehensive error definitions and handling utilities
+/// for all components of the Proxmox LXCRI system, including configuration,
+/// Proxmox API interactions, container runtime operations, and system errors.
 const std = @import("std");
 const logger = @import("logger");
 const types = @import("types");
 
+/// Comprehensive error set covering all possible failure modes in Proxmox LXCRI
+/// 
+/// Errors are categorized by source:
+/// - Configuration: Issues with config file parsing and validation
+/// - Proxmox API: Remote API communication and authentication errors
+/// - CRI: Container Runtime Interface specific errors
+/// - Runtime: General runtime and system-level errors
 pub const Error = error{
     // Configuration errors
     ConfigNotFound,
@@ -79,6 +91,17 @@ pub const Error = error{
     NotInitialized,
 };
 
+/// Handles and logs errors with contextual information
+/// 
+/// Creates an ErrorContext with the provided information and logs it through
+/// the global logger. The error is then re-thrown to maintain error propagation.
+/// 
+/// Arguments:
+/// - allocator: Memory allocator for error context creation
+/// - err: The error that occurred
+/// - context: Descriptive context where the error occurred
+/// 
+/// Returns: The original error (re-thrown after logging)
 pub fn handleError(allocator: std.mem.Allocator, err: anyerror, context: []const u8) !void {
     const error_context = try types.ErrorContext.init(allocator, @errorName(err), err, context, null);
     defer error_context.deinit(allocator);
@@ -87,6 +110,18 @@ pub fn handleError(allocator: std.mem.Allocator, err: anyerror, context: []const
     return err;
 }
 
+/// Handles and logs errors with additional details
+/// 
+/// Extended version of handleError that includes detailed information about
+/// the error context and circumstances.
+/// 
+/// Arguments:
+/// - allocator: Memory allocator for error context creation
+/// - err: The error that occurred
+/// - context: Descriptive context where the error occurred
+/// - details: Additional details about the error circumstances
+/// 
+/// Returns: The original error (re-thrown after logging)
 pub fn handleErrorWithDetails(allocator: std.mem.Allocator, err: anyerror, context: []const u8, details: []const u8) !void {
     const error_context = try types.ErrorContext.init(allocator, @errorName(err), err, context, details);
     defer error_context.deinit(allocator);

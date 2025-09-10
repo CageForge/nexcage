@@ -73,10 +73,30 @@ const StaticMap = std.StaticStringMap(Command).initComptime(.{
     .{ "-V", .version },
 });
 
+/// Parses a command string into a Command enum using StaticStringMap
+/// 
+/// Efficiently maps command line arguments to internal command representations
+/// using a compile-time generated hash map for maximum performance.
+/// 
+/// Arguments:
+/// - command: Command string from command line arguments
+/// 
+/// Returns: Corresponding Command enum value, or .unknown if not recognized
 fn parseCommand(command: []const u8) Command {
     return StaticMap.get(command) orelse .unknown;
 }
 
+/// Initializes the global logging system with configuration-based settings
+/// 
+/// Sets up logging with proper file handling, directory creation, and fallback
+/// mechanisms. Supports both command-line overrides and configuration file settings.
+/// 
+/// Arguments:
+/// - allocator: Memory allocator for logger operations
+/// - options: Runtime options from command line parsing
+/// - cfg: Configuration object with logging settings
+/// 
+/// Returns: Error if logger initialization fails
 fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.Config) !void {
     const log_level = if (options.debug) types.LogLevel.debug else types.LogLevel.info;
 
