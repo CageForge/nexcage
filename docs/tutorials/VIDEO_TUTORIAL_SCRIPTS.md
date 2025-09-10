@@ -25,7 +25,7 @@ This document contains detailed scripts for video tutorials covering all aspects
 
 *Visual: Animated logo, modern container graphics*
 
-**Narrator:** "Welcome to Proxmox LXCRI - the next-generation container runtime that bridges the gap between lightweight containers and enterprise virtualization. I'm [Name], and in this video, you'll discover how Proxmox LXCRI revolutionizes container management."
+**Narrator:** "Welcome to Proxmox LXCRI - the next-generation container runtime that bridges the gap between lightweight containers and enterprise virtualization. I'm Marian, and in this video, you'll discover how Proxmox LXCRI revolutionizes container management."
 
 **[0:30-2:00] Problem Statement**
 
@@ -136,46 +136,43 @@ proxmox-lxcri create secure-web \
 *Visual: Checklist with system verification commands*
 
 ```bash
-# System requirements check
-uname -a                    # Linux kernel 5.0+
-free -h                     # 2GB+ RAM recommended
-df -h                       # 10GB+ free space
-systemctl status pveproxy   # Proxmox VE running
+# Debian/Proxmox VE requirements check
+cat /etc/debian_version     # Debian 11+ required
+uname -a                    # Linux kernel 5.15+ (Proxmox VE)
+free -h                     # 4GB+ RAM recommended for Proxmox VE
+df -h                       # 20GB+ free space
+systemctl status pve-cluster   # Proxmox VE cluster running
+systemctl status pvedaemon     # Proxmox VE daemon
+pvesh get /version          # Proxmox VE API version
 ```
 
 **[2:30-4:30] Installation Methods**
 
 *Visual: Three installation panels*
 
-**Narrator:** "Three installation methods are available:"
+**Narrator:** "Two installation methods for Debian/Proxmox VE:"
 
-**Panel 1: APT Repository (Recommended)**
+**Panel 1: APT Repository (Recommended for Proxmox VE)**
 ```bash
-# Add repository
+# Add Proxmox VE compatible repository
 echo "deb [signed-by=/usr/share/keyrings/proxmox-lxcri.gpg] \
   https://repo.proxmox-lxcri.org/debian bookworm main" | \
   sudo tee /etc/apt/sources.list.d/proxmox-lxcri.list
 
-# Install
+# Install on Proxmox VE node
 sudo apt update
-sudo apt install proxmox-lxcri
+sudo apt install proxmox-lxcri proxmox-lxcri-zfs
 ```
 
-**Panel 2: DEB Package**
+**Panel 2: DEB Package (Manual installation)**
 ```bash
-# Download and install
-wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/proxmox-lxcri.deb
-sudo dpkg -i proxmox-lxcri.deb
+# Download Debian/Proxmox VE compatible package
+wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/proxmox-lxcri-debian.deb
+sudo dpkg -i proxmox-lxcri-debian.deb
 sudo apt install -f  # Fix dependencies
-```
 
-**Panel 3: From Source**
-```bash
-# Build from source
-git clone https://github.com/kubebsd/proxmox-lxcri.git
-cd proxmox-lxcri
-zig build -Doptimize=ReleaseSafe
-sudo zig build install
+# Verify Proxmox VE integration
+sudo systemctl enable proxmox-lxcri
 ```
 
 **[4:30-6:30] Configuration Setup**

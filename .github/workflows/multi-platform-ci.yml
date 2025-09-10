@@ -16,55 +16,28 @@ env:
 
 jobs:
   # ============================================================================
-  # BUILD MATRIX - Multiple platforms and configurations
+  # BUILD MATRIX - Debian Linux only (Proxmox VE compatibility)
   # ============================================================================
   build-matrix:
-    name: Build (${{ matrix.os }}, ${{ matrix.arch }}, ${{ matrix.mode }})
-    runs-on: ${{ matrix.runner }}
+    name: Build (Debian Linux ${{ matrix.arch }}, ${{ matrix.mode }})
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux builds
-          - os: linux
-            arch: amd64
-            runner: ubuntu-22.04
+          # Debian Linux builds only
+          - arch: amd64
             mode: debug
             target: x86_64-linux
-          - os: linux
-            arch: amd64
-            runner: ubuntu-22.04
+          - arch: amd64
             mode: release
             target: x86_64-linux
-          - os: linux
-            arch: arm64
-            runner: ubuntu-22.04
+          - arch: arm64
             mode: release
             target: aarch64-linux
-          - os: linux
-            arch: arm64
-            runner: ubuntu-22.04
+          - arch: arm64
             mode: debug
             target: aarch64-linux
-          
-          # macOS builds
-          - os: macos
-            arch: amd64
-            runner: macos-13
-            mode: release
-            target: x86_64-macos
-          - os: macos
-            arch: arm64
-            runner: macos-14
-            mode: release
-            target: aarch64-macos
-          
-          # Windows builds (for development/testing tools)
-          - os: windows
-            arch: amd64
-            runner: windows-2022
-            mode: release
-            target: x86_64-windows
 
     steps:
     - name: Checkout repository
@@ -75,7 +48,7 @@ jobs:
     - name: Set up Zig
       uses: goto-bus-stop/setup-zig@v2
       with:
-        version: 0.12.0
+        version: 0.13.0
 
     - name: Cache Zig dependencies
       uses: actions/cache@v4
@@ -88,8 +61,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-${{ matrix.arch }}-zig-
 
-    - name: Install platform dependencies (Linux)
-      if: matrix.os == 'linux'
+    - name: Install Debian/Proxmox dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -97,21 +69,11 @@ jobs:
           libseccomp-dev \
           libsystemd-dev \
           pkg-config \
-          qemu-user-static
+          qemu-user-static \
+          zfsutils-linux
 
-    - name: Install platform dependencies (macOS)
-      if: matrix.os == 'macos'
-      run: |
-        brew install pkg-config
-
-    - name: Install platform dependencies (Windows)
-      if: matrix.os == 'windows'
-      run: |
-        # Windows-specific dependencies for development tools
-        choco install make
-
-    - name: Configure cross-compilation (Linux ARM64)
-      if: matrix.os == 'linux' && matrix.arch == 'arm64'
+    - name: Configure cross-compilation (ARM64)
+      if: matrix.arch == 'arm64'
       run: |
         sudo apt-get install -y gcc-aarch64-linux-gnu
         export CC=aarch64-linux-gnu-gcc
@@ -125,21 +87,21 @@ jobs:
           -Dcpu=baseline
 
     - name: Run unit tests
-      if: matrix.os == 'linux' && matrix.arch == 'amd64'
+      if: matrix.arch == 'amd64'
       run: |
         zig build test \
           -Dtarget=${{ matrix.target }} \
           -Doptimize=${{ matrix.mode == 'release' && 'ReleaseSafe' || 'Debug' }}
 
-    - name: Run integration tests
-      if: matrix.os == 'linux' && matrix.arch == 'amd64'
+    - name: Run integration tests (requires Proxmox VE for full testing)
+      if: matrix.arch == 'amd64'
       run: |
         zig build test-integration \
           -Dtarget=${{ matrix.target }} \
           -Doptimize=${{ matrix.mode == 'release' && 'ReleaseSafe' || 'Debug' }}
 
-    - name: Security scan (Linux only)
-      if: matrix.os == 'linux' && matrix.mode == 'release'
+    - name: Security scan (Debian compatibility)
+      if: matrix.mode == 'release'
       run: |
         # Static analysis with Semgrep
         pip install semgrep
@@ -149,8 +111,8 @@ jobs:
         sudo apt-get install -y checksec
         checksec --file=zig-out/bin/proxmox-lxcri
 
-    - name: Performance benchmarks
-      if: matrix.os == 'linux' && matrix.arch == 'amd64' && matrix.mode == 'release'
+    - name: Performance benchmarks (Debian/Proxmox optimized)
+      if: matrix.arch == 'amd64' && matrix.mode == 'release'
       run: |
         zig build benchmark
         
@@ -162,7 +124,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: proxmox-lxcri-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}
+        name: proxmox-lxcri-debian-${{ matrix.arch }}-${{ matrix.mode }}
         path: |
           zig-out/bin/proxmox-lxcri*
           zig-out/lib/libproxmox-lxcri*
@@ -172,7 +134,7 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}
+        name: test-results-debian-${{ matrix.arch }}-${{ matrix.mode }}
         path: |
           test-results.xml
           coverage-report.html
@@ -207,16 +169,16 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Download build artifacts
+    - name: Download build artifacts (amd64)
       uses: actions/download-artifact@v4
       with:
-        name: proxmox-lxcri-linux-amd64-release
+        name: proxmox-lxcri-debian-amd64-release
         path: ./artifacts/amd64/
 
     - name: Download ARM64 artifacts
       uses: actions/download-artifact@v4
       with:
-        name: proxmox-lxcri-linux-arm64-release
+        name: proxmox-lxcri-debian-arm64-release
         path: ./artifacts/arm64/
 
     - name: Extract metadata
@@ -274,16 +236,15 @@ jobs:
         cache-to: type=gha,mode=max
 
   # ============================================================================
-  # PACKAGE BUILDING
+  # PACKAGE BUILDING - Debian only (for Proxmox VE)
   # ============================================================================
   build-packages:
-    name: Build System Packages
+    name: Build Debian Packages
     needs: build-matrix
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        distro: [debian, ubuntu, fedora, arch]
-        version: [stable, latest]
+        codename: [bookworm, bullseye]  # Debian versions for Proxmox VE
 
     steps:
     - name: Checkout repository
@@ -292,56 +253,42 @@ jobs:
     - name: Download build artifacts
       uses: actions/download-artifact@v4
       with:
-        name: proxmox-lxcri-linux-amd64-release
+        name: proxmox-lxcri-debian-amd64-release
         path: ./artifacts/
 
-    - name: Set up packaging environment
+    - name: Set up Debian packaging environment
       run: |
         sudo apt-get update
         sudo apt-get install -y \
           devscripts \
           debhelper \
-          rpm \
-          createrepo-c \
-          alien
+          build-essential \
+          fakeroot \
+          lintian
 
-    - name: Build DEB package (Debian/Ubuntu)
-      if: matrix.distro == 'debian' || matrix.distro == 'ubuntu'
+    - name: Build DEB package for Proxmox VE
       run: |
         ./packaging/build-deb.sh \
           --version ${{ github.ref_name }} \
-          --distribution ${{ matrix.distro }} \
-          --codename ${{ matrix.version }}
+          --distribution debian \
+          --codename ${{ matrix.codename }} \
+          --proxmox-ve-compatible
 
-    - name: Build RPM package (Fedora)
-      if: matrix.distro == 'fedora'
-      run: |
-        ./packaging/build-rpm.sh \
-          --version ${{ github.ref_name }} \
-          --distribution ${{ matrix.distro }} \
-          --release ${{ matrix.version }}
-
-    - name: Build Arch package
-      if: matrix.distro == 'arch'
-      run: |
-        ./packaging/build-arch.sh \
-          --version ${{ github.ref_name }}
-
-    - name: Test package installation
+    - name: Test package installation on Debian
       run: |
         ./packaging/test-package.sh \
-          --package ./packages/proxmox-lxcri-${{ matrix.distro }}-${{ matrix.version }}.* \
-          --distribution ${{ matrix.distro }}
+          --package ./packages/proxmox-lxcri-debian-${{ matrix.codename }}.deb \
+          --distribution debian \
+          --test-proxmox-integration
 
-    - name: Upload packages
+    - name: Upload Debian packages
       uses: actions/upload-artifact@v4
       with:
-        name: packages-${{ matrix.distro }}-${{ matrix.version }}
+        name: packages-debian-${{ matrix.codename }}
         path: |
-          packages/proxmox-lxcri-*
           packages/proxmox-lxcri-*.deb
-          packages/proxmox-lxcri-*.rpm
-          packages/proxmox-lxcri-*.pkg.tar.xz
+          packages/proxmox-lxcri-*_amd64.deb
+          packages/proxmox-lxcri-*_arm64.deb
         retention-days: 90
 
   # ============================================================================
@@ -432,7 +379,7 @@ jobs:
     - name: Download test artifacts
       uses: actions/download-artifact@v4
       with:
-        pattern: test-results-*
+        pattern: test-results-debian-*
         merge-multiple: true
 
     - name: Code coverage analysis
@@ -525,15 +472,11 @@ jobs:
 
     - name: Publish to package repositories
       run: |
-        # Publish DEB packages
+        # Publish DEB packages to Proxmox VE compatible repository
         ./scripts/publish-deb.sh \
           --packages packages/**/*.deb \
-          --repository-url https://repo.proxmox-lxcri.org/debian
-
-        # Publish RPM packages  
-        ./scripts/publish-rpm.sh \
-          --packages packages/**/*.rpm \
-          --repository-url https://repo.proxmox-lxcri.org/fedora
+          --repository-url https://repo.proxmox-lxcri.org/debian \
+          --proxmox-ve-repo
 
     - name: Update documentation
       run: |

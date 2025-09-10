@@ -1,5 +1,5 @@
 # Default values for Proxmox LXCRI Helm Chart
-# This file contains comprehensive configuration options for production deployment
+# Optimized for Debian Linux and Proxmox VE environments only
 
 # ============================================================================
 # GLOBAL CONFIGURATION
@@ -86,9 +86,10 @@ daemonset:
     rollingUpdate:
       maxUnavailable: 1
   
-  # Node selection for runtime installation
+  # Node selection for runtime installation (Debian only)
   nodeSelector:
     kubernetes.io/os: linux
+    node.kubernetes.io/debian-version: bookworm
   
   tolerations:
   - operator: Exists

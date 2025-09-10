@@ -2,15 +2,19 @@
 
 ## 🚀 Quick Start Interactive Tutorial
 
-This guide provides hands-on examples and interactive commands to get you started with Proxmox LXCRI immediately.
+This guide provides hands-on examples and interactive commands to get you started with Proxmox LXCRI on Debian Linux and Proxmox VE environments.
 
 ### Prerequisites Verification
 
 ```bash
+# Verify Debian/Proxmox VE environment
+cat /etc/debian_version  # Should show Debian version
+systemctl status pve-cluster  # Proxmox VE cluster service
+
 # Check if Proxmox LXCRI is installed
 proxmox-lxcri --version
 
-# Verify Proxmox connection
+# Verify Proxmox VE connection
 proxmox-lxcri list
 
 # Check configuration
