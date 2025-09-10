@@ -143,9 +143,9 @@ test "Performance property: Container creation time" {
     // Property: Container creation should complete within reasonable time
     const ContainerCreationFunction = struct {
         fn create(alloc: std.mem.Allocator) !*types.Container {
-            var config = try types.ContainerConfig.init(alloc);
-            config.id = try alloc.dupe(u8, "perf-test-container");
-            return try types.Container.init(alloc, &config);
+            var container_config = try types.ContainerConfig.init(alloc);
+            container_config.id = try alloc.dupe(u8, "perf-test-container");
+            return try types.Container.init(alloc, &container_config);
         }
     };
 
@@ -161,12 +161,12 @@ test "Memory usage property: Container cleanup" {
     // Property: Container creation and cleanup should not use excessive memory
     const ContainerMemoryFunction = struct {
         fn createAndDestroy(alloc: std.mem.Allocator) !void {
-            var config = try types.ContainerConfig.init(alloc);
-            defer config.deinit();
+            var container_config = try types.ContainerConfig.init(alloc);
+            defer container_config.deinit();
             
-            config.id = try alloc.dupe(u8, "memory-test-container");
+            container_config.id = try alloc.dupe(u8, "memory-test-container");
             
-            const container = try types.Container.init(alloc, &config);
+            const container = try types.Container.init(alloc, &container_config);
             defer container.deinit();
         }
     };
@@ -233,12 +233,12 @@ test "Benchmark: Container operations" {
 
     const ContainerCreation = struct {
         fn createContainer(alloc: std.mem.Allocator) !void {
-            var config = try types.ContainerConfig.init(alloc);
-            defer config.deinit();
+            var container_config = try types.ContainerConfig.init(alloc);
+            defer container_config.deinit();
             
-            config.id = try alloc.dupe(u8, "benchmark-container");
+            container_config.id = try alloc.dupe(u8, "benchmark-container");
             
-            const container = try types.Container.init(alloc, &config);
+            const container = try types.Container.init(alloc, &container_config);
             defer container.deinit();
         }
     };
@@ -325,17 +325,17 @@ test "Stress testing: Rapid container lifecycle" {
     const start_time = std.time.nanoTimestamp();
     
     while (i < container_count) : (i += 1) {
-        var config = try types.ContainerConfig.init(allocator);
-        config.id = try std.fmt.allocPrint(allocator, "stress-test-{d}", .{i});
+        var container_config = try types.ContainerConfig.init(allocator);
+        container_config.id = try std.fmt.allocPrint(allocator, "stress-test-{d}", .{i});
         
-        const container = try types.Container.init(allocator, &config);
+        const container = try types.Container.init(allocator, &container_config);
         
         // Verify container state
         try expectEqual(types.ContainerState.created, container.state);
         
         // Cleanup
         container.deinit();
-        config.deinit();
+        container_config.deinit();
     }
     
     const end_time = std.time.nanoTimestamp();

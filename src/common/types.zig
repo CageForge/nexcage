@@ -232,7 +232,7 @@ pub const ContainerSpec = struct {
             network.deinit(self.allocator);
         }
         if (self.storage) |storage| {
-            for (storage) |*storage_config| {
+            for (storage) |storage_config| {
                 storage_config.deinit();
             }
             self.allocator.free(storage);
@@ -867,7 +867,7 @@ pub const StorageConfig = struct {
         };
     }
 
-    pub fn deinit(self: *StorageConfig) void {
+    pub fn deinit(self: StorageConfig) void {
         if (self.zfs_dataset) |dataset| {
             self.allocator.free(dataset);
         }
