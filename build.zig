@@ -43,6 +43,24 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Configuration validator module
+    const config_validator_mod = b.addModule("config_validator", .{
+        .root_source_file = b.path("src/common/config_validator.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
+    // Test utilities module
+    const test_utilities_mod = b.addModule("test_utilities", .{
+        .root_source_file = b.path("tests/test_utilities.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
     // Config module
     const config_mod = b.addModule("config", .{
         .root_source_file = b.path("src/common/config.zig"),
@@ -184,6 +202,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("config", config_mod);
     exe.root_module.addImport("logger", logger_mod);
     exe.root_module.addImport("performance_monitor", perf_monitor_mod);
+    exe.root_module.addImport("config_validator", config_validator_mod);
     exe.root_module.addImport("network", network_mod);
     exe.root_module.addImport("proxmox", proxmox_mod);
     exe.root_module.addImport("oci", oci_mod);
@@ -292,6 +311,21 @@ pub fn build(b: *std.Build) void {
 
     const run_container_lifecycle_test = b.addRunArtifact(container_lifecycle_test);
     
+    // Property-based tests
+    const property_based_test = b.addTest(.{
+        .root_source_file = b.path("tests/property_based_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    property_based_test.root_module.addImport("types", types_mod);
+    property_based_test.root_module.addImport("error", error_mod);
+    property_based_test.root_module.addImport("logger", logger_mod);
+    property_based_test.root_module.addImport("config", config_mod);
+    property_based_test.root_module.addImport("test_utilities", test_utilities_mod);
+
+    const run_property_based_test = b.addRunArtifact(property_based_test);
+    
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_config_test.step);
     test_step.dependOn(&run_crun_test.step);
@@ -299,6 +333,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_performance_test.step);
     test_step.dependOn(&run_edge_cases_test.step);
     test_step.dependOn(&run_container_lifecycle_test.step);
+    test_step.dependOn(&run_property_based_test.step);
     
     // Separate step for crun integration test
     const crun_integration_step = b.step("crun_integration", "Run crun integration tests");
