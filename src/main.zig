@@ -757,13 +757,29 @@ fn executeCreateCommand(allocator: Allocator, args: []const []const u8, temp_log
     
     cfg.setRuntimeType(actual_runtime_type);
     
-    // Create crun manager for container operations
-    var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
-    defer crun_manager.deinit();
-    
-    // Execute create
-    try crun_manager.createContainer(container_id.?, bundle_path.?, null);
-    try temp_logger.info("Successfully created container: {s}", .{container_id.?});
+    // Create appropriate runtime manager based on runtime type
+    switch (actual_runtime_type) {
+        .crun => {
+            var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
+            defer crun_manager.deinit();
+            
+            // Execute create
+            try crun_manager.createContainer(container_id.?, bundle_path.?, null);
+            try temp_logger.info("Successfully created crun container: {s}", .{container_id.?});
+        },
+        .lxc => {
+            // For LXC, we need to use the full create flow from src/oci/create.zig
+            // This requires more complex setup with image manager, zfs manager, etc.
+            try temp_logger.info("LXC runtime requires full create flow - not implemented in simple command", .{});
+            try std.io.getStdErr().writer().writeAll("Error: LXC runtime requires full create flow. Use the main create function instead.\n");
+            return error.RuntimeNotImplemented;
+        },
+        .vm => {
+            try temp_logger.info("VM runtime not implemented in simple command", .{});
+            try std.io.getStdErr().writer().writeAll("Error: VM runtime not implemented in simple command.\n");
+            return error.RuntimeNotImplemented;
+        },
+    }
 }
 
 // Helper function to execute start command logic
@@ -988,10 +1004,50 @@ pub fn main() !void {
     var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
     defer temp_logger.deinit();
     
+    // Initialize managers for create command
+    var image_manager: ?*image.ImageManager = null;
+    var zfs_manager: ?*zfs.ZFSManager = null;
+    var lxc_manager: ?*anyopaque = null;
+    
+    if (command == .create) {
+        // Initialize image manager
+        const umoci_path = "/usr/bin/umoci";
+        const images_dir = "/var/lib/proxmox-lxcri/images";
+        image_manager = try image.ImageManager.init(allocator, umoci_path, images_dir);
+        defer if (image_manager) |img_mgr| img_mgr.deinit();
+        
+        // Initialize ZFS manager
+        zfs_manager = try zfs.ZFSManager.init(allocator, &temp_logger);
+        defer if (zfs_manager) |zfs_mgr| zfs_mgr.deinit();
+        
+        // LXC manager is not implemented yet
+        lxc_manager = null;
+        
+        // Initialize Proxmox client
+        var cfg = try loadConfig(allocator, null);
+        defer cfg.deinit();
+        
+        const host = if (cfg.proxmox.hosts) |hosts| (if (hosts.len > 0) hosts[0] else "localhost") else "localhost";
+        const port = cfg.proxmox.port orelse 8006;
+        const token = cfg.proxmox.token orelse "";
+        const node = cfg.proxmox.node orelse "localhost";
+        
+        var local_proxmox_client = try ProxmoxClient.init(
+            allocator, 
+            host, 
+            port, 
+            token, 
+            node, 
+            &temp_logger
+        );
+        defer local_proxmox_client.deinit();
+        proxmox_client = &local_proxmox_client;
+    }
+    
     // Execute command
     switch (command) {
         .create => {
-            try executeCreateCommand(allocator, args, &temp_logger);
+            try executeCreate(allocator, args, image_manager.?, zfs_manager.?, lxc_manager);
         },
         .list => {
             try temp_logger.info("Listing containers...", .{});

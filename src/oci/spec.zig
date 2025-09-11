@@ -613,6 +613,7 @@ pub const OciImageConfig = struct {
     workingDir: ?[]const u8 = null,
     labels: ?*std.StringHashMap([]const u8) = null,
     stopSignal: ?[]const u8 = null,
+    containerd_mode: bool = false, // Визначає чи запуск відбувається через containerd
 
     pub fn deinit(self: *const OciImageConfig, allocator: Allocator) void {
         if (self.storage.storage_path) |path| {

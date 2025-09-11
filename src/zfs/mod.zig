@@ -297,4 +297,33 @@ pub const ZFSManager = struct {
         try self.logger.info("Dataset {s} mountpoint: {s}", .{ dataset, owned_mountpoint });
         return owned_mountpoint;
     }
+
+    /// Copy data from source path to ZFS dataset
+    pub fn copyToDataset(self: *Self, source_path: []const u8, dataset: []const u8) !void {
+        try self.logger.info("Copying {s} to ZFS dataset: {s}", .{ source_path, dataset });
+
+        // Get dataset mountpoint
+        const mountpoint = try self.getDatasetMountpoint(dataset);
+        defer self.allocator.free(mountpoint);
+
+        // Use rsync to copy data efficiently
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        const result = std.process.Child.run(.{
+            .allocator = arena_allocator,
+            .argv = &[_][]const u8{ "rsync", "-av", "--delete", source_path, mountpoint },
+        }) catch |err| {
+            try self.logger.err("Failed to copy data to dataset: {s}", .{@errorName(err)});
+            return ZFSError.CommandExecutionFailed;
+        };
+
+        if (result.term.Exited != 0) {
+            try self.logger.err("Failed to copy data to dataset, exit code: {d}", .{result.term.Exited});
+            return ZFSError.CommandExecutionFailed;
+        }
+
+        try self.logger.info("Successfully copied data to ZFS dataset: {s}", .{dataset});
+    }
 };

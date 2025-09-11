@@ -388,6 +388,150 @@ pub const Create = struct {
             return CreateError.InvalidRootfs;
         };
         defer rootfs_dir.close();
+
+        // Детальна перевірка rootfs
+        try self.validateRootfs(rootfs_path);
+        
+        // Перевіряємо чи запуск відбувається через containerd
+        try self.detectContainerdMode();
+        
+        // Налаштовуємо спеціальні параметри залежно від режиму
+        try self.configureRuntimeMode();
+    }
+
+    /// Детальна перевірка rootfs директорії
+    fn validateRootfs(self: *Self, rootfs_path: []const u8) !void {
+        try self.logger.info("Validating rootfs at {s}", .{rootfs_path});
+        
+        var rootfs_dir = std.fs.openDirAbsolute(rootfs_path, .{}) catch {
+            try self.logger.err("Cannot access rootfs directory: {s}", .{rootfs_path});
+            return CreateError.InvalidRootfs;
+        };
+        defer rootfs_dir.close();
+
+        // Перевіряємо наявність основних директорій
+        const required_dirs = [_][]const u8{ "bin", "lib", "lib64", "usr", "etc" };
+        for (required_dirs) |dir| {
+            rootfs_dir.access(dir, .{}) catch |err| {
+                try self.logger.warn("Missing directory in rootfs: {s} ({s})", .{ dir, @errorName(err) });
+            };
+        }
+
+        // Перевіряємо наявність основних бінарних файлів
+        const required_bins = [_][]const u8{ "bin/sh", "bin/ls", "usr/bin/env" };
+        for (required_bins) |bin| {
+            rootfs_dir.access(bin, .{}) catch |err| {
+                try self.logger.warn("Missing binary in rootfs: {s} ({s})", .{ bin, @errorName(err) });
+            };
+        }
+
+        // Перевіряємо наявність /proc, /sys, /dev (можуть бути відсутні в rootfs)
+        const optional_dirs = [_][]const u8{ "proc", "sys", "dev" };
+        for (optional_dirs) |dir| {
+            rootfs_dir.access(dir, .{}) catch {
+                try self.logger.debug("Optional directory not found in rootfs: {s}", .{dir});
+            };
+        }
+
+        try self.logger.info("Rootfs validation completed", .{});
+    }
+
+    /// Визначає чи запуск контейнера відбувається через containerd
+    fn detectContainerdMode(self: *Self) !void {
+        try self.logger.info("Detecting containerd mode...", .{});
+        
+        // Перевіряємо наявність containerd socket
+        const containerd_sockets = [_][]const u8{
+            "/run/containerd/containerd.sock",
+            "/var/run/containerd/containerd.sock",
+            "/run/dockershim.sock",
+            "/var/run/dockershim.sock",
+        };
+
+        var containerd_detected = false;
+        for (containerd_sockets) |socket_path| {
+            std.fs.accessAbsolute(socket_path, .{}) catch continue;
+            
+            try self.logger.info("Found containerd socket: {s}", .{socket_path});
+            containerd_detected = true;
+            break;
+        }
+
+        if (containerd_detected) {
+            try self.logger.info("Container will be managed by containerd", .{});
+            // Встановлюємо спеціальні налаштування для containerd
+            self.oci_config.containerd_mode = true;
+        } else {
+            try self.logger.info("Running in standalone mode (no containerd detected)", .{});
+            self.oci_config.containerd_mode = false;
+        }
+
+        // Перевіряємо наявність CRI environment variables
+        if (std.process.getEnvVarOwned(self.allocator, "CONTAINERD_SOCKET")) |socket| {
+            defer self.allocator.free(socket);
+            try self.logger.info("CONTAINERD_SOCKET environment variable set: {s}", .{socket});
+            self.oci_config.containerd_mode = true;
+        } else |_| {}
+
+        if (std.process.getEnvVarOwned(self.allocator, "CONTAINERD_NAMESPACE")) |namespace| {
+            defer self.allocator.free(namespace);
+            try self.logger.info("CONTAINERD_NAMESPACE environment variable set: {s}", .{namespace});
+            self.oci_config.containerd_mode = true;
+        } else |_| {}
+    }
+
+    /// Налаштовує спеціальні параметри залежно від режиму запуску
+    fn configureRuntimeMode(self: *Self) !void {
+        if (self.oci_config.containerd_mode) {
+            try self.logger.info("Configuring for containerd mode", .{});
+            
+            // В containerd режимі встановлюємо спеціальні налаштування
+            // 1. Встановлюємо правильний root path для containerd
+            if (self.oci_config.storage.storage_path) |path| {
+                self.allocator.free(path);
+            }
+            self.oci_config.storage.storage_path = try self.allocator.dupe(u8, "/var/lib/containerd/io.containerd.runtime.v2.task/default");
+            
+            // 2. Налаштовуємо cgroup path для containerd
+            if (self.oci_config.linux) |*linux| {
+                if (linux.cgroupsPath) |cgroup_path| {
+                    self.allocator.free(cgroup_path);
+                }
+                const containerd_cgroup = try std.fmt.allocPrint(
+                    self.allocator,
+                    "system.slice/containerd-{s}.scope",
+                    .{self.options.container_id}
+                );
+                linux.cgroupsPath = containerd_cgroup;
+            }
+            
+            // 3. Встановлюємо спеціальні labels для containerd
+            if (self.oci_config.labels == null) {
+                const labels_map = try self.allocator.create(std.StringHashMap([]const u8));
+                labels_map.* = std.StringHashMap([]const u8).init(self.allocator);
+                self.oci_config.labels = labels_map;
+            }
+            try self.oci_config.labels.?.put(
+                "io.containerd.runtime.v2.task", 
+                try self.allocator.dupe(u8, "default")
+            );
+            try self.oci_config.labels.?.put(
+                "io.kubernetes.container.name", 
+                try self.allocator.dupe(u8, self.options.container_id)
+            );
+            
+            try self.logger.info("Containerd mode configuration completed", .{});
+        } else {
+            try self.logger.info("Configuring for standalone mode", .{});
+            
+            // В standalone режимі використовуємо стандартні налаштування
+            if (self.oci_config.storage.storage_path) |path| {
+                self.allocator.free(path);
+            }
+            self.oci_config.storage.storage_path = try self.allocator.dupe(u8, "/var/lib/proxmox-lxcri");
+            
+            try self.logger.info("Standalone mode configuration completed", .{});
+        }
     }
 
     fn createZfsDataset(self: *Self) !void {

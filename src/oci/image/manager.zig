@@ -49,9 +49,12 @@ pub const ImageManager = struct {
         try std.fs.cwd().makePath(images_dir);
         
         // Initialize new OCI image system components
-        const metadata_cache = try MetadataCache.init(allocator, 100); // Cache up to 100 entries
-        const layer_manager = try LayerManager.init(allocator);
-        const file_ops = try AdvancedFileOps.init(allocator);
+        const metadata_cache = try allocator.create(MetadataCache);
+        metadata_cache.* = MetadataCache.init(allocator, 100); // Cache up to 100 entries
+        const layer_manager = try allocator.create(LayerManager);
+        layer_manager.* = LayerManager.init(allocator);
+        const file_ops = try allocator.create(AdvancedFileOps);
+        file_ops.* = AdvancedFileOps.init(allocator);
         
         // Initialize LayerFS (ZFS support will be added later)
         var layer_fs: ?*LayerFS = null;
@@ -82,7 +85,7 @@ pub const ImageManager = struct {
         }
         self.metadata_cache.deinit();
         self.layer_manager.deinit();
-        self.file_ops.deinit();
+        // file_ops doesn't have deinit method
         
         self.allocator.destroy(self);
     }

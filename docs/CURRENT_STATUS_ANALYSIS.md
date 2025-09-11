@@ -102,7 +102,6 @@
 
 ### 🔧 Placeholder Components (Ready for Implementation)
 - **Image Management**: `src/image_placeholder.zig`
-- **LXC Management**: `src/lxc_placeholder.zig`
 - **CRUN Runtime**: `src/crun_placeholder.zig`
 - **ZFS Management**: `src/zfs_placeholder.zig`
 - **Registry Integration**: `src/registry_placeholder.zig`

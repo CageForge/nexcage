@@ -409,7 +409,7 @@ pub const LayerManager = struct {
     pub fn deinit(self: *Self) void {
         var it = self.layers.iterator();
         while (it.next()) |entry| {
-            entry.value.deinit(self.allocator);
+            entry.value_ptr.*.deinit(self.allocator);
         }
         self.layers.deinit();
     }
