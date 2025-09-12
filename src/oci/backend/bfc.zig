@@ -273,8 +273,6 @@ pub const BFCBackend = struct {
         try self.logger.info("Getting logs for BFC container: {s}", .{container_id});
         
         // BFC containers don't have traditional logs, return empty
-        _ = self;
-        _ = container_id;
         return try self.allocator.dupe(u8, "");
     }
     
@@ -383,7 +381,6 @@ pub const BFCClient = struct {
     
     pub fn listContainers(self: *const Self) ![]BFCContainerInfo {
         // TODO: Implement actual BFC API call
-        _ = self;
         return try self.allocator.alloc(BFCContainerInfo, 0);
     }
     
@@ -410,21 +407,20 @@ pub const BFCClient = struct {
     
     pub fn getContainerLogs(self: *const Self, container_id: []const u8) ![]const u8 {
         // TODO: Implement actual BFC API call
-        _ = self;
         _ = container_id;
         return try self.allocator.dupe(u8, "");
     }
     
     pub fn checkpointContainer(self: *Self, container_id: []const u8, checkpoint_path: []const u8) !void {
-        _ = checkpoint_path;
         try self.logger.info("Creating checkpoint for BFC container via API: {s}", .{container_id});
         // TODO: Implement actual BFC API call
+        _ = checkpoint_path;
     }
     
     pub fn restoreContainer(self: *Self, container_id: []const u8, checkpoint_path: []const u8) !void {
-        _ = checkpoint_path;
         try self.logger.info("Restoring BFC container via API: {s}", .{container_id});
         // TODO: Implement actual BFC API call
+        _ = checkpoint_path;
     }
 };
 

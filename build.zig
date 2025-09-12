@@ -52,6 +52,33 @@ pub fn build(b: *std.Build) void {
     // Install BFC library
     b.installArtifact(bfc_lib);
 
+    // Crun library (simplified - just for headers)
+    const crun_lib = b.addStaticLibrary(.{
+        .name = "crun",
+        .target = target,
+        .optimize = optimize,
+    });
+    
+    // Add a simple C file to make the library valid
+    crun_lib.addCSourceFiles(.{
+        .files = &.{
+            "src/crun/crun_stub.c",
+        },
+        .flags = &.{
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-O3",
+            "-DNDEBUG",
+        },
+    });
+    
+    // Link system libraries for crun
+    crun_lib.linkSystemLibrary("c");
+    
+    // Install crun library
+    b.installArtifact(crun_lib);
+
     // Core modules
     const types_mod = b.addModule("types", .{
         .root_source_file = b.path("src/common/types.zig"),
@@ -237,6 +264,16 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Crun module
+    const crun_mod = b.addModule("crun", .{
+        .root_source_file = b.path("src/crun/mod.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
     // OCI runtime module
     const oci_mod = b.addModule("oci", .{
         .root_source_file = b.path("src/oci/mod.zig"),
@@ -255,6 +292,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "registry", .module = registry_mod },
             .{ .name = "raw", .module = raw_mod },
             .{ .name = "bfc", .module = bfc_mod },
+            .{ .name = "crun", .module = crun_mod },
         },
     });
 
@@ -276,11 +314,19 @@ pub fn build(b: *std.Build) void {
     // exe.linkSystemLibrary("zstd");
     // exe.linkSystemLibrary("sodium");
     
+    // Link crun library
+    exe.linkLibrary(crun_lib);
+    
     // Add include paths for crun headers
     exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
     exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
     exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
     exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
+    
+    // Add crun include paths
+    exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
+    exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
+    exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
     
     // Add BFC include path
     exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
@@ -306,6 +352,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("registry", registry_mod);
     exe.root_module.addImport("raw", raw_mod);
     exe.root_module.addImport("bfc", bfc_mod);
+    exe.root_module.addImport("crun", crun_mod);
 
     // Install
     b.installArtifact(exe);

@@ -73,46 +73,46 @@ pub const BackendPlugin = struct {
     isAvailable: *const fn (self: *const Self) bool,
     
     /// Create a container
-    createContainer: *const fn (self: *Self, container_id: []const u8, bundle_path: []const u8, options: ?[]const u8) !void,
+    createContainer: *const fn (self: *Self, container_id: []const u8, bundle_path: []const u8, options: ?[]const u8) anyerror!void,
     
     /// Start a container
-    startContainer: *const fn (self: *Self, container_id: []const u8) !void,
+    startContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
     
     /// Stop a container
-    stopContainer: *const fn (self: *Self, container_id: []const u8) !void,
+    stopContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
     
     /// Delete a container
-    deleteContainer: *const fn (self: *Self, container_id: []const u8) !void,
+    deleteContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
     
     /// Get container state
-    getContainerState: *const fn (self: *const Self, container_id: []const u8) !ContainerState,
+    getContainerState: *const fn (self: *const Self, container_id: []const u8) anyerror!ContainerState,
     
     /// Get container information
-    getContainerInfo: *const fn (self: *const Self, container_id: []const u8) !ContainerInfo,
+    getContainerInfo: *const fn (self: *const Self, container_id: []const u8) anyerror!ContainerInfo,
     
     /// List all containers
-    listContainers: *const fn (self: *const Self) ![]ContainerInfo,
+    listContainers: *const fn (self: *const Self) anyerror![]ContainerInfo,
     
     /// Pause a container
-    pauseContainer: *const fn (self: *Self, container_id: []const u8) !void,
+    pauseContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
     
     /// Resume a container
-    resumeContainer: *const fn (self: *Self, container_id: []const u8) !void,
+    resumeContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
     
     /// Kill a container
-    killContainer: *const fn (self: *Self, container_id: []const u8, signal: ?i32) !void,
+    killContainer: *const fn (self: *Self, container_id: []const u8, signal: ?i32) anyerror!void,
     
     /// Execute command in container
-    execContainer: *const fn (self: *Self, container_id: []const u8, command: []const []const u8) !void,
+    execContainer: *const fn (self: *Self, container_id: []const u8, command: []const []const u8) anyerror!void,
     
     /// Get container logs
-    getContainerLogs: *const fn (self: *const Self, container_id: []const u8) ![]const u8,
+    getContainerLogs: *const fn (self: *const Self, container_id: []const u8) anyerror![]const u8,
     
     /// Checkpoint a container
-    checkpointContainer: *const fn (self: *Self, container_id: []const u8, checkpoint_path: []const u8) !void,
+    checkpointContainer: *const fn (self: *Self, container_id: []const u8, checkpoint_path: []const u8) anyerror!void,
     
     /// Restore a container from checkpoint
-    restoreContainer: *const fn (self: *Self, container_id: []const u8, checkpoint_path: []const u8) !void,
+    restoreContainer: *const fn (self: *Self, container_id: []const u8, checkpoint_path: []const u8) anyerror!void,
 };
 
 /// Backend plugin registry
