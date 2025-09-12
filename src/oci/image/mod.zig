@@ -11,6 +11,7 @@ pub const layerfs = @import("layerfs.zig");
 pub const manager = @import("manager.zig");
 pub const raw = @import("raw.zig");
 pub const umoci = @import("umoci.zig");
+pub const bfc = @import("bfc.zig");
 
 // Re-export commonly used types
 pub const ImageManifest = types.ImageManifest;
@@ -19,6 +20,11 @@ pub const Descriptor = types.Descriptor;
 pub const Platform = types.Platform;
 pub const ImageError = types.ImageError;
 pub const ImageManager = manager.ImageManager;
+
+// Re-export BFC image types
+pub const BFCImageHandler = bfc.BFCImageHandler;
+pub const BFCImageInfo = bfc.BFCImageInfo;
+pub const BFCImageError = bfc.BFCImageError;
 
 // Re-export configuration types
 pub const HealthCheck = config.HealthCheck;

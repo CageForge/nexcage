@@ -8,7 +8,6 @@ const plugin = @import("plugin.zig");
 const crun_backend = @import("crun.zig");
 const proxmox_lxc_backend = @import("proxmox_lxc.zig");
 const proxmox_vm_backend = @import("proxmox_vm.zig");
-const bfc_backend = @import("bfc.zig");
 
 /// Backend manager for handling plugin operations
 pub const BackendManager = struct {
@@ -53,11 +52,6 @@ pub const BackendManager = struct {
         try self.registry.register(&proxmox_vm_plugin);
         try self.logger.info("Registered Proxmox VM backend plugin", .{});
         
-        // Register BFC backend
-        var bfc_plugin = try bfc_backend.createBFCPlugin(self.allocator, self.logger);
-        try self.registry.register(&bfc_plugin);
-        try self.logger.info("Registered BFC backend plugin", .{});
-        
         // Set default backend based on availability
         if (self.registry.isBackendAvailable(.crun)) {
             self.default_backend = .crun;
@@ -65,8 +59,6 @@ pub const BackendManager = struct {
             self.default_backend = .proxmox_lxc;
         } else if (self.registry.isBackendAvailable(.proxmox_vm)) {
             self.default_backend = .proxmox_vm;
-        } else if (self.registry.isBackendAvailable(.bfc)) {
-            self.default_backend = .bfc;
         } else {
             return error.NoBackendAvailable;
         }

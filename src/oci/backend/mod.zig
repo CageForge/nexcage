@@ -6,7 +6,6 @@ pub const manager = @import("manager.zig");
 pub const crun = @import("crun.zig");
 pub const proxmox_lxc = @import("proxmox_lxc.zig");
 pub const proxmox_vm = @import("proxmox_vm.zig");
-pub const bfc = @import("bfc.zig");
 
 // Re-export commonly used types
 pub const BackendType = plugin.BackendType;

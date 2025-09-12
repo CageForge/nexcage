@@ -11,7 +11,6 @@ pub const BackendType = enum {
     crun,
     proxmox_lxc,
     proxmox_vm,
-    bfc,
 };
 
 /// Container state for backend operations

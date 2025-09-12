@@ -30,6 +30,9 @@ pub const lxc = @import("lxc.zig");
 // Backend plugin system
 pub const backend = @import("backend/mod.zig");
 
+// Image storage modules
+pub const bfc = @import("../bfc/mod.zig");
+
 pub const Spec = spec.Spec;
 pub const Root = spec.Root;
 pub const Mount = spec.Mount;
