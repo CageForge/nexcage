@@ -12,6 +12,46 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // BFC (Binary File Container) library
+    const bfc_lib = b.addStaticLibrary(.{
+        .name = "bfc",
+        .target = target,
+        .optimize = optimize,
+    });
+    
+    // Add BFC source files
+    bfc_lib.addCSourceFiles(.{
+        .files = &.{
+            "deps/bfc/src/lib/bfc_compress.c",
+            "deps/bfc/src/lib/bfc_crc32c.c",
+            "deps/bfc/src/lib/bfc_encrypt.c",
+            "deps/bfc/src/lib/bfc_format.c",
+            "deps/bfc/src/lib/bfc_iter.c",
+            "deps/bfc/src/lib/bfc_os.c",
+            "deps/bfc/src/lib/bfc_reader.c",
+            "deps/bfc/src/lib/bfc_util.c",
+            "deps/bfc/src/lib/bfc_writer.c",
+        },
+        .flags = &.{
+            "-std=c17",
+            "-Wall",
+            "-Wextra",
+            "-O3",
+            "-DNDEBUG",
+        },
+    });
+    
+    // Add BFC include path
+    bfc_lib.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
+    
+    // Link system libraries for BFC
+    bfc_lib.linkSystemLibrary("c");
+    // bfc_lib.linkSystemLibrary("zstd");
+    // bfc_lib.linkSystemLibrary("sodium");
+    
+    // Install BFC library
+    b.installArtifact(bfc_lib);
+
     // Core modules
     const types_mod = b.addModule("types", .{
         .root_source_file = b.path("src/common/types.zig"),
@@ -187,6 +227,16 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // BFC (Binary File Container) module
+    const bfc_mod = b.addModule("bfc", .{
+        .root_source_file = b.path("src/bfc/mod.zig"),
+        .imports = &.{
+            .{ .name = "types", .module = types_mod },
+            .{ .name = "error", .module = error_mod },
+            .{ .name = "logger", .module = logger_mod },
+        },
+    });
+
     // OCI runtime module
     const oci_mod = b.addModule("oci", .{
         .root_source_file = b.path("src/oci/mod.zig"),
@@ -204,6 +254,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "image", .module = image_mod },
             .{ .name = "registry", .module = registry_mod },
             .{ .name = "raw", .module = raw_mod },
+            .{ .name = "bfc", .module = bfc_mod },
         },
     });
 
@@ -220,11 +271,19 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("seccomp");
     exe.linkSystemLibrary("yajl");
     
+    // Link BFC library
+    exe.linkLibrary(bfc_lib);
+    // exe.linkSystemLibrary("zstd");
+    // exe.linkSystemLibrary("sodium");
+    
     // Add include paths for crun headers
     exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
     exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
     exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
     exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
+    
+    // Add BFC include path
+    exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
 
     // Add dependencies
     exe.root_module.addImport("types", types_mod);
@@ -246,6 +305,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("image", image_mod);
     exe.root_module.addImport("registry", registry_mod);
     exe.root_module.addImport("raw", raw_mod);
+    exe.root_module.addImport("bfc", bfc_mod);
 
     // Install
     b.installArtifact(exe);

@@ -1,0 +1,3 @@
+[submodule "deps/bfc"]
+	path = deps/bfc
+	url = https://github.com/zombocoder/bfc.git

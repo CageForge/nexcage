@@ -21,10 +21,14 @@ pub const list = @import("list.zig");
 pub const help = @import("help.zig");
 pub const info = @import("info.zig");
 pub const exec = @import("exec.zig");
+pub const run = @import("run.zig");
 
 // Runtime modules
 pub const crun = @import("crun.zig");
 pub const lxc = @import("lxc.zig");
+
+// Backend plugin system
+pub const backend = @import("backend/mod.zig");
 
 pub const Spec = spec.Spec;
 pub const Root = spec.Root;
