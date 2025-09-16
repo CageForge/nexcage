@@ -161,8 +161,8 @@ pub const Create = struct {
         // Читаємо конфігурацію OCI образу
         const oci_config_path = try std.fmt.allocPrint(
             allocator,
-            "{s}/{s}/config.json",
-            .{ options.bundle_path, options.container_id },
+            "{s}/config.json",
+            .{ options.bundle_path },
         );
         defer allocator.free(oci_config_path);
 
@@ -357,7 +357,7 @@ pub const Create = struct {
         try self.logger.info("Validating bundle at {s}", .{self.options.bundle_path});
         
         // Перевіряємо чи існує bundle директорія
-        var bundle_dir = std.fs.openDirAbsolute(self.options.bundle_path, .{}) catch {
+        var bundle_dir = std.fs.cwd().openDir(self.options.bundle_path, .{}) catch {
             try self.logger.err("Bundle directory not found: {s}", .{self.options.bundle_path});
             return CreateError.BundleNotFound;
         };
@@ -370,7 +370,7 @@ pub const Create = struct {
         );
         defer self.allocator.free(config_path);
 
-        const config_file = std.fs.openFileAbsolute(config_path, .{}) catch {
+        const config_file = std.fs.cwd().openFile(config_path, .{}) catch {
             try self.logger.err("Config file not found: {s}", .{config_path});
             return CreateError.InvalidConfig;
         };
@@ -383,7 +383,7 @@ pub const Create = struct {
         );
         defer self.allocator.free(rootfs_path);
 
-        var rootfs_dir = std.fs.openDirAbsolute(rootfs_path, .{}) catch {
+        var rootfs_dir = std.fs.cwd().openDir(rootfs_path, .{}) catch {
             try self.logger.err("Rootfs directory not found: {s}", .{rootfs_path});
             return CreateError.InvalidRootfs;
         };
@@ -403,7 +403,7 @@ pub const Create = struct {
     fn validateRootfs(self: *Self, rootfs_path: []const u8) !void {
         try self.logger.info("Validating rootfs at {s}", .{rootfs_path});
         
-        var rootfs_dir = std.fs.openDirAbsolute(rootfs_path, .{}) catch {
+        var rootfs_dir = std.fs.cwd().openDir(rootfs_path, .{}) catch {
             try self.logger.err("Cannot access rootfs directory: {s}", .{rootfs_path});
             return CreateError.InvalidRootfs;
         };
@@ -987,11 +987,9 @@ pub const Create = struct {
 
         switch (self.runtime_type) {
             .lxc => {
-                if (self.lxc_manager) |lxc_mgr| {
-                    try lxc_mgr.startContainer(self.options.container_id);
-                } else {
-                    return CreateError.RuntimeNotAvailable;
-                }
+                // Start via Proxmox API using VMID resolved from OCI container id
+                const vmid = try self.proxmox_client.getProxmoxVMID(self.options.container_id);
+                try self.proxmox_client.startContainer(.lxc, vmid);
             },
             .crun => {
                 if (self.crun_manager) |crun_mgr| {
@@ -1024,7 +1022,10 @@ pub fn create(opts: CreateOpts, proxmox_client: *proxmox.ProxmoxClient) !void {
     try logger.info("Creating container {s} with bundle {s}", .{ opts.id, opts.bundle_path });
 
     // Перевіряємо, чи існує директорія bundle
-    try fs.cwd().access(opts.bundle_path, .{});
+    try fs.cwd().access(opts.bundle_path, .{}) catch |err| {
+        try logger.err("Cannot access bundle directory '{s}': {s}", .{ opts.bundle_path, @errorName(err) });
+        return CreateError.BundleNotFound;
+    };
 
     // Відкриваємо файл конфігурації
     const config_file = try fs.cwd().openFile(opts.config_path, .{});
@@ -1448,7 +1449,12 @@ fn parseOciImageConfig(allocator: Allocator, content: []const u8) !spec.OciImage
     if (obj.getOrNull("storage")) |storage| {
         config.storage = try parseStorageConfig(allocator, storage);
     } else {
-        return error.InvalidJson;
+        // Default storage config if not specified
+        config.storage = StorageConfig{
+            .type = .raw,
+            .storage_path = null,
+            .storage_pool = null,
+        };
     }
 
     // Парсимо environment змінні

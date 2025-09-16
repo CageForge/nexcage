@@ -339,9 +339,8 @@ fn executeCreate(
     args: []const []const u8,
     _image_manager: *image.ImageManager,
     _zfs_manager: *zfs.ZFSManager,
-    _lxc_manager: ?*anyopaque,
+    _lxc_manager: ?*oci.lxc.LXCManager,
 ) !void {
-    _ = _lxc_manager;
     if (args.len < 4) {
         try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
         return error.InvalidArguments;
@@ -379,7 +378,10 @@ fn executeCreate(
     }
 
     // Create bundle directory if it does not exist
-    var bundle_dir = try std.fs.cwd().openDir(bundle_path.?, .{});
+    var bundle_dir = std.fs.cwd().openDir(bundle_path.?, .{}) catch |err| {
+        try std.io.getStdErr().writer().print("Cannot access bundle directory '{s}': {s}\n", .{ bundle_path.?, @errorName(err) });
+        return error.InvalidBundle;
+    };
     defer bundle_dir.close();
 
     // Create OCI config file
@@ -473,7 +475,7 @@ fn executeCreate(
         allocator,
         _image_manager,
         _zfs_manager,
-        null, // lxc_manager - TODO: implement when LXC is ready
+        _lxc_manager,
         crun_manager,
         proxmox_client,
         .{
@@ -952,7 +954,9 @@ fn executeCheckpointCommand(allocator: Allocator, args: []const []const u8, temp
 
 
 pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
     // Parse command line arguments
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
@@ -971,12 +975,12 @@ pub fn main() !void {
     // Initialize managers for create command
     var image_manager: ?*image.ImageManager = null;
     var zfs_manager: ?*zfs.ZFSManager = null;
-    var lxc_manager: ?*anyopaque = null;
+    var lxc_manager: ?*oci.lxc.LXCManager = null;
     
     if (command == .create) {
         // Initialize image manager
         const umoci_path = "/usr/bin/umoci";
-        const images_dir = "/var/lib/proxmox-lxcri/images";
+        const images_dir = "./images";
         image_manager = try image.ImageManager.init(allocator, umoci_path, images_dir);
         defer if (image_manager) |img_mgr| img_mgr.deinit();
         
@@ -984,8 +988,9 @@ pub fn main() !void {
         zfs_manager = try zfs.ZFSManager.init(allocator, &temp_logger);
         defer if (zfs_manager) |zfs_mgr| zfs_mgr.deinit();
         
-        // LXC manager is not implemented yet
-        lxc_manager = null;
+        // Initialize LXC manager
+        lxc_manager = try oci.lxc.LXCManager.init(allocator);
+        defer if (lxc_manager) |lxc_mgr| lxc_mgr.deinit();
         
         // Initialize Proxmox client
         var cfg = try loadConfig(allocator, null);

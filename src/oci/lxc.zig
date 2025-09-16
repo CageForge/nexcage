@@ -11,8 +11,11 @@ pub const LXCManager = struct {
     allocator: Allocator,
 
     pub fn init(allocator: Allocator) !*@This() {
-        _ = allocator;
-        return undefined;
+        const self = try allocator.create(@This());
+        self.* = .{
+            .allocator = allocator,
+        };
+        return self;
     }
 
     pub fn deinit(self: *@This()) void {

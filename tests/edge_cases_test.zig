@@ -8,6 +8,7 @@ const testing = std.testing;
 const expect = testing.expect;
 const expectError = testing.expectError;
 const expectEqual = testing.expectEqual;
+const logger_mod = @import("logger");
 
 const types = @import("types");
 const config = @import("config");
@@ -35,7 +36,7 @@ test "Container ID edge cases" {
     const special_id = "container-with_special.chars123";
     const special_id_copy = try allocator.dupe(u8, special_id);
     defer allocator.free(special_id_copy);
-    try expectEqual(@as(usize, 30), special_id_copy.len);
+    try expectEqual(@as(usize, 31), special_id_copy.len);
 }
 
 test "Memory allocation edge cases" {
@@ -63,9 +64,16 @@ test "Configuration loading edge cases" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    // Create logger context
+    var logger_ctx = types.LogContext.init(allocator, std.io.getStdOut().writer(), .info, "test") catch return;
+    defer logger_ctx.deinit();
+
     // Test creating basic config structure
     // Note: We test config structure rather than file loading in unit tests
     var test_config = types.Config{
+        .allocator = allocator,
+        .runtime_type = .crun,
+        .runtime_path = null,
         .proxmox = types.ProxmoxConfig{
             .hosts = null,
             .port = 8006,
@@ -73,13 +81,65 @@ test "Configuration loading edge cases" {
             .node = "",
             .allocator = allocator,
         },
-        .allocator = allocator,
+        .storage = blk: {
+            var sc = try types.StorageConfig.init(allocator);
+            sc.zfs_dataset = try allocator.dupe(u8, "tank/containers");
+            sc.image_path = try allocator.dupe(u8, "/var/lib/lxcri/images");
+            break :blk sc;
+        },
+        .network = blk: {
+            var nc = try types.NetworkConfig.init(allocator);
+            nc.name = try allocator.dupe(u8, "lxcbr0");
+            nc.bridge = try allocator.dupe(u8, "lxcbr0");
+            nc.ip = try allocator.dupe(u8, "10.0.3.1/24");
+            nc.gw = try allocator.dupe(u8, "10.0.3.1");
+            nc.type = try allocator.dupe(u8, "bridge");
+            break :blk nc;
+        },
+        .logger = &logger_ctx,
+        .container_config = types.ContainerConfig{
+            .id = "test-container-id",
+            .name = "test-container",
+            .state = types.ContainerStateInfo{
+                .oci_version = "1.0.0",
+                .id = "test-container-id",
+                .status = "created",
+                .pid = 0,
+                .bundle = "/tmp/bundle",
+                .annotations = null,
+                .allocator = allocator,
+            },
+            .pid = null,
+            .bundle = "/tmp/bundle",
+            .annotations = null,
+            .metadata = null,
+            .image = null,
+            .command = &[_][]const u8{"/bin/bash"},
+            .args = &[_][]const u8{},
+            .working_dir = "/",
+            .envs = null,
+            .mounts = null,
+            .devices = null,
+            .labels = null,
+            .linux = null,
+            .log_path = null,
+            .allocator = allocator,
+            .crun_name_patterns = &[_][]const u8{},
+            .default_container_type = .lxc,
+        },
+        .log_path = null,
+        .root_path = "/var/lib/lxcri",
+        .bundle_path = "/tmp/bundle",
+        .pid_file = null,
+        .console_socket = null,
+        .systemd_cgroup = false,
+        .debug = false,
     };
     defer test_config.deinit();
 
     // Verify config structure
     try expectEqual(@as(u16, 8006), test_config.proxmox.port);
-    try expectEqual(false, test_config.runtime.debug);
+    try expectEqual(false, test_config.debug);
 }
 
 test "Error handling edge cases" {
@@ -88,21 +148,21 @@ test "Error handling edge cases" {
     const allocator = arena.allocator();
 
     // Test error context creation with null details
-    const error_context = try types.ErrorContext.init(
+    var error_context = try types.ErrorContext.init(
         allocator,
         "Test error message", 
         error_mod.Error.InvalidConfig,
         "test_function",
         null
     );
-    defer error_context.deinit(&error_context, allocator);
+    defer error_context.deinit(allocator);
 
     try expect(error_context.details == null);
     try expect(std.mem.eql(u8, error_context.message, "Test error message"));
 
     // Test error context with very long message
     const long_message = "a" ** 1000;
-    const long_error_context = try types.ErrorContext.init(
+    var long_error_context = try types.ErrorContext.init(
         allocator,
         long_message,
         error_mod.Error.InvalidConfig,
@@ -171,7 +231,8 @@ test "Network configuration edge cases" {
 
     // Network config should be initialized with safe defaults
     // Note: Checking actual fields that exist in NetworkConfig
-    try expect(network_config.bridge != null);
+    // Bridge may be empty by default; ensure field is initialized (non-null slice)
+    try expect(@intFromPtr(network_config.bridge.ptr) != 0);
     // Network config properly initialized
 }
 

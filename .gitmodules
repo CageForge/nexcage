@@ -1,6 +1,6 @@
 [submodule "deps/bfc"]
 	path = deps/bfc
-	url = https://github.com/zombocoder/bfc.git
+	url = git@github.com:themoriarti/bfc.git
 [submodule "deps/crun"]
 	path = deps/crun
-	url = https://github.com/containers/crun.git
+	url = git@github.com:/containers/crun.git

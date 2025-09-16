@@ -292,8 +292,9 @@ pub const LXCConfig = struct {
     features: struct {},
 
     pub fn deinit(self: *LXCConfig, allocator: Allocator) void {
-        allocator.free(self.hostname);
-        allocator.free(self.ostype);
+        // hostname та ostype можуть бути string literals, тому не звільняємо їх
+        // allocator.free(self.hostname);
+        // allocator.free(self.ostype);
         allocator.free(self.rootfs);
         self.net0.deinit(allocator);
     }
@@ -1376,7 +1377,7 @@ pub const Config = struct {
         self.runtime_path = null;
         self.proxmox.deinit();
         self.storage.deinit();
-        self.network.deinit();
+        self.network.deinit(self.allocator);
         if (self.log_path) |path| {
             self.allocator.free(path);
         }

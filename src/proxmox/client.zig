@@ -86,8 +86,15 @@ pub const Client = struct {
         while (retry_count < max_retries) : (retry_count += 1) {
             try self.logger.info("Making {s} request to {s} (attempt {d}/{d})", .{ @tagName(method), path, retry_count + 1, max_retries });
 
-            var url_buffer: [1024]u8 = undefined;
-            const url = try std.fmt.bufPrint(&url_buffer, "{s}/api2/json{s}", .{ self.base_urls[self.current_host_index], path });
+            // Видалено діагностику через проблеми компіляції
+
+            // Спрощене створення URL для діагностики
+            const base_url = self.base_urls[self.current_host_index];
+            const full_path = try std.fmt.allocPrint(self.allocator, "/api2/json{s}", .{path});
+            defer self.allocator.free(full_path);
+            
+            const url = try std.fmt.allocPrint(self.allocator, "{s}{s}", .{ base_url, full_path });
+            defer self.allocator.free(url);
 
             var server_header_buffer: [1024]u8 = undefined;
             var request = try self.client.open(method, try Uri.parse(url), .{

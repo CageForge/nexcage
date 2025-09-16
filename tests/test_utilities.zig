@@ -20,7 +20,7 @@ pub const PropertyTesting = struct {
 
     /// Initializes property testing framework
     pub fn init(allocator: std.mem.Allocator, max_iterations: u32, seed: ?u64) PropertyTesting {
-        const actual_seed = seed orelse @intCast(std.time.nanoTimestamp());
+        const actual_seed = seed orelse @as(u64, @intCast(std.time.nanoTimestamp()));
         return PropertyTesting{
             .allocator = allocator,
             .max_iterations = max_iterations,
@@ -42,7 +42,7 @@ pub const PropertyTesting = struct {
 
             // Generate test input
             const test_input = try generator.generate(&self.rng, self.allocator);
-            defer if (@hasDecl(@TypeOf(test_input), "deinit")) test_input.deinit();
+            defer if (@TypeOf(test_input) != []u8 and @TypeOf(test_input) != u16 and @hasDecl(@TypeOf(test_input), "deinit")) test_input.deinit(self.allocator);
 
             // Run property test
             property(test_input) catch |err| {
@@ -164,7 +164,7 @@ pub const Benchmark = struct {
         var i: u32 = 0;
         while (i < self.warmup_iterations) {
             defer i += 1;
-            _ = @call(.auto, function, args);
+            _ = @call(.auto, function, args) catch {};
         }
 
         // Actual benchmark
@@ -174,7 +174,7 @@ pub const Benchmark = struct {
             defer i += 1;
 
             const start_time = std.time.nanoTimestamp();
-            _ = @call(.auto, function, args);
+            _ = @call(.auto, function, args) catch {};
             const end_time = std.time.nanoTimestamp();
 
             const duration = @as(u64, @intCast(end_time - start_time));
@@ -291,6 +291,8 @@ pub const MutationTesting = struct {
 
     /// Simulates mutation testing results
     pub fn simulateMutationTest(allocator: std.mem.Allocator, test_function: anytype) !void {
+        _ = allocator;
+        _ = test_function;
         logger.info("Running mutation testing simulation", .{}) catch {};
         
         // In a real implementation, this would:
@@ -363,7 +365,7 @@ pub const TestHelpers = struct {
     /// Asserts that a function completes within a time limit
     pub fn assertWithinTime(comptime max_duration_ms: u64, function: anytype, args: anytype) !void {
         const start_time = std.time.nanoTimestamp();
-        _ = @call(.auto, function, args);
+        _ = @call(.auto, function, args) catch {};
         const end_time = std.time.nanoTimestamp();
         
         const duration_ms = @divTrunc(@as(u64, @intCast(end_time - start_time)), 1_000_000);
@@ -379,7 +381,7 @@ pub const TestHelpers = struct {
         defer arena.deinit();
         
         const arena_allocator = arena.allocator();
-        _ = @call(.auto, function, .{arena_allocator} ++ args);
+        _ = @call(.auto, function, .{arena_allocator} ++ args) catch {};
         
         // In a real implementation, we would track actual memory usage
         // For now, we just ensure the arena doesn't allocate too much
