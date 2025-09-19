@@ -401,7 +401,7 @@ fn executeCreate(
     defer cfg.deinit();
 
     // Determine runtime type based on CLI args or container ID pattern
-    var actual_runtime_type: types.RuntimeType = .crun; // Default to crun
+    var actual_runtime_type: types.RuntimeType = .lxc; // Default to lxc for Proxmox integration
     if (runtime_type) |rt| {
         if (std.mem.eql(u8, rt, "crun") or std.mem.eql(u8, rt, "runc")) {
             actual_runtime_type = .crun;
@@ -753,7 +753,7 @@ fn executeCreateCommand(allocator: Allocator, args: []const []const u8, temp_log
     defer cfg.deinit();
 
     // Determine runtime type
-    var actual_runtime_type: types.RuntimeType = .crun; // Default to crun
+    var actual_runtime_type: types.RuntimeType = .lxc; // Default to lxc for Proxmox integration
     if (runtime_type) |rt| {
         if (std.mem.eql(u8, rt, "crun") or std.mem.eql(u8, rt, "runc")) {
             actual_runtime_type = .crun;
