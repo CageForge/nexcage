@@ -46,6 +46,7 @@ const node_ops = @import("node/operations.zig");
 const storage_ops = @import("storage/operations.zig");
 const cluster_ops = @import("cluster/operations.zig");
 const vm_ops = @import("vm/operations.zig");
+const template_ops = @import("template/operations.zig");
 
 pub const ContainerType = enum {
     lxc,
@@ -62,11 +63,15 @@ pub const ProxmoxClient = struct {
     client: Client,
 
     pub fn init(allocator: Allocator, host: []const u8, port: u16, token: []const u8, node: []const u8, log_instance: *logger_mod.Logger) !ProxmoxClient {
+        try log_instance.info("ProxmoxClient.init called with node: '{s}' (len: {d})", .{ node, node.len });
+        
         const token_copy = try allocator.dupe(u8, token);
         errdefer allocator.free(token_copy);
 
         const node_copy = try allocator.dupe(u8, node);
         errdefer allocator.free(node_copy);
+        
+        try log_instance.info("ProxmoxClient.init node_copy: '{s}' (len: {d})", .{ node_copy, node_copy.len });
 
         const host_copy = try allocator.dupe(u8, host);
         errdefer allocator.free(host_copy);
@@ -75,10 +80,10 @@ pub const ProxmoxClient = struct {
         errdefer allocator.free(hosts);
         hosts[0] = host_copy;
 
-        const client = try Client.init(allocator, hosts, token_copy, log_instance, port, node_copy);
+        var client = try Client.init(allocator, hosts, token_copy, log_instance, port, node_copy);
         errdefer client.deinit();
 
-        return ProxmoxClient{
+        const result = ProxmoxClient{
             .allocator = allocator,
             .host = host_copy,
             .port = port,
@@ -87,6 +92,10 @@ pub const ProxmoxClient = struct {
             .logger = log_instance,
             .client = client,
         };
+        
+        try log_instance.info("ProxmoxClient created with node: '{s}' (len: {d})", .{ result.node, result.node.len });
+        try log_instance.info("ProxmoxClient result.node address: {*}", .{&result.node});
+        return result;
     }
 
     pub fn deinit(self: *ProxmoxClient) void {
@@ -120,15 +129,109 @@ pub const ProxmoxClient = struct {
         return self.listLXCs();
     }
 
-    pub fn createContainer(self: *ProxmoxClient, container_id: []const u8, spec: []const u8) !void {
-        var config = ContainerConfig{
-            .id = try self.allocator.dupe(u8, container_id),
-            .spec = try self.allocator.dupe(u8, spec),
-        };
-        defer config.deinit(self.allocator);
-
-        try self.logger.info("Creating container {s}", .{config.id});
-        // TODO: Implement container creation
+    pub fn createContainer(self: *ProxmoxClient, container_id: []const u8, spec: []const u8, rootfs_path: ?[]const u8) !void {
+        try self.logger.info("Creating container {s} with spec: {s}", .{ container_id, spec });
+        try self.logger.info("ProxmoxClient node: '{s}' (len: {d})", .{ self.node, self.node.len });
+        try self.logger.info("ProxmoxClient address: {*}", .{self});
+        try self.logger.info("ProxmoxClient.node address: {*}", .{&self.node});
+        
+        // Parse the spec string to extract VMID
+        // For now, we'll generate a VMID based on container_id hash
+        var hasher = std.hash.Wyhash.init(0);
+        hasher.update(container_id);
+        const vmid = @as(u32, @truncate(hasher.final())) % 100000 + 100; // Generate VMID between 100-100099
+        
+        try self.logger.info("Generated VMID {d} for container {s}", .{ vmid, container_id });
+        
+        // Create basic LXC configuration
+        const api_path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc", .{self.node});
+        defer self.allocator.free(api_path);
+        
+        // Basic LXC configuration
+        var config = std.StringHashMap([]const u8).init(self.allocator);
+        defer {
+            var iter = config.iterator();
+            while (iter.next()) |entry| {
+                self.allocator.free(entry.value_ptr.*);
+            }
+            config.deinit();
+        }
+        
+        try config.put("vmid", try std.fmt.allocPrint(self.allocator, "{d}", .{vmid}));
+        try config.put("hostname", try self.allocator.dupe(u8, container_id));
+        try config.put("ostype", try self.allocator.dupe(u8, "ubuntu"));
+        try config.put("memory", try self.allocator.dupe(u8, "512"));
+        try config.put("cores", try self.allocator.dupe(u8, "1"));
+        try config.put("rootfs", try std.fmt.allocPrint(self.allocator, "local-lvm:8", .{}));
+        try config.put("net0", try self.allocator.dupe(u8, "name=eth0,bridge=vmbr0,ip=dhcp"));
+        try config.put("unprivileged", try self.allocator.dupe(u8, "1"));
+        try config.put("onboot", try self.allocator.dupe(u8, "0"));
+        
+        // Якщо є rootfs_path, створюємо темплейт
+        if (rootfs_path) |rootfs| {
+            try self.logger.info("Creating template from rootfs: {s}", .{rootfs});
+            const template_name = try std.fmt.allocPrint(self.allocator, "{s}-template", .{container_id});
+            defer self.allocator.free(template_name);
+            
+            var template_info = try template_ops.createTemplateFromRootfs(&self.client, rootfs, template_name);
+            defer template_info.deinit(self.allocator);
+            
+            const ostemplate = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}.tar.zst", .{template_name});
+            defer self.allocator.free(ostemplate);
+            
+            try config.put("ostemplate", ostemplate);
+            try self.logger.info("Using template: {s}", .{ostemplate});
+        } else {
+            // Використовуємо існуючий темплейт або створюємо без темплейту
+            try self.logger.info("No rootfs provided, checking for available templates", .{});
+            
+            const templates = try template_ops.listAvailableTemplates(&self.client);
+            defer {
+                for (templates) |*template| {
+                    template.deinit(self.allocator);
+                }
+                self.allocator.free(templates);
+            }
+            
+            if (templates.len > 0) {
+                const template = templates[0];
+                const ostemplate = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}", .{template.name});
+                defer self.allocator.free(ostemplate);
+                
+                try config.put("ostemplate", ostemplate);
+                try self.logger.info("Using available template: {s}", .{ostemplate});
+            } else {
+                try self.logger.warn("No templates available, creating container without template", .{});
+            }
+        }
+        
+        // Convert configuration to JSON manually
+        var body = std.ArrayList(u8).init(self.allocator);
+        defer body.deinit();
+        
+        try body.append('{');
+        var first = true;
+        var iter = config.iterator();
+        while (iter.next()) |entry| {
+            if (!first) try body.append(',');
+            first = false;
+            
+            try body.writer().print("\"{s}\":\"{s}\"", .{ entry.key_ptr.*, entry.value_ptr.* });
+        }
+        try body.append('}');
+        
+        const body_str = try body.toOwnedSlice();
+        defer self.allocator.free(body_str);
+        
+        try self.logger.info("Sending LXC creation request to {s}", .{api_path});
+        try self.logger.info("Node: {s}, API path: {s}", .{ self.node, api_path });
+        try self.logger.info("Request body: {s}", .{body_str});
+        
+        // Send request to create container
+        const response = try self.client.makeRequest(.POST, api_path, body_str);
+        defer self.allocator.free(response);
+        
+        try self.logger.info("LXC container {s} created successfully with VMID {d}", .{ container_id, vmid });
     }
 
     pub fn startContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32) !void {
@@ -201,6 +304,15 @@ pub const ProxmoxClient = struct {
         version: []const u8,
     } {
         return cluster_ops.getClusterStatus(&self.client);
+    }
+
+    // Template операції
+    pub fn createTemplateFromRootfs(self: *ProxmoxClient, rootfs_path: []const u8, template_name: []const u8) !template_ops.TemplateInfo {
+        return template_ops.createTemplateFromRootfs(&self.client, rootfs_path, template_name);
+    }
+
+    pub fn listAvailableTemplates(self: *ProxmoxClient) ![]template_ops.TemplateInfo {
+        return template_ops.listAvailableTemplates(&self.client);
     }
 };
 

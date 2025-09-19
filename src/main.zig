@@ -32,7 +32,7 @@ const SIGHUP = types.SIGHUP;
 
 var shutdown_requested: bool = false;
 var last_signal: ?c_int = null;
-var proxmox_client: *ProxmoxClient = undefined;
+var proxmox_client: ?*ProxmoxClient = null;
 
 // RuntimeOptions moved to types.zig
 const RuntimeOptions = types.RuntimeOptions;
@@ -292,16 +292,13 @@ fn loadConfigFromPath(allocator: Allocator, path: []const u8) !config.Config {
     };
     defer allocator.free(content);
 
-    const parsed = try json_parser.parseWithUnknownFields(config.JsonConfig, allocator, content);
-    defer {
-        // Create a mutable copy to pass to deinitJsonConfig
-        var mutable_config = parsed.value;
-        config.deinitJsonConfig(&mutable_config, allocator);
-        for (parsed.unknown_fields) |field| {
-            allocator.free(field);
-        }
-        allocator.free(parsed.unknown_fields);
-    }
+    // Use arena allocator for JSON parsing to avoid memory leaks
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+    
+    const parsed = try json_parser.parseWithUnknownFields(config.JsonConfig, arena_allocator, content);
+    // No need to manually free arena-allocated memory
 
     // Create temporary logger for configuration initialization
     var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
@@ -340,6 +337,8 @@ fn executeCreate(
     _image_manager: *image.ImageManager,
     _zfs_manager: *zfs.ZFSManager,
     _lxc_manager: ?*oci.lxc.LXCManager,
+    temp_logger: *logger_mod.Logger,
+    _proxmox_client: ?*ProxmoxClient,
 ) !void {
     if (args.len < 4) {
         try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
@@ -394,8 +393,8 @@ fn executeCreate(
     };
 
     // Create temporary logger for config initialization
-    var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
-    defer temp_logger.deinit();
+    var config_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
+    defer config_logger.deinit();
 
     // Initialize configuration
     var cfg = try loadConfig(allocator, null);
@@ -464,10 +463,12 @@ fn executeCreate(
 
     // Create runtime managers based on runtime type
     var crun_manager: ?*oci.crun.CrunManager = null;
+    var crun_logger: ?logger_mod.Logger = null;
     
     if (actual_runtime_type == .crun) {
-        crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
-        defer crun_manager.?.deinit();
+        // Create dedicated logger for CrunManager
+        crun_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "crun");
+        crun_manager = try oci.crun.CrunManager.init(allocator, &crun_logger.?);
     }
 
     // Create container
@@ -477,7 +478,7 @@ fn executeCreate(
         _zfs_manager,
         _lxc_manager,
         crun_manager,
-        proxmox_client,
+        _proxmox_client.?,
         .{
             .container_id = container_id.?,
             .bundle_path = bundle_path.?,
@@ -487,10 +488,16 @@ fn executeCreate(
             .proxmox_node = cfg.proxmox.node orelse "pve",
             .proxmox_storage = "local-lvm",
         },
-        &temp_logger,
+        temp_logger,
         actual_runtime_type,
     );
     defer create.deinit();
+    if (crun_manager) |cm| {
+        defer cm.deinit();
+    }
+    if (crun_logger) |*cl| {
+        defer cl.deinit();
+    }
 
     try create.create();
 }
@@ -1000,8 +1007,10 @@ pub fn main() !void {
         const port = cfg.proxmox.port orelse 8006;
         const token = cfg.proxmox.token orelse "";
         const node = cfg.proxmox.node orelse "localhost";
+        try temp_logger.info("Proxmox node from config: '{s}'", .{node});
         
-        var local_proxmox_client = try ProxmoxClient.init(
+        proxmox_client = try allocator.create(ProxmoxClient);
+        proxmox_client.?.* = try ProxmoxClient.init(
             allocator, 
             host, 
             port, 
@@ -1009,14 +1018,16 @@ pub fn main() !void {
             node, 
             &temp_logger
         );
-        defer local_proxmox_client.deinit();
-        proxmox_client = &local_proxmox_client;
     }
+    
+    // Create temporary logger for command execution
+    var main_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
+    defer main_logger.deinit();
     
     // Execute command
     switch (command) {
         .create => {
-            try executeCreate(allocator, args, image_manager.?, zfs_manager.?, lxc_manager);
+            try executeCreate(allocator, args, image_manager.?, zfs_manager.?, lxc_manager, &main_logger, proxmox_client.?);
         },
         .list => {
             try temp_logger.info("Listing containers...", .{});
@@ -1159,41 +1170,6 @@ fn executeInfo(allocator: Allocator, container_id: ?[]const u8, logger: *logger_
     try oci.info.info(container_id, proxmox_client);
 }
 
-fn executeExec(allocator: Allocator, container_id: []const u8, command: []const u8, args: ?[]const []const u8, logger: *logger_mod.Logger) !void {
-    _ = allocator;
-    _ = logger;
-    
-    // Створюємо опції для exec
-    const exec_options = oci.exec.ExecOptions{
-        .container_id = container_id,
-        .command = command,
-        .args = args,
-        .working_dir = null,
-        .env = null,
-        .user = null,
-        .tty = false,
-        .privileged = false,
-        .method = .auto, // Автоматичний вибір найкращого методу
-    };
-    
-    // Виконуємо команду
-    const result = try oci.exec.exec(exec_options, proxmox_client);
-    defer result.deinit(proxmox_client.allocator);
-    
-    // Виводимо результат
-    if (result.stdout.len > 0) {
-        try std.io.getStdOut().writer().print("{s}", .{result.stdout});
-    }
-    
-    if (result.stderr.len > 0) {
-        try std.io.getStdErr().writer().print("{s}", .{result.stderr});
-    }
-    
-    // Показуємо час виконання
-    result.printTiming();
-    
-    // Встановлюємо код виходу
-    if (result.exit_code != 0) {
-        std.process.exit(@intCast(result.exit_code));
-    }
-}
+// fn executeExec(allocator: Allocator, container_id: []const u8, command: []const u8, args: ?[]const []const u8, logger: *logger_mod.Logger) !void {
+//     TODO: Implement exec functionality
+// }

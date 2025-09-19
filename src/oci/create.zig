@@ -492,7 +492,53 @@ pub const Create = struct {
             }
             self.oci_config.storage.storage_path = try self.allocator.dupe(u8, "/var/lib/containerd/io.containerd.runtime.v2.task/default");
             
-            // 2. Налаштовуємо cgroup path для containerd
+            // 2. Оновлюємо root.path для вказування на containerd snapshooter rootfs
+            const containerd_rootfs = try std.fmt.allocPrint(
+                self.allocator,
+                "/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/{s}/fs",
+                .{self.options.container_id}
+            );
+            
+            // Звільняємо старий root.path якщо він існує
+            if (self.oci_config.root) |*root| {
+                if (root.path.len > 0) {
+                    self.allocator.free(root.path);
+                }
+                root.path = containerd_rootfs;
+            } else {
+                // Створюємо новий root якщо не існує
+                self.oci_config.root = .{
+                    .path = containerd_rootfs,
+                    .readonly = false,
+                };
+            }
+            
+            // Перевіряємо чи існує containerd snapshooter rootfs
+            std.fs.accessAbsolute(containerd_rootfs, .{}) catch |err| {
+                try self.logger.warn("Containerd snapshooter rootfs not found at {s}: {s}", .{ containerd_rootfs, @errorName(err) });
+                try self.logger.info("Falling back to bundle rootfs", .{});
+                // Використовуємо bundle rootfs як fallback
+                const bundle_rootfs = try std.fs.path.join(
+                    self.allocator,
+                    &[_][]const u8{ self.options.bundle_path, "rootfs" },
+                );
+                if (self.oci_config.root) |*root| {
+                    if (root.path.len > 0) {
+                        self.allocator.free(root.path);
+                    }
+                    root.path = bundle_rootfs;
+                } else {
+                    self.oci_config.root = .{
+                        .path = bundle_rootfs,
+                        .readonly = false,
+                    };
+                }
+                return;
+            };
+            
+            try self.logger.info("Updated root.path for containerd snapshooter: {s}", .{containerd_rootfs});
+            
+            // 3. Налаштовуємо cgroup path для containerd
             if (self.oci_config.linux) |*linux| {
                 if (linux.cgroupsPath) |cgroup_path| {
                     self.allocator.free(cgroup_path);
@@ -505,7 +551,7 @@ pub const Create = struct {
                 linux.cgroupsPath = containerd_cgroup;
             }
             
-            // 3. Встановлюємо спеціальні labels для containerd
+            // 4. Встановлюємо спеціальні labels для containerd
             if (self.oci_config.labels == null) {
                 const labels_map = try self.allocator.create(std.StringHashMap([]const u8));
                 labels_map.* = std.StringHashMap([]const u8).init(self.allocator);
@@ -581,7 +627,7 @@ pub const Create = struct {
         defer lxc_config.deinit(self.allocator);
 
         // TODO: Convert lxc_config to spec string
-        try self.proxmox_client.createContainer(self.options.container_id, "lxc");
+        try self.proxmox_client.createContainer(self.options.container_id, "lxc", rootfs_path);
     }
 
     fn configureLxcContainer(self: *Self) !void {

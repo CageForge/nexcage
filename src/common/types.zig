@@ -279,6 +279,7 @@ pub const Container = struct {
 pub const LXCConfig = struct {
     hostname: []const u8,
     ostype: []const u8,
+    ostemplate: ?[]const u8 = null,
     memory: u32,
     swap: u32,
     cores: u32,
@@ -295,6 +296,9 @@ pub const LXCConfig = struct {
         // hostname та ostype можуть бути string literals, тому не звільняємо їх
         // allocator.free(self.hostname);
         // allocator.free(self.ostype);
+        if (self.ostemplate) |template| {
+            allocator.free(template);
+        }
         allocator.free(self.rootfs);
         self.net0.deinit(allocator);
     }

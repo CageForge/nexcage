@@ -592,6 +592,7 @@ pub const SELinux = struct {
 
 pub const OciImageConfig = struct {
     storage: StorageConfig,
+    root: ?Root = null,
     raw_image: bool = false,
     raw_image_size: u64 = 10 * 1024 * 1024 * 1024, // 10GB за замовчуванням
     registry_url: ?[]const u8 = null,
@@ -616,6 +617,11 @@ pub const OciImageConfig = struct {
     containerd_mode: bool = false, // Визначає чи запуск відбувається через containerd
 
     pub fn deinit(self: *const OciImageConfig, allocator: Allocator) void {
+        if (self.root) |root| {
+            if (root.path.len > 0) {
+                allocator.free(root.path);
+            }
+        }
         if (self.storage.storage_path) |path| {
             allocator.free(path);
         }

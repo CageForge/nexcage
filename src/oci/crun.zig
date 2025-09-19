@@ -38,7 +38,8 @@ pub const ContainerStatus = types.ContainerStatus;
 
 // Main CrunManager struct
 pub const CrunManager = struct {
-    allocator: Allocator,
+    allocator: *const Allocator,
+    original_allocator: Allocator,
     logger: *Logger,
     root_path: ?[]const u8,
     log_path: ?[]const u8,
@@ -48,7 +49,9 @@ pub const CrunManager = struct {
     const Self = @This();
 
     pub fn init(allocator: Allocator, logger: *Logger) !*Self {
+        std.debug.print("DEBUG: CrunManager.init called with allocator = {*}\n", .{&allocator});
         const self = try allocator.create(Self);
+        std.debug.print("DEBUG: CrunManager.init created self = {*}\n", .{self});
         
         // Try to initialize ZFS manager (optional)
         const zfs_manager = zfs.ZFSManager.init(allocator, logger) catch |err| blk: {
@@ -56,14 +59,18 @@ pub const CrunManager = struct {
             break :blk null;
         };
         
+        // Use the global allocator to avoid corruption
         self.* = .{
-            .allocator = allocator,
+            .allocator = &std.heap.page_allocator,
+            .original_allocator = allocator,
             .logger = logger,
             .root_path = null,
             .log_path = null,
             .crun_path = "/usr/bin/crun",
             .zfs_manager = zfs_manager,
         };
+        std.debug.print("DEBUG: After assignment, self.allocator.* = {*}\n", .{&self.allocator.*});
+        std.debug.print("DEBUG: CrunManager.init set self.allocator.* = {*}\n", .{&self.allocator.*});
 
         try self.logger.info("CrunManager initialized with crun path: {s}", .{self.crun_path});
         if (self.zfs_manager != null) {
@@ -73,27 +80,29 @@ pub const CrunManager = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        if (self.root_path) |path| self.allocator.free(path);
-        if (self.log_path) |path| self.allocator.free(path);
+        if (self.root_path) |path| self.allocator.*.free(path);
+        if (self.log_path) |path| self.allocator.*.free(path);
         if (self.zfs_manager) |zfs_mgr| zfs_mgr.deinit();
-        self.allocator.destroy(self);
+        // Use the original allocator to destroy self
+        // Note: This is a workaround for the allocator corruption issue
+        self.original_allocator.destroy(self);
     }
 
     // Set root path for containers
     pub fn setRootPath(self: *Self, root_path: []const u8) !void {
-        if (self.root_path) |old_path| self.allocator.free(old_path);
-        self.root_path = try self.allocator.dupe(u8, root_path);
+        if (self.root_path) |old_path| self.allocator.*.free(old_path);
+        self.root_path = try self.allocator.*.dupe(u8, root_path);
     }
 
     // Set log path
     pub fn setLogPath(self: *Self, log_path: []const u8) !void {
-        if (self.log_path) |old_path| self.allocator.free(old_path);
-        self.log_path = try self.allocator.dupe(u8, log_path);
+        if (self.log_path) |old_path| self.allocator.*.free(old_path);
+        self.log_path = try self.allocator.*.dupe(u8, log_path);
     }
 
     // Set crun binary path
     pub fn setCrunPath(self: *Self, crun_path: []const u8) !void {
-        self.crun_path = try self.allocator.dupe(u8, crun_path);
+        self.crun_path = try self.allocator.*.dupe(u8, crun_path);
     }
 
     // Check if crun is available
@@ -109,7 +118,7 @@ pub const CrunManager = struct {
     fn executeCrunCommand(self: *Self, args: []const []const u8) !void {
         try self.checkCrunAvailable();
 
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -140,40 +149,60 @@ pub const CrunManager = struct {
 
     // Create a new container
     pub fn createContainer(self: *Self, container_id: []const u8, bundle_path: []const u8, _: ?*const OciSpec) !void {
-        try self.logger.info("Creating crun container: {s} in bundle: {s}", .{ container_id, bundle_path });
-
+        _ = self; // Suppress unused parameter warning
+        std.debug.print("DEBUG: CrunManager.createContainer called\n", .{});
+        std.debug.print("DEBUG: container_id = {s}\n", .{container_id});
+        std.debug.print("DEBUG: bundle_path = {s}\n", .{bundle_path});
+        
         // Validate inputs
         if (container_id.len == 0) return CrunError.InvalidContainerId;
         if (bundle_path.len == 0) return CrunError.InvalidBundlePath;
-
-        // Build crun create command
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
-        defer arena.deinit();
-        const arena_allocator = arena.allocator();
-
-        var args = std.ArrayList([]const u8).init(arena_allocator);
+        
+        // Use page allocator for this operation to avoid corruption
+        const page_allocator = std.heap.page_allocator;
+        
+        // Build crun command
+        var args = std.ArrayList([]const u8).init(page_allocator);
+        defer args.deinit();
+        
+        try args.append("/usr/bin/crun");
         try args.append("create");
-        
-        // Add bundle option
-        try args.append("--bundle");
-        try args.append(bundle_path);
-        
-        // Add options to avoid common issues
+        // Helpful flags to avoid common kernel/env issues
         try args.append("--no-new-keyring");
         try args.append("--no-pivot");
-        try args.append("--console-socket");
-        try args.append("/tmp/console.sock");
+        try args.append("--bundle");
+        try args.append(bundle_path);
+        try args.append(container_id);
         
-        // Add root path if specified
-        if (self.root_path) |root| {
-            try args.append("--root");
-            try args.append(root);
+        std.debug.print("DEBUG: Executing crun command with {d} args\n", .{args.items.len});
+        for (args.items, 0..) |arg, i| {
+            std.debug.print("DEBUG: arg[{d}] = '{s}' (len: {d})\n", .{i, arg, arg.len});
         }
         
-        try args.append(container_id);
-
-        try self.executeCrunCommand(args.items);
-        try self.logger.info("Successfully created crun container: {s}", .{container_id});
+        // Execute crun command
+        const result = std.process.Child.run(.{
+            .allocator = page_allocator,
+            .argv = args.items,
+        }) catch |err| {
+            std.debug.print("DEBUG: Failed to execute crun: {}\n", .{err});
+            return CrunError.CommandExecutionFailed;
+        };
+        
+        defer {
+            page_allocator.free(result.stdout);
+            page_allocator.free(result.stderr);
+        }
+        
+        if (result.term != .Exited or result.term.Exited != 0) {
+            std.debug.print("DEBUG: crun failed with exit code: {}\n", .{result.term.Exited});
+            std.debug.print("DEBUG: stderr: {s}\n", .{result.stderr});
+            return CrunError.CommandExecutionFailed;
+        }
+        
+        std.debug.print("DEBUG: crun executed successfully\n", .{});
+        if (result.stdout.len > 0) {
+            std.debug.print("DEBUG: stdout: {s}\n", .{result.stdout});
+        }
     }
 
     // Start a container
@@ -183,7 +212,7 @@ pub const CrunManager = struct {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
         // Build crun start command
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -209,7 +238,7 @@ pub const CrunManager = struct {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
         // Build crun delete command
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -261,7 +290,7 @@ pub const CrunManager = struct {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
         // Build crun state command
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -297,7 +326,7 @@ pub const CrunManager = struct {
         if (container_id.len == 0) return CrunError.InvalidContainerId;
 
         // Build crun kill command
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -324,7 +353,7 @@ pub const CrunManager = struct {
         if (bundle_path.len == 0) return CrunError.InvalidBundlePath;
 
         // Build crun spec command
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -361,7 +390,7 @@ pub const CrunManager = struct {
 
         // Determine the ZFS dataset for this container
         // This could be configured per container, but for now we'll use a convention
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -390,7 +419,7 @@ pub const CrunManager = struct {
     fn checkpointWithCRIU(self: *Self, container_id: []const u8, checkpoint_path: ?[]const u8) !void {
         try self.logger.info("Using CRIU for checkpoint: {s}", .{container_id});
 
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -436,7 +465,7 @@ pub const CrunManager = struct {
     fn restoreWithZFS(self: *Self, zfs_mgr: *zfs.ZFSManager, container_id: []const u8, checkpoint_path: ?[]const u8, snapshot_name: ?[]const u8) !void {
         try self.logger.info("Using ZFS snapshot for restore: {s}", .{container_id});
 
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -454,9 +483,9 @@ pub const CrunManager = struct {
             const snapshots = try zfs_mgr.listSnapshots(dataset);
             defer {
                 for (snapshots) |snapshot| {
-                    self.allocator.free(snapshot);
+                    self.allocator.*.free(snapshot);
                 }
-                self.allocator.free(snapshots);
+                self.allocator.*.free(snapshots);
             }
 
             // Filter for checkpoint snapshots and find the latest
@@ -483,7 +512,7 @@ pub const CrunManager = struct {
             }
 
             if (latest_checkpoint) |latest| {
-                break :blk try self.allocator.dupe(u8, latest);
+                break :blk try self.allocator.*.dupe(u8, latest);
             } else {
                 try self.logger.err("No checkpoint snapshots found for container: {s}", .{container_id});
                 return CrunError.SnapshotNotFound;
@@ -504,7 +533,7 @@ pub const CrunManager = struct {
     fn restoreWithCRIU(self: *Self, container_id: []const u8, checkpoint_path: ?[]const u8) !void {
         try self.logger.info("Using CRIU for restore: {s}", .{container_id});
 
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
@@ -535,7 +564,7 @@ pub const CrunManager = struct {
         try self.logger.info("Listing all containers...", .{});
 
         // Build crun list command
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        var arena = std.heap.ArenaAllocator.init(self.allocator.*);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 

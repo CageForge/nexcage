@@ -115,3 +115,66 @@ pub fn listStorage(client: *Client) ![]Storage {
 
     return try storages.toOwnedSlice();
 }
+
+pub fn listTemplates(client: *Client) ![]Template {
+    const path = "/storage/local/template";
+    const response = try client.makeRequest(.GET, path, null);
+    defer client.allocator.free(response);
+
+    var templates = ArrayList(Template).init(client.allocator);
+    errdefer {
+        for (templates.items) |*template| {
+            template.deinit(client.allocator);
+        }
+        templates.deinit();
+    }
+
+    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
+    defer parsed.deinit();
+
+    if (parsed.value.object.get("data")) |data| {
+        for (data.array.items) |template| {
+            try templates.append(try Template.init(
+                client.allocator,
+                template.object.get("volid").?.string,
+                template.object.get("size").?.integer,
+                template.object.get("format").?.string,
+                true,
+            ));
+        }
+    }
+
+    return try templates.toOwnedSlice();
+}
+
+pub const Template = struct {
+    volid: []const u8,
+    size: u64,
+    format: []const u8,
+    owned: bool = false,
+
+    pub fn init(allocator: std.mem.Allocator, volid: []const u8, size: u64, format: []const u8, owned: bool) !Template {
+        if (owned) {
+            return Template{
+                .volid = try allocator.dupe(u8, volid),
+                .size = size,
+                .format = try allocator.dupe(u8, format),
+                .owned = true,
+            };
+        } else {
+            return Template{
+                .volid = volid,
+                .size = size,
+                .format = format,
+                .owned = false,
+            };
+        }
+    }
+
+    pub fn deinit(self: *Template, allocator: std.mem.Allocator) void {
+        if (self.owned) {
+            allocator.free(self.volid);
+            allocator.free(self.format);
+        }
+    }
+};

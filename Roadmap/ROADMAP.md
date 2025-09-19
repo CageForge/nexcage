@@ -292,6 +292,12 @@
 - Remaining: ~13 days
 
 ## Recent Updates
+- **SECURITY FIX**: Fixed buffer overflow vulnerability in BFC extract command (1 hour) - December 29, 2024
+  - Replaced fixed 1024-byte buffer with dynamic allocation using PATH_MAX
+  - Added proper bounds checking and error handling for path length
+  - Implemented memory-safe path construction with overflow protection
+  - Enhanced security by preventing potential buffer overflow attacks
+  - **Status**: ✅ **COMPLETED** - Critical security vulnerability resolved
 - Implemented OCI container creation (4 hours)
   - Added support for OCI bundle validation
   - Implemented config.json parsing
