@@ -91,7 +91,7 @@ pub const Client = struct {
         var retry_count: u8 = 0;
         var last_error: anyerror = undefined;
 
-        while (retry_count < max_retries) : (retry_count += 1) {
+        retry_loop: while (retry_count < max_retries) : (retry_count += 1) {
             if (retry_count > 0) {
                 const backoffs = [_]u64{ 250, 500, 1000, 2000, 4000, 8000 };
                 const idx: usize = if (retry_count < backoffs.len) retry_count else backoffs.len - 1;
@@ -141,7 +141,7 @@ pub const Client = struct {
                 if (err == error.ConnectionResetByPeer) {
                     try self.logger.warn("Connection reset by peer, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
                     last_error = err;
-                    if (self.tryNextHost()) continue;
+                    if (self.tryNextHost()) continue :retry_loop;
                     return err;
                 }
                 return err;
@@ -157,7 +157,7 @@ pub const Client = struct {
                         if (err == error.ConnectionResetByPeer) {
                             try self.logger.warn("Connection reset during write, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
                             last_error = err;
-                            if (self.tryNextHost()) break; // restart loop
+                            if (self.tryNextHost()) continue :retry_loop;
                             return err;
                         }
                         return err;
@@ -202,7 +202,7 @@ pub const Client = struct {
         var retry_count: u8 = 0;
         var last_error: anyerror = undefined;
 
-        while (retry_count < max_retries) : (retry_count += 1) {
+        retry_loop: while (retry_count < max_retries) : (retry_count += 1) {
             try self.logger.info("Making {s} request to {s} (attempt {d}/{d})", .{ @tagName(method), path, retry_count + 1, max_retries });
 
             const base_url = self.base_urls[self.current_host_index];
@@ -239,7 +239,7 @@ pub const Client = struct {
                 if (err == error.ConnectionResetByPeer) {
                     try self.logger.warn("Connection reset by peer, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
                     last_error = err;
-                    if (self.tryNextHost()) continue;
+                    if (self.tryNextHost()) continue :retry_loop;
                     return err;
                 }
                 return err;
@@ -255,7 +255,7 @@ pub const Client = struct {
                         if (err == error.ConnectionResetByPeer) {
                             try self.logger.warn("Connection reset during write, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
                             last_error = err;
-                            if (self.tryNextHost()) break; // restart on next host
+                            if (self.tryNextHost()) continue :retry_loop;
                             return err;
                         }
                         return err;
