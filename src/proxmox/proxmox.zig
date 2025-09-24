@@ -100,11 +100,9 @@ pub const ProxmoxClient = struct {
 
     pub fn deinit(self: *ProxmoxClient) void {
         self.client.deinit();
-        // host, token, node звільняються в Client.deinit
-        // self.allocator.free(self.host); // звільняється в Client.deinit
-        // self.allocator.free(self.token); // звільняється в Client.deinit  
-        // self.allocator.free(self.node); // звільняється в Client.deinit
-        // self.allocator.free(self.client.hosts); // звільняється в Client.deinit
+        // host і token звільняються в Client.deinit
+        // Звільняємо node, який належить ProxmoxClient
+        if (self.node.len > 0) self.allocator.free(self.node);
     }
 
     pub fn getProxmoxVMID(self: *ProxmoxClient, oci_container_id: []const u8) !u32 {
