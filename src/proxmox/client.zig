@@ -87,11 +87,22 @@ pub const Client = struct {
     }
 
     pub fn makeRequest(self: *Client, method: http.Method, path: []const u8, body: ?[]const u8) ![]const u8 {
-        const max_retries = 3;
+        const max_retries = 5;
         var retry_count: u8 = 0;
         var last_error: anyerror = undefined;
 
         while (retry_count < max_retries) : (retry_count += 1) {
+            if (retry_count > 0) {
+                const backoffs = [_]u64{ 250, 500, 1000, 2000, 4000, 8000 };
+                const idx: usize = if (retry_count < backoffs.len) retry_count else backoffs.len - 1;
+                std.time.sleep(backoffs[idx] * std.time.ns_per_ms);
+            }
+            // Exponential backoff before retry attempts (skip on first try)
+            if (retry_count > 0) {
+                const backoffs = [_]u64{ 250, 500, 1000, 2000, 4000, 8000 };
+                const idx: usize = if (retry_count < backoffs.len) retry_count else backoffs.len - 1;
+                std.time.sleep(backoffs[idx] * std.time.ns_per_ms);
+            }
             try self.logger.info("Making {s} request to {s} (attempt {d}/{d})", .{ @tagName(method), path, retry_count + 1, max_retries });
 
             // Видалено діагностику через проблеми компіляції
@@ -133,15 +144,23 @@ pub const Client = struct {
                 return err;
             };
             if (body) |b| {
-                request.writeAll(b) catch |err| {
-                    if (err == error.ConnectionResetByPeer) {
-                        try self.logger.warn("Connection reset during write, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
-                        last_error = err;
-                        if (self.tryNextHost()) continue;
+                // Write request body in small chunks to reduce risk of TLS resets
+                const chunk_size: usize = 64 * 1024;
+                var offset: usize = 0;
+                while (offset < b.len) {
+                    const end = @min(offset + chunk_size, b.len);
+                    const slice = b[offset..end];
+                    request.writeAll(slice) catch |err| {
+                        if (err == error.ConnectionResetByPeer) {
+                            try self.logger.warn("Connection reset during write, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
+                            last_error = err;
+                            if (self.tryNextHost()) break; // restart loop
+                            return err;
+                        }
                         return err;
-                    }
-                    return err;
-                };
+                    };
+                    offset = end;
+                }
             }
             try request.finish();
             try request.wait();
@@ -176,7 +195,7 @@ pub const Client = struct {
     }
 
     pub fn makeRequestWithContentType(self: *Client, method: http.Method, path: []const u8, body: ?[]const u8, content_type_value: []const u8) ![]const u8 {
-        const max_retries = 3;
+        const max_retries = 5;
         var retry_count: u8 = 0;
         var last_error: anyerror = undefined;
 
@@ -219,15 +238,23 @@ pub const Client = struct {
                 return err;
             };
             if (body) |b| {
-                request.writeAll(b) catch |err| {
-                    if (err == error.ConnectionResetByPeer) {
-                        try self.logger.warn("Connection reset during write, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
-                        last_error = err;
-                        if (self.tryNextHost()) continue;
+                // Chunked write to mitigate ConnectionResetByPeer on large bodies
+                const chunk_size: usize = 64 * 1024;
+                var offset: usize = 0;
+                while (offset < b.len) {
+                    const end = @min(offset + chunk_size, b.len);
+                    const slice = b[offset..end];
+                    request.writeAll(slice) catch |err| {
+                        if (err == error.ConnectionResetByPeer) {
+                            try self.logger.warn("Connection reset during write, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
+                            last_error = err;
+                            if (self.tryNextHost()) break; // restart on next host
+                            return err;
+                        }
                         return err;
-                    }
-                    return err;
-                };
+                    };
+                    offset = end;
+                }
             }
             try request.finish();
             try request.wait();
