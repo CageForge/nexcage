@@ -127,6 +127,7 @@ pub const Client = struct {
             const headers = [_]http.Header{
                 .{ .name = "Authorization", .value = auth_header },
                 .{ .name = "Content-Type", .value = "application/json" },
+                .{ .name = "Expect", .value = "100-continue" },
             };
             request.extra_headers = &headers;
 
@@ -145,7 +146,7 @@ pub const Client = struct {
             };
             if (body) |b| {
                 // Write request body in small chunks to reduce risk of TLS resets
-                const chunk_size: usize = 64 * 1024;
+                const chunk_size: usize = 16 * 1024;
                 var offset: usize = 0;
                 while (offset < b.len) {
                     const end = @min(offset + chunk_size, b.len);
@@ -221,6 +222,7 @@ pub const Client = struct {
             const headers = [_]http.Header{
                 .{ .name = "Authorization", .value = auth_header },
                 .{ .name = "Content-Type", .value = content_type_value },
+                .{ .name = "Expect", .value = "100-continue" },
             };
             request.extra_headers = &headers;
 
@@ -239,7 +241,7 @@ pub const Client = struct {
             };
             if (body) |b| {
                 // Chunked write to mitigate ConnectionResetByPeer on large bodies
-                const chunk_size: usize = 64 * 1024;
+                const chunk_size: usize = 16 * 1024;
                 var offset: usize = 0;
                 while (offset < b.len) {
                     const end = @min(offset + chunk_size, b.len);
