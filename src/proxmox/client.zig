@@ -127,8 +127,8 @@ pub const Client = struct {
             const headers = [_]http.Header{
                 .{ .name = "Authorization", .value = auth_header },
                 .{ .name = "Content-Type", .value = "application/json" },
-                .{ .name = "Expect", .value = "100-continue" },
                 .{ .name = "Accept", .value = "application/json" },
+                .{ .name = "Connection", .value = "close" },
             };
             request.extra_headers = &headers;
 
@@ -224,15 +224,14 @@ pub const Client = struct {
             const headers = [_]http.Header{
                 .{ .name = "Authorization", .value = auth_header },
                 .{ .name = "Content-Type", .value = content_type_value },
-                .{ .name = "Expect", .value = "100-continue" },
                 .{ .name = "Accept", .value = "application/json" },
+                .{ .name = "Connection", .value = "close" },
             };
             request.extra_headers = &headers;
 
             if (body) |b| {
-                // Use chunked encoding for large multipart to avoid full content-length buffering
-                _ = b; // unused for length
-                request.transfer_encoding = .chunked;
+                // Use Content-Length for multipart uploads
+                request.transfer_encoding = .{ .content_length = b.len };
             }
 
             request.send() catch |err| {
