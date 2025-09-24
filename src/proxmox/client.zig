@@ -109,6 +109,7 @@ pub const Client = struct {
 
             // Спрощене створення URL для діагностики
             const base_url = self.base_urls[self.current_host_index];
+            const host_header = self.hosts[self.current_host_index];
             const full_path = try std.fmt.allocPrint(self.allocator, "/api2/json{s}", .{path});
             defer self.allocator.free(full_path);
             
@@ -129,6 +130,8 @@ pub const Client = struct {
                 .{ .name = "Content-Type", .value = "application/json" },
                 .{ .name = "Accept", .value = "application/json" },
                 .{ .name = "Connection", .value = "close" },
+                .{ .name = "User-Agent", .value = "proxmox-lxcri/0.3" },
+                .{ .name = "Host", .value = host_header },
             };
             request.extra_headers = &headers;
 
@@ -148,7 +151,7 @@ pub const Client = struct {
             };
             if (body) |b| {
                 // Write request body in small chunks to reduce risk of TLS resets
-                const chunk_size: usize = 16 * 1024;
+                const chunk_size: usize = 4 * 1024;
                 var offset: usize = 0;
                 while (offset < b.len) {
                     const end = @min(offset + chunk_size, b.len);
@@ -163,6 +166,8 @@ pub const Client = struct {
                         return err;
                     };
                     offset = end;
+                    // short pacing to avoid aggressive proxy resets
+                    std.time.sleep(5 * std.time.ms_per_s / 1000 * std.time.ns_per_ms);
                 }
             }
             try request.finish();
@@ -206,6 +211,7 @@ pub const Client = struct {
             try self.logger.info("Making {s} request to {s} (attempt {d}/{d})", .{ @tagName(method), path, retry_count + 1, max_retries });
 
             const base_url = self.base_urls[self.current_host_index];
+            const host_header = self.hosts[self.current_host_index];
             const full_path = try std.fmt.allocPrint(self.allocator, "/api2/json{s}", .{path});
             defer self.allocator.free(full_path);
 
@@ -226,6 +232,8 @@ pub const Client = struct {
                 .{ .name = "Content-Type", .value = content_type_value },
                 .{ .name = "Accept", .value = "application/json" },
                 .{ .name = "Connection", .value = "close" },
+                .{ .name = "User-Agent", .value = "proxmox-lxcri/0.3" },
+                .{ .name = "Host", .value = host_header },
             };
             request.extra_headers = &headers;
 
@@ -245,7 +253,7 @@ pub const Client = struct {
             };
             if (body) |b| {
                 // Chunked write to mitigate ConnectionResetByPeer on large bodies
-                const chunk_size: usize = 8 * 1024;
+                const chunk_size: usize = 4 * 1024;
                 var offset: usize = 0;
                 while (offset < b.len) {
                     const end = @min(offset + chunk_size, b.len);
@@ -260,6 +268,8 @@ pub const Client = struct {
                         return err;
                     };
                     offset = end;
+                    // short pacing to avoid aggressive proxy resets
+                    std.time.sleep(5 * std.time.ms_per_s / 1000 * std.time.ns_per_ms);
                 }
             }
             try request.finish();
