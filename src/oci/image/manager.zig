@@ -80,8 +80,8 @@ pub const ImageManager = struct {
         
         // Clean up new OCI image system components
         if (self.layer_fs) |layerfs| {
+            // layerfs.deinit() already calls allocator.destroy(self)
             layerfs.deinit();
-            self.allocator.destroy(layerfs);
         }
         self.metadata_cache.deinit();
         self.allocator.destroy(self.metadata_cache);

@@ -975,6 +975,14 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
+    defer {
+        // Ensure global proxmox_client is cleaned on any exit path
+        if (proxmox_client) |pc| {
+            pc.deinit();
+            allocator.destroy(pc);
+            proxmox_client = null;
+        }
+    }
     
     // Parse command line arguments
     const args = try std.process.argsAlloc(allocator);
