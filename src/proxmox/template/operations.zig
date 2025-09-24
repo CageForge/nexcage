@@ -119,8 +119,48 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
     try form_data.appendSlice(file_content);
     try form_data.writer().print("\r\n--{s}--\r\n", .{boundary});
     
-    // Відправляємо запит
-    const response = try client.makeRequestWithContentType(.POST, upload_path, form_data.items, content_type);
+    // Відправляємо запит (з fallback через curl у разі ConnectionResetByPeer)
+    const response = client.makeRequestWithContentType(.POST, upload_path, form_data.items, content_type) catch |err| blk: {
+        try client.logger.warn("Primary HTTP upload failed: {s}. Falling back to curl", .{@errorName(err)});
+
+        const host = client.hosts[client.current_host_index];
+        const url = try fmt.allocPrint(client.allocator, "https://{s}:{d}/api2/json{s}", .{ host, client.port, upload_path });
+        defer client.allocator.free(url);
+
+        const auth = try fmt.allocPrint(client.allocator, "PVEAPIToken={s}", .{client.token});
+        defer client.allocator.free(auth);
+
+        const filename_arg = try fmt.allocPrint(client.allocator, "filename={s}.tar.zst", .{template_name});
+        defer client.allocator.free(filename_arg);
+
+        const content_arg = try fmt.allocPrint(client.allocator, "content=@{s}.tar.zst;type=application/octet-stream", .{template_name});
+        defer client.allocator.free(content_arg);
+
+        const auth_header_arg = try fmt.allocPrint(client.allocator, "Authorization: PVEAPIToken={s}", .{client.token});
+        defer client.allocator.free(auth_header_arg);
+
+        const curl_args = [_][]const u8{
+            "curl", "-sS", "-k", "-X", "POST",
+            "-H", "Accept: application/json",
+            "-H", "Connection: close",
+            "-H", "User-Agent: proxmox-lxcri/0.3",
+            "-H", auth_header_arg,
+            "-F", filename_arg,
+            "-F", content_arg,
+            url,
+        };
+
+        const curl_res = try std.process.Child.run(.{ .allocator = client.allocator, .argv = &curl_args });
+        defer {
+            client.allocator.free(curl_res.stdout);
+            client.allocator.free(curl_res.stderr);
+        }
+        if (curl_res.term != .Exited or curl_res.term.Exited != 0) {
+            try client.logger.err("curl upload failed: {s}", .{curl_res.stderr});
+            return error.TemplateCreationFailed;
+        }
+        break :blk try client.allocator.dupe(u8, curl_res.stdout);
+    };
     defer client.allocator.free(response);
     
     // Парсимо відповідь
