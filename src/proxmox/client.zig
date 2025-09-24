@@ -128,10 +128,12 @@ pub const Client = struct {
                 .{ .name = "Authorization", .value = auth_header },
                 .{ .name = "Content-Type", .value = "application/json" },
                 .{ .name = "Expect", .value = "100-continue" },
+                .{ .name = "Accept", .value = "application/json" },
             };
             request.extra_headers = &headers;
 
             if (body) |b| {
+                // For JSON small bodies keep content-length
                 request.transfer_encoding = .{ .content_length = b.len };
             }
 
@@ -223,11 +225,14 @@ pub const Client = struct {
                 .{ .name = "Authorization", .value = auth_header },
                 .{ .name = "Content-Type", .value = content_type_value },
                 .{ .name = "Expect", .value = "100-continue" },
+                .{ .name = "Accept", .value = "application/json" },
             };
             request.extra_headers = &headers;
 
             if (body) |b| {
-                request.transfer_encoding = .{ .content_length = b.len };
+                // Use chunked encoding for large multipart to avoid full content-length buffering
+                _ = b; // unused for length
+                request.transfer_encoding = .chunked;
             }
 
             request.send() catch |err| {
@@ -241,7 +246,7 @@ pub const Client = struct {
             };
             if (body) |b| {
                 // Chunked write to mitigate ConnectionResetByPeer on large bodies
-                const chunk_size: usize = 16 * 1024;
+                const chunk_size: usize = 8 * 1024;
                 var offset: usize = 0;
                 while (offset < b.len) {
                     const end = @min(offset + chunk_size, b.len);
