@@ -107,14 +107,14 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
     const content_type = try fmt.allocPrint(client.allocator, "multipart/form-data; boundary={s}", .{boundary});
     defer client.allocator.free(content_type);
     
-    // Додаємо поле content=vztmpl
+    // Додаємо поле filename
     try form_data.writer().print("--{s}\r\n", .{boundary});
-    try form_data.writer().print("Content-Disposition: form-data; name=\"content\"\r\n\r\n", .{});
-    try form_data.writer().print("vztmpl\r\n", .{});
+    try form_data.writer().print("Content-Disposition: form-data; name=\"filename\"\r\n\r\n", .{});
+    try form_data.writer().print("{s}.tar.zst\r\n", .{template_name});
     
-    // Додаємо файл як поле filename
+    // Додаємо файл як поле content
     try form_data.writer().print("--{s}\r\n", .{boundary});
-    try form_data.writer().print("Content-Disposition: form-data; name=\"filename\"; filename=\"{s}.tar.zst\"\r\n", .{template_name});
+    try form_data.writer().print("Content-Disposition: form-data; name=\"content\"; filename=\"{s}.tar.zst\"\r\n", .{template_name});
     try form_data.writer().print("Content-Type: application/octet-stream\r\n\r\n", .{});
     try form_data.appendSlice(file_content);
     try form_data.writer().print("\r\n--{s}--\r\n", .{boundary});

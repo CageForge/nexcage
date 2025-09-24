@@ -81,10 +81,14 @@ pub const ImageManager = struct {
         // Clean up new OCI image system components
         if (self.layer_fs) |layerfs| {
             layerfs.deinit();
+            self.allocator.destroy(layerfs);
         }
         self.metadata_cache.deinit();
+        self.allocator.destroy(self.metadata_cache);
         self.layer_manager.deinit();
+        self.allocator.destroy(self.layer_manager);
         // file_ops doesn't have deinit method
+        self.allocator.destroy(self.file_ops);
         
         self.allocator.destroy(self);
     }

@@ -19,8 +19,7 @@ pub const LXCManager = struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        _ = self;
-        // TODO: Implement LXC cleanup
+        self.allocator.destroy(self);
     }
 
     pub fn containerExists(self: *@This(), id: []const u8) !bool {

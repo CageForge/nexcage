@@ -175,7 +175,7 @@
 - [x] **Issue #54**: Performance Optimization (3 hours) - ✅ **COMPLETED**
 - [x] **Issue #55**: Prepare Release v0.2.0 (2 hours) - ✅ **COMPLETED**
 
-### 10. Sprint 4: Advanced Features & Production Deployment (0% complete) - 6 days
+### 10. Sprint 4: Advanced Features & Production Deployment (progressing) - 6 days
 
 **Status**: 🚀 **ACTIVE** - In Progress
 
@@ -183,6 +183,17 @@
 - **Issue #56**: Fix CreateContainer Implementation (16 hours) - 🚀 **ACTIVE**
 - **Issue #57**: CRI Integration & Runtime Selection (16 hours) - 🚀 **ACTIVE**
 - **Issue #58**: OCI Bundle Generation & Configuration (16 hours) - 🚀 **ACTIVE**
+
+**Recent Sprint 4 updates (2025-09-24)**:
+- Fixed memory cleanup paths:
+  - `Client.deinit()` frees `hosts`, `token`, `base_urls`
+  - Avoid double-free in `ProxmoxClient.deinit`
+  - Proper `deinit()` in `ImageManager` and `LXCManager`
+  - Adjusted cleanup for `proxmox_client` in `main.zig`
+- Multipart upload fixes for Proxmox template:
+  - Corrected `Content-Type` handling and multipart boundaries
+  - File data sent in `content` field with `filename`
+- Build and remote compile are green; remaining runtime GPA leaks on upload under investigation
 
 **Goals**:
 - Fix CreateContainer command according to technical requirements

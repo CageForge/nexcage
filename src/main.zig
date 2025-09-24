@@ -975,6 +975,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
+    
     // Parse command line arguments
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
@@ -1029,7 +1030,9 @@ pub fn main() !void {
             node, 
             &temp_logger
         );
+        
     }
+    
     
     // Create temporary logger for command execution
     var main_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
@@ -1137,6 +1140,12 @@ pub fn main() !void {
         else => {
             try std.io.getStdErr().writer().writeAll("Command not implemented in this test version\n");
         },
+    }
+    
+    // Cleanup proxmox_client at the end
+    if (proxmox_client) |pc| {
+        pc.deinit();
+        allocator.destroy(pc);
     }
 }
 

@@ -66,6 +66,14 @@ pub const Client = struct {
             self.allocator.free(url);
         }
         self.allocator.free(self.base_urls);
+        
+        // Звільняємо hosts та token
+        for (self.hosts) |host| {
+            self.allocator.free(host);
+        }
+        self.allocator.free(self.hosts);
+        self.allocator.free(self.token);
+        
         self.client.deinit();
     }
 
@@ -115,8 +123,26 @@ pub const Client = struct {
                 request.transfer_encoding = .{ .content_length = b.len };
             }
 
-            try request.send();
-            if (body) |b| try request.writeAll(b);
+            request.send() catch |err| {
+                if (err == error.ConnectionResetByPeer) {
+                    try self.logger.warn("Connection reset by peer, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
+                    last_error = err;
+                    if (self.tryNextHost()) continue;
+                    return err;
+                }
+                return err;
+            };
+            if (body) |b| {
+                request.writeAll(b) catch |err| {
+                    if (err == error.ConnectionResetByPeer) {
+                        try self.logger.warn("Connection reset during write, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
+                        last_error = err;
+                        if (self.tryNextHost()) continue;
+                        return err;
+                    }
+                    return err;
+                };
+            }
             try request.finish();
             try request.wait();
 
@@ -183,8 +209,26 @@ pub const Client = struct {
                 request.transfer_encoding = .{ .content_length = b.len };
             }
 
-            try request.send();
-            if (body) |b| try request.writeAll(b);
+            request.send() catch |err| {
+                if (err == error.ConnectionResetByPeer) {
+                    try self.logger.warn("Connection reset by peer, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
+                    last_error = err;
+                    if (self.tryNextHost()) continue;
+                    return err;
+                }
+                return err;
+            };
+            if (body) |b| {
+                request.writeAll(b) catch |err| {
+                    if (err == error.ConnectionResetByPeer) {
+                        try self.logger.warn("Connection reset during write, retrying... (attempt {d}/{d})", .{ retry_count + 1, max_retries });
+                        last_error = err;
+                        if (self.tryNextHost()) continue;
+                        return err;
+                    }
+                    return err;
+                };
+            }
             try request.finish();
             try request.wait();
 
