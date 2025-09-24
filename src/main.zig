@@ -400,14 +400,25 @@ fn executeCreate(
     var cfg = try loadConfig(allocator, null);
     defer cfg.deinit();
 
-    // Determine runtime type based on CLI args or container ID pattern
-    var actual_runtime_type: types.RuntimeType = .lxc; // Default to lxc for Proxmox integration
+    // Determine runtime type based on CLI args, config, or container ID pattern
+    var actual_runtime_type: types.RuntimeType = .lxc; // Default fallback
+    
     if (runtime_type) |rt| {
+        // CLI argument takes precedence
         if (std.mem.eql(u8, rt, "crun") or std.mem.eql(u8, rt, "runc")) {
             actual_runtime_type = .crun;
         } else if (std.mem.eql(u8, rt, "lxc") or std.mem.eql(u8, rt, "proxmox-lxc")) {
             actual_runtime_type = .lxc;
         } else if (std.mem.eql(u8, rt, "vm")) {
+            actual_runtime_type = .vm;
+        }
+    } else if (cfg.default_runtime) |default_rt| {
+        // Use default from config
+        if (std.mem.eql(u8, default_rt, "crun") or std.mem.eql(u8, default_rt, "runc")) {
+            actual_runtime_type = .crun;
+        } else if (std.mem.eql(u8, default_rt, "lxc") or std.mem.eql(u8, default_rt, "proxmox-lxc")) {
+            actual_runtime_type = .lxc;
+        } else if (std.mem.eql(u8, default_rt, "vm")) {
             actual_runtime_type = .vm;
         }
     } else {
@@ -477,7 +488,7 @@ fn executeCreate(
         _image_manager,
         _zfs_manager,
         _lxc_manager,
-        crun_manager,
+        if (actual_runtime_type == .crun) crun_manager else null,
         _proxmox_client.?,
         .{
             .container_id = container_id.?,

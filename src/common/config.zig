@@ -52,6 +52,7 @@ pub const Config = struct {
     allocator: std.mem.Allocator,
     runtime_type: RuntimeType,
     runtime_path: ?[]const u8,
+    default_runtime: ?[]const u8,
     proxmox: ProxmoxConfig,
     storage: StorageConfig,
     network: NetworkConfig,
@@ -77,6 +78,7 @@ pub const Config = struct {
             .allocator = allocator,
             .runtime_type = .runc,
             .runtime_path = null,
+            .default_runtime = null,
             .proxmox = try ProxmoxConfig.init(allocator),
             .storage = try StorageConfig.init(allocator),
             .network = try NetworkConfig.init(allocator),
@@ -95,6 +97,9 @@ pub const Config = struct {
     pub fn deinit(self: *Config) void {
         if (self.runtime_path) |path| {
             self.allocator.free(path);
+        }
+        if (self.default_runtime) |rt| {
+            self.allocator.free(rt);
         }
         self.proxmox.deinit();
         self.storage.deinit();
@@ -126,6 +131,11 @@ pub const Config = struct {
         // if (runtime.log_level) |level| {
         //     ...
         // }
+    }
+
+    // Default runtime from root json
+    if (json_config.default_runtime) |rt| {
+        config.default_runtime = try allocator.dupe(u8, rt);
     }
 
     // Proxmox config

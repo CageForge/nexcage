@@ -62,7 +62,8 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
     // Використовуємо tar для створення архіву
     const tar_args = [_][]const u8{
         "tar",
-        "-czf",
+        "--zstd",
+        "-cf",
         archive_path,
         "-C",
         rootfs_path,
@@ -98,7 +99,7 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
     
     _ = try file.readAll(file_content);
     
-    // Створюємо multipart form data для завантаження
+    // Створюємо multipart form data для завантаження (Proxmox expects fields: content=vztmpl, filename=<name>)
     var form_data = ArrayList(u8).init(client.allocator);
     defer form_data.deinit();
     
@@ -106,20 +107,20 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
     const content_type = try fmt.allocPrint(client.allocator, "multipart/form-data; boundary={s}", .{boundary});
     defer client.allocator.free(content_type);
     
-    // Додаємо поле filename
+    // Додаємо поле content=vztmpl
     try form_data.writer().print("--{s}\r\n", .{boundary});
-    try form_data.writer().print("Content-Disposition: form-data; name=\"filename\"\r\n\r\n", .{});
-    try form_data.writer().print("{s}.tar.zst\r\n", .{template_name});
+    try form_data.writer().print("Content-Disposition: form-data; name=\"content\"\r\n\r\n", .{});
+    try form_data.writer().print("vztmpl\r\n", .{});
     
-    // Додаємо поле content
+    // Додаємо файл як поле filename
     try form_data.writer().print("--{s}\r\n", .{boundary});
-    try form_data.writer().print("Content-Disposition: form-data; name=\"content\"; filename=\"{s}.tar.zst\"\r\n", .{template_name});
+    try form_data.writer().print("Content-Disposition: form-data; name=\"filename\"; filename=\"{s}.tar.zst\"\r\n", .{template_name});
     try form_data.writer().print("Content-Type: application/octet-stream\r\n\r\n", .{});
     try form_data.appendSlice(file_content);
     try form_data.writer().print("\r\n--{s}--\r\n", .{boundary});
     
     // Відправляємо запит
-    const response = try client.makeRequest(.POST, upload_path, form_data.items);
+    const response = try client.makeRequestWithContentType(.POST, upload_path, form_data.items, content_type);
     defer client.allocator.free(response);
     
     // Парсимо відповідь

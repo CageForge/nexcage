@@ -859,6 +859,7 @@ pub const JsonConfig = struct {
     proxmox: ?ProxmoxConfig = null,
     storage: ?StorageConfig = null,
     network: ?NetworkConfig = null,
+    default_runtime: ?[]const u8 = null,
 };
 
 pub const StorageConfig = struct {

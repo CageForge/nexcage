@@ -148,4 +148,72 @@ pub const Client = struct {
 
         return last_error;
     }
+
+    pub fn makeRequestWithContentType(self: *Client, method: http.Method, path: []const u8, body: ?[]const u8, content_type_value: []const u8) ![]const u8 {
+        const max_retries = 3;
+        var retry_count: u8 = 0;
+        var last_error: anyerror = undefined;
+
+        while (retry_count < max_retries) : (retry_count += 1) {
+            try self.logger.info("Making {s} request to {s} (attempt {d}/{d})", .{ @tagName(method), path, retry_count + 1, max_retries });
+
+            const base_url = self.base_urls[self.current_host_index];
+            const full_path = try std.fmt.allocPrint(self.allocator, "/api2/json{s}", .{path});
+            defer self.allocator.free(full_path);
+
+            const url = try std.fmt.allocPrint(self.allocator, "{s}{s}", .{ base_url, full_path });
+            defer self.allocator.free(url);
+
+            var server_header_buffer: [1024]u8 = undefined;
+            var request = try self.client.open(method, try Uri.parse(url), .{ 
+                .server_header_buffer = &server_header_buffer,
+            });
+            defer request.deinit();
+
+            const auth_header = try std.fmt.allocPrint(self.allocator, "PVEAPIToken={s}", .{self.token});
+            defer self.allocator.free(auth_header);
+
+            const headers = [_]http.Header{
+                .{ .name = "Authorization", .value = auth_header },
+                .{ .name = "Content-Type", .value = content_type_value },
+            };
+            request.extra_headers = &headers;
+
+            if (body) |b| {
+                request.transfer_encoding = .{ .content_length = b.len };
+            }
+
+            try request.send();
+            if (body) |b| try request.writeAll(b);
+            try request.finish();
+            try request.wait();
+
+            const status = request.response.status;
+            const response_body = try request.reader().readAllAlloc(self.allocator, 1024 * 1024);
+            defer self.allocator.free(response_body);
+
+            if (status != .ok) {
+                try self.logger.err("Request failed with status {d}: {s}", .{ @intFromEnum(status), response_body });
+                switch (status) {
+                    .unauthorized => return Error.ProxmoxAuthError,
+                    .forbidden => return Error.ProxmoxPermissionDenied,
+                    .not_found => return Error.ProxmoxResourceNotFound,
+                    .request_timeout => {
+                        last_error = Error.ProxmoxTimeout;
+                        if (self.tryNextHost()) continue;
+                        return Error.ProxmoxTimeout;
+                    },
+                    else => {
+                        last_error = Error.ProxmoxOperationFailed;
+                        if (self.tryNextHost()) continue;
+                        return Error.ProxmoxOperationFailed;
+                    },
+                }
+            }
+
+            return try self.allocator.dupe(u8, response_body);
+        }
+
+        return last_error;
+    }
 };
