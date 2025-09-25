@@ -133,7 +133,8 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
         const filename_arg = try fmt.allocPrint(client.allocator, "filename={s}.tar.zst", .{template_name});
         defer client.allocator.free(filename_arg);
 
-        const content_arg = try fmt.allocPrint(client.allocator, "content=@{s}.tar.zst;type=application/octet-stream", .{template_name});
+        // Використовуємо абсолютний шлях до архіву
+        const content_arg = try fmt.allocPrint(client.allocator, "content=@{s};type=application/octet-stream", .{archive_path});
         defer client.allocator.free(content_arg);
 
         const auth_header_arg = try fmt.allocPrint(client.allocator, "Authorization: PVEAPIToken={s}", .{client.token});
