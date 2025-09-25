@@ -316,7 +316,8 @@ fn detectVersion(rootfs_path: []const u8, allocator: std.mem.Allocator) ![]const
 }
 
 pub fn listAvailableTemplates(client: *Client) ![]TemplateInfo {
-    const path = "/storage/local/template";
+    const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/storage/{s}/content?content=vztmpl", .{ client.node, "local" });
+    defer client.allocator.free(path);
     const response = try client.makeRequest(.GET, path, null);
     defer client.allocator.free(response);
 
@@ -332,23 +333,23 @@ pub fn listAvailableTemplates(client: *Client) ![]TemplateInfo {
     defer parsed.deinit();
 
     if (parsed.value.object.get("data")) |data| {
-        for (data.array.items) |template| {
-            const volid = template.object.get("volid").?.string;
-            const size = template.object.get("size").?.integer;
-            const format = template.object.get("format").?.string;
-            
-            // Витягуємо назву з volid
-            const name = if (std.mem.indexOf(u8, volid, "/")) |pos| volid[pos+1..] else volid;
-            
+        for (data.array.items) |item| {
+            const volid = item.object.get("volid").?.string;
+            const size = item.object.get("size").?.integer;
+            const format = if (item.object.get("format")) |f| f.string else "unknown";
+
+            const slash = std.mem.lastIndexOf(u8, volid, "/");
+            const name = if (slash) |pos| volid[pos+1..] else volid;
+
             try templates.append(try TemplateInfo.init(
                 client.allocator,
                 name,
                 @intCast(size),
                 format,
-                "unknown", // OS визначається під час створення
-                "unknown", // Arch визначається під час створення
-                "unknown", // Version визначається під час створення
-                false, // Не створюємо копії, оскільки рядки не є власними
+                "unknown",
+                "unknown",
+                "unknown",
+                false,
             ));
         }
     }
