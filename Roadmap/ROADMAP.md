@@ -527,3 +527,4 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 
 ### 🏆 Project Status: PRODUCTION READY
 **Proxmox LXCRI v0.3.0** establishes the project as a mature, enterprise-grade container runtime with revolutionary ZFS checkpoint/restore capabilities. The project has successfully achieved its core goals and is ready for widespread adoption in production environments.
+- [x] Додано юніт-тести для процесу шаблонів (detectOS/Arch/Version, multipart, parse).
