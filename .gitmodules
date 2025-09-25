@@ -3,4 +3,4 @@
 	url = git@github.com:themoriarti/bfc.git
 [submodule "deps/crun"]
 	path = deps/crun
-	url = git@github.com:/containers/crun.git
+	url = https://github.com/kubebsd/crun.git
