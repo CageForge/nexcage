@@ -56,34 +56,8 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
     try client.logger.info("Creating template from rootfs: {s}", .{rootfs_path});
     
     // Створюємо архів з rootfs
-    const archive_path = try fmt.allocPrint(client.allocator, "/tmp/{s}.tar.zst", .{template_name});
+    const archive_path = try createTemplateArchive(client.allocator, rootfs_path, template_name);
     defer client.allocator.free(archive_path);
-    
-    // Використовуємо tar для створення архіву
-    const tar_args = [_][]const u8{
-        "tar",
-        "--zstd",
-        "-cf",
-        archive_path,
-        "-C",
-        rootfs_path,
-        ".",
-    };
-    
-    const result = try std.process.Child.run(.{
-        .allocator = client.allocator,
-        .argv = &tar_args,
-    });
-    
-    defer {
-        client.allocator.free(result.stdout);
-        client.allocator.free(result.stderr);
-    }
-    
-    if (result.term != .Exited or result.term.Exited != 0) {
-        try client.logger.err("Failed to create tar archive: {s}", .{result.stderr});
-        return error.TemplateCreationFailed;
-    }
     
     // Завантажуємо архів на Proxmox storage
     const upload_path = try fmt.allocPrint(client.allocator, "/nodes/{s}/storage/local/upload", .{client.node});
@@ -100,27 +74,13 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
     _ = try file.readAll(file_content);
     
     // Створюємо multipart form data для завантаження (Proxmox expects fields: content=vztmpl, filename=<name>)
-    var form_data = ArrayList(u8).init(client.allocator);
-    defer form_data.deinit();
-    
     const boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
-    const content_type = try fmt.allocPrint(client.allocator, "multipart/form-data; boundary={s}", .{boundary});
-    defer client.allocator.free(content_type);
-    
-    // Додаємо поле filename
-    try form_data.writer().print("--{s}\r\n", .{boundary});
-    try form_data.writer().print("Content-Disposition: form-data; name=\"filename\"\r\n\r\n", .{});
-    try form_data.writer().print("{s}.tar.zst\r\n", .{template_name});
-    
-    // Додаємо файл як поле content
-    try form_data.writer().print("--{s}\r\n", .{boundary});
-    try form_data.writer().print("Content-Disposition: form-data; name=\"content\"; filename=\"{s}.tar.zst\"\r\n", .{template_name});
-    try form_data.writer().print("Content-Type: application/octet-stream\r\n\r\n", .{});
-    try form_data.appendSlice(file_content);
-    try form_data.writer().print("\r\n--{s}--\r\n", .{boundary});
+    const mf = try buildMultipartForm(client.allocator, boundary, template_name, file_content);
+    defer client.allocator.free(mf.body);
+    defer client.allocator.free(mf.content_type);
     
     // Відправляємо запит (з fallback через curl у разі ConnectionResetByPeer)
-    const response = client.makeRequestWithContentType(.POST, upload_path, form_data.items, content_type) catch |err| blk: {
+    const response = client.makeRequestWithContentType(.POST, upload_path, mf.body, mf.content_type) catch |err| blk: {
         try client.logger.warn("Primary HTTP upload failed: {s}. Falling back to curl", .{@errorName(err)});
 
         const host = client.hosts[client.current_host_index];
@@ -356,3 +316,65 @@ pub fn listAvailableTemplates(client: *Client) ![]TemplateInfo {
 
     return try templates.toOwnedSlice();
 }
+
+// Допоміжні хелпери для тестування
+pub fn createTemplateArchive(allocator: std.mem.Allocator, rootfs_path: []const u8, template_name: []const u8) ![]const u8 {
+    const archive_path = try fmt.allocPrint(allocator, "/tmp/{s}.tar.zst", .{template_name});
+    errdefer allocator.free(archive_path);
+    const tar_args = [_][]const u8{
+        "tar", "--zstd", "-cf", archive_path, "-C", rootfs_path, ".",
+    };
+    const result = try std.process.Child.run(.{ .allocator = allocator, .argv = &tar_args });
+    defer {
+        allocator.free(result.stdout);
+        allocator.free(result.stderr);
+    }
+    if (result.term != .Exited or result.term.Exited != 0) return error.TemplateCreationFailed;
+    return archive_path;
+}
+
+pub fn buildMultipartForm(allocator: std.mem.Allocator, boundary: []const u8, template_name: []const u8, file_content: []const u8) !struct { body: []u8, content_type: []u8 } {
+    var form_data = ArrayList(u8).init(allocator);
+    errdefer form_data.deinit();
+    try form_data.writer().print("--{s}\r\n", .{boundary});
+    try form_data.writer().print("Content-Disposition: form-data; name=\"filename\"\r\n\r\n", .{});
+    try form_data.writer().print("{s}.tar.zst\r\n", .{template_name});
+    try form_data.writer().print("--{s}\r\n", .{boundary});
+    try form_data.writer().print("Content-Disposition: form-data; name=\"content\"; filename=\"{s}.tar.zst\"\r\n", .{template_name});
+    try form_data.writer().print("Content-Type: application/octet-stream\r\n\r\n", .{});
+    try form_data.appendSlice(file_content);
+    try form_data.writer().print("\r\n--{s}--\r\n", .{boundary});
+    const content_type = try fmt.allocPrint(allocator, "multipart/form-data; boundary={s}", .{boundary});
+    return .{ .body = try form_data.toOwnedSlice(), .content_type = content_type };
+}
+
+pub fn parseTemplatesFromJson(allocator: std.mem.Allocator, response: []const u8) ![]TemplateInfo {
+    const templates = ArrayList(TemplateInfo).init(allocator);
+    errdefer {
+        for (templates.items) |*t| t.deinit(allocator);
+        templates.deinit();
+    }
+    var parsed = try json.parseFromSlice(json.Value, allocator, response, .{});
+    defer parsed.deinit();
+    if (parsed.value.object.get("data")) |data| {
+        for (data.array.items) |item| {
+            const volid = item.object.get("volid").?.string;
+            const size = item.object.get("size").?.integer;
+            const format = if (item.object.get("format")) |f| f.string else "unknown";
+            const slash = std.mem.lastIndexOf(u8, volid, "/");
+            const name = if (slash) |pos| volid[pos+1..] else volid;
+            try templates.append(try TemplateInfo.init(
+                allocator,
+                name,
+                @intCast(size),
+                format,
+                "unknown",
+                "unknown",
+                "unknown",
+                false,
+            ));
+        }
+    }
+    return try templates.toOwnedSlice();
+}
+
