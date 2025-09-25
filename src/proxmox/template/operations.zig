@@ -160,12 +160,56 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
             try client.logger.err("curl upload failed: {s}", .{curl_res.stderr});
             return error.TemplateCreationFailed;
         }
+        if (curl_res.stdout.len == 0) {
+            // Fallback: перевіряємо, чи з'явився шаблон у списку
+            const templates = try listAvailableTemplates(client);
+            defer {
+                for (templates) |*t| t.deinit(client.allocator);
+                client.allocator.free(templates);
+            }
+            const expected = try fmt.allocPrint(client.allocator, "{s}.tar.zst", .{template_name});
+            defer client.allocator.free(expected);
+            for (templates) |*t| {
+                if (std.mem.eql(u8, t.name, expected)) {
+                    // Повертаємо фіктивну JSON-відповідь, щоб нижче створити TemplateInfo стандартним шляхом
+                    const fake = try fmt.allocPrint(client.allocator, "{s}", .{"{\"data\":{\"size\":0}}"});
+                    break :blk fake;
+                }
+            }
+            try client.logger.err("Upload via curl returned empty response and template not found", .{});
+            return error.TemplateCreationFailed;
+        }
         break :blk try client.allocator.dupe(u8, curl_res.stdout);
     };
     defer client.allocator.free(response);
     
     // Парсимо відповідь
-    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
+    var parsed = json.parseFromSlice(json.Value, client.allocator, response, .{}) catch |perr| {
+        // Якщо парсинг JSON не вдався (наприклад, порожня відповідь), спробуємо знайти шаблон у списку
+        try client.logger.warn("Template upload response parse failed: {s}. Trying list-based verification", .{@errorName(perr)});
+        const templates = try listAvailableTemplates(client);
+        defer {
+            for (templates) |*t| t.deinit(client.allocator);
+            client.allocator.free(templates);
+        }
+        const expected = try fmt.allocPrint(client.allocator, "{s}.tar.zst", .{template_name});
+        defer client.allocator.free(expected);
+        for (templates) |*t| {
+            if (std.mem.eql(u8, t.name, expected)) {
+                return TemplateInfo.init(
+                    client.allocator,
+                    expected,
+                    t.size,
+                    t.format,
+                    t.os_type,
+                    t.arch,
+                    t.version,
+                    true,
+                );
+            }
+        }
+        return error.TemplateCreationFailed;
+    };
     defer parsed.deinit();
     
     if (parsed.value.object.get("data")) |data| {
