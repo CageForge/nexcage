@@ -290,16 +290,6 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Registry module
-    const registry_mod = b.addModule("registry", .{
-        .root_source_file = b.path("src/registry_placeholder.zig"),
-        .imports = &.{
-            .{ .name = "types", .module = types_mod },
-            .{ .name = "error", .module = error_mod },
-            .{ .name = "logger", .module = logger_mod },
-        },
-    });
-
     // Raw image module
     const raw_mod = b.addModule("raw", .{
         .root_source_file = b.path("src/raw/mod.zig"),
@@ -345,7 +335,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "json_helpers", .module = json_mod },
             // .{ .name = "cli_args", .module = cli_args_mod }, // disabled - file removed
             .{ .name = "image", .module = image_mod },
-            .{ .name = "registry", .module = registry_mod },
             .{ .name = "raw", .module = raw_mod },
             .{ .name = "bfc", .module = bfc_mod },
             .{ .name = "crun", .module = crun_mod },
@@ -440,7 +429,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("json_helpers", json_mod);
     // exe.root_module.addImport("cli_args", cli_args_mod); // disabled - file removed
     exe.root_module.addImport("image", image_mod);
-    exe.root_module.addImport("registry", registry_mod);
     exe.root_module.addImport("raw", raw_mod);
     exe.root_module.addImport("bfc", bfc_mod);
     exe.root_module.addImport("crun", crun_mod);
@@ -462,7 +450,6 @@ pub fn build(b: *std.Build) void {
     exe_legacy.root_module.addImport("zfs", zfs_mod);
     exe_legacy.root_module.addImport("json_helpers", json_mod);
     exe_legacy.root_module.addImport("image", image_mod);
-    exe_legacy.root_module.addImport("registry", registry_mod);
     exe_legacy.root_module.addImport("raw", raw_mod);
     exe_legacy.root_module.addImport("bfc", bfc_mod);
     exe_legacy.root_module.addImport("crun", crun_mod);
