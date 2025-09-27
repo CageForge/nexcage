@@ -240,12 +240,8 @@ pub const Create = struct {
                         var raw_image = try raw.RawImage.init(
                             self.allocator,
                             raw_path,
-                            self.oci_config.raw_image_size,
-                            self.logger,
                         );
                         defer raw_image.deinit();
-
-                        try raw_image.create();
 
                         // Створюємо ZFS dataset
                         try self.createZfsDataset();
