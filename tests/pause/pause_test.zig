@@ -90,4 +90,4 @@ test "pause container state management" {
     const state = container.getState();
     try testing.expectEqual(ContainerState.Status.created, state.status);
     try testing.expectEqualStrings("/var/lib/containers/test-pause", state.bundle);
-} 
+}

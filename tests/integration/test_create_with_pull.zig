@@ -38,4 +38,4 @@ pub fn main() !void {
     try testing.expect(pulled.rootfs_path != null);
     try testing.expect(pulled.name == image_name);
     try testing.expect(pulled.tag == image_tag);
-} 
+}

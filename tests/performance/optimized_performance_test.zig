@@ -18,13 +18,8 @@ fn createTestLayer(index: u32) !*Layer {
     const digest = createTestDigest(index);
     defer allocator.free(digest);
 
-    return try Layer.createLayer(
-        allocator,
-        "application/vnd.oci.image.layer.v1.tar",
-        try allocator.dupe(u8, digest),
-        1024 + index * 100, // Varying sizes
-        null
-    );
+    return try Layer.createLayer(allocator, "application/vnd.oci.image.layer.v1.tar", try allocator.dupe(u8, digest), 1024 + index * 100, // Varying sizes
+        null);
 }
 
 fn createTestMetadataEntry(index: u32) !*MetadataCache.MetadataCacheEntry {

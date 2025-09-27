@@ -38,23 +38,23 @@ pub fn main() !void {
 
     // Test bundle validation
     try logger.info("Validating bundle...", .{});
-    
+
     // Check if bundle exists
     const bundle_dir = try std.fs.cwd().openDir(bundle_path, .{});
     defer bundle_dir.close();
-    
+
     try logger.info("Bundle directory opened successfully", .{});
 
     // Check if config.json exists
     const config_file = try bundle_dir.openFile("config.json", .{});
     defer config_file.close();
-    
+
     try logger.info("Config file opened successfully", .{});
 
     // Check if rootfs exists
     const rootfs_dir = try bundle_dir.openDir("rootfs", .{});
     defer rootfs_dir.close();
-    
+
     try logger.info("Rootfs directory opened successfully", .{});
 
     try logger.info("Bundle validation completed successfully!", .{});

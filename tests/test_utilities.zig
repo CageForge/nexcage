@@ -1,8 +1,7 @@
 /// Advanced testing utilities for Proxmox LXCRI
-/// 
+///
 /// This module provides comprehensive testing utilities including property-based testing,
 /// fuzzing capabilities, performance benchmarking, and code coverage helpers.
-
 const std = @import("std");
 const testing = std.testing;
 const expect = testing.expect;
@@ -33,7 +32,7 @@ pub const PropertyTesting = struct {
     /// Runs property-based test with generated inputs
     pub fn check(self: *PropertyTesting, property: anytype, generator: anytype) !void {
         logger.info("Starting property-based testing with {} iterations", .{self.max_iterations}) catch {};
-        
+
         var failures: u32 = 0;
         self.current_iteration = 0;
 
@@ -48,7 +47,7 @@ pub const PropertyTesting = struct {
             property(test_input) catch |err| {
                 failures += 1;
                 logger.err("Property test failed at iteration {}: {}", .{ self.current_iteration, err }) catch {};
-                
+
                 // For debugging, we could implement shrinking here
                 if (failures > 10) {
                     return error.TooManyPropertyTestFailures;
@@ -86,11 +85,11 @@ pub const FuzzTesting = struct {
     pub fn generateRandomBytes(self: *FuzzTesting, size: usize) ![]u8 {
         const actual_size = std.math.min(size, self.max_input_size);
         const bytes = try self.allocator.alloc(u8, actual_size);
-        
+
         for (bytes) |*byte| {
             byte.* = self.rng.random().int(u8);
         }
-        
+
         return bytes;
     }
 
@@ -98,19 +97,19 @@ pub const FuzzTesting = struct {
     pub fn generateRandomString(self: *FuzzTesting, max_len: usize) ![]u8 {
         const len = self.rng.random().uintLessThan(usize, max_len + 1);
         const str = try self.allocator.alloc(u8, len);
-        
+
         for (str) |*char| {
             // Generate printable ASCII characters
             char.* = 32 + self.rng.random().uintLessThan(u8, 95);
         }
-        
+
         return str;
     }
 
     /// Runs fuzz test on a target function
     pub fn fuzz(self: *FuzzTesting, target_function: anytype, input_generator: anytype) !void {
         logger.info("Starting fuzz testing with {} iterations", .{self.max_iterations}) catch {};
-        
+
         var crashes: u32 = 0;
         var i: u32 = 0;
 
@@ -193,7 +192,7 @@ pub const Benchmark = struct {
 
         const min = self.results.items[0];
         const max = self.results.items[self.results.items.len - 1];
-        
+
         var sum: u64 = 0;
         for (self.results.items) |result| {
             sum += result;
@@ -294,17 +293,17 @@ pub const MutationTesting = struct {
         _ = allocator;
         _ = test_function;
         logger.info("Running mutation testing simulation", .{}) catch {};
-        
+
         // In a real implementation, this would:
         // 1. Parse source code
         // 2. Apply mutations
         // 3. Run tests
         // 4. Check if tests catch mutations
-        
+
         // For now, we simulate the results
         const mutations = [_]MutationType{
             .arithmetic_operator,
-            .logical_operator, 
+            .logical_operator,
             .constant_value,
             .boundary_condition,
         };
@@ -315,7 +314,7 @@ pub const MutationTesting = struct {
         for (mutations) |mutation_type| {
             // Simulate running test with mutation
             logger.debug("Testing mutation: {}", .{mutation_type}) catch {};
-            
+
             // Simulate test result (70% of mutations should be caught by good tests)
             var rng = std.rand.Xoroshiro128.init(@intCast(std.time.nanoTimestamp()));
             if (rng.random().float(f32) < 0.7) {
@@ -341,12 +340,12 @@ pub const Generators = struct {
         pub fn generate(rng: *std.rand.Xoroshiro128, allocator: std.mem.Allocator) ![]u8 {
             const length = 1 + rng.random().uintLessThan(usize, 63); // 1-64 chars
             const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
-            
+
             const id = try allocator.alloc(u8, length);
             for (id) |*char| {
                 char.* = chars[rng.random().uintLessThan(usize, chars.len)];
             }
-            
+
             return id;
         }
     };
@@ -367,7 +366,7 @@ pub const TestHelpers = struct {
         const start_time = std.time.nanoTimestamp();
         _ = @call(.auto, function, args) catch {};
         const end_time = std.time.nanoTimestamp();
-        
+
         const duration_ms = @divTrunc(@as(u64, @intCast(end_time - start_time)), 1_000_000);
         if (duration_ms > max_duration_ms) {
             logger.err("Function took {}ms, expected <{}ms", .{ duration_ms, max_duration_ms }) catch {};
@@ -379,10 +378,10 @@ pub const TestHelpers = struct {
     pub fn assertMemoryUsage(allocator: std.mem.Allocator, max_bytes: usize, function: anytype, args: anytype) !void {
         var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
-        
+
         const arena_allocator = arena.allocator();
         _ = @call(.auto, function, .{arena_allocator} ++ args) catch {};
-        
+
         // In a real implementation, we would track actual memory usage
         // For now, we just ensure the arena doesn't allocate too much
         logger.debug("Memory usage check completed (limit: {} bytes)", .{max_bytes}) catch {};

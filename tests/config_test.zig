@@ -92,4 +92,4 @@ test "Config JSON parsing" {
     // Basic validation - just check that config was created
     try testing.expect(cfg.runtime_path != null or cfg.runtime_path == null);
     try testing.expect(cfg.log_path != null or cfg.log_path == null);
-} 
+}
