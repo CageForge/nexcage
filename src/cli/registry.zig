@@ -5,6 +5,11 @@ const interfaces = core.interfaces;
 const run = @import("run.zig");
 const help = @import("help.zig");
 const version = @import("version.zig");
+const create = @import("create.zig");
+const start = @import("start.zig");
+const stop = @import("stop.zig");
+const delete = @import("delete.zig");
+const list = @import("list.zig");
 
 /// CLI command registry using StaticStringMap
 /// Command registry
@@ -101,4 +106,29 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
     const version_cmd = try registry.allocator.alloc(version.VersionCommand, 1);
     version_cmd[0] = version.VersionCommand{};
     try registry.register(@ptrCast(&version_cmd[0]));
+    
+    // Register create command
+    const create_cmd = try registry.allocator.alloc(create.CreateCommand, 1);
+    create_cmd[0] = create.CreateCommand{};
+    try registry.register(@ptrCast(&create_cmd[0]));
+    
+    // Register start command
+    const start_cmd = try registry.allocator.alloc(start.StartCommand, 1);
+    start_cmd[0] = start.StartCommand{};
+    try registry.register(@ptrCast(&start_cmd[0]));
+    
+    // Register stop command
+    const stop_cmd = try registry.allocator.alloc(stop.StopCommand, 1);
+    stop_cmd[0] = stop.StopCommand{};
+    try registry.register(@ptrCast(&stop_cmd[0]));
+    
+    // Register delete command
+    const delete_cmd = try registry.allocator.alloc(delete.DeleteCommand, 1);
+    delete_cmd[0] = delete.DeleteCommand{};
+    try registry.register(@ptrCast(&delete_cmd[0]));
+    
+    // Register list command
+    const list_cmd = try registry.allocator.alloc(list.ListCommand, 1);
+    list_cmd[0] = list.ListCommand{};
+    try registry.register(@ptrCast(&list_cmd[0]));
 }

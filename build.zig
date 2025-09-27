@@ -353,17 +353,18 @@ pub fn build(b: *std.Build) void {
     });
 
     // Main executable (modular architecture)
+    // Main executable (modular architecture)
     const exe = b.addExecutable(.{
         .name = "proxmox-lxcri",
-        .root_source_file = b.path("src/main_modular.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    // Legacy executable (original architecture)
+    // Legacy executable (original architecture - deprecated)
     const exe_legacy = b.addExecutable(.{
         .name = "proxmox-lxcri-legacy",
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("legacy/src/main_legacy.zig"),
         .target = target,
         .optimize = optimize,
     });
