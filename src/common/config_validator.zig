@@ -1,8 +1,7 @@
 /// Configuration validation and schema management for Proxmox LXCRI
-/// 
+///
 /// This module provides comprehensive configuration validation, schema checking,
 /// and configuration versioning capabilities to ensure robust configuration management.
-
 const std = @import("std");
 const types = @import("types");
 const logger = @import("logger");
@@ -42,7 +41,7 @@ pub const ConfigVersion = enum(u32) {
     pub fn toString(self: ConfigVersion) []const u8 {
         return switch (self) {
             .v1_0 => "1.0",
-            .v1_1 => "1.1", 
+            .v1_1 => "1.1",
             .v1_2 => "1.2",
             .v2_0 => "2.0",
             .current => "2.0",
@@ -77,14 +76,14 @@ pub const ValidationRule = struct {
         // String validation
         if (val == .string) {
             const str_val = val.string;
-            
+
             if (self.min_length) |min| {
                 if (str_val.len < min) {
                     logger.err("Field '{s}' is too short (min: {d}, actual: {d})", .{ self.field_name, min, str_val.len }) catch {};
                     return ValidationError.InvalidFieldValue;
                 }
             }
-            
+
             if (self.max_length) |max| {
                 if (str_val.len > max) {
                     logger.err("Field '{s}' is too long (max: {d}, actual: {d})", .{ self.field_name, max, str_val.len }) catch {};
@@ -110,14 +109,14 @@ pub const ValidationRule = struct {
         // Number validation
         if (val == .integer) {
             const int_val = val.integer;
-            
+
             if (self.min_value) |min| {
                 if (int_val < min) {
                     logger.err("Field '{s}' is too small (min: {d}, actual: {d})", .{ self.field_name, min, int_val }) catch {};
                     return ValidationError.InvalidFieldValue;
                 }
             }
-            
+
             if (self.max_value) |max| {
                 if (int_val > max) {
                     logger.err("Field '{s}' is too large (max: {d}, actual: {d})", .{ self.field_name, max, int_val }) catch {};
@@ -191,10 +190,10 @@ pub const HotReloadManager = struct {
     pub fn start(self: *HotReloadManager) !void {
         self.running = true;
         logger.info("Starting hot-reload monitoring for: {s}", .{self.config_path}) catch {};
-        
+
         // Initial file modification time
         self.last_modified = try self.getFileModTime();
-        
+
         // In a real implementation, this would run in a separate thread
         // For now, we provide the interface
     }
@@ -213,15 +212,15 @@ pub const HotReloadManager = struct {
         if (current_mod_time > self.last_modified) {
             self.last_modified = current_mod_time;
             logger.info("Configuration file modified, triggering reload", .{}) catch {};
-            
+
             if (self.callback) |callback| {
                 // In a real implementation, we would load and parse the new config
                 // callback(new_config);
             }
-            
+
             return true;
         }
-        
+
         return false;
     }
 

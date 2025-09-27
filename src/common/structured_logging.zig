@@ -1,8 +1,7 @@
 /// Structured logging system for Proxmox LXCRI
-/// 
+///
 /// This module provides advanced structured logging capabilities including
 /// JSON formatting, log rotation, remote logging, and performance metrics.
-
 const std = @import("std");
 const types = @import("types");
 const logger = @import("logger");
@@ -41,7 +40,7 @@ pub const LogEntry = struct {
         if (self.metadata == null) {
             self.metadata = std.StringHashMap(json.Value).init(self.allocator);
         }
-        
+
         const owned_key = try self.allocator.dupe(u8, key);
         try self.metadata.?.put(owned_key, value);
     }
@@ -79,7 +78,7 @@ pub const LogEntry = struct {
     /// Cleans up log entry
     pub fn deinit(self: *LogEntry) void {
         self.allocator.free(self.message);
-        
+
         var context_iter = self.context.iterator();
         while (context_iter.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
@@ -171,7 +170,7 @@ pub const StructuredFileLogger = struct {
         while (i > 0) : (i -= 1) {
             const old_name = try std.fmt.allocPrint(self.allocator, "{s}.{d}", .{ self.file_path, i });
             defer self.allocator.free(old_name);
-            
+
             const new_name = try std.fmt.allocPrint(self.allocator, "{s}.{d}", .{ self.file_path, i + 1 });
             defer self.allocator.free(new_name);
 
@@ -181,7 +180,7 @@ pub const StructuredFileLogger = struct {
         // Move current file to .1
         const backup_name = try std.fmt.allocPrint(self.allocator, "{s}.1", .{self.file_path});
         defer self.allocator.free(backup_name);
-        
+
         std.fs.cwd().rename(self.file_path, backup_name) catch {};
 
         // Reset file size
@@ -240,7 +239,7 @@ pub const RemoteStructuredLogger = struct {
     pub fn deinit(self: *RemoteStructuredLogger) void {
         // Flush remaining entries
         self.flush() catch {};
-        
+
         for (self.batch.items) |*entry| {
             entry.deinit();
         }
@@ -276,7 +275,7 @@ pub const RemoteStructuredLogger = struct {
             entry.deinit();
         }
         self.batch.clearRetainingCapacity();
-        
+
         self.last_flush = std.time.nanoTimestamp();
     }
 };
@@ -316,7 +315,7 @@ pub const PerformanceLogger = struct {
     /// Increments a counter metric
     pub fn incrementCounter(self: *PerformanceLogger, name: []const u8, value: u64) !void {
         const owned_name = try self.allocator.dupe(u8, name);
-        
+
         if (self.metrics.get(name)) |existing| {
             switch (existing) {
                 .counter => |current| {
@@ -338,7 +337,7 @@ pub const PerformanceLogger = struct {
     /// Records a histogram value
     pub fn recordHistogram(self: *PerformanceLogger, name: []const u8, value: f64) !void {
         const owned_name = try self.allocator.dupe(u8, name);
-        
+
         if (self.metrics.get(name)) |existing| {
             switch (existing) {
                 .histogram => |*hist| {

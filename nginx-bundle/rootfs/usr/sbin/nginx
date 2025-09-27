@@ -1,6 +1,0 @@
-#!/bin/sh
-echo "nginx: starting nginx server..."
-while true; do
-    echo "nginx: running..."
-    sleep 30
-done

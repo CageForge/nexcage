@@ -16,8 +16,8 @@ pub const DashboardConfig = struct {
     alert_thresholds: AlertThresholds,
 
     pub const AlertThresholds = struct {
-        cpu_high: f64,      // CPU usage threshold for high alert
-        memory_high: f64,   // Memory usage threshold for high alert
+        cpu_high: f64, // CPU usage threshold for high alert
+        memory_high: f64, // Memory usage threshold for high alert
         error_rate_high: u32, // Error count threshold for high alert
         response_time_slow: u64, // Response time threshold for slow alert
     };
@@ -30,9 +30,9 @@ pub const DashboardConfig = struct {
             .show_trends = true,
             .show_alerts = true,
             .alert_thresholds = .{
-                .cpu_high = 80.0,        // 80% CPU
-                .memory_high = 85.0,     // 85% Memory
-                .error_rate_high = 5,    // 5 errors
+                .cpu_high = 80.0, // 80% CPU
+                .memory_high = 85.0, // 85% Memory
+                .error_rate_high = 5, // 5 errors
                 .response_time_slow = 500, // 500ms
             },
         };
@@ -121,7 +121,7 @@ pub const PerformanceDashboard = struct {
 
         self.is_active = true;
         try self.logger.info("Performance dashboard started", .{});
-        
+
         // Initial refresh
         try self.refresh();
     }
@@ -150,7 +150,7 @@ pub const PerformanceDashboard = struct {
 
         // Collect new metrics
         const metrics = try self.monitor.collectMetrics();
-        
+
         // Check for alerts
         if (self.config.show_alerts) {
             try self.checkAlerts(metrics);
@@ -167,31 +167,27 @@ pub const PerformanceDashboard = struct {
 
         // Check CPU usage
         if (metrics.cpu_usage > self.config.alert_thresholds.cpu_high) {
-            alert_message = try mem.dupe(self.allocator, u8, 
-                "High CPU usage detected");
+            alert_message = try mem.dupe(self.allocator, u8, "High CPU usage detected");
             severity = if (metrics.cpu_usage > 95.0) .critical else .warning;
         }
 
         // Check memory usage
-        const memory_percent = @as(f64, @floatFromInt(metrics.memory_usage)) / 
-                              @as(f64, @floatFromInt(metrics.memory_limit)) * 100.0;
+        const memory_percent = @as(f64, @floatFromInt(metrics.memory_usage)) /
+            @as(f64, @floatFromInt(metrics.memory_limit)) * 100.0;
         if (memory_percent > self.config.alert_thresholds.memory_high) {
-            alert_message = try mem.dupe(self.allocator, u8, 
-                "High memory usage detected");
+            alert_message = try mem.dupe(self.allocator, u8, "High memory usage detected");
             severity = if (memory_percent > 95.0) .critical else .warning;
         }
 
         // Check error rate
         if (metrics.error_count > self.config.alert_thresholds.error_rate_high) {
-            alert_message = try mem.dupe(self.allocator, u8, 
-                "High error rate detected");
+            alert_message = try mem.dupe(self.allocator, u8, "High error rate detected");
             severity = .warning;
         }
 
         // Check response time
         if (metrics.response_time > self.config.alert_thresholds.response_time_slow) {
-            alert_message = try mem.dupe(self.allocator, u8, 
-                "Slow response time detected");
+            alert_message = try mem.dupe(self.allocator, u8, "Slow response time detected");
             severity = .warning;
         }
 
@@ -199,9 +195,9 @@ pub const PerformanceDashboard = struct {
         if (alert_message) |message| {
             const alert = PerformanceAlert.init(severity, message, metrics);
             try self.alerts.append(alert);
-            
+
             try self.logger.warn("Performance alert: {s}", .{message});
-            
+
             // Limit alert history
             if (self.alerts.items.len > 100) {
                 _ = self.alerts.orderedRemove(0);
@@ -224,13 +220,15 @@ pub const PerformanceDashboard = struct {
         const metrics = latest_metrics.?;
         const now = time.timestamp();
         const one_hour_ago = now - 3600;
-        
+
         // Get recent history
         const history = try self.monitor.getMetricsInRange(one_hour_ago, now);
-        
+
         // Calculate trends
-        const trends = if (self.config.show_trends) 
-            try self.calculateTrends(history) else null;
+        const trends = if (self.config.show_trends)
+            try self.calculateTrends(history)
+        else
+            null;
 
         return DashboardView{
             .current_metrics = metrics,
@@ -274,8 +272,8 @@ pub const PerformanceDashboard = struct {
             if (self.is_active) "ACTIVE" else "INACTIVE",
             view.current_metrics.cpu_usage,
             if (view.trends) |t| @tagName(t.cpu_trend) else "",
-            @as(f64, @floatFromInt(view.current_metrics.memory_usage)) / 
-            @as(f64, @floatFromInt(view.current_metrics.memory_limit)) * 100.0,
+            @as(f64, @floatFromInt(view.current_metrics.memory_usage)) /
+                @as(f64, @floatFromInt(view.current_metrics.memory_limit)) * 100.0,
             if (view.trends) |t| @tagName(t.memory_trend) else "",
             view.current_metrics.active_containers,
             view.current_metrics.container_count,
@@ -331,7 +329,7 @@ pub const PerformanceDashboard = struct {
     /// Clear old alerts
     pub fn clearOldAlerts(self: *Self, older_than_hours: u32) void {
         const cutoff_time = time.timestamp() - @as(i64, @intCast(older_than_hours * 3600));
-        
+
         var i: usize = 0;
         while (i < self.alerts.items.len) {
             if (self.alerts.items[i].timestamp < cutoff_time) {
@@ -340,7 +338,7 @@ pub const PerformanceDashboard = struct {
                 i += 1;
             }
         }
-        
+
         try self.logger.info("Cleared {d} old alerts", .{self.alerts.items.len});
     }
 };

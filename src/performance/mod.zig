@@ -32,7 +32,7 @@ pub const performance = struct {
     pub const Dashboard = PerformanceDashboard;
     pub const Optimizer = PerformanceOptimizer;
     pub const Tester = PerformanceTester;
-    
+
     pub const Metrics = PerformanceMetrics;
     pub const Alert = PerformanceAlert;
     pub const View = DashboardView;

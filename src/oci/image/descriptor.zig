@@ -80,4 +80,4 @@ fn getOptionalString(obj: *zig_json.Object, field: []const u8) !?[]const u8 {
     const value = obj.get(field) orelse return null;
     if (value.type != .string) return error.InvalidType;
     return value.string();
-} 
+}

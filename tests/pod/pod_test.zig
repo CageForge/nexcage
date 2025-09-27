@@ -29,7 +29,7 @@ test "pod with pause container" {
                 .process = .{
                     .terminal = false,
                     .user = .{ .uid = 0, .gid = 0 },
-                    .args = &.{"/bin/sleep", "infinity"},
+                    .args = &.{ "/bin/sleep", "infinity" },
                     .env = &.{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
                     .cwd = "/",
                 },
@@ -77,4 +77,4 @@ test "pod with pause container" {
     // Тестуємо видалення
     try pod.delete();
     try testing.expect(pod.pause_container == null);
-} 
+}

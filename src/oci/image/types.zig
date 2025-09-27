@@ -19,17 +19,17 @@ pub const ImageManifest = struct {
     config: Descriptor,
     layers: []Descriptor,
     annotations: ?std.StringHashMap([]const u8),
-    
+
     pub fn deinit(self: *ImageManifest, allocator: std.mem.Allocator) void {
         // Free config
         self.config.deinit(allocator);
-        
+
         // Free layers
         for (self.layers) |*layer| {
             layer.deinit(allocator);
         }
         allocator.free(self.layers);
-        
+
         // Free annotations
         if (self.annotations) |annotations| {
             var it = annotations.iterator();
@@ -39,14 +39,14 @@ pub const ImageManifest = struct {
             annotations.deinit();
         }
     }
-    
+
     pub fn validate(self: *const ImageManifest) !void {
         if (self.schemaVersion != 2) {
             return error.InvalidSchemaVersion;
         }
-        
+
         try self.config.validate();
-        
+
         for (self.layers) |layer| {
             try layer.validate();
         }
@@ -96,7 +96,7 @@ pub const Descriptor = struct {
     urls: ?[][]const u8,
     annotations: ?std.StringHashMap([]const u8),
     platform: ?Platform,
-    
+
     pub fn deinit(self: *Descriptor, allocator: std.mem.Allocator) void {
         // Free urls
         if (self.urls) |urls| {
@@ -105,7 +105,7 @@ pub const Descriptor = struct {
             }
             allocator.free(urls);
         }
-        
+
         // Free annotations
         if (self.annotations) |annotations| {
             var it = annotations.iterator();
@@ -114,31 +114,31 @@ pub const Descriptor = struct {
             }
             annotations.deinit();
         }
-        
+
         // Free platform
         if (self.platform) |*platform| {
             platform.deinit(allocator);
         }
     }
-    
+
     pub fn validate(self: *const Descriptor) !void {
         if (self.mediaType.len == 0) {
             return error.InvalidMediaType;
         }
-        
+
         if (self.size == 0) {
             return error.InvalidSize;
         }
-        
+
         if (self.digest.len == 0) {
             return error.InvalidDigest;
         }
-        
+
         // Validate digest format (should be "sha256:...")
         if (!std.mem.startsWith(u8, self.digest, "sha256:")) {
             return error.InvalidDigestFormat;
         }
-        
+
         if (self.platform) |platform| {
             try platform.validate();
         }
@@ -152,7 +152,7 @@ pub const Platform = struct {
     os_features: ?[][]const u8,
     variant: ?[]const u8,
     features: ?[][]const u8,
-    
+
     pub fn deinit(self: *Platform, allocator: std.mem.Allocator) void {
         // Free os_features
         if (self.os_features) |features| {
@@ -161,7 +161,7 @@ pub const Platform = struct {
             }
             allocator.free(features);
         }
-        
+
         // Free features
         if (self.features) |features| {
             for (features) |feature| {
@@ -170,16 +170,16 @@ pub const Platform = struct {
             allocator.free(features);
         }
     }
-    
+
     pub fn validate(self: *const Platform) !void {
         if (self.architecture.len == 0) {
             return error.InvalidArchitecture;
         }
-        
+
         if (self.os.len == 0) {
             return error.InvalidOS;
         }
-        
+
         // Validate architecture (common values: amd64, arm64, 386, etc.)
         const valid_architectures = [_][]const u8{ "amd64", "arm64", "386", "arm", "ppc64le", "s390x" };
         var valid = false;
@@ -192,7 +192,7 @@ pub const Platform = struct {
         if (!valid) {
             return error.InvalidArchitecture;
         }
-        
+
         // Validate OS (common values: linux, windows, darwin, etc.)
         const valid_os = [_][]const u8{ "linux", "windows", "darwin", "freebsd", "openbsd", "solaris" };
         valid = false;

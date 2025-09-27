@@ -119,83 +119,83 @@ pub const Config = struct {
         var config = try Config.init(allocator, logger_ctx);
         errdefer config.deinit();
 
-    // Runtime config
-    if (json_config.runtime) |runtime| {
-        if (runtime.root_path) |path| {
-            config.runtime_path = try allocator.dupe(u8, path);
+        // Runtime config
+        if (json_config.runtime) |runtime| {
+            if (runtime.root_path) |path| {
+                config.runtime_path = try allocator.dupe(u8, path);
+            }
+            if (runtime.log_path) |path| {
+                config.log_path = try allocator.dupe(u8, path);
+            }
+            // log_level не optional, працюємо напряму
+            // if (runtime.log_level) |level| {
+            //     ...
+            // }
         }
-        if (runtime.log_path) |path| {
-            config.log_path = try allocator.dupe(u8, path);
+
+        // Default runtime from root json
+        if (json_config.default_runtime) |rt| {
+            config.default_runtime = try allocator.dupe(u8, rt);
         }
-        // log_level не optional, працюємо напряму
-        // if (runtime.log_level) |level| {
-        //     ...
-        // }
-    }
 
-    // Default runtime from root json
-    if (json_config.default_runtime) |rt| {
-        config.default_runtime = try allocator.dupe(u8, rt);
-    }
-
-    // Proxmox config
-    if (json_config.proxmox) |proxmox| {
-        if (proxmox.hosts) |hosts| {
-            var new_hosts = try allocator.alloc([]const u8, hosts.len);
-            errdefer {
-                for (new_hosts) |host| {
-                    allocator.free(host);
+        // Proxmox config
+        if (json_config.proxmox) |proxmox| {
+            if (proxmox.hosts) |hosts| {
+                var new_hosts = try allocator.alloc([]const u8, hosts.len);
+                errdefer {
+                    for (new_hosts) |host| {
+                        allocator.free(host);
+                    }
+                    allocator.free(new_hosts);
                 }
-                allocator.free(new_hosts);
-            }
-            for (hosts, 0..) |host, i| {
-                new_hosts[i] = try allocator.dupe(u8, host);
-            }
-            config.proxmox.hosts = new_hosts;
-        }
-        if (proxmox.port) |port| {
-            config.proxmox.port = port;
-        }
-        if (proxmox.token) |token| {
-            config.proxmox.token = try allocator.dupe(u8, token);
-        }
-        if (proxmox.node) |node| {
-            config.proxmox.node = try allocator.dupe(u8, node);
-        }
-    }
-
-    // Storage config
-    if (json_config.storage) |storage| {
-        if (storage.zfs_dataset) |dataset| {
-            config.storage.zfs_dataset = try allocator.dupe(u8, dataset);
-        }
-        if (storage.image_path) |path| {
-            config.storage.image_path = try allocator.dupe(u8, path);
-        }
-    }
-
-    // Network config
-    if (json_config.network) |network| {
-        if (network.bridge.len > 0) {
-            config.network.bridge = try allocator.dupe(u8, network.bridge);
-        }
-        if (network.dns_servers) |servers| {
-            var new_servers = try allocator.alloc([]const u8, servers.len);
-            errdefer {
-                for (new_servers) |server| {
-                    allocator.free(server);
+                for (hosts, 0..) |host, i| {
+                    new_hosts[i] = try allocator.dupe(u8, host);
                 }
-                allocator.free(new_servers);
+                config.proxmox.hosts = new_hosts;
             }
-            for (servers, 0..) |server, i| {
-                new_servers[i] = try allocator.dupe(u8, server);
+            if (proxmox.port) |port| {
+                config.proxmox.port = port;
             }
-            config.network.dns_servers = new_servers;
+            if (proxmox.token) |token| {
+                config.proxmox.token = try allocator.dupe(u8, token);
+            }
+            if (proxmox.node) |node| {
+                config.proxmox.node = try allocator.dupe(u8, node);
+            }
         }
+
+        // Storage config
+        if (json_config.storage) |storage| {
+            if (storage.zfs_dataset) |dataset| {
+                config.storage.zfs_dataset = try allocator.dupe(u8, dataset);
+            }
+            if (storage.image_path) |path| {
+                config.storage.image_path = try allocator.dupe(u8, path);
+            }
+        }
+
+        // Network config
+        if (json_config.network) |network| {
+            if (network.bridge.len > 0) {
+                config.network.bridge = try allocator.dupe(u8, network.bridge);
+            }
+            if (network.dns_servers) |servers| {
+                var new_servers = try allocator.alloc([]const u8, servers.len);
+                errdefer {
+                    for (new_servers) |server| {
+                        allocator.free(server);
+                    }
+                    allocator.free(new_servers);
+                }
+                for (servers, 0..) |server, i| {
+                    new_servers[i] = try allocator.dupe(u8, server);
+                }
+                config.network.dns_servers = new_servers;
+            }
+        }
+
+        return config;
     }
-    
-    return config;
-}
 
     pub fn getContainerType(self: *Config, container_name: []const u8) types.ContainerType {
         for (self.container_config.crun_name_patterns) |pattern| {
@@ -210,23 +210,23 @@ pub const Config = struct {
         var name_idx: usize = 0;
         var pattern_idx: usize = 0;
 
-    while (pattern_idx < pattern.len) {
-        if (pattern[pattern_idx] == '*') {
-            // Skip until next pattern character or end
-            while (name_idx < name.len and (pattern_idx + 1 >= pattern.len or name[name_idx] != pattern[pattern_idx + 1])) {
+        while (pattern_idx < pattern.len) {
+            if (pattern[pattern_idx] == '*') {
+                // Skip until next pattern character or end
+                while (name_idx < name.len and (pattern_idx + 1 >= pattern.len or name[name_idx] != pattern[pattern_idx + 1])) {
+                    name_idx += 1;
+                }
+                pattern_idx += 1;
+            } else if (name_idx < name.len and pattern[pattern_idx] == name[name_idx]) {
                 name_idx += 1;
+                pattern_idx += 1;
+            } else {
+                return false;
             }
-            pattern_idx += 1;
-        } else if (name_idx < name.len and pattern[pattern_idx] == name[name_idx]) {
-            name_idx += 1;
-            pattern_idx += 1;
-        } else {
-            return false;
         }
-    }
 
-    return name_idx == name.len;
-}
+        return name_idx == name.len;
+    }
 
     pub fn setRuntimeType(self: *Config, runtime_type: RuntimeType) void {
         self.runtime_type = runtime_type;
@@ -249,11 +249,11 @@ pub const Config = struct {
             .crun => "/usr/bin/crun",
         };
 
-    // Перевіряємо чи існує файл
-    const file = std.fs.openFileAbsolute(default_path, .{}) catch {
-        return error.RuntimeNotFound;
-    };
-    defer file.close();
+        // Перевіряємо чи існує файл
+        const file = std.fs.openFileAbsolute(default_path, .{}) catch {
+            return error.RuntimeNotFound;
+        };
+        defer file.close();
 
         return try self.allocator.dupe(u8, default_path);
     }
@@ -273,7 +273,7 @@ pub fn deinitJsonConfig(config_value: *JsonConfig, allocator: std.mem.Allocator)
             }
         }
     }
-    
+
     // Safely deallocate proxmox config
     if (config_value.proxmox) |*proxmox| {
         if (proxmox.hosts) |hosts| {
@@ -298,7 +298,7 @@ pub fn deinitJsonConfig(config_value: *JsonConfig, allocator: std.mem.Allocator)
             }
         }
     }
-    
+
     // Safely deallocate storage config
     if (config_value.storage) |*storage| {
         if (storage.zfs_dataset) |dataset| {
@@ -312,7 +312,7 @@ pub fn deinitJsonConfig(config_value: *JsonConfig, allocator: std.mem.Allocator)
             }
         }
     }
-    
+
     // Safely deallocate network config
     if (config_value.network) |*network| {
         if (network.bridge.len > 0 and network.bridge.ptr != undefined) {

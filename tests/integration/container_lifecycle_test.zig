@@ -1,9 +1,8 @@
 /// Integration tests for complete container lifecycle operations
-/// 
+///
 /// This module contains comprehensive integration tests that verify
 /// the full container lifecycle from creation to cleanup, including
 /// error scenarios and edge cases.
-
 const std = @import("std");
 const testing = std.testing;
 const expect = testing.expect;
@@ -101,7 +100,7 @@ test "Container error handling scenarios" {
     defer error_config.deinit();
 
     // Set up configuration that might cause errors
-    error_config.id = try allocator.dupe(u8, "");  // Empty ID
+    error_config.id = try allocator.dupe(u8, ""); // Empty ID
     error_config.bundle = try allocator.dupe(u8, "/nonexistent/path");
 
     // Container creation should still succeed with invalid paths
@@ -126,14 +125,14 @@ test "Multiple container management" {
         configs[i] = try types.ContainerConfig.init(allocator);
         configs[i].id = try std.fmt.allocPrint(allocator, "multi-test-{d}", .{i});
         configs[i].name = try std.fmt.allocPrint(allocator, "Multi Test Container {d}", .{i});
-        
+
         containers[i] = try types.Container.init(allocator, &configs[i]);
     }
 
     // Verify all containers are created correctly
     for (0..container_count) |i| {
         try expectEqual(types.ContainerState.created, containers[i].state);
-        
+
         // Verify unique IDs
         for (0..container_count) |j| {
             if (i != j) {
@@ -200,7 +199,7 @@ test "Container memory management stress test" {
     for (0..100) |i| {
         var container_config = try types.ContainerConfig.init(allocator);
         container_config.id = try std.fmt.allocPrint(allocator, "stress-test-{d}", .{i});
-        
+
         // Add some environment variables
         const envs = try allocator.alloc(types.EnvVar, 3);
         envs[0] = types.EnvVar{
@@ -218,10 +217,10 @@ test "Container memory management stress test" {
         container_config.envs = envs;
 
         const container = try types.Container.init(allocator, &container_config);
-        
+
         // Verify container was created correctly
         try expectEqual(types.ContainerState.created, container.state);
-        
+
         // Clean up immediately
         container.deinit();
         container_config.deinit();
@@ -238,10 +237,10 @@ test "Container resource limits integration" {
     defer container_config.deinit();
 
     container_config.id = try allocator.dupe(u8, "resource-limited-container");
-    
+
     // Note: Resource limits would be configured through linux field
     // This test verifies the structure supports resource configuration
-    
+
     const container = try types.Container.init(allocator, &container_config);
     defer container.deinit();
 

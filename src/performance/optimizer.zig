@@ -165,7 +165,7 @@ pub const PerformanceOptimizer = struct {
         if (metrics.cpu_usage > 80.0) {
             const priority = if (metrics.cpu_usage > 95.0) .critical else .high;
             const improvement = if (metrics.cpu_usage > 95.0) 25.0 else 15.0;
-            
+
             const rec = OptimizationRecommendation.init(
                 "cpu-high-usage",
                 "Optimize High CPU Usage",
@@ -211,14 +211,14 @@ pub const PerformanceOptimizer = struct {
 
     /// Analyze memory usage patterns
     fn analyzeMemoryUsage(self: *Self, metrics: PerformanceMetrics, trends: ?PerformanceTrends) !void {
-        const memory_percent = @as(f64, @floatFromInt(metrics.memory_usage)) / 
-                              @as(f64, @floatFromInt(metrics.memory_limit)) * 100.0;
+        const memory_percent = @as(f64, @floatFromInt(metrics.memory_usage)) /
+            @as(f64, @floatFromInt(metrics.memory_limit)) * 100.0;
 
         // High memory usage recommendation
         if (memory_percent > 85.0) {
             const priority = if (memory_percent > 95.0) .critical else .high;
             const improvement = if (memory_percent > 95.0) 30.0 else 20.0;
-            
+
             const rec = OptimizationRecommendation.init(
                 "memory-high-usage",
                 "Optimize High Memory Usage",
@@ -266,9 +266,9 @@ pub const PerformanceOptimizer = struct {
     fn analyzeContainerPerformance(self: *Self, metrics: PerformanceMetrics, trends: ?PerformanceTrends) !void {
         // Container efficiency analysis
         if (metrics.container_count > 0) {
-            const efficiency = @as(f64, @floatFromInt(metrics.active_containers)) / 
-                             @as(f64, @floatFromInt(metrics.container_count)) * 100.0;
-            
+            const efficiency = @as(f64, @floatFromInt(metrics.active_containers)) /
+                @as(f64, @floatFromInt(metrics.container_count)) * 100.0;
+
             if (efficiency < 50.0) {
                 const rec = OptimizationRecommendation.init(
                     "container-efficiency",
@@ -319,7 +319,7 @@ pub const PerformanceOptimizer = struct {
         if (metrics.error_count > 5) {
             const priority = if (metrics.error_count > 10) .critical else .high;
             const improvement = if (metrics.error_count > 10) 40.0 else 25.0;
-            
+
             const rec = OptimizationRecommendation.init(
                 "error-rate-reduction",
                 "Reduce Error Rate",
@@ -345,7 +345,7 @@ pub const PerformanceOptimizer = struct {
         if (metrics.response_time > 500) {
             const priority = if (metrics.response_time > 1000) .high else .medium;
             const improvement = if (metrics.response_time > 1000) 35.0 else 20.0;
-            
+
             const rec = OptimizationRecommendation.init(
                 "response-time-optimization",
                 "Optimize Response Times",
@@ -370,13 +370,13 @@ pub const PerformanceOptimizer = struct {
     pub fn getRecommendationsByCategory(self: *Self, category: OptimizationCategory) []const OptimizationRecommendation {
         var result = std.ArrayList(OptimizationRecommendation).init(self.allocator);
         defer result.deinit();
-        
+
         for (self.recommendations.items) |rec| {
             if (rec.category == category) {
                 result.append(rec) catch continue;
             }
         }
-        
+
         return result.toOwnedSlice();
     }
 
@@ -384,13 +384,13 @@ pub const PerformanceOptimizer = struct {
     pub fn getRecommendationsByPriority(self: *Self, priority: RecommendationPriority) []const OptimizationRecommendation {
         var result = std.ArrayList(OptimizationRecommendation).init(self.allocator);
         defer result.deinit();
-        
+
         for (self.recommendations.items) |rec| {
             if (rec.priority == priority) {
                 result.append(rec) catch continue;
             }
         }
-        
+
         return result.toOwnedSlice();
     }
 
@@ -446,7 +446,7 @@ pub const PerformanceOptimizer = struct {
                 \\
             , .{critical.len});
             for (critical) |rec| {
-                try report.writer().print("  • {s} (Impact: {d:.1}%)\n", .{rec.title, rec.estimated_improvement});
+                try report.writer().print("  • {s} (Impact: {d:.1}%)\n", .{ rec.title, rec.estimated_improvement });
             }
         }
 
@@ -457,7 +457,7 @@ pub const PerformanceOptimizer = struct {
                 \\
             , .{high.len});
             for (high) |rec| {
-                try report.writer().print("  • {s} (Impact: {d:.1}%)\n", .{rec.title, rec.estimated_improvement});
+                try report.writer().print("  • {s} (Impact: {d:.1}%)\n", .{ rec.title, rec.estimated_improvement });
             }
         }
 
@@ -468,7 +468,7 @@ pub const PerformanceOptimizer = struct {
                 \\
             , .{medium.len});
             for (medium) |rec| {
-                try report.writer().print("  • {s} (Impact: {d:.1}%)\n", .{rec.title, rec.estimated_improvement});
+                try report.writer().print("  • {s} (Impact: {d:.1}%)\n", .{ rec.title, rec.estimated_improvement });
             }
         }
 
@@ -479,7 +479,7 @@ pub const PerformanceOptimizer = struct {
                 \\
             , .{low.len});
             for (low) |rec| {
-                try report.writer().print("  • {s} (Impact: {d:.1}%)\n", .{rec.title, rec.estimated_improvement});
+                try report.writer().print("  • {s} (Impact: {d:.1}%)\n", .{ rec.title, rec.estimated_improvement });
             }
         }
 

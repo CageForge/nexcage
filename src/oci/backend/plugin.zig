@@ -48,7 +48,7 @@ pub const ContainerInfo = struct {
 /// Backend plugin interface
 pub const BackendPlugin = struct {
     const Self = @This();
-    
+
     /// Backend type
     backend_type: BackendType,
     /// Plugin name
@@ -64,52 +64,52 @@ pub const BackendPlugin = struct {
 
     /// Initialize the backend plugin
     init: *const fn (allocator: Allocator, logger: *logger_mod.Logger) anyerror!Self,
-    
+
     /// Cleanup resources
     deinit: *const fn (self: *Self) void,
-    
+
     /// Check if backend is available
     isAvailable: *const fn (self: *const Self) bool,
-    
+
     /// Create a container
     createContainer: *const fn (self: *Self, container_id: []const u8, bundle_path: []const u8, options: ?[]const u8) anyerror!void,
-    
+
     /// Start a container
     startContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
-    
+
     /// Stop a container
     stopContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
-    
+
     /// Delete a container
     deleteContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
-    
+
     /// Get container state
     getContainerState: *const fn (self: *const Self, container_id: []const u8) anyerror!ContainerState,
-    
+
     /// Get container information
     getContainerInfo: *const fn (self: *const Self, container_id: []const u8) anyerror!ContainerInfo,
-    
+
     /// List all containers
     listContainers: *const fn (self: *const Self) anyerror![]ContainerInfo,
-    
+
     /// Pause a container
     pauseContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
-    
+
     /// Resume a container
     resumeContainer: *const fn (self: *Self, container_id: []const u8) anyerror!void,
-    
+
     /// Kill a container
     killContainer: *const fn (self: *Self, container_id: []const u8, signal: ?i32) anyerror!void,
-    
+
     /// Execute command in container
     execContainer: *const fn (self: *Self, container_id: []const u8, command: []const []const u8) anyerror!void,
-    
+
     /// Get container logs
     getContainerLogs: *const fn (self: *const Self, container_id: []const u8) anyerror![]const u8,
-    
+
     /// Checkpoint a container
     checkpointContainer: *const fn (self: *Self, container_id: []const u8, checkpoint_path: []const u8) anyerror!void,
-    
+
     /// Restore a container from checkpoint
     restoreContainer: *const fn (self: *Self, container_id: []const u8, checkpoint_path: []const u8) anyerror!void,
 };
@@ -117,17 +117,17 @@ pub const BackendPlugin = struct {
 /// Backend plugin registry
 pub const BackendRegistry = struct {
     const Self = @This();
-    
+
     allocator: Allocator,
     plugins: std.HashMap(BackendType, *BackendPlugin, std.hash_map.default_hash_fn(BackendType), std.hash_map.default_eql_fn(BackendType)),
-    
+
     pub fn init(allocator: Allocator) !Self {
         return Self{
             .allocator = allocator,
             .plugins = std.HashMap(BackendType, *BackendPlugin, std.hash_map.default_hash_fn(BackendType), std.hash_map.default_eql_fn(BackendType)).init(allocator),
         };
     }
-    
+
     pub fn deinit(self: *Self) void {
         var iterator = self.plugins.iterator();
         while (iterator.next()) |entry| {
@@ -136,17 +136,17 @@ pub const BackendRegistry = struct {
         }
         self.plugins.deinit();
     }
-    
+
     /// Register a backend plugin
     pub fn register(self: *Self, plugin: *BackendPlugin) !void {
         try self.plugins.put(plugin.backend_type, plugin);
     }
-    
+
     /// Get a backend plugin by type
     pub fn get(self: *const Self, backend_type: BackendType) ?*BackendPlugin {
         return self.plugins.get(backend_type);
     }
-    
+
     /// List all registered backend types
     pub fn listBackends(self: *const Self) ![]BackendType {
         const backends = try self.allocator.alloc(BackendType, self.plugins.count());
@@ -158,7 +158,7 @@ pub const BackendRegistry = struct {
         }
         return backends;
     }
-    
+
     /// Check if a backend is available
     pub fn isBackendAvailable(self: *const Self, backend_type: BackendType) bool {
         if (self.get(backend_type)) |plugin| {
@@ -171,15 +171,15 @@ pub const BackendRegistry = struct {
 /// Backend manager for handling plugin operations
 pub const BackendManager = struct {
     const Self = @This();
-    
+
     allocator: Allocator,
     registry: BackendRegistry,
     default_backend: BackendType,
     logger: *logger_mod.Logger,
-    
+
     pub fn init(allocator: Allocator, logger: *logger_mod.Logger) !Self {
         const registry = try BackendRegistry.init(allocator);
-        
+
         return Self{
             .allocator = allocator,
             .registry = registry,
@@ -187,27 +187,27 @@ pub const BackendManager = struct {
             .logger = logger,
         };
     }
-    
+
     pub fn deinit(self: *Self) void {
         self.registry.deinit();
     }
-    
+
     /// Register a backend plugin
     pub fn registerBackend(self: *Self, plugin: *BackendPlugin) !void {
         try self.registry.register(plugin);
         try self.logger.info("Registered backend plugin: {s} ({s})", .{ plugin.name, @tagName(plugin.backend_type) });
     }
-    
+
     /// Get a backend plugin by type
     pub fn getBackend(self: *Self, backend_type: BackendType) ?*BackendPlugin {
         return self.registry.get(backend_type);
     }
-    
+
     /// Get the default backend
     pub fn getDefaultBackend(self: *Self) ?*BackendPlugin {
         return self.registry.get(self.default_backend);
     }
-    
+
     /// Set the default backend
     pub fn setDefaultBackend(self: *Self, backend_type: BackendType) !void {
         if (self.registry.get(backend_type)) |_| {
@@ -217,24 +217,24 @@ pub const BackendManager = struct {
             return error.BackendNotRegistered;
         }
     }
-    
+
     /// List all available backends
     pub fn listAvailableBackends(self: *Self) ![]BackendType {
         var available = std.ArrayList(BackendType).init(self.allocator);
         defer available.deinit();
-        
+
         const backends = try self.registry.listBackends();
         defer self.allocator.free(backends);
-        
+
         for (backends) |backend_type| {
             if (self.registry.isBackendAvailable(backend_type)) {
                 try available.append(backend_type);
             }
         }
-        
+
         return available.toOwnedSlice();
     }
-    
+
     /// Create a container using the specified backend
     pub fn createContainer(self: *Self, backend_type: BackendType, container_id: []const u8, bundle_path: []const u8, options: ?[]const u8) !void {
         if (self.getBackend(backend_type)) |backend| {
@@ -243,7 +243,7 @@ pub const BackendManager = struct {
             return error.BackendNotAvailable;
         }
     }
-    
+
     /// Start a container using the specified backend
     pub fn startContainer(self: *Self, backend_type: BackendType, container_id: []const u8) !void {
         if (self.getBackend(backend_type)) |backend| {
@@ -252,7 +252,7 @@ pub const BackendManager = struct {
             return error.BackendNotAvailable;
         }
     }
-    
+
     /// Stop a container using the specified backend
     pub fn stopContainer(self: *Self, backend_type: BackendType, container_id: []const u8) !void {
         if (self.getBackend(backend_type)) |backend| {
@@ -261,7 +261,7 @@ pub const BackendManager = struct {
             return error.BackendNotAvailable;
         }
     }
-    
+
     /// Delete a container using the specified backend
     pub fn deleteContainer(self: *Self, backend_type: BackendType, container_id: []const u8) !void {
         if (self.getBackend(backend_type)) |backend| {
@@ -270,7 +270,7 @@ pub const BackendManager = struct {
             return error.BackendNotAvailable;
         }
     }
-    
+
     /// Get container state using the specified backend
     pub fn getContainerState(self: *Self, backend_type: BackendType, container_id: []const u8) !ContainerState {
         if (self.getBackend(backend_type)) |backend| {
@@ -279,7 +279,7 @@ pub const BackendManager = struct {
             return error.BackendNotAvailable;
         }
     }
-    
+
     /// Get container info using the specified backend
     pub fn getContainerInfo(self: *Self, backend_type: BackendType, container_id: []const u8) !ContainerInfo {
         if (self.getBackend(backend_type)) |backend| {
@@ -288,7 +288,7 @@ pub const BackendManager = struct {
             return error.BackendNotAvailable;
         }
     }
-    
+
     /// List containers using the specified backend
     pub fn listContainers(self: *Self, backend_type: BackendType) ![]ContainerInfo {
         if (self.getBackend(backend_type)) |backend| {

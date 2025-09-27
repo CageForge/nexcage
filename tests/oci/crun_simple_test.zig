@@ -21,7 +21,7 @@ test "ContainerState enum" {
 
 test "ContainerStatus struct" {
     const allocator = testing.allocator;
-    
+
     var status = crun.ContainerStatus{
         .id = try allocator.dupe(u8, "test-container"),
         .state = crun.ContainerState.created,
@@ -32,7 +32,7 @@ test "ContainerStatus struct" {
         .finished_at = null,
     };
     defer status.deinit(allocator);
-    
+
     try testing.expectEqualStrings("test-container", status.id);
     try testing.expect(status.state == crun.ContainerState.created);
     try testing.expect(status.pid == 12345);

@@ -1,8 +1,7 @@
 /// Advanced container management system for Proxmox LXCRI
-/// 
+///
 /// This module provides enterprise-grade container lifecycle management including
 /// health checks, readiness probes, resource monitoring, and advanced lifecycle hooks.
-
 const std = @import("std");
 const types = @import("types");
 const logger = @import("logger");
@@ -14,7 +13,7 @@ pub const HealthStatus = enum {
     unhealthy,
     unknown,
     starting,
-    
+
     pub fn toString(self: HealthStatus) []const u8 {
         return @tagName(self);
     }
@@ -27,7 +26,7 @@ pub const HealthCheck = struct {
     timeout_seconds: u32,
     retries: u32,
     start_period_seconds: u32,
-    
+
     pub const default = HealthCheck{
         .command = "/bin/true",
         .interval_seconds = 30,
@@ -35,7 +34,7 @@ pub const HealthCheck = struct {
         .retries = 3,
         .start_period_seconds = 0,
     };
-    
+
     /// Validates health check configuration
     pub fn validate(self: *const HealthCheck) !void {
         if (self.command.len == 0) return error.EmptyHealthCheckCommand;
@@ -53,7 +52,7 @@ pub const ReadinessProbe = struct {
     timeout_seconds: u32,
     failure_threshold: u32,
     success_threshold: u32,
-    
+
     pub const default = ReadinessProbe{
         .command = "/bin/true",
         .initial_delay_seconds = 0,
@@ -62,7 +61,7 @@ pub const ReadinessProbe = struct {
         .failure_threshold = 3,
         .success_threshold = 1,
     };
-    
+
     /// Validates readiness probe configuration
     pub fn validate(self: *const ReadinessProbe) !void {
         if (self.command.len == 0) return error.EmptyReadinessCommand;
@@ -90,7 +89,7 @@ pub const LifecycleHook = struct {
     timeout_seconds: u32,
     required: bool,
     allocator: std.mem.Allocator,
-    
+
     /// Initializes lifecycle hook
     pub fn init(allocator: std.mem.Allocator, hook_type: HookType, command: []const u8, timeout_seconds: u32, required: bool) !LifecycleHook {
         return LifecycleHook{
@@ -101,26 +100,26 @@ pub const LifecycleHook = struct {
             .allocator = allocator,
         };
     }
-    
+
     /// Deinitializes lifecycle hook
     pub fn deinit(self: *LifecycleHook) void {
         self.allocator.free(self.command);
     }
-    
+
     /// Executes the lifecycle hook
     pub fn execute(self: *const LifecycleHook, container_id: []const u8) !void {
         logger.info("Executing {s} hook for container {s}: {s}", .{ @tagName(self.hook_type), container_id, self.command }) catch {};
-        
+
         // In a real implementation, this would execute the command
         // For now, we simulate the execution
         const start_time = std.time.nanoTimestamp();
-        
+
         // Simulate command execution time
         std.time.sleep(100 * std.time.ns_per_ms); // 100ms simulation
-        
+
         const end_time = std.time.nanoTimestamp();
         const duration_ms = @divTrunc(@as(u64, @intCast(end_time - start_time)), std.time.ns_per_ms);
-        
+
         if (duration_ms > self.timeout_seconds * 1000) {
             if (self.required) {
                 logger.err("Required hook {s} timed out after {}ms", .{ @tagName(self.hook_type), duration_ms }) catch {};
@@ -142,7 +141,7 @@ pub const ResourceLimits = struct {
     memory_requests_bytes: ?u64,
     disk_limit_bytes: ?u64,
     network_bandwidth_limit_bps: ?u64,
-    
+
     /// Validates resource limits
     pub fn validate(self: *const ResourceLimits) !void {
         if (self.memory_limit_bytes) |limit| {
@@ -155,21 +154,21 @@ pub const ResourceLimits = struct {
             if (limit == 0) return error.InvalidDiskLimit;
         }
     }
-    
+
     /// Enforces resource limits on container
     pub fn enforce(self: *const ResourceLimits, container_id: []const u8) !void {
         logger.info("Enforcing resource limits for container {s}", .{container_id}) catch {};
-        
+
         if (self.memory_limit_bytes) |limit| {
             logger.info("Setting memory limit: {} bytes", .{limit}) catch {};
             // In real implementation, this would use cgroups
         }
-        
+
         if (self.cpu_limit_millicores) |limit| {
             logger.info("Setting CPU limit: {} millicores", .{limit}) catch {};
             // In real implementation, this would use cgroups
         }
-        
+
         if (self.disk_limit_bytes) |limit| {
             logger.info("Setting disk limit: {} bytes", .{limit}) catch {};
             // In real implementation, this would use filesystem quotas
@@ -188,19 +187,19 @@ pub const ContainerMetrics = struct {
     disk_limit_bytes: u64,
     uptime_seconds: u64,
     restart_count: u32,
-    
+
     /// Calculates memory usage percentage
     pub fn getMemoryUsagePercent(self: *const ContainerMetrics) f64 {
         if (self.memory_limit_bytes == 0) return 0.0;
         return (@as(f64, @floatFromInt(self.memory_usage_bytes)) / @as(f64, @floatFromInt(self.memory_limit_bytes))) * 100.0;
     }
-    
+
     /// Calculates disk usage percentage
     pub fn getDiskUsagePercent(self: *const ContainerMetrics) f64 {
         if (self.disk_limit_bytes == 0) return 0.0;
         return (@as(f64, @floatFromInt(self.disk_usage_bytes)) / @as(f64, @floatFromInt(self.disk_limit_bytes))) * 100.0;
     }
-    
+
     /// Logs metrics
     pub fn log(self: *const ContainerMetrics, container_id: []const u8) !void {
         logger.info("Container {s} metrics:", .{container_id}) catch {};
@@ -221,7 +220,7 @@ pub const AdvancedContainerState = struct {
     last_readiness_check: i64,
     metrics: ContainerMetrics,
     resource_limits: ?ResourceLimits,
-    
+
     /// Initializes advanced container state
     pub fn init() AdvancedContainerState {
         return AdvancedContainerState{
@@ -244,12 +243,12 @@ pub const AdvancedContainerState = struct {
             .resource_limits = null,
         };
     }
-    
+
     /// Updates container state
     pub fn updateState(self: *AdvancedContainerState, new_state: types.ContainerState) void {
         logger.info("Container state transition: {s} -> {s}", .{ @tagName(self.basic_state), @tagName(new_state) }) catch {};
         self.basic_state = new_state;
-        
+
         if (new_state == .running) {
             self.health_status = .starting;
         } else if (new_state == .stopped) {
@@ -267,7 +266,7 @@ pub const AdvancedContainerManager = struct {
     readiness_probes: std.StringHashMap(ReadinessProbe),
     performance_monitor: performance.ContainerPerformanceHook,
     allocator: std.mem.Allocator,
-    
+
     /// Initializes advanced container manager
     pub fn init(allocator: std.mem.Allocator) AdvancedContainerManager {
         return AdvancedContainerManager{
@@ -279,7 +278,7 @@ pub const AdvancedContainerManager = struct {
             .allocator = allocator,
         };
     }
-    
+
     /// Deinitializes advanced container manager
     pub fn deinit(self: *AdvancedContainerManager) void {
         // Clean up lifecycle hooks
@@ -292,108 +291,108 @@ pub const AdvancedContainerManager = struct {
             self.allocator.free(entry.key_ptr.*);
         }
         self.lifecycle_hooks.deinit();
-        
+
         // Clean up containers
         var containers_iter = self.containers.iterator();
         while (containers_iter.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
         }
         self.containers.deinit();
-        
+
         // Clean up health checks
         var health_iter = self.health_checks.iterator();
         while (health_iter.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
         }
         self.health_checks.deinit();
-        
+
         // Clean up readiness probes
         var readiness_iter = self.readiness_probes.iterator();
         while (readiness_iter.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
         }
         self.readiness_probes.deinit();
-        
+
         self.performance_monitor.deinit();
     }
-    
+
     /// Creates a new container with advanced features
     pub fn createContainer(self: *AdvancedContainerManager, container_id: []const u8, resource_limits: ?ResourceLimits) !void {
         try self.performance_monitor.startOperation("container_create", container_id);
         defer self.performance_monitor.finishOperation();
-        
+
         logger.info("Creating advanced container: {s}", .{container_id}) catch {};
-        
+
         // Execute pre-start hooks
         try self.executeHooks(container_id, .pre_start);
-        
+
         // Initialize container state
         var state = AdvancedContainerState.init();
         state.resource_limits = resource_limits;
-        
+
         // Validate and enforce resource limits
         if (resource_limits) |limits| {
             try limits.validate();
             try limits.enforce(container_id);
         }
-        
+
         const owned_id = try self.allocator.dupe(u8, container_id);
         try self.containers.put(owned_id, state);
-        
+
         // Execute post-start hooks
         try self.executeHooks(container_id, .post_start);
-        
+
         logger.info("Advanced container {s} created successfully", .{container_id}) catch {};
     }
-    
+
     /// Starts a container with health checks
     pub fn startContainer(self: *AdvancedContainerManager, container_id: []const u8) !void {
         try self.performance_monitor.startOperation("container_start", container_id);
         defer self.performance_monitor.finishOperation();
-        
+
         logger.info("Starting advanced container: {s}", .{container_id}) catch {};
-        
+
         if (self.containers.getPtr(container_id)) |state| {
             state.updateState(.running);
-            
+
             // Start health monitoring
             try self.startHealthMonitoring(container_id);
-            
+
             // Start readiness monitoring
             try self.startReadinessMonitoring(container_id);
-            
+
             logger.info("Advanced container {s} started successfully", .{container_id}) catch {};
         } else {
             return error.ContainerNotFound;
         }
     }
-    
+
     /// Stops a container with cleanup
     pub fn stopContainer(self: *AdvancedContainerManager, container_id: []const u8) !void {
         try self.performance_monitor.startOperation("container_stop", container_id);
         defer self.performance_monitor.finishOperation();
-        
+
         logger.info("Stopping advanced container: {s}", .{container_id}) catch {};
-        
+
         // Execute pre-stop hooks
         try self.executeHooks(container_id, .pre_stop);
-        
+
         if (self.containers.getPtr(container_id)) |state| {
             state.updateState(.stopped);
-            
+
             logger.info("Advanced container {s} stopped successfully", .{container_id}) catch {};
         } else {
             return error.ContainerNotFound;
         }
-        
+
         // Execute post-stop hooks
         try self.executeHooks(container_id, .post_stop);
     }
-    
+
     /// Adds a lifecycle hook to a container
     pub fn addLifecycleHook(self: *AdvancedContainerManager, container_id: []const u8, hook: LifecycleHook) !void {
         const owned_id = try self.allocator.dupe(u8, container_id);
-        
+
         if (self.lifecycle_hooks.getPtr(container_id)) |hooks| {
             try hooks.append(hook);
         } else {
@@ -401,10 +400,10 @@ pub const AdvancedContainerManager = struct {
             try hooks.append(hook);
             try self.lifecycle_hooks.put(owned_id, hooks);
         }
-        
+
         logger.info("Added {s} lifecycle hook for container {s}", .{ @tagName(hook.hook_type), container_id }) catch {};
     }
-    
+
     /// Executes lifecycle hooks for a container
     fn executeHooks(self: *AdvancedContainerManager, container_id: []const u8, hook_type: HookType) !void {
         if (self.lifecycle_hooks.get(container_id)) |hooks| {
@@ -422,53 +421,53 @@ pub const AdvancedContainerManager = struct {
             }
         }
     }
-    
+
     /// Configures health check for a container
     pub fn configureHealthCheck(self: *AdvancedContainerManager, container_id: []const u8, health_check: HealthCheck) !void {
         try health_check.validate();
-        
+
         const owned_id = try self.allocator.dupe(u8, container_id);
         try self.health_checks.put(owned_id, health_check);
-        
+
         logger.info("Configured health check for container {s}: {s}", .{ container_id, health_check.command }) catch {};
     }
-    
+
     /// Configures readiness probe for a container
     pub fn configureReadinessProbe(self: *AdvancedContainerManager, container_id: []const u8, readiness_probe: ReadinessProbe) !void {
         try readiness_probe.validate();
-        
+
         const owned_id = try self.allocator.dupe(u8, container_id);
         try self.readiness_probes.put(owned_id, readiness_probe);
-        
+
         logger.info("Configured readiness probe for container {s}: {s}", .{ container_id, readiness_probe.command }) catch {};
     }
-    
+
     /// Starts health monitoring for a container
     fn startHealthMonitoring(self: *AdvancedContainerManager, container_id: []const u8) !void {
         if (self.health_checks.get(container_id)) |_| {
             logger.info("Starting health monitoring for container {s}", .{container_id}) catch {};
             // In real implementation, this would start a monitoring thread
-            
+
             if (self.containers.getPtr(container_id)) |state| {
                 state.health_status = .healthy; // Simulate healthy status
                 state.last_health_check = std.time.nanoTimestamp();
             }
         }
     }
-    
+
     /// Starts readiness monitoring for a container
     fn startReadinessMonitoring(self: *AdvancedContainerManager, container_id: []const u8) !void {
         if (self.readiness_probes.get(container_id)) |_| {
             logger.info("Starting readiness monitoring for container {s}", .{container_id}) catch {};
             // In real implementation, this would start a monitoring thread
-            
+
             if (self.containers.getPtr(container_id)) |state| {
                 state.ready = true; // Simulate ready status
                 state.last_readiness_check = std.time.nanoTimestamp();
             }
         }
     }
-    
+
     /// Gets container health status
     pub fn getHealthStatus(self: *AdvancedContainerManager, container_id: []const u8) !HealthStatus {
         if (self.containers.get(container_id)) |state| {
@@ -476,7 +475,7 @@ pub const AdvancedContainerManager = struct {
         }
         return error.ContainerNotFound;
     }
-    
+
     /// Gets container readiness status
     pub fn getReadinessStatus(self: *AdvancedContainerManager, container_id: []const u8) !bool {
         if (self.containers.get(container_id)) |state| {
@@ -484,7 +483,7 @@ pub const AdvancedContainerManager = struct {
         }
         return error.ContainerNotFound;
     }
-    
+
     /// Gets container metrics
     pub fn getMetrics(self: *AdvancedContainerManager, container_id: []const u8) !ContainerMetrics {
         if (self.containers.getPtr(container_id)) |state| {
@@ -493,51 +492,51 @@ pub const AdvancedContainerManager = struct {
             state.metrics.memory_usage_bytes = 512 * 1024 * 1024; // 512MB
             state.metrics.memory_limit_bytes = 1024 * 1024 * 1024; // 1GB
             state.metrics.uptime_seconds = 3600; // 1 hour
-            
+
             return state.metrics;
         }
         return error.ContainerNotFound;
     }
-    
+
     /// Updates container resource limits
     pub fn updateResourceLimits(self: *AdvancedContainerManager, container_id: []const u8, new_limits: ResourceLimits) !void {
         try self.performance_monitor.startOperation("container_update", container_id);
         defer self.performance_monitor.finishOperation();
-        
+
         logger.info("Updating resource limits for container {s}", .{container_id}) catch {};
-        
+
         // Execute pre-update hooks
         try self.executeHooks(container_id, .pre_update);
-        
+
         try new_limits.validate();
         try new_limits.enforce(container_id);
-        
+
         if (self.containers.getPtr(container_id)) |state| {
             state.resource_limits = new_limits;
             logger.info("Resource limits updated for container {s}", .{container_id}) catch {};
         } else {
             return error.ContainerNotFound;
         }
-        
+
         // Execute post-update hooks
         try self.executeHooks(container_id, .post_update);
     }
-    
+
     /// Lists all containers with their advanced status
     pub fn listContainers(self: *AdvancedContainerManager) !void {
         logger.info("Advanced Container Status Report:", .{}) catch {};
         logger.info("================================", .{}) catch {};
-        
+
         var iterator = self.containers.iterator();
         while (iterator.next()) |entry| {
             const container_id = entry.key_ptr.*;
             const state = entry.value_ptr.*;
-            
+
             logger.info("Container: {s}", .{container_id}) catch {};
             logger.info("  State: {s}", .{@tagName(state.basic_state)}) catch {};
             logger.info("  Health: {s}", .{state.health_status.toString()}) catch {};
             logger.info("  Ready: {}", .{state.ready}) catch {};
-            
+
             try state.metrics.log(container_id);
             logger.info("", .{}) catch {};
         }

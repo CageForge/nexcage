@@ -1,8 +1,7 @@
 /// Edge case testing suite for Proxmox LXCRI
-/// 
+///
 /// This module contains tests for edge cases, boundary conditions,
 /// and error scenarios that could occur in real-world usage.
-
 const std = @import("std");
 const testing = std.testing;
 const expect = testing.expect;
@@ -24,7 +23,7 @@ test "Container ID edge cases" {
     // Test empty container ID
     var container_config = try types.ContainerConfig.init(allocator);
     defer container_config.deinit();
-    
+
     try expectEqual(@as(usize, 0), container_config.id.len);
 
     // Test very long container ID (boundary condition)
@@ -46,7 +45,7 @@ test "Memory allocation edge cases" {
 
     // Test multiple container configs creation and cleanup
     var configs: [10]*types.ContainerConfig = undefined;
-    
+
     for (0..10) |i| {
         configs[i] = try allocator.create(types.ContainerConfig);
         configs[i].* = try types.ContainerConfig.init(allocator);
@@ -148,13 +147,7 @@ test "Error handling edge cases" {
     const allocator = arena.allocator();
 
     // Test error context creation with null details
-    var error_context = try types.ErrorContext.init(
-        allocator,
-        "Test error message", 
-        error_mod.Error.InvalidConfig,
-        "test_function",
-        null
-    );
+    var error_context = try types.ErrorContext.init(allocator, "Test error message", error_mod.Error.InvalidConfig, "test_function", null);
     defer error_context.deinit(allocator);
 
     try expect(error_context.details == null);
@@ -162,13 +155,7 @@ test "Error handling edge cases" {
 
     // Test error context with very long message
     const long_message = "a" ** 1000;
-    var long_error_context = try types.ErrorContext.init(
-        allocator,
-        long_message,
-        error_mod.Error.InvalidConfig,
-        "test_function",
-        "Test details"
-    );
+    var long_error_context = try types.ErrorContext.init(allocator, long_message, error_mod.Error.InvalidConfig, "test_function", "Test details");
     defer long_error_context.deinit(allocator);
 
     try expectEqual(@as(usize, 1000), long_error_context.message.len);
@@ -247,7 +234,7 @@ test "Large data structure handling" {
 
     const env_count = 100;
     const envs = try allocator.alloc(types.EnvVar, env_count);
-    
+
     for (0..env_count) |i| {
         const name = try std.fmt.allocPrint(allocator, "ENV_VAR_{d}", .{i});
         const value = try std.fmt.allocPrint(allocator, "value_{d}", .{i});
@@ -258,14 +245,14 @@ test "Large data structure handling" {
     }
 
     container_config.envs = envs;
-    
+
     // Verify all environment variables are accessible
     try expectEqual(@as(usize, env_count), container_config.envs.?.len);
 }
 
 test "Command parsing edge cases" {
     // Test command enum values
-    
+
     // Test all command enum values are properly defined
     const commands = [_]types.Command{
         .create,
@@ -297,7 +284,7 @@ test "Resource cleanup verification" {
         container_config.id = try allocator.dupe(u8, "test-container");
         container_config.name = try allocator.dupe(u8, "Test Container");
         container_config.bundle = try allocator.dupe(u8, "/tmp/test-bundle");
-        
+
         // Create some environment variables
         const envs = try allocator.alloc(types.EnvVar, 3);
         envs[0] = types.EnvVar{
@@ -319,7 +306,6 @@ test "Resource cleanup verification" {
     }
 }
 
-
 test "Concurrent operation simulation" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -327,11 +313,11 @@ test "Concurrent operation simulation" {
 
     // Simulate concurrent container operations
     var containers: [5]*types.Container = undefined;
-    
+
     for (0..5) |i| {
         var container_config = try types.ContainerConfig.init(allocator);
         container_config.id = try std.fmt.allocPrint(allocator, "stress-test-{d}", .{i});
-        
+
         containers[i] = try types.Container.init(allocator, &container_config);
     }
 

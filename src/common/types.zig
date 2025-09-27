@@ -55,7 +55,7 @@ pub const EnvVar = struct {
 };
 
 /// Comprehensive container configuration structure
-/// 
+///
 /// Contains all necessary information to create, configure, and manage
 /// a container instance. Supports both OCI-compliant and Proxmox-specific
 /// configuration options with proper memory management.
@@ -102,13 +102,13 @@ pub const ContainerConfig = struct {
     default_container_type: ContainerType,
 
     /// Initializes a new ContainerConfig with default values
-    /// 
+    ///
     /// Creates a properly initialized container configuration with safe defaults
     /// and proper memory management setup.
-    /// 
+    ///
     /// Arguments:
     /// - allocator: Memory allocator for dynamic allocations
-    /// 
+    ///
     /// Returns: Initialized ContainerConfig or error if allocation fails
     pub fn init(allocator: Allocator) !ContainerConfig {
         return ContainerConfig{
@@ -638,7 +638,7 @@ pub const ContainerState = enum {
     created,
     running,
     stopped,
-    paused,    // Added from crun.zig
+    paused, // Added from crun.zig
     deleted,
     unknown,
 };
@@ -950,7 +950,7 @@ pub const Command = enum {
     resume_container,
     exec,
     ps,
-    run,        // Create and start container in one operation
+    run, // Create and start container in one operation
     events,
     spec,
     checkpoint,
@@ -959,7 +959,7 @@ pub const Command = enum {
     features,
     help,
     generate_config,
-    version,        // Show version information
+    version, // Show version information
     unknown,
 };
 
@@ -1067,8 +1067,8 @@ pub const LogContext = struct {
             for (tags) |tag| {
                 if (idx + tag.len + 3 > buf.len) break;
                 buf[idx] = ' ';
-                buf[idx+1] = '[';
-                std.mem.copyForwards(u8, buf[idx+2..][0..tag.len], tag);
+                buf[idx + 1] = '[';
+                std.mem.copyForwards(u8, buf[idx + 2 ..][0..tag.len], tag);
                 idx += 2 + tag.len;
                 buf[idx] = ']';
                 idx += 1;
@@ -1083,7 +1083,7 @@ pub const LogContext = struct {
         if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.debug)) {
             const ts = getTimestamp();
             const tags = self.formatTags();
-            self.writer.print("[{s}] [DEBUG] [{s}]{s} " ++ fmt ++ "\n", .{ts, self.name, tags} ++ args) catch |write_err| {
+            self.writer.print("[{s}] [DEBUG] [{s}]{s} " ++ fmt ++ "\n", .{ ts, self.name, tags } ++ args) catch |write_err| {
                 return switch (write_err) {
                     error.DiskQuota => LoggerError.DiskQuota,
                     error.FileTooBig => LoggerError.FileTooBig,
@@ -1109,7 +1109,7 @@ pub const LogContext = struct {
         if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.info)) {
             const ts = getTimestamp();
             const tags = self.formatTags();
-            self.writer.print("[{s}] [INFO] [{s}]{s} " ++ fmt ++ "\n", .{ts, self.name, tags} ++ args) catch |write_err| {
+            self.writer.print("[{s}] [INFO] [{s}]{s} " ++ fmt ++ "\n", .{ ts, self.name, tags } ++ args) catch |write_err| {
                 return switch (write_err) {
                     error.DiskQuota => LoggerError.DiskQuota,
                     error.FileTooBig => LoggerError.FileTooBig,
@@ -1135,7 +1135,7 @@ pub const LogContext = struct {
         if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.warn)) {
             const ts = getTimestamp();
             const tags = self.formatTags();
-            self.writer.print("[{s}] [WARN] [{s}]{s} " ++ fmt ++ "\n", .{ts, self.name, tags} ++ args) catch |write_err| {
+            self.writer.print("[{s}] [WARN] [{s}]{s} " ++ fmt ++ "\n", .{ ts, self.name, tags } ++ args) catch |write_err| {
                 return switch (write_err) {
                     error.DiskQuota => LoggerError.DiskQuota,
                     error.FileTooBig => LoggerError.FileTooBig,
@@ -1161,7 +1161,7 @@ pub const LogContext = struct {
         if (@intFromEnum(self.level) <= @intFromEnum(LogLevel.err)) {
             const ts = getTimestamp();
             const tags = self.formatTags();
-            self.writer.print("[{s}] [ERROR] [{s}]{s} " ++ fmt ++ "\n", .{ts, self.name, tags} ++ args) catch |write_err| {
+            self.writer.print("[{s}] [ERROR] [{s}]{s} " ++ fmt ++ "\n", .{ ts, self.name, tags } ++ args) catch |write_err| {
                 return switch (write_err) {
                     error.DiskQuota => LoggerError.DiskQuota,
                     error.FileTooBig => LoggerError.FileTooBig,
@@ -1592,4 +1592,3 @@ pub const ConfigError = error{
     FailedToCreateLogFile,
     FailedToParseConfig,
 } || std.fs.File.OpenError || std.fs.File.ReadError;
-

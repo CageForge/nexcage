@@ -52,13 +52,13 @@ pub const CrunManager = struct {
         std.debug.print("DEBUG: CrunManager.init called with allocator = {*}\n", .{&allocator});
         const self = try allocator.create(Self);
         std.debug.print("DEBUG: CrunManager.init created self = {*}\n", .{self});
-        
+
         // Try to initialize ZFS manager (optional)
         const zfs_manager = zfs.ZFSManager.init(allocator, logger) catch |err| blk: {
             try logger.info("ZFS not available, falling back to CRIU-only checkpoint: {s}", .{@errorName(err)});
             break :blk null;
         };
-        
+
         // Use the global allocator to avoid corruption
         self.* = .{
             .allocator = &std.heap.page_allocator,
@@ -108,7 +108,7 @@ pub const CrunManager = struct {
     // Check if crun is available
     fn checkCrunAvailable(self: *Self) !void {
         const file = fs.openFileAbsolute(self.crun_path, .{}) catch |err| {
-            try self.logger.err("crun not found at {s}: {s}", .{self.crun_path, @errorName(err)});
+            try self.logger.err("crun not found at {s}: {s}", .{ self.crun_path, @errorName(err) });
             return CrunError.CrunNotFound;
         };
         defer file.close();
@@ -153,18 +153,18 @@ pub const CrunManager = struct {
         std.debug.print("DEBUG: CrunManager.createContainer called\n", .{});
         std.debug.print("DEBUG: container_id = {s}\n", .{container_id});
         std.debug.print("DEBUG: bundle_path = {s}\n", .{bundle_path});
-        
+
         // Validate inputs
         if (container_id.len == 0) return CrunError.InvalidContainerId;
         if (bundle_path.len == 0) return CrunError.InvalidBundlePath;
-        
+
         // Use page allocator for this operation to avoid corruption
         const page_allocator = std.heap.page_allocator;
-        
+
         // Build crun command
         var args = std.ArrayList([]const u8).init(page_allocator);
         defer args.deinit();
-        
+
         try args.append("/usr/bin/crun");
         try args.append("create");
         // Helpful flags to avoid common kernel/env issues
@@ -173,12 +173,12 @@ pub const CrunManager = struct {
         try args.append("--bundle");
         try args.append(bundle_path);
         try args.append(container_id);
-        
+
         std.debug.print("DEBUG: Executing crun command with {d} args\n", .{args.items.len});
         for (args.items, 0..) |arg, i| {
-            std.debug.print("DEBUG: arg[{d}] = '{s}' (len: {d})\n", .{i, arg, arg.len});
+            std.debug.print("DEBUG: arg[{d}] = '{s}' (len: {d})\n", .{ i, arg, arg.len });
         }
-        
+
         // Execute crun command
         const result = std.process.Child.run(.{
             .allocator = page_allocator,
@@ -187,18 +187,18 @@ pub const CrunManager = struct {
             std.debug.print("DEBUG: Failed to execute crun: {}\n", .{err});
             return CrunError.CommandExecutionFailed;
         };
-        
+
         defer {
             page_allocator.free(result.stdout);
             page_allocator.free(result.stderr);
         }
-        
+
         if (result.term != .Exited or result.term.Exited != 0) {
             std.debug.print("DEBUG: crun failed with exit code: {}\n", .{result.term.Exited});
             std.debug.print("DEBUG: stderr: {s}\n", .{result.stderr});
             return CrunError.CommandExecutionFailed;
         }
-        
+
         std.debug.print("DEBUG: crun executed successfully\n", .{});
         if (result.stdout.len > 0) {
             std.debug.print("DEBUG: stdout: {s}\n", .{result.stdout});
@@ -218,13 +218,13 @@ pub const CrunManager = struct {
 
         var args = std.ArrayList([]const u8).init(arena_allocator);
         try args.append("start");
-        
+
         // Add root path if specified
         if (self.root_path) |root| {
             try args.append("--root");
             try args.append(root);
         }
-        
+
         try args.append(container_id);
 
         try self.executeCrunCommand(args.items);
@@ -244,13 +244,13 @@ pub const CrunManager = struct {
 
         var args = std.ArrayList([]const u8).init(arena_allocator);
         try args.append("delete");
-        
+
         // Add root path if specified
         if (self.root_path) |root| {
             try args.append("--root");
             try args.append(root);
         }
-        
+
         try args.append(container_id);
 
         try self.executeCrunCommand(args.items);
@@ -296,13 +296,13 @@ pub const CrunManager = struct {
 
         var args = std.ArrayList([]const u8).init(arena_allocator);
         try args.append("state");
-        
+
         // Add root path if specified
         if (self.root_path) |root| {
             try args.append("--root");
             try args.append(root);
         }
-        
+
         try args.append(container_id);
 
         // For now, we'll use a simple approach - try to get state
@@ -332,13 +332,13 @@ pub const CrunManager = struct {
 
         var args = std.ArrayList([]const u8).init(arena_allocator);
         try args.append("kill");
-        
+
         // Add root path if specified
         if (self.root_path) |root| {
             try args.append("--root");
             try args.append(root);
         }
-        
+
         try args.append(container_id);
         try args.append(signal);
 
@@ -359,7 +359,7 @@ pub const CrunManager = struct {
 
         var args = std.ArrayList([]const u8).init(arena_allocator);
         try args.append("spec");
-        
+
         // Add bundle option
         try args.append("--bundle");
         try args.append(bundle_path);
@@ -396,9 +396,9 @@ pub const CrunManager = struct {
 
         // Default dataset pattern: tank/containers/<container_id>
         // This can be made configurable later
-        const dataset = if (checkpoint_path) |path| 
-            path 
-        else 
+        const dataset = if (checkpoint_path) |path|
+            path
+        else
             try std.fmt.allocPrint(arena_allocator, "tank/containers/{s}", .{container_id});
 
         // Generate snapshot name with timestamp
@@ -411,7 +411,7 @@ pub const CrunManager = struct {
 
         // Create ZFS snapshot
         try zfs_mgr.createSnapshot(dataset, snapshot_name);
-        
+
         try self.logger.info("Successfully created ZFS checkpoint snapshot: {s}@{s}", .{ dataset, snapshot_name });
     }
 
@@ -426,13 +426,13 @@ pub const CrunManager = struct {
         // Try using crun's checkpoint if available (with CRIU support)
         var args = std.ArrayList([]const u8).init(arena_allocator);
         try args.append("checkpoint");
-        
+
         // Add checkpoint path if provided
         if (checkpoint_path) |path| {
             try args.append("--image-path");
             try args.append(path);
         }
-        
+
         try args.append(container_id);
 
         // Execute checkpoint command and handle potential failure
@@ -441,7 +441,7 @@ pub const CrunManager = struct {
             try self.logger.info("Alternative: Use ZFS datasets for checkpoint/restore functionality", .{});
             return err;
         };
-        
+
         try self.logger.info("Successfully created CRIU checkpoint for container: {s}", .{container_id});
     }
 
@@ -470,9 +470,9 @@ pub const CrunManager = struct {
         const arena_allocator = arena.allocator();
 
         // Determine the ZFS dataset for this container
-        const dataset = if (checkpoint_path) |path| 
-            path 
-        else 
+        const dataset = if (checkpoint_path) |path|
+            path
+        else
             try std.fmt.allocPrint(arena_allocator, "tank/containers/{s}", .{container_id});
 
         // Determine snapshot name
@@ -495,14 +495,14 @@ pub const CrunManager = struct {
             for (snapshots) |snapshot| {
                 // Extract snapshot name (after the @)
                 if (std.mem.indexOf(u8, snapshot, "@")) |at_index| {
-                    const snap_name = snapshot[at_index + 1..];
+                    const snap_name = snapshot[at_index + 1 ..];
                     if (std.mem.startsWith(u8, snap_name, "checkpoint-")) {
                         if (std.mem.eql(u8, snap_name, "checkpoint-")) continue; // Skip malformed
-                        
+
                         // Extract timestamp
                         const timestamp_str = snap_name[11..]; // Skip "checkpoint-"
                         const timestamp = std.fmt.parseInt(i64, timestamp_str, 10) catch continue;
-                        
+
                         if (timestamp > latest_timestamp) {
                             latest_timestamp = timestamp;
                             latest_checkpoint = snap_name;
@@ -520,12 +520,12 @@ pub const CrunManager = struct {
         };
 
         // Note: Should stop the container if it's running before restore
-        // TODO: Implement stopContainer method  
+        // TODO: Implement stopContainer method
         try self.logger.info("Note: Container should be stopped manually before restore", .{});
 
         // Restore from ZFS snapshot
         try zfs_mgr.restoreFromSnapshot(dataset, restore_snapshot);
-        
+
         try self.logger.info("Successfully restored from ZFS snapshot: {s}@{s}", .{ dataset, restore_snapshot });
     }
 
@@ -540,13 +540,13 @@ pub const CrunManager = struct {
         // Try using crun's restore if available (with CRIU support)
         var args = std.ArrayList([]const u8).init(arena_allocator);
         try args.append("restore");
-        
+
         // Add checkpoint path if provided
         if (checkpoint_path) |path| {
             try args.append("--image-path");
             try args.append(path);
         }
-        
+
         try args.append(container_id);
 
         // Execute restore command and handle potential failure
@@ -555,7 +555,7 @@ pub const CrunManager = struct {
             try self.logger.info("Alternative: Use ZFS datasets for checkpoint/restore functionality", .{});
             return err;
         };
-        
+
         try self.logger.info("Successfully restored from CRIU checkpoint for container: {s}", .{container_id});
     }
 
@@ -570,7 +570,7 @@ pub const CrunManager = struct {
 
         var args = std.ArrayList([]const u8).init(arena_allocator);
         try args.append("list");
-        
+
         // Add root path if specified
         if (self.root_path) |root| {
             try args.append("--root");

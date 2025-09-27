@@ -65,8 +65,6 @@ pub fn parseWithUnknownFields(comptime T: type, allocator: std.mem.Allocator, in
     };
 }
 
-
-
 fn convertValue(comptime T: type, value: *zig_json.JsonValue, allocator: std.mem.Allocator) !T {
     switch (@typeInfo(T)) {
         .Struct => {
@@ -106,7 +104,7 @@ fn convertValue(comptime T: type, value: *zig_json.JsonValue, allocator: std.mem
             if (value.type != .array) return error.InvalidType;
             const arr = value.array();
             var result = try allocator.alloc(array_info.child, arr.len());
-            
+
             // Initialize array with safe defaults
             for (0..arr.len()) |i| {
                 result[i] = try convertValue(array_info.child, arr.get(i), allocator);
@@ -124,7 +122,7 @@ fn convertValue(comptime T: type, value: *zig_json.JsonValue, allocator: std.mem
                         if (value.type != .array) return error.InvalidType;
                         const arr = value.array();
                         var result = try allocator.alloc([]const u8, arr.len());
-                        
+
                         // Initialize array with safe defaults
                         for (0..arr.len()) |i| {
                             const item = arr.get(i);
@@ -243,4 +241,4 @@ fn skipValue(stream: *zig_json.TokenStream) !void {
         .null => {},
         else => return error.InvalidJson,
     }
-} 
+}

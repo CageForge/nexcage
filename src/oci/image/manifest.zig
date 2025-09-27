@@ -17,10 +17,10 @@ pub fn parseManifest(allocator: std.mem.Allocator, content: []const u8) !types.I
         .layers = try parseLayers(obj, "layers", allocator),
         .annotations = try parseAnnotations(obj, "annotations", allocator),
     };
-    
+
     // Validate the parsed manifest
     try manifest.validate();
-    
+
     return manifest;
 }
 
@@ -49,10 +49,10 @@ fn parseDescriptor(obj: *zig_json.Object, field: []const u8, allocator: std.mem.
         .annotations = try parseAnnotations(descriptor_obj, "annotations", allocator),
         .platform = try parsePlatform(descriptor_obj, "platform", allocator),
     };
-    
+
     // Validate the parsed descriptor
     try descriptor.validate();
-    
+
     return descriptor;
 }
 
@@ -126,15 +126,13 @@ fn parseLayers(obj: *zig_json.Object, field: []const u8, allocator: std.mem.Allo
             .annotations = try parseAnnotations(layer_obj, "annotations", allocator),
             .platform = try parsePlatform(layer_obj, "platform", allocator),
         };
-        
+
         // Validate each layer
         try layer.validate();
     }
 
     return layers;
 }
-
-
 
 pub fn createManifest(
     _: std.mem.Allocator,
@@ -148,10 +146,10 @@ pub fn createManifest(
         .layers = layers,
         .annotations = annotations,
     };
-    
+
     // Validate the created manifest
     try manifest.validate();
-    
+
     return manifest;
 }
 
@@ -164,12 +162,12 @@ pub fn cloneManifest(allocator: std.mem.Allocator, manifest: *const types.ImageM
         .schemaVersion = manifest.schemaVersion,
         .config = try cloneDescriptor(allocator, &manifest.config),
         .layers = try cloneDescriptors(allocator, manifest.layers),
-        .annotations = if (manifest.annotations) |annotations| 
-            try cloneAnnotations(allocator, annotations) 
-        else 
+        .annotations = if (manifest.annotations) |annotations|
+            try cloneAnnotations(allocator, annotations)
+        else
             null,
     };
-    
+
     return cloned;
 }
 
@@ -178,20 +176,20 @@ fn cloneDescriptor(allocator: std.mem.Allocator, descriptor: *const types.Descri
         .mediaType = try allocator.dupe(u8, descriptor.mediaType),
         .size = descriptor.size,
         .digest = try allocator.dupe(u8, descriptor.digest),
-        .urls = if (descriptor.urls) |urls| 
-            try cloneStringArray(allocator, urls) 
-        else 
+        .urls = if (descriptor.urls) |urls|
+            try cloneStringArray(allocator, urls)
+        else
             null,
-        .annotations = if (descriptor.annotations) |annotations| 
-            try cloneAnnotations(allocator, annotations) 
-        else 
+        .annotations = if (descriptor.annotations) |annotations|
+            try cloneAnnotations(allocator, annotations)
+        else
             null,
-        .platform = if (descriptor.platform) |platform| 
-            try clonePlatform(allocator, &platform) 
-        else 
+        .platform = if (descriptor.platform) |platform|
+            try clonePlatform(allocator, &platform)
+        else
             null,
     };
-    
+
     return cloned;
 }
 
@@ -207,24 +205,24 @@ fn clonePlatform(allocator: std.mem.Allocator, platform: *const types.Platform) 
     const cloned = types.Platform{
         .architecture = try allocator.dupe(u8, platform.architecture),
         .os = try allocator.dupe(u8, platform.os),
-        .os_version = if (platform.os_version) |version| 
-            try allocator.dupe(u8, version) 
-        else 
+        .os_version = if (platform.os_version) |version|
+            try allocator.dupe(u8, version)
+        else
             null,
-        .os_features = if (platform.os_features) |features| 
-            try cloneStringArray(allocator, features) 
-        else 
+        .os_features = if (platform.os_features) |features|
+            try cloneStringArray(allocator, features)
+        else
             null,
-        .variant = if (platform.variant) |variant| 
-            try allocator.dupe(u8, variant) 
-        else 
+        .variant = if (platform.variant) |variant|
+            try allocator.dupe(u8, variant)
+        else
             null,
-        .features = if (platform.features) |features| 
-            try cloneStringArray(allocator, features) 
-        else 
+        .features = if (platform.features) |features|
+            try cloneStringArray(allocator, features)
+        else
             null,
     };
-    
+
     return cloned;
 }
 
@@ -240,10 +238,7 @@ fn cloneAnnotations(allocator: std.mem.Allocator, annotations: std.StringHashMap
     var cloned = std.StringHashMap([]const u8).init(allocator);
     var it = annotations.iterator();
     while (it.next()) |entry| {
-        try cloned.put(
-            try allocator.dupe(u8, entry.key),
-            try allocator.dupe(u8, entry.value)
-        );
+        try cloned.put(try allocator.dupe(u8, entry.key), try allocator.dupe(u8, entry.value));
     }
     return cloned;
 }

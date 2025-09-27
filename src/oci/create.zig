@@ -142,9 +142,9 @@ pub const Create = struct {
     oci_config: spec.OciImageConfig,
     logger: *logger_mod.Logger,
     runtime_type: oci_types.RuntimeType,
-    
+
     const Self = @This();
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         image_manager: *image.ImageManager,
@@ -162,7 +162,7 @@ pub const Create = struct {
         const oci_config_path = try std.fmt.allocPrint(
             allocator,
             "{s}/config.json",
-            .{ options.bundle_path },
+            .{options.bundle_path},
         );
         defer allocator.free(oci_config_path);
 
@@ -190,29 +190,29 @@ pub const Create = struct {
         };
         return self;
     }
-    
+
     pub fn deinit(self: *Self) void {
         self.hook_executor.deinit();
         self.oci_config.deinit(self.allocator);
         self.allocator.destroy(self);
     }
-    
+
     pub fn create(self: *Self) !void {
-        try self.logger.info("Creating container {s} with runtime {s}", .{ 
+        try self.logger.info("Creating container {s} with runtime {s}", .{
             self.options.container_id,
             @tagName(self.runtime_type),
         });
 
         // Перевіряємо, чи образ вже є локально
         if (!self.image_manager.hasImage(self.options.image_name, self.options.image_tag)) {
-            try self.logger.info("Image {s}:{s} not found locally, pulling...", .{self.options.image_name, self.options.image_tag});
+            try self.logger.info("Image {s}:{s} not found locally, pulling...", .{ self.options.image_name, self.options.image_tag });
             // Якщо нема — викликаємо pullImage
             const img_ref = try std.fmt.allocPrint(self.allocator, "{s}:{s}", .{ self.options.image_name, self.options.image_tag });
             defer self.allocator.free(img_ref);
             _ = try self.image_manager.pullImage(img_ref);
-            try self.logger.info("Image {s}:{s} pulled successfully", .{self.options.image_name, self.options.image_tag});
+            try self.logger.info("Image {s}:{s} pulled successfully", .{ self.options.image_name, self.options.image_tag });
         } else {
-            try self.logger.info("Image {s}:{s} found locally", .{self.options.image_name, self.options.image_tag});
+            try self.logger.info("Image {s}:{s} found locally", .{ self.options.image_name, self.options.image_tag });
         }
 
         // Валідуємо bundle
@@ -311,14 +311,14 @@ pub const Create = struct {
 
         try self.logger.info("Container {s} created successfully", .{self.options.container_id});
     }
-    
+
     fn validateNetworkConfig(self: *Self) !void {
         const net_config = self.oci_config.linux.?.network orelse return;
 
         // Валідуємо інтерфейси
         for (net_config.interfaces) |iface| {
             try self.network_validator.validateInterface(iface.name);
-            
+
             if (iface.bridge) |bridge| {
                 try self.network_validator.validateBridge(bridge);
             }
@@ -338,7 +338,7 @@ pub const Create = struct {
             // Валідуємо IP налаштування
             if (iface.ip) |ip| {
                 try self.network_validator.validateIPRange(ip.address, ip.netmask);
-                
+
                 if (ip.gateway) |gateway| {
                     try self.network_validator.validateGateway(gateway);
                 }
@@ -352,10 +352,10 @@ pub const Create = struct {
             }
         }
     }
-    
+
     fn validateBundle(self: *Self) !void {
         try self.logger.info("Validating bundle at {s}", .{self.options.bundle_path});
-        
+
         // Перевіряємо чи існує bundle директорія
         var bundle_dir = std.fs.cwd().openDir(self.options.bundle_path, .{}) catch {
             try self.logger.err("Bundle directory not found: {s}", .{self.options.bundle_path});
@@ -391,10 +391,10 @@ pub const Create = struct {
 
         // Детальна перевірка rootfs
         try self.validateRootfs(rootfs_path);
-        
+
         // Перевіряємо чи запуск відбувається через containerd
         try self.detectContainerdMode();
-        
+
         // Налаштовуємо спеціальні параметри залежно від режиму
         try self.configureRuntimeMode();
     }
@@ -402,7 +402,7 @@ pub const Create = struct {
     /// Детальна перевірка rootfs директорії
     fn validateRootfs(self: *Self, rootfs_path: []const u8) !void {
         try self.logger.info("Validating rootfs at {s}", .{rootfs_path});
-        
+
         var rootfs_dir = std.fs.cwd().openDir(rootfs_path, .{}) catch {
             try self.logger.err("Cannot access rootfs directory: {s}", .{rootfs_path});
             return CreateError.InvalidRootfs;
@@ -439,7 +439,7 @@ pub const Create = struct {
     /// Визначає чи запуск контейнера відбувається через containerd
     fn detectContainerdMode(self: *Self) !void {
         try self.logger.info("Detecting containerd mode...", .{});
-        
+
         // Перевіряємо наявність containerd socket
         const containerd_sockets = [_][]const u8{
             "/run/containerd/containerd.sock",
@@ -451,7 +451,7 @@ pub const Create = struct {
         var containerd_detected = false;
         for (containerd_sockets) |socket_path| {
             std.fs.accessAbsolute(socket_path, .{}) catch continue;
-            
+
             try self.logger.info("Found containerd socket: {s}", .{socket_path});
             containerd_detected = true;
             break;
@@ -484,21 +484,17 @@ pub const Create = struct {
     fn configureRuntimeMode(self: *Self) !void {
         if (self.oci_config.containerd_mode) {
             try self.logger.info("Configuring for containerd mode", .{});
-            
+
             // В containerd режимі встановлюємо спеціальні налаштування
             // 1. Встановлюємо правильний root path для containerd
             if (self.oci_config.storage.storage_path) |path| {
                 self.allocator.free(path);
             }
             self.oci_config.storage.storage_path = try self.allocator.dupe(u8, "/var/lib/containerd/io.containerd.runtime.v2.task/default");
-            
+
             // 2. Оновлюємо root.path для вказування на containerd snapshooter rootfs
-            const containerd_rootfs = try std.fmt.allocPrint(
-                self.allocator,
-                "/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/{s}/fs",
-                .{self.options.container_id}
-            );
-            
+            const containerd_rootfs = try std.fmt.allocPrint(self.allocator, "/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/{s}/fs", .{self.options.container_id});
+
             // Звільняємо старий root.path якщо він існує
             if (self.oci_config.root) |*root| {
                 if (root.path.len > 0) {
@@ -512,7 +508,7 @@ pub const Create = struct {
                     .readonly = false,
                 };
             }
-            
+
             // Перевіряємо чи існує containerd snapshooter rootfs
             std.fs.accessAbsolute(containerd_rootfs, .{}) catch |err| {
                 try self.logger.warn("Containerd snapshooter rootfs not found at {s}: {s}", .{ containerd_rootfs, @errorName(err) });
@@ -535,47 +531,37 @@ pub const Create = struct {
                 }
                 return;
             };
-            
+
             try self.logger.info("Updated root.path for containerd snapshooter: {s}", .{containerd_rootfs});
-            
+
             // 3. Налаштовуємо cgroup path для containerd
             if (self.oci_config.linux) |*linux| {
                 if (linux.cgroupsPath) |cgroup_path| {
                     self.allocator.free(cgroup_path);
                 }
-                const containerd_cgroup = try std.fmt.allocPrint(
-                    self.allocator,
-                    "system.slice/containerd-{s}.scope",
-                    .{self.options.container_id}
-                );
+                const containerd_cgroup = try std.fmt.allocPrint(self.allocator, "system.slice/containerd-{s}.scope", .{self.options.container_id});
                 linux.cgroupsPath = containerd_cgroup;
             }
-            
+
             // 4. Встановлюємо спеціальні labels для containerd
             if (self.oci_config.labels == null) {
                 const labels_map = try self.allocator.create(std.StringHashMap([]const u8));
                 labels_map.* = std.StringHashMap([]const u8).init(self.allocator);
                 self.oci_config.labels = labels_map;
             }
-            try self.oci_config.labels.?.put(
-                "io.containerd.runtime.v2.task", 
-                try self.allocator.dupe(u8, "default")
-            );
-            try self.oci_config.labels.?.put(
-                "io.kubernetes.container.name", 
-                try self.allocator.dupe(u8, self.options.container_id)
-            );
-            
+            try self.oci_config.labels.?.put("io.containerd.runtime.v2.task", try self.allocator.dupe(u8, "default"));
+            try self.oci_config.labels.?.put("io.kubernetes.container.name", try self.allocator.dupe(u8, self.options.container_id));
+
             try self.logger.info("Containerd mode configuration completed", .{});
         } else {
             try self.logger.info("Configuring for standalone mode", .{});
-            
+
             // В standalone режимі використовуємо стандартні налаштування
             if (self.oci_config.storage.storage_path) |path| {
                 self.allocator.free(path);
             }
             self.oci_config.storage.storage_path = try self.allocator.dupe(u8, "/var/lib/proxmox-lxcri");
-            
+
             try self.logger.info("Standalone mode configuration completed", .{});
         }
     }
@@ -604,7 +590,7 @@ pub const Create = struct {
 
         // Створюємо LXC контейнер в Proxmox
         try self.logger.info("Creating LXC container in Proxmox", .{});
-        
+
         var lxc_config = types.LXCConfig{
             .hostname = self.options.container_id,
             .ostype = "ubuntu",
@@ -614,8 +600,8 @@ pub const Create = struct {
                 .{ self.options.proxmox_storage, dataset_path },
             ),
             .memory = 512, // Default 512MB
-            .swap = 512,   // Default 512MB
-            .cores = 1,    // Default 1 core
+            .swap = 512, // Default 512MB
+            .cores = 1, // Default 1 core
             .net0 = try types.NetworkConfig.init(self.allocator),
             .onboot = false,
             .protection = false,
@@ -667,7 +653,7 @@ pub const Create = struct {
         if (self.oci_config.user) |user| {
             config.setUID(user.uid);
             config.setGID(user.gid);
-            
+
             if (user.additionalGids) |additional_gids| {
                 try config.setAdditionalGids(additional_gids);
             }
@@ -790,10 +776,10 @@ pub const Create = struct {
         // Налаштовуємо монтування
         if (self.oci_config.linux) |linux| {
             for (linux.mounts) |mount| {
-            try config.addMount(.{
-                .source = mount.source,
-                .target = mount.destination,
-                .type = mount.type,
+                try config.addMount(.{
+                    .source = mount.source,
+                    .target = mount.destination,
+                    .type = mount.type,
                     .options = if (mount.options) |opts| blk: {
                         const result = try self.allocator.alloc([]const u8, opts.len);
                         for (opts, 0..) |opt, i| {
@@ -801,7 +787,7 @@ pub const Create = struct {
                         }
                         break :blk result;
                     } else null,
-            });
+                });
             }
         }
 
@@ -886,7 +872,7 @@ pub const Create = struct {
         if (self.oci_config.user) |user| {
             config.setUID(user.uid);
             config.setGID(user.gid);
-            
+
             if (user.additionalGids) |additional_gids| {
                 try config.setAdditionalGids(additional_gids);
             }
@@ -1009,10 +995,10 @@ pub const Create = struct {
         // Налаштовуємо монтування
         if (self.oci_config.linux) |linux| {
             for (linux.mounts) |mount| {
-            try config.addMount(.{
-                .source = mount.source,
-                .target = mount.destination,
-                .type = mount.type,
+                try config.addMount(.{
+                    .source = mount.source,
+                    .target = mount.destination,
+                    .type = mount.type,
                     .options = if (mount.options) |opts| blk: {
                         const result = try self.allocator.alloc([]const u8, opts.len);
                         for (opts, 0..) |opt, i| {
@@ -1020,7 +1006,7 @@ pub const Create = struct {
                         }
                         break :blk result;
                     } else null,
-            });
+                });
             }
         }
 
@@ -1102,7 +1088,7 @@ pub fn create(opts: CreateOpts, proxmox_client: *proxmox.ProxmoxClient) !void {
     if (opts.pid_file) |pid_file| {
         const pid_str = try std.fmt.allocPrint(opts.allocator, "{d}\n", .{0}); // TODO: Get real PID
         defer opts.allocator.free(pid_str);
-        
+
         try fs.cwd().writeFile(.{
             .data = pid_str,
             .sub_path = pid_file,

@@ -44,16 +44,16 @@ pub fn parseRunArgs(allocator: Allocator, args: []const []const u8) !RunOptions 
         try std.io.getStdErr().writer().writeAll("Error: run requires --bundle and container-id arguments\n");
         return RunError.InvalidArguments;
     }
-    
+
     var bundle_path: ?[]const u8 = null;
     var container_id: ?[]const u8 = null;
     var runtime_type: ?[]const u8 = null;
     var i: usize = 1;
-    
+
     // Parse arguments similar to create command
     while (i < args.len) : (i += 1) {
         const arg = args[i];
-        
+
         if (std.mem.startsWith(u8, arg, "--bundle=")) {
             bundle_path = try allocator.dupe(u8, arg[9..]); // Skip "--bundle="
         } else if (std.mem.startsWith(u8, arg, "-b=")) {
@@ -81,17 +81,17 @@ pub fn parseRunArgs(allocator: Allocator, args: []const []const u8) !RunOptions 
             }
         }
     }
-    
+
     if (bundle_path == null) {
         try std.io.getStdErr().writer().writeAll("Error: --bundle argument is required\n");
         return RunError.InvalidArguments;
     }
-    
+
     if (container_id == null) {
         try std.io.getStdErr().writer().writeAll("Error: container-id argument is required\n");
         return RunError.InvalidArguments;
     }
-    
+
     return RunOptions{
         .container_id = container_id.?,
         .bundle_path = bundle_path.?,
@@ -106,24 +106,24 @@ pub fn executeRun(allocator: Allocator, args: []const []const u8, logger: *logge
         return err;
     };
     defer run_options.deinit(allocator);
-    
-    try logger.info("Running container: {s} with bundle: {s}", .{run_options.container_id, run_options.bundle_path});
-    
+
+    try logger.info("Running container: {s} with bundle: {s}", .{ run_options.container_id, run_options.bundle_path });
+
     // Step 1/2: Create container
     try logger.info("Step 1/2: Creating container...", .{});
     try createContainer(allocator, &run_options, logger);
-    
+
     // Step 2/2: Start container
     try logger.info("Step 2/2: Starting container...", .{});
     try startContainer(allocator, run_options.container_id, logger);
-    
+
     try logger.info("Successfully ran container: {s}", .{run_options.container_id});
 }
 
 /// Create container using the specified options
 fn createContainer(allocator: Allocator, options: *RunOptions, logger: *logger_mod.Logger) !void {
-    try logger.info("Creating container: {s} with bundle: {s}", .{options.container_id, options.bundle_path});
-    
+    try logger.info("Creating container: {s} with bundle: {s}", .{ options.container_id, options.bundle_path });
+
     // Determine runtime type (currently we only support crun)
     if (options.runtime_type) |rt| {
         if (std.mem.eql(u8, rt, "lxc") or std.mem.eql(u8, rt, "proxmox-lxc")) {
@@ -132,11 +132,11 @@ fn createContainer(allocator: Allocator, options: *RunOptions, logger: *logger_m
             try logger.warn("VM runtime requested but not yet implemented, using crun", .{});
         }
     }
-    
+
     // Create crun manager for container operations
     var crun_manager = try crun.CrunManager.init(allocator, logger);
     defer crun_manager.deinit();
-    
+
     // Execute create
     try crun_manager.createContainer(options.container_id, options.bundle_path, null);
     try logger.info("Successfully created container: {s}", .{options.container_id});
@@ -145,13 +145,12 @@ fn createContainer(allocator: Allocator, options: *RunOptions, logger: *logger_m
 /// Start container by ID
 fn startContainer(allocator: Allocator, container_id: []const u8, logger: *logger_mod.Logger) !void {
     try logger.info("Starting container: {s}", .{container_id});
-    
+
     // Create crun manager
     var crun_manager = try crun.CrunManager.init(allocator, logger);
     defer crun_manager.deinit();
-    
+
     // Start container using crun
     try crun_manager.startContainer(container_id);
     try logger.info("Successfully started container: {s}", .{container_id});
 }
-

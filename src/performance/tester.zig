@@ -7,12 +7,12 @@ const mem = std.mem;
 
 /// Performance test type
 pub const TestType = enum {
-    load,           // Load testing
-    stress,         // Stress testing
-    endurance,      // Endurance testing
-    spike,          // Spike testing
-    scalability,    // Scalability testing
-    custom,         // Custom test
+    load, // Load testing
+    stress, // Stress testing
+    endurance, // Endurance testing
+    spike, // Spike testing
+    scalability, // Scalability testing
+    custom, // Custom test
 };
 
 /// Test result status
@@ -28,12 +28,12 @@ pub const TestStatus = enum {
 pub const TestConfig = struct {
     test_type: TestType,
     duration_seconds: u64,
-    target_load: u32,        // requests per second
+    target_load: u32, // requests per second
     max_concurrent_users: u32,
-    ramp_up_time: u64,       // seconds
-    ramp_down_time: u64,     // seconds
-    think_time: u64,         // milliseconds between requests
-    timeout: u64,            // milliseconds
+    ramp_up_time: u64, // seconds
+    ramp_down_time: u64, // seconds
+    think_time: u64, // milliseconds between requests
+    timeout: u64, // milliseconds
     custom_parameters: std.StringHashMap([]const u8),
 
     pub fn init(test_type: TestType) TestConfig {
@@ -77,10 +77,10 @@ pub const TestResult = struct {
     successful_requests: u64,
     failed_requests: u64,
     average_response_time: u64, // milliseconds
-    min_response_time: u64,     // milliseconds
-    max_response_time: u64,     // milliseconds
+    min_response_time: u64, // milliseconds
+    max_response_time: u64, // milliseconds
     requests_per_second: f64,
-    error_rate: f64,            // percentage
+    error_rate: f64, // percentage
     cpu_usage_avg: f64,
     memory_usage_avg: u64,
     network_usage_avg: u64,
@@ -140,7 +140,7 @@ pub const TestResult = struct {
         self.status = .failed;
         self.end_time = time.timestamp();
         try self.error_messages.append(error_message);
-        
+
         if (self.start_time > 0) {
             self.duration_seconds = @as(u64, @intCast(self.end_time.? - self.start_time));
         }
@@ -171,7 +171,7 @@ pub const TestResult = struct {
             total_disk += metrics.disk_read + metrics.disk_write;
             total_containers += metrics.container_count;
             total_response_time += metrics.response_time;
-            
+
             if (metrics.response_time < min_rt) min_rt = metrics.response_time;
             if (metrics.response_time > max_rt) max_rt = metrics.response_time;
         }
@@ -182,7 +182,7 @@ pub const TestResult = struct {
         self.network_usage_avg = @as(u64, @intFromFloat(total_network / count));
         self.disk_usage_avg = @as(u64, @intFromFloat(total_disk / count));
         self.container_count_avg = @as(u32, @intFromFloat(total_containers / count));
-        
+
         if (self.total_requests > 0) {
             self.average_response_time = @as(u64, @intFromFloat(@as(f64, @floatFromInt(total_response_time)) / count));
             self.requests_per_second = @as(f64, @floatFromInt(self.total_requests)) / @as(f64, @floatFromInt(self.duration_seconds));
@@ -234,9 +234,10 @@ pub const TestResult = struct {
             self.total_requests,
             self.successful_requests,
             self.failed_requests,
-            if (self.total_requests > 0) 
-                @as(f64, @floatFromInt(self.successful_requests)) / @as(f64, @floatFromInt(self.total_requests)) * 100.0 
-            else 0.0,
+            if (self.total_requests > 0)
+                @as(f64, @floatFromInt(self.successful_requests)) / @as(f64, @floatFromInt(self.total_requests)) * 100.0
+            else
+                0.0,
             self.error_rate,
             self.requests_per_second,
             self.average_response_time,
@@ -256,7 +257,7 @@ pub const TestResult = struct {
                 \\Error Messages ({d}):
                 \\
             , .{self.error_messages.items.len});
-            
+
             for (self.error_messages.items) |err_msg| {
                 try report.writer().print("  • {s}\n", .{err_msg});
             }
@@ -302,8 +303,8 @@ pub const PerformanceTest = struct {
         self.is_running = true;
         self.start_time = time.timestamp();
         self.result.start();
-        
-        try std.log.info("Started performance test: {s} ({s})", .{self.name, self.id});
+
+        try std.log.info("Started performance test: {s} ({s})", .{ self.name, self.id });
     }
 
     /// Stop the test
@@ -315,8 +316,8 @@ pub const PerformanceTest = struct {
         self.is_running = false;
         self.result.complete();
         self.result.calculateStatistics();
-        
-        try std.log.info("Completed performance test: {s} ({s})", .{self.name, self.id});
+
+        try std.log.info("Completed performance test: {s} ({s})", .{ self.name, self.id });
     }
 
     /// Add test result data
@@ -401,10 +402,10 @@ pub const PerformanceTester = struct {
         const test_id = try self.generateTestId();
         const test_item = try self.allocator.create(PerformanceTest);
         test_item.* = PerformanceTest.init(test_id, name, description, config);
-        
+
         try self.tests.append(test_item);
-        try self.logger.info("Created performance test: {s} ({s})", .{name, test_id});
-        
+        try self.logger.info("Created performance test: {s} ({s})", .{ name, test_id });
+
         return test_item;
     }
 
@@ -416,14 +417,14 @@ pub const PerformanceTester = struct {
 
         try test_item.start();
         try self.active_tests.append(test_item);
-        
+
         try self.logger.info("Started performance test: {s}", .{test_item.name});
     }
 
     /// Stop a performance test
     pub fn stopTest(self: *Self, test_item: *PerformanceTest) !void {
         try test_item.stop();
-        
+
         // Remove from active tests
         for (self.active_tests.items, 0..) |active_test, i| {
             if (active_test.id == test_item.id) {
@@ -431,7 +432,7 @@ pub const PerformanceTester = struct {
                 break;
             }
         }
-        
+
         try self.logger.info("Stopped performance test: {s}", .{test_item.name});
     }
 
@@ -459,11 +460,11 @@ pub const PerformanceTester = struct {
     pub fn getTestResults(self: *Self) ![]const TestResult {
         var results = std.ArrayList(TestResult).init(self.allocator);
         defer results.deinit();
-        
+
         for (self.tests.items) |test_item| {
             try results.append(test_item.result);
         }
-        
+
         return results.toOwnedSlice();
     }
 
@@ -471,17 +472,17 @@ pub const PerformanceTester = struct {
     fn generateTestId(self: *Self) ![]const u8 {
         const timestamp = time.timestamp();
         const random = @as(u32, @intCast(@mod(timestamp, 1000000)));
-        return try std.fmt.allocPrint(self.allocator, "test_{d}_{d}", .{timestamp, random});
+        return try std.fmt.allocPrint(self.allocator, "test_{d}_{d}", .{ timestamp, random });
     }
 
     /// Monitor active tests and handle timeouts
     pub fn monitorTests(self: *Self) !void {
         const now = time.timestamp();
-        
+
         var i: usize = 0;
         while (i < self.active_tests.items.len) {
             const active_test = self.active_tests.items[i];
-            
+
             if (active_test.start_time) |start_time| {
                 if (now - start_time > @as(i64, @intCast(self.test_timeout))) {
                     try self.logger.warn("Test timeout reached for: {s}", .{active_test.name});
@@ -490,7 +491,7 @@ pub const PerformanceTester = struct {
                     continue; // Don't increment i since we removed an item
                 }
             }
-            
+
             i += 1;
         }
     }
@@ -526,7 +527,7 @@ pub const PerformanceTester = struct {
         // Test type breakdown
         var test_types = std.AutoHashMap(TestType, u32).init(self.allocator);
         defer test_types.deinit();
-        
+
         for (self.tests.items) |test_item| {
             const count = test_types.get(test_item.config.test_type) orelse 0;
             try test_types.put(test_item.config.test_type, count + 1);
@@ -537,10 +538,10 @@ pub const PerformanceTester = struct {
             \\Test Type Breakdown:
             \\
         );
-        
+
         var iterator = test_types.iterator();
         while (iterator.next()) |entry| {
-            try report.writer().print("  {s}: {d}\n", .{@tagName(entry.key), entry.value});
+            try report.writer().print("  {s}: {d}\n", .{ @tagName(entry.key), entry.value });
         }
 
         // Recent test results
@@ -550,10 +551,12 @@ pub const PerformanceTester = struct {
                 \\Recent Test Results:
                 \\
             );
-            
-            const recent_tests = if (completed_tests > 5) 
-                self.tests.items[completed_tests - 5..] else self.tests.items;
-            
+
+            const recent_tests = if (completed_tests > 5)
+                self.tests.items[completed_tests - 5 ..]
+            else
+                self.tests.items;
+
             for (recent_tests) |test_item| {
                 if (test_item.result.status == .completed) {
                     try report.writer().print("  • {s}: {d} req/s, {d}ms avg, {d:.1}% success\n", .{

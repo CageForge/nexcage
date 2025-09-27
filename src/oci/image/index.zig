@@ -85,4 +85,4 @@ fn parseStringArray(obj: *zig_json.Object, field: []const u8, allocator: std.mem
     }
 
     return result;
-} 
+}

@@ -8,6 +8,21 @@ const fs = std.fs;
 const os = std.os;
 const logger = std.log.scoped(.proxmox_template);
 
+// DI-хуки для тестів та розширюваності
+pub const Deps = struct {
+    upload: fn (*Client, []const u8, []const u8, []const u8) anyerror![]u8,
+    list: fn (*Client) anyerror![]TemplateInfo,
+};
+
+fn defaultUpload(client: *Client, upload_path: []const u8, body: []const u8, content_type: []const u8) ![]u8 {
+    const result = try client.makeRequestWithContentType(.POST, upload_path, body, content_type);
+    return client.allocator.dupe(u8, result);
+}
+
+fn defaultList(client: *Client) ![]TemplateInfo {
+    return try listAvailableTemplates(client);
+}
+
 pub const TemplateInfo = struct {
     name: []const u8,
     size: u64,
@@ -52,35 +67,35 @@ pub const TemplateInfo = struct {
     }
 };
 
-pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, template_name: []const u8) !TemplateInfo {
+pub fn createTemplateFromRootfsWithDeps(client: *Client, rootfs_path: []const u8, template_name: []const u8, deps: Deps) !TemplateInfo {
     try client.logger.info("Creating template from rootfs: {s}", .{rootfs_path});
-    
+
     // Створюємо архів з rootfs
     const archive_path = try createTemplateArchive(client.allocator, rootfs_path, template_name);
     defer client.allocator.free(archive_path);
-    
+
     // Завантажуємо архів на Proxmox storage
     const upload_path = try fmt.allocPrint(client.allocator, "/nodes/{s}/storage/local/upload", .{client.node});
     defer client.allocator.free(upload_path);
-    
+
     // Читаємо файл архіву
     const file = try fs.cwd().openFile(archive_path, .{});
     defer file.close();
-    
+
     const file_size = try file.getEndPos();
     const file_content = try client.allocator.alloc(u8, file_size);
     defer client.allocator.free(file_content);
-    
+
     _ = try file.readAll(file_content);
-    
+
     // Створюємо multipart form data для завантаження (Proxmox expects fields: content=vztmpl, filename=<name>)
     const boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
     const mf = try buildMultipartForm(client.allocator, boundary, template_name, file_content);
     defer client.allocator.free(mf.body);
     defer client.allocator.free(mf.content_type);
-    
+
     // Відправляємо запит (з fallback через curl у разі ConnectionResetByPeer)
-    const response = client.makeRequestWithContentType(.POST, upload_path, mf.body, mf.content_type) catch |err| blk: {
+    const response = (deps.upload)(client, upload_path, mf.body, mf.content_type) catch |err| blk: {
         try client.logger.warn("Primary HTTP upload failed: {s}. Falling back to curl", .{@errorName(err)});
 
         const host = client.hosts[client.current_host_index];
@@ -101,14 +116,10 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
         defer client.allocator.free(auth_header_arg);
 
         const curl_args = [_][]const u8{
-            "curl", "-sS", "-k", "-X", "POST",
-            "-H", "Accept: application/json",
-            "-H", "Connection: close",
-            "-H", "User-Agent: proxmox-lxcri/0.3",
-            "-H", auth_header_arg,
-            "-F", filename_arg,
-            "-F", content_arg,
-            url,
+            "curl",                          "-sS",                      "-k",            "-X",                "POST",
+            "-H",                            "Accept: application/json", "-H",            "Connection: close", "-H",
+            "User-Agent: proxmox-lxcri/0.3", "-H",                       auth_header_arg, "-F",                filename_arg,
+            "-F",                            content_arg,                url,
         };
 
         const curl_res = try std.process.Child.run(.{ .allocator = client.allocator, .argv = &curl_args });
@@ -122,7 +133,7 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
         }
         if (curl_res.stdout.len == 0) {
             // Fallback: перевіряємо, чи з'явився шаблон у списку
-            const templates = try listAvailableTemplates(client);
+            const templates = try (deps.list)(client);
             defer {
                 for (templates) |*t| t.deinit(client.allocator);
                 client.allocator.free(templates);
@@ -142,12 +153,12 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
         break :blk try client.allocator.dupe(u8, curl_res.stdout);
     };
     defer client.allocator.free(response);
-    
+
     // Парсимо відповідь
     var parsed = json.parseFromSlice(json.Value, client.allocator, response, .{}) catch |perr| {
         // Якщо парсинг JSON не вдався (наприклад, порожня відповідь), спробуємо знайти шаблон у списку
         try client.logger.warn("Template upload response parse failed: {s}. Trying list-based verification", .{@errorName(perr)});
-        const templates = try listAvailableTemplates(client);
+        const templates = try (deps.list)(client);
         defer {
             for (templates) |*t| t.deinit(client.allocator);
             client.allocator.free(templates);
@@ -171,15 +182,15 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
         return error.TemplateCreationFailed;
     };
     defer parsed.deinit();
-    
+
     if (parsed.value.object.get("data")) |data| {
         const size = data.object.get("size").?.integer;
-        
+
         // Визначаємо OS та архітектуру з rootfs
         const os_type = try detectOS(rootfs_path, client.allocator);
         const arch = try detectArchitecture(rootfs_path, client.allocator);
         const version = try detectVersion(rootfs_path, client.allocator);
-        
+
         return TemplateInfo.init(
             client.allocator,
             template_name,
@@ -191,26 +202,31 @@ pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, templa
             true,
         );
     }
-    
+
     try client.logger.err("Failed to parse template creation response: {s}", .{response});
     return error.TemplateCreationFailed;
+}
+
+pub fn createTemplateFromRootfs(client: *Client, rootfs_path: []const u8, template_name: []const u8) !TemplateInfo {
+    const deps = Deps{ .upload = defaultUpload, .list = defaultList };
+    return createTemplateFromRootfsWithDeps(client, rootfs_path, template_name, deps);
 }
 
 fn detectOS(rootfs_path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
     // Перевіряємо /etc/os-release
     const os_release_path = try fmt.allocPrint(allocator, "{s}/etc/os-release", .{rootfs_path});
     defer allocator.free(os_release_path);
-    
+
     const file = fs.cwd().openFile(os_release_path, .{}) catch {
         return allocator.dupe(u8, "unknown");
     };
     defer file.close();
-    
+
     const content = file.readToEndAlloc(allocator, 1024) catch {
         return allocator.dupe(u8, "unknown");
     };
     defer allocator.free(content);
-    
+
     var lines = std.mem.splitScalar(u8, content, '\n');
     while (lines.next()) |line| {
         if (std.mem.startsWith(u8, line, "ID=")) {
@@ -218,7 +234,7 @@ fn detectOS(rootfs_path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
             return allocator.dupe(u8, id);
         }
     }
-    
+
     return allocator.dupe(u8, "unknown");
 }
 
@@ -226,17 +242,17 @@ fn detectArchitecture(rootfs_path: []const u8, allocator: std.mem.Allocator) ![]
     // Перевіряємо /proc/version
     const version_path = try fmt.allocPrint(allocator, "{s}/proc/version", .{rootfs_path});
     defer allocator.free(version_path);
-    
+
     const file = fs.cwd().openFile(version_path, .{}) catch {
         return allocator.dupe(u8, "unknown");
     };
     defer file.close();
-    
+
     const content = file.readToEndAlloc(allocator, 1024) catch {
         return allocator.dupe(u8, "unknown");
     };
     defer allocator.free(content);
-    
+
     // Простий парсинг архітектури
     if (std.mem.indexOf(u8, content, "x86_64")) |_| {
         return allocator.dupe(u8, "amd64");
@@ -245,7 +261,7 @@ fn detectArchitecture(rootfs_path: []const u8, allocator: std.mem.Allocator) ![]
     } else if (std.mem.indexOf(u8, content, "arm")) |_| {
         return allocator.dupe(u8, "arm");
     }
-    
+
     return allocator.dupe(u8, "unknown");
 }
 
@@ -253,17 +269,17 @@ fn detectVersion(rootfs_path: []const u8, allocator: std.mem.Allocator) ![]const
     // Перевіряємо /etc/os-release для версії
     const os_release_path = try fmt.allocPrint(allocator, "{s}/etc/os-release", .{rootfs_path});
     defer allocator.free(os_release_path);
-    
+
     const file = fs.cwd().openFile(os_release_path, .{}) catch {
         return allocator.dupe(u8, "unknown");
     };
     defer file.close();
-    
+
     const content = file.readToEndAlloc(allocator, 1024) catch {
         return allocator.dupe(u8, "unknown");
     };
     defer allocator.free(content);
-    
+
     var lines = std.mem.splitScalar(u8, content, '\n');
     while (lines.next()) |line| {
         if (std.mem.startsWith(u8, line, "VERSION_ID=")) {
@@ -271,7 +287,7 @@ fn detectVersion(rootfs_path: []const u8, allocator: std.mem.Allocator) ![]const
             return allocator.dupe(u8, version);
         }
     }
-    
+
     return allocator.dupe(u8, "unknown");
 }
 
@@ -299,7 +315,7 @@ pub fn listAvailableTemplates(client: *Client) ![]TemplateInfo {
             const format = if (item.object.get("format")) |f| f.string else "unknown";
 
             const slash = std.mem.lastIndexOf(u8, volid, "/");
-            const name = if (slash) |pos| volid[pos+1..] else volid;
+            const name = if (slash) |pos| volid[pos + 1 ..] else volid;
 
             try templates.append(try TemplateInfo.init(
                 client.allocator,
@@ -362,7 +378,7 @@ pub fn parseTemplatesFromJson(allocator: std.mem.Allocator, response: []const u8
             const size = item.object.get("size").?.integer;
             const format = if (item.object.get("format")) |f| f.string else "unknown";
             const slash = std.mem.lastIndexOf(u8, volid, "/");
-            const name = if (slash) |pos| volid[pos+1..] else volid;
+            const name = if (slash) |pos| volid[pos + 1 ..] else volid;
             try templates.append(try TemplateInfo.init(
                 allocator,
                 name,
@@ -377,4 +393,3 @@ pub fn parseTemplatesFromJson(allocator: std.mem.Allocator, response: []const u8
     }
     return try templates.toOwnedSlice();
 }
-

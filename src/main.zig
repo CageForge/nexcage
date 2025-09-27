@@ -74,28 +74,28 @@ const StaticMap = std.StaticStringMap(Command).initComptime(.{
 });
 
 /// Parses a command string into a Command enum using StaticStringMap
-/// 
+///
 /// Efficiently maps command line arguments to internal command representations
 /// using a compile-time generated hash map for maximum performance.
-/// 
+///
 /// Arguments:
 /// - command: Command string from command line arguments
-/// 
+///
 /// Returns: Corresponding Command enum value, or .unknown if not recognized
 fn parseCommand(command: []const u8) Command {
     return StaticMap.get(command) orelse .unknown;
 }
 
 /// Initializes the global logging system with configuration-based settings
-/// 
+///
 /// Sets up logging with proper file handling, directory creation, and fallback
 /// mechanisms. Supports both command-line overrides and configuration file settings.
-/// 
+///
 /// Arguments:
 /// - allocator: Memory allocator for logger operations
 /// - options: Runtime options from command line parsing
 /// - cfg: Configuration object with logging settings
-/// 
+///
 /// Returns: Error if logger initialization fails
 fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.Config) !void {
     const log_level = if (options.debug) types.LogLevel.debug else types.LogLevel.info;
@@ -109,7 +109,7 @@ fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.
         // Create log directory if it doesn't exist
         const actual_log_path = log_path orelse "/var/log/proxmox-lxcri/runtime.log";
         const log_dir = std.fs.path.dirname(actual_log_path) orelse ".";
-        
+
         // Try to create directory with proper permissions
         fs.cwd().makePath(log_dir) catch |err| {
             try logger_mod.err("Failed to create log directory: {s}, falling back to stderr", .{@errorName(err)});
@@ -120,8 +120,8 @@ fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.
         const file = fs.cwd().openFile(actual_log_path, .{ .mode = .read_write }) catch |err| {
             // If file doesn't exist, create it
             if (err == error.FileNotFound) {
-                const new_file = fs.cwd().createFile(actual_log_path, .{ 
-                    .truncate = false, 
+                const new_file = fs.cwd().createFile(actual_log_path, .{
+                    .truncate = false,
                     .mode = 0o644,
                     .exclusive = false,
                 }) catch |create_err| {
@@ -256,15 +256,15 @@ fn loadConfig(allocator: Allocator, config_path: ?[]const u8) !config.Config {
 
     // Інакше перевіряємо файли за замовчуванням у порядку пріоритету
     const default_paths = [_][]const u8{
-        "./config.json",                           // Поточна директорія
-        "/etc/proxmox-lxcri/config.json",         // Системний конфіг
-        "/etc/proxmox-lxcri/proxmox-lxcri.json",  // Альтернативний системний конфіг
+        "./config.json", // Поточна директорія
+        "/etc/proxmox-lxcri/config.json", // Системний конфіг
+        "/etc/proxmox-lxcri/proxmox-lxcri.json", // Альтернативний системний конфіг
     };
 
     for (default_paths) |path| {
         const result = loadConfigFromPath(allocator, path) catch |err| {
             // Логуємо помилку, але продовжуємо перевіряти наступні файли
-            logger_mod.warn("Failed to load config from '{s}': {s}", .{path, @errorName(err)}) catch {};
+            logger_mod.warn("Failed to load config from '{s}': {s}", .{ path, @errorName(err) }) catch {};
             continue;
         };
         // Якщо успішно завантажили, повертаємо результат
@@ -281,7 +281,7 @@ fn loadConfig(allocator: Allocator, config_path: ?[]const u8) !config.Config {
 
 fn loadConfigFromPath(allocator: Allocator, path: []const u8) !config.Config {
     const file = fs.cwd().openFile(path, .{}) catch |err| {
-        try logger_mod.err("Failed to open config file '{s}': {s}", .{path, @errorName(err)});
+        try logger_mod.err("Failed to open config file '{s}': {s}", .{ path, @errorName(err) });
         return error.ConfigError;
     };
     defer file.close();
@@ -296,7 +296,7 @@ fn loadConfigFromPath(allocator: Allocator, path: []const u8) !config.Config {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const arena_allocator = arena.allocator();
-    
+
     const parsed = try json_parser.parseWithUnknownFields(config.JsonConfig, arena_allocator, content);
     // No need to manually free arena-allocated memory
 
@@ -402,7 +402,7 @@ fn executeCreate(
 
     // Determine runtime type based on CLI args, config, or container ID pattern
     var actual_runtime_type: types.RuntimeType = .lxc; // Default fallback
-    
+
     if (runtime_type) |rt| {
         // CLI argument takes precedence
         if (std.mem.eql(u8, rt, "crun") or std.mem.eql(u8, rt, "runc")) {
@@ -423,13 +423,14 @@ fn executeCreate(
         }
     } else {
         // Auto-detect based on container ID pattern
-        if (std.mem.startsWith(u8, container_id.?, "lxc-") or 
-            std.mem.startsWith(u8, container_id.?, "db-") or 
-            std.mem.startsWith(u8, container_id.?, "vm-")) {
+        if (std.mem.startsWith(u8, container_id.?, "lxc-") or
+            std.mem.startsWith(u8, container_id.?, "db-") or
+            std.mem.startsWith(u8, container_id.?, "vm-"))
+        {
             actual_runtime_type = .lxc;
         }
     }
-    
+
     cfg.setRuntimeType(actual_runtime_type);
 
     // Create container specification
@@ -438,7 +439,7 @@ fn executeCreate(
     // Create Process and Root
     var container_process = try types.Process.init();
     defer container_process.deinit(allocator);
-    
+
     var container_root = spec_mod.Root.init();
     defer container_root.deinit(allocator);
 
@@ -446,26 +447,26 @@ fn executeCreate(
     const oci_version = try allocator.dupe(u8, "1.0.2");
     defer allocator.free(oci_version);
     container_spec.ociVersion = oci_version;
-    
+
     const hostname = try allocator.dupe(u8, "container");
     defer allocator.free(hostname);
     container_spec.hostname = hostname;
-    
+
     const args_array2 = try allocator.alloc([]const u8, 1);
     defer allocator.free(args_array2);
-    
+
     const shell_path = try allocator.dupe(u8, "/bin/sh");
     defer allocator.free(shell_path);
     args_array2[0] = shell_path;
-    
+
     container_process.args = args_array2;
-    
+
     const cwd_path = try allocator.dupe(u8, "/");
     defer allocator.free(cwd_path);
     container_process.cwd = cwd_path;
-    
+
     container_spec.process = container_process;
-    
+
     const root_path = try allocator.dupe(u8, "/var/lib/containers/rootfs");
     defer allocator.free(root_path);
     container_root.path = root_path;
@@ -475,7 +476,7 @@ fn executeCreate(
     // Create runtime managers based on runtime type
     var crun_manager: ?*oci.crun.CrunManager = null;
     var crun_logger: ?logger_mod.Logger = null;
-    
+
     if (actual_runtime_type == .crun) {
         // Create dedicated logger for CrunManager
         crun_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "crun");
@@ -541,7 +542,7 @@ fn executeState(allocator: Allocator, container_id: []const u8) !void {
         .bundle = container_state.state.bundle,
     };
 
-            const state_json = try std.json.stringifyAlloc(allocator, response, .{});
+    const state_json = try std.json.stringifyAlloc(allocator, response, .{});
     defer allocator.free(state_json);
     try std.io.getStdOut().writer().print("{s}\n", .{state_json});
 }
@@ -598,7 +599,7 @@ fn executeGenerateConfig(
     const config_path = try std.fs.path.join(allocator, &[_][]const u8{ bundle_path.?, "config.json" });
     defer allocator.free(config_path);
 
-            const oci_config = try std.json.stringifyAlloc(allocator, .{
+    const oci_config = try std.json.stringifyAlloc(allocator, .{
         .ociVersion = "1.0.2",
         .process = .{
             .terminal = false,
@@ -606,8 +607,8 @@ fn executeGenerateConfig(
                 .uid = 0,
                 .gid = 0,
             },
-            .args = &[_][]const u8{ "/bin/sh" },
-            .env = &[_][]const u8{ "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" },
+            .args = &[_][]const u8{"/bin/sh"},
+            .env = &[_][]const u8{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
             .cwd = "/",
         },
         .root = .{
@@ -703,16 +704,16 @@ fn executeCreateCommand(allocator: Allocator, args: []const []const u8, temp_log
         try std.io.getStdErr().writer().writeAll("Error: create requires --bundle and container-id arguments\n");
         return error.InvalidArguments;
     }
-    
+
     var bundle_path: ?[]const u8 = null;
     var container_id: ?[]const u8 = null;
     var runtime_type: ?[]const u8 = null;
     var i: usize = 1;
-    
+
     while (i < args.len) : (i += 1) {
         const arg = args[i];
-        try temp_logger.info("Parsing arg[{d}]: {s}", .{i, arg});
-        
+        try temp_logger.info("Parsing arg[{d}]: {s}", .{ i, arg });
+
         if (std.mem.startsWith(u8, arg, "--bundle=")) {
             bundle_path = arg[9..]; // Skip "--bundle="
             try temp_logger.info("Set bundle_path: {s}", .{bundle_path.?});
@@ -746,19 +747,19 @@ fn executeCreateCommand(allocator: Allocator, args: []const []const u8, temp_log
             }
         }
     }
-    
+
     if (bundle_path == null) {
         try std.io.getStdErr().writer().writeAll("Error: --bundle argument is required\n");
         return error.InvalidArguments;
     }
-    
+
     if (container_id == null) {
         try std.io.getStdErr().writer().writeAll("Error: container-id argument is required\n");
         return error.InvalidArguments;
     }
-    
-    try temp_logger.info("Creating container: {s} with bundle: {s}", .{container_id.?, bundle_path.?});
-    
+
+    try temp_logger.info("Creating container: {s} with bundle: {s}", .{ container_id.?, bundle_path.? });
+
     // Load configuration
     var cfg = try loadConfig(allocator, null);
     defer cfg.deinit();
@@ -774,15 +775,15 @@ fn executeCreateCommand(allocator: Allocator, args: []const []const u8, temp_log
             actual_runtime_type = .vm;
         }
     }
-    
+
     cfg.setRuntimeType(actual_runtime_type);
-    
+
     // Create appropriate runtime manager based on runtime type
     switch (actual_runtime_type) {
         .crun => {
             var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
             defer crun_manager.deinit();
-            
+
             // Execute create
             try crun_manager.createContainer(container_id.?, bundle_path.?, null);
             try temp_logger.info("Successfully created crun container: {s}", .{container_id.?});
@@ -808,27 +809,26 @@ fn executeStartCommand(allocator: Allocator, args: []const []const u8, temp_logg
         try std.io.getStdErr().writer().writeAll("Error: start requires container-id argument\n");
         return error.InvalidArguments;
     }
-    
+
     const container_id = args[2];
     // Create crun manager
     var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
     defer crun_manager.deinit();
-    
+
     // Start container using crun
     try crun_manager.startContainer(container_id);
     try temp_logger.info("Successfully started container: {s}", .{container_id});
 }
 
-
 // Helper function to execute spec command logic
 fn executeSpecCommand(allocator: Allocator, args: []const []const u8, temp_logger: *logger_mod.Logger) !void {
     var bundle_path: ?[]const u8 = null;
     var i: usize = 1;
-    
+
     // Parse arguments
     while (i < args.len) : (i += 1) {
         const arg = args[i];
-        
+
         if (std.mem.startsWith(u8, arg, "--bundle=")) {
             bundle_path = arg[9..]; // Skip "--bundle="
         } else if (std.mem.startsWith(u8, arg, "-b=")) {
@@ -847,18 +847,18 @@ fn executeSpecCommand(allocator: Allocator, args: []const []const u8, temp_logge
             }
         }
     }
-    
+
     // Default to current directory if no bundle specified
     if (bundle_path == null) {
         bundle_path = ".";
     }
-    
+
     try temp_logger.info("Generating OCI spec in bundle: {s}", .{bundle_path.?});
-    
+
     // Create crun manager
     var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
     defer crun_manager.deinit();
-    
+
     // Generate spec
     try crun_manager.generateSpec(bundle_path.?);
     try temp_logger.info("Successfully generated OCI spec in bundle: {s}", .{bundle_path.?});
@@ -870,16 +870,16 @@ fn executeRestoreCommand(allocator: Allocator, args: []const []const u8, temp_lo
         try std.io.getStdErr().writer().writeAll("Error: restore requires container-id argument\n");
         return error.InvalidArguments;
     }
-    
+
     var container_id: ?[]const u8 = null;
     var checkpoint_path: ?[]const u8 = null;
     var snapshot_name: ?[]const u8 = null;
     var i: usize = 1;
-    
+
     // Parse arguments
     while (i < args.len) : (i += 1) {
         const arg = args[i];
-        
+
         if (std.mem.startsWith(u8, arg, "--image-path=")) {
             checkpoint_path = arg[13..]; // Skip "--image-path="
         } else if (std.mem.eql(u8, arg, "--image-path")) {
@@ -905,18 +905,18 @@ fn executeRestoreCommand(allocator: Allocator, args: []const []const u8, temp_lo
             }
         }
     }
-    
+
     if (container_id == null) {
         try std.io.getStdErr().writer().writeAll("Error: container-id argument is required\n");
         return error.InvalidArguments;
     }
-    
+
     try temp_logger.info("Restoring container from checkpoint: {s}", .{container_id.?});
-    
+
     // Create crun manager
     var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
     defer crun_manager.deinit();
-    
+
     // Restore container
     try crun_manager.restoreContainer(container_id.?, checkpoint_path, snapshot_name);
     try temp_logger.info("Successfully restored container: {s}", .{container_id.?});
@@ -928,15 +928,15 @@ fn executeCheckpointCommand(allocator: Allocator, args: []const []const u8, temp
         try std.io.getStdErr().writer().writeAll("Error: checkpoint requires container-id argument\n");
         return error.InvalidArguments;
     }
-    
+
     var container_id: ?[]const u8 = null;
     var checkpoint_path: ?[]const u8 = null;
     var i: usize = 1;
-    
+
     // Parse arguments
     while (i < args.len) : (i += 1) {
         const arg = args[i];
-        
+
         if (std.mem.startsWith(u8, arg, "--image-path=")) {
             checkpoint_path = arg[13..]; // Skip "--image-path="
         } else if (std.mem.eql(u8, arg, "--image-path")) {
@@ -953,23 +953,22 @@ fn executeCheckpointCommand(allocator: Allocator, args: []const []const u8, temp
             }
         }
     }
-    
+
     if (container_id == null) {
         try std.io.getStdErr().writer().writeAll("Error: container-id argument is required\n");
         return error.InvalidArguments;
     }
-    
+
     try temp_logger.info("Creating checkpoint for container: {s}", .{container_id.?});
-    
+
     // Create crun manager
     var crun_manager = try oci.crun.CrunManager.init(allocator, temp_logger);
     defer crun_manager.deinit();
-    
+
     // Create checkpoint
     try crun_manager.checkpointContainer(container_id.?, checkpoint_path);
     try temp_logger.info("Successfully created checkpoint for container: {s}", .{container_id.?});
 }
-
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -983,69 +982,60 @@ pub fn main() !void {
             proxmox_client = null;
         }
     }
-    
+
     // Parse command line arguments
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
-    
+
     if (args.len < 2) {
         oci.help.printUsage();
         return;
     }
-    
+
     const command = parseCommand(args[1]);
-    
+
     // Create temporary logger
     var temp_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
     defer temp_logger.deinit();
-    
+
     // Initialize managers for create command
     var image_manager: ?*image.ImageManager = null;
     var zfs_manager: ?*zfs.ZFSManager = null;
     var lxc_manager: ?*oci.lxc.LXCManager = null;
-    
+
     if (command == .create) {
         // Initialize image manager
         const umoci_path = "/usr/bin/umoci";
         const images_dir = "./images";
         image_manager = try image.ImageManager.init(allocator, umoci_path, images_dir);
         defer if (image_manager) |img_mgr| img_mgr.deinit();
-        
+
         // Initialize ZFS manager
         zfs_manager = try zfs.ZFSManager.init(allocator, &temp_logger);
         defer if (zfs_manager) |zfs_mgr| zfs_mgr.deinit();
-        
+
         // Initialize LXC manager
         lxc_manager = try oci.lxc.LXCManager.init(allocator);
         defer if (lxc_manager) |lxc_mgr| lxc_mgr.deinit();
-        
+
         // Initialize Proxmox client
         var cfg = try loadConfig(allocator, null);
         defer cfg.deinit();
-        
+
         const host = if (cfg.proxmox.hosts) |hosts| (if (hosts.len > 0) hosts[0] else "localhost") else "localhost";
         const port = cfg.proxmox.port orelse 8006;
         const token = cfg.proxmox.token orelse "";
         const node = cfg.proxmox.node orelse "localhost";
         try temp_logger.info("Proxmox node from config: '{s}'", .{node});
-        
+
         proxmox_client = try allocator.create(ProxmoxClient);
-        proxmox_client.?.* = try ProxmoxClient.init(
-            allocator, 
-            host, 
-            port, 
-            token, 
-            node, 
-            &temp_logger
-        );
-        
+        proxmox_client.?.* = try ProxmoxClient.init(allocator, host, port, token, node, &temp_logger);
     }
-    
-    
+
     // Create temporary logger for command execution
     var main_logger = try logger_mod.Logger.init(allocator, std.io.getStdErr().writer(), .info, "main");
     defer main_logger.deinit();
-    
+
     // Execute command
     switch (command) {
         .create => {
@@ -1053,15 +1043,15 @@ pub fn main() !void {
         },
         .list => {
             try temp_logger.info("Listing containers...", .{});
-            
-            // Create crun manager  
+
+            // Create crun manager
             var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
             defer crun_manager.deinit();
-            
+
             try std.io.getStdOut().writer().print("\n=== CRUN Containers ===\n", .{});
             // List containers using crun
             try crun_manager.listContainers();
-            
+
             try std.io.getStdOut().writer().print("\n=== PROXMOX LXC Containers ===\n", .{});
             // Try to load configuration and create proxmox client
             var cfg = loadConfig(allocator, null) catch |err| {
@@ -1070,27 +1060,20 @@ pub fn main() !void {
                 return;
             };
             defer cfg.deinit();
-            
+
             // Create proxmox client
             const host = if (cfg.proxmox.hosts) |hosts| (if (hosts.len > 0) hosts[0] else "localhost") else "localhost";
             const port = cfg.proxmox.port orelse 8006;
             const token = cfg.proxmox.token orelse "";
             const node = cfg.proxmox.node orelse "localhost";
-            
-            var local_proxmox_client = ProxmoxClient.init(
-                allocator, 
-                host, 
-                port, 
-                token, 
-                node, 
-                &temp_logger
-            ) catch |err| {
+
+            var local_proxmox_client = ProxmoxClient.init(allocator, host, port, token, node, &temp_logger) catch |err| {
                 try temp_logger.info("Could not create proxmox client: {s}", .{@errorName(err)});
                 try std.io.getStdOut().writer().print("Could not connect to proxmox\n", .{});
-        return;
+                return;
             };
             defer local_proxmox_client.deinit();
-            
+
             // List containers using proxmox
             oci.list.list(&local_proxmox_client) catch |err| {
                 try temp_logger.info("Could not list proxmox containers: {s}", .{@errorName(err)});
@@ -1102,14 +1085,14 @@ pub fn main() !void {
                 try std.io.getStdErr().writer().writeAll("Error: state requires container-id argument\n");
                 return error.InvalidArguments;
             }
-            
+
             const container_id = args[2];
             try temp_logger.info("Getting state for container: {s}", .{container_id});
-            
+
             // Create crun manager
             var crun_manager = try oci.crun.CrunManager.init(allocator, &temp_logger);
             defer crun_manager.deinit();
-            
+
             // Get container state using crun
             const state = try crun_manager.getContainerState(container_id);
             try temp_logger.info("Container {s} state: {s}", .{ container_id, @tagName(state) });
@@ -1149,7 +1132,7 @@ pub fn main() !void {
             try std.io.getStdErr().writer().writeAll("Command not implemented in this test version\n");
         },
     }
-    
+
     // Cleanup proxmox_client at the end
     if (proxmox_client) |pc| {
         pc.deinit();

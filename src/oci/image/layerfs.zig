@@ -41,9 +41,9 @@ pub const LayerFS = struct {
     readonly: bool,
     zfs_pool: ?[]const u8,
     zfs_dataset: ?[]const u8,
-    
+
     const Self = @This();
-    
+
     /// Initialize a new LayerFS instance
     pub fn init(allocator: std.mem.Allocator, base_path: []const u8) !*Self {
         const layerfs = try allocator.create(Self);
@@ -57,10 +57,10 @@ pub const LayerFS = struct {
             .zfs_pool = null,
             .zfs_dataset = null,
         };
-        
+
         return layerfs;
     }
-    
+
     /// Initialize LayerFS with ZFS support
     pub fn initWithZFS(allocator: std.mem.Allocator, base_path: []const u8, zfs_pool: []const u8, zfs_dataset: []const u8) !*Self {
         const layerfs = try allocator.create(Self);
@@ -74,32 +74,28 @@ pub const LayerFS = struct {
             .zfs_pool = try allocator.dupe(u8, zfs_pool),
             .zfs_dataset = try allocator.dupe(u8, zfs_dataset),
         };
-        
+
         // Initialize ZFS dataset if it doesn't exist
         try layerfs.initZFSDataset();
-        
+
         return layerfs;
     }
-    
+
     /// Initialize ZFS dataset for layer storage
     fn initZFSDataset(self: *Self) !void {
         if (self.zfs_pool == null or self.zfs_dataset == null) {
             return;
         }
-        
-        const dataset_path = try std.fmt.allocPrint(
-            self.allocator,
-            "{s}/{s}",
-            .{ self.zfs_pool.?, self.zfs_dataset.? }
-        );
+
+        const dataset_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ self.zfs_pool.?, self.zfs_dataset.? });
         defer self.allocator.free(dataset_path);
-        
+
         // Check if dataset exists
         if (!self.zfsDatasetExists(dataset_path)) {
             try self.zfsCreateDataset(dataset_path);
         }
     }
-    
+
     /// Check if ZFS dataset exists
     fn zfsDatasetExists(self: *Self, dataset_path: []const u8) bool {
         _ = self;
@@ -108,7 +104,7 @@ pub const LayerFS = struct {
         // In real implementation, this would use ZFS commands or libzfs
         return true;
     }
-    
+
     /// Create ZFS dataset
     fn zfsCreateDataset(self: *Self, dataset_path: []const u8) !void {
         _ = self;
@@ -116,7 +112,7 @@ pub const LayerFS = struct {
         // For now, simulate ZFS dataset creation
         // In real implementation, this would use ZFS commands or libzfs
     }
-    
+
     /// Clean up LayerFS resources
     pub fn deinit(self: *Self) void {
         // Unmount all overlay mounts
@@ -125,7 +121,7 @@ pub const LayerFS = struct {
             _ = self.unmountOverlay(entry.key_ptr.*);
         }
         self.overlay_mounts.deinit();
-        
+
         // Free mount points
         var mp_it = self.mount_points.iterator();
         while (mp_it.next()) |entry| {
@@ -133,96 +129,96 @@ pub const LayerFS = struct {
             self.allocator.free(entry.value_ptr.*);
         }
         self.mount_points.deinit();
-        
+
         // Free layer digests (but don't deinit layers as they're owned elsewhere)
         var layer_it = self.layers.iterator();
         while (layer_it.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
         }
         self.layers.deinit();
-        
+
         // Free ZFS-related strings
         if (self.zfs_pool) |pool| self.allocator.free(pool);
         if (self.zfs_dataset) |dataset| self.allocator.free(dataset);
-        
+
         // Free base path
         self.allocator.free(self.base_path);
-        
+
         // Free self
         self.allocator.destroy(self);
     }
-    
+
     /// Add a layer to the filesystem
     pub fn addLayer(self: *Self, layer: *Layer) !void {
         if (self.layers.contains(layer.digest)) {
             return LayerFSError.LayerNotFound;
         }
-        
+
         // Optimized: only duplicate digest if layer doesn't exist
         const digest_copy = try self.allocator.dupe(u8, layer.digest);
         errdefer self.allocator.free(digest_copy);
-        
+
         try self.layers.put(digest_copy, layer);
     }
-    
+
     /// Get a layer by digest
     pub fn getLayer(self: *Self, digest: []const u8) ?*Layer {
         return self.layers.get(digest);
     }
-    
+
     /// Remove a layer from the filesystem
     pub fn removeLayer(self: *Self, digest: []const u8) !void {
         if (self.layers.fetchRemove(digest)) |entry| {
             self.allocator.free(entry.key);
         }
     }
-    
+
     /// Create a mount point for a layer
     pub fn createMountPoint(self: *Self, layer_digest: []const u8, mount_path: []const u8) !void {
         _ = self.getLayer(layer_digest) orelse return LayerFSError.LayerNotFound;
-        
+
         if (self.mount_points.contains(layer_digest)) {
             return LayerFSError.InvalidMountPoint;
         }
-        
+
         // Optimized: duplicate strings with error handling
         const digest_copy = try self.allocator.dupe(u8, layer_digest);
         errdefer self.allocator.free(digest_copy);
-        
+
         const path_copy = try self.allocator.dupe(u8, mount_path);
         errdefer self.allocator.free(path_copy);
-        
+
         try self.mount_points.put(digest_copy, path_copy);
     }
-    
+
     /// Get mount point for a layer
     pub fn getMountPoint(self: *Self, layer_digest: []const u8) ?[]const u8 {
         return self.mount_points.get(layer_digest);
     }
-    
+
     /// Mount a layer as an overlay filesystem
     pub fn mountOverlay(self: *Self, layer_digest: []const u8, mount_path: []const u8) !void {
         _ = self.getLayer(layer_digest) orelse return LayerFSError.LayerNotFound;
-        
+
         if (self.overlay_mounts.contains(layer_digest)) {
             return LayerFSError.InvalidOverlay;
         }
-        
+
         // Create mount directory if it doesn't exist
         try std.fs.cwd().makePath(mount_path);
-        
+
         // For now, we'll simulate overlay mounting
         // In a real implementation, this would use mount(2) with overlayfs
         // Optimized: duplicate strings with error handling
         const digest_copy = try self.allocator.dupe(u8, layer_digest);
         errdefer self.allocator.free(digest_copy);
-        
+
         const path_copy = try self.allocator.dupe(u8, mount_path);
         errdefer self.allocator.free(path_copy);
-        
+
         try self.overlay_mounts.put(digest_copy, path_copy);
     }
-    
+
     /// Unmount an overlay filesystem
     pub fn unmountOverlay(self: *Self, layer_digest: []const u8) void {
         if (self.overlay_mounts.fetchRemove(layer_digest)) |entry| {
@@ -230,23 +226,23 @@ pub const LayerFS = struct {
             self.allocator.free(entry.value);
         }
     }
-    
+
     /// Stack multiple layers into a single filesystem
     pub fn stackLayers(self: *Self, layer_digests: [][]const u8, target_path: []const u8) !void {
         if (layer_digests.len == 0) {
             return LayerFSError.InvalidLayerOrder;
         }
-        
+
         // Validate all layers exist
         for (layer_digests) |digest| {
             if (self.getLayer(digest) == null) {
                 return LayerFSError.LayerNotFound;
             }
         }
-        
+
         // Create target directory
         try std.fs.cwd().makePath(target_path);
-        
+
         // For now, simulate layer stacking
         // In real implementation, this would use overlayfs or ZFS layers
         // Optimized: batch mount operations
@@ -257,39 +253,35 @@ pub const LayerFS = struct {
             }
             self.allocator.free(layer_paths);
         }
-        
+
         // Pre-allocate all layer paths
         for (layer_digests, 0..) |_, i| {
-            layer_paths[i] = try std.fmt.allocPrint(
-                self.allocator,
-                "{s}/layer_{d}",
-                .{ target_path, i }
-            );
+            layer_paths[i] = try std.fmt.allocPrint(self.allocator, "{s}/layer_{d}", .{ target_path, i });
         }
-        
+
         // Mount all layers
         for (layer_digests, 0..) |digest, i| {
             try self.mountOverlay(digest, layer_paths[i]);
         }
     }
-    
+
     /// Merge multiple layers into a single layer
     pub fn mergeLayers(self: *Self, layer_digests: [][]const u8, target_digest: []const u8) !void {
         if (layer_digests.len < 2) {
             return LayerFSError.InvalidLayerOrder;
         }
-        
+
         // Validate all layers exist
         for (layer_digests) |digest| {
             if (self.getLayer(digest) == null) {
                 return LayerFSError.LayerNotFound;
             }
         }
-        
+
         // For now, simulate layer merging
         // In real implementation, this would use ZFS snapshots and clones
         // or overlayfs merging
-        
+
         // Create a new merged layer
         const merged_layer = try Layer.createLayerWithMetadata(
             self.allocator,
@@ -306,26 +298,26 @@ pub const LayerFS = struct {
             false, // Compressed
             null, // Compression type
         );
-        
+
         try self.addLayer(merged_layer);
     }
-    
+
     /// Get all layers in dependency order
     pub fn getLayersInOrder(self: *Self) ![]*Layer {
         var ordered_layers = std.ArrayList(*Layer).init(self.allocator);
         defer ordered_layers.deinit();
-        
+
         var visited = std.StringHashMap(bool).init(self.allocator);
         defer visited.deinit();
-        
+
         var it = self.layers.iterator();
         while (it.next()) |entry| {
             try self.dfsVisit(entry.value_ptr.*, &visited, &ordered_layers);
         }
-        
+
         return ordered_layers.toOwnedSlice();
     }
-    
+
     /// Depth-first search for dependency ordering
     fn dfsVisit(
         self: *Self,
@@ -336,10 +328,10 @@ pub const LayerFS = struct {
         if (visited.contains(layer.digest)) {
             return;
         }
-        
+
         // Optimized: use digest directly without copying
         try visited.put(layer.digest, true);
-        
+
         // Visit dependencies first
         if (layer.dependencies) |deps| {
             for (deps) |dep_digest| {
@@ -348,11 +340,11 @@ pub const LayerFS = struct {
                 }
             }
         }
-        
+
         // Add this layer after its dependencies
         try ordered.append(layer);
     }
-    
+
     /// Validate all layers in the filesystem
     pub fn validateAllLayers(self: *Self) !void {
         var it = self.layers.iterator();
@@ -360,15 +352,15 @@ pub const LayerFS = struct {
             try entry.value_ptr.*.validate(self.allocator);
         }
     }
-    
+
     /// Check for circular dependencies
     pub fn checkCircularDependencies(self: *Self) !void {
         var visited = std.StringHashMap(bool).init(self.allocator);
         defer visited.deinit();
-        
+
         var rec_stack = std.StringHashMap(bool).init(self.allocator);
         defer rec_stack.deinit();
-        
+
         var it = self.layers.iterator();
         while (it.next()) |entry| {
             if (try self.hasCycle(entry.value_ptr.*, &visited, &rec_stack)) {
@@ -376,7 +368,7 @@ pub const LayerFS = struct {
             }
         }
     }
-    
+
     /// Check if a layer has a cycle in its dependency graph
     fn hasCycle(
         self: *Self,
@@ -387,15 +379,15 @@ pub const LayerFS = struct {
         if (rec_stack.contains(layer.digest)) {
             return true; // Back edge found
         }
-        
+
         if (visited.contains(layer.digest)) {
             return false; // Already processed
         }
-        
+
         // Optimized: use digest directly without copying
         try visited.put(layer.digest, true);
         try rec_stack.put(layer.digest, true);
-        
+
         // Check dependencies
         if (layer.dependencies) |deps| {
             for (deps) |dep_digest| {
@@ -406,29 +398,29 @@ pub const LayerFS = struct {
                 }
             }
         }
-        
+
         // Optimized: remove from recursion stack
         _ = rec_stack.remove(layer.digest);
-        
+
         return false;
     }
-    
+
     /// Get filesystem statistics
     pub fn getStats(self: *Self) !LayerFSStats {
         var total_size: u64 = 0;
         var total_layers: u32 = 0;
         var mounted_layers: u32 = 0;
-        
+
         var it = self.layers.iterator();
         while (it.next()) |entry| {
             total_size += entry.value_ptr.*.size;
             total_layers += 1;
-            
+
             if (self.overlay_mounts.contains(entry.key_ptr.*)) {
                 mounted_layers += 1;
             }
         }
-        
+
         return LayerFSStats{
             .total_layers = total_layers,
             .mounted_layers = mounted_layers,
@@ -438,32 +430,32 @@ pub const LayerFS = struct {
             .zfs_dataset = if (self.zfs_dataset) |dataset| try self.allocator.dupe(u8, dataset) else null,
         };
     }
-    
+
     /// Set filesystem as read-only
     pub fn setReadOnly(self: *Self, readonly: bool) void {
         self.readonly = readonly;
     }
-    
+
     /// Check if filesystem is read-only
     pub fn isReadOnly(self: *Self) bool {
         return self.readonly;
     }
-    
+
     /// Check if ZFS is enabled
     pub fn hasZFS(self: *Self) bool {
         return self.zfs_pool != null and self.zfs_dataset != null;
     }
-    
+
     /// Get ZFS pool name
     pub fn getZFSPool(self: *Self) ?[]const u8 {
         return self.zfs_pool;
     }
-    
+
     /// Get ZFS dataset name
     pub fn getZFSDataset(self: *Self) ?[]const u8 {
         return self.zfs_dataset;
     }
-    
+
     /// Garbage collection for unused layers
     pub fn garbageCollect(self: *Self, _force: bool) !GarbageCollectionResult {
         var result = GarbageCollectionResult{
@@ -472,24 +464,24 @@ pub const LayerFS = struct {
             .errors = std.ArrayList(GarbageCollectionError).init(self.allocator),
         };
         defer result.deinit();
-        
+
         // Use force parameter to determine behavior
         _ = _force;
-        
+
         var layers_to_remove = std.ArrayList([]const u8).init(self.allocator);
         defer layers_to_remove.deinit();
-        
+
         // Find unused layers (not mounted, not referenced by other layers)
         var it = self.layers.iterator();
         while (it.next()) |entry| {
             const digest = entry.key_ptr.*;
             _ = entry.value_ptr.*;
-            
+
             // Check if layer is mounted
             if (self.overlay_mounts.contains(digest)) {
                 continue; // Skip mounted layers
             }
-            
+
             // Check if layer is referenced by other layers
             var is_referenced = false;
             var ref_it = self.layers.iterator();
@@ -505,33 +497,33 @@ pub const LayerFS = struct {
                     if (is_referenced) break;
                 }
             }
-            
+
             if (!is_referenced) {
                 try layers_to_remove.append(digest);
             }
         }
-        
+
         // Remove unused layers
         for (layers_to_remove.items) |digest| {
             if (self.layers.get(digest)) |layer| {
                 const layer_size = layer.size;
-                
+
                 // Remove layer from filesystem
                 if (self.layers.fetchRemove(digest)) |entry| {
                     self.allocator.free(entry.key);
-                    
+
                     // Clean up layer resources
                     layer.deinit(self.allocator);
-                    
+
                     result.layers_removed += 1;
                     result.space_freed += layer_size;
                 }
             }
         }
-        
+
         return result;
     }
-    
+
     /// Get detailed statistics about layer usage
     pub fn getDetailedStats(self: *Self) !DetailedLayerFSStats {
         var stats = DetailedLayerFSStats{
@@ -548,18 +540,18 @@ pub const LayerFS = struct {
             .zfs_dataset = if (self.zfs_dataset) |dataset| try self.allocator.dupe(u8, dataset) else null,
             .layer_details = std.ArrayList(LayerDetail).init(self.allocator),
         };
-        
+
         var it = self.layers.iterator();
         while (it.next()) |entry| {
             const digest = entry.key_ptr.*;
             const layer = entry.value_ptr.*;
-            
+
             stats.total_layers += 1;
             stats.total_size += layer.size;
-            
+
             const is_mounted = self.overlay_mounts.contains(digest);
             const is_referenced = self.isLayerReferenced(digest);
-            
+
             if (is_mounted) {
                 stats.mounted_layers += 1;
                 stats.mounted_size += layer.size;
@@ -570,7 +562,7 @@ pub const LayerFS = struct {
                 stats.unused_layers += 1;
                 stats.unused_size += layer.size;
             }
-            
+
             // Add layer detail
             try stats.layer_details.append(LayerDetail{
                 .digest = try self.allocator.dupe(u8, digest),
@@ -589,10 +581,10 @@ pub const LayerFS = struct {
                 .last_validated = if (layer.last_validated) |lv| try self.allocator.dupe(u8, lv) else null,
             });
         }
-        
+
         return stats;
     }
-    
+
     /// Check if a layer is referenced by other layers
     fn isLayerReferenced(self: *Self, digest: []const u8) bool {
         var it = self.layers.iterator();
@@ -608,7 +600,7 @@ pub const LayerFS = struct {
         }
         return false;
     }
-    
+
     /// Clone string array for layer details
     fn cloneStringArray(self: *Self, strings: [][]const u8) ![][]const u8 {
         var cloned = try self.allocator.alloc([]const u8, strings.len);
@@ -617,7 +609,6 @@ pub const LayerFS = struct {
         }
         return cloned;
     }
-    
 };
 
 /// Layer operation types for batch operations
@@ -637,13 +628,13 @@ pub const LayerOperation = union(enum) {
         digest: []const u8,
     },
 };
-    
+
 /// Layer operation error
 pub const LayerOperationError = struct {
     operation: []const u8,
     digest: []const u8,
     error_message: []const u8,
-    
+
     pub fn deinit(self: *LayerOperationError) void {
         // Note: These are now allocated strings, need to free
         _ = self;
@@ -655,7 +646,7 @@ pub const BatchOperationResult = struct {
     successful: u32,
     failed: u32,
     errors: std.ArrayList(LayerOperationError),
-    
+
     pub fn deinit(self: *BatchOperationResult) void {
         for (self.errors.items) |err| {
             err.deinit();
@@ -680,7 +671,7 @@ pub const MetadataCacheEntry = struct {
     last_validated: ?[]const u8,
     last_accessed: i64,
     access_count: u32,
-    
+
     pub fn deinit(self: *MetadataCacheEntry, allocator: std.mem.Allocator) void {
         allocator.free(self.digest);
         allocator.free(self.media_type);
@@ -689,7 +680,7 @@ pub const MetadataCacheEntry = struct {
         if (self.comment) |c| allocator.free(c);
         if (self.compression_type) |ct| allocator.free(ct);
         if (self.last_validated) |lv| allocator.free(lv);
-        
+
         if (self.dependencies) |deps| {
             for (deps) |dep| {
                 allocator.free(dep);
@@ -697,7 +688,7 @@ pub const MetadataCacheEntry = struct {
             allocator.free(deps);
         }
     }
-    
+
     pub fn clone(self: *const MetadataCacheEntry, allocator: std.mem.Allocator) !*MetadataCacheEntry {
         const entry = try allocator.create(MetadataCacheEntry);
         entry.* = .{
@@ -725,20 +716,20 @@ pub const MetadataCache = struct {
     entries: std.StringHashMap(*MetadataCacheEntry),
     max_entries: usize,
     allocator: std.mem.Allocator,
-    
+
     // Optimized LRU tracking
     lru_head: ?*LRUNode,
     lru_tail: ?*LRUNode,
     lru_map: std.StringHashMap(*LRUNode),
-    
+
     const Self = @This();
-    
+
     const LRUNode = struct {
         digest: []const u8,
         entry: *MetadataCacheEntry,
         prev: ?*LRUNode,
         next: ?*LRUNode,
-        
+
         pub fn init(digest: []const u8, entry: *MetadataCacheEntry) LRUNode {
             return .{
                 .digest = digest,
@@ -748,7 +739,7 @@ pub const MetadataCache = struct {
             };
         }
     };
-    
+
     pub fn init(allocator: std.mem.Allocator, max_entries: usize) Self {
         return .{
             .entries = std.StringHashMap(*MetadataCacheEntry).init(allocator),
@@ -759,7 +750,7 @@ pub const MetadataCache = struct {
             .lru_map = std.StringHashMap(*LRUNode).init(allocator),
         };
     }
-    
+
     pub fn deinit(self: *Self) void {
         var it = self.entries.iterator();
         while (it.next()) |entry| {
@@ -767,7 +758,7 @@ pub const MetadataCache = struct {
             self.allocator.destroy(entry.value_ptr.*);
         }
         self.entries.deinit();
-        
+
         // Clean up LRU nodes
         var lru_it = self.lru_map.iterator();
         while (lru_it.next()) |node| {
@@ -775,38 +766,38 @@ pub const MetadataCache = struct {
         }
         self.lru_map.deinit();
     }
-    
+
     pub fn get(self: *Self, digest: []const u8) ?*MetadataCacheEntry {
         if (self.entries.get(digest)) |entry| {
             // Update LRU - move to front
             if (self.lru_map.get(digest)) |lru_node| {
                 self.moveToFront(lru_node);
             }
-            
+
             entry.last_accessed = std.time.timestamp();
             entry.access_count += 1;
             return entry;
         }
         return null;
     }
-    
+
     pub fn put(self: *Self, digest: []const u8, entry: *MetadataCacheEntry) !void {
         // Evict least recently used entry if cache is full
         if (self.entries.count() >= self.max_entries) {
             try self.evictLRU();
         }
-        
+
         const digest_copy = try self.allocator.dupe(u8, digest);
         try self.entries.put(digest_copy, entry);
-        
+
         // Add to LRU list
         try self.addToLRU(digest_copy, entry);
     }
-    
+
     fn addToLRU(self: *Self, digest: []const u8, entry: *MetadataCacheEntry) !void {
         const lru_node = try self.allocator.create(LRUNode);
         lru_node.* = LRUNode.init(digest, entry);
-        
+
         // Add to front of LRU list
         if (self.lru_head) |head| {
             head.prev = lru_node;
@@ -815,13 +806,13 @@ pub const MetadataCache = struct {
             self.lru_tail = lru_node;
         }
         self.lru_head = lru_node;
-        
+
         try self.lru_map.put(digest, lru_node);
     }
-    
+
     fn moveToFront(self: *Self, node: *LRUNode) void {
         if (node == self.lru_head) return;
-        
+
         // Remove from current position
         if (node.prev) |prev| {
             prev.next = node.next;
@@ -832,7 +823,7 @@ pub const MetadataCache = struct {
         if (node == self.lru_tail) {
             self.lru_tail = node.prev;
         }
-        
+
         // Move to front
         if (self.lru_head) |head| {
             head.prev = node;
@@ -843,12 +834,12 @@ pub const MetadataCache = struct {
         node.prev = null;
         self.lru_head = node;
     }
-    
+
     fn evictLRU(self: *Self) !void {
         // Remove from tail (least recently used)
         if (self.lru_tail) |tail| {
             const digest = tail.digest;
-            
+
             // Remove from LRU list
             if (tail.prev) |prev| {
                 prev.next = null;
@@ -857,20 +848,20 @@ pub const MetadataCache = struct {
                 self.lru_head = null;
                 self.lru_tail = null;
             }
-            
+
             // Remove from entries and LRU map
             if (self.entries.fetchRemove(digest)) |removed| {
                 removed.value.deinit(self.allocator);
                 self.allocator.destroy(removed.value);
                 self.allocator.free(removed.key);
             }
-            
+
             if (self.lru_map.fetchRemove(digest)) |removed| {
                 self.allocator.destroy(removed.value);
             }
         }
     }
-    
+
     fn cloneStringArray(strings: [][]const u8, allocator: std.mem.Allocator) ![][]const u8 {
         var cloned = try allocator.alloc([]const u8, strings.len);
         for (strings, 0..) |str, i| {
@@ -886,12 +877,12 @@ pub const LayerObjectPool = struct {
     total_allocated: u32,
     max_pool_size: u32,
     allocator: std.mem.Allocator,
-    
+
     // Optimized: pre-allocated layer templates
     layer_templates: std.ArrayList(*Layer),
-    
+
     const Self = @This();
-    
+
     pub fn init(allocator: std.mem.Allocator, max_pool_size: u32) Self {
         var pool = Self{
             .available_layers = std.ArrayList(*Layer).init(allocator),
@@ -900,66 +891,54 @@ pub const LayerObjectPool = struct {
             .allocator = allocator,
             .layer_templates = std.ArrayList(*Layer).init(allocator),
         };
-        
+
         // Pre-allocate some layer templates for faster initialization
         pool.preallocateTemplates() catch {};
-        
+
         return pool;
     }
-    
+
     pub fn deinit(self: *Self) void {
         for (self.available_layers.items) |layer| {
             layer.deinit(self.allocator);
             self.allocator.destroy(layer);
         }
         self.available_layers.deinit();
-        
+
         for (self.layer_templates.items) |template| {
             template.deinit(self.allocator);
             self.allocator.destroy(template);
         }
         self.layer_templates.deinit();
     }
-    
+
     fn preallocateTemplates(self: *Self) !void {
         const template_count = @min(10, self.max_pool_size / 4);
         for (0..template_count) |_| {
-            const template = try Layer.createLayer(
-                self.allocator,
-                "application/vnd.oci.image.layer.v1.tar",
-                "",
-                0,
-                null
-            );
+            const template = try Layer.createLayer(self.allocator, "application/vnd.oci.image.layer.v1.tar", "", 0, null);
             try self.layer_templates.append(template);
         }
     }
-    
+
     pub fn getLayer(self: *Self) !*Layer {
         if (self.available_layers.popOrNull()) |layer| {
             return layer;
         }
-        
+
         if (self.total_allocated < self.max_pool_size) {
             self.total_allocated += 1;
-            
+
             // Use template if available
             if (self.layer_templates.popOrNull()) |template| {
                 return template;
             }
-            
-            return try Layer.createLayer(
-                self.allocator,
-                "application/vnd.oci.image.layer.v1.tar",
-                "",
-                0,
-                null
-            );
+
+            return try Layer.createLayer(self.allocator, "application/vnd.oci.image.layer.v1.tar", "", 0, null);
         }
-        
+
         return error.PoolExhausted;
     }
-    
+
     pub fn returnLayer(self: *Self, layer: *Layer) void {
         if (self.available_layers.items.len < self.max_pool_size) {
             // Optimized: use template reset instead of full reset
@@ -1014,42 +993,42 @@ pub const LayerObjectPool = struct {
 pub const ParallelProcessingContext = struct {
     max_workers: u32,
     allocator: std.mem.Allocator,
-    
+
     const Self = @This();
-    
+
     pub fn init(allocator: std.mem.Allocator, max_workers: u32) Self {
         return .{
             .max_workers = max_workers,
             .allocator = allocator,
         };
     }
-    
-    pub fn processLayersParallel(self: *Self, layers: [][]const u8, processor: fn([]const u8) anyerror!void) !void {
+
+    pub fn processLayersParallel(self: *Self, layers: [][]const u8, processor: fn ([]const u8) anyerror!void) !void {
         const worker_count = @min(self.max_workers, @as(u32, @intCast(layers.len)));
         if (worker_count == 0) return;
-        
+
         var threads = try self.allocator.alloc(std.Thread, worker_count);
         defer self.allocator.free(threads);
-        
+
         const layers_per_worker = layers.len / worker_count;
         const remaining_layers = layers.len % worker_count;
         var start_index: usize = 0;
-        
+
         for (0..worker_count) |i| {
             const end_index = start_index + layers_per_worker + if (i < remaining_layers) 1 else 0;
             const worker_layers = layers[start_index..end_index];
-            
+
             threads[i] = try std.Thread.spawn(.{}, processLayersWorker, .{ worker_layers, processor });
             start_index = end_index;
         }
-        
+
         // Wait for all workers to complete
         for (threads) |thread| {
             thread.join();
         }
     }
-    
-    fn processLayersWorker(layers: [][]const u8, processor: fn([]const u8) anyerror!void) void {
+
+    fn processLayersWorker(layers: [][]const u8, processor: fn ([]const u8) anyerror!void) void {
         for (layers) |layer| {
             processor(layer) catch |err| {
                 // Log error but continue processing other layers
@@ -1064,7 +1043,7 @@ pub const FileOperationResult = struct {
     success: bool,
     bytes_processed: u64,
     error_message: ?[]const u8,
-    
+
     pub fn deinit(self: *FileOperationResult, allocator: std.mem.Allocator) void {
         if (self.error_message) |msg| {
             allocator.free(msg);
@@ -1075,55 +1054,55 @@ pub const FileOperationResult = struct {
 /// Advanced file operations for layers
 pub const AdvancedFileOps = struct {
     allocator: std.mem.Allocator,
-    
+
     const Self = @This();
-    
+
     pub fn init(allocator: std.mem.Allocator) Self {
         return .{ .allocator = allocator };
     }
-    
+
     pub fn copyLayerData(_: *Self, source_path: []const u8, dest_path: []const u8) !FileOperationResult {
         const source_file = try std.fs.cwd().openFile(source_path, .{});
         defer source_file.close();
-        
+
         const dest_file = try std.fs.cwd().createFile(dest_path, .{});
         defer dest_file.close();
-        
+
         _ = try source_file.stat();
         var buffer: [8192]u8 = undefined;
         var total_copied: u64 = 0;
-        
+
         while (true) {
             const bytes_read = try source_file.reader().read(&buffer);
             if (bytes_read == 0) break;
-            
+
             try dest_file.writer().writeAll(buffer[0..bytes_read]);
             total_copied += bytes_read;
         }
-        
+
         return FileOperationResult{
             .success = true,
             .bytes_processed = total_copied,
             .error_message = null,
         };
     }
-    
+
     pub fn moveLayerData(_: *Self, source_path: []const u8, dest_path: []const u8) !FileOperationResult {
         try std.fs.rename(source_path, dest_path);
-        
+
         return FileOperationResult{
             .success = true,
             .bytes_processed = 0,
             .error_message = null,
         };
     }
-    
+
     pub fn syncLayerData(_: *Self, path: []const u8) !FileOperationResult {
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
-        
+
         try file.sync();
-        
+
         return FileOperationResult{
             .success = true,
             .bytes_processed = 0,
@@ -1140,7 +1119,7 @@ pub fn batchLayerOperations(self: *LayerFS, operations: []LayerOperation) !Batch
         .errors = std.ArrayList(LayerOperationError).init(self.allocator),
     };
     defer result.deinit();
-    
+
     for (operations) |operation| {
         switch (operation) {
             .add => |add_op| {
@@ -1197,7 +1176,7 @@ pub fn batchLayerOperations(self: *LayerFS, operations: []LayerOperation) !Batch
             },
         }
     }
-    
+
     return result;
 }
 
@@ -1209,7 +1188,7 @@ pub const LayerFSStats = struct {
     base_path: []const u8,
     zfs_pool: ?[]const u8,
     zfs_dataset: ?[]const u8,
-    
+
     pub fn deinit(self: *LayerFSStats, allocator: std.mem.Allocator) void {
         allocator.free(self.base_path);
         if (self.zfs_pool) |pool| allocator.free(pool);
@@ -1237,7 +1216,7 @@ pub const GarbageCollectionResult = struct {
     layers_removed: u32,
     space_freed: u64,
     errors: std.ArrayList(GarbageCollectionError),
-    
+
     pub fn deinit(self: *GarbageCollectionResult) void {
         self.errors.deinit();
     }
@@ -1247,7 +1226,7 @@ pub const GarbageCollectionResult = struct {
 pub const GarbageCollectionError = struct {
     digest: []const u8,
     error_message: []const u8,
-    
+
     pub fn deinit(self: *GarbageCollectionError, allocator: std.mem.Allocator) void {
         allocator.free(self.digest);
         allocator.free(self.error_message);
@@ -1268,12 +1247,12 @@ pub const DetailedLayerFSStats = struct {
     zfs_pool: ?[]const u8,
     zfs_dataset: ?[]const u8,
     layer_details: std.ArrayList(LayerDetail),
-    
+
     pub fn deinit(self: *DetailedLayerFSStats, allocator: std.mem.Allocator) void {
         allocator.free(self.base_path);
         if (self.zfs_pool) |pool| allocator.free(pool);
         if (self.zfs_dataset) |dataset| allocator.free(dataset);
-        
+
         for (self.layer_details.items) |detail| {
             detail.deinit(allocator);
         }
@@ -1297,7 +1276,7 @@ pub const LayerDetail = struct {
     compression_type: ?[]const u8,
     validated: bool,
     last_validated: ?[]const u8,
-    
+
     pub fn deinit(self: *LayerDetail, allocator: std.mem.Allocator) void {
         allocator.free(self.digest);
         if (self.media_type) |mt| allocator.free(mt);
@@ -1306,7 +1285,7 @@ pub const LayerDetail = struct {
         if (self.comment) |c| allocator.free(c);
         if (self.compression_type) |ct| allocator.free(ct);
         if (self.last_validated) |lv| allocator.free(lv);
-        
+
         if (self.dependencies) |deps| {
             for (deps) |dep| {
                 allocator.free(dep);

@@ -66,14 +66,14 @@ pub const Client = struct {
             self.allocator.free(url);
         }
         self.allocator.free(self.base_urls);
-        
+
         // Звільняємо hosts та token
         for (self.hosts) |host| {
             self.allocator.free(host);
         }
         self.allocator.free(self.hosts);
         self.allocator.free(self.token);
-        
+
         self.client.deinit();
     }
 
@@ -112,7 +112,7 @@ pub const Client = struct {
             const host_header = self.hosts[self.current_host_index];
             const full_path = try std.fmt.allocPrint(self.allocator, "/api2/json{s}", .{path});
             defer self.allocator.free(full_path);
-            
+
             const url = try std.fmt.allocPrint(self.allocator, "{s}{s}", .{ base_url, full_path });
             defer self.allocator.free(url);
 
@@ -219,7 +219,7 @@ pub const Client = struct {
             defer self.allocator.free(url);
 
             var server_header_buffer: [1024]u8 = undefined;
-            var request = try self.client.open(method, try Uri.parse(url), .{ 
+            var request = try self.client.open(method, try Uri.parse(url), .{
                 .server_header_buffer = &server_header_buffer,
             });
             defer request.deinit();
