@@ -1,6 +1,6 @@
 const std = @import("std");
-const core = @import("../core/mod.zig");
-const backends = @import("../backends/mod.zig");
+const core = @import("core");
+const backends = @import("backends");
 
 /// List command implementation for modular architecture
 pub const ListCommand = struct {

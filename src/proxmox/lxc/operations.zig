@@ -1,0 +1,293 @@
+const std = @import("std");
+const types = @import("types");
+const Client = @import("../client.zig").Client;
+const node_ops = @import("../node/operations.zig");
+const json = std.json;
+const fmt = std.fmt;
+const ArrayList = std.ArrayList;
+const Thread = std.Thread;
+const os = std.os;
+const logger = std.log.scoped(.proxmox_lxc);
+const proxmox = @import("../proxmox.zig");
+pub const create = @import("create.zig").createLXC;
+pub const start = @import("start.zig").startLXC;
+pub const stop = @import("stop.zig").stopLXC;
+pub const delete = @import("delete.zig").deleteLXC;
+pub const status = @import("status.zig").getLXCStatus;
+pub const list = @import("list.zig").listLXCs;
+
+pub fn listLXCs(client: *Client) ![]types.LXCContainer {
+    const nodes = try node_ops.getNodes(client);
+    defer {
+        for (nodes) |*node| {
+            client.allocator.free(node.name);
+            client.allocator.free(node.node_type);
+            client.allocator.free(node.status);
+        }
+        client.allocator.free(nodes);
+    }
+
+    var containers = ArrayList(types.LXCContainer).init(client.allocator);
+    errdefer {
+        for (containers.items) |*container| {
+            container.deinit(client.allocator);
+        }
+        containers.deinit();
+    }
+
+    for (nodes) |node| {
+        const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc", .{node.name});
+        defer client.allocator.free(path);
+
+        try client.logger.info("Requesting LXC containers from node {s} with path: {s}", .{ node.name, path });
+
+        const response = try client.makeRequest(.GET, path, null);
+        defer client.allocator.free(response);
+
+        if (response.len == 0) {
+            try client.logger.warn("Empty response from node {s}", .{node.name});
+            continue;
+        }
+
+        var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
+        defer parsed.deinit();
+
+        if (parsed.value.object.get("data")) |data| {
+            for (data.array.items) |container| {
+                var config = try getContainerConfig(client, node.name, @intCast(container.object.get("vmid").?.integer));
+                errdefer config.deinit(client.allocator);
+
+                const name = try client.allocator.dupe(u8, container.object.get("name").?.string);
+                errdefer client.allocator.free(name);
+
+                try containers.append(types.LXCContainer{
+                    .vmid = @intCast(container.object.get("vmid").?.integer),
+                    .name = name,
+                    .status = try parseContainerStatus(container.object.get("status").?.string),
+                    .config = config,
+                });
+            }
+        }
+    }
+
+    return try containers.toOwnedSlice();
+}
+
+fn getContainerConfig(client: *Client, node: []const u8, vmid: u32) !types.LXCConfig {
+    const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/config", .{ node, vmid });
+    defer client.allocator.free(path);
+
+    try client.logger.debug("Requesting container config from node {s} for VMID {d}", .{ node, vmid });
+    const response = try client.makeRequest(.GET, path, null);
+    defer client.allocator.free(response);
+
+    if (response.len == 0) {
+        try client.logger.warn("Empty response when requesting config for container {d}", .{vmid});
+        return error.EmptyResponse;
+    }
+
+    try client.logger.debug("Parsing response: {s}", .{response});
+    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
+    defer parsed.deinit();
+
+    const data = parsed.value.object.get("data") orelse {
+        try client.logger.err("No data field in response for container {d}", .{vmid});
+        return error.InvalidResponse;
+    };
+
+    if (data != .object) {
+        try client.logger.err("Data field is not an object for container {d}", .{vmid});
+        return error.InvalidResponse;
+    }
+
+    const config_data = data.object;
+
+    // Отримуємо мережеву конфігурацію
+    var net0 = types.NetworkConfig{
+        .name = try client.allocator.dupe(u8, "eth0"),
+        .bridge = try client.allocator.dupe(u8, "vmbr0"),
+        .ip = try client.allocator.dupe(u8, "dhcp"),
+        .allocator = client.allocator,
+    };
+    errdefer net0.deinit(client.allocator);
+
+    if (config_data.get("net0")) |net0_data| {
+        if (net0_data == .string) {
+            // Звільняємо дефолтні значення
+            client.allocator.free(net0.name);
+            client.allocator.free(net0.bridge);
+            client.allocator.free(net0.ip);
+
+            // Парсимо рядок конфігурації мережі
+            const net_str = net0_data.string;
+            var net_iter = std.mem.splitScalar(u8, net_str, ',');
+            while (net_iter.next()) |pair| {
+                var kv_iter = std.mem.splitScalar(u8, pair, '=');
+                if (kv_iter.next()) |key| {
+                    if (kv_iter.next()) |value| {
+                        if (std.mem.eql(u8, key, "name")) {
+                            net0.name = try client.allocator.dupe(u8, value);
+                        } else if (std.mem.eql(u8, key, "bridge")) {
+                            net0.bridge = try client.allocator.dupe(u8, value);
+                        } else if (std.mem.eql(u8, key, "ip")) {
+                            net0.ip = try client.allocator.dupe(u8, value);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    const hostname = try client.allocator.dupe(u8, config_data.get("hostname").?.string);
+    errdefer client.allocator.free(hostname);
+
+    const ostype = try client.allocator.dupe(u8, config_data.get("ostype").?.string);
+    errdefer client.allocator.free(ostype);
+
+    const rootfs = try client.allocator.dupe(u8, config_data.get("rootfs").?.string);
+    errdefer client.allocator.free(rootfs);
+
+    return types.LXCConfig{
+        .hostname = hostname,
+        .ostype = ostype,
+        .memory = @intCast(config_data.get("memory").?.integer),
+        .swap = @intCast(config_data.get("swap").?.integer),
+        .cores = @intCast(config_data.get("cores").?.integer),
+        .rootfs = rootfs,
+        .net0 = net0,
+        .onboot = if (config_data.get("onboot")) |v|
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => false,
+            }
+        else
+            false,
+        .protection = if (config_data.get("protection")) |v|
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => false,
+            }
+        else
+            false,
+        .start = if (config_data.get("start")) |v|
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => true,
+            }
+        else
+            true,
+        .template = if (config_data.get("template")) |v|
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => false,
+            }
+        else
+            false,
+        .unprivileged = if (config_data.get("unprivileged")) |v|
+            switch (v) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => true,
+            }
+        else
+            true,
+        .features = .{},
+    };
+}
+
+pub fn createLXC(client: *proxmox.ProxmoxClient, vmid: u32, config: types.LXCConfig) !void {
+    logger.info("Creating container with VMID {d}", .{vmid});
+
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc", .{client.node});
+    defer client.allocator.free(path);
+
+    var params = std.ArrayList(u8).init(client.allocator);
+    defer params.deinit();
+
+    try std.fmt.format(params.writer(), "vmid={d}", .{vmid});
+    try std.fmt.format(params.writer(), "&hostname={s}", .{config.hostname});
+    try std.fmt.format(params.writer(), "&ostemplate={s}", .{config.ostemplate});
+    try std.fmt.format(params.writer(), "&rootfs={s}", .{config.rootfs});
+    try std.fmt.format(params.writer(), "&memory={d}", .{config.memory});
+    try std.fmt.format(params.writer(), "&swap={d}", .{config.swap});
+    try std.fmt.format(params.writer(), "&cores={d}", .{config.cores});
+
+    const response = try client.makeRequest(.POST, path, params.items);
+    defer response.deinit();
+}
+
+fn parseContainerStatus(status_str: []const u8) !types.LXCStatus {
+    if (std.mem.eql(u8, status_str, "running")) {
+        return .running;
+    } else if (std.mem.eql(u8, status_str, "stopped")) {
+        return .stopped;
+    } else if (std.mem.eql(u8, status_str, "paused")) {
+        return .paused;
+    } else {
+        return .unknown;
+    }
+}
+
+pub fn startLXC(client: *Client, node: []const u8, vmid: u32) !void {
+    logger.info("Starting container {d}", .{vmid});
+
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/start", .{ node, vmid });
+    defer client.allocator.free(path);
+
+    const body = "{}";
+    const response = try client.makeRequest(.POST, path, body);
+    defer client.allocator.free(response);
+}
+
+pub fn stopLXC(client: *Client, node: []const u8, vmid: u32) !void {
+    logger.info("Stopping container {d}", .{vmid});
+
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/stop", .{ node, vmid });
+    defer client.allocator.free(path);
+
+    const body = "{}";
+    const response = try client.makeRequest(.POST, path, body);
+    defer client.allocator.free(response);
+}
+
+pub fn deleteLXC(client: *Client, node: []const u8, vmid: u32) !void {
+    logger.info("Deleting container {d}", .{vmid});
+
+    const path = try std.fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}", .{ node, vmid });
+    defer client.allocator.free(path);
+
+    const response = try client.makeRequest(.DELETE, path, null);
+    defer client.allocator.free(response);
+}
+
+// Додаємо функцію для перевірки стану контейнера
+pub fn getLXCStatus(client: *Client, node: []const u8, vmid: u32) !types.LXCStatus {
+    const path = try fmt.allocPrint(client.allocator, "/nodes/{s}/lxc/{d}/status/current", .{ node, vmid });
+    defer client.allocator.free(path);
+
+    try client.logger.debug("Getting status for LXC container {d} on node {s}", .{ vmid, node });
+
+    const response = try client.makeRequest(.GET, path, null);
+    defer client.allocator.free(response);
+
+    if (response.len == 0) {
+        try client.logger.err("Empty response when getting container status {d}", .{vmid});
+        return error.EmptyResponse;
+    }
+
+    var parsed = try json.parseFromSlice(json.Value, client.allocator, response, .{});
+    defer parsed.deinit();
+
+    if (parsed.value.object.get("data")) |data| {
+        if (data.object.get("status")) |status_str| {
+            return try parseContainerStatus(status_str.string);
+        }
+    }
+
+    try client.logger.err("Invalid response format for container status {d}: {s}", .{ vmid, response });
+    return error.InvalidResponse;
+}
