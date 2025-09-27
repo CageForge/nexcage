@@ -2,6 +2,12 @@ const std = @import("std");
 const Build = std.Build;
 const fs = std.fs;
 
+// Version information
+const VERSION = "0.4.0";
+const VERSION_MAJOR = 0;
+const VERSION_MINOR = 4;
+const VERSION_PATCH = 0;
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});

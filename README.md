@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CNCF Sandbox](https://img.shields.io/badge/CNCF-Sandbox-blue.svg)](https://www.cncf.io/sandbox-projects/)
-[![Version](https://img.shields.io/badge/Version-0.3.0-green.svg)](https://github.com/kubebsd/proxmox-lxcri/releases/tag/v0.3.0)
+[![Version](https://img.shields.io/badge/Version-0.4.0-green.svg)](https://github.com/kubebsd/proxmox-lxcri/releases/tag/v0.4.0)
 
 
 A high-performance OCI-compatible runtime implementation that transforms Proxmox VE into a container and VM orchestration worker. A complete OCI Image System with advanced performance optimizations, making this project a feature-rich drop-in replacement for runc, enabling native LXC containers and VMs to run as pods through containerd or other OCI-compatible container engines.
@@ -28,6 +28,34 @@ A high-performance OCI-compatible runtime implementation that transforms Proxmox
 - High-availability with multi-node support
 - Resource limits and cgroups management
 - Live migration capabilities
+- **🚀 NEW: Modular Architecture (v0.4.0)**: Clean separation of concerns with SOLID principles
+
+## Modular Architecture (v0.4.0)
+
+Proxmox LXCRI now features a modular architecture that follows SOLID principles, providing:
+
+### Core Modules
+- **Core**: Global settings, errors, logging, interfaces, and types
+- **CLI**: Command-line interface with registry-based command system
+- **Utils**: File system and network utilities
+
+### Backend Modules
+- **LXC Backend**: Native LXC container management
+- **Proxmox LXC Backend**: Proxmox API integration for LXC containers
+- **Proxmox VM Backend**: Proxmox API integration for virtual machines
+- **Crun Backend**: OCI-compatible container runtime
+
+### Integration Modules
+- **Proxmox API**: RESTful API client for Proxmox VE
+- **ZFS Integration**: ZFS filesystem operations and snapshots
+- **BFC Integration**: Binary File Container support
+
+### Benefits of Modular Architecture
+- **Extensibility**: Easy to add new backends and integrations
+- **Maintainability**: Clean separation of concerns
+- **Testability**: Independent module testing
+- **Flexibility**: Dynamic backend selection
+- **Performance**: Optimized module loading
 - Node caching for improved performance
 
 ### 🚀 New in v0.3.0
