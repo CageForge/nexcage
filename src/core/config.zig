@@ -61,9 +61,11 @@ pub const ConfigLoader = struct {
         return self.parseConfig(value);
     }
 
-    fn parseConfig(self: *Self, value: std.json.Value) !Config {
-        var config = try Config.init(self.allocator, .lxc); // default
+    pub fn parseConfig(self: *Self, value: std.json.Value) !Config {
+        // Start with default config
+        var config = try Config.init(self.allocator, .lxc);
 
+        // runtime_type
         if (value.object.get("runtime_type")) |runtime_value| {
             switch (runtime_value) {
                 .string => |runtime_str| {
@@ -73,15 +75,19 @@ pub const ConfigLoader = struct {
             }
         }
 
+        // default_runtime
         if (value.object.get("default_runtime")) |default_value| {
             switch (default_value) {
                 .string => |default_str| {
+                    // replace allocated string safely
+                    self.allocator.free(config.default_runtime);
                     config.default_runtime = try self.allocator.dupe(u8, default_str);
                 },
                 else => {},
             }
         }
 
+        // log_level
         if (value.object.get("log_level")) |level_value| {
             switch (level_value) {
                 .string => |level_str| {
@@ -91,52 +97,87 @@ pub const ConfigLoader = struct {
             }
         }
 
+        // log_file
         if (value.object.get("log_file")) |file_value| {
             switch (file_value) {
                 .string => |file_str| {
+                    if (config.log_file) |old| self.allocator.free(old);
                     config.log_file = try self.allocator.dupe(u8, file_str);
                 },
                 else => {},
             }
         }
 
+        // data_dir
         if (value.object.get("data_dir")) |dir_value| {
             switch (dir_value) {
                 .string => |dir_str| {
+                    self.allocator.free(config.data_dir);
                     config.data_dir = try self.allocator.dupe(u8, dir_str);
                 },
                 else => {},
             }
         }
 
+        // cache_dir
         if (value.object.get("cache_dir")) |dir_value| {
             switch (dir_value) {
                 .string => |dir_str| {
+                    self.allocator.free(config.cache_dir);
                     config.cache_dir = try self.allocator.dupe(u8, dir_str);
                 },
                 else => {},
             }
         }
 
+        // temp_dir
         if (value.object.get("temp_dir")) |dir_value| {
             switch (dir_value) {
                 .string => |dir_str| {
+                    self.allocator.free(config.temp_dir);
                     config.temp_dir = try self.allocator.dupe(u8, dir_str);
                 },
                 else => {},
             }
         }
 
+        // network
         if (value.object.get("network")) |network_value| {
-            config.network = try self.parseNetworkConfig(network_value);
-        }
+            // start from existing defaults
+            var net = config.network;
+            const obj = network_value.object;
 
-        if (value.object.get("security")) |security_value| {
-            config.security = try self.parseSecurityConfig(security_value);
-        }
+            if (obj.get("bridge")) |bridge_value| {
+                switch (bridge_value) {
+                    .string => |bridge_str| {
+                        if (net.bridge) |old_bridge| self.allocator.free(old_bridge);
+                        net.bridge = try self.allocator.dupe(u8, bridge_str);
+                    },
+                    else => {},
+                }
+            }
 
-        if (value.object.get("resources")) |resources_value| {
-            config.resources = try self.parseResourceLimits(resources_value);
+            if (obj.get("ip")) |ip_value| {
+                switch (ip_value) {
+                    .string => |ip_str| {
+                        if (net.ip) |old_ip| self.allocator.free(old_ip);
+                        net.ip = try self.allocator.dupe(u8, ip_str);
+                    },
+                    else => {},
+                }
+            }
+
+            if (obj.get("gateway")) |gateway_value| {
+                switch (gateway_value) {
+                    .string => |gw_str| {
+                        if (net.gateway) |old_gw| self.allocator.free(old_gw);
+                        net.gateway = try self.allocator.dupe(u8, gw_str);
+                    },
+                    else => {},
+                }
+            }
+
+            config.network = net;
         }
 
         return config;
@@ -170,7 +211,7 @@ pub const ConfigLoader = struct {
         return .info; // default
     }
 
-    fn parseNetworkConfig(self: *Self, value: std.json.Value) !types.NetworkConfig {
+    pub fn parseNetworkConfig(self: *Self, value: std.json.Value) !types.NetworkConfig {
         var config = types.NetworkConfig{
             .bridge = try self.allocator.dupe(u8, "lxcbr0"),
             .ip = null,
