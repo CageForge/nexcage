@@ -9,8 +9,8 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "test_config_simple",
-        .root_source_file = b.path("test_config_simple.zig"),
+        .name = "test_parse_config_only",
+        .root_source_file = b.path("test_parse_config_only.zig"),
         .target = target,
         .optimize = optimize,
     });

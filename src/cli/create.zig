@@ -21,18 +21,14 @@ pub const CreateCommand = struct {
 
         // Validate required options
         if (options.container_id == null or options.image == null) {
-            if (self.logger) |log| {
-                try log.@"error"("Container ID and image are required for create command", .{});
-            }
+            if (self.logger) |log| try log.err("Container ID and image are required for create command", .{});
             return core.Error.InvalidInput;
         }
 
         const container_id = options.container_id.?;
         const image = options.image.?;
 
-        if (self.logger) |log| {
-            try log.info("Creating container {s} with image {s}", .{ container_id, image });
-        }
+        if (self.logger) |log| try log.info("Creating container {s} with image {s}", .{ container_id, image });
 
         // Create sandbox configuration (aligned with current core.types)
         const sandbox_config = core.types.SandboxConfig{
@@ -40,8 +36,8 @@ pub const CreateCommand = struct {
             .name = try allocator.dupe(u8, container_id),
             .runtime_type = options.runtime_type orelse .lxc,
             .resources = core.types.ResourceLimits{
-                .memory = options.memory_limit orelse 512 * 1024 * 1024,
-                .cpu = options.cpu_limit orelse 1.0,
+                .memory = 512 * 1024 * 1024,
+                .cpu = 1.0,
                 .disk = null,
                 .network_bandwidth = null,
             },
@@ -63,8 +59,16 @@ pub const CreateCommand = struct {
             try log.info("[noop] Would create {s} with image {s} using runtime {s}", .{ container_id, image, rt });
         }
 
-        if (self.logger) |log| {
-            try log.info("Create command completed successfully", .{});
-        }
+        if (self.logger) |log| try log.info("Create command completed successfully", .{});
+    }
+
+    pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
+        _ = self;
+        return allocator.dupe(u8, "Usage: proxmox-lxcri create --name <id> <image>\n");
+    }
+
+    pub fn validate(self: *Self, args: []const []const u8) !void {
+        _ = self;
+        if (args.len == 0) return core.types.Error.InvalidInput;
     }
 };

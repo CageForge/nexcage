@@ -15,15 +15,14 @@ pub const DeleteCommand = struct {
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        _ = allocator;
         if (self.logger) |log| {
             try log.info("Executing delete command", .{});
         }
 
         // Validate required options
         if (options.container_id == null) {
-            if (self.logger) |log| {
-                try log.@"error"("Container ID is required for delete command", .{});
-            }
+            if (self.logger) |log| try log.err("Container ID is required for delete command", .{});
             return core.Error.InvalidInput;
         }
 
@@ -37,114 +36,45 @@ pub const DeleteCommand = struct {
         // Delete container based on runtime type
         switch (runtime_type) {
             .lxc => {
-                // Create minimal config for LXC driver
-                const sandbox_config = core.types.SandboxConfig{
-                    .allocator = allocator,
-                    .name = try allocator.dupe(u8, container_id),
-                    .runtime_type = .lxc,
-                };
-
-                const lxc_driver = try backends.lxc.LxcDriver.init(allocator, sandbox_config);
-                defer lxc_driver.deinit();
-                
                 if (self.logger) |log| {
-                    lxc_driver.setLogger(log);
+                    try log.info("Deleting LXC container: {s}", .{container_id});
+                    try log.warn("LXC backend temporarily disabled in CLI (no-op)", .{});
                 }
-
-                try lxc_driver.delete(container_id);
-                
-                if (self.logger) |log| {
-                    try log.info("LXC container deleted successfully: {s}", .{container_id});
-                }
+                return;
             },
-            .proxmox_lxc => {
-                // Initialize Proxmox LXC backend
-                const proxmox_config = core.types.ProxmoxLxcBackendConfig{
-                    .allocator = allocator,
-                    .host = try allocator.dupe(u8, "localhost"),
-                    .port = 8006,
-                    .username = try allocator.dupe(u8, "user@pam"),
-                    .password = try allocator.dupe(u8, "password"),
-                    .realm = try allocator.dupe(u8, "pam"),
-                    .verify_ssl = false,
-                };
-
-                const proxmox_lxc = try backends.proxmox_lxc.ProxmoxLxcDriver.init(allocator, proxmox_config);
-                defer proxmox_lxc.deinit();
-
+            .vm => {
                 if (self.logger) |log| {
-                    proxmox_lxc.setLogger(log);
+                    try log.info("Deleting Proxmox VM: {s}", .{container_id});
+                    try log.warn("Proxmox VM backend not implemented yet", .{});
+                    try log.info("Alert: Proxmox VM support is planned for v0.5.0", .{});
                 }
-
-                // Get VMID by container name (simplified)
-                const vmid = 100; // TODO: Implement proper VMID lookup
-                
-                try proxmox_lxc.deleteContainer(vmid);
-                
-                if (self.logger) |log| {
-                    try log.info("Proxmox LXC container deleted successfully: {s} (VMID: {d})", .{ container_id, vmid });
-                }
+                return;
             },
-            .proxmox_vm => {
-                // Initialize Proxmox VM backend
-                const proxmox_config = core.types.ProxmoxVmBackendConfig{
-                    .allocator = allocator,
-                    .host = try allocator.dupe(u8, "localhost"),
-                    .port = 8006,
-                    .username = try allocator.dupe(u8, "user@pam"),
-                    .password = try allocator.dupe(u8, "password"),
-                    .realm = try allocator.dupe(u8, "pam"),
-                    .verify_ssl = false,
-                };
-
-                const proxmox_vm = try backends.proxmox_vm.ProxmoxVmDriver.init(allocator, proxmox_config);
-                defer proxmox_vm.deinit();
-
-                if (self.logger) |log| {
-                    proxmox_vm.setLogger(log);
-                }
-
-                // Get VMID by VM name (simplified)
-                const vmid = 200; // TODO: Implement proper VMID lookup
-                
-                try proxmox_vm.deleteVm(vmid);
-                
-                if (self.logger) |log| {
-                    try log.info("Proxmox VM deleted successfully: {s} (VMID: {d})", .{ container_id, vmid });
-                }
-            },
+            // Proxmox VM branch disabled to avoid duplicate .vm; choose by config in future
+            // else => { ... }
             .crun => {
-                // Initialize Crun backend
-                const crun_config = core.types.CrunBackendConfig{
-                    .allocator = allocator,
-                    .runtime_path = try allocator.dupe(u8, "/usr/bin/crun"),
-                    .root = try allocator.dupe(u8, "/var/lib/containers"),
-                    .state = try allocator.dupe(u8, "/var/lib/containers"),
-                };
-
-                const crun_driver = try backends.crun.CrunDriver.init(allocator, crun_config);
-                defer crun_driver.deinit();
-
                 if (self.logger) |log| {
-                    crun_driver.setLogger(log);
+                    try log.info("Deleting Crun container: {s}", .{container_id});
+                    try log.warn("Crun backend not implemented yet", .{});
                 }
-
-                try crun_driver.deleteContainer(container_id);
-                
-                if (self.logger) |log| {
-                    try log.info("Crun container deleted successfully: {s}", .{container_id});
-                }
+                return;
             },
             else => {
-                if (self.logger) |log| {
-                    try log.@"error"("Unsupported runtime type: {}", .{runtime_type});
-                }
-                return core.Error.UnsupportedRuntime;
+                if (self.logger) |log| try log.err("Unsupported runtime type: {}", .{runtime_type});
+                return core.Error.UnsupportedOperation;
             },
         }
 
-        if (self.logger) |log| {
-            try log.info("Delete command completed successfully", .{});
-        }
+        if (self.logger) |log| try log.info("Delete command completed successfully", .{});
+    }
+
+    pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
+        _ = self;
+        return allocator.dupe(u8, "Usage: proxmox-lxcri delete --name <id>\n");
+    }
+
+    pub fn validate(self: *Self, args: []const []const u8) !void {
+        _ = self;
+        if (args.len == 0) return core.types.Error.InvalidInput;
     }
 };

@@ -201,22 +201,23 @@ pub const ImageInfo = struct {
 
 /// CLI command interface
 pub const CommandInterface = struct {
-    const Self = @This();
-
     /// Command name
     name: []const u8,
 
     /// Command description
     description: []const u8,
 
+    /// Opaque context pointer to concrete command instance
+    ctx: *anyopaque,
+
     /// Execute command
-    execute: *const fn (self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) Error!void,
+    execute: *const fn (ctx: *anyopaque, options: types.RuntimeOptions, allocator: std.mem.Allocator) Error!void,
 
     /// Get command help
-    help: *const fn (self: *Self, allocator: std.mem.Allocator) Error![]const u8,
+    help: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator) Error![]const u8,
 
     /// Validate command arguments
-    validate: *const fn (self: *Self, args: []const []const u8) Error!void,
+    validate: *const fn (ctx: *anyopaque, args: []const []const u8) Error!void,
 };
 
 /// Error type for interfaces
