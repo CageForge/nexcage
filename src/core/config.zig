@@ -180,6 +180,70 @@ pub const ConfigLoader = struct {
             config.network = net;
         }
 
+        // security
+        if (value.object.get("security")) |sec_value| {
+            const obj = sec_value.object;
+            var sec = config.security;
+
+            if (obj.get("seccomp")) |v| {
+                switch (v) {
+                    .bool => |b| sec.seccomp = b,
+                    else => {},
+                }
+            }
+            if (obj.get("apparmor")) |v| {
+                switch (v) {
+                    .bool => |b| sec.apparmor = b,
+                    else => {},
+                }
+            }
+            if (obj.get("read_only")) |v| {
+                switch (v) {
+                    .bool => |b| sec.read_only = b,
+                    else => {},
+                }
+            }
+
+            // capabilities: array of strings (by reference; not allocating here)
+            // If needed later, we can dupe each entry and manage lifetime
+
+            config.security = sec;
+        }
+
+        // resources
+        if (value.object.get("resources")) |res_value| {
+            const obj = res_value.object;
+            var res = config.resources;
+
+            if (obj.get("memory")) |v| {
+                switch (v) {
+                    .integer => |n| res.memory = @intCast(n),
+                    else => {},
+                }
+            }
+            if (obj.get("cpu")) |v| {
+                switch (v) {
+                    .float => |f| res.cpu = f,
+                    .integer => |n| res.cpu = @floatFromInt(n),
+                    else => {},
+                }
+            }
+            if (obj.get("disk")) |v| {
+                switch (v) {
+                    .integer => |n| res.disk = @intCast(n),
+                    else => {},
+                }
+            }
+            if (obj.get("network_bandwidth")) |v| {
+                switch (v) {
+                    .integer => |n| res.network_bandwidth = @intCast(n),
+                    else => {},
+                }
+            }
+
+            config.resources = res;
+        }
+
         return config;
     }
 
