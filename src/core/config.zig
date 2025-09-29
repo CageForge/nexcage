@@ -33,7 +33,7 @@ pub const ConfigLoader = struct {
         }
 
         // Return default config if no file found
-        return Config.init(self.allocator, .lxc);
+        return try Config.init(self.allocator, .lxc);
     }
 
     /// Load configuration from file
@@ -62,7 +62,7 @@ pub const ConfigLoader = struct {
     }
 
     fn parseConfig(self: *Self, value: std.json.Value) !Config {
-        var config = Config.init(self.allocator, .lxc); // default
+        var config = try Config.init(self.allocator, .lxc); // default
 
         if (value.object.get("runtime_type")) |runtime_value| {
             switch (runtime_value) {
@@ -172,7 +172,6 @@ pub const ConfigLoader = struct {
 
     fn parseNetworkConfig(self: *Self, value: std.json.Value) !types.NetworkConfig {
         var config = types.NetworkConfig{
-            .allocator = self.allocator,
             .bridge = try self.allocator.dupe(u8, "lxcbr0"),
             .ip = null,
             .gateway = null,
@@ -248,19 +247,18 @@ pub const Config = struct {
     security: types.SecurityConfig,
     resources: types.ResourceLimits,
 
-    pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) Config {
+    pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) !Config {
         return Config{
             .allocator = allocator,
             .runtime_type = runtime_type,
-            .default_runtime = "lxc",
+            .default_runtime = try allocator.dupe(u8, "lxc"),
             .log_level = logging.LogLevel.info,
             .log_file = null,
-            .data_dir = "/var/lib/proxmox-lxcri",
-            .cache_dir = "/var/cache/proxmox-lxcri",
-            .temp_dir = "/tmp/proxmox-lxcri",
+            .data_dir = try allocator.dupe(u8, "/var/lib/proxmox-lxcri"),
+            .cache_dir = try allocator.dupe(u8, "/var/cache/proxmox-lxcri"),
+            .temp_dir = try allocator.dupe(u8, "/tmp/proxmox-lxcri"),
             .network = types.NetworkConfig{
-                .allocator = allocator,
-                .bridge = "lxcbr0",
+                .bridge = try allocator.dupe(u8, "lxcbr0"),
                 .ip = null,
                 .gateway = null,
             },
@@ -287,7 +285,7 @@ pub const Config = struct {
         self.allocator.free(self.data_dir);
         self.allocator.free(self.cache_dir);
         self.allocator.free(self.temp_dir);
-        self.network.deinit();
+        self.network.deinit(self.allocator);
         self.security.deinit();
         self.resources.deinit();
     }

@@ -33,8 +33,8 @@ pub const SandboxConfig = struct {
         self.allocator.free(self.name);
         if (self.resources) |*r| r.deinit();
         if (self.security) |*s| s.deinit();
-        if (self.network) |*n| n.deinit();
-        if (self.storage) |*s| s.deinit();
+        if (self.network) |*n| n.deinit(self.allocator);
+        if (self.storage) |*s| s.deinit(self.allocator);
     }
 };
 
@@ -78,17 +78,16 @@ pub const SecurityConfig = struct {
 
 /// Network configuration
 pub const NetworkConfig = struct {
-    allocator: std.mem.Allocator,
     bridge: ?[]const u8 = null,
     ip: ?[]const u8 = null,
     gateway: ?[]const u8 = null,
     dns: ?[]const []const u8 = null,
     port_mappings: ?[]const PortMapping = null,
 
-    pub fn deinit(self: *NetworkConfig) void {
-        if (self.bridge) |b| self.allocator.free(b);
-        if (self.ip) |i| self.allocator.free(i);
-        if (self.gateway) |g| self.allocator.free(g);
+    pub fn deinit(self: *NetworkConfig, allocator: std.mem.Allocator) void {
+        if (self.bridge) |b| allocator.free(b);
+        if (self.ip) |i| allocator.free(i);
+        if (self.gateway) |g| allocator.free(g);
         if (self.dns) |d| {
             for (d) |dns| {
                 // DNS entries are not allocated, just referenced
@@ -97,9 +96,9 @@ pub const NetworkConfig = struct {
         }
         if (self.port_mappings) |pm| {
             for (pm) |mapping| {
-                mapping.deinit();
+                mapping.deinit(allocator);
             }
-            self.allocator.free(pm);
+            allocator.free(pm);
         }
     }
 };
@@ -110,32 +109,32 @@ pub const PortMapping = struct {
     container_port: u16,
     protocol: []const u8,
 
-    pub fn deinit(self: *const PortMapping) void {
+    pub fn deinit(self: *const PortMapping, allocator: std.mem.Allocator) void {
         // protocol is not allocated, just referenced
         _ = self;
+        _ = allocator;
     }
 };
 
 /// Storage configuration
 pub const StorageConfig = struct {
-    allocator: std.mem.Allocator,
     rootfs: ?[]const u8 = null,
     volumes: ?[]const Volume = null,
     tmpfs: ?[]const TmpfsMount = null,
 
-    pub fn deinit(self: *StorageConfig) void {
-        if (self.rootfs) |r| self.allocator.free(r);
+    pub fn deinit(self: *StorageConfig, allocator: std.mem.Allocator) void {
+        if (self.rootfs) |r| allocator.free(r);
         if (self.volumes) |v| {
             for (v) |*vol| {
-                vol.deinit();
+                vol.deinit(allocator);
             }
-            self.allocator.free(v);
+            allocator.free(v);
         }
         if (self.tmpfs) |t| {
             for (t) |*tmp| {
-                tmp.deinit();
+                tmp.deinit(allocator);
             }
-            self.allocator.free(t);
+            allocator.free(t);
         }
     }
 };
@@ -147,9 +146,10 @@ pub const Volume = struct {
     read_only: bool = false,
     options: ?[]const u8 = null,
 
-    pub fn deinit(self: *Volume) void {
+    pub fn deinit(self: *Volume, allocator: std.mem.Allocator) void {
         // source, destination, options are not allocated, just referenced
         _ = self;
+        _ = allocator;
     }
 };
 
@@ -159,9 +159,10 @@ pub const TmpfsMount = struct {
     size: ?u64 = null,
     mode: ?u32 = null,
 
-    pub fn deinit(self: *TmpfsMount) void {
+    pub fn deinit(self: *TmpfsMount, allocator: std.mem.Allocator) void {
         // destination is not allocated, just referenced
         _ = self;
+        _ = allocator;
     }
 };
 
