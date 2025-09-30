@@ -76,9 +76,7 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
-            if (self.logger) |log| {
-                try log.@"error"("Failed to create LXC container: {s}", .{result.stderr});
-            }
+            if (self.logger) |log| try log.err("Failed to create LXC container: {s}", .{result.stderr});
             return core.Error.RuntimeError;
         }
 
@@ -105,9 +103,7 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
-            if (self.logger) |log| {
-                try log.@"error"("Failed to start LXC container {s}: {s}", .{ container_id, result.stderr });
-            }
+            if (self.logger) |log| try log.err("Failed to start LXC container {s}: {s}", .{ container_id, result.stderr });
             return core.Error.RuntimeError;
         }
 
@@ -133,9 +129,7 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
-            if (self.logger) |log| {
-                try log.@"error"("Failed to stop LXC container {s}: {s}", .{ container_id, result.stderr });
-            }
+            if (self.logger) |log| try log.err("Failed to stop LXC container {s}: {s}", .{ container_id, result.stderr });
             return core.Error.RuntimeError;
         }
 
@@ -169,9 +163,7 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
-            if (self.logger) |log| {
-                try log.@"error"("Failed to delete LXC container {s}: {s}", .{ container_id, result.stderr });
-            }
+            if (self.logger) |log| try log.err("Failed to delete LXC container {s}: {s}", .{ container_id, result.stderr });
             return core.Error.RuntimeError;
         }
 
@@ -182,7 +174,7 @@ pub const LxcDriver = struct {
 
     pub fn list(self: *Self, allocator: std.mem.Allocator) ![]interfaces.ContainerInfo {
         if (self.logger) |log| {
-            try log.info("Listing LXC containers");
+            try log.info("Listing LXC containers", .{});
         }
 
         // Build lxc-ls command
@@ -197,9 +189,7 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
-            if (self.logger) |log| {
-                try log.@"error"("Failed to list LXC containers: {s}", .{result.stderr});
-            }
+            if (self.logger) |log| try log.err("Failed to list LXC containers: {s}", .{result.stderr});
             return core.Error.RuntimeError;
         }
 
@@ -364,7 +354,7 @@ pub const LxcDriver = struct {
 
     /// Run a command and return the result
     fn runCommand(self: *Self, args: []const []const u8) !CommandResult {
-        const child = std.process.Child.init(args, self.allocator);
+               var child = std.process.Child.init(args, self.allocator);
         
         var stdout = std.ArrayList(u8).init(self.allocator);
         defer stdout.deinit();
@@ -389,12 +379,16 @@ pub const LxcDriver = struct {
             try stderr_pipe.reader().readAllArrayList(&stderr, 1024 * 1024);
         }
         
-        const exit_code = try child.wait();
-        
+        const term = try child.wait();
+        const exit_code: u8 = switch (term) {
+            .Exited => |code| code,
+            else => 255,
+        };
+
         return CommandResult{
             .stdout = try self.allocator.dupe(u8, stdout.items),
             .stderr = try self.allocator.dupe(u8, stderr.items),
-            .exit_code = @intCast(exit_code),
+            .exit_code = exit_code,
         };
     }
 };

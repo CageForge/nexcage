@@ -15,11 +15,11 @@ pub const RunCommand = struct {
         _ = self;
         _ = allocator;
 
-        if (!options.container_id) {
+        if (options.container_id == null) {
             return types.Error.InvalidInput;
         }
 
-        if (!options.image) {
+        if (options.image == null) {
             return types.Error.InvalidInput;
         }
 

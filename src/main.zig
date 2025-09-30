@@ -30,6 +30,9 @@ pub const AppContext = struct {
         // TODO: Implement DefaultErrorHandler
         // const error_handler = core.DefaultErrorHandler.init(allocator, &logger.writer);
 
+        // Initialize global command registry
+        try cli.initGlobalRegistry(allocator);
+
         // Initialize command registry
         var command_registry = cli.CommandRegistry.init(allocator);
 
@@ -61,15 +64,19 @@ pub const AppContext = struct {
         // }
 
         self.command_registry.deinit();
+        cli.deinitGlobalRegistry();
         self.logger.deinit();
         self.config.deinit();
     }
 
     /// Initialize backend based on configuration
     pub fn initBackend(self: *AppContext) !void {
+        const name = try self.allocator.dupe(u8, "default");
+        defer self.allocator.free(name);
+        
         const sandbox_config = core.SandboxConfig{
             .allocator = self.allocator,
-            .name = try self.allocator.dupe(u8, "default"),
+            .name = name,
             .runtime_type = self.config.runtime_type,
         };
         _ = sandbox_config; // TODO: Use when backend selection is implemented

@@ -131,8 +131,8 @@ pub const LxcSecurityConfig = struct {
 
     pub fn deinit(self: *LxcSecurityConfig) void {
         if (self.id_maps) |maps| {
-            for (maps) |*map| {
-                map.deinit();
+            for (maps) |map| {
+                map.deinit(self.allocator);
             }
             self.allocator.free(maps);
         }
@@ -156,8 +156,8 @@ pub const IdMap = struct {
     container_id: u32,
     range: u32,
 
-    pub fn deinit(self: *IdMap) void {
-        self.allocator.free(self.type);
+    pub fn deinit(self: *const IdMap, allocator: std.mem.Allocator) void {
+        allocator.free(self.type);
     }
 };
 
@@ -178,32 +178,32 @@ pub const LxcResourceConfig = struct {
     pub fn deinit(self: *LxcResourceConfig) void {
         if (self.cpuset) |cs| self.allocator.free(cs);
         if (self.blkio_device_weight) |bdw| {
-            for (bdw) |*weight| {
-                weight.deinit();
+            for (bdw) |weight| {
+                weight.deinit(self.allocator);
             }
             self.allocator.free(bdw);
         }
         if (self.blkio_device_read_bps) |bdrb| {
-            for (bdrb) |*limit| {
-                limit.deinit();
+            for (bdrb) |limit| {
+                limit.deinit(self.allocator);
             }
             self.allocator.free(bdrb);
         }
         if (self.blkio_device_write_bps) |bdwb| {
-            for (bdwb) |*limit| {
-                limit.deinit();
+            for (bdwb) |limit| {
+                limit.deinit(self.allocator);
             }
             self.allocator.free(bdwb);
         }
         if (self.blkio_device_read_iops) |bdri| {
-            for (bdri) |*limit| {
-                limit.deinit();
+            for (bdri) |limit| {
+                limit.deinit(self.allocator);
             }
             self.allocator.free(bdri);
         }
         if (self.blkio_device_write_iops) |bdwi| {
-            for (bdwi) |*limit| {
-                limit.deinit();
+            for (bdwi) |limit| {
+                limit.deinit(self.allocator);
             }
             self.allocator.free(bdwi);
         }
@@ -216,8 +216,8 @@ pub const BlkioDeviceWeight = struct {
     path: []const u8,
     weight: u16,
 
-    pub fn deinit(self: *BlkioDeviceWeight) void {
-        self.allocator.free(self.path);
+    pub fn deinit(self: *const BlkioDeviceWeight, allocator: std.mem.Allocator) void {
+        allocator.free(self.path);
     }
 };
 
@@ -227,8 +227,8 @@ pub const BlkioDeviceLimit = struct {
     path: []const u8,
     rate: u64,
 
-    pub fn deinit(self: *BlkioDeviceLimit) void {
-        self.allocator.free(self.path);
+    pub fn deinit(self: *const BlkioDeviceLimit, allocator: std.mem.Allocator) void {
+        allocator.free(self.path);
     }
 };
 

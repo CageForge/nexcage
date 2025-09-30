@@ -15,3 +15,4 @@ crun-*.tar.gz
 /zig/*
 !/zig/download.sh
 !/zig/.gitkeep
+.backup/*

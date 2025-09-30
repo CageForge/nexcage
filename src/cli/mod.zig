@@ -12,6 +12,9 @@ pub const list = @import("list.zig");
 // Re-export commonly used types
 pub const CommandRegistry = registry.CommandRegistry;
 pub const registerBuiltinCommands = registry.registerBuiltinCommands;
+pub const initGlobalRegistry = registry.initGlobalRegistry;
+pub const getGlobalRegistry = registry.getGlobalRegistry;
+pub const deinitGlobalRegistry = registry.deinitGlobalRegistry;
 pub const RunCommand = run.RunCommand;
 pub const HelpCommand = help.HelpCommand;
 pub const VersionCommand = version.VersionCommand;
