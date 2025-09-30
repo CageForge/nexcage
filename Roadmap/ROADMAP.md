@@ -297,6 +297,25 @@
 5. Complete security audit
 6. Finalize build system optimization
 
+## Sprint 6.x (towards v0.5.0)
+
+### Completed (Sprint 6.1 → 6.2)
+- CLI LXC integration stabilized: `list/start/stop/delete` call real LXC backend
+- Graceful behavior without LXC tools: warnings + empty list or UnsupportedOperation
+- JSON parsing for `lxc-ls --format json` with unit tests
+- CI (GitHub Actions): build, smoke (`help`, `list`), unit tests on PRs
+- Architecture-as-Code docs with Mermaid diagrams and ADRs
+
+### In Progress
+- Extended `list` output (state, timestamps), filtering/sorting
+- LXC error mapping to `core.Error` with friendly CLI messages
+- Proxmox VM integration scaffolding for v0.5.0
+
+### Planned (Short-term)
+- Expand unit tests for JSON and CLI parsing
+- Optional CI step to render Mermaid previews
+- Update CLI docs and examples for v0.5.0
+
 ## 📈 Time Expenditure
 - Planned: 39 days
 - Spent: 25 days + 6 hours
