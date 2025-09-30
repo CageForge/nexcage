@@ -25,6 +25,9 @@ Build & tests:
   - `list --runtime lxc`: no crash; empty result if LXC tools absent
   - `start/stop/delete container-1`: controlled `UnsupportedOperation` when tools missing
 
+CLI UX:
+- Updated help texts for `list/start/stop/delete` with `--runtime` options and error behavior notes
+
 Notes:
 - Next: install LXC utilities in CI/smoke environment to exercise real flows
 - Next: extend error mapping and JSON parsing for `lxc-ls --format json`

@@ -117,7 +117,14 @@ pub const DeleteCommand = struct {
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        return allocator.dupe(u8, "Usage: proxmox-lxcri delete --name <id>\n");
+        return allocator.dupe(u8,
+            "Usage: proxmox-lxcri delete --name <id> [--runtime <type>]\n\n" ++
+            "Options:\n" ++
+            "  --name <id>        Container/VM identifier\n" ++
+            "  --runtime <type>   Runtime: lxc|vm|crun (default: lxc)\n\n" ++
+            "Notes:\n" ++
+            "  If LXC tools are missing, command fails with UnsupportedOperation.\n"
+        );
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

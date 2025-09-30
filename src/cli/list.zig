@@ -108,7 +108,13 @@ pub const ListCommand = struct {
     
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        return allocator.dupe(u8, "Usage: proxmox-lxcri list [--runtime <type>]\n");
+        return allocator.dupe(u8,
+            "Usage: proxmox-lxcri list [--runtime <type>]\n\n" ++
+            "Options:\n" ++
+            "  --runtime <type>   Runtime: lxc|vm|crun (default: lxc)\n\n" ++
+            "Notes:\n" ++
+            "  If LXC tools are not installed, returns empty list with a warning.\n"
+        );
     }
     
     pub fn validate(self: *Self, args: []const []const u8) !void {
