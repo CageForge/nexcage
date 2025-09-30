@@ -25,6 +25,11 @@ Build & tests:
   - `list --runtime lxc`: no crash; empty result if LXC tools absent
   - `start/stop/delete container-1`: controlled `UnsupportedOperation` when tools missing
 
+Parsing & tests:
+- Implemented `parseLxcLsJson` in `src/backends/lxc/driver.zig`
+- Added unit tests: `src/tests/lxc_list_parse_test.zig`
+- `zig build test` passes locally and in CI
+
 CLI UX:
 - Updated help texts for `list/start/stop/delete` with `--runtime` options and error behavior notes
 

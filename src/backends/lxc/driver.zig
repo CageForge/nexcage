@@ -209,14 +209,8 @@ pub const LxcDriver = struct {
             return core.Error.RuntimeError;
         }
 
-        // Parse JSON output and convert to ContainerInfo
-        // For now, return empty list - full JSON parsing would be complex
-        const containers = try allocator.alloc(interfaces.ContainerInfo, 0);
-        
-        if (self.logger) |log| {
-            try log.info("Listed {d} LXC containers", .{containers.len});
-        }
-        
+        const containers = try parseLxcLsJson(allocator, result.stdout);
+        if (self.logger) |log| try log.info("Listed {d} LXC containers", .{containers.len});
         return containers;
     }
 
@@ -301,6 +295,74 @@ pub const LxcDriver = struct {
         if (self.logger) |log| {
             try log.info("Command executed successfully in LXC container: {s}", .{container_id});
         }
+    }
+
+    fn mapState(state_str: []const u8) interfaces.ContainerState {
+        if (std.ascii.eqlIgnoreCase(state_str, "RUNNING")) return interfaces.ContainerState.running;
+        if (std.ascii.eqlIgnoreCase(state_str, "STOPPED")) return interfaces.ContainerState.stopped;
+        if (std.ascii.eqlIgnoreCase(state_str, "CREATED")) return interfaces.ContainerState.created;
+        if (std.ascii.eqlIgnoreCase(state_str, "PAUSED")) return interfaces.ContainerState.paused;
+        return interfaces.ContainerState.unknown;
+    }
+
+    fn parseLxcLsJson(allocator: std.mem.Allocator, json_bytes: []const u8) ![]interfaces.ContainerInfo {
+        var pr = std.json.parseFromSlice(std.json.Value, allocator, json_bytes, .{}) catch |err| {
+            return allocator.alloc(interfaces.ContainerInfo, 0);
+        };
+        defer pr.deinit();
+
+        const value = pr.value;
+        if (value != .array) return allocator.alloc(interfaces.ContainerInfo, 0);
+
+        const arr = value.array;
+        var containers = try allocator.alloc(interfaces.ContainerInfo, arr.items.len);
+        var count: usize = 0;
+        for (arr.items) |item| {
+            switch (item) {
+                .string => |s| {
+                    containers[count] = interfaces.ContainerInfo{
+                        .allocator = allocator,
+                        .id = try allocator.dupe(u8, s),
+                        .name = try allocator.dupe(u8, s),
+                        .state = interfaces.ContainerState.unknown,
+                        .runtime_type = .lxc,
+                    };
+                    count += 1;
+                },
+                .object => |obj| {
+                    var name_opt: ?[]const u8 = null;
+                    var state_str_opt: ?[]const u8 = null;
+                    var it = obj.iterator();
+                    while (it.next()) |entry| {
+                        if (std.mem.eql(u8, entry.key_ptr.*, "name") and entry.value_ptr.* == .string) {
+                            name_opt = entry.value_ptr.*.string;
+                        } else if (std.mem.eql(u8, entry.key_ptr.*, "state") and entry.value_ptr.* == .string) {
+                            state_str_opt = entry.value_ptr.*.string;
+                        }
+                    }
+                    if (name_opt) |name_val| {
+                        const st = if (state_str_opt) |st_str| mapState(st_str) else interfaces.ContainerState.unknown;
+                        containers[count] = interfaces.ContainerInfo{
+                            .allocator = allocator,
+                            .id = try allocator.dupe(u8, name_val),
+                            .name = try allocator.dupe(u8, name_val),
+                            .state = st,
+                            .runtime_type = .lxc,
+                        };
+                        count += 1;
+                    }
+                },
+                else => {},
+            }
+        }
+
+        if (count != containers.len) {
+            const trimmed = try allocator.alloc(interfaces.ContainerInfo, count);
+            std.mem.copyForwards(interfaces.ContainerInfo, trimmed, containers[0..count]);
+            allocator.free(containers);
+            containers = trimmed;
+        }
+        return containers;
     }
 
     fn convertToLxcConfig(self: *Self, config: types.SandboxConfig) !lxc_types.LxcConfig {
