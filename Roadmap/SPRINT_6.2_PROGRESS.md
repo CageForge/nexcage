@@ -15,6 +15,10 @@ Changes implemented:
   - `list` returns empty set with a warning if `lxc-ls` isn't available
   - `start/stop/delete` return `UnsupportedOperation` with a clear warning if tools are missing
 
+2025-09-30 (later the same day):
+- CLI now catches `UnsupportedOperation` and logs user-friendly warnings in `start/stop/delete/list`
+- Build remains green; behavior is stable without system LXC tools
+
 Build & tests:
 - `zig build` OK
 - CLI smoke:

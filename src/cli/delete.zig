@@ -77,7 +77,13 @@ pub const DeleteCommand = struct {
                 }
                 
                 // Delete container
-                try lxc_backend.delete(container_id);
+                lxc_backend.delete(container_id) catch |err| {
+                    if (err == core.Error.UnsupportedOperation) {
+                        if (self.logger) |log| try log.warn("LXC tools not available; cannot delete {s}", .{container_id});
+                        return;
+                    }
+                    return err;
+                };
                 
                 if (self.logger) |log| {
                     try log.info("LXC container deleted successfully: {s}", .{container_id});

@@ -70,7 +70,13 @@ pub const StartCommand = struct {
                 defer lxc_backend.deinit();
                 if (self.logger) |log| lxc_backend.driver.logger = log;
 
-                try lxc_backend.start(container_id);
+                lxc_backend.start(container_id) catch |err| {
+                    if (err == core.Error.UnsupportedOperation) {
+                        if (self.logger) |log| try log.warn("LXC tools not available; cannot start {s}", .{container_id});
+                        return;
+                    }
+                    return err;
+                };
                 return;
             },
             .vm => {

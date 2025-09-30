@@ -70,7 +70,13 @@ pub const StopCommand = struct {
                 defer lxc_backend.deinit();
                 if (self.logger) |log| lxc_backend.driver.logger = log;
 
-                try lxc_backend.stop(container_id);
+                lxc_backend.stop(container_id) catch |err| {
+                    if (err == core.Error.UnsupportedOperation) {
+                        if (self.logger) |log| try log.warn("LXC tools not available; cannot stop {s}", .{container_id});
+                        return;
+                    }
+                    return err;
+                };
                 return;
             },
             // Proxmox LXC mapped under VM runtime type

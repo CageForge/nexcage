@@ -64,7 +64,13 @@ pub const ListCommand = struct {
                 defer lxc_backend.deinit();
                 if (self.logger) |log| lxc_backend.driver.logger = log;
 
-                const containers = try lxc_backend.list(allocator);
+                const containers = lxc_backend.list(allocator) catch |err| {
+                    if (err == core.Error.UnsupportedOperation) {
+                        if (self.logger) |log| try log.warn("LXC tools not available; returning empty list", .{});
+                        return;
+                    }
+                    return err;
+                };
                 defer allocator.free(containers);
                 for (containers) |*c| {
                     if (self.logger) |log| try log.info("- {s} ({any})", .{ c.name, c.state });
