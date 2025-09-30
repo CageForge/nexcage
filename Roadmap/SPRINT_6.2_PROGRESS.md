@@ -35,5 +35,10 @@ CI:
   - Smoke run `help` and `list --runtime lxc`
   - Enforced on PRs to `main`/`develop`
 
+Documentation (Architecture as Code):
+- Added Mermaid-based docs:
+  - `docs/architecture/OVERVIEW.md` (system and sequence)
+  - `docs/architecture/BACKENDS.md` (backends/class)
+
 Time spent: 1h 15m
 
