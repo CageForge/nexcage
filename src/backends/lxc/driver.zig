@@ -16,22 +16,22 @@ pub const LxcDriver = struct {
     config: ?lxc_types.LxcConfig = null,
 
     pub fn init(allocator: std.mem.Allocator, config: types.SandboxConfig) !*Self {
-        const driver = try allocator.alloc(Self, 1);
-        driver[0] = Self{
+        const driver = try allocator.create(Self);
+        driver.* = Self{
             .allocator = allocator,
         };
 
         // Convert SandboxConfig to LxcConfig
-        driver[0].config = try driver[0].convertToLxcConfig(config);
+        driver.config = try driver.convertToLxcConfig(config);
 
-        return &driver[0];
+        return driver;
     }
 
     pub fn deinit(self: *Self) void {
         if (self.config) |*cfg| {
             cfg.deinit();
         }
-        self.allocator.free(self);
+        self.allocator.destroy(self);
     }
 
     pub fn create(self: *Self, config: types.SandboxConfig) !void {
@@ -40,7 +40,7 @@ pub const LxcDriver = struct {
         }
 
         // Convert SandboxConfig to LxcConfig
-        const lxc_config = try self.convertToLxcConfig(config);
+        var lxc_config = try self.convertToLxcConfig(config);
         defer lxc_config.deinit();
 
         // Build lxc-create command
@@ -103,6 +103,10 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
+            if (result.exit_code == 127) {
+                if (self.logger) |log| try log.warn("lxc-start not found; cannot start {s}", .{container_id});
+                return core.Error.UnsupportedOperation;
+            }
             if (self.logger) |log| try log.err("Failed to start LXC container {s}: {s}", .{ container_id, result.stderr });
             return core.Error.RuntimeError;
         }
@@ -129,6 +133,10 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
+            if (result.exit_code == 127) {
+                if (self.logger) |log| try log.warn("lxc-stop not found; cannot stop {s}", .{container_id});
+                return core.Error.UnsupportedOperation;
+            }
             if (self.logger) |log| try log.err("Failed to stop LXC container {s}: {s}", .{ container_id, result.stderr });
             return core.Error.RuntimeError;
         }
@@ -163,6 +171,10 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
+            if (result.exit_code == 127) {
+                if (self.logger) |log| try log.warn("lxc-destroy not found; cannot delete {s}", .{container_id});
+                return core.Error.UnsupportedOperation;
+            }
             if (self.logger) |log| try log.err("Failed to delete LXC container {s}: {s}", .{ container_id, result.stderr });
             return core.Error.RuntimeError;
         }
@@ -189,6 +201,10 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
+            if (result.exit_code == 127) {
+                if (self.logger) |log| try log.warn("lxc-ls not found; returning empty list", .{});
+                return allocator.alloc(interfaces.ContainerInfo, 0);
+            }
             if (self.logger) |log| try log.err("Failed to list LXC containers: {s}", .{result.stderr});
             return core.Error.RuntimeError;
         }
@@ -354,40 +370,30 @@ pub const LxcDriver = struct {
 
     /// Run a command and return the result
     fn runCommand(self: *Self, args: []const []const u8) !CommandResult {
-               var child = std.process.Child.init(args, self.allocator);
-        
-        var stdout = std.ArrayList(u8).init(self.allocator);
-        defer stdout.deinit();
-        
-        var stderr = std.ArrayList(u8).init(self.allocator);
-        defer stderr.deinit();
-        
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Pipe;
-        
-        try child.spawn();
-        
-        // Read stdout
-        if (child.stdout) |stdout_pipe| {
-            defer stdout_pipe.close();
-            try stdout_pipe.reader().readAllArrayList(&stdout, 1024 * 1024);
-        }
-        
-        // Read stderr
-        if (child.stderr) |stderr_pipe| {
-            defer stderr_pipe.close();
-            try stderr_pipe.reader().readAllArrayList(&stderr, 1024 * 1024);
-        }
-        
-        const term = try child.wait();
-        const exit_code: u8 = switch (term) {
+        const res = std.process.Child.run(.{
+            .allocator = self.allocator,
+            .argv = args,
+            .max_output_bytes = 1024 * 1024,
+        }) catch |err| {
+            // Return a synthetic result for missing binaries
+            if (err == error.FileNotFound) {
+                return CommandResult{
+                    .stdout = try self.allocator.dupe(u8, ""),
+                    .stderr = try self.allocator.dupe(u8, "command not found"),
+                    .exit_code = 127,
+                };
+            }
+            return err;
+        };
+
+        const exit_code: u8 = switch (res.term) {
             .Exited => |code| code,
             else => 255,
         };
 
         return CommandResult{
-            .stdout = try self.allocator.dupe(u8, stdout.items),
-            .stderr = try self.allocator.dupe(u8, stderr.items),
+            .stdout = res.stdout,
+            .stderr = res.stderr,
             .exit_code = exit_code,
         };
     }
@@ -401,17 +407,17 @@ pub const LxcBackend = struct {
     driver: *LxcDriver,
 
     pub fn init(allocator: std.mem.Allocator, config: types.SandboxConfig) !*Self {
-        const backend = try allocator.alloc(Self, 1);
-        backend[0] = Self{
+        const backend = try allocator.create(Self);
+        backend.* = Self{
             .allocator = allocator,
             .driver = try LxcDriver.init(allocator, config),
         };
-        return &backend[0];
+        return backend;
     }
 
     pub fn deinit(self: *Self) void {
         self.driver.deinit();
-        self.allocator.free(self);
+        self.allocator.destroy(self);
     }
 
     pub fn create(self: *Self, config: types.SandboxConfig) !void {

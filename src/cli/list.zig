@@ -15,7 +15,6 @@ pub const ListCommand = struct {
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        _ = allocator;
         if (self.logger) |log| {
             try log.info("Executing list command", .{});
         }
@@ -31,7 +30,45 @@ pub const ListCommand = struct {
             .lxc => {
                 if (self.logger) |log| {
                     try log.info("Listing LXC containers", .{});
-                    try log.warn("LXC backend temporarily disabled in CLI (no-op)", .{});
+                }
+
+                // Minimal sandbox config for backend init
+                const sandbox_config = core.types.SandboxConfig{
+                    .allocator = allocator,
+                    .name = try allocator.dupe(u8, "default"),
+                    .runtime_type = .lxc,
+                    .resources = core.types.ResourceLimits{
+                        .memory = 512 * 1024 * 1024,
+                        .cpu = 1.0,
+                        .disk = null,
+                        .network_bandwidth = null,
+                    },
+                    .security = null,
+                    .network = core.types.NetworkConfig{
+                        .bridge = try allocator.dupe(u8, "lxcbr0"),
+                        .ip = null,
+                        .gateway = null,
+                        .dns = null,
+                        .port_mappings = null,
+                    },
+                    .storage = null,
+                };
+                defer {
+                    allocator.free(sandbox_config.name);
+                    if (sandbox_config.network) |net| {
+                        if (net.bridge) |b| allocator.free(b);
+                    }
+                }
+
+                const lxc_backend = try backends.lxc.LxcBackend.init(allocator, sandbox_config);
+                defer lxc_backend.deinit();
+                if (self.logger) |log| lxc_backend.driver.logger = log;
+
+                const containers = try lxc_backend.list(allocator);
+                defer allocator.free(containers);
+                for (containers) |*c| {
+                    if (self.logger) |log| try log.info("- {s} ({any})", .{ c.name, c.state });
+                    c.deinit();
                 }
                 return;
             },

@@ -15,7 +15,6 @@ pub const DeleteCommand = struct {
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        _ = allocator;
         if (self.logger) |log| {
             try log.info("Executing delete command", .{});
         }
@@ -38,9 +37,51 @@ pub const DeleteCommand = struct {
             .lxc => {
                 if (self.logger) |log| {
                     try log.info("Deleting LXC container: {s}", .{container_id});
-                    try log.warn("LXC backend temporarily disabled in CLI (no-op)", .{});
                 }
-                return;
+                
+                // Create minimal sandbox config for LXC backend
+                const sandbox_config = core.types.SandboxConfig{
+                    .allocator = allocator,
+                    .name = try allocator.dupe(u8, container_id),
+                    .runtime_type = .lxc,
+                    .resources = core.types.ResourceLimits{
+                        .memory = 512 * 1024 * 1024,
+                        .cpu = 1.0,
+                        .disk = null,
+                        .network_bandwidth = null,
+                    },
+                    .security = null,
+                    .network = core.types.NetworkConfig{
+                        .bridge = try allocator.dupe(u8, "lxcbr0"),
+                        .ip = null,
+                        .gateway = null,
+                        .dns = null,
+                        .port_mappings = null,
+                    },
+                    .storage = null,
+                };
+                defer {
+                    allocator.free(sandbox_config.name);
+                    if (sandbox_config.network) |net| {
+                        if (net.bridge) |b| allocator.free(b);
+                    }
+                }
+                
+                // Initialize LXC backend
+                const lxc_backend = try backends.lxc.LxcBackend.init(allocator, sandbox_config);
+                defer lxc_backend.deinit();
+                
+                // Set logger if available
+                if (self.logger) |log| {
+                    lxc_backend.driver.logger = log;
+                }
+                
+                // Delete container
+                try lxc_backend.delete(container_id);
+                
+                if (self.logger) |log| {
+                    try log.info("LXC container deleted successfully: {s}", .{container_id});
+                }
             },
             .vm => {
                 if (self.logger) |log| {
