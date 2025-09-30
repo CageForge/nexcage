@@ -29,5 +29,11 @@ Notes:
 - Next: install LXC utilities in CI/smoke environment to exercise real flows
 - Next: extend error mapping and JSON parsing for `lxc-ls --format json`
 
+CI:
+- Added GitHub Actions workflow `.github/workflows/ci.yml`:
+  - Build with Zig 0.13
+  - Smoke run `help` and `list --runtime lxc`
+  - Enforced on PRs to `main`/`develop`
+
 Time spent: 1h 15m
 

@@ -2,6 +2,37 @@ name: CI
 
 on:
   push:
+    branches: [ main, develop, feature/**, feat/** ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Zig version
+        run: zig version
+
+      - name: Build
+        run: zig build
+
+      - name: Smoke test: help
+        run: ./zig-out/bin/proxmox-lxcri help
+
+      - name: Smoke test: list lxc (should not crash, may be empty)
+        run: ./zig-out/bin/proxmox-lxcri list --runtime lxc
+name: CI
+
+on:
+  push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
