@@ -40,6 +40,7 @@ Documentation (Architecture as Code):
   - `docs/architecture/OVERVIEW.md` (system and sequence)
   - `docs/architecture/BACKENDS.md` (backends/class)
   - ADRs: `ADR-000-Template.md`, `ADR-004-Mermaid-Architecture-Docs.md`
+  - `docs/architecture/MODULES.md`, `docs/architecture/DEPLOYMENT.md`
 
 Time spent: 1h 15m
 
