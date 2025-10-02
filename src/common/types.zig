@@ -837,6 +837,7 @@ pub const RuntimeConfig = struct {
     log_path: ?[]const u8 = null,
     log_level: LogLevel = .info,
     allocator: Allocator,
+    routing: ?[]RoutingRule = null,
 
     pub fn init(allocator: Allocator) !RuntimeConfig {
         return RuntimeConfig{
@@ -851,6 +852,10 @@ pub const RuntimeConfig = struct {
         if (self.log_path) |path| {
             self.allocator.free(path);
         }
+        if (self.routing) |rules| {
+            for (rules) |*r| r.deinit(self.allocator);
+            self.allocator.free(rules);
+        }
     }
 };
 
@@ -860,6 +865,16 @@ pub const JsonConfig = struct {
     storage: ?StorageConfig = null,
     network: ?NetworkConfig = null,
     default_runtime: ?[]const u8 = null,
+};
+
+pub const RoutingRule = struct {
+    pattern: []const u8,
+    runtime: []const u8,
+
+    pub fn deinit(self: *RoutingRule, allocator: Allocator) void {
+        allocator.free(self.pattern);
+        allocator.free(self.runtime);
+    }
 };
 
 pub const StorageConfig = struct {

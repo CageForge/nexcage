@@ -1022,14 +1022,11 @@ pub fn main() !void {
         var cfg = try loadConfig(allocator, null);
         defer cfg.deinit();
 
-        const host = if (cfg.proxmox.hosts) |hosts| (if (hosts.len > 0) hosts[0] else "localhost") else "localhost";
-        const port = cfg.proxmox.port orelse 8006;
-        const token = cfg.proxmox.token orelse "";
         const node = cfg.proxmox.node orelse "localhost";
         try temp_logger.info("Proxmox node from config: '{s}'", .{node});
 
         proxmox_client = try allocator.create(ProxmoxClient);
-        proxmox_client.?.* = try ProxmoxClient.init(allocator, host, port, token, node, &temp_logger);
+        proxmox_client.?.* = try ProxmoxClient.init(allocator, "/usr/bin/pct", node, &temp_logger);
     }
 
     // Create temporary logger for command execution
@@ -1062,12 +1059,9 @@ pub fn main() !void {
             defer cfg.deinit();
 
             // Create proxmox client
-            const host = if (cfg.proxmox.hosts) |hosts| (if (hosts.len > 0) hosts[0] else "localhost") else "localhost";
-            const port = cfg.proxmox.port orelse 8006;
-            const token = cfg.proxmox.token orelse "";
             const node = cfg.proxmox.node orelse "localhost";
 
-            var local_proxmox_client = ProxmoxClient.init(allocator, host, port, token, node, &temp_logger) catch |err| {
+            var local_proxmox_client = ProxmoxClient.init(allocator, "/usr/bin/pct", node, &temp_logger) catch |err| {
                 try temp_logger.info("Could not create proxmox client: {s}", .{@errorName(err)});
                 try std.io.getStdOut().writer().print("Could not connect to proxmox\n", .{});
                 return;

@@ -1,9 +1,13 @@
 {
     "proxmox": {
-        "hosts": ["proxmox.example.com"],
-        "port": 8006,
-        "token": "your-token",
-        "node": "node1"
+        "pct_path": "/usr/bin/pct",
+        "node": "node1",
+        "timeout": 30,
+        "legacy_api": {
+            "hosts": ["proxmox.example.com"],
+            "port": 8006,
+            "token": "your-token"
+        }
     },
     "runtime": {
         "root_path": "/var/lib/proxmox-lxcri",

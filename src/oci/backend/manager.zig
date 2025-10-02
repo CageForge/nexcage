@@ -118,6 +118,16 @@ pub const BackendManager = struct {
         }
     }
 
+    /// Select backend by container/image name using routing from config
+    pub fn selectBackendByName(_: *Self, cfg: *const @import("config").Config, name: []const u8) plugin.BackendType {
+        const ctype = cfg.getContainerType(name);
+        return switch (ctype) {
+            .crun => .crun,
+            .lxc => .proxmox_lxc,
+            .vm => .proxmox_vm,
+        };
+    }
+
     /// Start a container using the specified backend
     pub fn startContainer(self: *Self, backend_type: plugin.BackendType, container_id: []const u8) !void {
         if (self.getBackend(backend_type)) |backend| {

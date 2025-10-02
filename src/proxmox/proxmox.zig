@@ -26,6 +26,9 @@ const Headers = std.http.Headers;
 const HeaderIterator = std.http.Headers.Iterator;
 const API_PREFIX = "/api2/json";
 
+// Import PCT CLI client
+const pct_cli = @import("pct_cli.zig");
+
 const ContainerConfig = struct {
     id: []const u8,
     spec: []const u8,
@@ -55,42 +58,26 @@ pub const ContainerType = enum {
 
 pub const ProxmoxClient = struct {
     allocator: Allocator,
-    host: []const u8,
-    port: u16,
-    token: []const u8,
     node: []const u8,
     logger: *logger_mod.Logger,
-    client: Client,
+    pct_client: pct_cli.PCTClient,
 
-    pub fn init(allocator: Allocator, host: []const u8, port: u16, token: []const u8, node: []const u8, log_instance: *logger_mod.Logger) !ProxmoxClient {
+    pub fn init(allocator: Allocator, pct_path: []const u8, node: []const u8, log_instance: *logger_mod.Logger) !ProxmoxClient {
         try log_instance.info("ProxmoxClient.init called with node: '{s}' (len: {d})", .{ node, node.len });
-
-        const token_copy = try allocator.dupe(u8, token);
-        errdefer allocator.free(token_copy);
 
         const node_copy = try allocator.dupe(u8, node);
         errdefer allocator.free(node_copy);
 
         try log_instance.info("ProxmoxClient.init node_copy: '{s}' (len: {d})", .{ node_copy, node_copy.len });
 
-        const host_copy = try allocator.dupe(u8, host);
-        errdefer allocator.free(host_copy);
-
-        const hosts = try allocator.alloc([]const u8, 1);
-        errdefer allocator.free(hosts);
-        hosts[0] = host_copy;
-
-        var client = try Client.init(allocator, hosts, token_copy, log_instance, port, node_copy);
-        errdefer client.deinit();
+        var pct_client = try pct_cli.PCTClient.init(allocator, pct_path, node_copy, log_instance);
+        errdefer pct_client.deinit();
 
         const result = ProxmoxClient{
             .allocator = allocator,
-            .host = host_copy,
-            .port = port,
-            .token = token_copy,
             .node = node_copy,
             .logger = log_instance,
-            .client = client,
+            .pct_client = pct_client,
         };
 
         try log_instance.info("ProxmoxClient created with node: '{s}' (len: {d})", .{ result.node, result.node.len });
@@ -99,8 +86,7 @@ pub const ProxmoxClient = struct {
     }
 
     pub fn deinit(self: *ProxmoxClient) void {
-        self.client.deinit();
-        // host і token звільняються в Client.deinit
+        self.pct_client.deinit();
         // Звільняємо node, який належить ProxmoxClient
         if (self.node.len > 0) self.allocator.free(self.node);
     }
@@ -125,14 +111,11 @@ pub const ProxmoxClient = struct {
     }
 
     pub fn listContainers(self: *ProxmoxClient) ![]types.LXCContainer {
-        return self.listLXCs();
+        return self.pct_client.listContainers();
     }
 
     pub fn createContainer(self: *ProxmoxClient, container_id: []const u8, spec: []const u8, rootfs_path: ?[]const u8) !void {
         try self.logger.info("Creating container {s} with spec: {s}", .{ container_id, spec });
-        try self.logger.info("ProxmoxClient node: '{s}' (len: {d})", .{ self.node, self.node.len });
-        try self.logger.info("ProxmoxClient address: {*}", .{self});
-        try self.logger.info("ProxmoxClient.node address: {*}", .{&self.node});
 
         // Parse the spec string to extract VMID
         // For now, we'll generate a VMID based on container_id hash
@@ -142,93 +125,47 @@ pub const ProxmoxClient = struct {
 
         try self.logger.info("Generated VMID {d} for container {s}", .{ vmid, container_id });
 
-        // Create basic LXC configuration
-        const api_path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc", .{self.node});
-        defer self.allocator.free(api_path);
+        // Create LXC configuration
+        var config = types.LXCConfig{
+            .hostname = try self.allocator.dupe(u8, container_id),
+            .ostype = try self.allocator.dupe(u8, "ubuntu"),
+            .memory = 512,
+            .swap = 0,
+            .cores = 1,
+            .rootfs = try self.allocator.dupe(u8, "local-lvm:8"),
+            .net0 = types.NetworkConfig{
+                .name = try self.allocator.dupe(u8, "eth0"),
+                .bridge = try self.allocator.dupe(u8, "vmbr0"),
+                .ip = try self.allocator.dupe(u8, "dhcp"),
+                .allocator = self.allocator,
+            },
+            .onboot = false,
+            .protection = false,
+            .start = true,
+            .template = false,
+            .unprivileged = true,
+            .features = .{},
+        };
+        defer config.deinit(self.allocator);
 
-        // Basic LXC configuration
-        var config = std.StringHashMap([]const u8).init(self.allocator);
-        defer {
-            var iter = config.iterator();
-            while (iter.next()) |entry| {
-                self.allocator.free(entry.value_ptr.*);
-            }
-            config.deinit();
-        }
-
-        try config.put("vmid", try std.fmt.allocPrint(self.allocator, "{d}", .{vmid}));
-        try config.put("hostname", try self.allocator.dupe(u8, container_id));
-        try config.put("ostype", try self.allocator.dupe(u8, "ubuntu"));
-        try config.put("memory", try self.allocator.dupe(u8, "512"));
-        try config.put("cores", try self.allocator.dupe(u8, "1"));
-        try config.put("rootfs", try std.fmt.allocPrint(self.allocator, "local-lvm:8", .{}));
-        try config.put("net0", try self.allocator.dupe(u8, "name=eth0,bridge=vmbr0,ip=dhcp"));
-        try config.put("unprivileged", try self.allocator.dupe(u8, "1"));
-        try config.put("onboot", try self.allocator.dupe(u8, "0"));
-
-        // Якщо є rootfs_path, створюємо темплейт
+        // Set template if provided
         if (rootfs_path) |rootfs| {
             try self.logger.info("Creating template from rootfs: {s}", .{rootfs});
             const template_name = try std.fmt.allocPrint(self.allocator, "{s}-template", .{container_id});
             defer self.allocator.free(template_name);
 
-            var template_info = try template_ops.createTemplateFromRootfs(&self.client, rootfs, template_name);
-            defer template_info.deinit(self.allocator);
-
             const ostemplate = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}.tar.zst", .{template_name});
             defer self.allocator.free(ostemplate);
+            config.ostemplate = ostemplate;
 
-            try config.put("ostemplate", ostemplate);
             try self.logger.info("Using template: {s}", .{ostemplate});
         } else {
-            // Використовуємо існуючий темплейт або створюємо без темплейту
-            try self.logger.info("No rootfs provided, checking for available templates", .{});
-
-            const templates = try template_ops.listAvailableTemplates(&self.client);
-            defer {
-                for (templates) |*template| {
-                    template.deinit(self.allocator);
-                }
-                self.allocator.free(templates);
-            }
-
-            if (templates.len > 0) {
-                const template = templates[0];
-                const ostemplate = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}", .{template.name});
-                defer self.allocator.free(ostemplate);
-
-                try config.put("ostemplate", ostemplate);
-                try self.logger.info("Using available template: {s}", .{ostemplate});
-            } else {
-                try self.logger.warn("No templates available, creating container without template", .{});
-            }
+            // Use default template
+            config.ostemplate = try self.allocator.dupe(u8, "local:vztmpl/ubuntu-20.04-standard_20.04-1_amd64.tar.gz");
         }
 
-        // Convert configuration to JSON manually
-        var body = std.ArrayList(u8).init(self.allocator);
-        defer body.deinit();
-
-        try body.append('{');
-        var first = true;
-        var iter = config.iterator();
-        while (iter.next()) |entry| {
-            if (!first) try body.append(',');
-            first = false;
-
-            try body.writer().print("\"{s}\":\"{s}\"", .{ entry.key_ptr.*, entry.value_ptr.* });
-        }
-        try body.append('}');
-
-        const body_str = try body.toOwnedSlice();
-        defer self.allocator.free(body_str);
-
-        try self.logger.info("Sending LXC creation request to {s}", .{api_path});
-        try self.logger.info("Node: {s}, API path: {s}", .{ self.node, api_path });
-        try self.logger.info("Request body: {s}", .{body_str});
-
-        // Send request to create container
-        const response = try self.client.makeRequest(.POST, api_path, body_str);
-        defer self.allocator.free(response);
+        // Create container using PCT CLI
+        try self.pct_client.createContainer(vmid, config);
 
         try self.logger.info("LXC container {s} created successfully with VMID {d}", .{ container_id, vmid });
     }
@@ -236,42 +173,49 @@ pub const ProxmoxClient = struct {
     pub fn startContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32) !void {
         try self.logger.info("Starting container {d}", .{vmid});
         switch (container_type) {
-            .lxc => try lxc_ops.startLXC(&self.client, self.node, vmid),
-            .qemu => try vm_ops.startVM(&self.client, self.node, vmid),
+            .lxc => try self.pct_client.startContainer(vmid),
+            .qemu => {
+                try self.logger.warn("VM start not supported via PCT CLI, only LXC containers are supported", .{});
+                return Error.PCTOperationFailed;
+            },
         }
     }
 
     pub fn stopContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32, force: ?bool) !void {
         try self.logger.info("Stopping container {d} (force: {?})", .{ vmid, force });
         switch (container_type) {
-            .lxc => try lxc_ops.stopLXC(&self.client, self.node, vmid),
-            .qemu => try vm_ops.stopVM(&self.client, self.node, vmid, if (force) |f| if (f) @as(?i64, 0) else null else null),
+            .lxc => try self.pct_client.stopContainer(vmid),
+            .qemu => {
+                try self.logger.warn("VM stop not supported via PCT CLI, only LXC containers are supported", .{});
+                return Error.PCTOperationFailed;
+            },
         }
     }
 
     pub fn deleteContainer(self: *ProxmoxClient, container_type: ContainerType, vmid: u32) !void {
         try self.logger.info("Deleting container {d}", .{vmid});
         switch (container_type) {
-            .lxc => try lxc_ops.deleteLXC(&self.client, self.node, vmid),
-            .qemu => try vm_ops.deleteVM(&self.client, self.node, vmid),
+            .lxc => try self.pct_client.deleteContainer(vmid),
+            .qemu => {
+                try self.logger.warn("VM delete not supported via PCT CLI, only LXC containers are supported", .{});
+                return Error.PCTOperationFailed;
+            },
         }
     }
 
     pub fn getContainerStatus(self: *ProxmoxClient, container_type: ContainerType, vmid: u32) !types.ContainerStatus {
         return switch (container_type) {
-            .lxc => switch (try lxc_ops.getLXCStatus(&self.client, self.client.node, vmid)) {
-                .running => .running,
-                .stopped => .stopped,
-                .paused => .paused,
-                .unknown => .unknown,
+            .lxc => try self.pct_client.getContainerStatus(vmid),
+            .qemu => {
+                try self.logger.warn("VM status not supported via PCT CLI, only LXC containers are supported", .{});
+                return types.ContainerStatus.unknown;
             },
-            .qemu => try vm_ops.getVMStatus(&self.client, self.client.node, vmid),
         };
     }
 
     // LXC специфічні операції
     pub fn listLXCs(self: *ProxmoxClient) ![]types.LXCContainer {
-        return lxc_ops.listLXCs(&self.client);
+        return self.pct_client.listContainers();
     }
 
     // VM специфічні операції

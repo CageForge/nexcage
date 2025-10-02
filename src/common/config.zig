@@ -127,6 +127,28 @@ pub const Config = struct {
             if (runtime.log_path) |path| {
                 config.log_path = try allocator.dupe(u8, path);
             }
+            if (runtime.routing) |rules| {
+                // copy rules into container_config: map runtime string -> patterns
+                // We will convert routing rules into crun_name_patterns and default_container_type
+                var crun_patterns = std.ArrayList([]const u8).init(allocator);
+                defer crun_patterns.deinit();
+
+                const default_type: types.ContainerType = .lxc;
+
+                for (rules) |rule| {
+                    if (std.mem.eql(u8, rule.runtime, "crun") or std.mem.eql(u8, rule.runtime, "runc")) {
+                        try crun_patterns.append(try allocator.dupe(u8, rule.pattern));
+                    } else if (std.mem.eql(u8, rule.runtime, "lxc")) {
+                        // keep default as lxc, nothing to do
+                    }
+                }
+
+                // apply patterns
+                const arr = try allocator.alloc([]const u8, crun_patterns.items.len);
+                for (crun_patterns.items, 0..) |p, i| arr[i] = p;
+                config.container_config.crun_name_patterns = arr;
+                config.container_config.default_container_type = default_type;
+            }
             // log_level не optional, працюємо напряму
             // if (runtime.log_level) |level| {
             //     ...

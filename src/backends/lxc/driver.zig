@@ -38,51 +38,64 @@ pub const LxcDriver = struct {
         if (self.logger) |log| {
             try log.info("Creating LXC container: {s}", .{config.name});
         }
+        // Generate VMID from name (Proxmox requires numeric vmid)
+        var hasher = std.hash.Wyhash.init(0);
+        hasher.update(config.name);
+        const vmid_num: u32 = @truncate(hasher.final());
+        const vmid_calc: u32 = (vmid_num % 900000) + 100; // 100..900099
+        const vmid = try std.fmt.allocPrint(self.allocator, "{d}", .{vmid_calc});
+        defer self.allocator.free(vmid);
 
-        // Convert SandboxConfig to LxcConfig
-        var lxc_config = try self.convertToLxcConfig(config);
-        defer lxc_config.deinit();
+        // Map image to ostemplate (simple heuristic)
+        const image = if (config.image) |img| img else "ubuntu-20.04";
+        const ostemplate = blk: {
+            if (std.mem.indexOf(u8, image, "ubuntu-20.04") != null) {
+                break :blk "local:vztmpl/ubuntu-20.04-standard_20.04-1_amd64.tar.gz";
+            }
+            if (std.mem.indexOf(u8, image, "debian-11") != null) {
+                break :blk "local:vztmpl/debian-11-standard_11.7-1_amd64.tar.gz";
+            }
+            break :blk "local:vztmpl/ubuntu-20.04-standard_20.04-1_amd64.tar.gz";
+        };
 
-        // Build lxc-create command
+        // pct create <vmid> <ostemplate> [--hostname NAME] [--memory MB] [--cores N]
         var args = std.ArrayList([]const u8).init(self.allocator);
         defer args.deinit();
-        
-        try args.append("lxc-create");
-        try args.append("-n");
-        try args.append(lxc_config.name);
-        try args.append("-t");
-        try args.append(lxc_config.template);
-        try args.append("--");
-        
-        // Add template-specific arguments
-        if (lxc_config.arch.len > 0) {
-            try args.append("--arch");
-            try args.append(lxc_config.arch);
-        }
-        
-        if (lxc_config.dist.len > 0) {
-            try args.append("--dist");
-            try args.append(lxc_config.dist);
-        }
-        
-        if (lxc_config.release.len > 0) {
-            try args.append("--release");
-            try args.append(lxc_config.release);
+
+        try args.append("/usr/sbin/pct");
+        try args.append("create");
+        try args.append(vmid);
+        try args.append(ostemplate);
+
+        try args.append("--hostname");
+        try args.append(config.name);
+
+        if (config.resources) |res| {
+            if (res.memory) |mem_bytes| {
+                const mem_mb = mem_bytes / (1024 * 1024);
+                const mem_str = try std.fmt.allocPrint(self.allocator, "{d}", .{mem_mb});
+                defer self.allocator.free(mem_str);
+                try args.append("--memory");
+                try args.append(mem_str);
+            }
+            if (res.cpu) |cpu| {
+                const cores: u32 = if (cpu < 1.0) 1 else @intFromFloat(cpu);
+                const cores_str = try std.fmt.allocPrint(self.allocator, "{d}", .{cores});
+                defer self.allocator.free(cores_str);
+                try args.append("--cores");
+                try args.append(cores_str);
+            }
         }
 
-        // Execute lxc-create command
         const result = try self.runCommand(args.items);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
-
         if (result.exit_code != 0) {
-            if (self.logger) |log| try log.err("Failed to create LXC container: {s}", .{result.stderr});
-            return core.Error.RuntimeError;
+            if (self.logger) |log| try log.err("Failed to create LXC via pct: {s}", .{result.stderr});
+            return mapLxcError(result.exit_code, result.stderr);
         }
 
-        if (self.logger) |log| {
-            try log.info("LXC container created successfully: {s}", .{config.name});
-        }
+        if (self.logger) |log| try log.info("LXC container created via pct: {s} (vmid {s})", .{ config.name, vmid });
     }
 
     pub fn start(self: *Self, container_id: []const u8) !void {
@@ -90,14 +103,13 @@ pub const LxcDriver = struct {
             try log.info("Starting LXC container: {s}", .{container_id});
         }
 
-        // Build lxc-start command
-        const args = [_][]const u8{
-            "lxc-start",
-            "-n", container_id,
-            "-d", // daemon mode
-        };
+        // Resolve VMID by name via pct list
+        const vmid = try self.getVmidByName(container_id);
+        defer self.allocator.free(vmid);
 
-        // Execute lxc-start command
+        // Build pct start command
+        const args = [_][]const u8{ "/usr/sbin/pct", "start", vmid };
+
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
@@ -108,7 +120,7 @@ pub const LxcDriver = struct {
                 return core.Error.UnsupportedOperation;
             }
             if (self.logger) |log| try log.err("Failed to start LXC container {s}: {s}", .{ container_id, result.stderr });
-            return core.Error.RuntimeError;
+            return mapLxcError(result.exit_code, result.stderr);
         }
 
         if (self.logger) |log| {
@@ -121,11 +133,12 @@ pub const LxcDriver = struct {
             try log.info("Stopping LXC container: {s}", .{container_id});
         }
 
-        // Build lxc-stop command
-        const args = [_][]const u8{
-            "lxc-stop",
-            "-n", container_id,
-        };
+        // Resolve VMID by name via pct list
+        const vmid = try self.getVmidByName(container_id);
+        defer self.allocator.free(vmid);
+
+        // Build pct stop command
+        const args = [_][]const u8{ "/usr/sbin/pct", "stop", vmid };
 
         // Execute lxc-stop command
         const result = try self.runCommand(&args);
@@ -138,7 +151,7 @@ pub const LxcDriver = struct {
                 return core.Error.UnsupportedOperation;
             }
             if (self.logger) |log| try log.err("Failed to stop LXC container {s}: {s}", .{ container_id, result.stderr });
-            return core.Error.RuntimeError;
+            return mapLxcError(result.exit_code, result.stderr);
         }
 
         if (self.logger) |log| {
@@ -159,13 +172,13 @@ pub const LxcDriver = struct {
             // Continue with deletion even if stop fails
         };
 
-        // Build lxc-destroy command
-        const args = [_][]const u8{
-            "lxc-destroy",
-            "-n", container_id,
-        };
+        // Resolve VMID by name via pct list
+        const vmid = try self.getVmidByName(container_id);
+        defer self.allocator.free(vmid);
 
-        // Execute lxc-destroy command
+        // Build pct destroy command
+        const args = [_][]const u8{ "/usr/sbin/pct", "destroy", vmid };
+
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
@@ -176,7 +189,7 @@ pub const LxcDriver = struct {
                 return core.Error.UnsupportedOperation;
             }
             if (self.logger) |log| try log.err("Failed to delete LXC container {s}: {s}", .{ container_id, result.stderr });
-            return core.Error.RuntimeError;
+            return mapLxcError(result.exit_code, result.stderr);
         }
 
         if (self.logger) |log| {
@@ -200,18 +213,25 @@ pub const LxcDriver = struct {
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
 
-        if (result.exit_code != 0) {
-            if (result.exit_code == 127) {
-                if (self.logger) |log| try log.warn("lxc-ls not found; returning empty list", .{});
-                return allocator.alloc(interfaces.ContainerInfo, 0);
-            }
-            if (self.logger) |log| try log.err("Failed to list LXC containers: {s}", .{result.stderr});
-            return core.Error.RuntimeError;
+        if (result.exit_code == 0) {
+            const containers = try parseLxcLsJson(allocator, result.stdout);
+            if (self.logger) |log| try log.info("Listed {d} LXC containers (lxc-ls)", .{containers.len});
+            return containers;
         }
 
-        const containers = try parseLxcLsJson(allocator, result.stdout);
-        if (self.logger) |log| try log.info("Listed {d} LXC containers", .{containers.len});
-        return containers;
+        // Fallback to pct list (Proxmox VE)
+        if (self.logger) |log| try log.warn("lxc-ls failed, falling back to pct list", .{});
+        const pct_args = [_][]const u8{ "/usr/sbin/pct", "list" };
+        const pct_res = try self.runCommand(&pct_args);
+        defer self.allocator.free(pct_res.stdout);
+        defer self.allocator.free(pct_res.stderr);
+        if (pct_res.exit_code != 0) {
+            if (self.logger) |log| try log.err("pct list failed: {s}", .{pct_res.stderr});
+            return core.Error.RuntimeError;
+        }
+        const pct_containers = try parsePctList(allocator, pct_res.stdout);
+        if (self.logger) |log| try log.info("Listed {d} LXC containers (pct)", .{pct_containers.len});
+        return pct_containers;
     }
 
     pub fn info(self: *Self, container_id: []const u8, allocator: std.mem.Allocator) !interfaces.ContainerInfo {
@@ -261,13 +281,17 @@ pub const LxcDriver = struct {
             try log.info("Executing command in LXC container {s}: {s}", .{ container_id, command[0] });
         }
 
-        // Build lxc-attach command
+        // Resolve VMID by name via pct list
+        const vmid = try self.getVmidByName(container_id);
+        defer self.allocator.free(vmid);
+
+        // Build pct exec command
         var args = std.ArrayList([]const u8).init(allocator);
         defer args.deinit();
-        
-        try args.append("lxc-attach");
-        try args.append("-n");
-        try args.append(container_id);
+
+        try args.append("/usr/sbin/pct");
+        try args.append("exec");
+        try args.append(vmid);
         try args.append("--");
         
         // Add the command to execute
@@ -305,8 +329,29 @@ pub const LxcDriver = struct {
         return interfaces.ContainerState.unknown;
     }
 
+    fn mapLxcError(exit_code: u8, stderr: []const u8) core.Error {
+        _ = exit_code;
+        const s = stderr;
+        if (std.mem.indexOf(u8, s, "No such file or directory") != null or
+            std.mem.indexOf(u8, s, "does not exist") != null or
+            std.mem.indexOf(u8, s, "not found") != null)
+        {
+            return core.Error.NotFound;
+        }
+        if (std.mem.indexOf(u8, s, "permission") != null or std.mem.indexOf(u8, s, "Permission denied") != null) {
+            return core.Error.PermissionDenied;
+        }
+        if (std.mem.indexOf(u8, s, "invalid") != null or std.mem.indexOf(u8, s, "usage") != null) {
+            return core.Error.InvalidInput;
+        }
+        if (std.mem.indexOf(u8, s, "timeout") != null or std.mem.indexOf(u8, s, "timed out") != null) {
+            return core.Error.Timeout;
+        }
+        return core.Error.RuntimeError;
+    }
+
     fn parseLxcLsJson(allocator: std.mem.Allocator, json_bytes: []const u8) ![]interfaces.ContainerInfo {
-        var pr = std.json.parseFromSlice(std.json.Value, allocator, json_bytes, .{}) catch |err| {
+        var pr = std.json.parseFromSlice(std.json.Value, allocator, json_bytes, .{}) catch {
             return allocator.alloc(interfaces.ContainerInfo, 0);
         };
         defer pr.deinit();
@@ -363,6 +408,62 @@ pub const LxcDriver = struct {
             containers = trimmed;
         }
         return containers;
+    }
+
+    fn parsePctList(allocator: std.mem.Allocator, text: []const u8) ![]interfaces.ContainerInfo {
+        // pct list typical table with header: VMID NAME STATUS ...
+        var lines = std.mem.splitScalar(u8, text, '\n');
+        var items = try allocator.alloc(interfaces.ContainerInfo, 0);
+        var count: usize = 0;
+        // skip header
+        var first = true;
+        while (lines.next()) |line| {
+            const trimmed = std.mem.trim(u8, line, " \t\r");
+            if (trimmed.len == 0) continue;
+            if (first) { first = false; continue; }
+            // split by whitespace columns
+            var it = std.mem.tokenizeScalar(u8, trimmed, ' ');
+            const vmid = it.next() orelse continue;
+            const name = it.next() orelse vmid;
+            const status = it.next() orelse "unknown";
+            const state = mapState(status);
+            // grow array
+            const new_len = count + 1;
+            const new_items = try allocator.realloc(items, new_len);
+            items = new_items;
+            items[count] = interfaces.ContainerInfo{
+                .allocator = allocator,
+                .id = try allocator.dupe(u8, name),
+                .name = try allocator.dupe(u8, name),
+                .state = state,
+                .runtime_type = .lxc,
+            };
+            count = new_len;
+        }
+        return items;
+    }
+
+    fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
+        const pct_args = [_][]const u8{ "/usr/sbin/pct", "list" };
+        const pct_res = try self.runCommand(&pct_args);
+        defer self.allocator.free(pct_res.stdout);
+        defer self.allocator.free(pct_res.stderr);
+        if (pct_res.exit_code != 0) return core.Error.RuntimeError;
+
+        var lines = std.mem.splitScalar(u8, pct_res.stdout, '\n');
+        var first = true;
+        while (lines.next()) |line| {
+            const trimmed = std.mem.trim(u8, line, " \t\r");
+            if (trimmed.len == 0) continue;
+            if (first) { first = false; continue; }
+            var it = std.mem.tokenizeScalar(u8, trimmed, ' ');
+            const vmid = it.next() orelse continue;
+            const nm = it.next() orelse vmid;
+            if (std.mem.eql(u8, nm, name)) {
+                return self.allocator.dupe(u8, vmid);
+            }
+        }
+        return core.Error.NotFound;
     }
 
     fn convertToLxcConfig(self: *Self, config: types.SandboxConfig) !lxc_types.LxcConfig {

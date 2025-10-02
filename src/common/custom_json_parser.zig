@@ -131,7 +131,14 @@ fn convertValue(comptime T: type, value: *zig_json.JsonValue, allocator: std.mem
                         }
                         return result;
                     } else {
-                        @compileError("Unsupported slice type: " ++ @typeName(ptr_info.child));
+                        // Generic slice of arbitrary child type (e.g., slice of structs)
+                        if (value.type != .array) return error.InvalidType;
+                        const arr = value.array();
+                        var result = try allocator.alloc(ptr_info.child, arr.len());
+                        for (0..arr.len()) |i| {
+                            result[i] = try convertValue(ptr_info.child, arr.get(i), allocator);
+                        }
+                        return result;
                     }
                 },
                 else => return error.UnsupportedType,
@@ -197,8 +204,18 @@ fn parseValue(comptime T: type, allocator: std.mem.Allocator, node: zig_json.Val
         .Pointer => |ptr_info| {
             switch (ptr_info.size) {
                 .Slice => {
-                    if (node != .string) return error.InvalidType;
-                    return try allocator.dupe(u8, node.string);
+                    // handle string slice of u8
+                    if (@typeInfo(ptr_info.child) == .Int and ptr_info.child == u8) {
+                        if (node != .string) return error.InvalidType;
+                        return try allocator.dupe(u8, node.string);
+                    }
+                    // generic slice of child type (e.g., struct)
+                    if (node != .array) return error.InvalidType;
+                    var result = try allocator.alloc(ptr_info.child, node.array.items.len);
+                    for (node.array.items, 0..) |item, i| {
+                        result[i] = try parseValue(ptr_info.child, allocator, item, unknown_fields);
+                    }
+                    return result;
                 },
                 else => @compileError("Unsupported pointer type"),
             }

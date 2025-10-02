@@ -24,11 +24,24 @@ jobs:
       - name: Build
         run: zig build
 
+      - name: Run unit tests
+        run: zig build test
+
       - name: Smoke test: help
         run: ./zig-out/bin/proxmox-lxcri help
 
       - name: Smoke test: list lxc (should not crash, may be empty)
         run: ./zig-out/bin/proxmox-lxcri list --runtime lxc
+
+      - name: Test: start should fail without LXC tools
+        run: |
+          set -euo pipefail
+          if ./zig-out/bin/proxmox-lxcri start --name ci-test --runtime lxc; then
+            echo "Expected failure when LXC tools are absent" >&2
+            exit 1
+          else
+            echo "Negative test passed (start failed as expected)"
+          fi
 name: CI
 
 on:

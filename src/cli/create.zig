@@ -31,9 +31,15 @@ pub const CreateCommand = struct {
         if (self.logger) |log| try log.info("Creating container {s} with image {s}", .{ container_id, image });
 
         // Create sandbox configuration (aligned with current core.types)
+        const name_buf = try allocator.dupe(u8, container_id);
+        defer allocator.free(name_buf);
+
+        const bridge_buf = try allocator.dupe(u8, "lxcbr0");
+        defer allocator.free(bridge_buf);
+
         const sandbox_config = core.types.SandboxConfig{
             .allocator = allocator,
-            .name = try allocator.dupe(u8, container_id),
+            .name = name_buf,
             .runtime_type = options.runtime_type orelse .lxc,
             .resources = core.types.ResourceLimits{
                 .memory = 512 * 1024 * 1024,
@@ -43,7 +49,7 @@ pub const CreateCommand = struct {
             },
             .security = null,
             .network = core.types.NetworkConfig{
-                .bridge = try allocator.dupe(u8, "lxcbr0"),
+                .bridge = bridge_buf,
                 .ip = null,
                 .gateway = null,
                 .dns = null,

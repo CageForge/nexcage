@@ -118,7 +118,7 @@ pub fn build(b: *std.Build) void {
     // Add a simple C file to make the library valid
     crun_lib.addCSourceFiles(.{
         .files = &.{
-            "src/crun/crun_stub.c",
+            "legacy/src/crun/crun_stub.c",
         },
         .flags = &.{
             "-std=c99",
@@ -302,7 +302,7 @@ pub fn build(b: *std.Build) void {
 
     // BFC (Binary File Container) module
     const bfc_mod = b.addModule("bfc", .{
-        .root_source_file = b.path("src/bfc/mod.zig"),
+        .root_source_file = b.path("legacy/src/bfc/mod.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },
@@ -312,7 +312,7 @@ pub fn build(b: *std.Build) void {
 
     // Crun module
     const crun_mod = b.addModule("crun", .{
-        .root_source_file = b.path("src/crun/mod.zig"),
+        .root_source_file = b.path("legacy/src/crun/mod.zig"),
         .imports = &.{
             .{ .name = "types", .module = types_mod },
             .{ .name = "error", .module = error_mod },

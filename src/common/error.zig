@@ -40,6 +40,14 @@ pub const Error = error{
     ProxmoxPermissionDenied,
     ProxmoxInternalError,
 
+    // PCT CLI errors
+    PCTNotAvailable,
+    PCTCommandFailed,
+    PCTOperationFailed,
+    PCTInvalidOutput,
+    PCTTimeout,
+    PCTPermissionDenied,
+
     // CRI errors
     PodNotFound,
     ContainerNotFound,
