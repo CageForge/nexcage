@@ -24,6 +24,7 @@ pub const SandboxConfig = struct {
     allocator: std.mem.Allocator,
     name: []const u8,
     runtime_type: RuntimeType,
+    image: ?[]const u8 = null,
     resources: ?ResourceLimits = null,
     security: ?SecurityConfig = null,
     network: ?NetworkConfig = null,
@@ -42,6 +43,14 @@ pub const SandboxConfig = struct {
 pub const RuntimeType = enum {
     lxc,
     qemu,
+    crun,
+    runc,
+    vm,
+};
+
+/// Container type enumeration
+pub const ContainerType = enum {
+    lxc,
     crun,
     runc,
     vm,
@@ -227,6 +236,19 @@ pub const ConfigError = error{
     FileNotFound,
     PermissionDenied,
     ParseError,
+};
+
+/// Container configuration
+pub const ContainerConfig = struct {
+    crun_name_patterns: []const []const u8,
+    default_container_type: ContainerType,
+
+    pub fn deinit(self: *ContainerConfig, allocator: std.mem.Allocator) void {
+        for (self.crun_name_patterns) |pattern| {
+            allocator.free(pattern);
+        }
+        allocator.free(self.crun_name_patterns);
+    }
 };
 
 /// Signal constants

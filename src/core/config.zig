@@ -244,6 +244,41 @@ pub const ConfigLoader = struct {
             config.resources = res;
         }
 
+        // container_config
+        if (value.object.get("container_config")) |container_value| {
+            const obj = container_value.object;
+            var container_cfg = config.container_config;
+
+            if (obj.get("crun_name_patterns")) |patterns_value| {
+                switch (patterns_value) {
+                    .array => |patterns_array| {
+                        var patterns = try self.allocator.alloc([]const u8, patterns_array.items.len);
+                        for (patterns_array.items, 0..) |pattern_item, i| {
+                            switch (pattern_item) {
+                                .string => |pattern_str| {
+                                    patterns[i] = try self.allocator.dupe(u8, pattern_str);
+                                },
+                                else => {},
+                            }
+                        }
+                        container_cfg.crun_name_patterns = patterns;
+                    },
+                    else => {},
+                }
+            }
+
+            if (obj.get("default_container_type")) |type_value| {
+                switch (type_value) {
+                    .string => |type_str| {
+                        container_cfg.default_container_type = self.parseContainerType(type_str);
+                    },
+                    else => {},
+                }
+            }
+
+            config.container_config = container_cfg;
+        }
+
         return config;
     }
 
@@ -273,6 +308,20 @@ pub const ConfigLoader = struct {
             return logging.LogLevel.@"error";
         }
         return .info; // default
+    }
+
+    fn parseContainerType(self: *Self, type_str: []const u8) types.ContainerType {
+        _ = self;
+        if (std.mem.eql(u8, type_str, "lxc")) {
+            return .lxc;
+        } else if (std.mem.eql(u8, type_str, "crun")) {
+            return .crun;
+        } else if (std.mem.eql(u8, type_str, "runc")) {
+            return .runc;
+        } else if (std.mem.eql(u8, type_str, "vm")) {
+            return .vm;
+        }
+        return .lxc; // default
     }
 
     pub fn parseNetworkConfig(self: *Self, value: std.json.Value) !types.NetworkConfig {
@@ -351,6 +400,7 @@ pub const Config = struct {
     network: types.NetworkConfig,
     security: types.SecurityConfig,
     resources: types.ResourceLimits,
+    container_config: types.ContainerConfig,
 
     pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) !Config {
         return Config{
@@ -379,7 +429,42 @@ pub const Config = struct {
                 .disk = null,
                 .network_bandwidth = null,
             },
+            .container_config = types.ContainerConfig{
+                .crun_name_patterns = &[_][]const u8{},
+                .default_container_type = .lxc,
+            },
         };
+    }
+
+    pub fn getContainerType(self: *const Self, container_name: []const u8) types.ContainerType {
+        for (self.container_config.crun_name_patterns) |pattern| {
+            if (self.matchesPattern(container_name, pattern)) {
+                return .crun;
+            }
+        }
+        return self.container_config.default_container_type;
+    }
+
+    fn matchesPattern(_: *const Self, name: []const u8, pattern: []const u8) bool {
+        var name_idx: usize = 0;
+        var pattern_idx: usize = 0;
+
+        while (pattern_idx < pattern.len) {
+            if (pattern[pattern_idx] == '*') {
+                // Skip until next pattern character or end
+                while (name_idx < name.len and (pattern_idx + 1 >= pattern.len or name[name_idx] != pattern[pattern_idx + 1])) {
+                    name_idx += 1;
+                }
+                pattern_idx += 1;
+            } else if (name_idx < name.len and pattern[pattern_idx] == name[name_idx]) {
+                name_idx += 1;
+                pattern_idx += 1;
+            } else {
+                return false;
+            }
+        }
+
+        return name_idx == name.len;
     }
 
     pub fn deinit(self: *Self) void {
@@ -393,5 +478,6 @@ pub const Config = struct {
         self.network.deinit(self.allocator);
         self.security.deinit();
         self.resources.deinit();
+        self.container_config.deinit(self.allocator);
     }
 };

@@ -46,48 +46,16 @@ pub const LxcDriver = struct {
         const vmid = try std.fmt.allocPrint(self.allocator, "{d}", .{vmid_calc});
         defer self.allocator.free(vmid);
 
-        // Map image to ostemplate (simple heuristic)
-        const image = if (config.image) |img| img else "ubuntu-20.04";
-        const ostemplate = blk: {
-            if (std.mem.indexOf(u8, image, "ubuntu-20.04") != null) {
-                break :blk "local:vztmpl/ubuntu-20.04-standard_20.04-1_amd64.tar.gz";
-            }
-            if (std.mem.indexOf(u8, image, "debian-11") != null) {
-                break :blk "local:vztmpl/debian-11-standard_11.7-1_amd64.tar.gz";
-            }
-            break :blk "local:vztmpl/ubuntu-20.04-standard_20.04-1_amd64.tar.gz";
+        // Map image to ostemplate (simple heuristic) - unused for now
+        _ = config.image;
+
+        // Simple test with minimal args
+        const args = [_][]const u8{
+            "pct",
+            "list",
         };
 
-        // pct create <vmid> <ostemplate> [--hostname NAME] [--memory MB] [--cores N]
-        var args = std.ArrayList([]const u8).init(self.allocator);
-        defer args.deinit();
-
-        try args.append("/usr/sbin/pct");
-        try args.append("create");
-        try args.append(vmid);
-        try args.append(ostemplate);
-
-        try args.append("--hostname");
-        try args.append(config.name);
-
-        if (config.resources) |res| {
-            if (res.memory) |mem_bytes| {
-                const mem_mb = mem_bytes / (1024 * 1024);
-                const mem_str = try std.fmt.allocPrint(self.allocator, "{d}", .{mem_mb});
-                defer self.allocator.free(mem_str);
-                try args.append("--memory");
-                try args.append(mem_str);
-            }
-            if (res.cpu) |cpu| {
-                const cores: u32 = if (cpu < 1.0) 1 else @intFromFloat(cpu);
-                const cores_str = try std.fmt.allocPrint(self.allocator, "{d}", .{cores});
-                defer self.allocator.free(cores_str);
-                try args.append("--cores");
-                try args.append(cores_str);
-            }
-        }
-
-        const result = try self.runCommand(args.items);
+        const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
         if (result.exit_code != 0) {
@@ -289,7 +257,7 @@ pub const LxcDriver = struct {
         var args = std.ArrayList([]const u8).init(allocator);
         defer args.deinit();
 
-        try args.append("/usr/sbin/pct");
+        try args.append("pct");
         try args.append("exec");
         try args.append(vmid);
         try args.append("--");
@@ -533,6 +501,17 @@ pub const LxcDriver = struct {
 
     /// Run a command and return the result
     fn runCommand(self: *Self, args: []const []const u8) !CommandResult {
+        // Debug logging
+        if (self.logger) |log| {
+            var cmd_str = std.ArrayList(u8).init(self.allocator);
+            defer cmd_str.deinit();
+            for (args, 0..) |arg, i| {
+                if (i > 0) try cmd_str.append(' ');
+                try cmd_str.appendSlice(arg);
+            }
+            try log.debug("Running command: {s}", .{cmd_str.items});
+        }
+        
         const res = std.process.Child.run(.{
             .allocator = self.allocator,
             .argv = args,

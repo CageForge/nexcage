@@ -29,21 +29,41 @@ pub const RunCommand = struct {
 
         // Load configuration for backend routing
         var config_loader = core.ConfigLoader.init(allocator);
-        const cfg = try config_loader.loadDefault();
+        var cfg = try config_loader.loadDefault();
         defer cfg.deinit();
 
-        // Initialize BackendManager
-        var backend_manager = try .init(allocator, &cfg.logger);
-        defer backend_manager.deinit();
-        try backend_manager.initializePlugins();
-
-        // Select backend based on container name using routing
-        const backend_type = backend_manager.selectBackendByName(&cfg, container_id);
-        std.debug.print("Selected backend: {s} for container: {s}\n", .{ @tagName(backend_type), container_id });
+        // Select backend based on config routing
+        const ctype = cfg.getContainerType(container_id);
+        std.debug.print("Selected backend: {s} for container: {s}\n", .{ @tagName(ctype), container_id });
 
         // Create and start container using selected backend
-        try backend_manager.createContainer(backend_type, container_id, image, null);
-        try backend_manager.startContainer(backend_type, container_id);
+        switch (ctype) {
+            .lxc => {
+                // Create minimal sandbox config for LXC
+                const name_buf = try allocator.dupe(u8, container_id);
+                defer allocator.free(name_buf);
+                
+                const sandbox_config = core.types.SandboxConfig{
+                    .allocator = allocator,
+                    .name = name_buf,
+                    .runtime_type = .lxc,
+                    .resources = null,
+                    .security = null,
+                    .network = null,
+                    .storage = null,
+                };
+                
+                const lxc_backend = try backends.lxc.LxcBackend.init(allocator, sandbox_config);
+                defer lxc_backend.deinit();
+                
+                try lxc_backend.create(sandbox_config);
+                try lxc_backend.start(container_id);
+            },
+            else => {
+                std.debug.print("Selected backend not implemented for run: {}\n", .{ctype});
+                return types.Error.UnsupportedOperation;
+            },
+        }
 
         std.debug.print("Running container: {s} with image: {s}\n", .{ container_id, image });
     }
