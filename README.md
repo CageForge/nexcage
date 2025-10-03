@@ -1,362 +1,204 @@
-# Proxmox LXCRI
+# Proxmox LXC Runtime Interface (proxmox-lxcri)
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![CNCF Sandbox](https://img.shields.io/badge/CNCF-Sandbox-blue.svg)](https://www.cncf.io/sandbox-projects/)
-[![Version](https://img.shields.io/badge/Version-0.4.0-green.svg)](https://github.com/kubebsd/proxmox-lxcri/releases/tag/v0.4.0)
-
-
-A high-performance OCI-compatible runtime implementation that transforms Proxmox VE into a container and VM orchestration worker. A complete OCI Image System with advanced performance optimizations, making this project a feature-rich drop-in replacement for runc, enabling native LXC containers and VMs to run as pods through containerd or other OCI-compatible container engines.
-
-## Key Benefits
-
-- Run containers using Proxmox LXC/VM backend instead of standard runc
-- Leverage Proxmox VE's mature virtualization capabilities
-- Use existing Proxmox infrastructure for container orchestration
-- Seamless integration with containerd and Kubernetes
-- Support for both LXC containers and full VMs as pods
-- Native ZFS storage management
-- Enterprise-grade security and isolation
+A modern container runtime interface for Proxmox VE that supports both LXC and OCI containers with intelligent backend routing.
 
 ## Features
 
-- Full OCI Runtime Specification v1.0 compliance
-- Native Proxmox LXC/VM lifecycle management
-- ZFS-based storage with snapshots and clones
-- **ZFS Checkpoint/Restore**: Lightning-fast container state snapshots
-- Advanced networking with VLAN and SDN support
-- Comprehensive security with AppArmor/SELinux
-- High-availability with multi-node support
-- Resource limits and cgroups management
-- Live migration capabilities
-- **🚀 NEW: Modular Architecture (v0.4.0)**: Clean separation of concerns with SOLID principles
+- **Multi-Backend Support**: LXC, OCI crun, and OCI runc backends
+- **Intelligent Routing**: Automatic backend selection based on container name patterns
+- **Proxmox Integration**: Native integration with Proxmox VE via `pct` CLI
+- **OCI Compliance**: Support for OCI container specifications
+- **Modern Architecture**: Clean separation of concerns with modular design
 
-## Modular Architecture (v0.4.0)
+## Quick Start
 
-Proxmox LXCRI now features a modular architecture that follows SOLID principles, providing:
+### Prerequisites
 
-### Core Modules
-- **Core**: Global settings, errors, logging, interfaces, and types
-- **CLI**: Command-line interface with registry-based command system
-- **Utils**: File system and network utilities
-
-### Backend Modules
-- **LXC Backend**: Native LXC container management
-- **Proxmox LXC Backend**: Proxmox API integration for LXC containers
-- **Proxmox VM Backend**: Proxmox API integration for virtual machines
-- **Crun Backend**: OCI-compatible container runtime
-
-### Integration Modules
-- **Proxmox API**: RESTful API client for Proxmox VE
-- **ZFS Integration**: ZFS filesystem operations and snapshots
-- **BFC Integration**: Binary File Container support
-
-### Benefits of Modular Architecture
-- **Extensibility**: Easy to add new backends and integrations
-- **Maintainability**: Clean separation of concerns
-- **Testability**: Independent module testing
-- **Flexibility**: Dynamic backend selection
-- **Performance**: Optimized module loading
-- Node caching for improved performance
-
-### 🚀 New in v0.3.0
-- **ZFS Checkpoint/Restore**: Revolutionary hybrid ZFS snapshots + CRIU fallback system
-- **Lightning-fast Snapshots**: Second-level container state preservation with filesystem consistency
-- **Enhanced Command Set**: New `checkpoint`, `restore`, `run`, and `spec` commands
-- **Smart Detection**: Automatic ZFS availability detection with graceful CRIU fallback
-- **Performance Boost**: 300%+ improvement with StaticStringMap command parsing
-- **Production Ready**: Seamless Proxmox ZFS infrastructure integration
-- **Comprehensive Guide**: Complete ZFS configuration and troubleshooting documentation
-- **Architecture Updates**: Enhanced documentation with detailed ZFS integration diagrams
-
-### OCI Image System
-- **Advanced Layer Management**: Efficient container image layer handling with dependency resolution
-- **LayerFS**: High-performance filesystem abstraction for container layers
-- **Metadata Caching**: LRU-based caching system for improved performance
-- **Object Pooling**: Memory-efficient layer object reuse
-- **Parallel Processing**: Multi-threaded layer operations
-- **Image Validation**: Comprehensive OCI image manifest and configuration validation
-- **Container Creation**: Integrated container creation from OCI images with LayerFS support
-
-### ZFS Checkpoint/Restore System
-- **Hybrid Architecture**: ZFS snapshots (primary) + CRIU fallback (secondary)
-- **Lightning Performance**: Filesystem-level snapshots in seconds vs minutes
-- **Automatic Detection**: Smart ZFS availability detection and graceful fallback
-- **Dataset Management**: Structured `tank/containers/<container_id>` pattern
-- **Timestamp Snapshots**: `checkpoint-<timestamp>` naming for easy organization
-- **Latest Auto-Selection**: Automatic latest checkpoint detection for restore
-- **Consistency Guarantees**: Filesystem-level data consistency and integrity
-- **Production Ready**: Seamless integration with Proxmox ZFS infrastructure
-
-
-## Requirements
-
+- Proxmox VE server with `pct` CLI installed
 - Zig 0.13.0 or later
-- Proxmox VE 7.0 or later
-- ZFS utilities
-- Linux kernel 5.0 or later
+- Linux system with required dependencies
 
-## Installation
+### Installation
 
-### 📦 Quick Install (DEB Package - Recommended)
-
-```bash
-# Ubuntu/Debian - Download and install DEB package
-wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/download/proxmox-lxcri_0.3.0-1_amd64.deb
-sudo dpkg -i proxmox-lxcri_0.3.0-1_amd64.deb
-sudo apt-get install -f
-
-# Configure and start
-sudo systemctl enable proxmox-lxcri
-sudo systemctl start proxmox-lxcri
-```
-
-### 🔧 Binary Installation
-
-```bash
-# Download binary
-wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/download/proxmox-lxcri-linux-x86_64
-chmod +x proxmox-lxcri-linux-x86_64
-sudo mv proxmox-lxcri-linux-x86_64 /usr/local/bin/proxmox-lxcri
-```
-
-### 🛠️ Build from Source
-
+1. Clone the repository:
 ```bash
 git clone https://github.com/kubebsd/proxmox-lxcri.git
 cd proxmox-lxcri
-zig build -Doptimize=ReleaseFast
 ```
 
-**📖 Complete installation guide**: [docs/INSTALLATION.md](docs/INSTALLATION.md)
-
-## Usage
-
-### Container Management
-
-```bash
-# Create a container
-./zig-out/bin/proxmox-lxcri create \
-    --name my-container \
-    --image debian:bullseye \
-    --memory 512 \
-    --cores 1 \
-    --storage zfs
-
-# Start a container
-./zig-out/bin/proxmox-lxcri start my-container
-
-# Stop a container
-./zig-out/bin/proxmox-lxcri stop my-container
-
-# Delete a container
-./zig-out/bin/proxmox-lxcri delete my-container
-```
-
-### Image Management
-
-```bash
-# Pull an image from registry
-./zig-out/bin/proxmox-lxcri image pull debian:bullseye
-
-# Create an image from local file
-./zig-out/bin/proxmox-lxcri image import my-image.raw
-
-# Delete an image
-./zig-out/bin/proxmox-lxcri image delete my-image
-```
-
-### Testing
-
-```bash
-# Run all tests
-./zig-linux-x86_64-0.13.0/zig build test
-
-# Run specific test categories
-./zig-linux-x86_64-0.13.0/zig build test-performance
-./zig-linux-x86_64-0.13.0/zig build test-optimized-performance
-./zig-linux-x86_64-0.13.0/zig build test-memory
-./zig-linux-x86_64-0.13.0/zig build test-integration
-./zig-linux-x86_64-0.13.0/zig build test-comprehensive
-
-# Run individual test files
-./zig-linux-x86_64-0.13.0/zig test tests/oci/image/layerfs_test.zig
-```
-
-### Development
-# Run tests
-zig build test
-
-# Run linter
-zig build lint
-```
-
-## Building
-
-Build the project using Zig:
-
+2. Build the project:
 ```bash
 zig build
 ```
 
-## Configuration
+3. Install to system:
+```bash
+sudo cp zig-out/bin/proxmox-lxcri /usr/local/bin/
+sudo cp config.json /etc/proxmox-lxcri/
+```
 
-The configuration file can be placed in one of these locations:
+### Configuration
 
-1. Path specified in `PROXMOX_LXCRI_CONFIG` environment variable
-2. `/etc/proxmox-lxcri/config.json`
-3. `./config.json`
-
-Example configuration:
+Edit `/etc/proxmox-lxcri/config.json`:
 
 ```json
 {
     "proxmox": {
-        "hosts": ["host1.example.com", "host2.example.com"],
-        "port": 8006,
-        "token": "YOUR-API-TOKEN",
-        "node": "your-node",
-        "node_cache_duration": 60
+        "pct_path": "/usr/bin/pct",
+        "node": "your-node-name",
+        "timeout": 30
+    },
+    "container_config": {
+        "crun_name_patterns": ["kube-ovn-*", "cilium-*"],
+        "default_container_type": "lxc"
     }
 }
 ```
 
 ## Usage
 
-### As OCI Runtime
-
+### Create Container
 ```bash
-# Create a container
-proxmox-lxcri create --bundle /path/to/bundle container-id
+# LXC container (default)
+proxmox-lxcri create --name my-app ubuntu:20.04
 
-# Start a container
-proxmox-lxcri start container-id
-
-# Get container state
-proxmox-lxcri state container-id
-
-# Stop a container
-proxmox-lxcri kill container-id
-
-# Delete a container
-proxmox-lxcri delete container-id
+# OCI container (matches kube-ovn-* pattern)
+proxmox-lxcri create --name kube-ovn-pod ubuntu:20.04
 ```
 
-### ZFS Checkpoint/Restore Operations
-
+### Manage Container
 ```bash
-# Create checkpoint (ZFS snapshot)
-proxmox-lxcri checkpoint container-id
+# Start container
+proxmox-lxcri start my-app
 
-# Restore from latest checkpoint
-proxmox-lxcri restore container-id
+# Stop container
+proxmox-lxcri stop my-app
 
-# Restore from specific snapshot
-proxmox-lxcri restore --snapshot checkpoint-1691234567 container-id
-
-# Create and start in one operation
-proxmox-lxcri run --bundle /path/to/bundle container-id
-
-# Generate OCI specification
-proxmox-lxcri spec --bundle /path/to/bundle
+# Delete container
+proxmox-lxcri delete my-app
 ```
-
-Runtime options:
-- `--root` - Directory for storing container state
-- `--log` - Set the log file path
-- `--log-format` - Set the log format (text or json)
-- `--systemd-cgroup` - Use systemd cgroup manager
-- `--bundle` - Path to the root of the bundle directory
-- `--pid-file` - File to write the process id to
-- `--console-socket` - Path to an AF_UNIX socket to send the console FD
-
-### With containerd
-
-1. Configure containerd to use proxmox-lxcri:
-
-```toml
-# /etc/containerd/config.toml
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.proxmox-lxcri]
-  runtime_type = "io.containerd.proxmox-lxcri.v1"
-  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.proxmox-lxcri.options]
-    BinaryName = "/usr/local/bin/proxmox-lxcri"
-```
-
-2. Restart containerd:
-
-```bash
-sudo systemctl restart containerd
-```
-
 
 ## Architecture
 
-The project consists of several key components:
+### Backend Routing
 
-1. **OCI Runtime**: Implements the OCI Runtime Specification
-2. **Container Manager**: Manages container lifecycle
-3. **Storage Manager**: Handles ZFS-based storage
-4. **Network Manager**: Manages container networking
-5. **Security Module**: Handles security features
-6. **Proxmox Client**: Communicates with Proxmox VE API
+The system automatically selects the appropriate backend based on container name patterns:
 
-## Project Status
+- **OCI Backends**: Containers matching `kube-ovn-*` or `cilium-*` patterns
+- **LXC Backend**: All other containers (default)
 
-Current progress: **100% Sprint 3 Complete** 🎉
+### Module Structure
 
-### ✅ Sprint 3: OCI Image System Implementation (COMPLETED)
-- **Issue #45**: Image Manifest ✅
-- **Issue #47**: Image Configuration ✅
-- **Issue #48**: Layer Management ✅
-- **Issue #49**: LayerFS Core ✅
-- **Issue #50**: Advanced LayerFS ✅
-- **Issue #51**: Create Command Integration ✅
-- **Issue #52**: Comprehensive Testing Suite ✅
-- **Issue #53**: Update Documentation ✅
-- **Issue #54**: Performance Optimization ✅
-- **Issue #55**: Prepare Release v0.2.0 ✅
+```
+src/
+├── core/           # Core functionality and types
+├── cli/            # Command-line interface
+├── backends/       # Backend implementations
+│   ├── lxc/        # LXC backend
+│   ├── crun/       # OCI crun backend
+│   └── runc/       # OCI runc backend
+└── oci/            # OCI specification support
+```
 
-### 🚀 Major Achievements
-- **Complete OCI Image System**: Full OCI v1.0.2 implementation
-- **Performance Revolution**: 20%+ improvement across all operations
-- **Comprehensive Testing**: 5 categories with 50+ tests
-- **Production Ready**: Enterprise-grade reliability
-- **Complete Documentation**: API, User Guide, Performance Guide
+## Development
 
-### 🔄 Next Phase
-- **Sprint 4**: Advanced Features & Production Deployment
-- **Performance Monitoring**: Real-time metrics and optimization
-- **Cloud Integration**: Enhanced deployment capabilities
-- **Community Engagement**: User feedback and improvement
+### Building
+
+```bash
+# Debug build
+zig build
+
+# Release build
+zig build -Doptimize=ReleaseFast
+```
+
+### Testing
+
+```bash
+# Run working tests
+bash scripts/e2e_working_tests.sh
+
+# Run full E2E tests (requires Proxmox server)
+bash scripts/e2e_proxmox_tests.sh
+```
+
+### Adding New Backends
+
+1. Create backend driver in `src/backends/<name>/`
+2. Implement required methods: `create`, `start`, `stop`, `delete`
+3. Add to `src/backends/mod.zig`
+4. Update CLI commands to handle new backend type
+5. Add routing logic in `core/config.zig`
+
+## Configuration Reference
+
+### Proxmox Settings
+- `pct_path`: Path to `pct` CLI executable
+- `node`: Proxmox node name
+- `timeout`: Command timeout in seconds
+
+### Container Configuration
+- `crun_name_patterns`: Array of patterns for OCI crun backend
+- `default_container_type`: Default backend type (lxc, crun, runc)
+
+### Runtime Settings
+- `log_level`: Logging level (debug, info, warn, error)
+- `log_path`: Path to log file
+- `root_path`: Root directory for container data
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Segmentation Fault**: Known issue with ArrayList in LXC driver, workaround implemented
+2. **Command Not Found**: Ensure `pct` is in PATH or update `pct_path` in config
+3. **Permission Denied**: Run with appropriate permissions for Proxmox operations
+
+### Debug Mode
+
+Enable debug logging:
+```bash
+proxmox-lxcri create --name test ubuntu:20.04 --debug
+```
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-### For Maintainers
-
-- **📋 Release Process**: [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) - Complete step-by-step release guide
-- **⚡ Quick Release**: [docs/RELEASE_QUICKSTART.md](docs/RELEASE_QUICKSTART.md) - Fast reference for experienced maintainers
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-Proxmox LXCri is a Cloud Native Computing Foundation (CNCF) Sandbox project.
+## Roadmap
 
-## CNCF Compliance
+- [x] CLI refactoring and OCI backend support
+- [x] Backend routing implementation
+- [x] E2E testing framework
+- [ ] Full OCI container functionality
+- [ ] Performance optimizations
+- [ ] Additional backend support
+- [ ] Container orchestration features
 
-Proxmox LXCri adheres to the principles and standards of the Cloud Native Computing Foundation (CNCF):
+## Support
 
-- Open source and open development
-- Vendor neutrality
-- Focus on containers and microservices
-- Support for CNCF standards
-- Community and collaboration
+For issues and questions:
+- Create an issue on GitHub
+- Check the documentation in `Roadmap/`
+- Review the architecture documentation
 
-## Code of Conduct
+## Changelog
 
-This project follows the [CNCF Code of Conduct](CODE_OF_CONDUCT.md). Please familiarize yourself with it before participating in the community. 
+### v0.5.0 (Current)
+- CLI refactoring completed
+- OCI backend support added
+- Backend routing implemented
+- E2E testing framework
+
+### v0.4.0
+- Initial Proxmox integration
+- LXC backend implementation
+- Basic CLI commands

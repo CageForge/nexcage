@@ -56,7 +56,7 @@ pub const LxcDriver = struct {
         };
 
         if (self.logger) |log| {
-            try log.debug("Testing with simple pct list command", .{});
+            try log.debug("Testing with simple pct list command (create disabled due to segfault)", .{});
         }
 
         const result = try self.runCommand(&args);
