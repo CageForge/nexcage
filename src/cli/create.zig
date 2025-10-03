@@ -81,6 +81,14 @@ pub const CreateCommand = struct {
                 defer lxc_backend.deinit();
                 try lxc_backend.create(sandbox_config);
             },
+            .crun => {
+                var crun_backend = backends.crun.CrunDriver.init(allocator, self.logger);
+                try crun_backend.create(sandbox_config);
+            },
+            .runc => {
+                var runc_backend = backends.runc.RuncDriver.init(allocator, self.logger);
+                try runc_backend.create(sandbox_config);
+            },
             else => {
                 if (self.logger) |log| try log.warn("Selected backend not implemented for create: {}", .{ctype});
                 return core.Error.UnsupportedOperation;

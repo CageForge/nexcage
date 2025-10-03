@@ -49,11 +49,15 @@ pub const LxcDriver = struct {
         // Map image to ostemplate (simple heuristic) - unused for now
         _ = config.image;
 
-        // Simple test with minimal args
+        // Simple test with minimal args to avoid segmentation fault
         const args = [_][]const u8{
             "pct",
             "list",
         };
+
+        if (self.logger) |log| {
+            try log.debug("Testing with simple pct list command", .{});
+        }
 
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);

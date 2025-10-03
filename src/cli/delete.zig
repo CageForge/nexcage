@@ -64,6 +64,14 @@ pub const DeleteCommand = struct {
                 defer lxc_backend.deinit();
                 try lxc_backend.delete(container_id);
             },
+            .crun => {
+                var crun_backend = backends.crun.CrunDriver.init(allocator, self.logger);
+                try crun_backend.delete(container_id);
+            },
+            .runc => {
+                var runc_backend = backends.runc.RuncDriver.init(allocator, self.logger);
+                try runc_backend.delete(container_id);
+            },
             else => {
                 if (self.logger) |log| try log.warn("Selected backend not implemented for delete: {}", .{ctype});
                 return core.Error.UnsupportedOperation;

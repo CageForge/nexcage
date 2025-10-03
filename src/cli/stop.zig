@@ -64,6 +64,14 @@ pub const StopCommand = struct {
                 defer lxc_backend.deinit();
                 try lxc_backend.stop(container_id);
             },
+            .crun => {
+                var crun_backend = backends.crun.CrunDriver.init(allocator, self.logger);
+                try crun_backend.stop(container_id);
+            },
+            .runc => {
+                var runc_backend = backends.runc.RuncDriver.init(allocator, self.logger);
+                try runc_backend.stop(container_id);
+            },
             else => {
                 if (self.logger) |log| try log.warn("Selected backend not implemented for stop: {}", .{ctype});
                 return core.Error.UnsupportedOperation;
