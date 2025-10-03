@@ -4,6 +4,7 @@ pub const interfaces = @import("interfaces.zig");
 pub const errors = @import("errors.zig");
 pub const logging = @import("logging.zig");
 pub const config = @import("config.zig");
+pub const backend_manager = @import("backend_manager.zig");
 
 // Re-export commonly used types
 pub const Error = types.Error;
@@ -19,3 +20,4 @@ pub const LogLevel = logging.LogLevel;
 pub const LogContext = logging.LogContext;
 pub const Config = config.Config;
 pub const ConfigLoader = config.ConfigLoader;
+pub const BackendManager = backend_manager.BackendManager;

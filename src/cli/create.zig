@@ -30,7 +30,23 @@ pub const CreateCommand = struct {
 
         if (self.logger) |log| try log.info("Creating container {s} with image {s}", .{ container_id, image });
 
-        // Create sandbox configuration (aligned with current core.types)
+        // Load configuration for backend routing
+        var config_loader = core.ConfigLoader.init(allocator);
+        const cfg = try config_loader.loadDefault();
+        defer cfg.deinit();
+
+        // Initialize BackendManager
+        var backend_manager = try core.BackendManager.init(allocator, &cfg.logger);
+        defer backend_manager.deinit();
+        try backend_manager.initializePlugins();
+
+        // Select backend based on container name using routing
+        const backend_type = backend_manager.selectBackendByName(&cfg, container_id);
+        if (self.logger) |log| {
+            try log.info("Selected backend: {s} for container: {s}", .{ @tagName(backend_type), container_id });
+        }
+
+        // Create sandbox configuration
         const name_buf = try allocator.dupe(u8, container_id);
         defer allocator.free(name_buf);
 
@@ -41,6 +57,7 @@ pub const CreateCommand = struct {
             .allocator = allocator,
             .name = name_buf,
             .runtime_type = options.runtime_type orelse .lxc,
+            .image = try allocator.dupe(u8, image),
             .resources = core.types.ResourceLimits{
                 .memory = 512 * 1024 * 1024,
                 .cpu = 1.0,
@@ -57,13 +74,12 @@ pub const CreateCommand = struct {
             },
             .storage = null,
         };
-
-        // Select backend based on runtime type
-        // Temporarily no-op: log intent instead of invoking backends
-        if (self.logger) |log| {
-            const rt = switch (sandbox_config.runtime_type) { .lxc => "lxc", .qemu => "qemu", .crun => "crun", .runc => "runc", .vm => "vm" };
-            try log.info("[noop] Would create {s} with image {s} using runtime {s}", .{ container_id, image, rt });
+        defer {
+            if (sandbox_config.image) |img| allocator.free(img);
         }
+
+        // Create container using selected backend
+        try backend_manager.createContainer(backend_type, container_id, image, null);
 
         if (self.logger) |log| try log.info("Create command completed successfully", .{});
     }

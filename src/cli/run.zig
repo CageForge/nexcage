@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core");
 const types = core.types;
 const interfaces = core.interfaces;
+const backends = @import("backends");
 
 /// Run command implementation
 /// Run command
@@ -13,7 +14,6 @@ pub const RunCommand = struct {
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         _ = self;
-        _ = allocator;
 
         if (options.container_id == null) {
             return types.Error.InvalidInput;
@@ -23,13 +23,28 @@ pub const RunCommand = struct {
             return types.Error.InvalidInput;
         }
 
-        // TODO: Implement actual container running logic
-        // This would involve:
-        // 1. Loading the appropriate backend based on runtime_type
-        // 2. Creating a sandbox configuration
-        // 3. Calling the backend's create and start methods
+        const container_id = options.container_id.?;
+        const image = options.image.?;
 
-        std.debug.print("Running container: {s} with image: {s}\n", .{ options.container_id.?, options.image.? });
+        // Load configuration for backend routing
+        var config_loader = core.ConfigLoader.init(allocator);
+        const cfg = try config_loader.loadDefault();
+        defer cfg.deinit();
+
+        // Initialize BackendManager
+        var backend_manager = try core.BackendManager.init(allocator, &cfg.logger);
+        defer backend_manager.deinit();
+        try backend_manager.initializePlugins();
+
+        // Select backend based on container name using routing
+        const backend_type = backend_manager.selectBackendByName(&cfg, container_id);
+        std.debug.print("Selected backend: {s} for container: {s}\n", .{ @tagName(backend_type), container_id });
+
+        // Create and start container using selected backend
+        try backend_manager.createContainer(backend_type, container_id, image, null);
+        try backend_manager.startContainer(backend_type, container_id);
+
+        std.debug.print("Running container: {s} with image: {s}\n", .{ container_id, image });
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {

@@ -26,81 +26,29 @@ pub const StopCommand = struct {
         }
 
         const container_id = options.container_id.?;
-        const runtime_type = options.runtime_type orelse .lxc;
 
         if (self.logger) |log| {
-            try log.info("Stopping container {s} with runtime type {}", .{ container_id, runtime_type });
+            try log.info("Stopping container {s}", .{container_id});
         }
 
-        // Stop container based on runtime type
-        switch (runtime_type) {
-            .lxc => {
-                if (self.logger) |log| {
-                    try log.info("Stopping LXC container: {s}", .{container_id});
-                }
+        // Load configuration for backend routing
+        var config_loader = core.ConfigLoader.init(allocator);
+        const cfg = try config_loader.loadDefault();
+        defer cfg.deinit();
 
-                const sandbox_config = core.types.SandboxConfig{
-                    .allocator = allocator,
-                    .name = try allocator.dupe(u8, container_id),
-                    .runtime_type = .lxc,
-                    .resources = core.types.ResourceLimits{
-                        .memory = 512 * 1024 * 1024,
-                        .cpu = 1.0,
-                        .disk = null,
-                        .network_bandwidth = null,
-                    },
-                    .security = null,
-                    .network = core.types.NetworkConfig{
-                        .bridge = try allocator.dupe(u8, "lxcbr0"),
-                        .ip = null,
-                        .gateway = null,
-                        .dns = null,
-                        .port_mappings = null,
-                    },
-                    .storage = null,
-                };
-                defer {
-                    allocator.free(sandbox_config.name);
-                    if (sandbox_config.network) |net| {
-                        if (net.bridge) |b| allocator.free(b);
-                    }
-                }
+        // Initialize BackendManager
+        var backend_manager = try core.BackendManager.init(allocator, &cfg.logger);
+        defer backend_manager.deinit();
+        try backend_manager.initializePlugins();
 
-                const lxc_backend = try backends.lxc.LxcBackend.init(allocator, sandbox_config);
-                defer lxc_backend.deinit();
-                if (self.logger) |log| lxc_backend.driver.logger = log;
-
-                lxc_backend.stop(container_id) catch |err| {
-                    if (err == core.Error.UnsupportedOperation) {
-                        if (self.logger) |log| try log.warn("LXC tools not available; cannot stop {s}", .{container_id});
-                        return;
-                    }
-                    return err;
-                };
-                return;
-            },
-            // Proxmox LXC mapped under VM runtime type
-            .vm => {
-                if (self.logger) |log| {
-                    try log.info("Stopping Proxmox VM: {s}", .{container_id});
-                    try log.warn("Proxmox VM backend not implemented yet", .{});
-                    try log.info("Alert: Proxmox VM support is planned for v0.5.0", .{});
-                }
-                return;
-            },
-            // Proxmox VM branch temporarily disabled to avoid duplicate .vm case; choose by config later
-            .crun => {
-                if (self.logger) |log| {
-                    try log.info("Stopping Crun container: {s}", .{container_id});
-                    try log.warn("Crun backend not implemented yet", .{});
-                }
-                return;
-            },
-            else => {
-                if (self.logger) |log| try log.err("Unsupported runtime type: {}", .{runtime_type});
-                return core.Error.UnsupportedOperation;
-            },
+        // Select backend based on container name using routing
+        const backend_type = backend_manager.selectBackendByName(&cfg, container_id);
+        if (self.logger) |log| {
+            try log.info("Selected backend: {s} for container: {s}", .{ @tagName(backend_type), container_id });
         }
+
+        // Stop container using selected backend
+        try backend_manager.stopContainer(backend_type, container_id);
 
         if (self.logger) |log| try log.info("Stop command completed successfully", .{});
     }
