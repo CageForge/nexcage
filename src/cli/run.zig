@@ -1,6 +1,6 @@
 const std = @import("std");
 const core = @import("core");
-const oci = @import("oci");
+
 const types = core.types;
 const interfaces = core.interfaces;
 const backends = @import("backends");
@@ -33,7 +33,7 @@ pub const RunCommand = struct {
         defer cfg.deinit();
 
         // Initialize BackendManager
-        var backend_manager = try (@import("oci").backend.BackendManager).init(allocator, &cfg.logger);
+        var backend_manager = try .init(allocator, &cfg.logger);
         defer backend_manager.deinit();
         try backend_manager.initializePlugins();
 
