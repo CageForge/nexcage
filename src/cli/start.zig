@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("core");
+const oci = @import("oci");
 const backends = @import("backends");
 
 /// Start command implementation for modular architecture
@@ -37,7 +38,7 @@ pub const StartCommand = struct {
         defer cfg.deinit();
 
         // Initialize BackendManager
-        var backend_manager = try core.BackendManager.init(allocator, &cfg.logger);
+        var backend_manager = try (@import("oci").backend.BackendManager).init(allocator, &cfg.logger);
         defer backend_manager.deinit();
         try backend_manager.initializePlugins();
 
