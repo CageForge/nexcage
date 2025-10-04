@@ -23,8 +23,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt-get update
-          apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
 
       - name: Create test reports directory
         run: mkdir -p test-reports
@@ -117,12 +117,12 @@ jobs:
       - name: Deploy to Proxmox
         run: |
           # Copy binary to system location
-          cp zig-out/bin/proxmox-lxcri /usr/local/bin/
-          chmod +x /usr/local/bin/proxmox-lxcri
+          sudo cp zig-out/bin/proxmox-lxcri /usr/local/bin/
+          sudo chmod +x /usr/local/bin/proxmox-lxcri
           
           # Copy config to system location
-          mkdir -p /etc/proxmox-lxcri
-          cp config.json /etc/proxmox-lxcri/
+          sudo mkdir -p /etc/proxmox-lxcri
+          sudo cp config.json /etc/proxmox-lxcri/
           
           # Test deployment
           /usr/local/bin/proxmox-lxcri --help
