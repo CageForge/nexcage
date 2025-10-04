@@ -147,11 +147,44 @@ pub fn main() !void {
     }
 
     const command_name = args[1];
+    
+    // Handle help command
+    if (std.mem.eql(u8, command_name, "--help") or std.mem.eql(u8, command_name, "-h")) {
+        try app.logger.info("Proxmox LXC Runtime Interface v0.5.0", .{});
+        try app.logger.info("", .{});
+        try app.logger.info("Available commands:", .{});
+        try app.logger.info("  create    Create a new container", .{});
+        try app.logger.info("  start     Start a container", .{});
+        try app.logger.info("  stop      Stop a container", .{});
+        try app.logger.info("  delete    Delete a container", .{});
+        try app.logger.info("  list      List containers", .{});
+        try app.logger.info("  run       Run a command in a container", .{});
+        try app.logger.info("  help      Show this help message", .{});
+        try app.logger.info("  version   Show version information", .{});
+        try app.logger.info("", .{});
+        try app.logger.info("Use 'proxmox-lxcri <command> --help' for command-specific help", .{});
+        return;
+    }
+    
     const command_args = args[2..];
 
     // Parse runtime options
     var options = try parseRuntimeOptions(allocator, command_name, command_args, &app.config);
     defer options.deinit();
+
+    // Check if help was requested
+    if (options.help) {
+        // Help is handled by individual commands
+        // Initialize providers
+        try app.initBackend();
+        try app.initNetworkProvider();
+        try app.initStorageProvider();
+        try app.initImageProvider();
+
+        // Execute command (which will handle help)
+        try app.command_registry.execute(command_name, options, allocator);
+        return;
+    }
 
     // Initialize providers
     try app.initBackend();
@@ -188,7 +221,10 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
     while (i < args.len) {
         const arg = args[i];
 
-        if (std.mem.eql(u8, arg, "--name") and i + 1 < args.len) {
+        if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            options.help = true;
+            i += 1;
+        } else if (std.mem.eql(u8, arg, "--name") and i + 1 < args.len) {
             options.container_id = try allocator.dupe(u8, args[i + 1]);
             i += 2;
         } else if (std.mem.eql(u8, arg, "--runtime") and i + 1 < args.len) {

@@ -199,6 +199,7 @@ pub const RuntimeOptions = struct {
     config_file: ?[]const u8 = null,
     verbose: bool = false,
     debug: bool = false,
+    help: bool = false,
     detach: bool = false,
     interactive: bool = false,
     tty: bool = false,
