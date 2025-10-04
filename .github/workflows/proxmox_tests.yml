@@ -1,0 +1,280 @@
+name: Proxmox E2E Tests
+
+on:
+  push:
+    branches: [ main, develop, feature/**, feat/** ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  proxmox-e2e-test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
+      - name: Create test reports directory
+        run: mkdir -p test-reports
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROXMOX_SSH_KEY }}
+
+      - name: Add Proxmox host to known_hosts
+        run: |
+          ssh-keyscan -H mgr.cp.if.ua >> ~/.ssh/known_hosts
+
+      - name: Run Proxmox E2E tests
+        run: |
+          chmod +x scripts/proxmox_e2e_test.sh
+          ./scripts/proxmox_e2e_test.sh
+        env:
+          PVE_HOST: root@mgr.cp.if.ua
+
+      - name: Upload Proxmox test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proxmox-test-reports-${{ github.run_id }}
+          path: test-reports/proxmox_e2e_test_report_*.md
+          retention-days: 30
+
+      - name: Upload Proxmox test logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proxmox-test-logs-${{ github.run_id }}
+          path: test-reports/*.log
+          retention-days: 30
+
+      - name: Comment PR with Proxmox test results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Read Proxmox test report
+            const reportPath = 'test-reports/proxmox_e2e_test_report_*.md';
+            const files = fs.readdirSync('test-reports/');
+            const reportFile = files.find(f => f.startsWith('proxmox_e2e_test_report_') && f.endsWith('.md'));
+            
+            if (reportFile) {
+              const reportContent = fs.readFileSync(`test-reports/${reportFile}`, 'utf8');
+              
+              // Extract summary from report
+              const summaryMatch = reportContent.match(/## Summary\s*\n\s*\|.*\|.*\|.*\|.*\|.*\|/s);
+              const summary = summaryMatch ? summaryMatch[0] : 'Summary not found';
+              
+              // Create comment
+              const comment = `## 🧪 Proxmox E2E Test Results
+              
+              **Test Environment**: Proxmox VE Server (mgr.cp.if.ua)
+              
+              ${summary}
+              
+              <details>
+              <summary>📊 Full Proxmox Test Report</summary>
+              
+              \`\`\`markdown
+              ${reportContent}
+              \`\`\`
+              </details>
+              
+              📁 [Download Full Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+
+  proxmox-container-tests:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
+      - name: Create test reports directory
+        run: mkdir -p test-reports
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROXMOX_SSH_KEY }}
+
+      - name: Add Proxmox host to known_hosts
+        run: |
+          ssh-keyscan -H mgr.cp.if.ua >> ~/.ssh/known_hosts
+
+      - name: Test LXC container lifecycle
+        run: |
+          chmod +x scripts/proxmox_e2e_test.sh
+          ./scripts/proxmox_e2e_test.sh
+        env:
+          PVE_HOST: root@mgr.cp.if.ua
+
+      - name: Upload container test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: container-test-reports-${{ github.run_id }}
+          path: test-reports/proxmox_e2e_test_report_*.md
+          retention-days: 30
+
+  proxmox-performance-tests:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
+      - name: Create test reports directory
+        run: mkdir -p test-reports
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROXMOX_SSH_KEY }}
+
+      - name: Add Proxmox host to known_hosts
+        run: |
+          ssh-keyscan -H mgr.cp.if.ua >> ~/.ssh/known_hosts
+
+      - name: Run performance tests on Proxmox
+        run: |
+          chmod +x scripts/proxmox_e2e_test.sh
+          ./scripts/proxmox_e2e_test.sh
+        env:
+          PVE_HOST: root@mgr.cp.if.ua
+
+      - name: Upload performance test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-test-reports-${{ github.run_id }}
+          path: test-reports/proxmox_e2e_test_report_*.md
+          retention-days: 30
+
+  generate-proxmox-summary:
+    runs-on: ubuntu-latest
+    needs: [proxmox-e2e-test, proxmox-container-tests, proxmox-performance-tests]
+    if: always()
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all Proxmox test reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-proxmox-reports/
+
+      - name: Generate combined Proxmox test summary
+        run: |
+          mkdir -p test-reports
+          
+          # Find all Proxmox report files
+          find all-proxmox-reports -name "*.md" -type f | while read report; do
+            echo "Processing: $report"
+            cp "$report" "test-reports/"
+          done
+          
+          # Generate combined summary
+          cat > test-reports/proxmox_combined_summary.md << EOF
+          # Combined Proxmox Test Summary - $(date)
+          
+          ## Test Environment
+          - **Proxmox Host**: mgr.cp.if.ua
+          - **Test Date**: $(date)
+          - **Git Branch**: ${{ github.ref_name }}
+          - **Git Commit**: ${{ github.sha }}
+          
+          ## Test Suites
+          
+          EOF
+          
+          # Add individual summaries
+          for report in test-reports/*.md; do
+            if [ -f "$report" ]; then
+              echo "### $(basename "$report")" >> test-reports/proxmox_combined_summary.md
+              echo "" >> test-reports/proxmox_combined_summary.md
+              grep -A 20 "## Summary" "$report" >> test-reports/proxmox_combined_summary.md
+              echo "" >> test-reports/proxmox_combined_summary.md
+            fi
+          done
+
+      - name: Upload combined Proxmox summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxmox-combined-summary-${{ github.run_id }}
+          path: test-reports/proxmox_combined_summary.md
+          retention-days: 30
+
+      - name: Comment with combined Proxmox summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            if (fs.existsSync('test-reports/proxmox_combined_summary.md')) {
+              const summary = fs.readFileSync('test-reports/proxmox_combined_summary.md', 'utf8');
+              
+              const comment = `## 🧪 Combined Proxmox Test Results
+              
+              **Test Environment**: Proxmox VE Server (mgr.cp.if.ua)
+              
+              ${summary}
+              
+              📁 [Download All Reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }

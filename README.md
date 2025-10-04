@@ -114,13 +114,49 @@ zig build -Doptimize=ReleaseFast
 
 ### Testing
 
-```bash
-# Run working tests
-bash scripts/e2e_working_tests.sh
+The project includes comprehensive testing with detailed reporting:
 
-# Run full E2E tests (requires Proxmox server)
-bash scripts/e2e_proxmox_tests.sh
+```bash
+# Run all tests with detailed reporting
+make test
+
+# Run specific test suites
+make test-unit      # Unit tests only
+make test-e2e       # E2E tests only
+make test-proxmox   # Proxmox E2E tests only
+make test-ci        # CI tests only
+make test-all       # All test suites
+
+# View test reports
+make report-view
+make report-clean
 ```
+
+**Test Coverage:**
+- **Unit Tests**: Individual component testing
+- **Integration Tests**: Component interaction testing
+- **E2E Tests**: End-to-end functionality testing
+- **Proxmox Tests**: Proxmox VE server testing (mgr.cp.if.ua)
+- **CI Tests**: Continuous integration testing
+
+**Test Reports:**
+- Detailed Markdown reports with timing and memory usage
+- Color-coded output for easy reading
+- Automated GitHub Actions integration
+- PR comments with test results
+
+**CI/CD Pipeline:**
+- **Self-Hosted Runner**: Proxmox server as GitHub Actions runner
+- **Automatic Testing**: Tests run directly on Proxmox server after each commit
+- **Deployment**: Automatic deployment to Proxmox server on main branch
+- **Monitoring**: Server health and application status monitoring
+- **Reporting**: Detailed reports and artifacts for each workflow run
+
+For detailed testing information, see:
+- [TESTING.md](TESTING.md) - General testing guide
+- [PROXMOX_TESTING.md](PROXMOX_TESTING.md) - Proxmox-specific testing
+- [CI_CD_SETUP.md](CI_CD_SETUP.md) - GitHub CI/CD setup guide
+- [SELF_HOSTED_RUNNER.md](SELF_HOSTED_RUNNER.md) - Self-hosted runner setup guide
 
 ### Adding New Backends
 

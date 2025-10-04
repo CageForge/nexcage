@@ -1,0 +1,348 @@
+name: Proxmox CI/CD
+
+on:
+  push:
+    branches: [ main, develop, feature/**, feat/** ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PVE_HOST: mgr.cp.if.ua
+  PVE_USER: root
+  PVE_PATH: /usr/local/bin
+  CONFIG_PATH: /etc/proxmox-lxcri
+
+jobs:
+  proxmox-ci:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
+      - name: Create test reports directory
+        run: mkdir -p test-reports
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROXMOX_SSH_KEY }}
+
+      - name: Add Proxmox host to known_hosts
+        run: |
+          ssh-keyscan -H ${{ env.PVE_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Test SSH connection
+        run: |
+          ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "echo 'SSH connection successful'"
+
+      - name: Run Proxmox tests
+        run: |
+          chmod +x scripts/proxmox_only_test.sh
+          ./scripts/proxmox_only_test.sh
+        env:
+          PVE_HOST: ${{ env.PVE_USER }}@${{ env.PVE_HOST }}
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proxmox-test-reports-${{ github.run_id }}
+          path: test-reports/proxmox_only_test_report_*.md
+          retention-days: 30
+
+      - name: Upload test logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proxmox-test-logs-${{ github.run_id }}
+          path: test-reports/*.log
+          retention-days: 30
+
+      - name: Comment PR with test results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Read Proxmox test report
+            const files = fs.readdirSync('test-reports/');
+            const reportFile = files.find(f => f.startsWith('proxmox_only_test_report_') && f.endsWith('.md'));
+            
+            if (reportFile) {
+              const reportContent = fs.readFileSync(`test-reports/${reportFile}`, 'utf8');
+              
+              // Extract summary from report
+              const summaryMatch = reportContent.match(/## Summary\s*\n\s*\|.*\|.*\|.*\|.*\|.*\|/s);
+              const summary = summaryMatch ? summaryMatch[0] : 'Summary not found';
+              
+              // Create comment
+              const comment = `## 🧪 Proxmox CI Test Results
+              
+              **Test Environment**: Proxmox VE Server (${{ env.PVE_HOST }})
+              **Commit**: ${{ github.sha }}
+              **Branch**: ${{ github.ref_name }}
+              
+              ${summary}
+              
+              <details>
+              <summary>📊 Full Test Report</summary>
+              
+              \`\`\`markdown
+              ${reportContent}
+              \`\`\`
+              </details>
+              
+              📁 [Download Full Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+
+  proxmox-deployment:
+    runs-on: ubuntu-latest
+    needs: [proxmox-ci]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
+      - name: Build release binary
+        run: |
+          zig build -Doptimize=ReleaseFast
+          ls -la zig-out/bin/
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROXMOX_SSH_KEY }}
+
+      - name: Add Proxmox host to known_hosts
+        run: |
+          ssh-keyscan -H ${{ env.PVE_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Proxmox
+        run: |
+          # Copy binary to Proxmox
+          scp zig-out/bin/proxmox-lxcri ${{ env.PVE_USER }}@${{ env.PVE_HOST }}:${{ env.PVE_PATH }}/
+          
+          # Copy config to Proxmox
+          scp config.json ${{ env.PVE_USER }}@${{ env.PVE_HOST }}:${{ env.CONFIG_PATH }}/
+          
+          # Set permissions
+          ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "chmod +x ${{ env.PVE_PATH }}/proxmox-lxcri"
+          
+          # Test deployment
+          ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "${{ env.PVE_PATH }}/proxmox-lxcri --help"
+
+      - name: Create deployment summary
+        run: |
+          cat > deployment_summary.md << EOF
+          # Deployment Summary - $(date)
+          
+          ## Deployment Details
+          - **Target Server**: ${{ env.PVE_HOST }}
+          - **Binary Path**: ${{ env.PVE_PATH }}
+          - **Config Path**: ${{ env.CONFIG_PATH }}
+          - **Commit**: ${{ github.sha }}
+          - **Branch**: ${{ github.ref_name }}
+          - **Status**: Success
+          
+          ## Files Deployed
+          - \`proxmox-lxcri\` - Main binary
+          - \`config.json\` - Configuration file
+          
+          ## Verification
+          - Binary permissions set correctly
+          - Help command executed successfully
+          - Ready for production use
+          EOF
+
+      - name: Upload deployment summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-summary-${{ github.run_id }}
+          path: deployment_summary.md
+          retention-days: 30
+
+  proxmox-monitoring:
+    runs-on: ubuntu-latest
+    needs: [proxmox-ci, proxmox-deployment]
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROXMOX_SSH_KEY }}
+
+      - name: Add Proxmox host to known_hosts
+        run: |
+          ssh-keyscan -H ${{ env.PVE_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Monitor Proxmox server
+        run: |
+          # Check server status
+          echo "=== Proxmox Server Status ==="
+          ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "uptime"
+          ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "df -h | head -5"
+          ssh ${{ env.PVE_USER }}@${{ env.PVE_USER }}@${{ env.PVE_HOST }} "free -h"
+          
+          # Check binary status
+          echo "=== Binary Status ==="
+          ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "ls -la ${{ env.PVE_PATH }}/proxmox-lxcri"
+          ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "${{ env.PVE_PATH }}/proxmox-lxcri version"
+          
+          # Check config status
+          echo "=== Config Status ==="
+          ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "ls -la ${{ env.CONFIG_PATH }}/config.json"
+
+      - name: Create monitoring report
+        run: |
+          cat > monitoring_report.md << EOF
+          # Proxmox Monitoring Report - $(date)
+          
+          ## Server Status
+          - **Host**: ${{ env.PVE_HOST }}
+          - **Uptime**: $(ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "uptime" | awk '{print $3,$4}')
+          - **Disk Usage**: $(ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "df -h / | tail -1 | awk '{print $5}'")
+          - **Memory Usage**: $(ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "free -h | grep Mem | awk '{print $3}'")
+          
+          ## Application Status
+          - **Binary**: ${{ env.PVE_PATH }}/proxmox-lxcri
+          - **Config**: ${{ env.CONFIG_PATH }}/config.json
+          - **Version**: $(ssh ${{ env.PVE_USER }}@${{ env.PVE_HOST }} "${{ env.PVE_PATH }}/proxmox-lxcri version" | head -1)
+          
+          ## Health Check
+          - ✅ SSH connection successful
+          - ✅ Binary executable
+          - ✅ Config file present
+          - ✅ Version command working
+          
+          **Status**: All systems operational
+          EOF
+
+      - name: Upload monitoring report
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-report-${{ github.run_id }}
+          path: monitoring_report.md
+          retention-days: 30
+
+  generate-ci-summary:
+    runs-on: ubuntu-latest
+    needs: [proxmox-ci, proxmox-deployment, proxmox-monitoring]
+    if: always()
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts/
+
+      - name: Generate combined CI summary
+        run: |
+          mkdir -p test-reports
+          
+          # Find all report files
+          find all-artifacts -name "*.md" -type f | while read report; do
+            echo "Processing: $report"
+            cp "$report" "test-reports/"
+          done
+          
+          # Generate combined summary
+          cat > test-reports/ci_combined_summary.md << EOF
+          # Proxmox CI/CD Combined Summary - $(date)
+          
+          ## Workflow Information
+          - **Repository**: ${{ github.repository }}
+          - **Commit**: ${{ github.sha }}
+          - **Branch**: ${{ github.ref_name }}
+          - **Event**: ${{ github.event_name }}
+          - **Run ID**: ${{ github.run_id }}
+          
+          ## Test Results
+          
+          EOF
+          
+          # Add individual summaries
+          for report in test-reports/*.md; do
+            if [ -f "$report" ]; then
+              echo "### $(basename "$report")" >> test-reports/ci_combined_summary.md
+              echo "" >> test-reports/ci_combined_summary.md
+              head -50 "$report" >> test-reports/ci_combined_summary.md
+              echo "" >> test-reports/ci_combined_summary.md
+              echo "---" >> test-reports/ci_combined_summary.md
+              echo "" >> test-reports/ci_combined_summary.md
+            fi
+          done
+
+      - name: Upload combined CI summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-combined-summary-${{ github.run_id }}
+          path: test-reports/ci_combined_summary.md
+          retention-days: 30
+
+      - name: Comment with combined CI summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            if (fs.existsSync('test-reports/ci_combined_summary.md')) {
+              const summary = fs.readFileSync('test-reports/ci_combined_summary.md', 'utf8');
+              
+              const comment = `## 🚀 Proxmox CI/CD Complete
+              
+              **Test Environment**: Proxmox VE Server (${{ env.PVE_HOST }})
+              
+              ${summary}
+              
+              📁 [Download All Reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }

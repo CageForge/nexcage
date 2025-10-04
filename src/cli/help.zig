@@ -5,7 +5,6 @@ const interfaces = core.interfaces;
 const registry = @import("registry.zig");
 
 /// Help command implementation
-/// Help command
 pub const HelpCommand = struct {
     const Self = @This();
 
