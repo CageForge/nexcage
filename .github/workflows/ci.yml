@@ -6,8 +6,14 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+  packages: read
+  security-events: write
+
 jobs:
   build-and-smoke:
+    name: Build and Smoke Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,10 +34,13 @@ jobs:
         run: zig build test
 
       - name: Smoke test: help
-        run: ./zig-out/bin/proxmox-lxcri help
+        run: ./zig-out/bin/proxmox-lxcri --help
 
-      - name: Smoke test: list lxc (should not crash, may be empty)
-        run: ./zig-out/bin/proxmox-lxcri list --runtime lxc
+      - name: Smoke test: version
+        run: ./zig-out/bin/proxmox-lxcri version
+
+      - name: Smoke test: create help
+        run: ./zig-out/bin/proxmox-lxcri create --help
 
       - name: Test: start should fail without LXC tools
         run: |
@@ -42,20 +51,7 @@ jobs:
           else
             echo "Negative test passed (start failed as expected)"
           fi
-name: CI
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-permissions:
-  contents: read
-  packages: read
-  security-events: write
-
-jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -77,7 +73,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: zig-out/test-results/
+          path: zig-out/
 
   lint:
     name: Lint
@@ -91,7 +87,7 @@ jobs:
           version: 0.13.0
 
       - name: Run Format Check
-        run: zig fmt --check src/*.zig
+        run: zig fmt --check src/
 
   code-scanning:
     name: Code Scanning
