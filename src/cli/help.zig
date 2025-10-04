@@ -10,7 +10,7 @@ pub const HelpCommand = struct {
 
     name: []const u8 = "help",
     description: []const u8 = "Show help information",
-    ctx: ?*interfaces.CommandContext = null,
+    ctx: ?*anyopaque = null,
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         const global_registry = registry.getGlobalRegistry() orelse return types.Error.OperationFailed;
