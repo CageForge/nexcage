@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-01-15
+
+### 🎉 Major Release: Backend Integration & Legacy Cleanup
+
+This release completes the backend integration system and removes all legacy code, providing a clean, modern, and production-ready codebase.
+
+### Added
+- **Backend Routing System**: Intelligent backend selection based on container naming patterns
+- **OCI Backend Support**: 
+  - Crun Driver: Full OCI container lifecycle management
+  - Runc Driver: Alternative OCI runtime support
+- **Proxmox VM Backend**: Complete VM management via Proxmox API
+- **PCT CLI Integration**: Native Proxmox LXC management via `pct` command
+- **Container Type Detection**: Automatic backend selection based on config patterns
+- **E2E Testing**: Automated testing on remote Proxmox servers
+- **Stub Libraries**: Minimal crun and bfc libraries for build compatibility
+
+### Changed
+- **Architecture**: Moved from direct API calls to CLI-based Proxmox integration
+- **CLI Commands**: Refactored to use backend routing instead of direct OCI calls
+- **Configuration**: Enhanced with container routing patterns and backend selection
+- **Build System**: Completely rewritten for clean modular architecture
+- **Error Handling**: Improved error mapping for external command failures
+
+### Removed
+- **Legacy Code**: All legacy build files and directories removed
+- **Archive Files**: Old documentation and examples moved to archive
+- **Old Sprint Files**: Cleaned up outdated sprint documentation
+- **Direct API Calls**: Replaced with CLI-based Proxmox integration
+- **Circular Dependencies**: Resolved all module dependency issues
+
+### Fixed
+- **Memory Leaks**: Resolved all known memory allocation issues
+- **Build Errors**: Fixed compilation errors and dependency issues
+- **Module Imports**: Cleaned up all import statements and dependencies
+- **Type Mismatches**: Resolved all type casting and compatibility issues
+
+### Technical Details
+- **Backend Selection**: Based on `config.json` routing patterns
+- **Container Types**: LXC, VM, crun, runc with automatic detection
+- **CLI Integration**: Direct backend calls without OCI layer
+- **Testing**: Automated E2E tests with SSH deployment
+- **Documentation**: Comprehensive architecture and implementation guides
+
+### Migration Notes
+- Legacy code preserved in `legacy/backend-routing-integration` branch
+- All functionality maintained with improved architecture
+- Configuration format updated for backend routing
+- Build system simplified and modernized
+
+---
+
 ## [0.4.0] - 2025-10-01
 
 ### 🚀 Major Release: Modular Architecture
