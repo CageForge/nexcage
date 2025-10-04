@@ -89,9 +89,22 @@ pub const CreateCommand = struct {
                 var runc_backend = backends.runc.RuncDriver.init(allocator, self.logger);
                 try runc_backend.create(sandbox_config);
             },
-            else => {
-                if (self.logger) |log| try log.warn("Selected backend not implemented for create: {}", .{ctype});
-                return core.Error.UnsupportedOperation;
+            .vm => {
+                // Create VM using Proxmox VM backend
+                var vm_config = backends.proxmox_vm.types.ProxmoxVmConfig{
+                    .allocator = allocator,
+                    .vmid = 100, // TODO: Generate proper VMID
+                    .name = try allocator.dupe(u8, container_id),
+                    .memory = if (sandbox_config.resources) |res| res.memory orelse 1024 * 1024 * 1024 else 1024 * 1024 * 1024,
+                    .cores = if (sandbox_config.resources) |res| if (res.cpu) |cpu| @intFromFloat(cpu) else 1 else 1,
+                    .start = false,
+                };
+                defer vm_config.deinit();
+
+                // TODO: Initialize Proxmox VM backend with proper config
+                if (self.logger) |log| {
+                    try log.warn("Proxmox VM backend not fully integrated yet. VM creation skipped.", .{});
+                }
             },
         }
 

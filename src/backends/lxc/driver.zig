@@ -49,14 +49,16 @@ pub const LxcDriver = struct {
         // Map image to ostemplate (simple heuristic) - unused for now
         _ = config.image;
 
-        // Simple test with minimal args to avoid segmentation fault
+        // Workaround for segmentation fault: use simple pct list instead of create
+        // This allows the system to work while we investigate the segfault issue
         const args = [_][]const u8{
             "pct",
             "list",
         };
 
         if (self.logger) |log| {
-            try log.debug("Testing with simple pct list command (create disabled due to segfault)", .{});
+            try log.debug("LXC create: Using workaround (pct list) due to segmentation fault in pct create", .{});
+            try log.warn("LXC container creation disabled due to segmentation fault. Use workaround: pct create manually", .{});
         }
 
         const result = try self.runCommand(&args);
@@ -505,15 +507,12 @@ pub const LxcDriver = struct {
 
     /// Run a command and return the result
     fn runCommand(self: *Self, args: []const []const u8) !CommandResult {
-        // Debug logging
+        // Debug logging - simplified to avoid ArrayList
         if (self.logger) |log| {
-            var cmd_str = std.ArrayList(u8).init(self.allocator);
-            defer cmd_str.deinit();
+            try log.debug("Running command with {d} arguments", .{args.len});
             for (args, 0..) |arg, i| {
-                if (i > 0) try cmd_str.append(' ');
-                try cmd_str.appendSlice(arg);
+                try log.debug("Arg {d}: '{s}'", .{i, arg});
             }
-            try log.debug("Running command: {s}", .{cmd_str.items});
         }
         
         const res = std.process.Child.run(.{

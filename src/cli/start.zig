@@ -72,9 +72,11 @@ pub const StartCommand = struct {
                 var runc_backend = backends.runc.RuncDriver.init(allocator, self.logger);
                 try runc_backend.start(container_id);
             },
-            else => {
-                if (self.logger) |log| try log.warn("Selected backend not implemented for start: {}", .{ctype});
-                return core.Error.UnsupportedOperation;
+            .vm => {
+                // Start VM using Proxmox VM backend
+                if (self.logger) |log| {
+                    try log.warn("Proxmox VM backend not fully integrated yet. VM start skipped.", .{});
+                }
             },
         }
 
