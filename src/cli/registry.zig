@@ -58,13 +58,13 @@ pub const CommandRegistry = struct {
     /// Get help for a specific command
     pub fn getHelp(self: *CommandRegistry, name: []const u8, allocator: std.mem.Allocator) ![]const u8 {
         const command = self.get(name) orelse return error.CommandNotFound;
-        return command.help(command.ctx, allocator);
+        return command.help(allocator);
     }
 
     /// Execute a command
     pub fn execute(self: *CommandRegistry, name: []const u8, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         const command = self.get(name) orelse return error.CommandNotFound;
-        try command.execute(command.ctx, options, allocator);
+        try command.execute(options, allocator);
     }
 };
 

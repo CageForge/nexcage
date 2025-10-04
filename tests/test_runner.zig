@@ -20,7 +20,7 @@ pub const TestStatus = enum {
     passed,
     failed,
     skipped,
-    error,
+    test_error,
 };
 
 /// Test suite runner with detailed reporting
