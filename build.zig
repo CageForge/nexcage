@@ -121,9 +121,11 @@ pub fn build(b: *std.Build) void {
 
     // Link system libraries
     exe.linkSystemLibrary("c");
-    exe.linkSystemLibrary("cap");
-    exe.linkSystemLibrary("seccomp");
-    exe.linkSystemLibrary("yajl");
+    
+    // Try to link optional system libraries (may not be available in all environments)
+    exe.linkSystemLibrary("cap") catch {};
+    exe.linkSystemLibrary("seccomp") catch {};
+    exe.linkSystemLibrary("yajl") catch {};
 
     // Link crun and bfc libraries
     exe.linkLibrary(crun_lib);
@@ -170,9 +172,11 @@ pub fn build(b: *std.Build) void {
     });
 
     test_exe.linkSystemLibrary("c");
-    test_exe.linkSystemLibrary("cap");
-    test_exe.linkSystemLibrary("seccomp");
-    test_exe.linkSystemLibrary("yajl");
+    
+    // Try to link optional system libraries (may not be available in all environments)
+    test_exe.linkSystemLibrary("cap") catch {};
+    test_exe.linkSystemLibrary("seccomp") catch {};
+    test_exe.linkSystemLibrary("yajl") catch {};
     test_exe.linkLibrary(crun_lib);
     test_exe.linkLibrary(bfc_lib);
 

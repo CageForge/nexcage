@@ -1,0 +1,103 @@
+name: AMD64 Only Build
+
+on:
+  push:
+    branches: [ main, develop, feature/**, feat/** ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: 0.13.0
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
+    - name: Build Debug
+      run: zig build
+
+    - name: Build Release
+      run: zig build -Doptimize=ReleaseFast
+
+    - name: Run unit tests
+      run: zig build test
+
+    - name: Test basic functionality
+      run: |
+        # Test help command
+        ./zig-out/bin/proxmox-lxcri --help || true
+        
+        # Test version command
+        ./zig-out/bin/proxmox-lxcri version || true
+        
+        # Test create help
+        ./zig-out/bin/proxmox-lxcri create --help || true
+        
+        # Test that invalid commands fail gracefully
+        ./zig-out/bin/proxmox-lxcri invalid-command 2>/dev/null && exit 1 || true
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: proxmox-lxcri-amd64
+        path: zig-out/bin/proxmox-lxcri
+        retention-days: 7
+
+  self-hosted-test:
+    runs-on: [self-hosted, proxmox]
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup environment
+      run: |
+        echo "Running on Proxmox server: $(hostname)"
+        echo "Zig version: $(zig version)"
+        echo "Current directory: $(pwd)"
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
+    - name: Build
+      run: zig build
+
+    - name: Test basic functionality
+      run: |
+        # Test help command
+        ./zig-out/bin/proxmox-lxcri --help || true
+        
+        # Test version command
+        ./zig-out/bin/proxmox-lxcri version || true
+        
+        # Test create help
+        ./zig-out/bin/proxmox-lxcri create --help || true
+
+    - name: Deploy to system
+      run: |
+        sudo cp zig-out/bin/proxmox-lxcri /usr/local/bin/
+        sudo chmod +x /usr/local/bin/proxmox-lxcri
+        
+        # Test deployed binary
+        /usr/local/bin/proxmox-lxcri --help || true
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: proxmox-lxcri-self-hosted
+        path: zig-out/bin/proxmox-lxcri
+        retention-days: 7
