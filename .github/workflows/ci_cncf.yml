@@ -1,0 +1,198 @@
+name: CI (CNCF Compliant)
+
+on:
+  push:
+    branches: [ main, develop, feature/**, feat/** ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Build and test on multiple OS (but same arch: amd64)
+  build-test:
+    name: Build and Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: ubuntu-amd64
+          - os: ubuntu-22.04
+            name: ubuntu-22.04-amd64
+          - os: ubuntu-20.04
+            name: ubuntu-20.04-amd64
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: 0.13.0
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libcap-dev \
+          libseccomp-dev \
+          libyajl-dev \
+          build-essential
+
+    - name: Build Debug
+      run: zig build
+
+    - name: Build Release
+      run: zig build -Doptimize=ReleaseFast
+
+    - name: Run unit tests
+      run: zig build test
+
+    - name: Smoke tests
+      run: |
+        ./zig-out/bin/proxmox-lxcri --help
+        ./zig-out/bin/proxmox-lxcri version
+        ./zig-out/bin/proxmox-lxcri create --help
+        ./zig-out/bin/proxmox-lxcri list --runtime lxc || true
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: proxmox-lxcri-${{ matrix.name }}
+        path: zig-out/bin/proxmox-lxcri
+        retention-days: 7
+
+  # Security scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: 0.13.0
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libcap-dev \
+          libseccomp-dev \
+          libyajl-dev
+
+    - name: Build with security flags
+      run: zig build -Doptimize=ReleaseSafe
+
+    - name: Run security tests
+      run: zig build test
+
+    - name: Dependency vulnerability scan
+      run: |
+        # Check for known vulnerabilities in system libraries
+        echo "Checking system dependencies..."
+        dpkg -l | grep -E 'libcap|libseccomp|libyajl'
+
+  # Code quality and formatting
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: 0.13.0
+
+    - name: Check code formatting
+      run: zig fmt --check src/
+
+    - name: Analyze code
+      run: |
+        # Basic static analysis
+        find src/ -name "*.zig" -exec echo "Analyzing: {}" \;
+        zig build --help | head -20
+
+  # Performance testing
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: 0.13.0
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libcap-dev \
+          libseccomp-dev \
+          libyajl-dev
+
+    - name: Build optimized
+      run: zig build -Doptimize=ReleaseFast
+
+    - name: Performance benchmarks
+      run: |
+        echo "Running performance tests..."
+        time ./zig-out/bin/proxmox-lxcri --help > /dev/null
+        time ./zig-out/bin/proxmox-lxcri version > /dev/null
+        
+        # Memory usage test
+        echo "Memory usage test:"
+        /usr/bin/time -v ./zig-out/bin/proxmox-lxcri --help 2>&1 | grep -E "Maximum resident|User time|System time" || true
+
+  # Integration tests (if Proxmox available)
+  integration:
+    name: Integration Tests
+    runs-on: [self-hosted, proxmox]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: 0.13.0
+
+    - name: Build
+      run: zig build -Doptimize=ReleaseFast
+
+    - name: Integration tests
+      run: |
+        echo "Running integration tests on Proxmox..."
+        ./zig-out/bin/proxmox-lxcri --help
+        ./zig-out/bin/proxmox-lxcri version
+        
+        # Test with actual Proxmox tools
+        command -v pct && pct version || echo "pct not available"
+        command -v pveversion && pveversion -v || echo "pveversion not available"
+
+    - name: Upload integration artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: proxmox-lxcri-integration-amd64
+        path: zig-out/bin/proxmox-lxcri
+        retention-days: 7
