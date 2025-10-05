@@ -1,0 +1,8 @@
+# CODEOWNERS
+# Order matters; last match wins.
+
+* @kubebsd @moriarti
+
+/docs/ @kubebsd
+/src/** @kubebsd @moriarti
+/.github/workflows/** @moriarti
