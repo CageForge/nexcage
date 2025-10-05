@@ -1,27 +1,10 @@
-[allowlist]
-description = "Global allowlist"
-paths = [
-    "tests/**",
-    "docs/**",
-    "examples/**",
-]
+# Gitleaks configuration for proxmox-lxcri
+title = "proxmox-lxcri"
+
+[extend]
+useDefault = true
 
 [[rules]]
-description = "API keys"
-regex = '''(?i)((api[_-]?key|apikey|secret|token)["\s]*[=:]["\s]*)[0-9a-zA-Z]{32,}'''
-tags = ["key", "API", "generic"]
-
-[[rules]]
-description = "Generic secret"
-regex = '''(?i)(secret|password|credential)["\s]*[=:]["\s]*[0-9a-zA-Z]{8,}'''
-tags = ["key", "generic"]
-
-[[rules]]
-description = "Private key"
-regex = '''(?i)-----BEGIN[ A-Z0-9_-]*PRIVATE[ A-Z0-9_-]*KEY-----'''
-tags = ["key", "private"]
-
-[[rules]]
-description = "Proxmox API token"
-regex = '''(?i)(proxmox[_-]?token|proxmox[_-]?api[_-]?key)["\s]*[=:]["\s]*[0-9a-zA-Z]{32,}'''
-tags = ["key", "API", "proxmox"] 
+description = "Test files should be ignored"
+regex = '''tests/.*'''
+tags = ["test"]
