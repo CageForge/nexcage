@@ -19,10 +19,6 @@ jobs:
             target: x86_64-linux
             arch: amd64
             artifact_name: proxmox-lxcri-linux-x86_64
-          - os: ubuntu-latest
-            target: aarch64-linux
-            arch: arm64
-            artifact_name: proxmox-lxcri-linux-aarch64
 
     steps:
       - name: Checkout code
@@ -35,11 +31,7 @@ jobs:
 
       - name: Build
         run: |
-          if [ "${{ matrix.target }}" = "aarch64-linux" ]; then
-            zig build -Dtarget=aarch64-linux -Doptimize=ReleaseFast
-          else
-            zig build -Doptimize=ReleaseFast
-          fi
+          zig build -Doptimize=ReleaseFast
 
       - name: Create artifact
         run: |
@@ -62,9 +54,6 @@ jobs:
           - os: ubuntu-22.04
             arch: amd64
             target: x86_64-linux
-          - os: ubuntu-22.04
-            arch: arm64
-            target: aarch64-linux
 
     steps:
       - name: Checkout code
@@ -86,10 +75,7 @@ jobs:
         with:
           version: 0.13.0
 
-      - name: Set up cross-compilation for ARM64
-        if: matrix.arch == 'arm64'
-        run: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+      # Single-arch (amd64) only per product constraints
 
       - name: Extract version from tag
         id: get_version
@@ -102,7 +88,7 @@ jobs:
         run: |
           sed -i "1s/0\.3\.0-1/${{ steps.get_version.outputs.debian_version }}/" packaging/debian/changelog
 
-      - name: Build DEB package
+      - name: Build DEB package (amd64)
         run: |
           # Create build environment
           mkdir -p build-deb
@@ -110,11 +96,7 @@ jobs:
           cd build-deb/proxmox-lxcri-${{ steps.get_version.outputs.version }}
           
           # Build package
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -us -uc -a${{ matrix.arch }} --host-arch=${{ matrix.arch }}
-          else
-            dpkg-buildpackage -us -uc
-          fi
+          dpkg-buildpackage -us -uc
           
           # Move packages to dist
           cd ..

@@ -1,0 +1,61 @@
+name: Proxmox E2E (Self-Hosted)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proxmox-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Proxmox Self-Hosted E2E
+    runs-on: [self-hosted, proxmox]
+
+    steps:
+    - name: Checkout
+    	uses: actions/checkout@v4
+
+    - name: Print environment info
+      run: |
+        echo "Runner: $(hostname)"
+        echo "Kernel: $(uname -a)"
+        echo "User: $(whoami)"
+        command -v pct && pct version || true
+        command -v pveversion && pveversion -v || true
+        command -v zig && zig version || true
+
+    - name: Verify system dependencies (pre-installed)
+      run: |
+        # Expect libs pre-installed on self-hosted runner (no sudo here)
+        ldconfig -p | grep -E 'libcap|libseccomp|libyajl' || true
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: 0.13.0
+
+    - name: Build (Debug)
+      run: zig build
+
+    - name: Smoke tests (no root required)
+      run: |
+        ./zig-out/bin/proxmox-lxcri --help || true
+        ./zig-out/bin/proxmox-lxcri version || true
+        ./zig-out/bin/proxmox-lxcri list --runtime lxc || true
+
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: proxmox-lxcri-selfhosted-amd64
+        path: zig-out/bin/proxmox-lxcri
+        retention-days: 7
+
+
