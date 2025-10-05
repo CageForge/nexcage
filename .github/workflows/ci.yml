@@ -24,6 +24,11 @@ jobs:
         with:
           version: 0.13.0
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
       - name: Zig version
         run: zig version
 
@@ -63,6 +68,11 @@ jobs:
         with:
           version: 0.13.0
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
       - name: Build and Test
         run: |
           zig build
@@ -86,6 +96,11 @@ jobs:
         with:
           version: 0.13.0
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
       - name: Run Format Check
         run: zig fmt --check src/
 
@@ -99,6 +114,11 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: cpp
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
 
       - name: Build
         run: zig build

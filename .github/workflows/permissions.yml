@@ -1,26 +1,16 @@
-name: "Permissions"
+# DISABLED: This workflow is deprecated
+# Use individual workflow permissions instead
+name: "Permissions (Disabled)"
 
 on:
-  workflow_call:
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
-      checks: write
-      statuses: write
-      security-events: write
-      packages: read
-      deployments: write
-      pages: write
-      issues: write
-      discussions: write
-      repository-projects: write
-      workflows: write
+  workflow_dispatch:
+    # Disabled - use individual workflow permissions
 
 jobs:
-  permissions:
-    name: "Set Permissions"
+  disabled:
+    name: "Workflow Disabled"
     runs-on: ubuntu-latest
+    if: false  # Always skip
     steps:
-      - name: "Set Permissions"
-        run: echo "Permissions set" 
+      - name: "This workflow is disabled"
+        run: echo "This workflow has been disabled in favor of individual workflow permissions" 
