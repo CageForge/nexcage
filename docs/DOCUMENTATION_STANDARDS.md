@@ -19,30 +19,35 @@
 - Main content
 - References and appendices
 
-## 2. Component Versions
+## 2. Archival Policy
+- Outdated documentation and materials are moved to `archive/`
+- Deprecated code is moved to `archive/legacy/`
+- New documents should reference current paths; avoid linking to `archive/` unless historical context is required
 
-### 2.1 Core Components
+## 3. Component Versions
+
+### 3.1 Core Components
 - Zig: 0.13.0+
 - Proxmox VE: 7.4+
 - containerd: 1.7+
 - ZFS: 2.1+
 - Linux Kernel: 5.15+
 
-### 2.2 Version Format
+### 3.2 Version Format
 - Use semantic versioning (MAJOR.MINOR.PATCH)
 - Use "+" for minimum versions (e.g., 1.7+)
 - Use full version for exact versions (e.g., 0.13.0)
 
-## 3. Formatting
+## 4. Formatting
 
-### 3.1 Headings
+### 4.1 Headings
 ```markdown
 # Level 1
 ## Level 2
 ### Level 3
 ```
 
-### 3.2 Code Blocks
+### 4.2 Code Blocks
 ```markdown
 ```zig
 // Zig code
@@ -57,58 +62,59 @@
 ```
 ```
 
-### 3.3 Lists
+### 4.3 Lists
 - Use "-" for unordered lists
 - Use "1." for ordered lists
 - Use 2 spaces for nested lists
 
-### 3.4 Tables
+### 4.4 Tables
 ```markdown
 | Header 1 | Header 2 |
 |----------|----------|
 | Cell 1   | Cell 2   |
 ```
 
-## 4. Project Structure
+## 5. Project Structure
 
-### 4.1 Main Directories
+### 5.1 Main Directories
 - `docs/` - documentation
 - `src/` - source code
 - `tests/` - tests
 - `scripts/` - scripts
 - `Roadmap/` - roadmap
+- `archive/` - archived content and `archive/legacy/` for deprecated code
 
-### 4.2 Document Types
+### 5.2 Document Types
 - `ARCHITECTURE.md` - architecture documentation
 - `API.md` - API documentation
 - `DEVELOPMENT.md` - developer instructions
 - `DEPLOYMENT.md` - deployment instructions
 - `TROUBLESHOOTING.md` - troubleshooting guide
 
-## 5. Documentation Updates
+## 6. Documentation Updates
 
-### 5.1 Process
+### 6.1 Process
 1. Create branch for changes
 2. Update documentation
 3. Check compliance with standards
 4. Review changes
 5. Merge to main branch
 
-### 5.2 Responsibility
+### 6.2 Responsibility
 - Each developer is responsible for updating documentation with code
 - Technical writer is responsible for overall documentation quality
 - Maintainer is responsible for enforcing standards
 
-## 6. Quality Control
+## 7. Quality Control
 
-### 6.1 Criteria
+### 7.1 Criteria
 - Compliance with standards
 - Information accuracy
 - Completeness
 - Clarity
 - Error-free
 
-### 6.2 Tools
+### 7.2 Tools
 - Markdown linters
 - Spell checkers
 - Link checkers

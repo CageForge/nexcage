@@ -5,6 +5,10 @@ System CLI utility for managing containers on Proxmox VE using LXC and OCI backe
 - Architecture: amd64 (x86_64) only
 - Environment: runs on Proxmox VE host (no containerization)
 
+## Archival Policy
+- Deprecated documentation and code are moved to `archive/`
+- Legacy code is kept under `archive/legacy/` and may be removed in future
+
 ## Quick Start (Ubuntu 22.04/24.04)
 
 1) Install dependencies
