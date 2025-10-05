@@ -4,7 +4,24 @@ title = "proxmox-lxcri"
 [extend]
 useDefault = true
 
+# Ignore common false positives
 [[rules]]
-description = "Test files should be ignored"
-regex = '''tests/.*'''
-tags = ["test"]
+description = "Ignore common false positives"
+regex = '''^(tests/.*|\.gitignore|\.backup/.*|deps/.*|zig-out/.*|\.zig-cache/.*)$'''
+tags = ["ignore"]
+
+# Ignore backup and dependency directories
+[[rules]]
+description = "Ignore backup directories"
+regex = '''\.backup/.*'''
+tags = ["ignore"]
+
+[[rules]]
+description = "Ignore dependency directories"
+regex = '''deps/.*'''
+tags = ["ignore"]
+
+[[rules]]
+description = "Ignore build output directories"
+regex = '''(zig-out|\.zig-cache)/.*'''
+tags = ["ignore"]
