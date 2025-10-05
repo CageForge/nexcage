@@ -1,10 +1,10 @@
-name: CI
+# DISABLED: This workflow is deprecated
+# Use CI (CNCF Compliant) or other specific workflows instead
+name: CI (Disabled)
 
 on:
-  push:
-    branches: [ main, develop, feature/**, feat/** ]
-  pull_request:
-    branches: [ main, develop ]
+  workflow_dispatch:
+    # Disabled - use CI (CNCF Compliant) instead
 
 permissions:
   contents: read
@@ -12,130 +12,10 @@ permissions:
   security-events: write
 
 jobs:
-  build-and-smoke:
-    name: Build and Smoke Tests
+  disabled:
+    name: Workflow Disabled
     runs-on: ubuntu-latest
+    if: false  # Always skip
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.13.0
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
-
-      - name: Zig version
-        run: zig version
-
-      - name: Build
-        run: zig build
-
-      - name: Run unit tests
-        run: zig build test
-
-      - name: Smoke test: help
-        run: ./zig-out/bin/proxmox-lxcri --help
-
-      - name: Smoke test: version
-        run: ./zig-out/bin/proxmox-lxcri version
-
-      - name: Smoke test: create help
-        run: ./zig-out/bin/proxmox-lxcri create --help
-
-      - name: Test: start should fail without LXC tools
-        run: |
-          set -euo pipefail
-          if ./zig-out/bin/proxmox-lxcri start --name ci-test --runtime lxc; then
-            echo "Expected failure when LXC tools are absent" >&2
-            exit 1
-          else
-            echo "Negative test passed (start failed as expected)"
-          fi
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.13.0
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
-
-      - name: Build and Test
-        run: |
-          zig build
-          zig build test
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: zig-out/
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.13.0
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
-
-      - name: Run Format Check
-        run: zig fmt --check src/
-
-  code-scanning:
-    name: Code Scanning
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: cpp
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
-
-      - name: Build
-        run: zig build
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-
-  # secrets-scanning:
-  #   name: Secrets Scanning
-  #   runs-on: ubuntu-latest
-  #   if: false  # Disabled due to false positives
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-  #     - name: Run Gitleaks
-  #       uses: gitleaks/gitleaks-action@v2
-  #       env:
-  #         GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-  #         GITLEAKS_CONFIG: .gitleaks.toml
+      - name: This workflow is disabled
+        run: echo "This workflow has been disabled. Use 'CI (CNCF Compliant)' or other specific workflows instead."
