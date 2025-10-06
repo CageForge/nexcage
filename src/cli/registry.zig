@@ -45,7 +45,7 @@ pub const CommandRegistry = struct {
 
     /// List all registered commands
     pub fn list(self: *CommandRegistry, allocator: std.mem.Allocator) ![]const []const u8 {
-        var names = std.ArrayList([]const u8).init(allocator);
+        var names = std.array_list.Managed([]const u8).init(allocator);
         var iterator = self.commands.iterator();
 
         while (iterator.next()) |entry| {

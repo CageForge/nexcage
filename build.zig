@@ -12,11 +12,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Add dependency for zig-json
-    const zigJsonDep = b.dependency("zig-json", .{
-        .target = target,
-        .optimize = optimize,
-    });
+    // zig-json dependency removed for Zig 0.15.1 compatibility
 
     // Core module
     const core_mod = b.addModule("core", .{
@@ -76,10 +72,16 @@ pub fn build(b: *std.Build) void {
     });
 
     // Create crun library (empty stub)
-    const crun_lib = b.addStaticLibrary(.{
-        .name = "crun",
+    const crun_mod = b.createModule(.{
+        .root_source_file = b.path("src/stubs/stub.zig"),
         .target = target,
         .optimize = optimize,
+    });
+    
+    const crun_lib = b.addLibrary(.{
+        .name = "crun",
+        .root_module = crun_mod,
+        .linkage = .static,
     });
 
     // Add a simple C file to make the library valid
@@ -94,10 +96,16 @@ pub fn build(b: *std.Build) void {
     });
 
     // Create BFC library (empty stub)
-    const bfc_lib = b.addStaticLibrary(.{
-        .name = "bfc",
+    const bfc_mod = b.createModule(.{
+        .root_source_file = b.path("src/stubs/stub.zig"),
         .target = target,
         .optimize = optimize,
+    });
+    
+    const bfc_lib = b.addLibrary(.{
+        .name = "bfc",
+        .root_module = bfc_mod,
+        .linkage = .static,
     });
 
     // Add a simple C file to make the library valid
@@ -112,11 +120,15 @@ pub fn build(b: *std.Build) void {
     });
 
     // Main executable
-    const exe = b.addExecutable(.{
-        .name = "proxmox-lxcri",
+    const main_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+    });
+    
+    const exe = b.addExecutable(.{
+        .name = "proxmox-lxcri",
+        .root_module = main_mod,
     });
 
     // Link system libraries
@@ -150,7 +162,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("integrations", integrations_mod);
     exe.root_module.addImport("utils", utils_mod);
     exe.root_module.addImport("oci", oci_mod);
-    exe.root_module.addImport("zig_json", zigJsonDep.module("zig-json"));
+    // zig-json import removed for Zig 0.15.1 compatibility
 
     // Install the executable
     b.installArtifact(exe);
@@ -167,10 +179,15 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     // Add test step
-    const test_exe = b.addTest(.{
+    const test_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+    });
+    
+    const test_exe = b.addTest(.{
+        .name = "test",
+        .root_module = test_mod,
     });
 
     test_exe.linkSystemLibrary("c");
@@ -199,7 +216,7 @@ pub fn build(b: *std.Build) void {
     test_exe.root_module.addImport("integrations", integrations_mod);
     test_exe.root_module.addImport("utils", utils_mod);
     test_exe.root_module.addImport("oci", oci_mod);
-    test_exe.root_module.addImport("zig_json", zigJsonDep.module("zig-json"));
+    // zig-json import removed for Zig 0.15.1 compatibility
 
     const run_test = b.addRunArtifact(test_exe);
 

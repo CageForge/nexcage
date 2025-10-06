@@ -105,9 +105,9 @@ EOF
 
 #### Prerequisites
 ```bash
-# Install Zig 0.13.0
-curl -L https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | tar -xJ
-sudo mv zig-linux-x86_64-0.13.0 /opt/zig
+# Install Zig 0.15.1
+curl -L https://ziglang.org/download/0.15.1/zig-linux-x86_64-0.15.1.tar.xz | tar -xJ
+sudo mv zig-linux-x86_64-0.15.1 /opt/zig
 sudo ln -sf /opt/zig/zig /usr/local/bin/zig
 ```
 

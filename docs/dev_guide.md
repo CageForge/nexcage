@@ -3,7 +3,7 @@
 ## Development Environment Setup
 
 ### Prerequisites
-- Zig 0.13.0 or later
+- Zig 0.15.1 or later
 - Proxmox VE 7.4 or later
 - containerd 1.7 or later
 - ZFS 2.1 or later

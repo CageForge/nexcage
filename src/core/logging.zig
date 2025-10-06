@@ -14,13 +14,13 @@ pub const LogLevel = enum(u8) {
 /// Log context
 pub const LogContext = struct {
     allocator: std.mem.Allocator,
-    writer: std.io.Writer(std.fs.File, std.fs.File.WriteError, std.fs.File.write),
+    writer: std.fs.File.Writer,
     level: LogLevel,
     component: []const u8,
     timestamp: bool = true,
     colorize: bool = true,
 
-    pub fn init(allocator: std.mem.Allocator, writer: std.io.Writer(std.fs.File, std.fs.File.WriteError, std.fs.File.write), level: LogLevel, component: []const u8) LogContext {
+    pub fn init(allocator: std.mem.Allocator, writer: std.fs.File.Writer, level: LogLevel, component: []const u8) LogContext {
         return LogContext{
             .allocator = allocator,
             .writer = writer,
@@ -71,19 +71,23 @@ pub const LogContext = struct {
         const reset = if (self.colorize) "\x1b[0m" else "";
 
         if (self.timestamp) {
-            try self.writer.print("{s}[{d}] {s}{s} {s}: " ++ format ++ "{s}\n", .{
+            const message = try std.fmt.allocPrint(self.allocator, "{s}[{d}] {s}{s} {s}: " ++ format ++ "{s}\n", .{
                 color,
                 timestamp,
                 level_str,
                 reset,
                 self.component,
             } ++ args ++ .{reset});
+            defer self.allocator.free(message);
+            try self.writer.file.writeAll(message);
         } else {
-            try self.writer.print("{s}{s} {s}: " ++ format ++ "{s}\n", .{
+            const message = try std.fmt.allocPrint(self.allocator, "{s}{s} {s}: " ++ format ++ "{s}\n", .{
                 color,
                 level_str,
                 self.component,
             } ++ args ++ .{reset});
+            defer self.allocator.free(message);
+            try self.writer.file.writeAll(message);
         }
     }
 
@@ -115,7 +119,7 @@ pub const LogContext = struct {
 /// Structured logging
 pub const StructuredLogger = struct {
     allocator: std.mem.Allocator,
-    writer: std.io.Writer(std.fs.File, std.fs.File.WriteError, std.fs.File.write),
+    writer: std.fs.File.Writer,
     level: LogLevel,
     component: []const u8,
 
@@ -214,11 +218,11 @@ pub const LoggerFactory = struct {
     }
 
     pub fn createConsoleLogger(self: *LoggerFactory, level: LogLevel, component: []const u8) LogContext {
-        return LogContext.init(self.allocator, std.io.getStdOut().writer(), level, component);
+        return LogContext.init(self.allocator, std.fs.File.stdout().writer(&[_]u8{ } ** 0), level, component);
     }
 
     pub fn createStructuredLogger(self: *LoggerFactory, level: LogLevel, component: []const u8) StructuredLogger {
-        return StructuredLogger.init(self.allocator, std.io.getStdOut().writer(), level, component);
+        return StructuredLogger.init(self.allocator, std.fs.File.stdout().writer(&[_]u8{ } ** 0), level, component);
     }
 
     pub fn createFileLogger(self: *LoggerFactory, level: LogLevel, component: []const u8, file_path: []const u8) !LogContext {

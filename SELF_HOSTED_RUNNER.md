@@ -63,9 +63,9 @@ apt-get install -y libcap-dev libseccomp-dev libyajl-dev build-essential
 
 # Install Zig
 cd /opt
-wget https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
-tar -xf zig-linux-x86_64-0.13.0.tar.xz
-ln -sf /opt/zig-linux-x86_64-0.13.0/zig /usr/local/bin/zig
+wget https://ziglang.org/download/0.15.1/zig-linux-x86_64-0.15.1.tar.xz
+tar -xf zig-linux-x86_64-0.15.1.tar.xz
+ln -sf /opt/zig-linux-x86_64-0.15.1/zig /usr/local/bin/zig
 ```
 
 #### Step 2: Download and Install Runner

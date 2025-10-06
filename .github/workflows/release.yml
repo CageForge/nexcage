@@ -27,7 +27,7 @@ jobs:
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.13.0
+          version: 0.15.1
 
       - name: Build
         run: |
@@ -87,7 +87,7 @@ jobs:
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.13.0
+          version: 0.15.1
 
       # Single-arch (amd64) only per product constraints
 

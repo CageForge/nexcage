@@ -52,8 +52,8 @@ sudo apt install -y \
 
 ### Install Zig Compiler
 ```bash
-# Download and install Zig 0.13.0
-ZIG_VERSION="0.13.0"
+# Download and install Zig 0.15.1
+ZIG_VERSION="0.15.1"
 ZIG_ARCH="x86_64"  # or "aarch64" for ARM64
 
 curl -L "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-${ZIG_ARCH}-${ZIG_VERSION}.tar.xz" \

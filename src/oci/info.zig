@@ -156,23 +156,17 @@ fn getCurrentTimestamp() []const u8 {
     return std.fmt.allocPrint(std.heap.page_allocator, "{d:0>4}-{d:0>2}-{d:0>2}T00:00:00Z", .{ year_day.year, month_day.month.numeric(), month_day.day_index + 1 }) catch "2025-01-01T00:00:00Z";
 }
 
-// Функція для отримання git commit hash
-fn getGitCommit() []const u8 {
-    // Спрощена версія - в реальному проекті тут була б логіка отримання git hash
-    return "a1b2c3d4";
-}
-
 pub fn info(container_id: ?[]const u8, proxmox_client: *proxmox.ProxmoxClient) !void {
     try proxmox_client.logger.info("Getting runtime information", .{});
 
     // Створюємо інформацію про runtime
     const runtime_info = RuntimeInfo{
         .version = "0.1.1",
-        .git_commit = getGitCommit(),
+        .git_commit = "a1b2c3d4",
         .spec = "1.1.0",
         .runtime = "proxmox-lxcri",
         .built = getCurrentTimestamp(),
-        .compiler = "zig 0.13.0",
+        .compiler = "zig 0.15.1",
         .platform = "linux/amd64",
 
         .backends = Backends{

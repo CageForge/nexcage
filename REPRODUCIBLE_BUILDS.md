@@ -3,7 +3,7 @@
 This project targets reproducible builds where feasible.
 
 ## Tooling versions
-- Zig: 0.13.0 (pinned in workflows)
+- Zig: 0.15.1 (pinned in workflows)
 - System libs: libcap-dev, libseccomp-dev, libyajl-dev (CI installs)
 
 ## Determinism guidelines

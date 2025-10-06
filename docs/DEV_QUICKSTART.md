@@ -6,13 +6,13 @@ This guide helps you set up a development environment quickly.
 - OS: Ubuntu 22.04/24.04 (Proxmox VE host recommended)
 - Arch: amd64 (x86_64)
 - Packages: libcap-dev, libseccomp-dev, libyajl-dev
-- Compiler: Zig 0.13.0
+- Compiler: Zig 0.15.1
 
 ## Setup
 ```bash
 sudo apt-get update
 sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
-# install Zig 0.13.0 and ensure zig is on PATH
+# install Zig 0.15.1 and ensure zig is on PATH
 zig version
 ```
 

@@ -3,7 +3,7 @@
 ## Core Dependencies
 
 ### Runtime Dependencies
-- **Zig Compiler** (>= 0.13.0)
+- **Zig Compiler** (>= 0.15.1)
   - Required for building the project
   - Used for memory management and system programming
 
@@ -80,7 +80,7 @@
 ## Version Management
 
 ### Fixed Versions
-- Zig: 0.13.0
+- Zig: 0.15.1
 - Gitleaks: 8.18.1
 - Proxmox VE: 7.0+
 

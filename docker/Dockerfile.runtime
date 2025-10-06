@@ -30,7 +30,7 @@ RUN case ${TARGETARCH} in \
     "arm64") ZIG_ARCH="aarch64" ;; \
     *) echo "Unsupported architecture for Proxmox VE: ${TARGETARCH}" && exit 1 ;; \
     esac && \
-    curl -L "https://ziglang.org/download/0.13.0/zig-linux-${ZIG_ARCH}-0.13.0.tar.xz" \
+    curl -L "https://ziglang.org/download/0.15.1/zig-linux-${ZIG_ARCH}-0.15.1.tar.xz" \
     | tar -xJ -C /usr/local --strip-components=1
 
 # Set working directory

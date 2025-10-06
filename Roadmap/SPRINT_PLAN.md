@@ -3,11 +3,11 @@
 Date: 2025-10-05
 Sprint Length: 1–2 weeks
 
-## Goals
+## Goals (Zig 0.15.1 Adoption included)
 - Verify alignment with current architecture (docs/architecture/*, ADR-001)
 - Stabilize LXC via pct create/start/stop/delete
 - Minimal OCI (crun/runc) create/start/stop/delete with bundle generation
-- CI/CD: stable green across all workflows, amd64 only
+- CI/CD: stable green across all workflows, amd64 only (Zig 0.15.1)
 - Docs: Developer onboarding complete and consistent
 
 ## Scope / Tasks
@@ -30,13 +30,13 @@ Sprint Length: 1–2 weeks
 - Acceptance: local smoke (no Proxmox) runs; self-hosted E2E optional smoke
 
 ### 4) CI/CD & Security
-- Keep all workflows green (Basic Test, AMD64 Only, Simple CI, Security, Proxmox E2E, CI (CNCF), Release) [A]
+- Keep all workflows green (Basic Test, AMD64 Only, Simple CI, Security, Proxmox E2E, CI (CNCF), Release) on Zig 0.15.1 [A]
 - SBOM published in releases (done); validate artifact naming [A]
 - Documentation workflow remains green (lint/spell/links) [A]
 
 ### 5) Documentation
 - README: quick start (done), keep up-to-date [A]
-- DEV_QUICKSTART & CLI_REFERENCE present and accurate [A]
+- DEV_QUICKSTART & CLI_REFERENCE present and accurate; update all Zig references to 0.15.1 [A]
 - Add `docs/architecture/CONFORMANCE_REPORT.md` [A]
 - Documentation standards reflect archival policy (done)
 
@@ -58,3 +58,4 @@ Sprint Length: 1–2 weeks
 ## Tracking
 - Owner: TBD (@kubebsd/@moriarti)
 - Report: `Roadmap/SPRINT_PROGRESS.md` (daily/at end)
+- Note: This sprint includes adoption and verification of Zig 0.15.1 across codebase, docs, and CI.

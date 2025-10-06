@@ -27,7 +27,7 @@
 ## 3. Component Versions
 
 ### 3.1 Core Components
-- Zig: 0.13.0+
+- Zig: 0.15.1+
 - Proxmox VE: 7.4+
 - containerd: 1.7+
 - ZFS: 2.1+
@@ -36,7 +36,7 @@
 ### 3.2 Version Format
 - Use semantic versioning (MAJOR.MINOR.PATCH)
 - Use "+" for minimum versions (e.g., 1.7+)
-- Use full version for exact versions (e.g., 0.13.0)
+- Use full version for exact versions (e.g., 0.15.1)
 
 ## 4. Formatting
 

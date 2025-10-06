@@ -1,7 +1,7 @@
 FROM ubuntu:latest
 
 # Version arguments
-ARG ZIG_VERSION=0.13.0
+ARG ZIG_VERSION=0.15.1
 ARG GITLEAKS_VERSION=8.18.1
 
 # Install dependencies

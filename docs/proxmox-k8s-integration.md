@@ -5,7 +5,7 @@ This document describes the process of setting up a Proxmox server as a Kubernet
 ## Prerequisites
 
 - Proxmox VE 7.4+
-- Zig 0.13.0+
+- Zig 0.15.1+
 - containerd 1.7+
 - ZFS 2.1+
 - Linux Kernel 5.15+
@@ -158,57 +158,4 @@ systemctl restart systemd-journald
 
 ### 5.2 Log Collection
 
-```bash
-# Containerd logs
-journalctl -u containerd -f
-
-# Kubelet logs
-journalctl -u kubelet -f
-
-# System logs
-journalctl -f
 ```
-
-## 6. Maintenance
-
-### 6.1 Updates
-```bash
-# Update packages
-apt update && apt upgrade -y
-
-# Update containerd
-apt update && apt install -y containerd
-systemctl restart containerd
-
-# Update Kubernetes components
-apt update && apt install -y kubelet kubeadm kubectl
-systemctl restart kubelet
-```
-
-### 6.2 Backup
-```bash
-# Create backup directory
-BACKUP_DIR="/var/backups/proxmox-k8s"
-mkdir -p $BACKUP_DIR
-
-# Backup containerd
-tar -czf $BACKUP_DIR/containerd-$(date +%Y%m%d).tar.gz /var/lib/containerd
-
-# Backup kubelet
-tar -czf $BACKUP_DIR/kubelet-$(date +%Y%m%d).tar.gz /var/lib/kubelet
-
-# Backup configuration
-tar -czf $BACKUP_DIR/config-$(date +%Y%m%d).tar.gz /etc/containerd /etc/kubernetes
-```
-
-### 6.3 Cleanup
-```bash
-# Cleanup unused images
-crictl rmi --prune
-
-# Cleanup unused containers
-crictl rm --prune
-
-# Cleanup unused volumes
-rm -rf /var/lib/containerd
-``` 
