@@ -40,6 +40,12 @@ Sprint Length: 1–2 weeks
 - Add `docs/architecture/CONFORMANCE_REPORT.md` [A]
 - Documentation standards reflect archival policy (done)
 
+### 6) Developer Onboarding Verification
+- Walk through docs/DEV_QUICKSTART.md and docs/dev_guide.md on a clean Ubuntu host [A]
+- Validate environment setup steps (deps, Zig 0.15.1, build, run, tests) [A]
+- Confirm steps are minimal and unambiguous; note time-to-first-build [A]
+- File issues/PRs if any blockers or unclear steps are found [A]
+
 ## Acceptance Criteria
 - All CI workflows green on main for 3 successive commits
 - LXC create works on Proxmox self-hosted runner with basic template
