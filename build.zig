@@ -71,53 +71,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Create crun library (empty stub)
-    const crun_mod = b.createModule(.{
-        .root_source_file = b.path("src/stubs/stub.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    
-    const crun_lib = b.addLibrary(.{
-        .name = "crun",
-        .root_module = crun_mod,
-        .linkage = .static,
-    });
-
-    // Add a simple C file to make the library valid
-    crun_lib.addCSourceFiles(.{
-        .files = &.{"src/stubs/stub.c"},
-        .flags = &.{
-            "-std=c99",
-            "-Wall",
-            "-Wextra",
-            "-O3",
-        },
-    });
-
-    // Create BFC library (empty stub)
-    const bfc_mod = b.createModule(.{
-        .root_source_file = b.path("src/stubs/stub.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    
-    const bfc_lib = b.addLibrary(.{
-        .name = "bfc",
-        .root_module = bfc_mod,
-        .linkage = .static,
-    });
-
-    // Add a simple C file to make the library valid
-    bfc_lib.addCSourceFiles(.{
-        .files = &.{"src/stubs/stub.c"},
-        .flags = &.{
-            "-std=c99",
-            "-Wall",
-            "-Wextra",
-            "-O3",
-        },
-    });
+    // Note: crun/bfc stub libraries removed to avoid duplicate _start symbol in Release builds
 
     // Main executable
     const main_mod = b.createModule(.{
@@ -141,9 +95,7 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("seccomp");
     exe.linkSystemLibrary("yajl");
 
-    // Link crun and bfc libraries
-    exe.linkLibrary(crun_lib);
-    exe.linkLibrary(bfc_lib);
+    // No additional static Zig libraries linked to avoid duplicate start symbol
 
     // Add include paths
     exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
@@ -198,8 +150,7 @@ pub fn build(b: *std.Build) void {
     test_exe.linkSystemLibrary("cap");
     test_exe.linkSystemLibrary("seccomp");
     test_exe.linkSystemLibrary("yajl");
-    test_exe.linkLibrary(crun_lib);
-    test_exe.linkLibrary(bfc_lib);
+    // No additional static Zig libraries linked into tests
 
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
