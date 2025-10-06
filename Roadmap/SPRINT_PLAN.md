@@ -9,6 +9,7 @@ Sprint Length: 1–2 weeks
 - Minimal OCI (crun/runc) create/start/stop/delete with bundle generation
 - CI/CD: stable green across all workflows, amd64 only (Zig 0.15.1)
 - Docs: Developer onboarding complete and consistent
+- Release target: version 0.6.0 at sprint end
 
 ## Scope / Tasks
 
@@ -40,11 +41,18 @@ Sprint Length: 1–2 weeks
 - Add `docs/architecture/CONFORMANCE_REPORT.md` [A]
 - Documentation standards reflect archival policy (done)
 
+### 6) Developer Onboarding Verification
+- Walk through docs/DEV_QUICKSTART.md and docs/dev_guide.md on a clean Ubuntu host [A]
+- Validate environment setup steps (deps, Zig 0.15.1, build, run, tests) [A]
+- Confirm steps are minimal and unambiguous; note time-to-first-build [A]
+- File issues/PRs if any blockers or unclear steps are found [A]
+
 ## Acceptance Criteria
 - All CI workflows green on main for 3 successive commits
 - LXC create works on Proxmox self-hosted runner with basic template
 - OCI crun/runc commands run locally (help + no-crash), bundle generated in expected path
 - Conformance report created and linked from `docs/architecture/OVERVIEW.md`
+- Release v0.6.0 tagged and notes published
 
 ## Out of Scope
 - Multi-arch builds
