@@ -179,7 +179,7 @@ Proxmox LXCRI v0.2.0 represents a significant milestone in the project's evoluti
 
 ### Minimum Requirements
 - **Operating System**: Linux 6.8.0+
-- **Zig Compiler**: 0.13.0+
+- **Zig Compiler**: 0.15.1+
 - **Proxmox VE**: 7.4+
 - **ZFS**: 2.1+
 - **Memory**: 2GB RAM
@@ -187,7 +187,7 @@ Proxmox LXCRI v0.2.0 represents a significant milestone in the project's evoluti
 
 ### Recommended Requirements
 - **Operating System**: Linux 6.8.0+
-- **Zig Compiler**: 0.13.0+
+- **Zig Compiler**: 0.15.1+
 - **Proxmox VE**: 8.0+
 - **ZFS**: 2.2+
 - **Memory**: 8GB RAM

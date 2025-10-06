@@ -50,7 +50,7 @@ pub const VersionCommand = struct {
     fn formatVersion(self: *Self, version: VersionInfo, allocator: std.mem.Allocator) ![]u8 {
         _ = self;
 
-        var version_text = std.ArrayList(u8).init(allocator);
+        var version_text = std.array_list.Managed(u8).init(allocator);
         defer version_text.deinit();
 
         try version_text.writer().print("proxmox-lxcri version {d}.{d}.{d}", .{

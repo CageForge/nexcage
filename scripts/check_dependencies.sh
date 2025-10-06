@@ -226,8 +226,8 @@ check_build_file() {
     local zig_path=""
     if command -v zig > /dev/null 2>&1; then
         zig_path="zig"
-    elif [[ -f "./zig-linux-x86_64-0.13.0/zig" ]]; then
-        zig_path="./zig-linux-x86_64-0.13.0/zig"
+    elif [[ -f "./zig-linux-x86_64-0.15.1/zig" ]]; then
+        zig_path="./zig-linux-x86_64-0.15.1/zig"
     else
         log_error "Zig not found. Please ensure Zig is installed or in the project directory."
         return 1

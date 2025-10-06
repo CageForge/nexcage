@@ -63,7 +63,7 @@ ssh "$PVE_USER@$PVE_HOST" "apt-get update && apt-get install -y libcap-dev libse
 
 # 6. Install Zig
 echo -e "${BLUE}📦 Installing Zig...${NC}"
-ssh "$PVE_USER@$PVE_HOST" "cd /opt && wget https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz && tar -xf zig-linux-x86_64-0.13.0.tar.xz && ln -sf /opt/zig-linux-x86_64-0.13.0/zig /usr/local/bin/zig"
+ssh "$PVE_USER@$PVE_HOST" "cd /opt && wget https://ziglang.org/download/0.15.1/zig-linux-x86_64-0.15.1.tar.xz && tar -xf zig-linux-x86_64-0.15.1.tar.xz && ln -sf /opt/zig-linux-x86_64-0.15.1/zig /usr/local/bin/zig"
 
 # 7. Configure runner
 echo -e "${BLUE}⚙️ Configuring runner...${NC}"

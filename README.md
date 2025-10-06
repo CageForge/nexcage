@@ -17,10 +17,10 @@ sudo apt-get update
 sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
 ```
 
-2) Install Zig 0.13.0 (or use CI setup)
+2) Install Zig 0.15.1 (or use CI setup)
 ```bash
 # See https://ziglang.org/download/ for binary tarball
-zig version  # should print 0.13.0
+zig version  # should print 0.15.1
 ```
 
 3) Build and run

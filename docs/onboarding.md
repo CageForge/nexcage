@@ -64,7 +64,7 @@ sudo dnf install -y \
 
 ```bash
 # Download Zig
-ZIG_VERSION="0.13.0"
+ZIG_VERSION="0.15.1"
 ZIG_DIR="/opt/zig"
 sudo mkdir -p "$ZIG_DIR"
 cd "$ZIG_DIR"

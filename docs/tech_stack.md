@@ -5,7 +5,7 @@ This document describes the technical stack used in the Proxmox LXCRI project, i
 ## Core Technologies
 
 ### 1. Zig Programming Language
-- **Version**: 0.13.0+
+- **Version**: 0.15.1+
 - **Features**:
   - Memory safety
   - Zero-cost abstractions

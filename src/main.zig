@@ -24,7 +24,9 @@ pub const AppContext = struct {
         const config = try config_loader.loadDefault();
 
         // Initialize logger
-        const logger = core.LogContext.init(allocator, std.io.getStdOut().writer(), config.log_level, "proxmox-lxcri");
+        const stdout = std.fs.File.stdout();
+        var buffer: [1024]u8 = undefined;
+        const logger = core.LogContext.init(allocator, stdout.writer(&buffer), config.log_level, "proxmox-lxcri");
 
         // Initialize error handler
         // TODO: Implement DefaultErrorHandler

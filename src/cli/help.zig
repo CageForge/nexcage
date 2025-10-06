@@ -46,7 +46,7 @@ pub const HelpCommand = struct {
         const command_names = try global_registry.list(allocator);
         defer allocator.free(command_names);
 
-        var help_text = std.ArrayList(u8).init(allocator);
+        var help_text = std.array_list.Managed(u8).init(allocator);
         defer help_text.deinit();
 
         try help_text.appendSlice("proxmox-lxcri - Proxmox LXC Runtime Interface\n\n");

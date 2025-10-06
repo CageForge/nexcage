@@ -51,7 +51,7 @@ Proxmox LXCRI includes a comprehensive testing suite that covers all major compo
 ## Running Tests
 
 ### Prerequisites
-- Zig 0.13.0 or later
+- Zig 0.15.1 or later
 - All project dependencies installed
 - Sufficient disk space for test artifacts
 
@@ -59,31 +59,31 @@ Proxmox LXCRI includes a comprehensive testing suite that covers all major compo
 
 #### Run All Tests
 ```bash
-./zig-linux-x86_64-0.13.0/zig build test
+./zig-linux-x86_64-0.15.1/zig build test
 ```
 
 #### Run Specific Test Categories
 ```bash
 # Performance tests
-./zig-linux-x86_64-0.13.0/zig build test-performance
+./zig-linux-x86_64-0.15.1/zig build test-performance
 
 # Memory leak tests
-./zig-linux-x86_64-0.13.0/zig build test-memory
+./zig-linux-x86_64-0.15.1/zig build test-memory
 
 # Integration tests
-./zig-linux-x86_64-0.13.0/zig build test-integration
+./zig-linux-x86_64-0.15.1/zig build test-integration
 
 # Comprehensive tests
-./zig-linux-x86_64-0.13.0/zig build test-comprehensive
+./zig-linux-x86_64-0.15.1/zig build test-comprehensive
 ```
 
 #### Run Individual Test Files
 ```bash
 # Test specific component
-./zig-linux-x86_64-0.13.0/zig test tests/oci/image/layerfs_test.zig
+./zig-linux-x86_64-0.15.1/zig test tests/oci/image/layerfs_test.zig
 
 # Test with specific target
-./zig-linux-x86_64-0.13.0/zig test tests/oci/image/layerfs_test.zig -target native
+./zig-linux-x86_64-0.15.1/zig test tests/oci/image/layerfs_test.zig -target native
 ```
 
 ### Test Environment Setup
@@ -427,19 +427,19 @@ performance_test.root_module.addImport("layer", layer_mod);
 #### Verbose Output
 ```bash
 # Enable verbose test output
-./zig-linux-x86_64-0.13.0/zig test tests/oci/image/layerfs_test.zig --verbose
+./zig-linux-x86_64-0.15.1/zig test tests/oci/image/layerfs_test.zig --verbose
 ```
 
 #### Individual Test Execution
 ```bash
 # Run specific test by name
-./zig-linux-x86_64-0.13.0/zig test tests/oci/image/layerfs_test.zig --test-filter "LayerFS initialization"
+./zig-linux-x86_64-0.15.1/zig test tests/oci/image/layerfs_test.zig --test-filter "LayerFS initialization"
 ```
 
 #### Test Coverage
 ```bash
 # Generate test coverage report (if supported)
-./zig-linux-x86_64-0.13.0/zig test tests/oci/image/layerfs_test.zig --test-coverage
+./zig-linux-x86_64-0.15.1/zig test tests/oci/image/layerfs_test.zig --test-coverage
 ```
 
 ## Future Enhancements

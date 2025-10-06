@@ -83,9 +83,9 @@ case $OS in
 esac
 
 # Install Zig
-print_status "Installing Zig 0.13.0"
+print_status "Installing Zig 0.15.1"
 
-ZIG_VERSION="0.13.0"
+ZIG_VERSION="0.15.1"
 ZIG_DIR="/opt/zig"
 ZIG_TAR="zig-linux-x86_64-$ZIG_VERSION.tar.xz"
 

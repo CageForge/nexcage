@@ -3,7 +3,7 @@
 ## Requirements
 
 - Proxmox VE 7.0 or newer
-- Zig 0.13.0 or newer
+- Zig 0.15.1 or newer
 - ZFS utilities
 - Linux kernel 5.0 or newer
 - CRI-O

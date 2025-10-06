@@ -21,7 +21,7 @@ This user guide provides comprehensive instructions for using Proxmox LXCRI with
 
 - **Operating System**: Linux (Ubuntu 20.04+, Debian 11+, CentOS 8+)
 - **Kernel**: Linux 5.0 or later
-- **Zig Compiler**: Version 0.13.0 or later
+- **Zig Compiler**: Version 0.15.1 or later
 - **Proxmox VE**: Version 7.0 or later (for full integration)
 - **ZFS**: ZFS utilities and kernel modules
 - **Storage**: Minimum 10GB available space
@@ -48,17 +48,17 @@ sudo apt update
 sudo apt install -y build-essential zfsutils-linux
 
 # Install Zig compiler (if not already installed)
-wget https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
-tar -xf zig-linux-x86_64-0.13.0.tar.xz
-sudo mv zig-linux-x86_64-0.13.0 /opt/
-echo 'export PATH="/opt/zig-linux-x86_64-0.13.0:$PATH"' >> ~/.bashrc
+wget https://ziglang.org/download/0.15.1/zig-linux-x86_64-0.15.1.tar.xz
+tar -xf zig-linux-x86_64-0.15.1.tar.xz
+sudo mv zig-linux-x86_64-0.15.1 /opt/
+echo 'export PATH="/opt/zig-linux-x86_64-0.15.1:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
 #### 3. Build Project
 ```bash
 # Build the project
-./zig-linux-x86_64-0.13.0/zig build
+./zig-linux-x86_64-0.15.1/zig build
 
 # Verify installation
 ./zig-out/bin/proxmox-lxcri --version

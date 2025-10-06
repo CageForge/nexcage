@@ -22,21 +22,21 @@ pub const CreateCommand = struct {
 
         // Check for help flag
         if (options.help) {
-            const stdout = std.io.getStdOut().writer();
-            try stdout.print("Create Command Help:\n", .{});
-            try stdout.print("  Usage: proxmox-lxcri create --name <container_id> --image <image>\n", .{});
-            try stdout.print("\n", .{});
-            try stdout.print("  Options:\n", .{});
-            try stdout.print("    --name <id>     Container ID/name (required)\n", .{});
-            try stdout.print("    --image <img>   Container image (required)\n", .{});
-            try stdout.print("    --runtime <rt>  Runtime type (lxc, crun, runc, vm)\n", .{});
-            try stdout.print("    --config <cfg>  Configuration file path\n", .{});
-            try stdout.print("    --verbose       Enable verbose logging\n", .{});
-            try stdout.print("    --debug         Enable debug logging\n", .{});
-            try stdout.print("\n", .{});
-            try stdout.print("  Examples:\n", .{});
-            try stdout.print("    proxmox-lxcri create --name my-container --image ubuntu:20.04\n", .{});
-            try stdout.print("    proxmox-lxcri create --name kube-ovn-1 --image nginx --runtime crun\n", .{});
+            const out = std.fs.File.stdout();
+            try out.writeAll("Create Command Help:\n");
+            try out.writeAll("  Usage: proxmox-lxcri create --name <container_id> --image <image>\n");
+            try out.writeAll("\n");
+            try out.writeAll("  Options:\n");
+            try out.writeAll("    --name <id>     Container ID/name (required)\n");
+            try out.writeAll("    --image <img>   Container image (required)\n");
+            try out.writeAll("    --runtime <rt>  Runtime type (lxc, crun, runc, vm)\n");
+            try out.writeAll("    --config <cfg>  Configuration file path\n");
+            try out.writeAll("    --verbose       Enable verbose logging\n");
+            try out.writeAll("    --debug         Enable debug logging\n");
+            try out.writeAll("\n");
+            try out.writeAll("  Examples:\n");
+            try out.writeAll("    proxmox-lxcri create --name my-container --image ubuntu:20.04\n");
+            try out.writeAll("    proxmox-lxcri create --name kube-ovn-1 --image nginx --runtime crun\n");
             return;
         }
 
