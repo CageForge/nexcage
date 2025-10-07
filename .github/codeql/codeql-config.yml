@@ -1,0 +1,8 @@
+paths-ignore:
+  - archive/**
+  - legacy/**
+  - docs/**
+  - Roadmap/**
+  - zig-out/**
+  - dist/**
+  - deps/**

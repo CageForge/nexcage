@@ -50,6 +50,7 @@ jobs:
           languages: 'cpp,c'
           queries: +security-and-quality
           build-mode: none
+          config-file: .github/codeql/codeql-config.yml
       - name: Analyze
         uses: github/codeql-action/analyze@v3
 
