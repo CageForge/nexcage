@@ -79,6 +79,9 @@ jobs:
         LOG=e2e_lxc.log
         exec > >(tee -a "$LOG") 2>&1
 
+        # Sudo helper if needed
+        if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi
+
         echo "[E2E] Detect template (vztmpl)"
         TPL=${TPL:-}
         if [ -z "${TPL}" ]; then
@@ -107,7 +110,7 @@ jobs:
         fi
         echo "BRIDGE: $BRIDGE"
 
-        VMID=$(pvesh get /cluster/nextid)
+        VMID=$($SUDO pvesh get /cluster/nextid)
         echo "VMID: $VMID"
 
         cleanup() {
@@ -120,32 +123,32 @@ jobs:
 
         echo "[E2E] Create"
         if echo "$TPL" | grep -q '^local:'; then
-          pct create "$VMID" "$TPL" \
+          $SUDO pct create "$VMID" "$TPL" \
             -rootfs "${ROOTFS}:2" -memory 256 -hostname "gh-e2e-$VMID" \
             -net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" -cores 1 -features nesting=1 -unprivileged 1
         else
-          pct create "$VMID" "$TPL" \
+          $SUDO pct create "$VMID" "$TPL" \
             -rootfs "${ROOTFS}:2" -memory 256 -hostname "gh-e2e-$VMID" \
             -net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" -cores 1 -features nesting=1 -unprivileged 1
         fi
 
         echo "[E2E] Start"
-        pct start "$VMID"
+        $SUDO pct start "$VMID"
         for i in $(seq 1 30); do
-          if pct status "$VMID" | grep -q running; then break; fi
+          if $SUDO pct status "$VMID" | grep -q running; then break; fi
           sleep 2
         done
-        pct status "$VMID"
+        $SUDO pct status "$VMID"
 
         echo "[E2E] Exec sanity"
-        pct exec "$VMID" -- sh -lc 'uname -a && id && echo ok'
+        $SUDO pct exec "$VMID" -- sh -lc 'uname -a && id && echo ok'
 
         echo "[E2E] Stop"
-        pct stop "$VMID" --timeout 60
-        pct status "$VMID" || true
+        $SUDO pct stop "$VMID" --timeout 60
+        $SUDO pct status "$VMID" || true
 
         echo "[E2E] Destroy"
-        pct destroy "$VMID" --purge 1
+        $SUDO pct destroy "$VMID" --purge 1
         trap - EXIT
 
     - name: Upload E2E logs
