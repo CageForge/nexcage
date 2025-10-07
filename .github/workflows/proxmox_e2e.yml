@@ -158,7 +158,8 @@ jobs:
         $SUDO pct status "$VMID"
 
         echo "[E2E] Exec sanity"
-        $SUDO env LXC_MEMFD_REXEC=0 pct exec "$VMID" -- sh -lc 'uname -a && id && echo ok'
+        export LXC_MEMFD_REXEC=0
+        $SUDO --preserve-env=LXC_MEMFD_REXEC pct exec "$VMID" -- sh -lc 'uname -a && id && echo ok'
 
         echo "[E2E] Stop"
         $SUDO pct stop "$VMID" --timeout 60
