@@ -59,25 +59,19 @@ jobs:
         path: zig-out/bin/proxmox-lxcri
         retention-days: 7
 
-    - name: Ensure LXC template exists (pveam download if missing)
+    - name: Prepare E2E log file
+      run: |
+        : > e2e_lxc.log
+
+    - name: Check LXC template present (pre-seeded requirement)
       run: |
         set -euo pipefail
-        # Pick a small, commonly available template
-        TEMPLATE_NAME=${TEMPLATE_NAME:-alpine-3.18-default_20230607_amd64.tar.xz}
-        # Prefer 'alpine' if available, else pick first from 'pveam available --section system'
-        if pveam available --section system | grep -q alpine; then
-          TEMPLATE_NAME=$(pveam available --section system | awk '/alpine/ {print $2; exit}')
-        else
-          TEMPLATE_NAME=$(pveam available --section system | awk 'NR==1{print $2}')
+        echo "[E2E] Checking local LXC templates..." | tee -a e2e_lxc.log
+        ls -l /var/lib/vz/template/cache/ | sed -n '1,200p' | tee -a e2e_lxc.log || true
+        if ! ls -1 /var/lib/vz/template/cache/*.tar.* >/dev/null 2>&1; then
+          echo "No LXC template found in /var/lib/vz/template/cache. Pre-seed a template or set TPL env." | tee -a e2e_lxc.log
+          exit 1
         fi
-        echo "Chosen template: $TEMPLATE_NAME"
-        # If no template present locally, try to download into 'local' storage
-        if ! ls -1 /var/lib/vz/template/cache/* | grep -q "$(basename "$TEMPLATE_NAME" | sed 's/\\./\\./g')"; then
-          if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi
-          $SUDO pveam update || true
-          $SUDO pveam download local "$TEMPLATE_NAME"
-        fi
-        ls -l /var/lib/vz/template/cache/ | sed -n '1,200p'
 
     - name: E2E LXC lifecycle (pct create/start/stop/destroy)
       run: |
@@ -106,11 +100,10 @@ jobs:
         fi
         echo "ROOTFS: $ROOTFS"
 
-        BRIDGE=${E2E_BRIDGE:-vmbr0}
+        BRIDGE=vmbr50
         if ! ip -br link 2>/dev/null | awk '{print $1}' | grep -q "^${BRIDGE}$"; then
-          # fallback to first vmbr*
-          FB=$(ip -br link 2>/dev/null | awk '{print $1}' | grep -E '^vmbr[0-9]+' | head -n1 || true)
-          if [ -n "$FB" ]; then BRIDGE=$FB; fi
+          echo "Bridge ${BRIDGE} not found. Please ensure vmbr50 exists on the runner." | tee -a "$LOG"
+          exit 1
         fi
         echo "BRIDGE: $BRIDGE"
 
