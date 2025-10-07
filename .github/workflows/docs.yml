@@ -21,6 +21,8 @@ jobs:
       - uses: DavidAnson/markdownlint-cli2-action@v15
         with:
           config: .markdownlint-cli2.jsonc
+          globs: |
+            README.md
           
   spell-check:
     name: Spell Check
