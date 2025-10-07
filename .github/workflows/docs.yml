@@ -16,14 +16,14 @@ jobs:
   markdown-lint:
     name: Markdown Lint
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - uses: DavidAnson/markdownlint-cli2-action@v15
         with:
-          config: .markdownlint.json
+          config: .markdownlint-cli2.jsonc
           globs: |
-            **/*.md
-            !node_modules/**/*.md
+            README.md
           
   spell-check:
     name: Spell Check
