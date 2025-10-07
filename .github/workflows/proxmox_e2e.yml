@@ -142,11 +142,13 @@ jobs:
         if echo "$TPL" | grep -q '^local:'; then
           $SUDO pct create "$VMID" "$TPL" \
             -rootfs "${ROOTFS}:2" -memory 256 -hostname "gh-e2e-$VMID" \
-            -net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" -cores 1 -features nesting=1 -unprivileged 1
+            -net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" -cores 1 -features nesting=1,keyctl=1 -unprivileged 0
+          $SUDO pct set "$VMID" -lxc.apparmor.profile unconfined
         else
           $SUDO pct create "$VMID" "$TPL" \
             -rootfs "${ROOTFS}:2" -memory 256 -hostname "gh-e2e-$VMID" \
-            -net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" -cores 1 -features nesting=1 -unprivileged 1
+            -net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" -cores 1 -features nesting=1,keyctl=1 -unprivileged 0
+          $SUDO pct set "$VMID" -lxc.apparmor.profile unconfined
         fi
 
         echo "[E2E] Start"
