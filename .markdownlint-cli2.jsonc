@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
+  "globs": [
+    "**/*.md",
+    "!archive/**",
+    "!legacy/**",
+    "!zig-out/**",
+    "!dist/**"
+  ],
+  "fix": false,
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD033": false,
+    "MD041": false
+  }
+}
+

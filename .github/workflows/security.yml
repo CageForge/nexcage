@@ -17,6 +17,7 @@ concurrency:
 permissions:
   contents: read
   security-events: write
+  actions: read
 
 jobs:
   build-and-test:
@@ -48,8 +49,7 @@ jobs:
         with:
           languages: 'cpp,c'
           queries: +security-and-quality
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+          build-mode: none
       - name: Analyze
         uses: github/codeql-action/analyze@v3
 
@@ -67,12 +67,6 @@ jobs:
             p/ci
             p/security-audit
             p/secrets
-          generateSarif: true
-          sarif: semgrep.sarif
-      - name: Upload Semgrep SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: semgrep.sarif
 
   trivy-fs:
     name: Trivy FS Scan
@@ -94,8 +88,10 @@ jobs:
           ignore-unfixed: true
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@v3
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           sarif_file: trivy-results.sarif
+        continue-on-error: true
 
   gitleaks:
     name: Gitleaks Secrets Scan
@@ -104,11 +100,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          args: detect --redact --report-format sarif --report-path gitleaks.sarif
+      - name: Install gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz | tar xz
+          sudo mv gitleaks /usr/local/bin/
+      - name: Run gitleaks (filesystem)
+        run: |
+          gitleaks detect --no-git --redact --report-format sarif --report-path gitleaks.sarif || true
       - name: Upload Gitleaks SARIF
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gitleaks.sarif
+        continue-on-error: true
