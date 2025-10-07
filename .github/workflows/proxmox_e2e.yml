@@ -79,8 +79,8 @@ jobs:
         LOG=e2e_lxc.log
         exec > >(tee -a "$LOG") 2>&1
 
-        # Sudo helper if needed
-        if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi
+        # Sudo helper (non-interactive). Requires NOPASSWD on runner for pct/pvesh/pvesm.
+        if command -v sudo >/dev/null 2>&1; then SUDO='sudo -n'; else SUDO=; fi
 
         echo "[E2E] Detect template (vztmpl)"
         TPL=${TPL:-}
@@ -99,7 +99,7 @@ jobs:
         echo "[E2E] Detect rootfs storage"
         ROOTFS=${ROOTFS:-}
         if [ -z "${ROOTFS}" ]; then
-          if pvesm status | awk '{print $1}' | grep -q '^local-lvm$'; then ROOTFS=local-lvm; else ROOTFS=local; fi
+          if $SUDO pvesm status | awk '{print $1}' | grep -q '^local-lvm$'; then ROOTFS=local-lvm; else ROOTFS=local; fi
         fi
         echo "ROOTFS: $ROOTFS"
 
