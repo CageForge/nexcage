@@ -66,6 +66,7 @@ jobs:
     - name: Check LXC template present (pre-seeded requirement)
       run: |
         set -euo pipefail
+        export PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH
         echo "[E2E] Checking local LXC templates..." | tee -a e2e_lxc.log
         ls -l /var/lib/vz/template/cache/ | sed -n '1,200p' | tee -a e2e_lxc.log || true
         if ! ls -1 /var/lib/vz/template/cache/*.tar.* >/dev/null 2>&1; then
@@ -78,6 +79,7 @@ jobs:
         set -euo pipefail
         LOG=e2e_lxc.log
         exec > >(tee -a "$LOG") 2>&1
+        export PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH
 
         # Sudo helper (non-interactive). Requires NOPASSWD on runner for pct/pvesh/pvesm.
         if command -v sudo >/dev/null 2>&1; then SUDO='sudo -n'; else SUDO=; fi
