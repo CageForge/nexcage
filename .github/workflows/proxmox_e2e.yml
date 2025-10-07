@@ -84,6 +84,16 @@ jobs:
         # Sudo helper (non-interactive). Requires NOPASSWD on runner for pct/pvesh/pvesm.
         if command -v sudo >/dev/null 2>&1; then SUDO='sudo -n'; else SUDO=; fi
 
+        # Preflight: verify NOPASSWD works for required tools
+        if [ -n "$SUDO" ]; then
+          set +e
+          $SUDO -v >/dev/null 2>&1
+          $SUDO pvesh get /cluster/nextid >/dev/null 2>&1 || { echo "sudo NOPASSWD for pvesh missing" | tee -a "$LOG"; exit 1; }
+          $SUDO pvesm status >/dev/null 2>&1 || { echo "sudo NOPASSWD for pvesm missing" | tee -a "$LOG"; exit 1; }
+          $SUDO pct status 999999 >/dev/null 2>&1 || true
+          set -e
+        fi
+
         echo "[E2E] Detect template (vztmpl)"
         TPL=${TPL:-}
         if [ -z "${TPL}" ]; then
@@ -118,8 +128,13 @@ jobs:
         cleanup() {
           set +e
           echo "[E2E] Cleanup for VMID=$VMID"
-          pct stop "$VMID" --timeout 30 >/dev/null 2>&1 || true
-          pct destroy "$VMID" --purge 1 >/dev/null 2>&1 || true
+          if [ -n "$SUDO" ]; then
+            $SUDO pct stop "$VMID" --timeout 30 >/dev/null 2>&1 || true
+            $SUDO pct destroy "$VMID" --purge 1 >/dev/null 2>&1 || true
+          else
+            pct stop "$VMID" --timeout 30 >/dev/null 2>&1 || true
+            pct destroy "$VMID" --purge 1 >/dev/null 2>&1 || true
+          fi
         }
         trap cleanup EXIT
 
