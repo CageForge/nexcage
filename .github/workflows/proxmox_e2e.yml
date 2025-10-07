@@ -160,7 +160,8 @@ jobs:
         # Exec skipped due to memfd restrictions on runner; lifecycle acceptance requires create/start/stop/destroy
 
         echo "[E2E] Stop"
-        $SUDO pct stop "$VMID" --timeout 60
+        # First try graceful shutdown with timeout, then force stop as fallback
+        $SUDO pct shutdown "$VMID" --timeout 60 --forceStop 1 || $SUDO pct stop "$VMID"
         $SUDO pct status "$VMID" || true
 
         echo "[E2E] Destroy"
