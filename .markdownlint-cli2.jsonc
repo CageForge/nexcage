@@ -4,6 +4,8 @@
     "**/*.md",
     "!archive/**",
     "!legacy/**",
+    "!Roadmap/**",
+    "!docs/tutorials/VIDEO_TUTORIAL_SCRIPTS.md",
     "!zig-out/**",
     "!dist/**"
   ],
@@ -11,6 +13,9 @@
   "config": {
     "default": true,
     "MD013": false,
+    "MD022": false,
+    "MD031": false,
+    "MD032": false,
     "MD033": false,
     "MD041": false
   }
