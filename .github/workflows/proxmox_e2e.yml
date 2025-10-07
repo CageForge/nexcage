@@ -194,9 +194,9 @@ jobs:
         set -euo pipefail
         export PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH
         if command -v sudo >/dev/null 2>&1; then SUDO='sudo -n'; else SUDO=; fi
-        mapfile -t ALL_IDS < <(pct list 2>/dev/null | awk 'NR>1 {print $1}')
-        for id in "${ALL_IDS[@]:-}"; do
-          name=$(pct config "$id" 2>/dev/null | awk -F': ' '/^hostname:/{print $2}')
+        ALL_IDS=$($SUDO pct list 2>/dev/null | awk 'NR>1 {print $1}' || true)
+        for id in $ALL_IDS; do
+          name=$($SUDO pct config "$id" 2>/dev/null | awk -F': ' '/^hostname:/{print $2}')
           if [ -n "${name:-}" ] && [ "${name#gh-e2e-}" != "$name" ]; then
             echo "[E2E] Final cleanup vmid=$id ($name)"
             $SUDO pct shutdown "$id" --timeout 30 --forceStop 1 || true
