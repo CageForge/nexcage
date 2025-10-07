@@ -29,6 +29,12 @@ jobs:
         with:
           version: 0.15.1
 
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Build
         run: |
           zig build -Doptimize=ReleaseFast
@@ -36,28 +42,29 @@ jobs:
       - name: Create artifact
         run: |
           mkdir -p dist
-          cp zig-out/bin/proxmox-lxcri dist/${{ matrix.artifact_name }}
-          chmod +x dist/${{ matrix.artifact_name }}
+          BIN_NAME=proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
+          cp zig-out/bin/proxmox-lxcri "dist/${BIN_NAME}"
+          chmod +x "dist/${BIN_NAME}"
 
       - name: Generate SBOM (SPDX JSON)
         uses: anchore/sbom-action@v0
         with:
           path: dist
-          artifact-name: sbom-${{ matrix.arch }}
-          output-file: dist/sbom-${{ matrix.arch }}.spdx.json
+          artifact-name: proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom
+          output-file: dist/proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
           format: spdx-json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/${{ matrix.artifact_name }}
+          name: proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
+          path: dist/proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-${{ matrix.arch }}.spdx.json
-          path: dist/sbom-${{ matrix.arch }}.spdx.json
+          name: proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
+          path: dist/proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
 
   build-deb:
     name: Build DEB Packages
@@ -161,9 +168,10 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release
+          # Binaries
           find artifacts -name "proxmox-lxcri-*" -type f -exec cp {} release/ \;
-          # Include SBOMs
-          find artifacts -name "*.spdx.json" -type f -exec cp {} release/ \;
+          # SBOMs (SPDX JSON)
+          find artifacts -name "*.sbom.spdx.json" -type f -exec cp {} release/ \;
           ls -la release/
 
       - name: Create checksums
