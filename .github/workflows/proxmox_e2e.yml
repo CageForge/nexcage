@@ -129,10 +129,22 @@ jobs:
           set +e
           echo "[E2E] Cleanup for VMID=$VMID"
           if [ -n "$SUDO" ]; then
-            $SUDO pct stop "$VMID" --timeout 30 >/dev/null 2>&1 || true
+            $SUDO pct shutdown "$VMID" --timeout 30 --forceStop 1 >/dev/null 2>&1 || true
+            $SUDO pct stop "$VMID" >/dev/null 2>&1 || true
+            for i in $(seq 1 10); do
+              st=$($SUDO pct status "$VMID" 2>/dev/null || true)
+              echo "$st" | grep -q running || break
+              sleep 2
+            done
             $SUDO pct destroy "$VMID" --purge 1 >/dev/null 2>&1 || true
           else
-            pct stop "$VMID" --timeout 30 >/dev/null 2>&1 || true
+            pct shutdown "$VMID" --timeout 30 --forceStop 1 >/dev/null 2>&1 || true
+            pct stop "$VMID" >/dev/null 2>&1 || true
+            for i in $(seq 1 10); do
+              st=$(pct status "$VMID" 2>/dev/null || true)
+              echo "$st" | grep -q running || break
+              sleep 2
+            done
             pct destroy "$VMID" --purge 1 >/dev/null 2>&1 || true
           fi
         }
@@ -175,3 +187,25 @@ jobs:
         name: proxmox-e2e-logs
         path: e2e_lxc.log
         retention-days: 7
+
+    - name: Cleanup leftover E2E containers (always)
+      if: always()
+      run: |
+        set -euo pipefail
+        export PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH
+        if command -v sudo >/dev/null 2>&1; then SUDO='sudo -n'; else SUDO=; fi
+        mapfile -t ALL_IDS < <(pct list 2>/dev/null | awk 'NR>1 {print $1}')
+        for id in "${ALL_IDS[@]:-}"; do
+          name=$(pct config "$id" 2>/dev/null | awk -F': ' '/^hostname:/{print $2}')
+          if [ -n "${name:-}" ] && [ "${name#gh-e2e-}" != "$name" ]; then
+            echo "[E2E] Final cleanup vmid=$id ($name)"
+            $SUDO pct shutdown "$id" --timeout 30 --forceStop 1 || true
+            $SUDO pct stop "$id" || true
+            for i in $(seq 1 10); do
+              st=$($SUDO pct status "$id" 2>/dev/null || true)
+              echo "$st" | grep -q running || break
+              sleep 2
+            done
+            $SUDO pct destroy "$id" --purge 1 || true
+          fi
+        done
