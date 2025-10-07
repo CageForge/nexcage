@@ -1,32 +1,41 @@
 {
     "proxmox": {
-        "pct_path": "/usr/bin/pct",
-        "node": "node1",
-        "timeout": 30,
-        "legacy_api": {
-            "hosts": ["proxmox.example.com"],
-            "port": 8006,
-            "token": "your-token"
-        }
+    "pct_path": "/usr/bin/pct",
+    "node": "mgr",
+    "timeout": 30,
+    "legacy_api": {
+        "hosts":["mgr.cp.if.ua"],
+        "port":8006,
+        "token":"your-token",
+        "node_cache_duration":60
+    }
     },
     "runtime": {
-        "root_path": "/var/lib/proxmox-lxcri",
-        "log_path": "/var/log/proxmox-lxcri/proxmox-lxcri.log",
-        "log_level": "info"
+    "log_level":"debug",
+    "log_path":"/var/log/proxmox-lxcri/runtime.log",
+    "root_path": "/var/lib/proxmox-lxcri",
+    "terminal": false,
+    "routing": [
+        {
+            "pattern": "^(kube-ovn-.*|cilium-.*)$",
+            "runtime": "crun"
+        },
+        {
+            "pattern": ".*",
+            "runtime": "lxc"
+        }
+        ]
+    },
+    "container_config": {
+        "crun_name_patterns": ["kube-ovn-*", "cilium-*"],
+        "default_container_type": "lxc"
     },
     "storage": {
         "zfs_dataset": "rpool/lxc",
         "image_path": "/var/lib/proxmox-lxcri/images"
     },
     "network": {
-        "name": "eth0",
-        "bridge": "vmbr0",
-        "ip": "192.168.1.100/24",
-        "gw": "192.168.1.1",
-        "type": "bridge",
-        "tag": 10,
-        "rate": 1000,
-        "mtu": 1500,
+        "bridge": "vmbr50",
         "dns_servers": ["8.8.8.8", "8.8.4.4"]
     }
 } 
