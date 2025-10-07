@@ -58,4 +58,81 @@ jobs:
         path: zig-out/bin/proxmox-lxcri
         retention-days: 7
 
+    - name: E2E LXC lifecycle (pct create/start/stop/destroy)
+      run: |
+        set -euo pipefail
+        LOG=e2e_lxc.log
+        exec > >(tee -a "$LOG") 2>&1
 
+        echo "[E2E] Detect template (vztmpl)"
+        TPL=${TPL:-}
+        if [ -z "${TPL}" ]; then
+          TPL=$(pvesm list local --content vztmpl 2>/dev/null | awk '/vztmpl/ {print $1; exit}') || true
+        fi
+        if [ -z "${TPL}" ]; then
+          TPL=$(ls -1 /var/lib/vz/template/cache/*.tar.* 2>/dev/null | head -n1) || true
+        fi
+        if [ -z "${TPL}" ]; then
+          echo "No LXC template found (vztmpl). Please ensure a container template exists." >&2
+          exit 1
+        fi
+        echo "Template: $TPL"
+
+        echo "[E2E] Detect rootfs storage"
+        ROOTFS=${ROOTFS:-}
+        if [ -z "${ROOTFS}" ]; then
+          if pvesm status | awk '{print $1}' | grep -q '^local-lvm$'; then ROOTFS=local-lvm; else ROOTFS=local; fi
+        fi
+        echo "ROOTFS: $ROOTFS"
+
+        BRIDGE=${E2E_BRIDGE:-vmbr0}
+        echo "BRIDGE: $BRIDGE"
+
+        VMID=$(pvesh get /cluster/nextid)
+        echo "VMID: $VMID"
+
+        cleanup() {
+          set +e
+          echo "[E2E] Cleanup for VMID=$VMID"
+          pct stop "$VMID" --timeout 30 >/dev/null 2>&1 || true
+          pct destroy "$VMID" --purge 1 >/dev/null 2>&1 || true
+        }
+        trap cleanup EXIT
+
+        echo "[E2E] Create"
+        if echo "$TPL" | grep -q '^local:'; then
+          pct create "$VMID" "$TPL" \
+            -rootfs "${ROOTFS}:2" -memory 256 -hostname "gh-e2e-$VMID" \
+            -net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" -cores 1 -features nesting=1 -unprivileged 1
+        else
+          pct create "$VMID" "$TPL" \
+            -rootfs "${ROOTFS}:2" -memory 256 -hostname "gh-e2e-$VMID" \
+            -net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" -cores 1 -features nesting=1 -unprivileged 1
+        fi
+
+        echo "[E2E] Start"
+        pct start "$VMID"
+        for i in $(seq 1 30); do
+          if pct status "$VMID" | grep -q running; then break; fi
+          sleep 2
+        done
+        pct status "$VMID"
+
+        echo "[E2E] Exec sanity"
+        pct exec "$VMID" -- sh -lc 'uname -a && id && echo ok'
+
+        echo "[E2E] Stop"
+        pct stop "$VMID" --timeout 60
+        pct status "$VMID" || true
+
+        echo "[E2E] Destroy"
+        pct destroy "$VMID" --purge 1
+        trap - EXIT
+
+    - name: Upload E2E logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: proxmox-e2e-logs
+        path: e2e_lxc.log
+        retention-days: 7
