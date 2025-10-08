@@ -26,7 +26,7 @@ pub const AppContext = struct {
         // Initialize logger
         const stdout = std.fs.File.stdout();
         var buffer: [1024]u8 = undefined;
-        const logger = core.LogContext.init(allocator, stdout.writer(&buffer), config.log_level, "proxmox-lxcri");
+        const logger = core.LogContext.init(allocator, stdout.writer(&buffer), config.log_level, "nexcage");
 
         // Initialize error handler
         // TODO: Implement DefaultErrorHandler
@@ -164,7 +164,7 @@ pub fn main() !void {
         try app.logger.info("  help      Show this help message", .{});
         try app.logger.info("  version   Show version information", .{});
         try app.logger.info("", .{});
-        try app.logger.info("Use 'proxmox-lxcri <command> --help' for command-specific help", .{});
+        try app.logger.info("Use 'nexcage <command> --help' for command-specific help", .{});
         return;
     }
     

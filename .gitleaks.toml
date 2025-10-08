@@ -1,5 +1,5 @@
-# Gitleaks configuration for proxmox-lxcri
-title = "proxmox-lxcri"
+# Gitleaks configuration for nexcage
+title = "nexcage"
 
 [extend]
 useDefault = true

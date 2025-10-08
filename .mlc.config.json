@@ -3,7 +3,7 @@
     { "pattern": "https://github.com/cageforge/nexcage/issues/72" },
     { "pattern": "https://github.com/cageforge/nexcage/issues/72#issuecomment-" },
     { "pattern": "https://pve.proxmox.com/wiki/Manual:_pct" },
-    { "pattern": "https://github.com/your-org/proxmox-lxcri/compare/" },
+    { "pattern": "https://github.com/cageforge/nexcage/compare/" },
     { "pattern": "^\.\./examples/" },
     { "pattern": "^\.\./LEGACY_DEPRECATION.md$" },
     { "pattern": "/Roadmap/CONTRIBUTING.md$" },

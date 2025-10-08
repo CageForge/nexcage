@@ -1,7 +1,7 @@
-Proxmox LXC Runtime Interface (LXCri)
-Copyright 2025 The Proxmox LXCri Authors
+Nexcage OCI runtime (nexcage)
+Copyright 2025 The Nexcage Authors
 
-This product includes software developed at The Proxmox LXCri Project (https://github.com/kubebsd/proxmox-lxcri).
+This product includes software developed at The Nexcage Project (https://github.com/cageforge/nexcage).
 
 This product includes software developed by The Kubernetes Authors (https://github.com/kubernetes/kubernetes).
 

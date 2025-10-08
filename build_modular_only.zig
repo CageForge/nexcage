@@ -115,7 +115,7 @@ pub fn build(b: *std.Build) void {
 
     // Modular executable
     const exe = b.addExecutable(.{
-        .name = "proxmox-lxcri",
+        .name = "nexcage",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,

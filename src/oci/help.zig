@@ -1,11 +1,11 @@
 const std = @import("std");
 
-/// Print usage information for proxmox-lxcri CLI
+/// Print usage information for nexcage CLI
 pub fn printUsage() void {
     const usage =
-        \\Proxmox LXC Container Runtime Interface (proxmox-lxcri)
+        \\Proxmox LXC Container Runtime Interface (nexcage)
         \\
-        \\Usage: proxmox-lxcri [OPTIONS] COMMAND [ARGS]...
+        \\Usage: nexcage [OPTIONS] COMMAND [ARGS]...
         \\
         \\COMMANDS:
         \\  create <container_id>    Create a new container
@@ -34,7 +34,7 @@ pub fn printUsage() void {
         \\  --log <path>             Set the log file to write logs to (default: '/dev/stderr')
         \\  --log-format <format>    Set the log format ('text' (default), or 'json') (default: "text")
         \\
-        \\  --root <path>            Root directory for storage of container state (default: "/run/proxmox-lxcri")
+        \\  --root <path>            Root directory for storage of container state (default: "/run/nexcage")
         \\
         \\  --systemd-cgroup         Enable systemd cgroup support
         \\  --config <path>          Path to configuration file
@@ -45,15 +45,15 @@ pub fn printUsage() void {
         \\  --version, -v            Print the version
         \\
         \\Examples:
-        \\  proxmox-lxcri --config /path/to/config.json create my-container
-        \\  proxmox-lxcri --config /path/to/config.json start my-container
-        \\  proxmox-lxcri list
+        \\  nexcage --config /path/to/config.json create my-container
+        \\  nexcage --config /path/to/config.json start my-container
+        \\  nexcage list
         \\
         \\Configuration files are loaded in this order:
         \\  1. File specified with --config
         \\  2. ./config.json (current directory)
-        \\  3. /etc/proxmox-lxcri/config.json
-        \\  4. /etc/proxmox-lxcri/proxmox-lxcri.json
+        \\  3. /etc/nexcage/config.json
+        \\  4. /etc/nexcage/nexcage.json
         \\
     ;
     std.io.getStdOut().writer().print(usage, .{}) catch {};
@@ -61,7 +61,7 @@ pub fn printUsage() void {
 
 /// Print version information
 pub fn printVersion() void {
-    const version = "proxmox-lxcri version 0.3.0\n";
+    const version = "nexcage version 0.3.0\n";
     std.io.getStdOut().writer().print(version, .{}) catch {};
 }
 
@@ -93,7 +93,7 @@ fn printCreateHelp() void {
     const help =
         \\Create a new container
         \\
-        \\Usage: proxmox-lxcri create [OPTIONS] <container_id>
+        \\Usage: nexcage create [OPTIONS] <container_id>
         \\
         \\Options:
         \\  --bundle, -b <path>      Path to OCI bundle directory
@@ -102,8 +102,8 @@ fn printCreateHelp() void {
         \\  --debug                  Enable debug logging
         \\
         \\Examples:
-        \\  proxmox-lxcri create --bundle ./my-bundle container1
-        \\  proxmox-lxcri create --runtime=crun --bundle ./bundle container2
+        \\  nexcage create --bundle ./my-bundle container1
+        \\  nexcage create --runtime=crun --bundle ./bundle container2
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};
@@ -113,7 +113,7 @@ fn printListHelp() void {
     const help =
         \\List all containers
         \\
-        \\Usage: proxmox-lxcri list [OPTIONS]
+        \\Usage: nexcage list [OPTIONS]
         \\
         \\Options:
         \\  --config <path>          Path to configuration file
@@ -124,8 +124,8 @@ fn printListHelp() void {
         \\  Output includes container ID, name, status, and type.
         \\
         \\Examples:
-        \\  proxmox-lxcri list
-        \\  proxmox-lxcri --config ./config.json list
+        \\  nexcage list
+        \\  nexcage --config ./config.json list
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};
@@ -135,15 +135,15 @@ fn printStartHelp() void {
     const help =
         \\Start a container
         \\
-        \\Usage: proxmox-lxcri start [OPTIONS] <container_id>
+        \\Usage: nexcage start [OPTIONS] <container_id>
         \\
         \\Options:
         \\  --config <path>          Path to configuration file
         \\  --debug                  Enable debug logging
         \\
         \\Examples:
-        \\  proxmox-lxcri start container1
-        \\  proxmox-lxcri --config ./config.json start my-container
+        \\  nexcage start container1
+        \\  nexcage --config ./config.json start my-container
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};
@@ -153,15 +153,15 @@ fn printStopHelp() void {
     const help =
         \\Stop a container
         \\
-        \\Usage: proxmox-lxcri stop [OPTIONS] <container_id>
+        \\Usage: nexcage stop [OPTIONS] <container_id>
         \\
         \\Options:
         \\  --config <path>          Path to configuration file
         \\  --debug                  Enable debug logging
         \\
         \\Examples:
-        \\  proxmox-lxcri stop container1
-        \\  proxmox-lxcri --config ./config.json stop my-container
+        \\  nexcage stop container1
+        \\  nexcage --config ./config.json stop my-container
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};
@@ -171,7 +171,7 @@ fn printRunHelp() void {
     const help =
         \\Create and start a container in one operation
         \\
-        \\Usage: proxmox-lxcri run [OPTIONS] --bundle <path> <container_id>
+        \\Usage: nexcage run [OPTIONS] --bundle <path> <container_id>
         \\
         \\Options:
         \\  --bundle, -b <path>      Path to OCI bundle directory (required)
@@ -185,13 +185,13 @@ fn printRunHelp() void {
         \\  2. Immediately starts the container
         \\  
         \\  This is equivalent to running:
-        \\    proxmox-lxcri create --bundle <path> <container_id>
-        \\    proxmox-lxcri start <container_id>
+        \\    nexcage create --bundle <path> <container_id>
+        \\    nexcage start <container_id>
         \\
         \\Examples:
-        \\  proxmox-lxcri run --bundle ./my-bundle container1
-        \\  proxmox-lxcri run --runtime=crun --bundle ./bundle container2
-        \\  proxmox-lxcri --config ./config.json run -b ./bundle my-container
+        \\  nexcage run --bundle ./my-bundle container1
+        \\  nexcage run --runtime=crun --bundle ./bundle container2
+        \\  nexcage --config ./config.json run -b ./bundle my-container
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};
@@ -201,7 +201,7 @@ fn printSpecHelp() void {
     const help =
         \\Generate OCI specification file
         \\
-        \\Usage: proxmox-lxcri spec [OPTIONS] [bundle-path]
+        \\Usage: nexcage spec [OPTIONS] [bundle-path]
         \\
         \\Options:
         \\  --bundle, -b <path>      Path to OCI bundle directory [default: .]
@@ -214,9 +214,9 @@ fn printSpecHelp() void {
         \\  process, mounts, and security settings.
         \\
         \\Examples:
-        \\  proxmox-lxcri spec                    # Generate in current directory
-        \\  proxmox-lxcri spec ./my-bundle       # Generate in specific directory
-        \\  proxmox-lxcri spec --bundle ./bundle # Using --bundle flag
+        \\  nexcage spec                    # Generate in current directory
+        \\  nexcage spec ./my-bundle       # Generate in specific directory
+        \\  nexcage spec --bundle ./bundle # Using --bundle flag
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};
@@ -226,7 +226,7 @@ fn printCheckpointHelp() void {
     const help =
         \\Create a checkpoint of a running container
         \\
-        \\Usage: proxmox-lxcri checkpoint [OPTIONS] <container_id>
+        \\Usage: nexcage checkpoint [OPTIONS] <container_id>
         \\
         \\Options:
         \\  --image-path <path>      Path to save checkpoint image
@@ -242,9 +242,9 @@ fn printCheckpointHelp() void {
         \\  If CRIU is not available, this command will fail gracefully.
         \\
         \\Examples:
-        \\  proxmox-lxcri checkpoint container1
-        \\  proxmox-lxcri checkpoint --image-path /tmp/checkpoint container1
-        \\  proxmox-lxcri --config ./config.json checkpoint my-container
+        \\  nexcage checkpoint container1
+        \\  nexcage checkpoint --image-path /tmp/checkpoint container1
+        \\  nexcage --config ./config.json checkpoint my-container
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};
@@ -254,7 +254,7 @@ fn printRestoreHelp() void {
     const help =
         \\Restore a container from checkpoint
         \\
-        \\Usage: proxmox-lxcri restore [OPTIONS] <container_id>
+        \\Usage: nexcage restore [OPTIONS] <container_id>
         \\
         \\Options:
         \\  --image-path <path>      Path to checkpoint image (for CRIU)
@@ -277,13 +277,13 @@ fn printRestoreHelp() void {
         \\
         \\Examples:
         \\  # ZFS restore (automatic latest checkpoint)
-        \\  proxmox-lxcri restore container1
+        \\  nexcage restore container1
         \\  
         \\  # ZFS restore from specific snapshot
-        \\  proxmox-lxcri restore --snapshot checkpoint-1691234567 container1
+        \\  nexcage restore --snapshot checkpoint-1691234567 container1
         \\  
         \\  # CRIU restore (fallback)
-        \\  proxmox-lxcri restore --image-path /tmp/checkpoint container1
+        \\  nexcage restore --image-path /tmp/checkpoint container1
         \\
     ;
     std.io.getStdOut().writer().print(help, .{}) catch {};
