@@ -1,7 +1,7 @@
 .{
     .name = .nexcage,
-    .version = "0.1.0",
-    .fingerprint = 0x4c44d7bb4130bc40,
+    .version = "0.5.0",
+    .fingerprint = 0xa09c4c6c27fa78dc,
     .minimum_zig_version = "0.15.1",
     .paths = .{
         "src",
