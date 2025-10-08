@@ -1,0 +1,77 @@
+name: OCI Smoke
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      enable_e2e:
+        description: "Run optional OCI E2E on self-hosted (requires prepared environment)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  oci-smoke:
+    name: OCI Local Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build
+        run: zig build
+
+      - name: Smoke run (help/version)
+        run: |
+          set -euo pipefail
+          ./zig-out/bin/proxmox-lxcri --help >/dev/null
+          ./zig-out/bin/proxmox-lxcri version >/dev/null
+
+  oci-e2e:
+    name: OCI Optional E2E
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_e2e == true }}
+    runs-on: [self-hosted, proxmox]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Print environment info
+        run: |
+          echo "Runner: $(hostname)"
+          echo "Kernel: $(uname -a)"
+          command -v zig && zig version || true
+          command -v ctr && ctr version || true
+          command -v nerdctl && nerdctl --version || true
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build
+        run: zig build -Doptimize=ReleaseSafe
+
+      - name: E2E placeholder (environment dependent)
+        run: |
+          set -euo pipefail
+          echo "OCI E2E requires prepared local runtime (containerd/nerdctl or equivalent)."
+          echo "Skipping substantive steps if tooling not present."
+          command -v ctr >/dev/null 2>&1 || exit 0
+          echo "ctr found; placeholder step succeeded."
+

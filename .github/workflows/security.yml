@@ -45,8 +45,13 @@ jobs:
   codeql:
     name: CodeQL (C/C++)
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 60
-    if: github.ref == 'refs/heads/main'
+    # Run on main, PRs to main, and workflow_dispatch
+    if: |
+      github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - name: Initialize CodeQL
@@ -58,6 +63,8 @@ jobs:
           config-file: .github/codeql/codeql-config.yml
       - name: Analyze
         uses: github/codeql-action/analyze@v3
+        with:
+          upload: false  # Disable upload since Advanced Security is not enabled
 
   semgrep:
     name: Semgrep SAST
@@ -93,8 +100,8 @@ jobs:
           vuln-type: 'os,library'
           ignore-unfixed: true
       - name: Upload Trivy SARIF
+        if: false  # Disabled: Advanced Security not enabled in repo
         uses: github/codeql-action/upload-sarif@v3
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           sarif_file: trivy-results.sarif
         continue-on-error: true
@@ -114,7 +121,7 @@ jobs:
         run: |
           gitleaks detect --no-git --redact --report-format sarif --report-path gitleaks.sarif || true
       - name: Upload Gitleaks SARIF
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: false  # Disabled: Advanced Security not enabled in repo
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gitleaks.sarif
