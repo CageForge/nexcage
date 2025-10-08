@@ -40,8 +40,8 @@ jobs:
       - name: Smoke run (help/version)
         run: |
           set -euo pipefail
-          ./zig-out/bin/proxmox-lxcri --help >/dev/null
-          ./zig-out/bin/proxmox-lxcri version >/dev/null
+          ./zig-out/bin/nexcage --help >/dev/null
+          ./zig-out/bin/nexcage version >/dev/null
 
   oci-e2e:
     name: OCI Optional E2E

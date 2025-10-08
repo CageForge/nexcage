@@ -22,21 +22,21 @@ apt-get install -y \
 
 # Configure CRI-O
 mkdir -p /etc/crio/crio.conf.d
-cp crio.conf.d/10-proxmox-lxcri.conf /etc/crio/crio.conf.d/
+cp crio.conf.d/10-nexcage.conf /etc/crio/crio.conf.d/
 
 # Configure Kubelet
 mkdir -p /etc/kubernetes
 cp kubelet.conf /etc/kubernetes/
 
 # Install Proxmox LXCRI
-cp zig-out/bin/proxmox-lxcri /usr/local/bin/
-chmod +x /usr/local/bin/proxmox-lxcri
+cp zig-out/bin/nexcage /usr/local/bin/
+chmod +x /usr/local/bin/nexcage
 
 # Create system service
-cp proxmox-lxcri.service /etc/systemd/system/
+cp nexcage.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable proxmox-lxcri
-systemctl start proxmox-lxcri
+systemctl enable nexcage
+systemctl start nexcage
 
 # Configure CNI
 mkdir -p /opt/cni/bin
@@ -47,12 +47,12 @@ curl -L https://github.com/cilium/cilium-cli/releases/latest/download/cilium-lin
 mv cilium /usr/local/bin/
 
 # Create Proxmox LXCRI directories
-mkdir -p /run/proxmox-lxcri
-mkdir -p /var/log/proxmox-lxcri
+mkdir -p /run/nexcage
+mkdir -p /var/log/nexcage
 
 # Configure logging
-cat > /etc/logrotate.d/proxmox-lxcri << EOF
-/var/log/proxmox-lxcri/*.log {
+cat > /etc/logrotate.d/nexcage << EOF
+/var/log/nexcage/*.log {
     daily
     rotate 5
     compress
@@ -65,4 +65,4 @@ EOF
 
 echo "Installation completed successfully!"
 echo "Restart services:"
-echo "systemctl restart crio kubelet proxmox-lxcri" 
+echo "systemctl restart crio kubelet nexcage" 

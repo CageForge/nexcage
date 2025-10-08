@@ -105,9 +105,9 @@ fi
 # Clone repository
 print_status "Cloning repository"
 
-REPO_DIR="/opt/proxmox-lxcri"
+REPO_DIR="/opt/nexcage"
 if [ ! -d "$REPO_DIR" ]; then
-    git clone https://github.com/your-org/proxmox-lxcri.git "$REPO_DIR"
+    git clone https://github.com/your-org/nexcage.git "$REPO_DIR"
     cd "$REPO_DIR"
 else
     cd "$REPO_DIR"
@@ -122,7 +122,7 @@ zig build
 # Create configuration directory
 print_status "Creating configuration directory"
 
-CONFIG_DIR="/etc/proxmox-lxcri"
+CONFIG_DIR="/etc/nexcage"
 if [ ! -d "$CONFIG_DIR" ]; then
     mkdir -p "$CONFIG_DIR"
     cp config.example.json "$CONFIG_DIR/config.json"
@@ -131,7 +131,7 @@ fi
 # Create runtime directory
 print_status "Creating runtime directory"
 
-RUNTIME_DIR="/run/proxmox-lxcri"
+RUNTIME_DIR="/run/nexcage"
 if [ ! -d "$RUNTIME_DIR" ]; then
     mkdir -p "$RUNTIME_DIR"
 fi
@@ -139,7 +139,7 @@ fi
 # Create ZFS pool if not exists
 print_status "Checking ZFS pool"
 
-POOL_NAME="proxmox-lxcri"
+POOL_NAME="nexcage"
 if ! zpool list "$POOL_NAME" >/dev/null 2>&1; then
     print_warning "ZFS pool '$POOL_NAME' not found"
     print_warning "Please create it manually with:"
@@ -149,7 +149,7 @@ fi
 # Create systemd service
 print_status "Creating systemd service"
 
-SERVICE_FILE="/etc/systemd/system/proxmox-lxcri.service"
+SERVICE_FILE="/etc/systemd/system/nexcage.service"
 cat > "$SERVICE_FILE" << EOF
 [Unit]
 Description=Proxmox LXCRI Container Runtime
@@ -157,7 +157,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=$REPO_DIR/zig-out/bin/proxmox-lxcri --config $CONFIG_DIR/config.json
+ExecStart=$REPO_DIR/zig-out/bin/nexcage --config $CONFIG_DIR/config.json
 Restart=always
 RestartSec=5
 
@@ -171,5 +171,5 @@ print_status "Installation complete!"
 print_status "Next steps:"
 print_status "1. Configure ZFS pool: zpool create $POOL_NAME /dev/your-disk"
 print_status "2. Edit configuration: $CONFIG_DIR/config.json"
-print_status "3. Start service: systemctl start proxmox-lxcri"
-print_status "4. Enable service: systemctl enable proxmox-lxcri" 
+print_status "3. Start service: systemctl start nexcage"
+print_status "4. Enable service: systemctl enable nexcage" 

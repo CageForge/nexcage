@@ -1,7 +1,7 @@
 {
   "ignorePatterns": [
-    { "pattern": "https://github.com/kubebsd/proxmox-lxcri/issues/72" },
-    { "pattern": "https://github.com/kubebsd/proxmox-lxcri/issues/72#issuecomment-" },
+    { "pattern": "https://github.com/cageforge/nexcage/issues/72" },
+    { "pattern": "https://github.com/cageforge/nexcage/issues/72#issuecomment-" },
     { "pattern": "https://pve.proxmox.com/wiki/Manual:_pct" },
     { "pattern": "https://github.com/your-org/proxmox-lxcri/compare/" },
     { "pattern": "^\.\./examples/" },

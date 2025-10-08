@@ -1,8 +1,8 @@
 # Maintainers
 
-This document lists the maintainers of proxmox-lxcri and defines contact and decision rules.
+This document lists the maintainers of nexcage and defines contact and decision rules.
 
-- Primary Maintainer: @kubebsd (architecture, releases)
+- Primary Maintainer: @cageforge (architecture, releases)
 - Core Maintainer: @moriarti (CI/CD, infra, self-hosted runner)
 
 ## Rules

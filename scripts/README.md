@@ -213,4 +213,4 @@ When adding new dependencies:
 
 ## License
 
-These scripts are part of the proxmox-lxcri project and follow the same license terms.
+These scripts are part of the nexcage project and follow the same license terms.

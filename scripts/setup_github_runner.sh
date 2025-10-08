@@ -6,7 +6,7 @@ set -euo pipefail
 PVE_HOST="mgr.cp.if.ua"
 PVE_USER="root"
 RUNNER_USER="github-runner"
-GITHUB_REPO="kubebsd/proxmox-lxcri"
+GITHUB_REPO="kubebsd/nexcage"
 RUNNER_NAME="proxmox-runner"
 RUNNER_LABELS="proxmox,self-hosted,ubuntu"
 
@@ -237,15 +237,15 @@ jobs:
       - name: Deploy to Proxmox
         run: |
           # Copy binary to system location
-          cp zig-out/bin/proxmox-lxcri /usr/local/bin/
-          chmod +x /usr/local/bin/proxmox-lxcri
+          cp zig-out/bin/nexcage /usr/local/bin/
+          chmod +x /usr/local/bin/nexcage
           
           # Copy config to system location
-          mkdir -p /etc/proxmox-lxcri
-          cp config.json /etc/proxmox-lxcri/
+          mkdir -p /etc/nexcage
+          cp config.json /etc/nexcage/
           
           # Test deployment
-          /usr/local/bin/proxmox-lxcri --help
+          /usr/local/bin/nexcage --help
 
       - name: Create deployment summary
         run: |
@@ -255,13 +255,13 @@ jobs:
           ## Deployment Details
           - **Target Server**: \$(hostname)
           - **Binary Path**: /usr/local/bin
-          - **Config Path**: /etc/proxmox-lxcri
+          - **Config Path**: /etc/nexcage
           - **Commit**: \${{ github.sha }}
           - **Branch**: \${{ github.ref_name }}
           - **Status**: Success
           
           ## Files Deployed
-          - \`proxmox-lxcri\` - Main binary
+          - \`nexcage\` - Main binary
           - \`config.json\` - Configuration file
           
           ## Verification
@@ -293,12 +293,12 @@ jobs:
           
           # Check binary status
           echo "=== Binary Status ==="
-          ls -la /usr/local/bin/proxmox-lxcri
-          /usr/local/bin/proxmox-lxcri version
+          ls -la /usr/local/bin/nexcage
+          /usr/local/bin/nexcage version
           
           # Check config status
           echo "=== Config Status ==="
-          ls -la /etc/proxmox-lxcri/config.json
+          ls -la /etc/nexcage/config.json
 
       - name: Create monitoring report
         run: |
@@ -312,9 +312,9 @@ jobs:
           - **Memory Usage**: \$(free -h | grep Mem | awk '{print \$3}')
           
           ## Application Status
-          - **Binary**: /usr/local/bin/proxmox-lxcri
-          - **Config**: /etc/proxmox-lxcri/config.json
-          - **Version**: \$(/usr/local/bin/proxmox-lxcri version | head -1)
+          - **Binary**: /usr/local/bin/nexcage
+          - **Config**: /etc/nexcage/config.json
+          - **Version**: \$(/usr/local/bin/nexcage version | head -1)
           
           ## Health Check
           - ✅ Runner service active

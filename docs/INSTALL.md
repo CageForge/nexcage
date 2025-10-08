@@ -14,8 +14,8 @@
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/proxmox-lxcri.git
-cd proxmox-lxcri
+git clone https://github.com/yourusername/nexcage.git
+cd nexcage
 ```
 
 2. Build the project:
@@ -55,7 +55,7 @@ mkdir -p /etc/crio/crio.conf.d
 
 2. Copy configuration:
 ```bash
-cp crio.conf.d/10-proxmox-lxcri.conf /etc/crio/crio.conf.d/
+cp crio.conf.d/10-nexcage.conf /etc/crio/crio.conf.d/
 ```
 
 ### 3. Configure Kubelet
@@ -74,16 +74,16 @@ cp kubelet.conf /etc/kubernetes/
 
 1. Copy binary:
 ```bash
-cp zig-out/bin/proxmox-lxcri /usr/local/bin/
-chmod +x /usr/local/bin/proxmox-lxcri
+cp zig-out/bin/nexcage /usr/local/bin/
+chmod +x /usr/local/bin/nexcage
 ```
 
 2. Install system service:
 ```bash
-cp proxmox-lxcri.service /etc/systemd/system/
+cp nexcage.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable proxmox-lxcri
-systemctl start proxmox-lxcri
+systemctl enable nexcage
+systemctl start nexcage
 ```
 
 ### 5. Configure CNI
@@ -104,14 +104,14 @@ mv cilium /usr/local/bin/
 
 1. Create directories:
 ```bash
-mkdir -p /run/proxmox-lxcri
-mkdir -p /var/log/proxmox-lxcri
+mkdir -p /run/nexcage
+mkdir -p /var/log/nexcage
 ```
 
 2. Configure log rotation:
 ```bash
-cat > /etc/logrotate.d/proxmox-lxcri << EOF
-/var/log/proxmox-lxcri/*.log {
+cat > /etc/logrotate.d/nexcage << EOF
+/var/log/nexcage/*.log {
     daily
     rotate 5
     compress
@@ -126,26 +126,26 @@ EOF
 ### 7. Restart Services
 
 ```bash
-systemctl restart crio kubelet proxmox-lxcri
+systemctl restart crio kubelet nexcage
 ```
 
 ## Verify Installation
 
 1. Check service status:
 ```bash
-systemctl status proxmox-lxcri
+systemctl status nexcage
 systemctl status crio
 systemctl status kubelet
 ```
 
 2. Check version:
 ```bash
-proxmox-lxcri --version
+nexcage --version
 ```
 
 3. Check Proxmox connection:
 ```bash
-proxmox-lxcri info
+nexcage info
 ```
 
 ## Troubleshooting
@@ -168,7 +168,7 @@ journalctl -u kubelet -f
 
 Check logs:
 ```bash
-journalctl -u proxmox-lxcri -f
+journalctl -u nexcage -f
 ```
 
 ## Additional Information

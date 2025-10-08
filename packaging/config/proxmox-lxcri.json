@@ -8,7 +8,7 @@
     "verify_ssl": false
   },
   "runtime": {
-    "root": "/run/proxmox-lxcri",
+    "root": "/run/nexcage",
     "log_level": "info",
     "log_format": "text",
     "systemd_cgroup": true
@@ -29,7 +29,7 @@
     "default_mode": "zfs",
     "fallback_to_criu": true,
     "criu_path": "/usr/sbin/criu",
-    "image_path": "/var/lib/proxmox-lxcri/checkpoints"
+    "image_path": "/var/lib/nexcage/checkpoints"
   },
   "networking": {
     "bridge": "vmbr0",

@@ -31,7 +31,7 @@ sequenceDiagram
   participant D as LXC Driver
   participant H as Host LXC
 
-  U->>C: proxmox-lxcri list --runtime lxc
+  U->>C: nexcage list --runtime lxc
   C->>B: list()
   B->>D: list()
   D->>H: lxc-ls --format json

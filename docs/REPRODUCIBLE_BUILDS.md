@@ -9,7 +9,7 @@ This project targets reproducible builds where feasible.
 ## Determinism guidelines
 - Avoid embedding timestamps; prefer constant version strings
 - Use `zig build -Doptimize=ReleaseFast` in release
-- Record commit hash in `proxmox-lxcri version` output
+- Record commit hash in `nexcage version` output
 
 ## How to reproduce
 1. Checkout the release tag

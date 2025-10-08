@@ -37,8 +37,8 @@ This user guide provides comprehensive instructions for using Proxmox LXCRI with
 
 #### 1. Clone Repository
 ```bash
-git clone https://github.com/kubebsd/proxmox-lxcri.git
-cd proxmox-lxcri
+git clone https://github.com/cageforge/nexcage.git
+cd nexcage
 ```
 
 #### 2. Install Dependencies
@@ -61,18 +61,18 @@ source ~/.bashrc
 ./zig-linux-x86_64-0.15.1/zig build
 
 # Verify installation
-./zig-out/bin/proxmox-lxcri --version
+./zig-out/bin/nexcage --version
 ```
 
 #### 4. Install System Service (Optional)
 ```bash
 # Copy service file
-sudo cp proxmox-lxcri.service /etc/systemd/system/
+sudo cp nexcage.service /etc/systemd/system/
 
 # Enable and start service
 sudo systemctl daemon-reload
-sudo systemctl enable proxmox-lxcri
-sudo systemctl start proxmox-lxcri
+sudo systemctl enable nexcage
+sudo systemctl start nexcage
 ```
 
 ## Configuration
@@ -100,7 +100,7 @@ sudo systemctl start proxmox-lxcri
   },
   "images": {
     "cache_size": 100,
-    "storage_path": "/var/lib/proxmox-lxcri/images"
+    "storage_path": "/var/lib/nexcage/images"
   }
 }
 ```
@@ -112,7 +112,7 @@ sudo systemctl start proxmox-lxcri
     "host": "192.168.1.100",
     "port": 8006,
     "username": "root@pam",
-    "token_name": "proxmox-lxcri",
+    "token_name": "nexcage",
     "token_value": "your_api_token"
   },
   "cluster": {
@@ -126,9 +126,9 @@ sudo systemctl start proxmox-lxcri
 
 ```bash
 # Set environment variables
-export PROXMOX_LXCRI_CONFIG="/etc/proxmox-lxcri/config.json"
+export PROXMOX_LXCRI_CONFIG="/etc/nexcage/config.json"
 export PROXMOX_LXCRI_LOG_LEVEL="info"
-export PROXMOX_LXCRI_STORAGE_PATH="/var/lib/proxmox-lxcri"
+export PROXMOX_LXCRI_STORAGE_PATH="/var/lib/nexcage"
 ```
 
 ## Basic Usage
@@ -136,7 +136,7 @@ export PROXMOX_LXCRI_STORAGE_PATH="/var/lib/proxmox-lxcri"
 ### Command Structure
 
 ```bash
-proxmox-lxcri [COMMAND] [OPTIONS] [ARGUMENTS]
+nexcage [COMMAND] [OPTIONS] [ARGUMENTS]
 ```
 
 ### Available Commands
@@ -156,7 +156,7 @@ proxmox-lxcri [COMMAND] [OPTIONS] [ARGUMENTS]
 #### Create Container
 ```bash
 # Create a basic container
-proxmox-lxcri create \
+nexcage create \
   --name my-container \
   --image ubuntu:22.04 \
   --memory 512 \
@@ -164,7 +164,7 @@ proxmox-lxcri create \
   --storage zfs
 
 # Create with custom configuration
-proxmox-lxcri create \
+nexcage create \
   --name web-server \
   --image nginx:alpine \
   --memory 1024 \
@@ -178,31 +178,31 @@ proxmox-lxcri create \
 #### Start Container
 ```bash
 # Start a container
-proxmox-lxcri start my-container
+nexcage start my-container
 
 # Start with specific options
-proxmox-lxcri start my-container --detach --interactive
+nexcage start my-container --detach --interactive
 ```
 
 #### Stop Container
 ```bash
 # Stop gracefully
-proxmox-lxcri stop my-container
+nexcage stop my-container
 
 # Force stop
-proxmox-lxcri stop my-container --force
+nexcage stop my-container --force
 ```
 
 #### List Containers
 ```bash
 # List all containers
-proxmox-lxcri list
+nexcage list
 
 # List with details
-proxmox-lxcri list --format json
+nexcage list --format json
 
 # List running containers only
-proxmox-lxcri list --status running
+nexcage list --status running
 ```
 
 ## Image Management
@@ -212,10 +212,10 @@ proxmox-lxcri list --status running
 #### Pull Image
 ```bash
 # Pull from Docker Hub
-proxmox-lxcri image pull ubuntu:22.04
+nexcage image pull ubuntu:22.04
 
 # Pull from private registry
-proxmox-lxcri image pull \
+nexcage image pull \
   --registry my-registry.com \
   --username myuser \
   --password mypass \
@@ -225,34 +225,34 @@ proxmox-lxcri image pull \
 #### List Images
 ```bash
 # List all images
-proxmox-lxcri image list
+nexcage image list
 
 # List with details
-proxmox-lxcri image list --format json
+nexcage image list --format json
 
 # Show image layers
-proxmox-lxcri image list --show-layers
+nexcage image list --show-layers
 ```
 
 #### Inspect Image
 ```bash
 # Show image details
-proxmox-lxcri image inspect ubuntu:22.04
+nexcage image inspect ubuntu:22.04
 
 # Show image configuration
-proxmox-lxcri image inspect ubuntu:22.04 --config
+nexcage image inspect ubuntu:22.04 --config
 
 # Show image layers
-proxmox-lxcri image inspect ubuntu:22.04 --layers
+nexcage image inspect ubuntu:22.04 --layers
 ```
 
 #### Remove Image
 ```bash
 # Remove image
-proxmox-lxcri image remove ubuntu:22.04
+nexcage image remove ubuntu:22.04
 
 # Force remove (even if used by containers)
-proxmox-lxcri image remove ubuntu:22.04 --force
+nexcage image remove ubuntu:22.04 --force
 ```
 
 ### Image Operations
@@ -260,22 +260,22 @@ proxmox-lxcri image remove ubuntu:22.04 --force
 #### Import Local Image
 ```bash
 # Import from tar file
-proxmox-lxcri image import my-image.tar
+nexcage image import my-image.tar
 
 # Import from directory
-proxmox-lxcri image import /path/to/image/directory
+nexcage image import /path/to/image/directory
 
 # Import with custom name
-proxmox-lxcri image import my-image.tar --name myapp:latest
+nexcage image import my-image.tar --name myapp:latest
 ```
 
 #### Export Image
 ```bash
 # Export to tar file
-proxmox-lxcri image export ubuntu:22.04 --output ubuntu-22.04.tar
+nexcage image export ubuntu:22.04 --output ubuntu-22.04.tar
 
 # Export specific layers
-proxmox-lxcri image export ubuntu:22.04 --layers --output ubuntu-layers.tar
+nexcage image export ubuntu:22.04 --layers --output ubuntu-layers.tar
 ```
 
 ## Container Operations
@@ -285,13 +285,13 @@ proxmox-lxcri image export ubuntu:22.04 --layers --output ubuntu-layers.tar
 #### Create and Start
 ```bash
 # Create and start in one command
-proxmox-lxcri create \
+nexcage create \
   --name my-app \
   --image myapp:latest \
   --start
 
 # Create with auto-start
-proxmox-lxcri create \
+nexcage create \
   --name my-app \
   --image myapp:latest \
   --auto-start
@@ -300,28 +300,28 @@ proxmox-lxcri create \
 #### Execute Commands
 ```bash
 # Execute single command
-proxmox-lxcri exec my-container ls -la
+nexcage exec my-container ls -la
 
 # Execute interactive shell
-proxmox-lxcri exec my-container --interactive --tty /bin/bash
+nexcage exec my-container --interactive --tty /bin/bash
 
 # Execute with specific user
-proxmox-lxcri exec my-container --user root whoami
+nexcage exec my-container --user root whoami
 ```
 
 #### Container Logs
 ```bash
 # Show container logs
-proxmox-lxcri logs my-container
+nexcage logs my-container
 
 # Follow logs
-proxmox-lxcri logs my-container --follow
+nexcage logs my-container --follow
 
 # Show logs with timestamps
-proxmox-lxcri logs my-container --timestamps
+nexcage logs my-container --timestamps
 
 # Show last N lines
-proxmox-lxcri logs my-container --tail 100
+nexcage logs my-container --tail 100
 ```
 
 ### Resource Management
@@ -329,14 +329,14 @@ proxmox-lxcri logs my-container --tail 100
 #### Resource Limits
 ```bash
 # Set memory limit
-proxmox-lxcri create \
+nexcage create \
   --name my-container \
   --image ubuntu:22.04 \
   --memory 1024 \
   --memory-swap 2048
 
 # Set CPU limits
-proxmox-lxcri create \
+nexcage create \
   --name my-container \
   --image ubuntu:22.04 \
   --cores 2 \
@@ -344,7 +344,7 @@ proxmox-lxcri create \
   --cpu-quota 50000
 
 # Set storage limits
-proxmox-lxcri create \
+nexcage create \
   --name my-container \
   --image ubuntu:22.04 \
   --storage-size 10G \
@@ -354,19 +354,19 @@ proxmox-lxcri create \
 #### Network Configuration
 ```bash
 # Bridge networking
-proxmox-lxcri create \
+nexcage create \
   --name my-container \
   --image ubuntu:22.04 \
   --network bridge=vmbr0
 
 # Host networking
-proxmox-lxcri create \
+nexcage create \
   --name my-container \
   --image ubuntu:22.04 \
   --network host
 
 # Custom network
-proxmox-lxcri create \
+nexcage create \
   --name my-container \
   --image ubuntu:22.04 \
   --network custom=my-network
@@ -379,31 +379,31 @@ proxmox-lxcri create \
 #### Layer Management
 ```bash
 # Show layer information
-proxmox-lxcri layer list
+nexcage layer list
 
 # Show layer dependencies
-proxmox-lxcri layer dependencies ubuntu:22.04
+nexcage layer dependencies ubuntu:22.04
 
 # Validate layer integrity
-proxmox-lxcri layer validate ubuntu:22.04
+nexcage layer validate ubuntu:22.04
 
 # Optimize layer access
-proxmox-lxcri layer optimize ubuntu:22.04
+nexcage layer optimize ubuntu:22.04
 ```
 
 #### Metadata Cache
 ```bash
 # Show cache statistics
-proxmox-lxcri cache stats
+nexcage cache stats
 
 # Clear cache
-proxmox-lxcri cache clear
+nexcage cache clear
 
 # Show cache entries
-proxmox-lxcri cache list
+nexcage cache list
 
 # Optimize cache
-proxmox-lxcri cache optimize
+nexcage cache optimize
 ```
 
 ### Performance Optimization
@@ -411,26 +411,26 @@ proxmox-lxcri cache optimize
 #### Parallel Processing
 ```bash
 # Enable parallel layer processing
-proxmox-lxcri config set parallel.processing true
-proxmox-lxcri config set parallel.workers 4
+nexcage config set parallel.processing true
+nexcage config set parallel.workers 4
 
 # Show performance metrics
-proxmox-lxcri performance metrics
+nexcage performance metrics
 
 # Run performance benchmark
-proxmox-lxcri performance benchmark
+nexcage performance benchmark
 ```
 
 #### Memory Management
 ```bash
 # Show memory usage
-proxmox-lxcri memory stats
+nexcage memory stats
 
 # Optimize memory usage
-proxmox-lxcri memory optimize
+nexcage memory optimize
 
 # Show memory leaks
-proxmox-lxcri memory check
+nexcage memory check
 ```
 
 ### ZFS Integration
@@ -438,16 +438,16 @@ proxmox-lxcri memory check
 #### ZFS Operations
 ```bash
 # Create ZFS dataset
-proxmox-lxcri zfs create tank/containers
+nexcage zfs create tank/containers
 
 # Show ZFS information
-proxmox-lxcri zfs info
+nexcage zfs info
 
 # Create snapshot
-proxmox-lxcri zfs snapshot tank/containers@backup
+nexcage zfs snapshot tank/containers@backup
 
 # Clone dataset
-proxmox-lxcri zfs clone tank/containers@backup tank/containers-clone
+nexcage zfs clone tank/containers@backup tank/containers-clone
 ```
 
 ## Troubleshooting
@@ -457,43 +457,43 @@ proxmox-lxcri zfs clone tank/containers@backup tank/containers-clone
 #### Container Won't Start
 ```bash
 # Check container status
-proxmox-lxcri info my-container
+nexcage info my-container
 
 # Check logs
-proxmox-lxcri logs my-container
+nexcage logs my-container
 
 # Check system resources
-proxmox-lxcri system resources
+nexcage system resources
 
 # Verify image integrity
-proxmox-lxcri image validate myapp:latest
+nexcage image validate myapp:latest
 ```
 
 #### Image Pull Issues
 ```bash
 # Check network connectivity
-proxmox-lxcri network test
+nexcage network test
 
 # Verify registry credentials
-proxmox-lxcri registry auth
+nexcage registry auth
 
 # Check image cache
-proxmox-lxcri cache status
+nexcage cache status
 
 # Clear image cache
-proxmox-lxcri cache clear
+nexcage cache clear
 ```
 
 #### Performance Issues
 ```bash
 # Check system performance
-proxmox-lxcri performance check
+nexcage performance check
 
 # Monitor resource usage
-proxmox-lxcri monitor
+nexcage monitor
 
 # Optimize configuration
-proxmox-lxcri optimize
+nexcage optimize
 ```
 
 ### Debug Mode
@@ -503,10 +503,10 @@ proxmox-lxcri optimize
 export PROXMOX_LXCRI_LOG_LEVEL="debug"
 
 # Run with verbose output
-proxmox-lxcri --verbose create --name test ubuntu:22.04
+nexcage --verbose create --name test ubuntu:22.04
 
 # Show debug information
-proxmox-lxcri debug info
+nexcage debug info
 ```
 
 ## Examples
@@ -516,10 +516,10 @@ proxmox-lxcri debug info
 #### 1. Create Web Application Container
 ```bash
 # Pull web application image
-proxmox-lxcri image pull myapp:latest
+nexcage image pull myapp:latest
 
 # Create container
-proxmox-lxcri create \
+nexcage create \
   --name web-app \
   --image myapp:latest \
   --memory 1024 \
@@ -535,7 +535,7 @@ proxmox-lxcri create \
 ```bash
 # Create multiple instances
 for i in {1..3}; do
-  proxmox-lxcri create \
+  nexcage create \
     --name "web-app-$i" \
     --image myapp:latest \
     --memory 1024 \
@@ -552,7 +552,7 @@ done
 #### 1. Create Database Container
 ```bash
 # Create PostgreSQL container
-proxmox-lxcri create \
+nexcage create \
   --name postgres-db \
   --image postgres:15 \
   --memory 2048 \
@@ -568,11 +568,11 @@ proxmox-lxcri create \
 #### 2. Backup Database
 ```bash
 # Create backup
-proxmox-lxcri exec postgres-db \
+nexcage exec postgres-db \
   pg_dump -U postgres myapp > backup.sql
 
 # Create ZFS snapshot
-proxmox-lxcri zfs snapshot tank/containers/postgres-db@backup-$(date +%Y%m%d)
+nexcage zfs snapshot tank/containers/postgres-db@backup-$(date +%Y%m%d)
 ```
 
 ### Development Environment
@@ -580,7 +580,7 @@ proxmox-lxcri zfs snapshot tank/containers/postgres-db@backup-$(date +%Y%m%d)
 #### 1. Create Development Container
 ```bash
 # Create development container
-proxmox-lxcri create \
+nexcage create \
   --name dev-env \
   --image ubuntu:22.04 \
   --memory 4096 \
@@ -596,7 +596,7 @@ proxmox-lxcri create \
 #### 2. Install Development Tools
 ```bash
 # Install development packages
-proxmox-lxcri exec dev-env \
+nexcage exec dev-env \
   apt update && apt install -y \
   build-essential \
   git \

@@ -1,6 +1,6 @@
-# Proxmox LXCRI
+# NexCage
 
-System CLI utility for managing containers on Proxmox VE using LXC and OCI backends (crun/runc).
+Next-generation container runtime for Proxmox VE using LXC and OCI backends (crun/runc).
 
 - Architecture: amd64 (x86_64) only
 - Environment: runs on Proxmox VE host (no containerization)
@@ -26,17 +26,17 @@ zig version  # should print 0.15.1
 3) Build and run
 ```bash
 zig build
-./zig-out/bin/proxmox-lxcri --help
-./zig-out/bin/proxmox-lxcri version
+./zig-out/bin/nexcage --help
+./zig-out/bin/nexcage version
 ```
 
 ## CLI Examples
 ```bash
 # Show command-specific help
-./zig-out/bin/proxmox-lxcri create --help
+./zig-out/bin/nexcage create --help
 
 # List containers (LXC)
-./zig-out/bin/proxmox-lxcri list --runtime lxc
+./zig-out/bin/nexcage list --runtime lxc
 ```
 
 ## Development

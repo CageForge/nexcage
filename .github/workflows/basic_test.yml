@@ -34,20 +34,20 @@ jobs:
     - name: Test basic commands
       run: |
         # Test help command
-        ./zig-out/bin/proxmox-lxcri --help || true
+        ./zig-out/bin/nexcage --help || true
         
         # Test version command
-        ./zig-out/bin/proxmox-lxcri version || true
+        ./zig-out/bin/nexcage version || true
         
         # Test create help
-        ./zig-out/bin/proxmox-lxcri create --help || true
+        ./zig-out/bin/nexcage create --help || true
         
         # Test that invalid commands fail gracefully
-        ./zig-out/bin/proxmox-lxcri invalid-command 2>/dev/null && exit 1 || true
+        ./zig-out/bin/nexcage invalid-command 2>/dev/null && exit 1 || true
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: proxmox-lxcri-binary
-        path: zig-out/bin/proxmox-lxcri
+        name: nexcage-binary
+        path: zig-out/bin/nexcage
         retention-days: 7

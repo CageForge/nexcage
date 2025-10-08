@@ -5,7 +5,7 @@ This document outlines the complete step-by-step process for creating and publis
 ## 📋 Prerequisites
 
 ### Required Access
-- **GitHub Repository**: Write access to `kubebsd/proxmox-lxcri`
+- **GitHub Repository**: Write access to `cageforge/nexcage`
 - **Git Configuration**: Properly configured local Git environment
 - **GPG Key**: For signing releases (recommended)
 
@@ -27,8 +27,8 @@ gh auth login
 ### Development Environment
 ```bash
 # Clone repository
-git clone https://github.com/kubebsd/proxmox-lxcri.git
-cd proxmox-lxcri
+git clone https://github.com/cageforge/nexcage.git
+cd nexcage
 
 # Ensure clean working directory
 git status
@@ -62,8 +62,8 @@ zig build test
 
 # Build and test locally
 zig build -Doptimize=ReleaseFast
-./zig-out/bin/proxmox-lxcri version
-./zig-out/bin/proxmox-lxcri --help
+./zig-out/bin/nexcage version
+./zig-out/bin/nexcage --help
 ```
 
 #### 1.3 Documentation Review
@@ -93,8 +93,8 @@ sed -i 's/Version-[0-9]\+\.[0-9]\+\.[0-9]\+/Version-'${NEXT_VERSION}'/' README.m
 sed -i 's/tag\/v[0-9]\+\.[0-9]\+\.[0-9]\+/tag\/v'${NEXT_VERSION}'/' README.md
 
 # Update installation examples
-sed -i 's/proxmox-lxcri_[0-9]\+\.[0-9]\+\.[0-9]\+-1/proxmox-lxcri_'${NEXT_VERSION}'-1/' README.md
-sed -i 's/proxmox-lxcri_[0-9]\+\.[0-9]\+\.[0-9]\+-1/proxmox-lxcri_'${NEXT_VERSION}'-1/' docs/INSTALLATION.md
+sed -i 's/nexcage_[0-9]\+\.[0-9]\+\.[0-9]\+-1/nexcage_'${NEXT_VERSION}'-1/' README.md
+sed -i 's/nexcage_[0-9]\+\.[0-9]\+\.[0-9]\+-1/nexcage_'${NEXT_VERSION}'-1/' docs/INSTALLATION.md
 
 # Update package changelog
 sed -i '1s/([0-9]\+\.[0-9]\+\.[0-9]\+-1)/('${NEXT_VERSION}'-1)/' packaging/debian/changelog
@@ -139,12 +139,12 @@ rm -rf zig-out/ zig-cache/
 zig build -Doptimize=ReleaseFast
 
 # Validate version
-./zig-out/bin/proxmox-lxcri version | grep ${NEXT_VERSION}
+./zig-out/bin/nexcage version | grep ${NEXT_VERSION}
 
 # Test key functionality
-./zig-out/bin/proxmox-lxcri help
-./zig-out/bin/proxmox-lxcri help checkpoint
-./zig-out/bin/proxmox-lxcri help restore
+./zig-out/bin/nexcage help
+./zig-out/bin/nexcage help checkpoint
+./zig-out/bin/nexcage help restore
 ```
 
 #### 3.2 Package Validation
@@ -218,13 +218,13 @@ $(grep -A 10 "## \[${NEXT_VERSION}\]" docs/CHANGELOG.md | tail -n +3 | head -n -
 
 📦 INSTALLATION:
 DEB Package (Ubuntu/Debian):
-  wget https://github.com/kubebsd/proxmox-lxcri/releases/download/v${NEXT_VERSION}/proxmox-lxcri_${NEXT_VERSION}-1_amd64.deb
-  sudo dpkg -i proxmox-lxcri_${NEXT_VERSION}-1_amd64.deb
+  wget https://github.com/cageforge/nexcage/releases/download/v${NEXT_VERSION}/nexcage_${NEXT_VERSION}-1_amd64.deb
+  sudo dpkg -i nexcage_${NEXT_VERSION}-1_amd64.deb
 
 Binary Installation:
-  wget https://github.com/kubebsd/proxmox-lxcri/releases/download/v${NEXT_VERSION}/proxmox-lxcri-linux-x86_64
-  chmod +x proxmox-lxcri-linux-x86_64
-  sudo mv proxmox-lxcri-linux-x86_64 /usr/local/bin/proxmox-lxcri
+  wget https://github.com/cageforge/nexcage/releases/download/v${NEXT_VERSION}/nexcage-linux-x86_64
+  chmod +x nexcage-linux-x86_64
+  sudo mv nexcage-linux-x86_64 /usr/local/bin/nexcage
 
 📚 DOCUMENTATION:
 - Installation Guide: docs/INSTALLATION.md
@@ -260,7 +260,7 @@ gh run watch
 
 # Alternative: Check via web
 echo "Monitor release progress at:"
-echo "https://github.com/kubebsd/proxmox-lxcri/actions"
+echo "https://github.com/cageforge/nexcage/actions"
 ```
 
 #### 6.2 Verify Artifacts Generation
@@ -289,14 +289,14 @@ gh release download v${NEXT_VERSION} --pattern "*.deb"
 # Test DEB package (in container to avoid system changes)
 docker run --rm -v $(pwd):/test ubuntu:22.04 bash -c "
     apt update && apt install -y /test/*.deb
-    proxmox-lxcri version
-    proxmox-lxcri help
+    nexcage version
+    nexcage help
 "
 
 # Download and test binary
 gh release download v${NEXT_VERSION} --pattern "*linux-x86_64"
-chmod +x proxmox-lxcri-linux-x86_64
-./proxmox-lxcri-linux-x86_64 version
+chmod +x nexcage-linux-x86_64
+./nexcage-linux-x86_64 version
 
 # Cleanup
 cd - && rm -rf /tmp/release-test
@@ -306,7 +306,7 @@ cd - && rm -rf /tmp/release-test
 ```bash
 # Test installation instructions from release notes
 echo "Test the installation commands from the release:"
-echo "https://github.com/kubebsd/proxmox-lxcri/releases/tag/v${NEXT_VERSION}"
+echo "https://github.com/cageforge/nexcage/releases/tag/v${NEXT_VERSION}"
 
 # Verify checksums if available
 gh release view v${NEXT_VERSION} --json assets --jq '.assets[] | select(.name | contains("sha256")) | .name'
@@ -339,19 +339,19 @@ We're excited to announce the release of Proxmox LXCRI v${NEXT_VERSION}!
 ## 📦 Installation
 \`\`\`bash
 # DEB Package (Ubuntu/Debian)
-wget https://github.com/kubebsd/proxmox-lxcri/releases/download/v${NEXT_VERSION}/proxmox-lxcri_${NEXT_VERSION}-1_amd64.deb
-sudo dpkg -i proxmox-lxcri_${NEXT_VERSION}-1_amd64.deb
+wget https://github.com/cageforge/nexcage/releases/download/v${NEXT_VERSION}/nexcage_${NEXT_VERSION}-1_amd64.deb
+sudo dpkg -i nexcage_${NEXT_VERSION}-1_amd64.deb
 
 # Binary Installation
-wget https://github.com/kubebsd/proxmox-lxcri/releases/download/v${NEXT_VERSION}/proxmox-lxcri-linux-x86_64
-chmod +x proxmox-lxcri-linux-x86_64
-sudo mv proxmox-lxcri-linux-x86_64 /usr/local/bin/proxmox-lxcri
+wget https://github.com/cageforge/nexcage/releases/download/v${NEXT_VERSION}/nexcage-linux-x86_64
+chmod +x nexcage-linux-x86_64
+sudo mv nexcage-linux-x86_64 /usr/local/bin/nexcage
 \`\`\`
 
 ## 📚 Documentation
 - [Installation Guide](docs/INSTALLATION.md)
 - [ZFS Checkpoint Guide](docs/zfs-checkpoint-guide.md)
-- [Release Notes](https://github.com/kubebsd/proxmox-lxcri/releases/tag/v${NEXT_VERSION})
+- [Release Notes](https://github.com/cageforge/nexcage/releases/tag/v${NEXT_VERSION})
 
 Thank you to all contributors who made this release possible!
 EOF
@@ -462,10 +462,10 @@ Post-Release:
 □ Update development environment for next cycle
 
 Artifacts Verified:
-□ proxmox-lxcri-linux-x86_64 binary
-□ proxmox-lxcri-linux-aarch64 binary  
-□ proxmox-lxcri_${NEXT_VERSION}-1_amd64.deb package
-□ proxmox-lxcri_${NEXT_VERSION}-1_arm64.deb package
+□ nexcage-linux-x86_64 binary
+□ nexcage-linux-aarch64 binary  
+□ nexcage_${NEXT_VERSION}-1_amd64.deb package
+□ nexcage_${NEXT_VERSION}-1_arm64.deb package
 □ checksums.txt with SHA256 hashes
 □ Comprehensive release notes with installation instructions
 ```

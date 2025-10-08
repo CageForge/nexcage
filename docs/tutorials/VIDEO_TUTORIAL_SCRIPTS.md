@@ -60,7 +60,7 @@ This document contains detailed scripts for video tutorials covering all aspects
 
 ```bash
 # Demo commands appear on screen with syntax highlighting
-proxmox-lxcri create secure-web \
+nexcage create secure-web \
   --image nginx:alpine \
   --memory 512MB \
   --read-only \
@@ -155,24 +155,24 @@ pvesh get /version          # Proxmox VE API version
 **Panel 1: APT Repository (Recommended for Proxmox VE)**
 ```bash
 # Add Proxmox VE compatible repository
-echo "deb [signed-by=/usr/share/keyrings/proxmox-lxcri.gpg] \
-  https://repo.proxmox-lxcri.org/debian bookworm main" | \
-  sudo tee /etc/apt/sources.list.d/proxmox-lxcri.list
+echo "deb [signed-by=/usr/share/keyrings/nexcage.gpg] \
+  https://repo.nexcage.org/debian bookworm main" | \
+  sudo tee /etc/apt/sources.list.d/nexcage.list
 
 # Install on Proxmox VE node
 sudo apt update
-sudo apt install proxmox-lxcri proxmox-lxcri-zfs
+sudo apt install nexcage nexcage-zfs
 ```
 
 **Panel 2: DEB Package (Manual installation)**
 ```bash
 # Download Debian/Proxmox VE compatible package
-wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/proxmox-lxcri-debian.deb
-sudo dpkg -i proxmox-lxcri-debian.deb
+wget https://github.com/cageforge/nexcage/releases/latest/nexcage-debian.deb
+sudo dpkg -i nexcage-debian.deb
 sudo apt install -f  # Fix dependencies
 
 # Verify Proxmox VE integration
-sudo systemctl enable proxmox-lxcri
+sudo systemctl enable nexcage
 ```
 
 **[4:30-6:30] Configuration Setup**
@@ -186,7 +186,7 @@ sudo systemctl enable proxmox-lxcri
   "runtime": {
     "primary": "crun",
     "fallback": "runc",
-    "data_dir": "/var/lib/proxmox-lxcri"
+    "data_dir": "/var/lib/nexcage"
   },
   "proxmox": {
     "host": "https://proxmox.local:8006",
@@ -195,7 +195,7 @@ sudo systemctl enable proxmox-lxcri
   },
   "logging": {
     "level": "info",
-    "file": "/var/log/proxmox-lxcri/runtime.log"
+    "file": "/var/log/nexcage/runtime.log"
   },
   "security": {
     "default_profile": "secure",
@@ -212,12 +212,12 @@ sudo systemctl enable proxmox-lxcri
 
 ```bash
 # Enable service
-sudo systemctl enable proxmox-lxcri
-sudo systemctl start proxmox-lxcri
+sudo systemctl enable nexcage
+sudo systemctl start nexcage
 
 # Verify status
-sudo systemctl status proxmox-lxcri
-sudo journalctl -u proxmox-lxcri -f
+sudo systemctl status nexcage
+sudo journalctl -u nexcage -f
 ```
 
 **[8:00-9:00] Verification Tests**
@@ -228,15 +228,15 @@ sudo journalctl -u proxmox-lxcri -f
 
 ```bash
 # Test basic functionality
-proxmox-lxcri --version
-proxmox-lxcri list
-proxmox-lxcri spec
+nexcage --version
+nexcage list
+nexcage spec
 
 # Test Proxmox integration
-proxmox-lxcri create test-container --image alpine:latest
-proxmox-lxcri start test-container
-proxmox-lxcri exec test-container -- echo "Hello from Proxmox LXCRI!"
-proxmox-lxcri cleanup test-container
+nexcage create test-container --image alpine:latest
+nexcage start test-container
+nexcage exec test-container -- echo "Hello from Proxmox LXCRI!"
+nexcage cleanup test-container
 ```
 
 **[9:00-10:00] Next Steps**
@@ -265,7 +265,7 @@ proxmox-lxcri cleanup test-container
 
 **Basic Container:**
 ```bash
-proxmox-lxcri create web-server \
+nexcage create web-server \
   --image nginx:alpine \
   --memory 256MB \
   --cpu 0.5
@@ -273,7 +273,7 @@ proxmox-lxcri create web-server \
 
 **Production Container:**
 ```bash
-proxmox-lxcri create production-web \
+nexcage create production-web \
   --image nginx:alpine \
   --memory 1GB \
   --cpu 2 \
@@ -331,7 +331,7 @@ spec:
 
 ```bash
 # Apply configuration
-proxmox-lxcri create --config container-spec.yaml
+nexcage create --config container-spec.yaml
 ```
 
 **[5:30-7:30] Health Monitoring**
@@ -342,13 +342,13 @@ proxmox-lxcri create --config container-spec.yaml
 
 ```bash
 # Check container health
-proxmox-lxcri health enterprise-app
+nexcage health enterprise-app
 
 # Real-time monitoring
-proxmox-lxcri stats enterprise-app --follow
+nexcage stats enterprise-app --follow
 
 # Detailed health history
-proxmox-lxcri inspect enterprise-app --health-history
+nexcage inspect enterprise-app --health-history
 ```
 
 *Visual: Health status transitions*
@@ -367,7 +367,7 @@ proxmox-lxcri inspect enterprise-app --health-history
 
 ```bash
 # Container with lifecycle hooks
-proxmox-lxcri create hooked-app \
+nexcage create hooked-app \
   --image myapp:latest \
   --pre-start-hook "/scripts/setup-environment.sh" \
   --post-start-hook "/scripts/notify-deployment.sh" \
@@ -391,20 +391,20 @@ proxmox-lxcri create hooked-app \
 
 ```bash
 # Update resources during runtime
-proxmox-lxcri update enterprise-app \
+nexcage update enterprise-app \
   --memory 4GB \
   --cpu 4 \
   --disk-limit 20GB
 
 # Set resource quotas
-proxmox-lxcri limit enterprise-app \
+nexcage limit enterprise-app \
   --cpu-quota 300000 \   # 3 CPU cores
   --memory-limit 4GB \
   --pids-limit 1024 \
   --files-limit 65536
 
 # Monitor resource usage
-proxmox-lxcri metrics enterprise-app \
+nexcage metrics enterprise-app \
   --cpu-details \
   --memory-breakdown \
   --network-stats
@@ -418,16 +418,16 @@ proxmox-lxcri metrics enterprise-app \
 
 ```bash
 # Create checkpoint
-proxmox-lxcri checkpoint enterprise-app \
+nexcage checkpoint enterprise-app \
   --checkpoint-name "before-update" \
   --description "Pre-deployment checkpoint" \
   --leave-running
 
 # List checkpoints
-proxmox-lxcri checkpoint --list enterprise-app
+nexcage checkpoint --list enterprise-app
 
 # Restore from checkpoint
-proxmox-lxcri restore enterprise-app \
+nexcage restore enterprise-app \
   --checkpoint-name "before-update" \
   --force
 ```
@@ -440,16 +440,16 @@ proxmox-lxcri restore enterprise-app \
 
 ```bash
 # Graceful stop
-proxmox-lxcri stop enterprise-app --timeout 30s
+nexcage stop enterprise-app --timeout 30s
 
 # Forced cleanup
-proxmox-lxcri kill enterprise-app --signal SIGTERM
+nexcage kill enterprise-app --signal SIGTERM
 
 # Complete removal
-proxmox-lxcri delete enterprise-app --force --remove-volumes
+nexcage delete enterprise-app --force --remove-volumes
 
 # System maintenance
-proxmox-lxcri system prune --containers --images --volumes
+nexcage system prune --containers --images --volumes
 ```
 
 **[14:00-15:00] Conclusion**
@@ -478,10 +478,10 @@ proxmox-lxcri system prune --containers --images --volumes
 
 ```bash
 # Available security profiles
-proxmox-lxcri security-profiles --list
+nexcage security-profiles --list
 
 # Create container with security profile
-proxmox-lxcri create secure-app \
+nexcage create secure-app \
   --image myapp:latest \
   --security-profile strict \
   --compliance pci-dss
@@ -505,7 +505,7 @@ proxmox-lxcri create secure-app \
 
 ```bash
 # Maximum security container
-proxmox-lxcri create hardened-app \
+nexcage create hardened-app \
   --image alpine:latest \
   --user 1000:1000 \
   --read-only \
@@ -538,13 +538,13 @@ proxmox-lxcri create hardened-app \
 
 ```bash
 # Scan container image
-proxmox-lxcri scan myapp:latest \
+nexcage scan myapp:latest \
   --standards cis-docker,nist-800-190 \
   --severity medium \
   --export-report scan-results.json
 
 # Scan running container
-proxmox-lxcri security-audit hardened-app \
+nexcage security-audit hardened-app \
   --deep-scan \
   --check-runtime-config \
   --verify-compliance
@@ -566,13 +566,13 @@ proxmox-lxcri security-audit hardened-app \
 
 ```bash
 # PCI-DSS compliance check
-proxmox-lxcri compliance-check hardened-app \
+nexcage compliance-check hardened-app \
   --standard pci-dss \
   --generate-report \
   --output pci-compliance-report.pdf
 
 # HIPAA compliance for healthcare
-proxmox-lxcri create healthcare-app \
+nexcage create healthcare-app \
   --image medical-app:latest \
   --compliance hipaa \
   --encryption-at-rest \
@@ -580,7 +580,7 @@ proxmox-lxcri create healthcare-app \
   --access-logging detailed
 
 # Custom compliance rules
-proxmox-lxcri compliance-check myapp \
+nexcage compliance-check myapp \
   --custom-rules /etc/compliance/custom-rules.yaml \
   --remediation-mode automatic
 ```
@@ -602,14 +602,14 @@ proxmox-lxcri compliance-check myapp \
 
 ```bash
 # Enable comprehensive monitoring
-proxmox-lxcri monitor hardened-app \
+nexcage monitor hardened-app \
   --anomaly-detection \
   --threat-detection \
   --compliance-monitoring \
   --real-time-alerts
 
 # Security event analysis
-proxmox-lxcri security-events \
+nexcage security-events \
   --last 24h \
   --severity high \
   --category network,privilege-escalation
@@ -632,14 +632,14 @@ proxmox-lxcri security-events \
 
 ```bash
 # Configure audit logging
-proxmox-lxcri config set \
+nexcage config set \
   --audit-logging.enabled true \
   --audit-logging.level detailed \
   --audit-logging.encryption true \
   --audit-logging.retention 7years
 
 # Search audit logs
-proxmox-lxcri audit-search \
+nexcage audit-search \
   --container hardened-app \
   --event-type security \
   --date-range "2024-01-01 to 2024-12-31" \
@@ -671,13 +671,13 @@ proxmox-lxcri audit-search \
 
 ```bash
 # Network isolation
-proxmox-lxcri network create secure-network \
+nexcage network create secure-network \
   --driver bridge \
   --subnet 172.16.0.0/24 \
   --isolation strict
 
 # Apply network policy
-proxmox-lxcri network-policy apply hardened-app \
+nexcage network-policy apply hardened-app \
   --ingress-rules ingress-policy.yaml \
   --egress-rules egress-policy.yaml \
   --default-deny

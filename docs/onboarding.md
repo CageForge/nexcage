@@ -14,7 +14,7 @@ For a quick setup, run the bootstrap script:
 
 ```bash
 # Download and run bootstrap script
-curl -O https://raw.githubusercontent.com/your-org/proxmox-lxcri/main/scripts/bootstrap.sh
+curl -O https://raw.githubusercontent.com/your-org/nexcage/main/scripts/bootstrap.sh
 chmod +x bootstrap.sh
 sudo ./bootstrap.sh
 ```
@@ -80,10 +80,10 @@ source ~/.bashrc
 ### 3. Clone Repository
 
 ```bash
-REPO_DIR="/opt/proxmox-lxcri"
+REPO_DIR="/opt/nexcage"
 sudo mkdir -p "$REPO_DIR"
 sudo chown $USER:$USER "$REPO_DIR"
-git clone https://github.com/your-org/proxmox-lxcri.git "$REPO_DIR"
+git clone https://github.com/your-org/nexcage.git "$REPO_DIR"
 cd "$REPO_DIR"
 ```
 
@@ -97,7 +97,7 @@ zig build
 
 ```bash
 # Create ZFS pool
-sudo zpool create proxmox-lxcri /dev/your-disk
+sudo zpool create nexcage /dev/your-disk
 
 # Verify pool
 sudo zpool status
@@ -107,25 +107,25 @@ sudo zpool status
 
 ```bash
 # Create config directory
-sudo mkdir -p /etc/proxmox-lxcri
-sudo cp config.example.json /etc/proxmox-lxcri/config.json
+sudo mkdir -p /etc/nexcage
+sudo cp config.example.json /etc/nexcage/config.json
 
 # Create runtime directory
-sudo mkdir -p /run/proxmox-lxcri
+sudo mkdir -p /run/nexcage
 ```
 
 ### 7. Start Service
 
 ```bash
 # Create systemd service
-sudo tee /etc/systemd/system/proxmox-lxcri.service << EOF
+sudo tee /etc/systemd/system/nexcage.service << EOF
 [Unit]
 Description=Proxmox LXCRI Container Runtime
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/opt/proxmox-lxcri/zig-out/bin/proxmox-lxcri --config /etc/proxmox-lxcri/config.json
+ExecStart=/opt/nexcage/zig-out/bin/nexcage --config /etc/nexcage/config.json
 Restart=always
 RestartSec=5
 
@@ -135,8 +135,8 @@ EOF
 
 # Reload and start service
 sudo systemctl daemon-reload
-sudo systemctl start proxmox-lxcri
-sudo systemctl enable proxmox-lxcri
+sudo systemctl start nexcage
+sudo systemctl enable nexcage
 ```
 
 ## Development Environment
@@ -201,7 +201,7 @@ zig build test_integration
 lsblk
 
 # Create pool with specific disk
-sudo zpool create proxmox-lxcri /dev/sdX
+sudo zpool create nexcage /dev/sdX
 ```
 
 ### 2. Build Errors
@@ -214,10 +214,10 @@ zig build
 ### 3. Service Issues
 ```bash
 # Check service status
-sudo systemctl status proxmox-lxcri
+sudo systemctl status nexcage
 
 # Check logs
-sudo journalctl -u proxmox-lxcri -f
+sudo journalctl -u nexcage -f
 ```
 
 ## Next Steps

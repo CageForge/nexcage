@@ -1,5 +1,5 @@
 .{
-    .name = .proxmox_lxcri,
+    .name = .nexcage,
     .version = "0.1.0",
     .fingerprint = 0x4c44d7bb4130bc40,
     .minimum_zig_version = "0.15.1",

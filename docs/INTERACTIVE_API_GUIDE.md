@@ -12,13 +12,13 @@ cat /etc/debian_version  # Should show Debian version
 systemctl status pve-cluster  # Proxmox VE cluster service
 
 # Check if Proxmox LXCRI is installed
-proxmox-lxcri --version
+nexcage --version
 
 # Verify Proxmox VE connection
-proxmox-lxcri list
+nexcage list
 
 # Check configuration
-proxmox-lxcri spec --help
+nexcage spec --help
 ```
 
 ## 📚 Core API Categories
@@ -30,19 +30,19 @@ proxmox-lxcri spec --help
 **Basic Container Creation:**
 ```bash
 # Create a simple container
-proxmox-lxcri create my-container \
+nexcage create my-container \
   --image ubuntu:22.04 \
   --memory 512MB \
   --cpu 1
 
 # Verify creation
-proxmox-lxcri list | grep my-container
+nexcage list | grep my-container
 ```
 
 **Advanced Container with Security:**
 ```bash
 # Create container with security hardening
-proxmox-lxcri create secure-container \
+nexcage create secure-container \
   --image alpine:latest \
   --memory 256MB \
   --cpu 0.5 \
@@ -56,7 +56,7 @@ proxmox-lxcri create secure-container \
 **Container with Health Checks:**
 ```bash
 # Create container with health monitoring
-proxmox-lxcri create web-app \
+nexcage create web-app \
   --image nginx:alpine \
   --memory 1GB \
   --cpu 2 \
@@ -71,7 +71,7 @@ proxmox-lxcri create web-app \
 **Start with Lifecycle Hooks:**
 ```bash
 # Start container with custom hooks
-proxmox-lxcri start my-container \
+nexcage start my-container \
   --pre-start-hook "/usr/local/bin/setup.sh" \
   --post-start-hook "/usr/local/bin/notify.sh"
 ```
@@ -79,7 +79,7 @@ proxmox-lxcri start my-container \
 **Combined Run Operation:**
 ```bash
 # Create and start in one command
-proxmox-lxcri run fast-start \
+nexcage run fast-start \
   --image redis:alpine \
   --memory 512MB \
   --detach \
@@ -91,13 +91,13 @@ proxmox-lxcri run fast-start \
 **Check Container Health:**
 ```bash
 # Get detailed health status
-proxmox-lxcri inspect my-container --health
+nexcage inspect my-container --health
 
 # Monitor real-time metrics
-proxmox-lxcri stats my-container --follow
+nexcage stats my-container --follow
 
 # Get readiness status
-proxmox-lxcri readiness my-container
+nexcage readiness my-container
 ```
 
 ### 2. Advanced Operations
@@ -107,23 +107,23 @@ proxmox-lxcri readiness my-container
 **Create Checkpoint:**
 ```bash
 # Create ZFS snapshot checkpoint
-proxmox-lxcri checkpoint my-container \
+nexcage checkpoint my-container \
   --checkpoint-dir /var/lib/containers/checkpoints \
   --leave-running
 
 # List available checkpoints
-proxmox-lxcri checkpoint --list my-container
+nexcage checkpoint --list my-container
 ```
 
 **Restore from Checkpoint:**
 ```bash
 # Restore container state
-proxmox-lxcri restore my-container \
+nexcage restore my-container \
   --checkpoint-dir /var/lib/containers/checkpoints \
   --force
 
 # Restore to different container
-proxmox-lxcri restore new-container \
+nexcage restore new-container \
   --from-checkpoint my-container \
   --checkpoint-dir /var/lib/containers/checkpoints
 ```
@@ -133,7 +133,7 @@ proxmox-lxcri restore new-container \
 **Configure Container Networking:**
 ```bash
 # Create with custom network
-proxmox-lxcri create net-container \
+nexcage create net-container \
   --image ubuntu:22.04 \
   --network bridge=br1 \
   --ip 192.168.1.100/24 \
@@ -141,7 +141,7 @@ proxmox-lxcri create net-container \
   --dns 8.8.8.8
 
 # Add additional network interface
-proxmox-lxcri network attach net-container \
+nexcage network attach net-container \
   --network bridge=br2 \
   --ip 10.0.0.100/16
 ```
@@ -151,14 +151,14 @@ proxmox-lxcri network attach net-container \
 **Configure Storage:**
 ```bash
 # Create with ZFS storage
-proxmox-lxcri create storage-container \
+nexcage create storage-container \
   --image ubuntu:22.04 \
   --storage-driver zfs \
   --storage-pool tank/containers \
   --storage-size 10GB
 
 # Mount additional volumes
-proxmox-lxcri create volume-container \
+nexcage create volume-container \
   --image nginx:alpine \
   --mount type=bind,source=/host/data,target=/var/www \
   --mount type=tmpfs,target=/tmp,size=100MB
@@ -171,13 +171,13 @@ proxmox-lxcri create volume-container \
 **Run Security Audit:**
 ```bash
 # Comprehensive security scan
-proxmox-lxcri security-audit \
+nexcage security-audit \
   --standards cis-docker,nist-800-190 \
   --severity medium \
   --export-report /tmp/security-report.json
 
 # Quick security check
-proxmox-lxcri security-check my-container \
+nexcage security-check my-container \
   --check-privileged \
   --check-capabilities \
   --check-network-exposure
@@ -188,13 +188,13 @@ proxmox-lxcri security-check my-container \
 **Generate Compliance Reports:**
 ```bash
 # PCI-DSS compliance report
-proxmox-lxcri compliance-report \
+nexcage compliance-report \
   --standard pci-dss \
   --container my-container \
   --output /reports/pci-compliance.pdf
 
 # HIPAA compliance check
-proxmox-lxcri compliance-report \
+nexcage compliance-report \
   --standard hipaa \
   --all-containers \
   --format json
@@ -207,17 +207,17 @@ proxmox-lxcri compliance-report \
 **Real-time Performance:**
 ```bash
 # Monitor all containers
-proxmox-lxcri stats --all --interval 5s
+nexcage stats --all --interval 5s
 
 # Detailed performance metrics
-proxmox-lxcri metrics my-container \
+nexcage metrics my-container \
   --cpu-details \
   --memory-breakdown \
   --network-stats \
   --disk-io
 
 # Performance benchmarking
-proxmox-lxcri benchmark my-container \
+nexcage benchmark my-container \
   --duration 60s \
   --include-network \
   --include-disk
@@ -228,14 +228,14 @@ proxmox-lxcri benchmark my-container \
 **Set and Update Limits:**
 ```bash
 # Set runtime resource limits
-proxmox-lxcri update my-container \
+nexcage update my-container \
   --memory 2GB \
   --cpu 4 \
   --disk-limit 20GB \
   --network-bandwidth 100Mbps
 
 # CPU throttling
-proxmox-lxcri limit my-container \
+nexcage limit my-container \
   --cpu-quota 50000 \
   --cpu-period 100000 \
   --cpu-shares 1024
@@ -249,28 +249,28 @@ proxmox-lxcri limit my-container \
 ```bash
 # Development configuration
 export PROXMOX_LXCRI_ENV=development
-proxmox-lxcri config set \
+nexcage config set \
   --log-level debug \
   --enable-profiling \
   --disable-security-checks
 
 # Load development-specific config
-proxmox-lxcri --config /etc/proxmox-lxcri/dev.json run dev-container
+nexcage --config /etc/nexcage/dev.json run dev-container
 ```
 
 **Production Environment:**
 ```bash
 # Production configuration
 export PROXMOX_LXCRI_ENV=production
-proxmox-lxcri config set \
+nexcage config set \
   --log-level info \
   --enable-audit-logging \
   --enforce-security-policies \
   --enable-monitoring
 
 # Production container with full security
-proxmox-lxcri run prod-app \
-  --config /etc/proxmox-lxcri/production.json \
+nexcage run prod-app \
+  --config /etc/nexcage/production.json \
   --security-profile strict \
   --enable-all-monitoring
 ```
@@ -280,16 +280,16 @@ proxmox-lxcri run prod-app \
 **Dynamic Configuration Updates:**
 ```bash
 # Reload configuration without restart
-proxmox-lxcri config reload
+nexcage config reload
 
 # Update specific configuration values
-proxmox-lxcri config update \
+nexcage config update \
   --runtime.memory_limit 8GB \
   --logging.level warn \
   --security.scan_interval 3600
 
 # Validate configuration changes
-proxmox-lxcri config validate \
+nexcage config validate \
   --schema-version 2.0 \
   --check-compliance
 ```
@@ -301,13 +301,13 @@ proxmox-lxcri config validate \
 **Circuit Breaker Management:**
 ```bash
 # Check circuit breaker status
-proxmox-lxcri debug circuit-breakers
+nexcage debug circuit-breakers
 
 # Reset failed circuit breaker
-proxmox-lxcri debug reset-circuit-breaker proxmox-api
+nexcage debug reset-circuit-breaker proxmox-api
 
 # Enable circuit breaker protection
-proxmox-lxcri config set \
+nexcage config set \
   --circuit-breaker.proxmox.enabled true \
   --circuit-breaker.proxmox.failure-threshold 5
 ```
@@ -315,13 +315,13 @@ proxmox-lxcri config set \
 **Error Analysis:**
 ```bash
 # Analyze error patterns
-proxmox-lxcri debug error-analysis \
+nexcage debug error-analysis \
   --last 24h \
   --category network \
   --severity high
 
 # Export error report
-proxmox-lxcri debug export-errors \
+nexcage debug export-errors \
   --format json \
   --include-stack-traces \
   --output /tmp/error-report.json
@@ -332,14 +332,14 @@ proxmox-lxcri debug export-errors \
 **Performance Profiling:**
 ```bash
 # Profile container performance
-proxmox-lxcri profile my-container \
+nexcage profile my-container \
   --duration 120s \
   --profile-cpu \
   --profile-memory \
   --profile-network
 
 # Generate performance report
-proxmox-lxcri profile-report \
+nexcage profile-report \
   --container my-container \
   --format html \
   --output /reports/performance.html
@@ -354,10 +354,10 @@ proxmox-lxcri profile-report \
 # .gitlab-ci.yml
 test_container:
   script:
-    - proxmox-lxcri run test-env --image test:latest --wait
-    - proxmox-lxcri exec test-env -- /run-tests.sh
-    - proxmox-lxcri security-audit test-env --fail-on-critical
-    - proxmox-lxcri cleanup test-env
+    - nexcage run test-env --image test:latest --wait
+    - nexcage exec test-env -- /run-tests.sh
+    - nexcage security-audit test-env --fail-on-critical
+    - nexcage cleanup test-env
 ```
 
 **GitHub Actions Integration:**
@@ -365,10 +365,10 @@ test_container:
 # .github/workflows/container-test.yml
 - name: Test with Proxmox LXCRI
   run: |
-    proxmox-lxcri create test-container --image ${{ matrix.image }}
-    proxmox-lxcri start test-container --wait-ready
-    proxmox-lxcri exec test-container -- make test
-    proxmox-lxcri logs test-container > test-logs.txt
+    nexcage create test-container --image ${{ matrix.image }}
+    nexcage start test-container --wait-ready
+    nexcage exec test-container -- make test
+    nexcage logs test-container > test-logs.txt
 ```
 
 ### Kubernetes Integration
@@ -379,8 +379,8 @@ test_container:
 apiVersion: node.k8s.io/v1
 kind: RuntimeClass
 metadata:
-  name: proxmox-lxcri
-handler: proxmox-lxcri
+  name: nexcage
+handler: nexcage
 overhead:
   podFixed:
     memory: "64Mi"
@@ -389,13 +389,13 @@ overhead:
 
 **Pod Specification:**
 ```yaml
-# pod-with-proxmox-lxcri.yaml
+# pod-with-nexcage.yaml
 apiVersion: v1
 kind: Pod
 metadata:
   name: test-pod
 spec:
-  runtimeClassName: proxmox-lxcri
+  runtimeClassName: nexcage
   containers:
   - name: app
     image: nginx:alpine
@@ -412,13 +412,13 @@ spec:
 **Memory Optimization:**
 ```bash
 # Enable memory optimization
-proxmox-lxcri config set \
+nexcage config set \
   --memory.use-hugepages true \
   --memory.enable-ksm true \
   --memory.compression-algorithm lz4
 
 # Memory-efficient container
-proxmox-lxcri run memory-efficient \
+nexcage run memory-efficient \
   --image alpine:latest \
   --memory 64MB \
   --memory-swappiness 10 \
@@ -428,14 +428,14 @@ proxmox-lxcri run memory-efficient \
 **Network Optimization:**
 ```bash
 # High-performance networking
-proxmox-lxcri create fast-network \
+nexcage create fast-network \
   --image nginx:alpine \
   --network-driver macvlan \
   --enable-sr-iov \
   --network-optimization aggressive
 
 # Zero-copy networking
-proxmox-lxcri config set \
+nexcage config set \
   --network.zero-copy-enabled true \
   --network.tcp-offload-enabled true
 ```
@@ -443,13 +443,13 @@ proxmox-lxcri config set \
 **Storage Optimization:**
 ```bash
 # ZFS optimization for containers
-proxmox-lxcri config set \
+nexcage config set \
   --storage.zfs.compression lz4 \
   --storage.zfs.deduplication on \
   --storage.zfs.recordsize 64K
 
 # High-IOPS storage configuration
-proxmox-lxcri create high-iops \
+nexcage create high-iops \
   --image database:latest \
   --storage-type nvme \
   --storage-iops 10000 \
@@ -503,4 +503,4 @@ proxmox-lxcri create high-iops \
 
 ---
 
-**💡 Pro Tip**: Use `proxmox-lxcri help COMMAND` for detailed help on any command, and `proxmox-lxcri completion bash` to enable tab completion!
+**💡 Pro Tip**: Use `nexcage help COMMAND` for detailed help on any command, and `nexcage completion bash` to enable tab completion!

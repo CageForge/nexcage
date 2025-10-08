@@ -151,9 +151,9 @@ directory: /opt/github-runner
 
 ## 🔗 **Links**
 
-- **Repository**: https://github.com/kubebsd/proxmox-lxcri
-- **Actions**: https://github.com/kubebsd/proxmox-lxcri/actions
-- **Runners**: https://github.com/kubebsd/proxmox-lxcri/settings/actions/runners
+- **Repository**: https://github.com/cageforge/nexcage
+- **Actions**: https://github.com/cageforge/nexcage/actions
+- **Runners**: https://github.com/cageforge/nexcage/settings/actions/runners
 - **Documentation**: See README.md and docs/ directory
 
 ## ✅ **Status**

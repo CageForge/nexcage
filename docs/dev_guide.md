@@ -12,8 +12,8 @@
 ### Build Environment
 ```bash
 # Clone repository
-git clone https://github.com/your-org/proxmox-lxcri.git
-cd proxmox-lxcri
+git clone https://github.com/your-org/nexcage.git
+cd nexcage
 
 # Install dependencies
 sudo apt-get update
@@ -46,26 +46,26 @@ log.debug("Debug info: {d}", .{value});
 zig build -Doptimize=Debug
 
 # Run with debug logging
-PROXMOX_LXCRI_LOG_LEVEL=debug ./zig-out/bin/proxmox-lxcri
+PROXMOX_LXCRI_LOG_LEVEL=debug ./zig-out/bin/nexcage
 ```
 
 ### GDB Debugging
 ```bash
 # Start GDB
-gdb ./zig-out/bin/proxmox-lxcri
+gdb ./zig-out/bin/nexcage
 
 # Set breakpoints
 break src/oci/create.zig:100
 break src/network/manager.zig:50
 
 # Run with arguments
-run --config /etc/proxmox-lxcri/config.json
+run --config /etc/nexcage/config.json
 ```
 
 ### System Tracing
 ```bash
 # Trace system calls
-strace -f -o trace.log ./zig-out/bin/proxmox-lxcri
+strace -f -o trace.log ./zig-out/bin/nexcage
 
 # Trace network operations
 tcpdump -i any -w network.pcap
@@ -242,7 +242,7 @@ zig build test_integration --test-filter "container_lifecycle"
 zig build benchmark
 
 # Profile performance
-perf record -g ./zig-out/bin/proxmox-lxcri
+perf record -g ./zig-out/bin/nexcage
 perf report
 ```
 
@@ -278,16 +278,16 @@ git push origin v0.2.0
 1. **Memory Leaks**
 ```bash
 # Use valgrind to detect leaks
-valgrind --leak-check=full ./zig-out/bin/proxmox-lxcri
+valgrind --leak-check=full ./zig-out/bin/nexcage
 ```
 
 2. **Performance Issues**
 ```bash
 # Profile CPU usage
-perf top -p $(pgrep proxmox-lxcri)
+perf top -p $(pgrep nexcage)
 
 # Profile memory usage
-pmap -x $(pgrep proxmox-lxcri)
+pmap -x $(pgrep nexcage)
 ```
 
 3. **Network Issues**
@@ -303,16 +303,16 @@ nc -zv container-ip port
 
 1. **Enable Verbose Logging**
 ```bash
-PROXMOX_LXCRI_LOG_LEVEL=debug ./zig-out/bin/proxmox-lxcri
+PROXMOX_LXCRI_LOG_LEVEL=debug ./zig-out/bin/nexcage
 ```
 
 2. **Check System Logs**
 ```bash
-journalctl -u proxmox-lxcri -f
+journalctl -u nexcage -f
 ```
 
 3. **Inspect Container State**
 ```bash
-ls -l /run/proxmox-lxcri/containers/
-cat /run/proxmox-lxcri/containers/<id>/state.json
+ls -l /run/nexcage/containers/
+cat /run/nexcage/containers/<id>/state.json
 ``` 

@@ -58,16 +58,16 @@ jobs:
 
     - name: Smoke tests
       run: |
-        ./zig-out/bin/proxmox-lxcri --help || true
-        ./zig-out/bin/proxmox-lxcri version || true
-        ./zig-out/bin/proxmox-lxcri create --help || true
-        ./zig-out/bin/proxmox-lxcri list --runtime lxc || true
+        ./zig-out/bin/nexcage --help || true
+        ./zig-out/bin/nexcage version || true
+        ./zig-out/bin/nexcage create --help || true
+        ./zig-out/bin/nexcage list --runtime lxc || true
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: proxmox-lxcri-${{ matrix.name }}
-        path: zig-out/bin/proxmox-lxcri
+        name: nexcage-${{ matrix.name }}
+        path: zig-out/bin/nexcage
         retention-days: 7
 
   # Security scanning
@@ -152,12 +152,12 @@ jobs:
     - name: Performance benchmarks
       run: |
         echo "Running performance tests..."
-        time ./zig-out/bin/proxmox-lxcri --help > /dev/null || true
-        time ./zig-out/bin/proxmox-lxcri version > /dev/null || true
+        time ./zig-out/bin/nexcage --help > /dev/null || true
+        time ./zig-out/bin/nexcage version > /dev/null || true
         
         # Memory usage test
         echo "Memory usage test:"
-        /usr/bin/time -v ./zig-out/bin/proxmox-lxcri --help 2>&1 | grep -E "Maximum resident|User time|System time" || true
+        /usr/bin/time -v ./zig-out/bin/nexcage --help 2>&1 | grep -E "Maximum resident|User time|System time" || true
 
   # Integration tests (if Proxmox available)
   integration:
@@ -179,8 +179,8 @@ jobs:
     - name: Integration tests
       run: |
         echo "Running integration tests on Proxmox..."
-        ./zig-out/bin/proxmox-lxcri --help || true
-        ./zig-out/bin/proxmox-lxcri version || true
+        ./zig-out/bin/nexcage --help || true
+        ./zig-out/bin/nexcage version || true
         
         # Test with actual Proxmox tools
         command -v pct && pct version || echo "pct not available"
@@ -189,6 +189,6 @@ jobs:
     - name: Upload integration artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: proxmox-lxcri-integration-amd64
-        path: zig-out/bin/proxmox-lxcri
+        name: nexcage-integration-amd64
+        path: zig-out/bin/nexcage
         retention-days: 7

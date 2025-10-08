@@ -5,7 +5,7 @@ set -euo pipefail
 # Configuration
 PVE_HOST="mgr.cp.if.ua"
 PVE_USER="root"
-GITHUB_REPO="moriarti/proxmox-lxcri"
+GITHUB_REPO="moriarti/nexcage"
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,7 +36,7 @@ echo -e "${YELLOW}📋 Setting up GitHub CI/CD...${NC}"
 # 1. Generate SSH key pair for CI
 echo -e "${BLUE}🔑 Generating SSH key pair for CI...${NC}"
 if [ ! -f "ci_ssh_key" ]; then
-    ssh-keygen -t ed25519 -f ci_ssh_key -N "" -C "proxmox-lxcri-ci@github.com"
+    ssh-keygen -t ed25519 -f ci_ssh_key -N "" -C "nexcage-ci@github.com"
     echo -e "${GREEN}✅ SSH key pair generated${NC}"
 else
     echo -e "${YELLOW}⚠️ SSH key pair already exists${NC}"

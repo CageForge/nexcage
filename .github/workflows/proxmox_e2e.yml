@@ -47,16 +47,16 @@ jobs:
 
     - name: Smoke tests (no root required)
       run: |
-        ./zig-out/bin/proxmox-lxcri --help || true
-        ./zig-out/bin/proxmox-lxcri version || true
+        ./zig-out/bin/nexcage --help || true
+        ./zig-out/bin/nexcage version || true
         # Temporarily skip list to avoid allocator crash on 0.13 zig pre-installed
-        # ./zig-out/bin/proxmox-lxcri list --runtime lxc || true
+        # ./zig-out/bin/nexcage list --runtime lxc || true
 
     - name: Upload binary artifact
       uses: actions/upload-artifact@v4
       with:
-        name: proxmox-lxcri-selfhosted-amd64
-        path: zig-out/bin/proxmox-lxcri
+        name: nexcage-selfhosted-amd64
+        path: zig-out/bin/nexcage
         retention-days: 7
 
     - name: Prepare E2E log file

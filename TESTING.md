@@ -83,8 +83,8 @@ Tests can be configured through environment variables:
 # E2E test configuration
 export PVE_HOST="root@mgr.cp.if.ua"
 export PVE_PATH="/usr/local/bin"
-export CONFIG_PATH="/etc/proxmox-lxcri"
-export LOG_PATH="/var/log/proxmox-lxcri"
+export CONFIG_PATH="/etc/nexcage"
+export LOG_PATH="/var/log/nexcage"
 
 # Test reporting
 export REPORT_DIR="./test-reports"

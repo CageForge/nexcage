@@ -6,7 +6,7 @@
 **Objective:** Implement minimal bundle generator and verify with local smoke tests.
 
 ### 2. OCI Runtime: Implement 'create' command
-**GitHub Issue:** [#103](https://github.com/kubebsd/proxmox-lxcri/issues/103)
+**GitHub Issue:** [#103](https://github.com/cageforge/nexcage/issues/103)
 **Objective:** Create OCI-compliant container based on Proxmox LXC.
 
 ## Acceptance Criteria
@@ -18,7 +18,7 @@
 - [ ] Integration with existing OCI workflow
 
 ### Create Command
-- [ ] `proxmox-lxcri create <container-id> <bundle>` successfully creates LXC container
+- [ ] `nexcage create <container-id> <bundle>` successfully creates LXC container
 - [ ] Container state is `created` (not started)
 - [ ] state.json is generated and stored correctly
 - [ ] Mapping between container-id and vmid is persistent
@@ -61,8 +61,8 @@
 **File:** `src/cli/bundle.zig`
 
 **Commands:**
-- `proxmox-lxcri bundle create <path>` - Create new bundle
-- `proxmox-lxcri bundle validate <path>` - Validate existing bundle
+- `nexcage bundle create <path>` - Create new bundle
+- `nexcage bundle validate <path>` - Validate existing bundle
 - Options:
   - `--rootfs <path>` - Source rootfs
   - `--config <file>` - Custom config template

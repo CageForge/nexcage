@@ -97,7 +97,7 @@ tank/containers/database-primary@checkpoint-1691234890
 Create a checkpoint of a running container:
 
 ```bash
-proxmox-lxcri checkpoint container-id
+nexcage checkpoint container-id
 ```
 
 **What happens:**
@@ -111,7 +111,7 @@ proxmox-lxcri checkpoint container-id
 Specify a custom ZFS dataset path:
 
 ```bash
-proxmox-lxcri checkpoint --image-path tank/custom/path container-id
+nexcage checkpoint --image-path tank/custom/path container-id
 ```
 
 #### CRIU Fallback
@@ -119,10 +119,10 @@ When ZFS is unavailable, automatic fallback to CRIU:
 
 ```bash
 # Automatically falls back to CRIU if ZFS unavailable
-proxmox-lxcri checkpoint container-id
+nexcage checkpoint container-id
 
 # Explicit CRIU usage
-proxmox-lxcri checkpoint --image-path /tmp/criu-checkpoint container-id
+nexcage checkpoint --image-path /tmp/criu-checkpoint container-id
 ```
 
 ### Restore Operations
@@ -131,7 +131,7 @@ proxmox-lxcri checkpoint --image-path /tmp/criu-checkpoint container-id
 Restore from the most recent checkpoint:
 
 ```bash
-proxmox-lxcri restore container-id
+nexcage restore container-id
 ```
 
 **What happens:**
@@ -145,14 +145,14 @@ proxmox-lxcri restore container-id
 Restore from a specific checkpoint snapshot:
 
 ```bash
-proxmox-lxcri restore --snapshot checkpoint-1691234567 container-id
+nexcage restore --snapshot checkpoint-1691234567 container-id
 ```
 
 #### CRIU Restore
 Restore from CRIU checkpoint:
 
 ```bash
-proxmox-lxcri restore --image-path /tmp/criu-checkpoint container-id
+nexcage restore --image-path /tmp/criu-checkpoint container-id
 ```
 
 ### Combined Operations
@@ -161,13 +161,13 @@ proxmox-lxcri restore --image-path /tmp/criu-checkpoint container-id
 Create and start a container in one operation:
 
 ```bash
-proxmox-lxcri run --bundle /path/to/bundle container-id
+nexcage run --bundle /path/to/bundle container-id
 ```
 
 **Equivalent to:**
 ```bash
-proxmox-lxcri create --bundle /path/to/bundle container-id
-proxmox-lxcri start container-id
+nexcage create --bundle /path/to/bundle container-id
+nexcage start container-id
 ```
 
 ## Management Commands
@@ -268,7 +268,7 @@ zpool status tank
 zpool iostat tank 1
 
 # Snapshot creation performance
-time proxmox-lxcri checkpoint test-container
+time nexcage checkpoint test-container
 ```
 
 ## Troubleshooting
@@ -309,7 +309,7 @@ ERROR: cannot create snapshot: out of space
 Enable detailed logging:
 
 ```bash
-proxmox-lxcri --debug checkpoint container-id
+nexcage --debug checkpoint container-id
 ```
 
 ### ZFS Health Check
@@ -359,7 +359,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   annotations:
-    io.kubernetes.cri.runtime: proxmox-lxcri
+    io.kubernetes.cri.runtime: nexcage
     io.kubernetes.cri.checkpoint.dataset: tank/containers/k8s-pod
 spec:
   # Pod specification
@@ -370,22 +370,22 @@ spec:
 ### Complete Workflow
 ```bash
 # 1. Create container
-proxmox-lxcri create --bundle /bundles/nginx nginx-server
+nexcage create --bundle /bundles/nginx nginx-server
 
 # 2. Start container
-proxmox-lxcri start nginx-server
+nexcage start nginx-server
 
 # 3. Create checkpoint
-proxmox-lxcri checkpoint nginx-server
+nexcage checkpoint nginx-server
 
 # 4. Stop container
-proxmox-lxcri kill nginx-server
+nexcage kill nginx-server
 
 # 5. Restore from checkpoint
-proxmox-lxcri restore nginx-server
+nexcage restore nginx-server
 
 # 6. Verify restoration
-proxmox-lxcri state nginx-server
+nexcage state nginx-server
 ```
 
 ### Batch Operations
@@ -396,7 +396,7 @@ containers=("web-1" "web-2" "database" "cache")
 
 for container in "${containers[@]}"; do
   echo "Creating checkpoint for $container..."
-  proxmox-lxcri checkpoint "$container"
+  nexcage checkpoint "$container"
 done
 ```
 
