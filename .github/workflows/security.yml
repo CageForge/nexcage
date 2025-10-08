@@ -63,6 +63,8 @@ jobs:
           config-file: .github/codeql/codeql-config.yml
       - name: Analyze
         uses: github/codeql-action/analyze@v3
+        with:
+          upload: false  # Disable upload since Advanced Security is not enabled
 
   semgrep:
     name: Semgrep SAST
