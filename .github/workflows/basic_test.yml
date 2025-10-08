@@ -20,10 +20,8 @@ jobs:
       with:
         version: 0.15.1
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+    # Dependencies pre-installed on self-hosted runner
+    # See docs/SELF_HOSTED_RUNNER_SETUP.md
 
     - name: Build
       run: zig build

@@ -24,10 +24,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+      # Dependencies pre-installed on self-hosted runner
+      # See docs/SELF_HOSTED_RUNNER_SETUP.md
 
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2

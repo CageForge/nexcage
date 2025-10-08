@@ -26,8 +26,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            name: ubuntu-amd64
+          - os: [self-hosted, proxmox]
+            name: proxmox-amd64
 
     steps:
     - name: Checkout
@@ -38,14 +38,8 @@ jobs:
       with:
         version: 0.15.1
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libcap-dev \
-          libseccomp-dev \
-          libyajl-dev \
-          build-essential
+    # Dependencies pre-installed on self-hosted runner
+    # See docs/SELF_HOSTED_RUNNER_SETUP.md
 
     - name: Build Debug
       run: zig build
@@ -83,13 +77,8 @@ jobs:
       with:
         version: 0.15.1
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libcap-dev \
-          libseccomp-dev \
-          libyajl-dev
+    # Dependencies pre-installed on self-hosted runner
+    # See docs/SELF_HOSTED_RUNNER_SETUP.md
 
     - name: Build with security flags
       run: zig build -Doptimize=ReleaseSafe
@@ -138,13 +127,8 @@ jobs:
       with:
         version: 0.15.1
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libcap-dev \
-          libseccomp-dev \
-          libyajl-dev
+    # Dependencies pre-installed on self-hosted runner
+    # See docs/SELF_HOSTED_RUNNER_SETUP.md
 
     - name: Build optimized
       run: zig build -Doptimize=ReleaseFast

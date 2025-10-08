@@ -24,10 +24,12 @@ Add the following content:
 
 ```sudoers
 # GitHub Actions runner permissions
-# Allow package management (apt-get)
+# Allow package management (apt-get) - only needed for release workflow
 github-runner ALL=(root) NOPASSWD: /usr/bin/apt-get update
 github-runner ALL=(root) NOPASSWD: /usr/bin/apt-get install *
 github-runner ALL=(root) NOPASSWD: /usr/bin/apt-get upgrade *
+github-runner ALL=(root) NOPASSWD: /usr/bin/apt-get dist-upgrade *
+github-runner ALL=(root) NOPASSWD: /usr/bin/apt-get autoremove *
 github-runner ALL=(root) NOPASSWD: /usr/bin/dpkg *
 
 # Allow Proxmox container management (pct)

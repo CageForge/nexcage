@@ -33,10 +33,8 @@ jobs:
       - uses: goto-bus-stop/setup-zig@v2
         with:
           version: '0.15.1'
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+      # Dependencies pre-installed on self-hosted runner
+      # See docs/SELF_HOSTED_RUNNER_SETUP.md
       - name: Build (ReleaseSafe)
         run: zig build -Doptimize=ReleaseSafe
       - name: Run tests
