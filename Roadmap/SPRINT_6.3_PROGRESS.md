@@ -10,3 +10,4 @@ Time spent: OCI bundle generator implementation
 - 2025-10-08: Fixed spell check issues in CI — 20m
 - 2025-10-08: Migrated all GitHub Actions workflows to self-hosted runner — 15m
 - 2025-10-08: Created runner permissions setup documentation and script — 25m
+- 2025-10-08: Fixed GitHub Actions workflows to work with self-hosted runner — 20m
