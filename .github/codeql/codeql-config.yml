@@ -6,3 +6,8 @@ paths-ignore:
   - zig-out/**
   - dist/**
   - deps/**
+  - zig/lib/**
+  - zig/libc/**
+  - zig/std/**
+  - zig/compiler/**
+  - zig/third_party/**
