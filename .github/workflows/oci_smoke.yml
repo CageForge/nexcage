@@ -24,6 +24,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
         with:

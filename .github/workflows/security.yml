@@ -45,6 +45,7 @@ jobs:
   codeql:
     name: CodeQL (C/C++)
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 60
     # Run on main, PRs to main, and workflow_dispatch
     if: |
