@@ -3,3 +3,4 @@
 Time spent: OCI bundle generator implementation
 
 - 2025-10-08: Sprint planning and architecture design — 15m
+- 2025-10-08: Project rebranding (proxmox-lxcri → nexcage, kubebsd → cageforge) — 30m
