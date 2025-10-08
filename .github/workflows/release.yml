@@ -154,7 +154,7 @@ jobs:
 
   release:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     needs: [build, build-deb]
     steps:
       - name: Checkout code

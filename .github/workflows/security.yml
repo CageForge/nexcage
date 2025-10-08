@@ -26,7 +26,7 @@ permissions:
 jobs:
   build-and-test:
     name: Build & Test (ReleaseSafe)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
 
   codeql:
     name: CodeQL (C/C++)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     continue-on-error: true
     timeout-minutes: 60
     # Run on main, PRs to main, and workflow_dispatch
@@ -68,7 +68,7 @@ jobs:
 
   semgrep:
     name: Semgrep SAST
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     continue-on-error: true
     timeout-minutes: 20
     steps:
@@ -83,7 +83,7 @@ jobs:
 
   trivy-fs:
     name: Trivy FS Scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     continue-on-error: true
     timeout-minutes: 15
     steps:
@@ -108,7 +108,7 @@ jobs:
 
   gitleaks:
     name: Gitleaks Secrets Scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     continue-on-error: true
     timeout-minutes: 10
     steps:

@@ -73,7 +73,7 @@ jobs:
   # Security scanning
   security:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -106,7 +106,7 @@ jobs:
   # Code quality and formatting
   quality:
     name: Code Quality
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -128,7 +128,7 @@ jobs:
   # Performance testing
   performance:
     name: Performance Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
