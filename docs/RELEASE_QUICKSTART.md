@@ -13,7 +13,7 @@ sed -i 's/version [0-9]\+\.[0-9]\+\.[0-9]\+/version '${NEXT_VERSION}'/' src/oci/
 
 # 3. Update documentation
 sed -i 's/Version-[0-9]\+\.[0-9]\+\.[0-9]\+/Version-'${NEXT_VERSION}'/' README.md
-sed -i 's/proxmox-lxcri_[0-9]\+\.[0-9]\+\.[0-9]\+-1/proxmox-lxcri_'${NEXT_VERSION}'-1/g' README.md docs/INSTALLATION.md
+sed -i 's/nexcage_[0-9]\+\.[0-9]\+\.[0-9]\+-1/nexcage_'${NEXT_VERSION}'-1/g' README.md docs/INSTALLATION.md
 sed -i '1s/([0-9]\+\.[0-9]\+\.[0-9]\+-1)/('${NEXT_VERSION}'-1)/' packaging/debian/changelog
 
 # 4. Update CHANGELOG.md manually
@@ -47,10 +47,10 @@ gh run watch
 ## 📦 Expected Artifacts
 
 After successful release:
-- `proxmox-lxcri-linux-x86_64`
-- `proxmox-lxcri-linux-aarch64`  
-- `proxmox-lxcri_${VERSION}-1_amd64.deb`
-- `proxmox-lxcri_${VERSION}-1_arm64.deb`
+- `nexcage-linux-x86_64`
+- `nexcage-linux-aarch64`  
+- `nexcage_${VERSION}-1_amd64.deb`
+- `nexcage_${VERSION}-1_arm64.deb`
 - `checksums.txt`
 
 **See [RELEASE_PROCESS.md](RELEASE_PROCESS.md) for detailed guide.**

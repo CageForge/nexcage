@@ -11,43 +11,43 @@ All commands support `--help` for detailed usage.
 ### version
 Show version info.
 ```bash
-proxmox-lxcri version
+nexcage version
 ```
 
 ### help
 Show global help.
 ```bash
-proxmox-lxcri --help
+nexcage --help
 ```
 
 ### create
 Create a new container (backend is auto-selected by routing rules; LXC by default).
 ```bash
-proxmox-lxcri create --name <id> --image <image> [--runtime lxc|crun|runc|vm]
+nexcage create --name <id> --image <image> [--runtime lxc|crun|runc|vm]
 ```
 
 ### start
 Start a container.
 ```bash
-proxmox-lxcri start --name <id>
+nexcage start --name <id>
 ```
 
 ### stop
 Stop a container.
 ```bash
-proxmox-lxcri stop --name <id>
+nexcage stop --name <id>
 ```
 
 ### delete
 Delete a container.
 ```bash
-proxmox-lxcri delete --name <id>
+nexcage delete --name <id>
 ```
 
 ### list
 List containers (for LXC this uses pct/lxc tools).
 ```bash
-proxmox-lxcri list --runtime lxc
+nexcage list --runtime lxc
 ```
 
 Notes:

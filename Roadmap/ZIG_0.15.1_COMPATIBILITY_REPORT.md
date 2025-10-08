@@ -8,8 +8,8 @@
 ### 1. Build System Changes (build.zig.zon)
 
 #### Name Field
-- **Old (0.13.0)**: `.name = "proxmox-lxcri"` (string)
-- **New (0.15.1)**: `.name = .proxmox_lxcri` (enum literal)
+- **Old (0.13.0)**: `.name = "nexcage"` (string)
+- **New (0.15.1)**: `.name = .nexcage` (enum literal)
 
 #### Fingerprint Field (New)
 - **Required**: `.fingerprint = 0x4c44d7bb4130bc40` 

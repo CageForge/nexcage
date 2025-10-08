@@ -169,17 +169,17 @@ run_test "Unit Tests" "zig build test"
 
 # Test 6: Check binary exists
 echo -e "${YELLOW}🔍 Checking binary exists...${NC}"
-if [ -f "./zig-out/bin/proxmox-lxcri" ]; then
-    log_test_result "Binary Exists Check" "PASS" "Binary found at ./zig-out/bin/proxmox-lxcri" "0ms"
+if [ -f "./zig-out/bin/nexcage" ]; then
+    log_test_result "Binary Exists Check" "PASS" "Binary found at ./zig-out/bin/nexcage" "0ms"
 else
-    log_test_result "Binary Exists Check" "FAIL" "Binary not found at ./zig-out/bin/proxmox-lxcri" "0ms"
+    log_test_result "Binary Exists Check" "FAIL" "Binary not found at ./zig-out/bin/nexcage" "0ms"
     echo -e "${RED}❌ Binary not found, cannot continue with tests${NC}"
     exit 1
 fi
 
 # Test 7: Check binary permissions
 echo -e "${YELLOW}🔍 Checking binary permissions...${NC}"
-if [ -x "./zig-out/bin/proxmox-lxcri" ]; then
+if [ -x "./zig-out/bin/nexcage" ]; then
     log_test_result "Binary Permissions Check" "PASS" "Binary is executable" "0ms"
 else
     log_test_result "Binary Permissions Check" "FAIL" "Binary is not executable" "0ms"
@@ -188,73 +188,73 @@ else
 fi
 
 # Test 8: Test help command
-run_test "Help Command" "./zig-out/bin/proxmox-lxcri --help"
+run_test "Help Command" "./zig-out/bin/nexcage --help"
 
 # Test 9: Test version command
-run_test "Version Command" "./zig-out/bin/proxmox-lxcri version"
+run_test "Version Command" "./zig-out/bin/nexcage version"
 
 # Test 10: Test create help
-run_test "Create Help Command" "./zig-out/bin/proxmox-lxcri create --help"
+run_test "Create Help Command" "./zig-out/bin/nexcage create --help"
 
 # Test 11: Test start help
-run_test "Start Help Command" "./zig-out/bin/proxmox-lxcri start --help"
+run_test "Start Help Command" "./zig-out/bin/nexcage start --help"
 
 # Test 12: Test stop help
-run_test "Stop Help Command" "./zig-out/bin/proxmox-lxcri stop --help"
+run_test "Stop Help Command" "./zig-out/bin/nexcage stop --help"
 
 # Test 13: Test delete help
-run_test "Delete Help Command" "./zig-out/bin/proxmox-lxcri delete --help"
+run_test "Delete Help Command" "./zig-out/bin/nexcage delete --help"
 
 # Test 14: Test list help
-run_test "List Help Command" "./zig-out/bin/proxmox-lxcri list --help"
+run_test "List Help Command" "./zig-out/bin/nexcage list --help"
 
 # Test 15: Test run help
-run_test "Run Help Command" "./zig-out/bin/proxmox-lxcri run --help"
+run_test "Run Help Command" "./zig-out/bin/nexcage run --help"
 
 # Test 16: Test invalid command (should fail)
-run_test_expected_fail "Invalid Command (Expected Fail)" "./zig-out/bin/proxmox-lxcri invalid-command"
+run_test_expected_fail "Invalid Command (Expected Fail)" "./zig-out/bin/nexcage invalid-command"
 
 # Test 17: Test missing required arguments (should fail)
-run_test_expected_fail "Missing Args (Expected Fail)" "./zig-out/bin/proxmox-lxcri create"
+run_test_expected_fail "Missing Args (Expected Fail)" "./zig-out/bin/nexcage create"
 
 # Test 18: Test invalid runtime (should fail)
-run_test_expected_fail "Invalid Runtime (Expected Fail)" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --runtime invalid"
+run_test_expected_fail "Invalid Runtime (Expected Fail)" "./zig-out/bin/nexcage create --name test --image ubuntu --runtime invalid"
 
 # Test 19: Test config file loading
-run_test "Config File Loading" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --config config.json --help"
+run_test "Config File Loading" "./zig-out/bin/nexcage create --name test --image ubuntu --config config.json --help"
 
 # Test 20: Test verbose flag
-run_test "Verbose Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --verbose --help"
+run_test "Verbose Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --verbose --help"
 
 # Test 21: Test debug flag
-run_test "Debug Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --debug --help"
+run_test "Debug Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --debug --help"
 
 # Test 22: Test detach flag
-run_test "Detach Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --detach --help"
+run_test "Detach Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --detach --help"
 
 # Test 23: Test interactive flag
-run_test "Interactive Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --interactive --help"
+run_test "Interactive Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --interactive --help"
 
 # Test 24: Test tty flag
-run_test "TTY Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --tty --help"
+run_test "TTY Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --tty --help"
 
 # Test 25: Test user flag
-run_test "User Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --user root --help"
+run_test "User Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --user root --help"
 
 # Test 26: Test workdir flag
-run_test "Workdir Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --workdir /tmp --help"
+run_test "Workdir Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --workdir /tmp --help"
 
 # Test 27: Test env flag
-run_test "Env Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --env PATH=/bin --help"
+run_test "Env Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --env PATH=/bin --help"
 
 # Test 28: Test args flag
-run_test "Args Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --args /bin/echo hello --help"
+run_test "Args Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --args /bin/echo hello --help"
 
 # Test 29: Test runtime flag
-run_test "Runtime Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --runtime lxc --help"
+run_test "Runtime Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --runtime lxc --help"
 
 # Test 30: Test config flag
-run_test "Config Flag" "./zig-out/bin/proxmox-lxcri create --name test --image ubuntu --config config.json --help"
+run_test "Config Flag" "./zig-out/bin/nexcage create --name test --image ubuntu --config config.json --help"
 
 # Test 31: Test memory usage
 echo -e "${YELLOW}🔍 Checking memory usage...${NC}"
@@ -335,7 +335,7 @@ fi
 
 # Test 39: Test exit codes
 echo -e "${YELLOW}🔍 Testing exit codes...${NC}"
-if ./zig-out/bin/proxmox-lxcri --help >/dev/null 2>&1; then
+if ./zig-out/bin/nexcage --help >/dev/null 2>&1; then
     log_test_result "Help Exit Code Check" "PASS" "Help command returns exit code 0" "0ms"
 else
     log_test_result "Help Exit Code Check" "FAIL" "Help command does not return exit code 0" "0ms"
@@ -343,7 +343,7 @@ fi
 
 # Test 40: Test error handling
 echo -e "${YELLOW}🔍 Testing error handling...${NC}"
-if ! ./zig-out/bin/proxmox-lxcri invalid-command >/dev/null 2>&1; then
+if ! ./zig-out/bin/nexcage invalid-command >/dev/null 2>&1; then
     log_test_result "Error Handling Check" "PASS" "Invalid command returns non-zero exit code" "0ms"
 else
     log_test_result "Error Handling Check" "FAIL" "Invalid command should return non-zero exit code" "0ms"

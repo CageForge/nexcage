@@ -5,8 +5,8 @@ set -euo pipefail
 # Configuration
 PVE_HOST="root@mgr.cp.if.ua"
 PVE_PATH="/usr/local/bin"
-CONFIG_PATH="/etc/proxmox-lxcri"
-LOG_PATH="/var/log/proxmox-lxcri"
+CONFIG_PATH="/etc/nexcage"
+LOG_PATH="/var/log/nexcage"
 REPORT_DIR="./test-reports"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 REPORT_FILE="$REPORT_DIR/e2e_test_report_$TIMESTAMP.md"
@@ -144,32 +144,32 @@ else
 fi
 
 # Test 2: Check local help command
-run_test "Local Help Command" "./zig-out/bin/proxmox-lxcri --help"
+run_test "Local Help Command" "./zig-out/bin/nexcage --help"
 
 # Test 3: Check local version command
-run_test "Local Version Command" "./zig-out/bin/proxmox-lxcri version"
+run_test "Local Version Command" "./zig-out/bin/nexcage version"
 
 # Test 4: Check local create help
-run_test "Local Create Help" "./zig-out/bin/proxmox-lxcri create --help"
+run_test "Local Create Help" "./zig-out/bin/nexcage create --help"
 
 # Test 5: Check local start help
-run_test "Local Start Help" "./zig-out/bin/proxmox-lxcri start --help"
+run_test "Local Start Help" "./zig-out/bin/nexcage start --help"
 
 # Test 6: Check local stop help
-run_test "Local Stop Help" "./zig-out/bin/proxmox-lxcri stop --help"
+run_test "Local Stop Help" "./zig-out/bin/nexcage stop --help"
 
 # Test 7: Check local delete help
-run_test "Local Delete Help" "./zig-out/bin/proxmox-lxcri delete --help"
+run_test "Local Delete Help" "./zig-out/bin/nexcage delete --help"
 
 # Test 8: Check local list help
-run_test "Local List Help" "./zig-out/bin/proxmox-lxcri list --help"
+run_test "Local List Help" "./zig-out/bin/nexcage list --help"
 
 # Test 9: Check local run help
-run_test "Local Run Help" "./zig-out/bin/proxmox-lxcri run --help"
+run_test "Local Run Help" "./zig-out/bin/nexcage run --help"
 
 # Test 10: Copy binary to PVE
 echo -e "${YELLOW}📤 Copying binary to PVE...${NC}"
-if scp zig-out/bin/proxmox-lxcri "$PVE_HOST:$PVE_PATH/"; then
+if scp zig-out/bin/nexcage "$PVE_HOST:$PVE_PATH/"; then
     log_test_result "Copy Binary to PVE" "PASS" "Binary copied successfully" "0ms"
 else
     log_test_result "Copy Binary to PVE" "FAIL" "Failed to copy binary" "0ms"
@@ -198,58 +198,58 @@ else
 fi
 
 # Test 13: Remote help command
-run_test "Remote Help Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri --help'"
+run_test "Remote Help Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage --help'"
 
 # Test 14: Remote version command
-run_test "Remote Version Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri version'"
+run_test "Remote Version Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage version'"
 
 # Test 15: Remote create help
-run_test "Remote Create Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --help'"
+run_test "Remote Create Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --help'"
 
 # Test 16: Remote start help
-run_test "Remote Start Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri start --help'"
+run_test "Remote Start Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --help'"
 
 # Test 17: Remote stop help
-run_test "Remote Stop Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri stop --help'"
+run_test "Remote Stop Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --help'"
 
 # Test 18: Remote delete help
-run_test "Remote Delete Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri delete --help'"
+run_test "Remote Delete Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --help'"
 
 # Test 19: Remote list help
-run_test "Remote List Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri list --help'"
+run_test "Remote List Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --help'"
 
 # Test 20: Remote run help
-run_test "Remote Run Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri run --help'"
+run_test "Remote Run Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage run --help'"
 
 # Test 21: Test create command (should fail without proper setup)
-run_test_expected_fail "Remote Create Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test-container --image ubuntu:20.04'"
+run_test_expected_fail "Remote Create Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-container --image ubuntu:20.04'"
 
 # Test 22: Test start command (should fail without container)
-run_test_expected_fail "Remote Start Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri start --name test-container'"
+run_test_expected_fail "Remote Start Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-container'"
 
 # Test 23: Test stop command (should fail without container)
-run_test_expected_fail "Remote Stop Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri stop --name test-container'"
+run_test_expected_fail "Remote Stop Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-container'"
 
 # Test 24: Test delete command (should fail without container)
-run_test_expected_fail "Remote Delete Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri delete --name test-container'"
+run_test_expected_fail "Remote Delete Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-container'"
 
 # Test 25: Test list command (should work)
-run_test "Remote List Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri list'"
+run_test "Remote List Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list'"
 
 # Test 26: Test run command (should fail without container)
-run_test_expected_fail "Remote Run Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri run --name test-container --command /bin/echo hello'"
+run_test_expected_fail "Remote Run Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage run --name test-container --command /bin/echo hello'"
 
 # Test 27: Test invalid command (should fail)
-run_test_expected_fail "Remote Invalid Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri invalid-command'"
+run_test_expected_fail "Remote Invalid Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage invalid-command'"
 
 # Test 28: Test missing required arguments (should fail)
-run_test_expected_fail "Remote Missing Args (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create'"
+run_test_expected_fail "Remote Missing Args (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create'"
 
 # Test 29: Test invalid runtime (should fail)
-run_test_expected_fail "Remote Invalid Runtime (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test --image ubuntu --runtime invalid'"
+run_test_expected_fail "Remote Invalid Runtime (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test --image ubuntu --runtime invalid'"
 
 # Test 30: Test config file loading
-run_test "Remote Config Loading" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test --image ubuntu --config $CONFIG_PATH/config.json --help'"
+run_test "Remote Config Loading" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test --image ubuntu --config $CONFIG_PATH/config.json --help'"
 
 # Generate final report
 echo ""

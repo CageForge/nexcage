@@ -18,7 +18,7 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-linux
             arch: amd64
-            artifact_name: proxmox-lxcri-linux-x86_64
+            artifact_name: nexcage-linux-x86_64
 
     steps:
       - name: Checkout code
@@ -42,29 +42,29 @@ jobs:
       - name: Create artifact
         run: |
           mkdir -p dist
-          BIN_NAME=proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
-          cp zig-out/bin/proxmox-lxcri "dist/${BIN_NAME}"
+          BIN_NAME=nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
+          cp zig-out/bin/nexcage "dist/${BIN_NAME}"
           chmod +x "dist/${BIN_NAME}"
 
       - name: Generate SBOM (SPDX JSON)
         uses: anchore/sbom-action@v0
         with:
           path: dist
-          artifact-name: proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom
-          output-file: dist/proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
+          artifact-name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom
+          output-file: dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
           format: spdx-json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
-          path: dist/proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
+          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
+          path: dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:
-          name: proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
-          path: dist/proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
+          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
+          path: dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
 
   build-deb:
     name: Build DEB Packages
@@ -113,8 +113,8 @@ jobs:
         run: |
           # Create build environment
           mkdir -p build-deb
-          cp -r . build-deb/proxmox-lxcri-${{ steps.get_version.outputs.version }}
-          cd build-deb/proxmox-lxcri-${{ steps.get_version.outputs.version }}
+          cp -r . build-deb/nexcage-${{ steps.get_version.outputs.version }}
+          cd build-deb/nexcage-${{ steps.get_version.outputs.version }}
           
           # Build package
           dpkg-buildpackage -us -uc
@@ -134,13 +134,13 @@ jobs:
           sudo apt-get install -y ./dist/*.deb || true
           
           # Basic functionality test
-          proxmox-lxcri version
+          nexcage version
           
           # Check if service is available
-          systemctl status proxmox-lxcri || true
+          systemctl status nexcage || true
           
           # Test help
-          proxmox-lxcri help
+          nexcage help
 
       - name: Run lintian checks
         run: |
@@ -149,12 +149,12 @@ jobs:
       - name: Upload DEB artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: proxmox-lxcri-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.deb
+          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.deb
           path: dist/*.deb
 
   release:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     needs: [build, build-deb]
     steps:
       - name: Checkout code
@@ -169,7 +169,7 @@ jobs:
         run: |
           mkdir -p release
           # Binaries
-          find artifacts -name "proxmox-lxcri-*" -type f -exec cp {} release/ \;
+          find artifacts -name "nexcage-*" -type f -exec cp {} release/ \;
           # SBOMs (SPDX JSON)
           find artifacts -name "*.sbom.spdx.json" -type f -exec cp {} release/ \;
           ls -la release/
@@ -216,21 +216,21 @@ jobs:
           ### DEB Packages (Ubuntu/Debian)
           ```bash
           # Download and install DEB package
-          wget https://github.com/kubebsd/proxmox-lxcri/releases/download/v$VERSION/proxmox-lxcri_$VERSION-1_amd64.deb
-          sudo dpkg -i proxmox-lxcri_$VERSION-1_amd64.deb
+          wget https://github.com/cageforge/nexcage/releases/download/v$VERSION/nexcage_$VERSION-1_amd64.deb
+          sudo dpkg -i nexcage_$VERSION-1_amd64.deb
           sudo apt-get install -f  # Fix dependencies if needed
           
           # Configure and start
-          sudo systemctl enable proxmox-lxcri
-          sudo systemctl start proxmox-lxcri
+          sudo systemctl enable nexcage
+          sudo systemctl start nexcage
           ```
           
           ### Binary Installation
           ```bash
           # Download binary
-          wget https://github.com/kubebsd/proxmox-lxcri/releases/download/v$VERSION/proxmox-lxcri-linux-x86_64
-          chmod +x proxmox-lxcri-linux-x86_64
-          sudo mv proxmox-lxcri-linux-x86_64 /usr/local/bin/proxmox-lxcri
+          wget https://github.com/cageforge/nexcage/releases/download/v$VERSION/nexcage-linux-x86_64
+          chmod +x nexcage-linux-x86_64
+          sudo mv nexcage-linux-x86_64 /usr/local/bin/nexcage
           ```
           
           ## 📚 Documentation
@@ -245,7 +245,7 @@ jobs:
           - Automatic latest checkpoint detection
           - Error handling and logging improvements
           
-          See [CHANGELOG.md](https://github.com/kubebsd/proxmox-lxcri/blob/main/docs/CHANGELOG.md) for complete details.
+          See [CHANGELOG.md](https://github.com/cageforge/nexcage/blob/main/docs/CHANGELOG.md) for complete details.
           EOF
           
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT

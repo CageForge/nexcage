@@ -107,7 +107,7 @@ fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.
 
     const log_file = blk: {
         // Create log directory if it doesn't exist
-        const actual_log_path = log_path orelse "/var/log/proxmox-lxcri/runtime.log";
+        const actual_log_path = log_path orelse "/var/log/nexcage/runtime.log";
         const log_dir = std.fs.path.dirname(actual_log_path) orelse ".";
 
         // Try to create directory with proper permissions
@@ -145,7 +145,7 @@ fn initLogger(allocator: Allocator, options: RuntimeOptions, cfg: *const config.
     };
 
     if (log_file) |file| {
-        try logger_mod.initWithFile(allocator, file, log_level, "proxmox-lxcri");
+        try logger_mod.initWithFile(allocator, file, log_level, "nexcage");
         try logger_mod.info("Logging initialized to file", .{});
     } else {
         try logger_mod.init(allocator, std.io.getStdErr().writer(), log_level);
@@ -257,8 +257,8 @@ fn loadConfig(allocator: Allocator, config_path: ?[]const u8) !config.Config {
     // Інакше перевіряємо файли за замовчуванням у порядку пріоритету
     const default_paths = [_][]const u8{
         "./config.json", // Поточна директорія
-        "/etc/proxmox-lxcri/config.json", // Системний конфіг
-        "/etc/proxmox-lxcri/proxmox-lxcri.json", // Альтернативний системний конфіг
+        "/etc/nexcage/config.json", // Системний конфіг
+        "/etc/nexcage/nexcage.json", // Альтернативний системний конфіг
     };
 
     for (default_paths) |path| {
@@ -1150,7 +1150,7 @@ fn getConfigPath(allocator: Allocator) ![]const u8 {
 
     // Check default locations
     const default_paths = [_][]const u8{
-        "/etc/proxmox-lxcri/config.json",
+        "/etc/nexcage/config.json",
         "./config.json",
     };
 

@@ -130,7 +130,7 @@ pub const Client = struct {
                 .{ .name = "Content-Type", .value = "application/json" },
                 .{ .name = "Accept", .value = "application/json" },
                 .{ .name = "Connection", .value = "close" },
-                .{ .name = "User-Agent", .value = "proxmox-lxcri/0.3" },
+                .{ .name = "User-Agent", .value = "nexcage/0.3" },
                 .{ .name = "Host", .value = host_header },
             };
             request.extra_headers = &headers;
@@ -232,7 +232,7 @@ pub const Client = struct {
                 .{ .name = "Content-Type", .value = content_type_value },
                 .{ .name = "Accept", .value = "application/json" },
                 .{ .name = "Connection", .value = "close" },
-                .{ .name = "User-Agent", .value = "proxmox-lxcri/0.3" },
+                .{ .name = "User-Agent", .value = "nexcage/0.3" },
                 .{ .name = "Host", .value = host_header },
             };
             request.extra_headers = &headers;

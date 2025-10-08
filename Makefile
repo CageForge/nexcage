@@ -5,7 +5,7 @@
 
 # Default target
 help:
-	@echo "Proxmox LXC Runtime Interface - Available Commands:"
+	@echo "Nexcage OCI runetime - Available Commands:"
 	@echo ""
 	@echo "Build Commands:"
 	@echo "  build          Build the project"
@@ -45,7 +45,7 @@ install: build
 
 uninstall:
 	@echo "🗑️ Uninstalling binary..."
-	rm -f /usr/local/bin/proxmox-lxcri
+	rm -f /usr/local/bin/nexcage
 	@echo "✅ Uninstallation completed successfully"
 
 clean:

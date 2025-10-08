@@ -9,7 +9,7 @@ on:
 jobs:
   disabled:
     name: "Workflow Disabled"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, proxmox]
     if: false  # Always skip
     steps:
       - name: "This workflow is disabled"

@@ -81,10 +81,10 @@ tar xzf actions-runner-linux-x64-2.311.0.tar.gz
 #### Step 3: Register Runner
 ```bash
 # Generate registration token
-gh api repos/moriarti/proxmox-lxcri/actions/runners/registration-token --jq '.token'
+gh api repos/moriarti/nexcage/actions/runners/registration-token --jq '.token'
 
 # Configure runner
-./config.sh --url https://github.com/moriarti/proxmox-lxcri --token <REGISTRATION_TOKEN> --name proxmox-runner --labels proxmox,self-hosted,ubuntu --work _work --replace
+./config.sh --url https://github.com/moriarti/nexcage --token <REGISTRATION_TOKEN> --name proxmox-runner --labels proxmox,self-hosted,ubuntu --work _work --replace
 ```
 
 #### Step 4: Create Systemd Service
@@ -218,7 +218,7 @@ jobs:
 ./scripts/manage_github_runner.sh status
 
 # Check GitHub registration
-gh api repos/moriarti/proxmox-lxcri/actions/runners --jq '.runners[] | select(.name=="proxmox-runner")'
+gh api repos/moriarti/nexcage/actions/runners --jq '.runners[] | select(.name=="proxmox-runner")'
 
 # Check service logs
 ssh root@mgr.cp.if.ua "journalctl -u github-runner --no-pager -n 20"
@@ -250,11 +250,11 @@ systemctl restart github-runner
 ##### 2. Runner Not Registered
 ```bash
 # Check registration token
-gh api repos/moriarti/proxmox-lxcri/actions/runners/registration-token
+gh api repos/moriarti/nexcage/actions/runners/registration-token
 
 # Re-register runner
 cd /opt/github-runner
-./config.sh --url https://github.com/moriarti/proxmox-lxcri --token <NEW_TOKEN> --name proxmox-runner --labels proxmox,self-hosted,ubuntu --work _work --replace
+./config.sh --url https://github.com/moriarti/nexcage --token <NEW_TOKEN> --name proxmox-runner --labels proxmox,self-hosted,ubuntu --work _work --replace
 ```
 
 ##### 3. Build Failures

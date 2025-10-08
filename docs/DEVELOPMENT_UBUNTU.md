@@ -86,8 +86,8 @@ sudo apt install code
 ### Clone Repository
 ```bash
 # Clone the project
-git clone https://github.com/kubebsd/proxmox-lxcri.git
-cd proxmox-lxcri
+git clone https://github.com/cageforge/nexcage.git
+cd nexcage
 
 # Verify project structure
 tree -L 2
@@ -145,12 +145,12 @@ cat > config/development.json << 'EOF'
   "runtime": {
     "primary": "crun",
     "fallback": "runc",
-    "data_dir": "/tmp/proxmox-lxcri-dev"
+    "data_dir": "/tmp/nexcage-dev"
   },
   "logging": {
     "level": "debug",
     "format": "text",
-    "file": "/tmp/proxmox-lxcri-dev.log"
+    "file": "/tmp/nexcage-dev.log"
   },
   "development": {
     "enable_profiling": true,
@@ -165,8 +165,8 @@ EOF
 ```bash
 # Test basic functionality (without Proxmox VE)
 export PROXMOX_LXCRI_CONFIG="$(pwd)/config/development.json"
-./zig-out/bin/proxmox-lxcri --version
-./zig-out/bin/proxmox-lxcri spec
+./zig-out/bin/nexcage --version
+./zig-out/bin/nexcage spec
 
 # Run development smoke tests
 zig build test-dev
@@ -240,20 +240,20 @@ code --install-extension GitHub.copilot  # optional
 zig build -Doptimize=Debug
 
 # Run with GDB
-gdb ./zig-out/bin/proxmox-lxcri
+gdb ./zig-out/bin/nexcage
 ```
 
 ### Memory Analysis
 ```bash
 # Check for memory leaks with Valgrind
 valgrind --leak-check=full --track-origins=yes \
-    ./zig-out/bin/proxmox-lxcri spec
+    ./zig-out/bin/nexcage spec
 ```
 
 ### System Call Tracing
 ```bash
 # Trace system calls
-strace -o trace.log ./zig-out/bin/proxmox-lxcri --version
+strace -o trace.log ./zig-out/bin/nexcage --version
 
 # Analyze trace
 less trace.log
@@ -290,18 +290,18 @@ For complete testing, you need:
 ```bash
 # On actual Proxmox VE server
 # Transfer built binary from Ubuntu development
-scp zig-out/bin/proxmox-lxcri root@proxmox-server:/tmp/
+scp zig-out/bin/nexcage root@proxmox-server:/tmp/
 
 # SSH to Proxmox VE server
 ssh root@proxmox-server
 
 # Install and test on Proxmox VE
-cp /tmp/proxmox-lxcri /usr/local/bin/
-chmod +x /usr/local/bin/proxmox-lxcri
+cp /tmp/nexcage /usr/local/bin/
+chmod +x /usr/local/bin/nexcage
 
 # Run full integration tests
-proxmox-lxcri --version
-proxmox-lxcri create test-container --image alpine:latest
+nexcage --version
+nexcage create test-container --image alpine:latest
 ```
 
 ## Continuous Integration

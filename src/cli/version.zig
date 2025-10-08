@@ -35,8 +35,8 @@ pub const VersionCommand = struct {
         _ = self;
         _ = allocator;
 
-        return "Usage: proxmox-lxcri version\n\n" ++
-            "Show version information for proxmox-lxcri\n\n" ++
+        return "Usage: nexcage version\n\n" ++
+            "Show version information for nexcage\n\n" ++
             "Options:\n" ++
             "  -h, --help    Show this help message\n";
     }
@@ -53,7 +53,7 @@ pub const VersionCommand = struct {
         var version_text = std.array_list.Managed(u8).init(allocator);
         defer version_text.deinit();
 
-        try version_text.writer().print("proxmox-lxcri version {d}.{d}.{d}", .{
+        try version_text.writer().print("nexcage version {d}.{d}.{d}", .{
             version.major,
             version.minor,
             version.patch,

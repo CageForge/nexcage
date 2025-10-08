@@ -26,7 +26,7 @@ test "RuntimeService - basic lifecycle operations" {
     }
 
     try testing.expectEqualStrings("0.1.0", version.version);
-    try testing.expectEqualStrings("proxmox-lxcri", version.runtime_name);
+    try testing.expectEqualStrings("nexcage", version.runtime_name);
     try testing.expectEqualStrings("v1alpha2", version.runtime_api_version);
 
     // Create container config

@@ -16,21 +16,21 @@ This guide covers all installation methods for Proxmox LXCRI v0.3.0 with revolut
 1. **Download DEB Package**:
    ```bash
    # For x86_64 (amd64)
-   wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/download/proxmox-lxcri_0.3.0-1_amd64.deb
+   wget https://github.com/cageforge/nexcage/releases/latest/download/nexcage_0.3.0-1_amd64.deb
    
    # For ARM64
-   wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/download/proxmox-lxcri_0.3.0-1_arm64.deb
+   wget https://github.com/cageforge/nexcage/releases/latest/download/nexcage_0.3.0-1_arm64.deb
    ```
 
 2. **Install Package**:
    ```bash
-   sudo dpkg -i proxmox-lxcri_0.3.0-1_amd64.deb
+   sudo dpkg -i nexcage_0.3.0-1_amd64.deb
    sudo apt-get install -f  # Fix any dependency issues
    ```
 
 3. **Configure Proxmox Credentials**:
    ```bash
-   sudo nano /etc/proxmox-lxcri/proxmox-lxcri.json
+   sudo nano /etc/nexcage/nexcage.json
    ```
    
    Update the configuration:
@@ -47,15 +47,15 @@ This guide covers all installation methods for Proxmox LXCRI v0.3.0 with revolut
 
 4. **Start Service**:
    ```bash
-   sudo systemctl enable proxmox-lxcri
-   sudo systemctl start proxmox-lxcri
-   sudo systemctl status proxmox-lxcri
+   sudo systemctl enable nexcage
+   sudo systemctl start nexcage
+   sudo systemctl status nexcage
    ```
 
 5. **Verify Installation**:
    ```bash
-   proxmox-lxcri version
-   proxmox-lxcri help
+   nexcage version
+   nexcage help
    ```
 
 #### DEB Package Benefits
@@ -71,25 +71,25 @@ This guide covers all installation methods for Proxmox LXCRI v0.3.0 with revolut
 #### Download Binary
 ```bash
 # x86_64 Linux
-wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/download/proxmox-lxcri-linux-x86_64
-chmod +x proxmox-lxcri-linux-x86_64
-sudo mv proxmox-lxcri-linux-x86_64 /usr/local/bin/proxmox-lxcri
+wget https://github.com/cageforge/nexcage/releases/latest/download/nexcage-linux-x86_64
+chmod +x nexcage-linux-x86_64
+sudo mv nexcage-linux-x86_64 /usr/local/bin/nexcage
 
 # ARM64 Linux  
-wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/download/proxmox-lxcri-linux-aarch64
-chmod +x proxmox-lxcri-linux-aarch64
-sudo mv proxmox-lxcri-linux-aarch64 /usr/local/bin/proxmox-lxcri
+wget https://github.com/cageforge/nexcage/releases/latest/download/nexcage-linux-aarch64
+chmod +x nexcage-linux-aarch64
+sudo mv nexcage-linux-aarch64 /usr/local/bin/nexcage
 ```
 
 #### Manual Configuration
 ```bash
 # Create directories
-sudo mkdir -p /etc/proxmox-lxcri
-sudo mkdir -p /var/lib/proxmox-lxcri
-sudo mkdir -p /var/log/proxmox-lxcri
+sudo mkdir -p /etc/nexcage
+sudo mkdir -p /var/lib/nexcage
+sudo mkdir -p /var/log/nexcage
 
 # Create configuration
-sudo tee /etc/proxmox-lxcri/config.json << 'EOF'
+sudo tee /etc/nexcage/config.json << 'EOF'
 {
   "proxmox": {
     "hosts": ["proxmox.example.com"],
@@ -113,15 +113,15 @@ sudo ln -sf /opt/zig/zig /usr/local/bin/zig
 
 #### Build Steps
 ```bash
-git clone https://github.com/kubebsd/proxmox-lxcri.git
-cd proxmox-lxcri
+git clone https://github.com/cageforge/nexcage.git
+cd nexcage
 git checkout v0.3.0
 
 # Build optimized release
 zig build -Doptimize=ReleaseFast
 
 # Install binary
-sudo cp zig-out/bin/proxmox-lxcri /usr/local/bin/
+sudo cp zig-out/bin/nexcage /usr/local/bin/
 ```
 
 ## 🔧 Post-Installation Configuration
@@ -143,10 +143,10 @@ sudo cp zig-out/bin/proxmox-lxcri /usr/local/bin/
 2. **Test ZFS Integration**:
    ```bash
    # Check ZFS availability
-   proxmox-lxcri checkpoint --help | grep -i zfs
+   nexcage checkpoint --help | grep -i zfs
    
    # Verify ZFS detection in logs
-   sudo journalctl -u proxmox-lxcri -f
+   sudo journalctl -u nexcage -f
    ```
 
 ### Proxmox API Token Setup
@@ -159,7 +159,7 @@ sudo cp zig-out/bin/proxmox-lxcri /usr/local/bin/
 2. **Test API Connection**:
    ```bash
    # Test with debug output
-   proxmox-lxcri --debug list
+   nexcage --debug list
    ```
 
 ### Container Runtime Configuration
@@ -169,10 +169,10 @@ sudo cp zig-out/bin/proxmox-lxcri /usr/local/bin/
 # Add to /etc/containerd/config.toml
 sudo tee -a /etc/containerd/config.toml << 'EOF'
 
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.proxmox-lxcri]
-  runtime_type = "io.containerd.proxmox-lxcri.v1"
-  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.proxmox-lxcri.options]
-    BinaryName = "/usr/bin/proxmox-lxcri"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nexcage]
+  runtime_type = "io.containerd.nexcage.v1"
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nexcage.options]
+    BinaryName = "/usr/bin/nexcage"
 EOF
 
 sudo systemctl restart containerd
@@ -184,8 +184,8 @@ sudo systemctl restart containerd
 apiVersion: node.k8s.io/v1
 kind: RuntimeClass
 metadata:
-  name: proxmox-lxcri
-handler: proxmox-lxcri
+  name: nexcage
+handler: nexcage
 ```
 
 ## ✅ Verification and Testing
@@ -193,28 +193,28 @@ handler: proxmox-lxcri
 ### Basic Functionality Test
 ```bash
 # Check version
-proxmox-lxcri version
+nexcage version
 
 # Test help system
-proxmox-lxcri help
-proxmox-lxcri help checkpoint
-proxmox-lxcri help restore
+nexcage help
+nexcage help checkpoint
+nexcage help restore
 
 # List containers (requires Proxmox connection)
-proxmox-lxcri list
+nexcage list
 ```
 
 ### ZFS Checkpoint/Restore Test
 ```bash
 # Create test container (example)
-proxmox-lxcri create --bundle /path/to/test-bundle test-container
-proxmox-lxcri start test-container
+nexcage create --bundle /path/to/test-bundle test-container
+nexcage start test-container
 
 # Test checkpoint
-proxmox-lxcri checkpoint test-container
+nexcage checkpoint test-container
 
 # Test restore
-proxmox-lxcri restore test-container
+nexcage restore test-container
 
 # Check ZFS snapshots
 sudo zfs list -t snapshot | grep test-container
@@ -223,19 +223,19 @@ sudo zfs list -t snapshot | grep test-container
 ### Service Health Check
 ```bash
 # Check service status
-sudo systemctl status proxmox-lxcri
+sudo systemctl status nexcage
 
 # View logs
-sudo journalctl -u proxmox-lxcri -f
+sudo journalctl -u nexcage -f
 
 # Check resource usage
-sudo systemctl show proxmox-lxcri --property=MemoryCurrent
+sudo systemctl show nexcage --property=MemoryCurrent
 ```
 
 ## 📋 Configuration Reference
 
 ### Main Configuration File
-Location: `/etc/proxmox-lxcri/proxmox-lxcri.json`
+Location: `/etc/nexcage/nexcage.json`
 
 ```json
 {
@@ -248,7 +248,7 @@ Location: `/etc/proxmox-lxcri/proxmox-lxcri.json`
     "verify_ssl": false
   },
   "runtime": {
-    "root": "/run/proxmox-lxcri",
+    "root": "/run/nexcage",
     "log_level": "info",
     "log_format": "text",
     "systemd_cgroup": true
@@ -268,7 +268,7 @@ Location: `/etc/proxmox-lxcri/proxmox-lxcri.json`
     "default_mode": "zfs",
     "fallback_to_criu": true,
     "criu_path": "/usr/sbin/criu",
-    "image_path": "/var/lib/proxmox-lxcri/checkpoints"
+    "image_path": "/var/lib/nexcage/checkpoints"
   }
 }
 ```
@@ -290,34 +290,34 @@ export PROXMOX_LXCRI_DEBUG=true
 ### Updating DEB Package
 ```bash
 # Check for updates
-apt list --upgradable | grep proxmox-lxcri
+apt list --upgradable | grep nexcage
 
 # Update package
 sudo apt update
-sudo apt upgrade proxmox-lxcri
+sudo apt upgrade nexcage
 
 # Restart service after update
-sudo systemctl restart proxmox-lxcri
+sudo systemctl restart nexcage
 ```
 
 ### Updating Binary Installation
 ```bash
 # Download new version
-wget https://github.com/kubebsd/proxmox-lxcri/releases/latest/download/proxmox-lxcri-linux-x86_64
+wget https://github.com/cageforge/nexcage/releases/latest/download/nexcage-linux-x86_64
 
 # Replace binary
-sudo systemctl stop proxmox-lxcri
-sudo cp proxmox-lxcri-linux-x86_64 /usr/local/bin/proxmox-lxcri
-sudo systemctl start proxmox-lxcri
+sudo systemctl stop nexcage
+sudo cp nexcage-linux-x86_64 /usr/local/bin/nexcage
+sudo systemctl start nexcage
 ```
 
 ### Log Rotation (DEB Package)
 ```bash
 # Log rotation is automatically configured
-cat /etc/logrotate.d/proxmox-lxcri
+cat /etc/logrotate.d/nexcage
 
 # Manual log rotation
-sudo logrotate -f /etc/logrotate.d/proxmox-lxcri
+sudo logrotate -f /etc/logrotate.d/nexcage
 ```
 
 ## 🚨 Troubleshooting
@@ -337,13 +337,13 @@ sudo zpool status
 #### Service Won't Start
 ```bash
 # Check service logs
-sudo journalctl -u proxmox-lxcri -n 50
+sudo journalctl -u nexcage -n 50
 
 # Check configuration
-proxmox-lxcri --debug help
+nexcage --debug help
 
 # Test configuration
-sudo -u proxmox-lxcri proxmox-lxcri version
+sudo -u nexcage nexcage version
 ```
 
 #### Proxmox Connection Issues
@@ -359,9 +359,9 @@ sudo iptables -L
 
 ### Getting Help
 
-- **Documentation**: `/usr/share/doc/proxmox-lxcri/` (DEB package)
-- **GitHub Issues**: https://github.com/kubebsd/proxmox-lxcri/issues
-- **ZFS Guide**: `/usr/share/doc/proxmox-lxcri/zfs-checkpoint-guide.md`
+- **Documentation**: `/usr/share/doc/nexcage/` (DEB package)
+- **GitHub Issues**: https://github.com/cageforge/nexcage/issues
+- **ZFS Guide**: `/usr/share/doc/nexcage/zfs-checkpoint-guide.md`
 
 ## 📚 Next Steps
 

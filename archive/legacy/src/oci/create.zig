@@ -556,7 +556,7 @@ pub const Create = struct {
             if (self.oci_config.storage.storage_path) |path| {
                 self.allocator.free(path);
             }
-            self.oci_config.storage.storage_path = try self.allocator.dupe(u8, "/var/lib/proxmox-lxcri");
+            self.oci_config.storage.storage_path = try self.allocator.dupe(u8, "/var/lib/nexcage");
 
             try self.logger.info("Standalone mode configuration completed", .{});
         }

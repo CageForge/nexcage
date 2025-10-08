@@ -19,8 +19,8 @@ The project includes specialized testing for Proxmox VE environments:
 - **Host**: `mgr.cp.if.ua`
 - **User**: `root`
 - **Binary Path**: `/usr/local/bin`
-- **Config Path**: `/etc/proxmox-lxcri`
-- **Log Path**: `/var/log/proxmox-lxcri`
+- **Config Path**: `/etc/nexcage`
+- **Log Path**: `/var/log/nexcage`
 
 ### Prerequisites
 
@@ -60,8 +60,8 @@ Tests can be configured through environment variables:
 # Proxmox test configuration
 export PVE_HOST="root@mgr.cp.if.ua"
 export PVE_PATH="/usr/local/bin"
-export CONFIG_PATH="/etc/proxmox-lxcri"
-export LOG_PATH="/var/log/proxmox-lxcri"
+export CONFIG_PATH="/etc/nexcage"
+export LOG_PATH="/var/log/nexcage"
 
 # Test reporting
 export REPORT_DIR="./test-reports"

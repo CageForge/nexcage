@@ -188,7 +188,7 @@ The system consists of several main containers:
 ## System Architecture
 
 ```
-containerd -> proxmox-lxcri -> Proxmox API -> LXC/QEMU
+containerd -> nexcage -> Proxmox API -> LXC/QEMU
      |              |              |
      |              |              v
      |              v          ZFS Storage
@@ -231,7 +231,7 @@ OCI Bundle
 
 ### create
 ```
-containerd -> proxmox-lxcri create
+containerd -> nexcage create
   1. Validate bundle
      - Check config.json existence
      - Validate bundle structure
@@ -271,7 +271,7 @@ containerd -> proxmox-lxcri create
 
 ### start
 ```
-containerd -> proxmox-lxcri start
+containerd -> nexcage start
   1. Load container state
      - Read state from disk
      - Validate current status
@@ -297,7 +297,7 @@ containerd -> proxmox-lxcri start
 
 ### state
 ```
-containerd -> proxmox-lxcri state
+containerd -> nexcage state
   1. Load container metadata
      - Read state from disk
      - Validate state file
@@ -319,7 +319,7 @@ containerd -> proxmox-lxcri state
 
 ### kill
 ```
-containerd -> proxmox-lxcri kill
+containerd -> nexcage kill
   1. Load container state
      - Validate container exists
      - Check current status
@@ -340,7 +340,7 @@ containerd -> proxmox-lxcri kill
 
 ### delete
 ```
-containerd -> proxmox-lxcri delete
+containerd -> nexcage delete
   1. Load container state
      - Check container exists
      - Verify container stopped
@@ -364,7 +364,7 @@ containerd -> proxmox-lxcri delete
 
 Container state is maintained in the configured root directory:
 ```
-/run/proxmox-lxcri/
+/run/nexcage/
   ├── containers/
   │   └── <container-id>/
   │       ├── state.json    # Current state

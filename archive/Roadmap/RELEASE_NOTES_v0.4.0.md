@@ -16,7 +16,7 @@ This release introduces a complete modular architecture refactoring, making the 
 
 ### Enhanced CLI
 - **Command Registry**: Dynamic command registration and discovery
-- **Help System**: Comprehensive help with `proxmox-lxcri help` and `proxmox-lxcri help <command>`
+- **Help System**: Comprehensive help with `nexcage help` and `nexcage help <command>`
 - **Alerting**: Clear notifications for unimplemented features
 - **Validation**: Input validation for all commands
 
@@ -40,14 +40,14 @@ This release introduces a complete modular architecture refactoring, making the 
 ## 🚀 Commands
 
 ### Available Commands
-- `proxmox-lxcri help` - Show help information
-- `proxmox-lxcri version` - Show version information
-- `proxmox-lxcri run` - Run containers (basic implementation)
-- `proxmox-lxcri create` - Create containers (no-op with alerting)
-- `proxmox-lxcri start` - Start containers (no-op with alerting)
-- `proxmox-lxcri stop` - Stop containers (no-op with alerting)
-- `proxmox-lxcri delete` - Delete containers (no-op with alerting)
-- `proxmox-lxcri list` - List containers (no-op with alerting)
+- `nexcage help` - Show help information
+- `nexcage version` - Show version information
+- `nexcage run` - Run containers (basic implementation)
+- `nexcage create` - Create containers (no-op with alerting)
+- `nexcage start` - Start containers (no-op with alerting)
+- `nexcage stop` - Stop containers (no-op with alerting)
+- `nexcage delete` - Delete containers (no-op with alerting)
+- `nexcage list` - List containers (no-op with alerting)
 
 ### Runtime Types
 - **LXC**: Linux Containers (temporarily disabled in CLI)
@@ -155,4 +155,4 @@ For support, please:
 
 ---
 
-**Full Changelog**: https://github.com/your-org/proxmox-lxcri/compare/v0.3.0...v0.4.0
+**Full Changelog**: https://github.com/your-org/nexcage/compare/v0.3.0...v0.4.0

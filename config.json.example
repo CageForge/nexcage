@@ -12,8 +12,8 @@
     },
     "runtime": {
     "log_level":"debug",
-    "log_path":"/var/log/proxmox-lxcri/runtime.log",
-    "root_path": "/var/lib/proxmox-lxcri",
+    "log_path":"/var/log/nexcage/runtime.log",
+    "root_path": "/var/lib/nexcage",
     "terminal": false,
     "routing": [
         {
@@ -32,7 +32,7 @@
     },
     "storage": {
         "zfs_dataset": "rpool/lxc",
-        "image_path": "/var/lib/proxmox-lxcri/images"
+        "image_path": "/var/lib/nexcage/images"
     },
     "network": {
         "bridge": "vmbr50",

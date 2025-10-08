@@ -81,7 +81,7 @@ pub fn build(b: *std.Build) void {
     });
     
     const exe = b.addExecutable(.{
-        .name = "proxmox-lxcri",
+        .name = "nexcage",
         .root_module = main_mod,
     });
 

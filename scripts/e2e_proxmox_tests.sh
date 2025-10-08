@@ -3,12 +3,12 @@ set -euo pipefail
 
 PVE_HOST="mgr.cp.if.ua"
 PVE_USER="root"
-BIN_LOCAL="zig-out/bin/proxmox-lxcri"
-BIN_REMOTE="/usr/local/bin/proxmox-lxcri"
+BIN_LOCAL="zig-out/bin/nexcage"
+BIN_REMOTE="/usr/local/bin/nexcage"
 CONF_LOCAL="config.json"
-CONF_REMOTE="/etc/proxmox-lxcri/config.json"
-BUNDLES_DIR="/var/lib/proxmox-lxcri/bundles"
-LOG_DIR="/var/log/proxmox-lxcri"
+CONF_REMOTE="/etc/nexcage/config.json"
+BUNDLES_DIR="/var/lib/nexcage/bundles"
+LOG_DIR="/var/log/nexcage"
 
 log() { echo "[e2e] $*"; }
 
@@ -16,10 +16,10 @@ log "Building binary..."
 zig build >/dev/null
 
 log "Copying binary and config to PVE..."
-ssh -o StrictHostKeyChecking=no ${PVE_USER}@${PVE_HOST} 'mkdir -p /etc/proxmox-lxcri /var/lib/proxmox-lxcri /var/run/proxmox-lxcri /var/log/proxmox-lxcri'
+ssh -o StrictHostKeyChecking=no ${PVE_USER}@${PVE_HOST} 'mkdir -p /etc/nexcage /var/lib/nexcage /var/run/nexcage /var/log/nexcage'
 scp -o StrictHostKeyChecking=no "$BIN_LOCAL" ${PVE_USER}@${PVE_HOST}:"$BIN_REMOTE"
 scp -o StrictHostKeyChecking=no "$CONF_LOCAL" ${PVE_USER}@${PVE_HOST}:"$CONF_REMOTE"
-ssh -o StrictHostKeyChecking=no ${PVE_USER}@${PVE_HOST} 'chmod +x /usr/local/bin/proxmox-lxcri'
+ssh -o StrictHostKeyChecking=no ${PVE_USER}@${PVE_HOST} 'chmod +x /usr/local/bin/nexcage'
 
 log "Environment checks..."
 ssh -o StrictHostKeyChecking=no ${PVE_USER}@${PVE_HOST} 'export PATH=/usr/sbin:/usr/bin:/bin:$PATH; if [ -x /usr/sbin/pct ]; then /usr/sbin/pct help | head -n 1; else echo "pct not found"; fi'

@@ -24,7 +24,7 @@ pub const CreateCommand = struct {
         if (options.help) {
             const out = std.fs.File.stdout();
             try out.writeAll("Create Command Help:\n");
-            try out.writeAll("  Usage: proxmox-lxcri create --name <container_id> --image <image>\n");
+            try out.writeAll("  Usage: nexcage create --name <container_id> --image <image>\n");
             try out.writeAll("\n");
             try out.writeAll("  Options:\n");
             try out.writeAll("    --name <id>     Container ID/name (required)\n");
@@ -35,8 +35,8 @@ pub const CreateCommand = struct {
             try out.writeAll("    --debug         Enable debug logging\n");
             try out.writeAll("\n");
             try out.writeAll("  Examples:\n");
-            try out.writeAll("    proxmox-lxcri create --name my-container --image ubuntu:20.04\n");
-            try out.writeAll("    proxmox-lxcri create --name kube-ovn-1 --image nginx --runtime crun\n");
+            try out.writeAll("    nexcage create --name my-container --image ubuntu:20.04\n");
+            try out.writeAll("    nexcage create --name kube-ovn-1 --image nginx --runtime crun\n");
             return;
         }
 
@@ -133,7 +133,7 @@ pub const CreateCommand = struct {
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        return allocator.dupe(u8, "Usage: proxmox-lxcri create --name <id> <image>\n");
+        return allocator.dupe(u8, "Usage: nexcage create --name <id> <image>\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

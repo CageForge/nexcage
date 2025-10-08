@@ -55,7 +55,7 @@ This script will:
 
 #### Step 1: Generate SSH Key Pair
 ```bash
-ssh-keygen -t ed25519 -f ci_ssh_key -N "" -C "proxmox-lxcri-ci@github.com"
+ssh-keygen -t ed25519 -f ci_ssh_key -N "" -C "nexcage-ci@github.com"
 ```
 
 #### Step 2: Copy Public Key to Proxmox Server
@@ -92,7 +92,7 @@ The workflow is defined in `.github/workflows/proxmox_ci.yml` and includes:
 - `PVE_HOST`: Proxmox server hostname (mgr.cp.if.ua)
 - `PVE_USER`: Proxmox server user (root)
 - `PVE_PATH`: Binary path on Proxmox server (/usr/local/bin)
-- `CONFIG_PATH`: Config path on Proxmox server (/etc/proxmox-lxcri)
+- `CONFIG_PATH`: Config path on Proxmox server (/etc/nexcage)
 
 ### Secrets Required
 - `PROXMOX_SSH_KEY`: Private SSH key for Proxmox server access
@@ -161,7 +161,7 @@ The workflow is defined in `.github/workflows/proxmox_ci.yml` and includes:
 
 ### Report Locations
 - **GitHub Actions**: Available as workflow artifacts
-- **Proxmox Server**: Stored in `/var/log/proxmox-lxcri/`
+- **Proxmox Server**: Stored in `/var/log/nexcage/`
 - **Local Development**: Stored in `test-reports/`
 
 ### Report Retention
@@ -177,7 +177,7 @@ The workflow is defined in `.github/workflows/proxmox_ci.yml` and includes:
 - **Slack Integration**: Configure webhooks for notifications
 
 ### Proxmox Server
-- **Log Monitoring**: Check `/var/log/proxmox-lxcri/`
+- **Log Monitoring**: Check `/var/log/nexcage/`
 - **System Monitoring**: Use Proxmox built-in monitoring
 - **Application Monitoring**: Check binary status and performance
 
@@ -194,7 +194,7 @@ ssh -i ci_ssh_key -o StrictHostKeyChecking=no root@mgr.cp.if.ua
 gh secret list
 
 # Regenerate SSH key
-ssh-keygen -t ed25519 -f ci_ssh_key -N "" -C "proxmox-lxcri-ci@github.com"
+ssh-keygen -t ed25519 -f ci_ssh_key -N "" -C "nexcage-ci@github.com"
 ```
 
 #### 2. Workflow Not Triggering
@@ -215,10 +215,10 @@ gh workflow run "Proxmox CI/CD" --ref main
 gh run view --log
 
 # Check Proxmox server
-ssh root@mgr.cp.if.ua "systemctl status proxmox-lxcri"
+ssh root@mgr.cp.if.ua "systemctl status nexcage"
 
 # Check binary
-ssh root@mgr.cp.if.ua "/usr/local/bin/proxmox-lxcri --help"
+ssh root@mgr.cp.if.ua "/usr/local/bin/nexcage --help"
 ```
 
 #### 4. Deployment Failed
@@ -227,10 +227,10 @@ ssh root@mgr.cp.if.ua "/usr/local/bin/proxmox-lxcri --help"
 gh run view --log
 
 # Check Proxmox server
-ssh root@mgr.cp.if.ua "ls -la /usr/local/bin/proxmox-lxcri"
+ssh root@mgr.cp.if.ua "ls -la /usr/local/bin/nexcage"
 
 # Check permissions
-ssh root@mgr.cp.if.ua "chmod +x /usr/local/bin/proxmox-lxcri"
+ssh root@mgr.cp.if.ua "chmod +x /usr/local/bin/nexcage"
 ```
 
 ### Debug Mode

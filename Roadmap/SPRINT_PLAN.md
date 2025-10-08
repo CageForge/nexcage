@@ -64,6 +64,6 @@ Sprint Length: 1–2 weeks
 - Missing templates on Proxmox host → document prerequisites
 
 ## Tracking
-- Owner: TBD (@kubebsd/@moriarti)
+- Owner: TBD (@cageforge/@moriarti)
 - Report: `Roadmap/SPRINT_PROGRESS.md` (daily/at end)
 - Note: This sprint includes adoption and verification of Zig 0.15.1 across codebase, docs, and CI.

@@ -111,16 +111,16 @@ tank/containers/<container_id>
 ### Basic Operations
 ```bash
 # Create checkpoint
-proxmox-lxcri checkpoint web-server
+nexcage checkpoint web-server
 
 # Restore latest
-proxmox-lxcri restore web-server
+nexcage restore web-server
 
 # Restore specific
-proxmox-lxcri restore --snapshot checkpoint-1703851200 web-server
+nexcage restore --snapshot checkpoint-1703851200 web-server
 
 # Run container
-proxmox-lxcri run --bundle /bundles/nginx nginx-container
+nexcage run --bundle /bundles/nginx nginx-container
 ```
 
 ### ZFS Commands
@@ -224,7 +224,7 @@ This release maintains full backward compatibility with v0.2.0. All existing fun
 Special thanks to all contributors who made this release possible through code, testing, documentation, and feedback.
 
 ### Getting Involved
-- **GitHub**: [proxmox-lxcri repository](https://github.com/kubebsd/proxmox-lxcri)
+- **GitHub**: [nexcage repository](https://github.com/cageforge/nexcage)
 - **Issues**: Report bugs and request features
 - **Discussions**: Join community discussions
 - **Contributions**: Code, documentation, and testing welcome
@@ -247,22 +247,22 @@ Special thanks to all contributors who made this release possible through code, 
 ## 📋 Download
 
 ### Binary Releases
-- **Linux x86_64**: `proxmox-lxcri-linux-x86_64`
-- **Linux aarch64**: `proxmox-lxcri-linux-aarch64`
+- **Linux x86_64**: `nexcage-linux-x86_64`
+- **Linux aarch64**: `nexcage-linux-aarch64`
 - **Checksums**: `checksums.txt`
 
 ### Installation
 ```bash
 # Download and install
-wget https://github.com/kubebsd/proxmox-lxcri/releases/download/v0.3.0/proxmox-lxcri-linux-x86_64
-chmod +x proxmox-lxcri-linux-x86_64
-sudo mv proxmox-lxcri-linux-x86_64 /usr/local/bin/proxmox-lxcri
+wget https://github.com/cageforge/nexcage/releases/download/v0.3.0/nexcage-linux-x86_64
+chmod +x nexcage-linux-x86_64
+sudo mv nexcage-linux-x86_64 /usr/local/bin/nexcage
 ```
 
 ### Build from Source
 ```bash
-git clone https://github.com/kubebsd/proxmox-lxcri.git
-cd proxmox-lxcri
+git clone https://github.com/cageforge/nexcage.git
+cd nexcage
 git checkout v0.3.0
 zig build -Doptimize=ReleaseFast
 ```
@@ -273,7 +273,7 @@ Proxmox LXCRI v0.3.0 represents a significant leap forward in container state ma
 
 The seamless integration with Proxmox ZFS infrastructure makes this release particularly valuable for organizations already leveraging ZFS storage, while the automatic CRIU fallback ensures compatibility across all environments.
 
-For complete documentation, examples, and support, visit the [project repository](https://github.com/kubebsd/proxmox-lxcri) and review the comprehensive [ZFS Checkpoint Guide](https://github.com/kubebsd/proxmox-lxcri/blob/main/docs/zfs-checkpoint-guide.md).
+For complete documentation, examples, and support, visit the [project repository](https://github.com/cageforge/nexcage) and review the comprehensive [ZFS Checkpoint Guide](https://github.com/cageforge/nexcage/blob/main/docs/zfs-checkpoint-guide.md).
 
 ---
 

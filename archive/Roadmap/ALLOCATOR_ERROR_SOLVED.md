@@ -17,9 +17,9 @@ The Allocator error was caused by **incorrect memory management** in the `Config
 pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) Config {
     return Config{
         .default_runtime = "lxc",  // ❌ String literal
-        .data_dir = "/var/lib/proxmox-lxcri",  // ❌ String literal
-        .cache_dir = "/var/cache/proxmox-lxcri",  // ❌ String literal
-        .temp_dir = "/tmp/proxmox-lxcri",  // ❌ String literal
+        .data_dir = "/var/lib/nexcage",  // ❌ String literal
+        .cache_dir = "/var/cache/nexcage",  // ❌ String literal
+        .temp_dir = "/tmp/nexcage",  // ❌ String literal
         .network = types.NetworkConfig{
             .bridge = "lxcbr0",  // ❌ String literal
         },
@@ -38,9 +38,9 @@ pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) Confi
 pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) !Config {
     return Config{
         .default_runtime = try allocator.dupe(u8, "lxc"),  // ✅ Allocated
-        .data_dir = try allocator.dupe(u8, "/var/lib/proxmox-lxcri"),  // ✅ Allocated
-        .cache_dir = try allocator.dupe(u8, "/var/cache/proxmox-lxcri"),  // ✅ Allocated
-        .temp_dir = try allocator.dupe(u8, "/tmp/proxmox-lxcri"),  // ✅ Allocated
+        .data_dir = try allocator.dupe(u8, "/var/lib/nexcage"),  // ✅ Allocated
+        .cache_dir = try allocator.dupe(u8, "/var/cache/nexcage"),  // ✅ Allocated
+        .temp_dir = try allocator.dupe(u8, "/tmp/nexcage"),  // ✅ Allocated
         .network = types.NetworkConfig{
             .bridge = try allocator.dupe(u8, "lxcbr0"),  // ✅ Allocated
         },

@@ -72,7 +72,7 @@ pub const RunCommand = struct {
         _ = self;
         _ = allocator;
 
-        return "Usage: proxmox-lxcri run [OPTIONS] IMAGE [COMMAND] [ARG...]\n\n" ++
+        return "Usage: nexcage run [OPTIONS] IMAGE [COMMAND] [ARG...]\n\n" ++
             "Run a container from an image\n\n" ++
             "Options:\n" ++
             "  -i, --interactive    Keep STDIN open even if not attached\n" ++

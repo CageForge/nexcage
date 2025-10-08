@@ -5,8 +5,8 @@ set -euo pipefail
 # Configuration
 PVE_HOST="root@mgr.cp.if.ua"
 PVE_PATH="/usr/local/bin"
-CONFIG_PATH="/etc/proxmox-lxcri"
-LOG_PATH="/var/log/proxmox-lxcri"
+CONFIG_PATH="/etc/nexcage"
+LOG_PATH="/var/log/nexcage"
 REPORT_DIR="./test-reports"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 REPORT_FILE="$REPORT_DIR/proxmox_only_test_report_$TIMESTAMP.md"
@@ -135,7 +135,7 @@ fi
 
 # Test 2: Copy binary to PVE
 echo -e "${YELLOW}📤 Copying binary to PVE...${NC}"
-if scp zig-out/bin/proxmox-lxcri "$PVE_HOST:$PVE_PATH/"; then
+if scp zig-out/bin/nexcage "$PVE_HOST:$PVE_PATH/"; then
     log_test_result "Copy Binary to PVE" "PASS" "Binary copied successfully" "0ms"
 else
     log_test_result "Copy Binary to PVE" "FAIL" "Failed to copy binary" "0ms"
@@ -191,77 +191,77 @@ else
 fi
 
 # Test 8: Remote help command
-run_test "Remote Help Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri --help'"
+run_test "Remote Help Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage --help'"
 
 # Test 9: Remote version command
-run_test "Remote Version Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri version'"
+run_test "Remote Version Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage version'"
 
 # Test 10: Remote create help
-run_test "Remote Create Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --help'"
+run_test "Remote Create Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --help'"
 
 # Test 11: Remote start help
-run_test "Remote Start Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri start --help'"
+run_test "Remote Start Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --help'"
 
 # Test 12: Remote stop help
-run_test "Remote Stop Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri stop --help'"
+run_test "Remote Stop Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --help'"
 
 # Test 13: Remote delete help
-run_test "Remote Delete Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri delete --help'"
+run_test "Remote Delete Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --help'"
 
 # Test 14: Remote list help
-run_test "Remote List Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri list --help'"
+run_test "Remote List Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --help'"
 
 # Test 15: Remote run help
-run_test "Remote Run Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri run --help'"
+run_test "Remote Run Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage run --help'"
 
 # Test 16: Test create command (should fail without proper setup)
-run_test_expected_fail "Remote Create Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test-container --image ubuntu:20.04'"
+run_test_expected_fail "Remote Create Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-container --image ubuntu:20.04'"
 
 # Test 17: Test start command (should fail without container)
-run_test_expected_fail "Remote Start Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri start --name test-container'"
+run_test_expected_fail "Remote Start Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-container'"
 
 # Test 18: Test stop command (should fail without container)
-run_test_expected_fail "Remote Stop Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri stop --name test-container'"
+run_test_expected_fail "Remote Stop Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-container'"
 
 # Test 19: Test delete command (should fail without container)
-run_test_expected_fail "Remote Delete Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri delete --name test-container'"
+run_test_expected_fail "Remote Delete Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-container'"
 
 # Test 20: Test list command (should work)
-run_test "Remote List Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri list'"
+run_test "Remote List Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list'"
 
 # Test 21: Test run command (should fail without container)
-run_test_expected_fail "Remote Run Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri run --name test-container --command /bin/echo hello'"
+run_test_expected_fail "Remote Run Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage run --name test-container --command /bin/echo hello'"
 
 # Test 22: Test invalid command (should fail)
-run_test_expected_fail "Remote Invalid Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri invalid-command'"
+run_test_expected_fail "Remote Invalid Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage invalid-command'"
 
 # Test 23: Test missing required arguments (should fail)
-run_test_expected_fail "Remote Missing Args (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create'"
+run_test_expected_fail "Remote Missing Args (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create'"
 
 # Test 24: Test invalid runtime (should fail)
-run_test_expected_fail "Remote Invalid Runtime (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test --image ubuntu --runtime invalid'"
+run_test_expected_fail "Remote Invalid Runtime (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test --image ubuntu --runtime invalid'"
 
 # Test 25: Test config file loading
-run_test "Remote Config Loading" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test --image ubuntu --config $CONFIG_PATH/config.json --help'"
+run_test "Remote Config Loading" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test --image ubuntu --config $CONFIG_PATH/config.json --help'"
 
 # Test 26: Test LXC container creation (if LXC tools available)
 if check_remote_command "pct"; then
     echo -e "${YELLOW}🧪 Testing LXC container creation...${NC}"
     
     # Test 27: Create LXC container
-    run_test "LXC Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test-lxc-container --image ubuntu:20.04 --runtime lxc'"
+    run_test "LXC Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-lxc-container --image ubuntu:20.04 --runtime lxc'"
     
     # Test 28: List LXC containers
-    run_test "LXC Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri list --runtime lxc'"
+    run_test "LXC Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --runtime lxc'"
     
     # Test 29: Start LXC container
-    run_test "LXC Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri start --name test-lxc-container --runtime lxc'"
+    run_test "LXC Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-lxc-container --runtime lxc'"
     
     # Test 30: Stop LXC container
-    run_test "LXC Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri stop --name test-lxc-container --runtime lxc'"
+    run_test "LXC Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-lxc-container --runtime lxc'"
     
     # Test 31: Delete LXC container
-    run_test "LXC Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri delete --name test-lxc-container --runtime lxc'"
+    run_test "LXC Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-lxc-container --runtime lxc'"
 else
     echo -e "${YELLOW}⏭️ Skipping LXC tests - LXC tools not available${NC}"
     log_test_result "LXC Container Tests" "SKIP" "LXC tools not available" "0ms"
@@ -272,19 +272,19 @@ if check_remote_command "crun"; then
     echo -e "${YELLOW}🧪 Testing OCI container creation...${NC}"
     
     # Test 33: Create OCI container
-    run_test "OCI Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test-oci-container --image nginx --runtime crun'"
+    run_test "OCI Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-oci-container --image nginx --runtime crun'"
     
     # Test 34: List OCI containers
-    run_test "OCI Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri list --runtime crun'"
+    run_test "OCI Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --runtime crun'"
     
     # Test 35: Start OCI container
-    run_test "OCI Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri start --name test-oci-container --runtime crun'"
+    run_test "OCI Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-oci-container --runtime crun'"
     
     # Test 36: Stop OCI container
-    run_test "OCI Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri stop --name test-oci-container --runtime crun'"
+    run_test "OCI Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-oci-container --runtime crun'"
     
     # Test 37: Delete OCI container
-    run_test "OCI Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri delete --name test-oci-container --runtime crun'"
+    run_test "OCI Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-oci-container --runtime crun'"
 else
     echo -e "${YELLOW}⏭️ Skipping OCI tests - crun not available${NC}"
     log_test_result "OCI Container Tests" "SKIP" "crun not available" "0ms"
@@ -295,19 +295,19 @@ if check_remote_command "runc"; then
     echo -e "${YELLOW}🧪 Testing runc container creation...${NC}"
     
     # Test 39: Create runc container
-    run_test "Runc Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test-runc-container --image nginx --runtime runc'"
+    run_test "Runc Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-runc-container --image nginx --runtime runc'"
     
     # Test 40: List runc containers
-    run_test "Runc Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri list --runtime runc'"
+    run_test "Runc Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --runtime runc'"
     
     # Test 41: Start runc container
-    run_test "Runc Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri start --name test-runc-container --runtime runc'"
+    run_test "Runc Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-runc-container --runtime runc'"
     
     # Test 42: Stop runc container
-    run_test "Runc Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri stop --name test-runc-container --runtime runc'"
+    run_test "Runc Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-runc-container --runtime runc'"
     
     # Test 43: Delete runc container
-    run_test "Runc Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri delete --name test-runc-container --runtime runc'"
+    run_test "Runc Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-runc-container --runtime runc'"
 else
     echo -e "${YELLOW}⏭️ Skipping runc tests - runc not available${NC}"
     log_test_result "Runc Container Tests" "SKIP" "runc not available" "0ms"
@@ -315,19 +315,19 @@ fi
 
 # Test 44: Test VM creation (if Proxmox API available)
 echo -e "${YELLOW}🧪 Testing VM creation...${NC}"
-run_test "VM Creation Test" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name test-vm --image ubuntu:20.04 --runtime vm'"
+run_test "VM Creation Test" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-vm --image ubuntu:20.04 --runtime vm'"
 
 # Test 45: Test performance
 echo -e "${YELLOW}🧪 Testing performance...${NC}"
-run_test "Performance Test" "ssh $PVE_HOST 'cd $PVE_PATH && time ./proxmox-lxcri --help'"
+run_test "Performance Test" "ssh $PVE_HOST 'cd $PVE_PATH && time ./nexcage --help'"
 
 # Test 46: Test memory usage
 echo -e "${YELLOW}🧪 Testing memory usage...${NC}"
-run_test "Memory Usage Test" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri --help && ps aux | grep proxmox-lxcri'"
+run_test "Memory Usage Test" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage --help && ps aux | grep nexcage'"
 
 # Test 47: Test error handling
 echo -e "${YELLOW}🧪 Testing error handling...${NC}"
-run_test_expected_fail "Error Handling Test" "ssh $PVE_HOST 'cd $PVE_PATH && ./proxmox-lxcri create --name invalid-container --image invalid-image --runtime invalid-runtime'"
+run_test_expected_fail "Error Handling Test" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name invalid-container --image invalid-image --runtime invalid-runtime'"
 
 # Generate final report
 echo ""

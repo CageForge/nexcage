@@ -86,7 +86,7 @@ pub const StopCommand = struct {
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
         return allocator.dupe(u8,
-            "Usage: proxmox-lxcri stop --name <id> [--runtime <type>]\n\n" ++
+            "Usage: nexcage stop --name <id> [--runtime <type>]\n\n" ++
             "Options:\n" ++
             "  --name <id>        Container/VM identifier\n" ++
             "  --runtime <type>   Runtime: lxc|vm|crun (default: lxc)\n\n" ++

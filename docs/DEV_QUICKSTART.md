@@ -19,14 +19,14 @@ zig version
 ## Build & Run
 ```bash
 zig build
-./zig-out/bin/proxmox-lxcri --help
-./zig-out/bin/proxmox-lxcri version
+./zig-out/bin/nexcage --help
+./zig-out/bin/nexcage version
 ```
 
 ## Local Smoke (no Proxmox)
 ```bash
-./zig-out/bin/proxmox-lxcri create --help
-./zig-out/bin/proxmox-lxcri list --runtime lxc || true
+./zig-out/bin/nexcage create --help
+./zig-out/bin/nexcage list --runtime lxc || true
 ```
 
 ## Proxmox E2E (self-hosted)
