@@ -1,7 +1,7 @@
 # Architecture Update Documentation
 
 ## Overview
-This document describes the updated architecture of proxmox-lxcri after the CLI refactoring and OCI backend implementation.
+This document describes the updated architecture of nexcage after the CLI refactoring and OCI backend implementation.
 
 ## Architecture Changes
 
@@ -48,8 +48,8 @@ src/
     },
     "runtime": {
         "log_level": "debug",
-        "log_path": "/var/log/proxmox-lxcri/runtime.log",
-        "root_path": "/var/lib/proxmox-lxcri"
+        "log_path": "/var/log/nexcage/runtime.log",
+        "root_path": "/var/lib/nexcage"
     },
     "container_config": {
         "crun_name_patterns": ["kube-ovn-*", "cilium-*"],
@@ -74,7 +74,7 @@ pub fn getContainerType(self: *const Self, container_name: []const u8) types.Con
 
 ### Create Command
 ```bash
-proxmox-lxcri create --name <container-name> <image> [options]
+nexcage create --name <container-name> <image> [options]
 ```
 
 **Backend Routing:**
@@ -84,7 +84,7 @@ proxmox-lxcri create --name <container-name> <image> [options]
 
 ### Start Command
 ```bash
-proxmox-lxcri start <container-id>
+nexcage start <container-id>
 ```
 
 **Backend Routing:**
@@ -92,7 +92,7 @@ proxmox-lxcri start <container-id>
 
 ### Stop Command
 ```bash
-proxmox-lxcri stop <container-id>
+nexcage stop <container-id>
 ```
 
 **Backend Routing:**
@@ -100,7 +100,7 @@ proxmox-lxcri stop <container-id>
 
 ### Delete Command
 ```bash
-proxmox-lxcri delete <container-id>
+nexcage delete <container-id>
 ```
 
 **Backend Routing:**

@@ -79,7 +79,7 @@ pub const ProxmoxApiClient = struct {
                 return err;
             };
 
-            req.headers.append("User-Agent", "proxmox-lxcri/0.3") catch |err| {
+            req.headers.append("User-Agent", "nexcage/0.3") catch |err| {
                 last_error = err;
                 if (self.tryNextHost()) continue :retry_loop;
                 return err;
@@ -189,7 +189,7 @@ pub const ProxmoxApiClient = struct {
                 return err;
             };
 
-            req.headers.append("User-Agent", "proxmox-lxcri/0.3") catch |err| {
+            req.headers.append("User-Agent", "nexcage/0.3") catch |err| {
                 last_error = err;
                 if (self.tryNextHost()) continue :retry_loop;
                 return err;

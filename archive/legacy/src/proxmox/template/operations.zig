@@ -118,7 +118,7 @@ pub fn createTemplateFromRootfsWithDeps(client: *Client, rootfs_path: []const u8
         const curl_args = [_][]const u8{
             "curl",                          "-sS",                      "-k",            "-X",                "POST",
             "-H",                            "Accept: application/json", "-H",            "Connection: close", "-H",
-            "User-Agent: proxmox-lxcri/0.3", "-H",                       auth_header_arg, "-F",                filename_arg,
+            "User-Agent: nexcage/0.3", "-H",                       auth_header_arg, "-F",                filename_arg,
             "-F",                            content_arg,                url,
         };
 

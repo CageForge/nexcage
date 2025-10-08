@@ -49,8 +49,8 @@ pub const HelpCommand = struct {
         var help_text = std.array_list.Managed(u8).init(allocator);
         defer help_text.deinit();
 
-        try help_text.appendSlice("proxmox-lxcri - Proxmox LXC Runtime Interface\n\n");
-        try help_text.appendSlice("Usage: proxmox-lxcri [COMMAND] [OPTIONS]\n\n");
+        try help_text.appendSlice("nexcage - Proxmox LXC Runtime Interface\n\n");
+        try help_text.appendSlice("Usage: nexcage [COMMAND] [OPTIONS]\n\n");
         try help_text.appendSlice("Commands:\n");
 
         for (command_names) |name| {
@@ -58,7 +58,7 @@ pub const HelpCommand = struct {
             try help_text.writer().print("  {s:<12} {s}\n", .{ name, command.description });
         }
 
-        try help_text.appendSlice("\nUse 'proxmox-lxcri help <command>' for more information about a command.\n");
+        try help_text.appendSlice("\nUse 'nexcage help <command>' for more information about a command.\n");
 
         return help_text.toOwnedSlice();
     }

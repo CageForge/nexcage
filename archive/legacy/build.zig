@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
 
     // Legacy executable (deprecated)
     const exe = b.addExecutable(.{
-        .name = "proxmox-lxcri-legacy",
+        .name = "nexcage-legacy",
         .root_source_file = b.path("src/main_legacy.zig"),
         .target = target,
         .optimize = optimize,

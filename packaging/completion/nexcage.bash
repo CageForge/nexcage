@@ -1,7 +1,7 @@
 #!/bin/bash
-# Bash completion for proxmox-lxcri
+# Bash completion for nexcage
 
-_proxmox_lxcri() {
+_nexcage() {
     local cur prev opts commands
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -100,9 +100,9 @@ _proxmox_lxcri() {
         *)
             # For other commands that take container ID
             if [[ "${COMP_WORDS[1]}" =~ ^(start|stop|delete|state|pause|resume|exec|ps|events|update)$ ]]; then
-                # Complete with running container IDs if proxmox-lxcri list is available
-                if command -v proxmox-lxcri >/dev/null 2>&1; then
-                    local containers=$(proxmox-lxcri list 2>/dev/null | awk 'NR>1 {print $1}')
+                # Complete with running container IDs if nexcage list is available
+                if command -v nexcage >/dev/null 2>&1; then
+                    local containers=$(nexcage list 2>/dev/null | awk 'NR>1 {print $1}')
                     COMPREPLY=( $(compgen -W "$containers" -- "$cur") )
                 fi
                 return 0
@@ -140,4 +140,4 @@ _proxmox_lxcri() {
     COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
 }
 
-complete -F _proxmox_lxcri proxmox-lxcri
+complete -F _nexcage nexcage

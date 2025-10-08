@@ -19,8 +19,8 @@ pub const ConfigLoader = struct {
         // Try to load from default locations in order
         const default_paths = [_][]const u8{
             "./config.json",
-            "/etc/proxmox-lxcri/config.json",
-            "/etc/proxmox-lxcri/proxmox-lxcri.json",
+            "/etc/nexcage/config.json",
+            "/etc/nexcage/nexcage.json",
         };
 
         for (default_paths) |path| {
@@ -409,9 +409,9 @@ pub const Config = struct {
             .default_runtime = try allocator.dupe(u8, "lxc"),
             .log_level = logging.LogLevel.info,
             .log_file = null,
-            .data_dir = try allocator.dupe(u8, "/var/lib/proxmox-lxcri"),
-            .cache_dir = try allocator.dupe(u8, "/var/cache/proxmox-lxcri"),
-            .temp_dir = try allocator.dupe(u8, "/tmp/proxmox-lxcri"),
+            .data_dir = try allocator.dupe(u8, "/var/lib/nexcage"),
+            .cache_dir = try allocator.dupe(u8, "/var/cache/nexcage"),
+            .temp_dir = try allocator.dupe(u8, "/tmp/nexcage"),
             .network = types.NetworkConfig{
                 .bridge = try allocator.dupe(u8, "lxcbr0"),
                 .ip = null,

@@ -286,7 +286,7 @@ fn testVersionCommand() !void {
 
 fn testCommandParsing() !void {
     // Test basic command parsing logic
-    const args = [_][]const u8{ "proxmox-lxcri", "--help" };
+    const args = [_][]const u8{ "nexcage", "--help" };
     if (args.len < 2) return;
     const command_name = args[1];
     if (!std.mem.eql(u8, command_name, "--help")) {

@@ -147,7 +147,7 @@ pub const SecurityAuditConfig = struct {
         .scan_network = true,
         .scan_filesystem = true,
         .enable_real_time_monitoring = true,
-        .audit_log_path = "/var/log/proxmox-lxcri/security-audit.log",
+        .audit_log_path = "/var/log/nexcage/security-audit.log",
     };
 };
 

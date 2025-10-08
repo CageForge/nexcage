@@ -26,7 +26,7 @@ pub const RuncDriver = struct {
         }
 
         // Create OCI bundle directory
-        const bundle_path = try std.fmt.allocPrint(self.allocator, "/var/lib/proxmox-lxcri/bundles/{s}", .{config.name});
+        const bundle_path = try std.fmt.allocPrint(self.allocator, "/var/lib/nexcage/bundles/{s}", .{config.name});
         defer self.allocator.free(bundle_path);
 
         // Create bundle directory

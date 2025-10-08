@@ -1,6 +1,6 @@
 // Performance monitoring and optimization module
 // This module provides comprehensive performance monitoring, metrics collection,
-// alerting, and optimization recommendations for the proxmox-lxcri system.
+// alerting, and optimization recommendations for the nexcage system.
 
 pub const monitor = @import("monitor.zig");
 pub const dashboard = @import("dashboard.zig");

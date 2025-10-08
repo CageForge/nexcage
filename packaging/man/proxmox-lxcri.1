@@ -1,10 +1,10 @@
-.TH PROXMOX-LXCRI 1 "December 2024" "proxmox-lxcri 0.3.0" "User Commands"
+.TH PROXMOX-LXCRI 1 "December 2024" "nexcage 0.3.0" "User Commands"
 
 .SH NAME
-proxmox-lxcri \- OCI-compatible container runtime for Proxmox VE
+nexcage \- OCI-compatible container runtime for Proxmox VE
 
 .SH SYNOPSIS
-.B proxmox-lxcri
+.B nexcage
 [\fIOPTIONS\fR] \fICOMMAND\fR [\fIARGS\fR]...
 
 .SH DESCRIPTION
@@ -29,7 +29,7 @@ Delete a container and its associated resources.
 
 .TP
 .B list
-List all containers managed by proxmox-lxcri.
+List all containers managed by nexcage.
 
 .TP
 .B state \fIcontainer_id\fR
@@ -66,11 +66,11 @@ Resume a paused container.
 .SH OPTIONS
 .TP
 .B \-\-config \fIPATH\fR
-Path to configuration file (default: /etc/proxmox-lxcri/proxmox-lxcri.json).
+Path to configuration file (default: /etc/nexcage/nexcage.json).
 
 .TP
 .B \-\-root \fIPATH\fR
-Root directory for storage of container state (default: /run/proxmox-lxcri).
+Root directory for storage of container state (default: /run/nexcage).
 
 .TP
 .B \-\-log \fIPATH\fR
@@ -148,50 +148,50 @@ File specified with \-\-config
 .IP 2. 4
 ./config.json (current directory)
 .IP 3. 4
-/etc/proxmox-lxcri/config.json
+/etc/nexcage/config.json
 .IP 4. 4
-/etc/proxmox-lxcri/proxmox-lxcri.json
+/etc/nexcage/nexcage.json
 
 .SH EXAMPLES
 .TP
 Create and start a container:
-.B proxmox-lxcri create --bundle /path/to/bundle container1
+.B nexcage create --bundle /path/to/bundle container1
 .br
-.B proxmox-lxcri start container1
+.B nexcage start container1
 
 .TP
 Create checkpoint and restore:
-.B proxmox-lxcri checkpoint container1
+.B nexcage checkpoint container1
 .br
-.B proxmox-lxcri restore container1
+.B nexcage restore container1
 
 .TP
 Restore from specific ZFS snapshot:
-.B proxmox-lxcri restore --snapshot checkpoint-1703851200 container1
+.B nexcage restore --snapshot checkpoint-1703851200 container1
 
 .TP
 Create and start in one operation:
-.B proxmox-lxcri run --bundle /path/to/bundle container1
+.B nexcage run --bundle /path/to/bundle container1
 
 .SH FILES
 .TP
-.I /etc/proxmox-lxcri/proxmox-lxcri.json
+.I /etc/nexcage/nexcage.json
 Main configuration file.
 
 .TP
-.I /etc/proxmox-lxcri/config.json
+.I /etc/nexcage/config.json
 Alternative configuration file.
 
 .TP
-.I /run/proxmox-lxcri
+.I /run/nexcage
 Default runtime directory.
 
 .TP
-.I /var/lib/proxmox-lxcri
+.I /var/lib/nexcage
 Data directory for checkpoints and storage.
 
 .TP
-.I /var/log/proxmox-lxcri
+.I /var/log/nexcage
 Log directory.
 
 .SH DEPENDENCIES
@@ -213,10 +213,10 @@ kubernetes-cni, docker.io
 .BR containerd (1),
 .BR runc (1)
 
-Online documentation: https://github.com/kubebsd/proxmox-lxcri
+Online documentation: https://github.com/kubebsd/nexcage
 
 .SH AUTHOR
-Proxmox LXCRI Team <maintainers@proxmox-lxcri.io>
+Proxmox LXCRI Team <maintainers@nexcage.io>
 
 .SH BUGS
-Report bugs at: https://github.com/kubebsd/proxmox-lxcri/issues
+Report bugs at: https://github.com/kubebsd/nexcage/issues

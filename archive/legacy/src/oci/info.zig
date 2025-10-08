@@ -36,14 +36,14 @@ const RuntimeInfo = struct {
         // Backends
         try json.writer().print("  \"backends\": {{\n", .{});
         try json.writer().print("    \"default\": \"{s}\",\n", .{self.backends.default});
-        try json.writer().print("    \"proxmox-lxcri\": {{\n", .{});
-        try json.writer().print("      \"engine\": \"{s}\",\n", .{self.backends.proxmox_lxcri.engine});
-        try json.writer().print("      \"hypervisor\": \"{s}\",\n", .{self.backends.proxmox_lxcri.hypervisor});
-        try json.writer().print("      \"sandbox_model\": \"{s}\",\n", .{self.backends.proxmox_lxcri.sandbox_model});
+        try json.writer().print("    \"nexcage\": {{\n", .{});
+        try json.writer().print("      \"engine\": \"{s}\",\n", .{self.backends.nexcage.engine});
+        try json.writer().print("      \"hypervisor\": \"{s}\",\n", .{self.backends.nexcage.hypervisor});
+        try json.writer().print("      \"sandbox_model\": \"{s}\",\n", .{self.backends.nexcage.sandbox_model});
         try json.writer().print("      \"use_cases\": [\n", .{});
-        try json.writer().print("        \"{s}\",\n", .{self.backends.proxmox_lxcri.use_cases[0]});
-        try json.writer().print("        \"{s}\",\n", .{self.backends.proxmox_lxcri.use_cases[1]});
-        try json.writer().print("        \"{s}\"\n", .{self.backends.proxmox_lxcri.use_cases[2]});
+        try json.writer().print("        \"{s}\",\n", .{self.backends.nexcage.use_cases[0]});
+        try json.writer().print("        \"{s}\",\n", .{self.backends.nexcage.use_cases[1]});
+        try json.writer().print("        \"{s}\"\n", .{self.backends.nexcage.use_cases[2]});
         try json.writer().print("      ]\n", .{});
         try json.writer().print("    }}\n", .{});
         try json.writer().print("  }},\n\n", .{});
@@ -111,7 +111,7 @@ const RuntimeInfo = struct {
 
 const Backends = struct {
     default: []const u8,
-    proxmox_lxcri: ProxmoxBackend,
+    nexcage: ProxmoxBackend,
 };
 
 const ProxmoxBackend = struct {
@@ -170,14 +170,14 @@ pub fn info(container_id: ?[]const u8, proxmox_client: *proxmox.ProxmoxClient) !
         .version = "0.1.1",
         .git_commit = getGitCommit(),
         .spec = "1.1.0",
-        .runtime = "proxmox-lxcri",
+        .runtime = "nexcage",
         .built = getCurrentTimestamp(),
         .compiler = "zig 0.13.0",
         .platform = "linux/amd64",
 
         .backends = Backends{
             .default = "crun",
-            .proxmox_lxcri = ProxmoxBackend{
+            .nexcage = ProxmoxBackend{
                 .engine = "LXC",
                 .hypervisor = "QEMU (optional)",
                 .sandbox_model = "LXC as a Pod",
