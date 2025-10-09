@@ -32,7 +32,7 @@ pub const ErrorHandler = struct {
     }
 
     /// Log and return InvalidInput error with context
-    pub fn invalidInput(self: *const ErrorHandler, message: []const u8, args: anytype) CliError {
+    pub fn invalidInput(self: *const ErrorHandler, comptime message: []const u8, args: anytype) CliError {
         if (self.logger) |log| {
             log.err(message, args) catch {};
         }
