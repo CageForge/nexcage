@@ -4,6 +4,7 @@ const core = @import("core");
 const types = core.types;
 const interfaces = core.interfaces;
 const backends = @import("backends");
+const router = @import("router.zig");
 
 /// Run command implementation
 /// Run command
@@ -27,43 +28,11 @@ pub const RunCommand = struct {
         const container_id = options.container_id.?;
         const image = options.image.?;
 
-        // Load configuration for backend routing
-        var config_loader = core.ConfigLoader.init(allocator);
-        var cfg = try config_loader.loadDefault();
-        defer cfg.deinit();
+        // Use router for backend selection and execution
+        var backend_router = router.BackendRouter.init(allocator, null);
 
-        // Select backend based on config routing
-        const ctype = cfg.getContainerType(container_id);
-        std.debug.print("Selected backend: {s} for container: {s}\n", .{ @tagName(ctype), container_id });
-
-        // Create and start container using selected backend
-        switch (ctype) {
-            .lxc => {
-                // Create minimal sandbox config for LXC
-                const name_buf = try allocator.dupe(u8, container_id);
-                defer allocator.free(name_buf);
-                
-                const sandbox_config = core.types.SandboxConfig{
-                    .allocator = allocator,
-                    .name = name_buf,
-                    .runtime_type = .lxc,
-                    .resources = null,
-                    .security = null,
-                    .network = null,
-                    .storage = null,
-                };
-                
-                const lxc_backend = try backends.lxc.LxcBackend.init(allocator, sandbox_config);
-                defer lxc_backend.deinit();
-                
-                try lxc_backend.create(sandbox_config);
-                try lxc_backend.start(container_id);
-            },
-            else => {
-                std.debug.print("Selected backend not implemented for run: {}\n", .{ctype});
-                return types.Error.UnsupportedOperation;
-            },
-        }
+        const operation = router.Operation{ .run = router.RunConfig{ .image = image } };
+        try backend_router.routeAndExecute(operation, container_id, null);
 
         std.debug.print("Running container: {s} with image: {s}\n", .{ container_id, image });
     }

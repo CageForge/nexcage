@@ -1,11 +1,12 @@
 const std = @import("std");
 const core = @import("core");
 const backends = @import("backends");
+const constants = @import("constants.zig");
 
 /// List command implementation for modular architecture
 pub const ListCommand = struct {
     const Self = @This();
-    
+
     name: []const u8 = "list",
     description: []const u8 = "List containers and virtual machines",
     logger: ?*core.LogContext = null,
@@ -38,14 +39,14 @@ pub const ListCommand = struct {
                     .name = try allocator.dupe(u8, "default"),
                     .runtime_type = .lxc,
                     .resources = core.types.ResourceLimits{
-                        .memory = 512 * 1024 * 1024,
-                        .cpu = 1.0,
+                        .memory = constants.DEFAULT_MEMORY_BYTES,
+                        .cpu = constants.DEFAULT_CPU_CORES,
                         .disk = null,
                         .network_bandwidth = null,
                     },
                     .security = null,
                     .network = core.types.NetworkConfig{
-                        .bridge = try allocator.dupe(u8, "lxcbr0"),
+                        .bridge = try allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
                         .ip = null,
                         .gateway = null,
                         .dns = null,
@@ -105,18 +106,16 @@ pub const ListCommand = struct {
             try log.info("List command completed successfully", .{});
         }
     }
-    
+
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        return allocator.dupe(u8,
-            "Usage: nexcage list [--runtime <type>]\n\n" ++
+        return allocator.dupe(u8, "Usage: nexcage list [--runtime <type>]\n\n" ++
             "Options:\n" ++
             "  --runtime <type>   Runtime: lxc|vm|crun (default: lxc)\n\n" ++
             "Notes:\n" ++
-            "  If LXC tools are not installed, returns empty list with a warning.\n"
-        );
+            "  If LXC tools are not installed, returns empty list with a warning.\n");
     }
-    
+
     pub fn validate(self: *Self, args: []const []const u8) !void {
         _ = self;
         _ = args;

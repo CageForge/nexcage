@@ -112,7 +112,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
         .validate = @ptrCast(&run.RunCommand.validate),
     };
     try registry.register(run_iface);
-    
+
     // Register help command
     const help_iface = try registry.allocator.create(interfaces.CommandInterface);
     help_iface.* = .{
@@ -124,7 +124,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
         .validate = @ptrCast(&help.HelpCommand.validate),
     };
     try registry.register(help_iface);
-    
+
     // Register version command
     const version_iface = try registry.allocator.create(interfaces.CommandInterface);
     version_iface.* = .{
@@ -136,7 +136,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
         .validate = @ptrCast(&version.VersionCommand.validate),
     };
     try registry.register(version_iface);
-    
+
     // Register create command
     const create_iface = try registry.allocator.create(interfaces.CommandInterface);
     create_iface.* = .{
@@ -148,7 +148,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
         .validate = @ptrCast(&create.CreateCommand.validate),
     };
     try registry.register(create_iface);
-    
+
     // Register start command
     const start_iface = try registry.allocator.create(interfaces.CommandInterface);
     start_iface.* = .{
@@ -160,7 +160,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
         .validate = @ptrCast(&start.StartCommand.validate),
     };
     try registry.register(start_iface);
-    
+
     // Register stop command
     const stop_iface = try registry.allocator.create(interfaces.CommandInterface);
     stop_iface.* = .{
@@ -172,7 +172,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
         .validate = @ptrCast(&stop.StopCommand.validate),
     };
     try registry.register(stop_iface);
-    
+
     // Register delete command
     const delete_iface = try registry.allocator.create(interfaces.CommandInterface);
     delete_iface.* = .{
@@ -184,7 +184,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
         .validate = @ptrCast(&delete.DeleteCommand.validate),
     };
     try registry.register(delete_iface);
-    
+
     // Register list command
     const list_iface = try registry.allocator.create(interfaces.CommandInterface);
     list_iface.* = .{
