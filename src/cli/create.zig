@@ -4,6 +4,7 @@ const core = @import("core");
 const backends = @import("backends");
 const router = @import("router.zig");
 const constants = @import("constants.zig");
+const validation = @import("validation.zig");
 
 /// Create command implementation for modular architecture
 pub const CreateCommand = struct {
@@ -42,14 +43,10 @@ pub const CreateCommand = struct {
             return;
         }
 
-        // Validate required options
-        if (options.container_id == null or options.image == null) {
-            if (self.logger) |log| try log.err("Container ID and image are required for create command", .{});
-            return core.Error.InvalidInput;
-        }
-
-        const container_id = options.container_id.?;
-        const image = options.image.?;
+        // Validate required options using validation utility
+        const validated = try validation.ValidationUtils.requireContainerIdAndImage(options, self.logger, "create");
+        const container_id = validated.container_id;
+        const image = validated.image;
 
         if (self.logger) |log| try log.info("Creating container {s} with image {s}", .{ container_id, image });
 
@@ -82,6 +79,6 @@ pub const CreateCommand = struct {
 
     pub fn validate(self: *Self, args: []const []const u8) !void {
         _ = self;
-        if (args.len == 0) return core.types.Error.InvalidInput;
+        try validation.ValidationUtils.requireNonEmptyArgs(args);
     }
 };

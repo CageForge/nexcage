@@ -3,6 +3,7 @@ const core = @import("core");
 
 const backends = @import("backends");
 const router = @import("router.zig");
+const validation = @import("validation.zig");
 
 /// Start command implementation for modular architecture
 pub const StartCommand = struct {
@@ -21,13 +22,8 @@ pub const StartCommand = struct {
             try log.info("Executing start command", .{});
         }
 
-        // Validate required options
-        if (options.container_id == null) {
-            if (self.logger) |log| try log.err("Container ID is required for start command", .{});
-            return core.Error.InvalidInput;
-        }
-
-        const container_id = options.container_id.?;
+        // Validate required options using validation utility
+        const container_id = try validation.ValidationUtils.requireContainerId(options, self.logger, "start");
 
         if (self.logger) |log| {
             try log.info("Starting container {s}", .{container_id});
@@ -54,6 +50,6 @@ pub const StartCommand = struct {
 
     pub fn validate(self: *Self, args: []const []const u8) !void {
         _ = self;
-        if (args.len == 0) return core.types.Error.InvalidInput;
+        try validation.ValidationUtils.requireNonEmptyArgs(args);
     }
 };

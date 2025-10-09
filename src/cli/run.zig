@@ -5,6 +5,7 @@ const types = core.types;
 const interfaces = core.interfaces;
 const backends = @import("backends");
 const router = @import("router.zig");
+const validation = @import("validation.zig");
 
 /// Run command implementation
 /// Run command
@@ -17,16 +18,10 @@ pub const RunCommand = struct {
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         _ = self;
 
-        if (options.container_id == null) {
-            return types.Error.InvalidInput;
-        }
-
-        if (options.image == null) {
-            return types.Error.InvalidInput;
-        }
-
-        const container_id = options.container_id.?;
-        const image = options.image.?;
+        // Validate required options using validation utility
+        const validated = try validation.ValidationUtils.requireContainerIdAndImage(options, null, "run");
+        const container_id = validated.container_id;
+        const image = validated.image;
 
         // Use router for backend selection and execution
         var backend_router = router.BackendRouter.init(allocator, null);
@@ -58,22 +53,8 @@ pub const RunCommand = struct {
     pub fn validate(self: *Self, args: []const []const u8) !void {
         _ = self;
 
-        if (args.len == 0) {
-            return types.Error.InvalidInput;
-        }
-
-        // Basic validation - check for required arguments
-        var has_image = false;
-        for (args) |arg| {
-            if (!std.mem.startsWith(u8, arg, "-")) {
-                has_image = true;
-                break;
-            }
-        }
-
-        if (!has_image) {
-            return types.Error.InvalidInput;
-        }
+        try validation.ValidationUtils.requireNonEmptyArgs(args);
+        try validation.ValidationUtils.requireImageInArgs(args);
     }
 };
 
