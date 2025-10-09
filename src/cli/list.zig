@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core");
 const backends = @import("backends");
 const constants = @import("constants.zig");
+const errors = @import("errors.zig");
 
 /// List command implementation for modular architecture
 pub const ListCommand = struct {
@@ -98,7 +99,7 @@ pub const ListCommand = struct {
             },
             else => {
                 if (self.logger) |log| try log.err("Unsupported runtime type: {}", .{runtime_type});
-                return core.Error.UnsupportedOperation;
+                return errors.CliError.UnsupportedOperation;
             },
         }
 

@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("core");
+const errors = @import("errors.zig");
 
 /// Common validation utilities for CLI commands
 pub const ValidationUtils = struct {
@@ -7,10 +8,8 @@ pub const ValidationUtils = struct {
     /// Returns the container_id or logs error and returns InvalidInput
     pub fn requireContainerId(options: core.types.RuntimeOptions, logger: ?*core.LogContext, command_name: []const u8) ![]const u8 {
         const container_id = options.container_id orelse {
-            if (logger) |log| {
-                try log.err("Container ID is required for {s} command", .{command_name});
-            }
-            return core.Error.InvalidInput;
+            const error_handler = errors.createErrorHandler(logger);
+            return error_handler.invalidInput("Container ID is required for {s} command", .{command_name});
         };
         return container_id;
     }
@@ -18,18 +17,14 @@ pub const ValidationUtils = struct {
     /// Validates that both container_id and image are provided in options
     /// Returns a struct with both values or logs error and returns InvalidInput
     pub fn requireContainerIdAndImage(options: core.types.RuntimeOptions, logger: ?*core.LogContext, command_name: []const u8) !struct { container_id: []const u8, image: []const u8 } {
+        const error_handler = errors.createErrorHandler(logger);
+
         const container_id = options.container_id orelse {
-            if (logger) |log| {
-                try log.err("Container ID is required for {s} command", .{command_name});
-            }
-            return core.Error.InvalidInput;
+            return error_handler.invalidInput("Container ID is required for {s} command", .{command_name});
         };
 
         const image = options.image orelse {
-            if (logger) |log| {
-                try log.err("Image is required for {s} command", .{command_name});
-            }
-            return core.Error.InvalidInput;
+            return error_handler.invalidInput("Image is required for {s} command", .{command_name});
         };
 
         return .{ .container_id = container_id, .image = image };
@@ -38,7 +33,7 @@ pub const ValidationUtils = struct {
     /// Validates that args array is not empty
     pub fn requireNonEmptyArgs(args: []const []const u8) !void {
         if (args.len == 0) {
-            return core.types.Error.InvalidInput;
+            return errors.CliError.InvalidInput;
         }
     }
 
@@ -53,7 +48,7 @@ pub const ValidationUtils = struct {
         }
 
         if (!has_image) {
-            return core.types.Error.InvalidInput;
+            return errors.CliError.InvalidInput;
         }
     }
 };

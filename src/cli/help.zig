@@ -3,6 +3,7 @@ const core = @import("core");
 const types = core.types;
 const interfaces = core.interfaces;
 const registry = @import("registry.zig");
+const errors = @import("errors.zig");
 
 /// Help command implementation
 pub const HelpCommand = struct {
@@ -13,7 +14,7 @@ pub const HelpCommand = struct {
     ctx: ?*anyopaque = null,
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        const global_registry = registry.getGlobalRegistry() orelse return types.Error.OperationFailed;
+        const global_registry = registry.getGlobalRegistry() orelse return errors.CliError.OperationFailed;
 
         if (options.args) |args| {
             if (args.len > 0) {

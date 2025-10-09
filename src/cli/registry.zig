@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core");
 const types = core.types;
 const interfaces = core.interfaces;
+const errors = @import("errors.zig");
 const run = @import("run.zig");
 const help = @import("help.zig");
 const version = @import("version.zig");
@@ -57,13 +58,13 @@ pub const CommandRegistry = struct {
 
     /// Get help for a specific command
     pub fn getHelp(self: *CommandRegistry, name: []const u8, allocator: std.mem.Allocator) ![]const u8 {
-        const command = self.get(name) orelse return error.CommandNotFound;
+        const command = self.get(name) orelse return errors.CliError.CommandNotFound;
         return command.help(allocator);
     }
 
     /// Execute a command
     pub fn execute(self: *CommandRegistry, name: []const u8, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        const command = self.get(name) orelse return error.CommandNotFound;
+        const command = self.get(name) orelse return errors.CliError.CommandNotFound;
         try command.execute(options, allocator);
     }
 };
