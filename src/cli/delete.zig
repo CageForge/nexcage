@@ -4,6 +4,7 @@ const core = @import("core");
 const backends = @import("backends");
 const router = @import("router.zig");
 const validation = @import("validation.zig");
+const base_command = @import("base_command.zig");
 
 /// Delete command implementation for modular architecture
 pub const DeleteCommand = struct {
@@ -11,31 +12,39 @@ pub const DeleteCommand = struct {
 
     name: []const u8 = "delete",
     description: []const u8 = "Delete a container or virtual machine",
-    logger: ?*core.LogContext = null,
+    base: base_command.BaseCommand = .{},
 
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
-        self.logger = logger;
+        self.base.setLogger(logger);
+    }
+
+    pub fn logCommandStart(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandStart(command_name);
+    }
+
+    pub fn logCommandComplete(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandComplete(command_name);
+    }
+
+    pub fn logOperation(self: *const Self, operation: []const u8, target: []const u8) !void {
+        try self.base.logOperation(operation, target);
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        if (self.logger) |log| {
-            try log.info("Executing delete command", .{});
-        }
+        try self.logCommandStart("delete");
 
         // Validate required options using validation utility
-        const container_id = try validation.ValidationUtils.requireContainerId(options, self.logger, "delete");
+        const container_id = try validation.ValidationUtils.requireContainerId(options, self.base.logger, "delete");
 
-        if (self.logger) |log| {
-            try log.info("Deleting container {s}", .{container_id});
-        }
+        try self.logOperation("Deleting container", container_id);
 
         // Use router for backend selection and execution
-        var backend_router = router.BackendRouter.init(allocator, self.logger);
+        var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
         const operation = router.Operation{ .delete = {} };
         try backend_router.routeAndExecute(operation, container_id, null);
 
-        if (self.logger) |log| try log.info("Delete command completed successfully", .{});
+        try self.logCommandComplete("delete");
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {

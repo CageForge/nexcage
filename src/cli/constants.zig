@@ -18,3 +18,31 @@ pub const DEFAULT_VM_MEMORY_BYTES: u64 = DEFAULT_VM_MEMORY_GB * 1024 * 1024 * 10
 
 // Container runtime defaults
 pub const DEFAULT_RUNTIME_TYPE = .lxc;
+
+// Tests
+const std = @import("std");
+
+test "memory constants" {
+    try std.testing.expect(DEFAULT_MEMORY_MB == 512);
+    try std.testing.expect(DEFAULT_MEMORY_BYTES == 512 * 1024 * 1024);
+    try std.testing.expect(DEFAULT_MEMORY_BYTES == 536870912);
+}
+
+test "CPU constants" {
+    try std.testing.expect(DEFAULT_CPU_CORES == 1.0);
+}
+
+test "network constants" {
+    try std.testing.expectEqualStrings(DEFAULT_BRIDGE_NAME, "lxcbr0");
+}
+
+test "VM constants" {
+    try std.testing.expect(DEFAULT_VM_ID == 100);
+    try std.testing.expect(DEFAULT_VM_MEMORY_GB == 1);
+    try std.testing.expect(DEFAULT_VM_MEMORY_BYTES == 1024 * 1024 * 1024);
+    try std.testing.expect(DEFAULT_VM_MEMORY_BYTES == 1073741824);
+}
+
+test "runtime constants" {
+    try std.testing.expect(DEFAULT_RUNTIME_TYPE == .lxc);
+}

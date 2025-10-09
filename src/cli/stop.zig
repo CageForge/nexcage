@@ -4,6 +4,7 @@ const core = @import("core");
 const backends = @import("backends");
 const router = @import("router.zig");
 const validation = @import("validation.zig");
+const base_command = @import("base_command.zig");
 
 /// Stop command implementation for modular architecture
 pub const StopCommand = struct {
@@ -11,31 +12,39 @@ pub const StopCommand = struct {
 
     name: []const u8 = "stop",
     description: []const u8 = "Stop a container or virtual machine",
-    logger: ?*core.LogContext = null,
+    base: base_command.BaseCommand = .{},
 
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
-        self.logger = logger;
+        self.base.setLogger(logger);
+    }
+
+    pub fn logCommandStart(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandStart(command_name);
+    }
+
+    pub fn logCommandComplete(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandComplete(command_name);
+    }
+
+    pub fn logOperation(self: *const Self, operation: []const u8, target: []const u8) !void {
+        try self.base.logOperation(operation, target);
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        if (self.logger) |log| {
-            try log.info("Executing stop command", .{});
-        }
+        try self.logCommandStart("stop");
 
         // Validate required options using validation utility
-        const container_id = try validation.ValidationUtils.requireContainerId(options, self.logger, "stop");
+        const container_id = try validation.ValidationUtils.requireContainerId(options, self.base.logger, "stop");
 
-        if (self.logger) |log| {
-            try log.info("Stopping container {s}", .{container_id});
-        }
+        try self.logOperation("Stopping container", container_id);
 
         // Use router for backend selection and execution
-        var backend_router = router.BackendRouter.init(allocator, self.logger);
+        var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
         const operation = router.Operation{ .stop = {} };
         try backend_router.routeAndExecute(operation, container_id, null);
 
-        if (self.logger) |log| try log.info("Stop command completed successfully", .{});
+        try self.logCommandComplete("stop");
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {

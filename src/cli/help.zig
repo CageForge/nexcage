@@ -4,6 +4,7 @@ const types = core.types;
 const interfaces = core.interfaces;
 const registry = @import("registry.zig");
 const errors = @import("errors.zig");
+const base_command = @import("base_command.zig");
 
 /// Help command implementation
 pub const HelpCommand = struct {
@@ -12,6 +13,11 @@ pub const HelpCommand = struct {
     name: []const u8 = "help",
     description: []const u8 = "Show help information",
     ctx: ?*anyopaque = null,
+    base: base_command.BaseCommand = .{},
+
+    pub fn setLogger(self: *Self, logger: *core.LogContext) void {
+        self.base.setLogger(logger);
+    }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         const global_registry = registry.getGlobalRegistry() orelse return errors.CliError.OperationFailed;

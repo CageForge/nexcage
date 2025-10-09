@@ -6,6 +6,7 @@ const interfaces = core.interfaces;
 const backends = @import("backends");
 const router = @import("router.zig");
 const validation = @import("validation.zig");
+const base_command = @import("base_command.zig");
 
 /// Run command implementation
 /// Run command
@@ -14,22 +15,40 @@ pub const RunCommand = struct {
 
     name: []const u8 = "run",
     description: []const u8 = "Run a container",
+    base: base_command.BaseCommand = .{},
+
+    pub fn setLogger(self: *Self, logger: *core.LogContext) void {
+        self.base.setLogger(logger);
+    }
+
+    pub fn logCommandStart(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandStart(command_name);
+    }
+
+    pub fn logCommandComplete(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandComplete(command_name);
+    }
+
+    pub fn logOperation(self: *const Self, operation: []const u8, target: []const u8) !void {
+        try self.base.logOperation(operation, target);
+    }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        _ = self;
+        try self.logCommandStart("run");
 
         // Validate required options using validation utility
-        const validated = try validation.ValidationUtils.requireContainerIdAndImage(options, null, "run");
+        const validated = try validation.ValidationUtils.requireContainerIdAndImage(options, self.base.logger, "run");
         const container_id = validated.container_id;
         const image = validated.image;
 
         // Use router for backend selection and execution
-        var backend_router = router.BackendRouter.init(allocator, null);
+        var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
         const operation = router.Operation{ .run = router.RunConfig{ .image = image } };
         try backend_router.routeAndExecute(operation, container_id, null);
 
-        std.debug.print("Running container: {s} with image: {s}\n", .{ container_id, image });
+        try self.logOperation("Running container", container_id);
+        try self.logCommandComplete("run");
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {

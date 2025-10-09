@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("core");
 const types = core.types;
+const base_command = @import("base_command.zig");
 const interfaces = core.interfaces;
 
 /// Version command implementation
@@ -20,6 +21,11 @@ pub const VersionCommand = struct {
 
     name: []const u8 = "version",
     description: []const u8 = "Show version information",
+    base: base_command.BaseCommand = .{},
+
+    pub fn setLogger(self: *Self, logger: *core.LogContext) void {
+        self.base.setLogger(logger);
+    }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         _ = options;
@@ -87,9 +93,4 @@ pub fn getVersionInfo() VersionInfo {
         .commit = "unknown",
         .date = "unknown",
     };
-}
-
-/// Create a version command instance
-pub fn createVersionCommand() VersionCommand {
-    return VersionCommand{};
 }
