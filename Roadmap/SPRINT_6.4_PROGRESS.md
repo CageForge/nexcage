@@ -14,8 +14,11 @@
 - 2025-10-10: Created pull request #107 — 5m
 - 2025-10-10: Fixed matrix syntax in crun_e2e.yml — 5m
 - 2025-10-10: Configured runner0 for build/test workloads (separate from Proxmox) — 30m
+- 2025-10-10: Updated runner version to 2.328.0 in setup scripts — 10m
+- 2025-10-10: Registered github-runner0 on github-runner0.cp.if.ua — 15m
+- 2025-10-10: Created runner verification guide and test workflow — 30m
 
-**Total time**: 2 hours 30 minutes
+**Total time**: 3 hours 30 minutes
 
 ## Completed Tasks
 
@@ -32,11 +35,12 @@
 
 ## Pending Tasks
 
-- [ ] Install and configure `github-runner0` on Proxmox server
-- [ ] Verify both runners are operational
+- [x] Install and configure `github-runner0` on github-runner0.cp.if.ua
+- [x] Register runner with correct labels
+- [ ] Verify runner executes workflows correctly (troubleshooting label matching)
 - [ ] Test crun E2E workflow execution
 - [ ] Measure CI execution time improvement
-- [ ] Create PR and merge to main
+- [ ] Review and merge PR #107
 
 ## Notes
 
@@ -51,9 +55,28 @@
 - Graceful cleanup of test containers implemented
 - Documentation updated with runner purposes and setup instructions
 
+## Current Issue
+
+**Problem**: Workflows with `runs-on: [self-hosted, runner0]` are executing on `proxmox-runner` instead of `github-runner0`.
+
+**Status**: 
+- ✅ github-runner0 registered and online with correct labels: `self-hosted`, `Linux`, `X64`, `runner0`
+- ✅ proxmox-runner online with labels: `self-hosted`, `Linux`, `X64`, `proxmox`, `ubuntu`
+- ❌ GitHub Actions not routing workflows to correct runner
+
+**Troubleshooting steps**:
+1. Verify runner configuration on server: `cat ~/actions-runner/.runner`
+2. Restart runner service: `sudo systemctl restart actions.runner.cageforge-nexcage.github-runner0.service`
+3. Check runner logs: `journalctl -u actions.runner.cageforge-nexcage.github-runner0.service -n 50`
+4. If needed, reconfigure runner with correct labels
+
+**Documentation created**:
+- `docs/RUNNER_VERIFICATION.md` - Complete verification guide
+- `.github/workflows/test_runner0.yml` - Test workflow for runner0
+
 ## Next Steps
 
-1. Verify runner0 is configured with label `[self-hosted, runner0]` on github-runner0.cp.if.ua
+1. Troubleshoot runner label matching issue on github-runner0.cp.if.ua
 2. Ensure runner0 has required dependencies (Zig, build tools)
 3. Test workflow execution and verify parallel execution
 4. Measure CI execution time improvement
