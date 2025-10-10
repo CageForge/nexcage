@@ -17,8 +17,9 @@
 - 2025-10-10: Updated runner version to 2.328.0 in setup scripts — 10m
 - 2025-10-10: Registered github-runner0 on github-runner0.cp.if.ua — 15m
 - 2025-10-10: Created runner verification guide and test workflow — 30m
+- 2025-10-10: Reorganized workflows and release notes — 45m
 
-**Total time**: 3 hours 30 minutes
+**Total time**: 4 hours 15 minutes
 
 ## Completed Tasks
 
@@ -32,12 +33,17 @@
 - [x] Committed and pushed all changes
 - [x] Created pull request #107
 - [x] Fixed workflow syntax issues
+- [x] Registered and configured github-runner0
+- [x] Created runner verification documentation
+- [x] Reorganized workflows (deleted obsolete, disabled unused)
+- [x] Reorganized release notes into docs/releases/
 
 ## Pending Tasks
 
 - [x] Install and configure `github-runner0` on github-runner0.cp.if.ua
 - [x] Register runner with correct labels
-- [ ] Verify runner executes workflows correctly (troubleshooting label matching)
+- [x] Reorganize and cleanup workflows
+- [ ] Verify runner executes workflows correctly (requires server-side troubleshooting)
 - [ ] Test crun E2E workflow execution
 - [ ] Measure CI execution time improvement
 - [ ] Review and merge PR #107
@@ -54,6 +60,29 @@
 - Tests use busybox for minimal rootfs
 - Graceful cleanup of test containers implemented
 - Documentation updated with runner purposes and setup instructions
+
+## Workflow Reorganization
+
+- **Deleted obsolete workflows**:
+  - `ci.yml` - replaced by `ci_cncf.yml`
+  - `basic_test.yml` - functionality merged into other workflows
+  - `simple_ci.yml` - replaced by `ci_cncf.yml`
+  - `Dockerfile` - not a workflow file
+
+- **Disabled workflows** (renamed to `.disabled`):
+  - `oci_smoke.yml` - pending OCI implementation
+  - `permissions.yml` - not currently needed
+  - `simple-ci.yml.disabled` - already disabled
+
+- **Updated workflows**:
+  - All workflows now use appropriate self-hosted runner labels
+  - Removed dependency installation steps (pre-installed on runners)
+  - Fixed matrix configurations for multi-runner support
+
+- **Release notes reorganization**:
+  - Moved to `docs/releases/` directory
+  - Renamed to `NOTES_v*.md` format for consistency
+  - Added `NOTES_v0.4.0.md` for upcoming release
 
 ## Current Issue
 
