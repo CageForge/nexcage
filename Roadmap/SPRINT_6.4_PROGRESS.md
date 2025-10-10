@@ -13,8 +13,9 @@
 - 2025-10-10: Committed and pushed changes — 5m
 - 2025-10-10: Created pull request #107 — 5m
 - 2025-10-10: Fixed matrix syntax in crun_e2e.yml — 5m
+- 2025-10-10: Configured runner0 for build/test workloads (separate from Proxmox) — 30m
 
-**Total time**: 2 hours
+**Total time**: 2 hours 30 minutes
 
 ## Completed Tasks
 
@@ -40,18 +41,21 @@
 ## Notes
 
 - All code changes implemented and pushed to `feat/optimize-github-actions` branch
-- Workflows are ready for multi-runner execution
+- Runner separation implemented:
+  - **Proxmox runner** (`[self-hosted, proxmox]`): LXC and crun E2E tests
+  - **Runner0** (`[self-hosted, runner0]`): Build, unit tests, security scans
+- Runner0 location: github-runner0.cp.if.ua (no Proxmox installed)
+- `ci_cncf.yml` uses matrix to run on both runners in parallel
 - Crun E2E tests include minimal OCI bundle generation
 - Tests use busybox for minimal rootfs
 - Graceful cleanup of test containers implemented
-- Documentation provides clear setup instructions for runner0
+- Documentation updated with runner purposes and setup instructions
 
 ## Next Steps
 
-1. SSH into Proxmox server
-2. Follow `docs/SELF_HOSTED_RUNNER_SETUP.md` to install runner0
-3. Run `sudo ./scripts/setup_runner_permissions.sh` if needed
-4. Verify both runners with `systemctl status actions.runner.*`
-5. Test workflow execution and measure performance
-6. Create PR for review
+1. Verify runner0 is configured with label `[self-hosted, runner0]` on github-runner0.cp.if.ua
+2. Ensure runner0 has required dependencies (Zig, build tools)
+3. Test workflow execution and verify parallel execution
+4. Measure CI execution time improvement
+5. Review and merge PR #107
 
