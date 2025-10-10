@@ -2,23 +2,41 @@ const std = @import("std");
 const core = @import("core");
 
 const backends = @import("backends");
+const router = @import("router.zig");
+const constants = @import("constants.zig");
+const validation = @import("validation.zig");
+const base_command = @import("base_command.zig");
 
 /// Create command implementation for modular architecture
 pub const CreateCommand = struct {
     const Self = @This();
-    
+
     name: []const u8 = "create",
     description: []const u8 = "Create a new container or virtual machine",
-    logger: ?*core.LogContext = null,
+    base: base_command.BaseCommand = .{},
 
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
-        self.logger = logger;
+        self.base.setLogger(logger);
+    }
+
+    pub fn logInfo(self: *const Self, comptime format: []const u8, args: anytype) !void {
+        try self.base.logInfo(format, args);
+    }
+
+    pub fn logCommandStart(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandStart(command_name);
+    }
+
+    pub fn logCommandComplete(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandComplete(command_name);
+    }
+
+    pub fn logOperation(self: *const Self, operation: []const u8, target: []const u8) !void {
+        try self.base.logOperation(operation, target);
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        if (self.logger) |log| {
-            try log.info("Executing create command", .{});
-        }
+        try self.logCommandStart("create");
 
         // Check for help flag
         if (options.help) {
@@ -40,50 +58,20 @@ pub const CreateCommand = struct {
             return;
         }
 
-        // Validate required options
-        if (options.container_id == null or options.image == null) {
-            if (self.logger) |log| try log.err("Container ID and image are required for create command", .{});
-            return core.Error.InvalidInput;
-        }
+        // Validate required options using validation utility
+        const validated = try validation.ValidationUtils.requireContainerIdAndImage(options, self.base.logger, "create");
+        const container_id = validated.container_id;
+        const image = validated.image;
 
-        const container_id = options.container_id.?;
-        const image = options.image.?;
+        try self.logInfo("Creating container {s} with image {s}", .{ container_id, image });
 
-        if (self.logger) |log| try log.info("Creating container {s} with image {s}", .{ container_id, image });
+        // Use router for backend selection and execution
+        var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
-        // Load configuration for backend routing
-        var config_loader = core.ConfigLoader.init(allocator);
-        var cfg = try config_loader.loadDefault();
-        defer cfg.deinit();
-
-        // Select backend based on config routing
-        const ctype = cfg.getContainerType(container_id);
-        if (self.logger) |log| {
-            try log.info("Selected backend: {s} for container: {s}", .{ @tagName(ctype), container_id });
-        }
-
-        // Create sandbox configuration
-        const name_buf = try allocator.dupe(u8, container_id);
-        defer allocator.free(name_buf);
-
-        const bridge_buf = try allocator.dupe(u8, "lxcbr0");
+        const bridge_buf = try allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME);
         defer allocator.free(bridge_buf);
 
-        const image_buf = try allocator.dupe(u8, image);
-        defer allocator.free(image_buf);
-
-        const sandbox_config = core.types.SandboxConfig{
-            .allocator = allocator,
-            .name = name_buf,
-            .runtime_type = options.runtime_type orelse .lxc,
-            .image = image_buf,
-            .resources = core.types.ResourceLimits{
-                .memory = 512 * 1024 * 1024,
-                .cpu = 1.0,
-                .disk = null,
-                .network_bandwidth = null,
-            },
-            .security = null,
+        const config = router.Config{
             .network = core.types.NetworkConfig{
                 .bridge = bridge_buf,
                 .ip = null,
@@ -91,44 +79,12 @@ pub const CreateCommand = struct {
                 .dns = null,
                 .port_mappings = null,
             },
-            .storage = null,
         };
 
-        // Create container using selected backend
-        switch (ctype) {
-            .lxc => {
-                const lxc_backend = try backends.lxc.LxcBackend.init(allocator, sandbox_config);
-                defer lxc_backend.deinit();
-                try lxc_backend.create(sandbox_config);
-            },
-            .crun => {
-                var crun_backend = backends.crun.CrunDriver.init(allocator, self.logger);
-                try crun_backend.create(sandbox_config);
-            },
-            .runc => {
-                var runc_backend = backends.runc.RuncDriver.init(allocator, self.logger);
-                try runc_backend.create(sandbox_config);
-            },
-            .vm => {
-                // Create VM using Proxmox VM backend
-                var vm_config = backends.proxmox_vm.types.ProxmoxVmConfig{
-                    .allocator = allocator,
-                    .vmid = 100, // TODO: Generate proper VMID
-                    .name = try allocator.dupe(u8, container_id),
-                    .memory = if (sandbox_config.resources) |res| res.memory orelse 1024 * 1024 * 1024 else 1024 * 1024 * 1024,
-                    .cores = if (sandbox_config.resources) |res| if (res.cpu) |cpu| @intFromFloat(cpu) else 1 else 1,
-                    .start = false,
-                };
-                defer vm_config.deinit();
+        const operation = router.Operation{ .create = router.CreateConfig{ .image = image } };
+        try backend_router.routeAndExecute(operation, container_id, config);
 
-                // TODO: Initialize Proxmox VM backend with proper config
-                if (self.logger) |log| {
-                    try log.warn("Proxmox VM backend not fully integrated yet. VM creation skipped.", .{});
-                }
-            },
-        }
-
-        if (self.logger) |log| try log.info("Create command completed successfully", .{});
+        try self.logCommandComplete("create");
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
@@ -138,6 +94,6 @@ pub const CreateCommand = struct {
 
     pub fn validate(self: *Self, args: []const []const u8) !void {
         _ = self;
-        if (args.len == 0) return core.types.Error.InvalidInput;
+        try validation.ValidationUtils.requireNonEmptyArgs(args);
     }
 };

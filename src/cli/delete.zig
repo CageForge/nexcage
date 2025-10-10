@@ -2,101 +2,63 @@ const std = @import("std");
 const core = @import("core");
 
 const backends = @import("backends");
+const router = @import("router.zig");
+const validation = @import("validation.zig");
+const base_command = @import("base_command.zig");
 
 /// Delete command implementation for modular architecture
 pub const DeleteCommand = struct {
     const Self = @This();
-    
+
     name: []const u8 = "delete",
     description: []const u8 = "Delete a container or virtual machine",
-    logger: ?*core.LogContext = null,
+    base: base_command.BaseCommand = .{},
 
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
-        self.logger = logger;
+        self.base.setLogger(logger);
+    }
+
+    pub fn logCommandStart(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandStart(command_name);
+    }
+
+    pub fn logCommandComplete(self: *const Self, command_name: []const u8) !void {
+        try self.base.logCommandComplete(command_name);
+    }
+
+    pub fn logOperation(self: *const Self, operation: []const u8, target: []const u8) !void {
+        try self.base.logOperation(operation, target);
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        if (self.logger) |log| {
-            try log.info("Executing delete command", .{});
-        }
+        try self.logCommandStart("delete");
 
-        // Validate required options
-        if (options.container_id == null) {
-            if (self.logger) |log| try log.err("Container ID is required for delete command", .{});
-            return core.Error.InvalidInput;
-        }
+        // Validate required options using validation utility
+        const container_id = try validation.ValidationUtils.requireContainerId(options, self.base.logger, "delete");
 
-        const container_id = options.container_id.?;
+        try self.logOperation("Deleting container", container_id);
 
-        if (self.logger) |log| {
-            try log.info("Deleting container {s}", .{container_id});
-        }
+        // Use router for backend selection and execution
+        var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
-        // Load configuration for backend routing
-        var config_loader = core.ConfigLoader.init(allocator);
-        var cfg = try config_loader.loadDefault();
-        defer cfg.deinit();
+        const operation = router.Operation{ .delete = {} };
+        try backend_router.routeAndExecute(operation, container_id, null);
 
-        // Select backend based on config routing
-        const ctype = cfg.getContainerType(container_id);
-        if (self.logger) |log| {
-            try log.info("Selected backend: {s} for container: {s}", .{ @tagName(ctype), container_id });
-        }
-
-        // Delete container using selected backend
-        switch (ctype) {
-            .lxc => {
-                // Create minimal sandbox config for LXC
-                const name_buf = try allocator.dupe(u8, container_id);
-                defer allocator.free(name_buf);
-                
-                const sandbox_config = core.types.SandboxConfig{
-                    .allocator = allocator,
-                    .name = name_buf,
-                    .runtime_type = .lxc,
-                    .resources = null,
-                    .security = null,
-                    .network = null,
-                    .storage = null,
-                };
-                
-                const lxc_backend = try backends.lxc.LxcBackend.init(allocator, sandbox_config);
-                defer lxc_backend.deinit();
-                try lxc_backend.delete(container_id);
-            },
-            .crun => {
-                var crun_backend = backends.crun.CrunDriver.init(allocator, self.logger);
-                try crun_backend.delete(container_id);
-            },
-            .runc => {
-                var runc_backend = backends.runc.RuncDriver.init(allocator, self.logger);
-                try runc_backend.delete(container_id);
-            },
-            .vm => {
-                // Delete VM using Proxmox VM backend
-                if (self.logger) |log| {
-                    try log.warn("Proxmox VM backend not fully integrated yet. VM delete skipped.", .{});
-                }
-            },
-        }
-
-        if (self.logger) |log| try log.info("Delete command completed successfully", .{});
+        try self.logCommandComplete("delete");
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        return allocator.dupe(u8,
-            "Usage: nexcage delete --name <id> [--runtime <type>]\n\n" ++
+        return allocator.dupe(u8, "Usage: nexcage delete --name <id> [--runtime <type>]\n\n" ++
             "Options:\n" ++
             "  --name <id>        Container/VM identifier\n" ++
             "  --runtime <type>   Runtime: lxc|vm|crun (default: lxc)\n\n" ++
             "Notes:\n" ++
-            "  If LXC tools are missing, command fails with UnsupportedOperation.\n"
-        );
+            "  If LXC tools are missing, command fails with UnsupportedOperation.\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {
         _ = self;
-        if (args.len == 0) return core.types.Error.InvalidInput;
+        try validation.ValidationUtils.requireNonEmptyArgs(args);
     }
 };

@@ -239,16 +239,39 @@ pub const ConfigError = error{
     ParseError,
 };
 
+/// Routing rule for container backend selection
+pub const RoutingRule = struct {
+    pattern: []const u8,
+    runtime: RuntimeType,
+
+    pub fn deinit(self: *RoutingRule, allocator: std.mem.Allocator) void {
+        allocator.free(self.pattern);
+    }
+};
+
 /// Container configuration
 pub const ContainerConfig = struct {
+    // Legacy pattern support (deprecated - use routing instead)
     crun_name_patterns: []const []const u8,
     default_container_type: ContainerType,
+    
+    // New routing system with regex patterns
+    routing: []const RoutingRule,
+    default_runtime: RuntimeType,
 
     pub fn deinit(self: *ContainerConfig, allocator: std.mem.Allocator) void {
+        // Clean up legacy patterns
         for (self.crun_name_patterns) |pattern| {
             allocator.free(pattern);
         }
         allocator.free(self.crun_name_patterns);
+        
+        // Clean up routing rules
+        for (self.routing) |*rule| {
+            var mutable_rule = rule.*;
+            mutable_rule.deinit(allocator);
+        }
+        allocator.free(self.routing);
     }
 };
 

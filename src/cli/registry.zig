@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core");
 const types = core.types;
 const interfaces = core.interfaces;
+const errors = @import("errors.zig");
 const run = @import("run.zig");
 const help = @import("help.zig");
 const version = @import("version.zig");
@@ -57,13 +58,13 @@ pub const CommandRegistry = struct {
 
     /// Get help for a specific command
     pub fn getHelp(self: *CommandRegistry, name: []const u8, allocator: std.mem.Allocator) ![]const u8 {
-        const command = self.get(name) orelse return error.CommandNotFound;
+        const command = self.get(name) orelse return errors.CliError.CommandNotFound;
         return command.help(allocator);
     }
 
     /// Execute a command
     pub fn execute(self: *CommandRegistry, name: []const u8, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        const command = self.get(name) orelse return error.CommandNotFound;
+        const command = self.get(name) orelse return errors.CliError.CommandNotFound;
         try command.execute(options, allocator);
     }
 };
@@ -99,101 +100,32 @@ var stop_cmd = stop.StopCommand{};
 var delete_cmd = delete.DeleteCommand{};
 var list_cmd = list.ListCommand{};
 
+/// Generic command registration helper
+fn registerCommand(
+    registry: *CommandRegistry,
+    cmd: anytype,
+    comptime CommandType: type,
+) !void {
+    const iface = try registry.allocator.create(interfaces.CommandInterface);
+    iface.* = .{
+        .name = cmd.name,
+        .description = cmd.description,
+        .ctx = cmd,
+        .execute = @ptrCast(&CommandType.execute),
+        .help = @ptrCast(&CommandType.help),
+        .validate = @ptrCast(&CommandType.validate),
+    };
+    try registry.register(iface);
+}
+
 /// Register all built-in commands
 pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
-    // Register run command
-    const run_iface = try registry.allocator.create(interfaces.CommandInterface);
-    run_iface.* = .{
-        .name = run_cmd.name,
-        .description = run_cmd.description,
-        .ctx = &run_cmd,
-        .execute = @ptrCast(&run.RunCommand.execute),
-        .help = @ptrCast(&run.RunCommand.help),
-        .validate = @ptrCast(&run.RunCommand.validate),
-    };
-    try registry.register(run_iface);
-    
-    // Register help command
-    const help_iface = try registry.allocator.create(interfaces.CommandInterface);
-    help_iface.* = .{
-        .name = help_cmd.name,
-        .description = help_cmd.description,
-        .ctx = &help_cmd,
-        .execute = @ptrCast(&help.HelpCommand.execute),
-        .help = @ptrCast(&help.HelpCommand.help),
-        .validate = @ptrCast(&help.HelpCommand.validate),
-    };
-    try registry.register(help_iface);
-    
-    // Register version command
-    const version_iface = try registry.allocator.create(interfaces.CommandInterface);
-    version_iface.* = .{
-        .name = version_cmd.name,
-        .description = version_cmd.description,
-        .ctx = &version_cmd,
-        .execute = @ptrCast(&version.VersionCommand.execute),
-        .help = @ptrCast(&version.VersionCommand.help),
-        .validate = @ptrCast(&version.VersionCommand.validate),
-    };
-    try registry.register(version_iface);
-    
-    // Register create command
-    const create_iface = try registry.allocator.create(interfaces.CommandInterface);
-    create_iface.* = .{
-        .name = create_cmd.name,
-        .description = create_cmd.description,
-        .ctx = &create_cmd,
-        .execute = @ptrCast(&create.CreateCommand.execute),
-        .help = @ptrCast(&create.CreateCommand.help),
-        .validate = @ptrCast(&create.CreateCommand.validate),
-    };
-    try registry.register(create_iface);
-    
-    // Register start command
-    const start_iface = try registry.allocator.create(interfaces.CommandInterface);
-    start_iface.* = .{
-        .name = start_cmd.name,
-        .description = start_cmd.description,
-        .ctx = &start_cmd,
-        .execute = @ptrCast(&start.StartCommand.execute),
-        .help = @ptrCast(&start.StartCommand.help),
-        .validate = @ptrCast(&start.StartCommand.validate),
-    };
-    try registry.register(start_iface);
-    
-    // Register stop command
-    const stop_iface = try registry.allocator.create(interfaces.CommandInterface);
-    stop_iface.* = .{
-        .name = stop_cmd.name,
-        .description = stop_cmd.description,
-        .ctx = &stop_cmd,
-        .execute = @ptrCast(&stop.StopCommand.execute),
-        .help = @ptrCast(&stop.StopCommand.help),
-        .validate = @ptrCast(&stop.StopCommand.validate),
-    };
-    try registry.register(stop_iface);
-    
-    // Register delete command
-    const delete_iface = try registry.allocator.create(interfaces.CommandInterface);
-    delete_iface.* = .{
-        .name = delete_cmd.name,
-        .description = delete_cmd.description,
-        .ctx = &delete_cmd,
-        .execute = @ptrCast(&delete.DeleteCommand.execute),
-        .help = @ptrCast(&delete.DeleteCommand.help),
-        .validate = @ptrCast(&delete.DeleteCommand.validate),
-    };
-    try registry.register(delete_iface);
-    
-    // Register list command
-    const list_iface = try registry.allocator.create(interfaces.CommandInterface);
-    list_iface.* = .{
-        .name = list_cmd.name,
-        .description = list_cmd.description,
-        .ctx = &list_cmd,
-        .execute = @ptrCast(&list.ListCommand.execute),
-        .help = @ptrCast(&list.ListCommand.help),
-        .validate = @ptrCast(&list.ListCommand.validate),
-    };
-    try registry.register(list_iface);
+    try registerCommand(registry, &run_cmd, run.RunCommand);
+    try registerCommand(registry, &help_cmd, help.HelpCommand);
+    try registerCommand(registry, &version_cmd, version.VersionCommand);
+    try registerCommand(registry, &create_cmd, create.CreateCommand);
+    try registerCommand(registry, &start_cmd, start.StartCommand);
+    try registerCommand(registry, &stop_cmd, stop.StopCommand);
+    try registerCommand(registry, &delete_cmd, delete.DeleteCommand);
+    try registerCommand(registry, &list_cmd, list.ListCommand);
 }
