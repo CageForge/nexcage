@@ -28,8 +28,8 @@ jobs:
         include:
           - os: [self-hosted, proxmox]
             name: proxmox-amd64
-          - os: [self-hosted, proxmox-runner0]
-            name: proxmox-runner0-amd64
+          - os: [self-hosted, runner0]
+            name: runner0-amd64
 
     steps:
     - name: Checkout
@@ -75,7 +75,7 @@ jobs:
   # Security scanning
   security:
     name: Security Scan
-    runs-on: [self-hosted, proxmox]
+    runs-on: [self-hosted, runner0]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -108,7 +108,7 @@ jobs:
   # Code quality and formatting
   quality:
     name: Code Quality
-    runs-on: [self-hosted, proxmox]
+    runs-on: [self-hosted, runner0]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -130,7 +130,7 @@ jobs:
   # Performance testing
   performance:
     name: Performance Tests
-    runs-on: [self-hosted, proxmox]
+    runs-on: [self-hosted, runner0]
     steps:
     - name: Checkout
       uses: actions/checkout@v4

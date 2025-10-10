@@ -14,7 +14,7 @@ permissions:
 jobs:
   disabled:
     name: Workflow Disabled
-    runs-on: [self-hosted, proxmox]
+    runs-on: [self-hosted, runner0]
     if: false  # Always skip
     steps:
       - name: This workflow is disabled

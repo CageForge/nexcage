@@ -16,19 +16,8 @@ concurrency:
 
 jobs:
   e2e:
-    name: Proxmox E2E (${{ matrix.name }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runner:
-          - [self-hosted, proxmox]
-          - [self-hosted, proxmox-runner0]
-        include:
-          - runner: [self-hosted, proxmox]
-            name: proxmox
-          - runner: [self-hosted, proxmox-runner0]
-            name: proxmox-runner0
+    name: Proxmox Self-Hosted E2E
+    runs-on: [self-hosted, proxmox]
 
     steps:
     - name: Checkout
