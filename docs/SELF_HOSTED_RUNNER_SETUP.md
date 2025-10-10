@@ -95,6 +95,23 @@ sudo apt-get install -y \
   wget
 ```
 
+### Docker (Proxmox Runner Only)
+
+Some workflows require Docker (e.g., Semgrep, Trivy, link checking). On the **proxmox runner**:
+
+```bash
+# Add github-runner user to docker group
+sudo usermod -aG docker github-runner
+
+# Restart runner service to apply group changes
+sudo systemctl restart actions.runner.cageforge-nexcage.proxmox-runner.service
+
+# Verify Docker access
+sudo -u github-runner docker ps
+```
+
+**Note**: `runner0` does not have Docker installed and should not run Docker-based workflows.
+
 ## Proxmox Configuration
 
 ### LXC Templates
