@@ -92,9 +92,23 @@ pub const BackendRouter = struct {
         var cfg = try config_loader.loadDefault();
         defer cfg.deinit();
 
-        const ctype = cfg.getContainerType(container_id);
+        // Use the new routing system that supports regex patterns
+        const runtime_type = cfg.getRoutedRuntime(container_id);
         if (self.logger) |log| {
-            try log.info("Selected backend: {s} for container: {s}", .{ @tagName(ctype), container_id });
+            try log.info("Routing container '{s}' to runtime: {s}", .{ container_id, @tagName(runtime_type) });
+        }
+
+        // Convert RuntimeType to ContainerType for backend execution
+        const ctype = switch (runtime_type) {
+            .lxc => core.types.ContainerType.lxc,
+            .crun => core.types.ContainerType.crun,
+            .runc => core.types.ContainerType.runc,
+            .vm => core.types.ContainerType.vm,
+            else => core.types.ContainerType.lxc, // fallback
+        };
+
+        if (self.logger) |log| {
+            try log.info("Executing with backend: {s} for container: {s}", .{ @tagName(ctype), container_id });
         }
 
         switch (ctype) {
