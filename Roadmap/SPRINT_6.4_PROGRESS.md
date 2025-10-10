@@ -18,8 +18,9 @@
 - 2025-10-10: Registered github-runner0 on github-runner0.cp.if.ua — 15m
 - 2025-10-10: Created runner verification guide and test workflow — 30m
 - 2025-10-10: Reorganized workflows and release notes — 45m
+- 2025-10-10: Fixed GitHub Actions failures (Zig cache, Docker deps, spell check) — 45m
 
-**Total time**: 4 hours 15 minutes
+**Total time**: 5 hours
 
 ## Completed Tasks
 
@@ -37,6 +38,9 @@
 - [x] Created runner verification documentation
 - [x] Reorganized workflows (deleted obsolete, disabled unused)
 - [x] Reorganized release notes into docs/releases/
+- [x] Fixed Zig cache directory error (XDG_CACHE_HOME)
+- [x] Moved Docker-based actions to proxmox runner
+- [x] Added 60+ Ukrainian words to spell check dictionary
 
 ## Pending Tasks
 
@@ -84,24 +88,34 @@
   - Renamed to `NOTES_v*.md` format for consistency
   - Added `NOTES_v0.4.0.md` for upcoming release
 
-## Current Issue
+## Issues Resolved
 
-**Problem**: Workflows with `runs-on: [self-hosted, runner0]` are executing on `proxmox-runner` instead of `github-runner0`.
+### 1. Zig Cache Directory Error
+**Problem**: `error: unable to resolve zig cache directory: AppDataDirUnavailable`
 
-**Status**: 
-- ✅ github-runner0 registered and online with correct labels: `self-hosted`, `Linux`, `X64`, `runner0`
-- ✅ proxmox-runner online with labels: `self-hosted`, `Linux`, `X64`, `proxmox`, `ubuntu`
-- ❌ GitHub Actions not routing workflows to correct runner
+**Solution**: Added `XDG_CACHE_HOME` environment variable to workflows:
+```yaml
+env:
+  XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+```
 
-**Troubleshooting steps**:
-1. Verify runner configuration on server: `cat ~/actions-runner/.runner`
-2. Restart runner service: `sudo systemctl restart actions.runner.cageforge-nexcage.github-runner0.service`
-3. Check runner logs: `journalctl -u actions.runner.cageforge-nexcage.github-runner0.service -n 50`
-4. If needed, reconfigure runner with correct labels
+### 2. Docker Not Found on runner0
+**Problem**: Docker-based actions failing on runner0 (no Docker installed)
 
-**Documentation created**:
-- `docs/RUNNER_VERIFICATION.md` - Complete verification guide
-- `.github/workflows/test_runner0.yml` - Test workflow for runner0
+**Solution**: Moved Docker-dependent jobs to proxmox runner:
+- `semgrep` (SAST scanning)
+- `trivy-fs` (vulnerability scanning)
+- `dead-links` (markdown link checking)
+
+### 3. Spell Check Failures
+**Problem**: 30+ Ukrainian words in `RUNNER0_QUICK_SETUP.md` flagged as unknown
+
+**Solution**: Added 60+ Ukrainian words to `.cspell.json` dictionary
+
+### 4. Runner Label Matching (Pending Investigation)
+**Status**: Workflows may still route to incorrect runner
+
+**Workaround**: Workflows now queued and executing with fixes applied
 
 ## Next Steps
 
