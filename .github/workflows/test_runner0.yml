@@ -1,0 +1,26 @@
+name: Test Runner0
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-runner0:
+    name: Test on runner0
+    runs-on: [runner0]
+    
+    steps:
+      - name: Check runner
+        run: |
+          echo "=== Runner Information ==="
+          echo "Hostname: $(hostname)"
+          echo "Runner name: $RUNNER_NAME"
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner arch: $RUNNER_ARCH"
+          echo "Working directory: $(pwd)"
+          uname -a
+          
+      - name: Test basic commands
+        run: |
+          which zig || echo "Zig not found"
+          zig version || echo "Cannot run zig"
+
