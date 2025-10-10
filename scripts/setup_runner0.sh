@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-RUNNER_VERSION="2.321.0"
+RUNNER_VERSION="2.328.0"
 RUNNER_TOKEN="ADKGWFVIZG5GUM6RMDTAI7DI5DW6S"
 REPO_URL="https://github.com/cageforge/nexcage"
 

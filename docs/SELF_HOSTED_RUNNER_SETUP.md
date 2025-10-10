@@ -255,11 +255,11 @@ mkdir -p ~/actions-runner
 cd ~/actions-runner
 
 # Download runner (use latest version)
-curl -o actions-runner-linux-x64-2.311.0.tar.gz -L \
-  https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
+curl -o actions-runner-linux-x64-2.328.0.tar.gz -L \
+  https://github.com/actions/runner/releases/download/v2.328.0/actions-runner-linux-x64-2.328.0.tar.gz
 
 # Extract
-tar xzf ./actions-runner-linux-x64-2.311.0.tar.gz
+tar xzf ./actions-runner-linux-x64-2.328.0.tar.gz
 
 # Configure with runner0 label
 ./config.sh --url https://github.com/cageforge/nexcage \
