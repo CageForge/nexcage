@@ -11,8 +11,10 @@
 - 2025-10-10: Updated documentation and setup script — 25m
 - 2025-10-10: Created GitHub issue #106 — 10m
 - 2025-10-10: Committed and pushed changes — 5m
+- 2025-10-10: Created pull request #107 — 5m
+- 2025-10-10: Fixed matrix syntax in crun_e2e.yml — 5m
 
-**Total time**: 1 hour 50 minutes
+**Total time**: 2 hours
 
 ## Completed Tasks
 
@@ -24,6 +26,8 @@
 - [x] Updated `scripts/setup_runner_permissions.sh` with notes
 - [x] Created GitHub issue #106
 - [x] Committed and pushed all changes
+- [x] Created pull request #107
+- [x] Fixed workflow syntax issues
 
 ## Pending Tasks
 
