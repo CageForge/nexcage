@@ -17,7 +17,7 @@ concurrency:
 jobs:
   e2e:
     name: Proxmox Self-Hosted E2E
-    runs-on: [self-hosted, proxmox]
+    runs-on: [proxmox]
 
     steps:
     - name: Checkout

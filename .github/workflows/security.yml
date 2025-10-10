@@ -68,7 +68,7 @@ jobs:
 
   semgrep:
     name: Semgrep SAST
-    runs-on: [self-hosted, runner0]
+    runs-on: [runner0]
     continue-on-error: true
     timeout-minutes: 20
     steps:
@@ -83,7 +83,7 @@ jobs:
 
   trivy-fs:
     name: Trivy FS Scan
-    runs-on: [self-hosted, runner0]
+    runs-on: [runner0]
     continue-on-error: true
     timeout-minutes: 15
     steps:
@@ -108,7 +108,7 @@ jobs:
 
   gitleaks:
     name: Gitleaks Secrets Scan
-    runs-on: [self-hosted, runner0]
+    runs-on: [runner0]
     continue-on-error: true
     timeout-minutes: 10
     steps:

@@ -17,7 +17,7 @@ concurrency:
 jobs:
   crun-e2e:
     name: Crun Container Lifecycle
-    runs-on: [self-hosted, proxmox]
+    runs-on: [proxmox]
 
     steps:
       - name: Checkout

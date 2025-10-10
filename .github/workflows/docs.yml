@@ -15,7 +15,7 @@ on:
 jobs:
   markdown-lint:
     name: Markdown Lint
-    runs-on: [self-hosted, runner0]
+    runs-on: [runner0]
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
           
   spell-check:
     name: Spell Check
-    runs-on: [self-hosted, runner0]
+    runs-on: [runner0]
     steps:
       - uses: actions/checkout@v4
       - uses: streetsidesoftware/cspell-action@v5
@@ -38,7 +38,7 @@ jobs:
         
   dead-links:
     name: Check Dead Links
-    runs-on: [self-hosted, runner0]
+    runs-on: [runner0]
     steps:
       - uses: actions/checkout@v4
       - uses: gaurav-nelson/github-action-markdown-link-check@v1

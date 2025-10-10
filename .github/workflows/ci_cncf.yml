@@ -75,7 +75,7 @@ jobs:
   # Security scanning
   security:
     name: Security Scan
-    runs-on: [self-hosted, runner0]
+    runs-on: [runner0]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
