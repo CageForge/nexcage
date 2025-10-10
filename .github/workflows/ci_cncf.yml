@@ -17,6 +17,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+
 jobs:
   # Build and test on multiple runners (same arch: amd64)
   build-test:
@@ -40,15 +43,6 @@ jobs:
       with:
         version: 0.15.1
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libcap-dev \
-          libseccomp-dev \
-          libyajl-dev \
-          build-essential
-
     - name: Build Debug
       run: zig build
 
@@ -71,39 +65,6 @@ jobs:
         name: nexcage-${{ matrix.name }}
         path: zig-out/bin/nexcage
         retention-days: 7
-
-  # Security scanning
-  security:
-    name: Security Scan
-    runs-on: [runner0]
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Setup Zig
-      uses: goto-bus-stop/setup-zig@v2
-      with:
-        version: 0.15.1
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libcap-dev \
-          libseccomp-dev \
-          libyajl-dev
-
-    - name: Build with security flags
-      run: zig build -Doptimize=ReleaseSafe
-
-    - name: Run security tests
-      run: zig build test
-
-    - name: Dependency vulnerability scan
-      run: |
-        # Check for known vulnerabilities in system libraries
-        echo "Checking system dependencies..."
-        dpkg -l | grep -E 'libcap|libseccomp|libyajl'
 
   # Code quality and formatting
   quality:
@@ -139,14 +100,6 @@ jobs:
       uses: goto-bus-stop/setup-zig@v2
       with:
         version: 0.15.1
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libcap-dev \
-          libseccomp-dev \
-          libyajl-dev
 
     - name: Build optimized
       run: zig build -Doptimize=ReleaseFast

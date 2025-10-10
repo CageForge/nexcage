@@ -38,7 +38,7 @@ jobs:
         
   dead-links:
     name: Check Dead Links
-    runs-on: [runner0]
+    runs-on: [self-hosted, proxmox]  # Requires Docker
     steps:
       - uses: actions/checkout@v4
       - uses: gaurav-nelson/github-action-markdown-link-check@v1

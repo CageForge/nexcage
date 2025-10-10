@@ -17,6 +17,9 @@ concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+
 # Minimal permissions per job will be set automatically from here
 permissions:
   contents: read
@@ -33,10 +36,6 @@ jobs:
       - uses: goto-bus-stop/setup-zig@v2
         with:
           version: '0.15.1'
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
       - name: Build (ReleaseSafe)
         run: zig build -Doptimize=ReleaseSafe
       - name: Run tests
@@ -68,7 +67,7 @@ jobs:
 
   semgrep:
     name: Semgrep SAST
-    runs-on: [runner0]
+    runs-on: [self-hosted, proxmox]  # Requires Docker
     continue-on-error: true
     timeout-minutes: 20
     steps:
@@ -83,7 +82,7 @@ jobs:
 
   trivy-fs:
     name: Trivy FS Scan
-    runs-on: [runner0]
+    runs-on: [self-hosted, proxmox]  # Requires Docker
     continue-on-error: true
     timeout-minutes: 15
     steps:
