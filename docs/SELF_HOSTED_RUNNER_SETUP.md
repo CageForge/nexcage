@@ -224,6 +224,86 @@ journalctl -u actions.runner.* -f
 sudo tail -f /var/log/auth.log | grep github-runner
 ```
 
+## Multi-Runner Setup
+
+For improved CI/CD performance, you can configure multiple self-hosted runners on the same Proxmox server or across multiple servers.
+
+### Runner Labels
+
+The project uses two runner configurations:
+
+1. **Primary Runner**: `[self-hosted, proxmox]`
+   - Default runner for most workflows
+   - Service name: `actions.runner.<org>-<repo>.github-runner`
+
+2. **Secondary Runner**: `[self-hosted, proxmox-runner0]`
+   - Additional runner for parallel execution
+   - Service name: `actions.runner.<org>-<repo>.github-runner0`
+
+### Installing a Second Runner
+
+1. **Download and configure the runner**:
+
+```bash
+# Create directory for second runner
+mkdir -p ~/actions-runner0
+cd ~/actions-runner0
+
+# Download runner (use same version as primary)
+curl -o actions-runner-linux-x64-2.311.0.tar.gz -L \
+  https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
+
+# Extract
+tar xzf ./actions-runner-linux-x64-2.311.0.tar.gz
+
+# Configure with proxmox-runner0 label
+./config.sh --url https://github.com/cageforge/nexcage \
+  --token <YOUR_TOKEN> \
+  --name github-runner0 \
+  --labels self-hosted,proxmox-runner0
+```
+
+2. **Install as service**:
+
+```bash
+sudo ./svc.sh install github-runner
+sudo ./svc.sh start
+```
+
+3. **Apply permissions** using the setup script:
+
+```bash
+# The script supports both runners
+cd /path/to/nexcage
+sudo ./scripts/setup_runner_permissions.sh
+```
+
+The sudoers configuration applies to the `github-runner` user, which both runner services use.
+
+### Verify Both Runners
+
+```bash
+# Check runner services
+systemctl status actions.runner.*
+
+# Both should show as active
+sudo systemctl list-units 'actions.runner.*'
+```
+
+### Workflow Distribution
+
+Workflows automatically distribute across available runners:
+
+- **Parallel execution**: Workflows with matrix strategies (e.g., `ci_cncf.yml`, `proxmox_e2e.yml`) will use both runners simultaneously
+- **Load balancing**: GitHub automatically assigns jobs to available runners with matching labels
+- **Graceful degradation**: If one runner is offline, jobs queue for the available runner
+
+### Benefits
+
+- **2x throughput**: Parallel test execution reduces CI time
+- **High availability**: Workflows continue if one runner fails
+- **Resource isolation**: Separate runners avoid resource contention
+
 ## References
 
 - [GitHub Actions Self-Hosted Runners](https://docs.github.com/en/actions/hosting-your-own-runners)

@@ -18,16 +18,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build and test on multiple OS (but same arch: amd64)
+  # Build and test on multiple runners (same arch: amd64)
   build-test:
-    name: Build and Test
+    name: Build and Test (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            name: ubuntu-amd64
+          - os: [self-hosted, proxmox]
+            name: proxmox-amd64
+          - os: [self-hosted, proxmox-runner0]
+            name: proxmox-runner0-amd64
 
     steps:
     - name: Checkout
