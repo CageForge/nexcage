@@ -16,14 +16,16 @@ concurrency:
 
 jobs:
   crun-e2e:
-    name: Crun Container Lifecycle
+    name: Crun Container Lifecycle (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        runner:
-          - [self-hosted, proxmox]
-          - [self-hosted, proxmox-runner0]
+        include:
+          - runner: [self-hosted, proxmox]
+            name: proxmox
+          - runner: [self-hosted, proxmox-runner0]
+            name: proxmox-runner0
 
     steps:
       - name: Checkout
