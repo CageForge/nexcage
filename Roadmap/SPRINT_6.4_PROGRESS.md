@@ -19,8 +19,9 @@
 - 2025-10-10: Created runner verification guide and test workflow — 30m
 - 2025-10-10: Reorganized workflows and release notes — 45m
 - 2025-10-10: Fixed GitHub Actions failures (Zig cache, Docker deps, spell check) — 45m
+- 2025-10-10: Fixed crun_e2e workflow and disabled docs workflow — 20m
 
-**Total time**: 5 hours
+**Total time**: 5 hours 20 minutes
 
 ## Completed Tasks
 
@@ -40,7 +41,9 @@
 - [x] Reorganized release notes into docs/releases/
 - [x] Fixed Zig cache directory error (XDG_CACHE_HOME)
 - [x] Moved Docker-based actions to proxmox runner
-- [x] Added 60+ Ukrainian words to spell check dictionary
+- [x] Added 80+ Ukrainian words to spell check dictionary
+- [x] Fixed crun_e2e.yml workflow errors
+- [x] Disabled docs.yml workflow (pending Docker permissions fix)
 
 ## Pending Tasks
 
@@ -112,10 +115,24 @@ env:
 
 **Solution**: Added 60+ Ukrainian words to `.cspell.json` dictionary
 
-### 4. Runner Label Matching (Pending Investigation)
-**Status**: Workflows may still route to incorrect runner
+### 4. Crun E2E Workflow Errors
+**Problem**: Matrix reference errors in crun_e2e.yml
 
-**Workaround**: Workflows now queued and executing with fixes applied
+**Solution**: 
+- Fixed `runs-on: [proxmox]` → `[self-hosted, proxmox]`
+- Fixed artifact name: removed `${{ matrix.runner[1] }}` reference
+- Added `XDG_CACHE_HOME` env variable
+
+### 5. Documentation Workflow (Temporarily Disabled)
+**Problem**: Docker permission denied on proxmox runner
+
+**Status**: Disabled until server-side fix applied
+
+**Required action on mgr.cp.if.ua**:
+```bash
+sudo usermod -aG docker github-runner
+sudo systemctl restart actions.runner.cageforge-nexcage.proxmox-runner.service
+```
 
 ## Next Steps
 
