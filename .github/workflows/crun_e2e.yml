@@ -14,6 +14,9 @@ concurrency:
   group: crun-e2e-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+
 jobs:
   crun-e2e:
     name: Crun Container Lifecycle
@@ -239,7 +242,7 @@ EOF
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: crun-e2e-logs-${{ matrix.runner[1] }}
+          name: crun-e2e-logs
           path: |
             /tmp/crun-e2e-test-*/
           retention-days: 3
