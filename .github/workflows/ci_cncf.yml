@@ -17,17 +17,22 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+
 jobs:
-  # Build and test on multiple OS (but same arch: amd64)
+  # Build and test on multiple runners (same arch: amd64)
   build-test:
-    name: Build and Test
+    name: Build and Test (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            name: ubuntu-amd64
+          - os: [self-hosted, proxmox]
+            name: proxmox-amd64
+          - os: [self-hosted, runner0]
+            name: runner0-amd64
 
     steps:
     - name: Checkout
@@ -37,15 +42,6 @@ jobs:
       uses: goto-bus-stop/setup-zig@v2
       with:
         version: 0.15.1
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libcap-dev \
-          libseccomp-dev \
-          libyajl-dev \
-          build-essential
 
     - name: Build Debug
       run: zig build
@@ -70,43 +66,10 @@ jobs:
         path: zig-out/bin/nexcage
         retention-days: 7
 
-  # Security scanning
-  security:
-    name: Security Scan
-    runs-on: [self-hosted, proxmox]
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Setup Zig
-      uses: goto-bus-stop/setup-zig@v2
-      with:
-        version: 0.15.1
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libcap-dev \
-          libseccomp-dev \
-          libyajl-dev
-
-    - name: Build with security flags
-      run: zig build -Doptimize=ReleaseSafe
-
-    - name: Run security tests
-      run: zig build test
-
-    - name: Dependency vulnerability scan
-      run: |
-        # Check for known vulnerabilities in system libraries
-        echo "Checking system dependencies..."
-        dpkg -l | grep -E 'libcap|libseccomp|libyajl'
-
   # Code quality and formatting
   quality:
     name: Code Quality
-    runs-on: [self-hosted, proxmox]
+    runs-on: [self-hosted, runner0]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -128,7 +91,7 @@ jobs:
   # Performance testing
   performance:
     name: Performance Tests
-    runs-on: [self-hosted, proxmox]
+    runs-on: [self-hosted, runner0]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -137,14 +100,6 @@ jobs:
       uses: goto-bus-stop/setup-zig@v2
       with:
         version: 0.15.1
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libcap-dev \
-          libseccomp-dev \
-          libyajl-dev
 
     - name: Build optimized
       run: zig build -Doptimize=ReleaseFast

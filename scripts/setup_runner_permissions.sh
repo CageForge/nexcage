@@ -10,6 +10,7 @@ SUDOERS_FILE="/etc/sudoers.d/${RUNNER_USER}"
 echo "=== GitHub Actions Runner Permission Setup ==="
 echo "Runner user: $RUNNER_USER"
 echo "Sudoers file: $SUDOERS_FILE"
+echo "Note: This configuration applies to all runner services using the $RUNNER_USER user"
 echo
 
 # Check if running as root
@@ -138,9 +139,10 @@ fi
 
 echo
 echo "Next steps:"
-echo "1. Verify runner service: systemctl status actions.runner.*"
-echo "2. Test workflow execution on GitHub Actions"
-echo "3. Monitor logs: journalctl -u actions.runner.* -f"
+echo "1. Verify runner services: systemctl status actions.runner.*"
+echo "2. For multi-runner setup, see docs/SELF_HOSTED_RUNNER_SETUP.md"
+echo "3. Test workflow execution on GitHub Actions"
+echo "4. Monitor logs: journalctl -u actions.runner.* -f"
 echo
 
 exit 0

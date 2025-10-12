@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: [self-hosted, proxmox]
+    runs-on: [self-hosted, runner0]
     
     steps:
     - name: Checkout
@@ -47,5 +47,5 @@ jobs:
 
   # Self-hosted test disabled due to sudo permissions issue
   # self-hosted-test:
-  #   runs-on: [self-hosted, proxmox]
+  #   runs-on: [self-hosted, runner0]
   #   if: false  # Disabled for now

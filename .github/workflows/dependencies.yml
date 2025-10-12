@@ -8,7 +8,7 @@ on:
 jobs:
   dependencies:
     name: "Check Dependencies"
-    runs-on: [self-hosted, proxmox]
+    runs-on: [runner0]
     permissions:
       contents: read
       pull-requests: write
@@ -39,7 +39,7 @@ jobs:
 
   check-updates:
     name: Check for Updates
-    runs-on: [self-hosted, proxmox]
+    runs-on: [runner0]
     permissions:
       contents: read
       pull-requests: write
@@ -63,7 +63,7 @@ jobs:
           
   update-zig:
     name: Update Zig
-    runs-on: [self-hosted, proxmox]
+    runs-on: [runner0]
     permissions:
       contents: read
       pull-requests: write

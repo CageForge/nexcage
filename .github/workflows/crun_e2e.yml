@@ -1,0 +1,250 @@
+name: Crun E2E Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crun-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+
+jobs:
+  crun-e2e:
+    name: Crun Container Lifecycle
+    runs-on: [proxmox]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Print environment info
+        run: |
+          echo "Runner: $(hostname)"
+          echo "Kernel: $(uname -a)"
+          echo "User: $(whoami)"
+          command -v crun && crun --version || echo "crun not installed"
+          command -v zig && zig version || true
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      # Dependencies pre-installed on self-hosted runner
+      # See docs/SELF_HOSTED_RUNNER_SETUP.md
+
+      - name: Build
+        run: zig build
+
+      - name: Prepare test environment
+        run: |
+          set -euo pipefail
+          # Create test directory
+          TEST_DIR="/tmp/crun-e2e-test-$$"
+          mkdir -p "$TEST_DIR"
+          echo "TEST_DIR=$TEST_DIR" >> $GITHUB_ENV
+          echo "Test directory: $TEST_DIR"
+
+      - name: Create OCI bundle
+        run: |
+          set -euo pipefail
+          BUNDLE_DIR="${TEST_DIR}/test-bundle"
+          ROOTFS_DIR="${BUNDLE_DIR}/rootfs"
+          
+          mkdir -p "$ROOTFS_DIR"
+          
+          # Create minimal rootfs with busybox
+          echo "Creating minimal rootfs..."
+          if command -v busybox >/dev/null 2>&1; then
+            mkdir -p "$ROOTFS_DIR"/{bin,usr/bin,sbin,usr/sbin,etc,proc,sys,dev,tmp}
+            cp /bin/busybox "$ROOTFS_DIR/bin/" || cp /usr/bin/busybox "$ROOTFS_DIR/bin/"
+            
+            # Create basic symlinks
+            for cmd in sh ls cat echo ps; do
+              ln -sf busybox "$ROOTFS_DIR/bin/$cmd" || true
+            done
+          else
+            echo "busybox not found, using minimal shell"
+            mkdir -p "$ROOTFS_DIR"/{bin,etc,proc,sys,dev,tmp}
+            cp /bin/sh "$ROOTFS_DIR/bin/" || cp /usr/bin/sh "$ROOTFS_DIR/bin/"
+          fi
+          
+          # Create minimal OCI config.json
+          cat > "${BUNDLE_DIR}/config.json" << 'EOF'
+{
+  "ociVersion": "1.0.0",
+  "process": {
+    "terminal": false,
+    "user": {
+      "uid": 0,
+      "gid": 0
+    },
+    "args": [
+      "/bin/sh",
+      "-c",
+      "sleep 5"
+    ],
+    "env": [
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "TERM=xterm"
+    ],
+    "cwd": "/",
+    "noNewPrivileges": true
+  },
+  "root": {
+    "path": "rootfs",
+    "readonly": false
+  },
+  "hostname": "crun-test",
+  "mounts": [
+    {
+      "destination": "/proc",
+      "type": "proc",
+      "source": "proc"
+    },
+    {
+      "destination": "/dev",
+      "type": "tmpfs",
+      "source": "tmpfs",
+      "options": [
+        "nosuid",
+        "strictatime",
+        "mode=755",
+        "size=65536k"
+      ]
+    },
+    {
+      "destination": "/sys",
+      "type": "sysfs",
+      "source": "sysfs",
+      "options": [
+        "nosuid",
+        "noexec",
+        "nodev",
+        "ro"
+      ]
+    }
+  ],
+  "linux": {
+    "namespaces": [
+      {
+        "type": "pid"
+      },
+      {
+        "type": "network"
+      },
+      {
+        "type": "ipc"
+      },
+      {
+        "type": "uts"
+      },
+      {
+        "type": "mount"
+      }
+    ]
+  }
+}
+EOF
+          
+          echo "BUNDLE_DIR=$BUNDLE_DIR" >> $GITHUB_ENV
+          echo "OCI bundle created at: $BUNDLE_DIR"
+          ls -la "$BUNDLE_DIR"
+
+      - name: Test crun create
+        run: |
+          set -euo pipefail
+          CONTAINER_ID="test-crun-$$"
+          echo "CONTAINER_ID=$CONTAINER_ID" >> $GITHUB_ENV
+          
+          echo "Creating container: $CONTAINER_ID"
+          crun create --bundle "$BUNDLE_DIR" "$CONTAINER_ID"
+          
+          echo "Checking container state..."
+          crun state "$CONTAINER_ID"
+
+      - name: Test crun start
+        run: |
+          set -euo pipefail
+          echo "Starting container: $CONTAINER_ID"
+          crun start "$CONTAINER_ID"
+          
+          # Give it a moment to start
+          sleep 1
+          
+          echo "Checking container state after start..."
+          crun state "$CONTAINER_ID" || true
+          
+          # List running containers
+          crun list || true
+
+      - name: Test crun stop
+        run: |
+          set -euo pipefail
+          echo "Stopping container: $CONTAINER_ID"
+          
+          # Try graceful stop first
+          crun kill "$CONTAINER_ID" TERM || true
+          sleep 2
+          
+          # Force kill if needed
+          crun kill "$CONTAINER_ID" KILL || true
+          sleep 1
+          
+          echo "Checking container state after stop..."
+          crun state "$CONTAINER_ID" || true
+
+      - name: Test crun delete
+        run: |
+          set -euo pipefail
+          echo "Deleting container: $CONTAINER_ID"
+          crun delete "$CONTAINER_ID" || crun delete --force "$CONTAINER_ID"
+          
+          echo "Verifying container is deleted..."
+          if crun state "$CONTAINER_ID" 2>/dev/null; then
+            echo "ERROR: Container still exists after delete"
+            exit 1
+          else
+            echo "Container successfully deleted"
+          fi
+
+      - name: Cleanup test environment
+        if: always()
+        run: |
+          set +e
+          echo "Cleaning up test environment..."
+          
+          # Force delete any remaining containers
+          if [ -n "${CONTAINER_ID:-}" ]; then
+            crun delete --force "$CONTAINER_ID" 2>/dev/null || true
+          fi
+          
+          # Clean up test directory
+          if [ -n "${TEST_DIR:-}" ] && [ -d "$TEST_DIR" ]; then
+            rm -rf "$TEST_DIR"
+            echo "Removed test directory: $TEST_DIR"
+          fi
+          
+          # List any remaining crun containers
+          echo "Remaining crun containers:"
+          crun list || true
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crun-e2e-logs
+          path: |
+            /tmp/crun-e2e-test-*/
+          retention-days: 3
+          if-no-files-found: ignore
+

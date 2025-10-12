@@ -19,7 +19,7 @@ permissions:
 jobs:
   oci-smoke:
     name: OCI Local Smoke
-    runs-on: [self-hosted, proxmox]
+    runs-on: [self-hosted, runner0]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
   oci-e2e:
     name: OCI Optional E2E
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_e2e == true }}
-    runs-on: [self-hosted, proxmox]
+    runs-on: [self-hosted, runner0]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

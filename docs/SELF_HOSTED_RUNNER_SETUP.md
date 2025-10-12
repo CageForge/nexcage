@@ -95,6 +95,23 @@ sudo apt-get install -y \
   wget
 ```
 
+### Docker (Proxmox Runner Only)
+
+Some workflows require Docker (e.g., Semgrep, Trivy, link checking). On the **proxmox runner**:
+
+```bash
+# Add github-runner user to docker group
+sudo usermod -aG docker github-runner
+
+# Restart runner service to apply group changes
+sudo systemctl restart actions.runner.cageforge-nexcage.proxmox-runner.service
+
+# Verify Docker access
+sudo -u github-runner docker ps
+```
+
+**Note**: `runner0` does not have Docker installed and should not run Docker-based workflows.
+
 ## Proxmox Configuration
 
 ### LXC Templates
@@ -223,6 +240,119 @@ journalctl -u actions.runner.* -f
 # Sudo logs
 sudo tail -f /var/log/auth.log | grep github-runner
 ```
+
+## Multi-Runner Setup
+
+The project uses two self-hosted runners with different purposes:
+
+### Runner Labels
+
+1. **Proxmox Runner**: `[self-hosted, proxmox]`
+   - Location: Proxmox VE server
+   - Purpose: E2E tests requiring Proxmox (LXC containers, crun)
+   - Workflows: `proxmox_e2e.yml`, `crun_e2e.yml`
+   - Service name: `actions.runner.<org>-<repo>.github-runner`
+
+2. **Build/Test Runner**: `[self-hosted, runner0]`
+   - Location: Separate server (github-runner0.cp.if.ua)
+   - Purpose: Build, unit tests, security scans, documentation
+   - Workflows: `ci_cncf.yml`, `security.yml`, `simple_ci.yml`, `basic_test.yml`, etc.
+   - Service name: `actions.runner.<org>-<repo>.github-runner0`
+   - **Note**: This runner does NOT have Proxmox installed
+
+### Installing Runner0 (Build/Test Server)
+
+On the build/test server (github-runner0.cp.if.ua):
+
+1. **Download and configure the runner**:
+
+```bash
+# Create directory for runner
+mkdir -p ~/actions-runner
+cd ~/actions-runner
+
+# Download runner (use latest version)
+curl -o actions-runner-linux-x64-2.328.0.tar.gz -L \
+  https://github.com/actions/runner/releases/download/v2.328.0/actions-runner-linux-x64-2.328.0.tar.gz
+
+# Extract
+tar xzf ./actions-runner-linux-x64-2.328.0.tar.gz
+
+# Configure with runner0 label
+./config.sh --url https://github.com/cageforge/nexcage \
+  --token <YOUR_TOKEN> \
+  --name github-runner0 \
+  --labels self-hosted,runner0
+```
+
+2. **Install as service**:
+
+```bash
+sudo ./svc.sh install github-runner
+sudo ./svc.sh start
+```
+
+3. **Install required dependencies**:
+
+```bash
+# Install Zig
+curl -L https://ziglang.org/download/0.15.1/zig-linux-x86_64-0.15.1.tar.xz | tar -xJ
+sudo mv zig-linux-x86_64-0.15.1 /usr/local/zig
+echo 'export PATH=/usr/local/zig:$PATH' >> ~/.bashrc
+
+# Install build dependencies
+sudo apt-get update
+sudo apt-get install -y \
+  libcap-dev \
+  libseccomp-dev \
+  libyajl-dev \
+  build-essential \
+  git \
+  curl \
+  wget
+```
+
+**Note**: Runner0 does NOT need Proxmox, `pct`, `pvesh`, or `pvesm` installed.
+
+### Verify Both Runners
+
+```bash
+# Check runner services
+systemctl status actions.runner.*
+
+# Both should show as active
+sudo systemctl list-units 'actions.runner.*'
+```
+
+### Workflow Distribution
+
+Workflows are distributed by purpose:
+
+**Proxmox Runner** (`[self-hosted, proxmox]`):
+- `proxmox_e2e.yml` - LXC container lifecycle tests
+- `crun_e2e.yml` - OCI container lifecycle tests
+- Any workflow requiring Proxmox VE access
+
+**Runner0** (`[self-hosted, runner0]`):
+- `ci_cncf.yml` - Build and test matrix (runs on both runners)
+- `security.yml` - Security scans (CodeQL, Semgrep, Trivy, Gitleaks)
+- `simple_ci.yml`, `basic_test.yml` - Unit tests and builds
+- `oci_smoke.yml` - OCI smoke tests
+- `docs.yml` - Documentation checks
+- `dependencies.yml` - Dependency updates
+- `permissions.yml` - Permission checks
+
+**Load Balancing**:
+- `ci_cncf.yml` uses matrix strategy to run jobs on both runners in parallel
+- GitHub automatically assigns jobs to available runners with matching labels
+- If one runner is offline, jobs queue for the available runner
+
+### Benefits
+
+- **Specialized runners**: Proxmox tests isolated from build/test workloads
+- **Parallel execution**: Build matrix runs simultaneously on both runners
+- **Resource efficiency**: Build-heavy jobs don't impact Proxmox server
+- **High availability**: Critical builds continue if Proxmox runner is down
 
 ## References
 
