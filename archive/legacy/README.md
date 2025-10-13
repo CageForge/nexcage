@@ -1,3 +1,28 @@
+# Legacy (Archived)
+
+Status: Deprecated (Archived)
+
+This directory preserves legacy sources and documentation for historical reference only. The active codebase has fully migrated to the modular architecture under `src/`.
+
+Where to look now
+- CLI: `src/cli/`
+- Core types/config: `src/core/`
+- Backends: `src/backends/` (LXC, OCI/crun)
+- Integrations (Proxmox): `src/integrations/`
+- Utilities: `src/utils/`
+
+Policies
+- No new development will occur in `archive/legacy/`.
+- References to legacy modules should be removed or replaced with their modular equivalents.
+- If a feature exists only in legacy, extract and refactor it into `src/*` with tests.
+
+Build & CI
+- Legacy code is excluded from the default build and CI pipelines.
+- Follow `README.md` for building the modular runtime.
+
+Contact
+- Maintainers: see `MAINTAINERS.md`
+- Governance: see `GOVERNANCE.md`
 # Legacy Architecture (Deprecated)
 
 ⚠️ **WARNING**: This legacy architecture is deprecated as of v0.4.0.

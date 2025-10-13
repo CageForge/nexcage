@@ -8,6 +8,7 @@ Next-generation container runtime for Proxmox VE using LXC and OCI backends (cru
 ## Archival Policy
 - Deprecated documentation and code are moved to `archive/`
 - Legacy code is kept under `archive/legacy/` and may be removed in future
+ - Active code lives under `src/` (modular architecture). See `archive/legacy/README.md` for legacy status.
 
 ## Quick Start (Ubuntu 22.04/24.04)
 
