@@ -5,39 +5,39 @@ Owner: @moriarti
 Status: Planned
 
 Goals
-- Перемістити `legacy/` до `archive/legacy/` без втрати історії
-- Інтегрувати придатні елементи legacy у модульну архітектуру (`src/*` backends)
-- Усунути імпорти на `legacy/*`, оновити шляхи
-- Забезпечити успішну збірку та тести
+- Move `legacy/` to `archive/legacy/` while preserving history
+- Integrate reusable legacy components into modular architecture (`src/*` backends)
+- Remove any imports to `legacy/*`, update paths
+- Ensure successful build and tests
 
 Scope
-- Каталог `legacy/` (усі підпапки: `bfc/`, `common/`, `config/`, `crun/`, `network/`, `oci/`, `performance/`, `proxmox/`, `raw/`, `zfs/`)
-- Перевірка перетинів із `src/*` та `tests/*`
+- Directory `legacy/` (subfolders: `bfc/`, `common/`, `config/`, `crun/`, `network/`, `oci/`, `performance/`, `proxmox/`, `raw/`, `zfs/`)
+- Check intersections with `src/*` and `tests/*`
 
 Deliverables
-- `archive/legacy/` із повним вмістом
-- Оновлені імпорти/посилання
-- Будь-які виділені модулі перенесені в `src/*`
+- `archive/legacy/` with complete contents
+- Updated imports/references
+- Any extracted modules placed under `src/*`
 - `Roadmap/SPRINT_6.5_PROGRESS.md`, `Roadmap/SPRINT_6.5_COMPLETED.md`
 
 Risks
-- Зламані імпорти або символи після переміщення
-- Дублювання реалізацій між `legacy/` та `src/`
+- Broken imports or missing symbols after move
+- Duplicate implementations between `legacy/` and `src/`
 
 Mitigations
-- Масовий пошук посилань і поетапне оновлення
-- Порівняння API, вибір єдиного джерела істини
+- Repository-wide reference search and staged updates
+- API comparison and selecting a single source of truth
 
 Plan
-1. Інвентаризація використань `legacy/` у коді
-2. Переміщення `legacy/` → `archive/legacy/`
-3. Оновлення імпортів/посилань
-4. Витяг корисних модулів у `src/*` за потреби
-5. Збірка, тести, виправлення
-6. Документація і PR
+1. Inventory all references to `legacy/` in codebase
+2. Move `legacy/` → `archive/legacy/`
+3. Update imports/references
+4. Extract useful modules into `src/*` if needed
+5. Build, test, fix issues
+6. Document and open PR
 
 Timebox
-- Загалом: 1 робочий день
-- Резерв: 2 години на виправлення збірки
+- Overall: 1 working day
+- Reserve: 2 hours for build fixes
 
 

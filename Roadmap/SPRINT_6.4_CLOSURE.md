@@ -6,26 +6,26 @@ Branch merged: feat/optimize-github-actions → main (squash)
 Total time: 5h 30m
 
 Summary
-- CI/CD оптимізовано: multi-runner (proxmox, runner0)
-- Додано crun E2E (create/start/stop/delete)
-- Видалено дублікати/зайві воркфлоу; docs тимчасово вимкнено
-- Оновлено документацію та інструкції для серверних правок
+- CI/CD optimized: multi-runner (proxmox, runner0)
+- Added crun E2E (create/start/stop/delete)
+- Removed duplicate/unnecessary workflows; docs temporarily disabled
+- Updated documentation and server-side instructions
 
 Main CI status after merge
 - CI (CNCF Compliant): success
 - Security: success
 - Proxmox E2E: success
-- crun_e2e: failure (очікувано: потребує донастройки середовища)
-- Dependencies: failure (очікувано: оновлення індексів та кешів на runner)
+- crun_e2e: failure (expected: environment tuning required)
+- Dependencies: failure (expected: runner index/cache updates)
 
 Local build
 - Command: `zig build -Doptimize=ReleaseSafe`
 - Result: success
 
 Post-merge actions (server mgr.cp.if.ua)
-- Додати користувача `github-runner` до групи `docker`
-- Перезапустити runner-сервіс
-- Після виправлень повторно увімкнути docs workflow
+- Add user `github-runner` to group `docker`
+- Restart runner service
+- Re-enable docs workflow after fixes
 
 Artifacts
 - MERGE_INSTRUCTIONS.md
@@ -33,7 +33,7 @@ Artifacts
 - Roadmap/GITHUB_ACTIONS_FIXES_SUMMARY.md
 
 Verification
-- Останні запуски на main: більшість зелені; 2 червоні — очікувані
+- Recent runs on main: majority green; 2 red — expected
 
 Prepared by: AI Assistant
 
