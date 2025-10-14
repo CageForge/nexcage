@@ -32,6 +32,9 @@ jobs:
       - name: Build
         run: zig build -Doptimize=ReleaseSafe
 
+      - name: Build packaging artifacts
+        run: bash scripts/ci/build_artifacts.sh
+
       - name: Create tag if missing
         id: tag
         run: |
@@ -55,6 +58,8 @@ jobs:
           prerelease: false
           files: |
             zig-out/bin/nexcage
+            dist/*.tar.gz
+            dist/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
