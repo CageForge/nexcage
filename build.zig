@@ -60,8 +60,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // Read VERSION file and pass to modules via options
-    const version_file = b.path("VERSION");
-    const version_bytes = b.readFile(version_file) catch @panic("Failed to read VERSION file");
+    const version_bytes = std.fs.cwd().readFileAlloc(b.allocator, "VERSION", 64) catch @panic("Failed to read VERSION file");
     const app_version = std.mem.trim(u8, version_bytes, " \n\r\t");
 
     // Build options shared across modules
