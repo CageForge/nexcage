@@ -4,6 +4,7 @@ const backends = @import("backends");
 const constants = @import("constants.zig");
 const errors = @import("errors.zig");
 const base_command = @import("base_command.zig");
+const build_options = @import("build_options");
 
 /// List command implementation for modular architecture
 pub const ListCommand = struct {
@@ -95,7 +96,7 @@ pub const ListCommand = struct {
                 if (self.base.logger) |log| {
                     try log.info("Listing Proxmox VMs", .{});
                     try log.warn("Proxmox VM backend not implemented yet", .{});
-                    try log.info("Alert: Proxmox VM support is planned for v0.5.0", .{});
+                    try log.info("Alert: Proxmox VM support is planned for v{s}", .{build_options.app_version});
                 }
                 return;
             },
