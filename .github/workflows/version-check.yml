@@ -1,0 +1,27 @@
+name: Version Check
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  version:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig 0.15.1
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+
+      - name: Check Version
+        run: bash scripts/ci/check_version.sh
+
+

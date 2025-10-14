@@ -95,7 +95,7 @@ pub const ListCommand = struct {
                 if (self.base.logger) |log| {
                     try log.info("Listing Proxmox VMs", .{});
                     try log.warn("Proxmox VM backend not implemented yet", .{});
-                    try log.info("Alert: Proxmox VM support is planned for v0.5.0", .{});
+                    try log.info("Alert: Proxmox VM support is planned in upcoming release", .{});
                 }
                 return;
             },

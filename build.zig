@@ -2,11 +2,7 @@ const std = @import("std");
 const Build = std.Build;
 const fs = std.fs;
 
-// Version information
-const VERSION = "0.5.0";
-const VERSION_MAJOR = 0;
-const VERSION_MINOR = 5;
-const VERSION_PATCH = 0;
+// Version information is sourced from VERSION file at build time
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -63,15 +59,13 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // OCI module
-    const oci_mod = b.addModule("oci", .{
-        .root_source_file = b.path("src/oci/mod.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-        },
-    });
+    // Read VERSION file and pass to modules via options
+    const version_bytes = std.fs.cwd().readFileAlloc(b.allocator, "VERSION", 64) catch @panic("Failed to read VERSION file");
+    const app_version = std.mem.trim(u8, version_bytes, " \n\r\t");
 
-    // Note: crun/bfc stub libraries removed to avoid duplicate _start symbol in Release builds
+    // Build options shared across modules
+    const build_options = b.addOptions();
+    build_options.addOption([]const u8, "app_version", app_version);
 
     // Main executable
     const main_mod = b.createModule(.{
@@ -79,6 +73,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    main_mod.addOptions("build_options", build_options);
     
     const exe = b.addExecutable(.{
         .name = "nexcage",
@@ -113,7 +108,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("backends", backends_mod);
     exe.root_module.addImport("integrations", integrations_mod);
     exe.root_module.addImport("utils", utils_mod);
-    exe.root_module.addImport("oci", oci_mod);
     // zig-json import removed for Zig 0.15.1 compatibility
 
     // Install the executable
@@ -136,6 +130,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    test_mod.addOptions("build_options", build_options);
     
     const test_exe = b.addTest(.{
         .name = "test",
@@ -166,7 +161,6 @@ pub fn build(b: *std.Build) void {
     test_exe.root_module.addImport("backends", backends_mod);
     test_exe.root_module.addImport("integrations", integrations_mod);
     test_exe.root_module.addImport("utils", utils_mod);
-    test_exe.root_module.addImport("oci", oci_mod);
     // zig-json import removed for Zig 0.15.1 compatibility
 
     const run_test = b.addRunArtifact(test_exe);
