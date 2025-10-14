@@ -30,7 +30,21 @@ pub const VersionCommand = struct {
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         _ = options;
 
-        const version = getVersionInfo();
+        // Read version from VERSION file
+        const version_file = std.fs.cwd().openFile("VERSION", .{}) catch {
+            std.debug.print("nexcage version 0.0.0-dev (VERSION file not found)\n", .{});
+            return;
+        };
+        defer version_file.close();
+        
+        const version_bytes = version_file.readToEndAlloc(allocator, 64) catch {
+            std.debug.print("nexcage version 0.0.0-dev (failed to read VERSION)\n", .{});
+            return;
+        };
+        defer allocator.free(version_bytes);
+        
+        const version_str = std.mem.trim(u8, version_bytes, " \n\r\t");
+        const version = getVersionInfo(version_str);
         const version_text = try self.formatVersion(version, allocator);
         defer allocator.free(version_text);
 
@@ -84,12 +98,23 @@ pub const VersionCommand = struct {
 };
 
 /// Get version information
-pub fn getVersionInfo() VersionInfo {
+pub fn getVersionInfo(version_str: []const u8) VersionInfo {
+    // Parse version string (e.g., "0.5.0")
+    var parts = std.mem.splitSequence(u8, version_str, ".");
+    
+    const major_str = parts.next() orelse "0";
+    const minor_str = parts.next() orelse "0";
+    const patch_str = parts.next() orelse "0";
+    
+    const major = std.fmt.parseInt(u32, major_str, 10) catch 0;
+    const minor = std.fmt.parseInt(u32, minor_str, 10) catch 0;
+    const patch = std.fmt.parseInt(u32, patch_str, 10) catch 0;
+    
     return VersionInfo{
-        .major = 0,
-        .minor = 3,
-        .patch = 0,
-        .build = "dev",
+        .major = major,
+        .minor = minor,
+        .patch = patch,
+        .build = "release",
         .commit = "unknown",
         .date = "unknown",
     };
