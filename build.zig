@@ -63,16 +63,6 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // OCI module
-    const oci_mod = b.addModule("oci", .{
-        .root_source_file = b.path("src/oci/mod.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-        },
-    });
-
-    // Note: crun/bfc stub libraries removed to avoid duplicate _start symbol in Release builds
-
     // Main executable
     const main_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -113,7 +103,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("backends", backends_mod);
     exe.root_module.addImport("integrations", integrations_mod);
     exe.root_module.addImport("utils", utils_mod);
-    exe.root_module.addImport("oci", oci_mod);
     // zig-json import removed for Zig 0.15.1 compatibility
 
     // Install the executable
@@ -166,7 +155,6 @@ pub fn build(b: *std.Build) void {
     test_exe.root_module.addImport("backends", backends_mod);
     test_exe.root_module.addImport("integrations", integrations_mod);
     test_exe.root_module.addImport("utils", utils_mod);
-    test_exe.root_module.addImport("oci", oci_mod);
     // zig-json import removed for Zig 0.15.1 compatibility
 
     const run_test = b.addRunArtifact(test_exe);
