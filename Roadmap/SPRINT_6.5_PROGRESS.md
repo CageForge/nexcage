@@ -12,7 +12,8 @@
   - Replaced hardcoded versions in `src/main.zig` and CLI.
   - Added `scripts/bump_version.sh` and CI workflow `version-check.yml`.
   - Local CI script `scripts/ci/check_version.sh` validates version embedding.
+  - Added auto-release workflow `.github/workflows/release.yml` (tag+release on VERSION change).
 
-Time spent: 1.3h (planning: 0.4h, build fixes: 0.3h, version system + CI: 0.6h)
+Time spent: 1.7h (planning: 0.4h, build fixes: 0.3h, version system + CI: 1.0h)
 
 
