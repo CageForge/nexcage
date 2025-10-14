@@ -48,4 +48,27 @@ fi
 echo "Artifacts ready in $OUT_DIR:"
 ls -la "$OUT_DIR"
 
+echo "Generating SHA256 checksums..."
+pushd "$OUT_DIR" >/dev/null
+sha256sum nexcage-linux-x86_64-v$VERSION.tar.gz > nexcage-linux-x86_64-v$VERSION.tar.gz.sha256
+if [[ -f "nexcage_${VERSION}-1_${ARCH}.deb" ]]; then
+  sha256sum nexcage_${VERSION}-1_${ARCH}.deb > nexcage_${VERSION}-1_${ARCH}.deb.sha256
+fi
+sha256sum ../zig-out/bin/nexcage > nexcage.sha256 || true
+popd >/dev/null
+
+if [[ -n "${GPG_SIGN:-}" ]]; then
+  echo "Signing artifacts with GPG..."
+  if [[ -z "${GPG_PRIVATE_KEY:-}" || -z "${GPG_PASSPHRASE:-}" ]]; then
+    echo "GPG_SIGN is set but GPG_PRIVATE_KEY/GPG_PASSPHRASE not provided" >&2
+    exit 1
+  fi
+  echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+  for f in "$OUT_DIR"/*.{tar.gz,deb,sha256} "$ROOT_DIR/zig-out/bin/nexcage"; do
+    [[ -f "$f" ]] || continue
+    gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --armor --output "$f.asc" --detach-sign "$f"
+  done
+  echo "GPG signatures generated (.asc)"
+fi
+
 

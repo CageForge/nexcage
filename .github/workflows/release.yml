@@ -33,6 +33,10 @@ jobs:
         run: zig build -Doptimize=ReleaseSafe
 
       - name: Build packaging artifacts
+        env:
+          GPG_SIGN: ${{ secrets.GPG_SIGN }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: bash scripts/ci/build_artifacts.sh
 
       - name: Create tag if missing
@@ -60,6 +64,8 @@ jobs:
             zig-out/bin/nexcage
             dist/*.tar.gz
             dist/*.deb
+            dist/*.sha256
+            dist/*.asc
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
