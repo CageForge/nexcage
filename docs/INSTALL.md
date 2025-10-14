@@ -12,18 +12,57 @@
 
 ## Automatic Installation
 
+### Option 1: Download Pre-built Binary
+
+1. Download latest release:
+```bash
+# Get latest version
+VERSION=$(curl -s https://api.github.com/repos/CageForge/nexcage/releases/latest | grep tag_name | cut -d'"' -f4 | sed 's/v//')
+
+# Download binary and checksum
+wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-linux-x86_64-v$VERSION.tar.gz
+wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-linux-x86_64-v$VERSION.tar.gz.sha256
+
+# Verify checksum
+sha256sum -c nexcage-linux-x86_64-v$VERSION.tar.gz.sha256
+
+# Extract and install
+tar -xzf nexcage-linux-x86_64-v$VERSION.tar.gz
+sudo mv nexcage /usr/local/bin/
+```
+
+2. Verify installation:
+```bash
+nexcage --help
+nexcage version
+```
+
+### Option 2: Build from Source
+
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/nexcage.git
+git clone https://github.com/CageForge/nexcage.git
 cd nexcage
 ```
 
-2. Build the project:
+2. Install dependencies:
+```bash
+sudo apt-get update
+sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+```
+
+3. Install Zig 0.15.1:
+```bash
+# See https://ziglang.org/download/ for binary tarball
+zig version  # should print 0.15.1
+```
+
+4. Build the project:
 ```bash
 zig build -Doptimize=ReleaseFast
 ```
 
-3. Run the installation script:
+5. Run the installation script:
 ```bash
 sudo ./scripts/install.sh
 ```
