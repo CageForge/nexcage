@@ -4,6 +4,7 @@ pub const interfaces = @import("interfaces.zig");
 pub const errors = @import("errors.zig");
 pub const logging = @import("logging.zig");
 pub const config = @import("config.zig");
+pub const constants = @import("constants.zig");
 
 // Re-export commonly used types
 pub const Error = types.Error;

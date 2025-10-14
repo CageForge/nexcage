@@ -1,5 +1,9 @@
 /// CLI module exports
+pub const base_command = @import("base_command.zig");
+pub const errors = @import("errors.zig");
 pub const registry = @import("registry.zig");
+pub const validation = @import("validation.zig");
+pub const router = @import("router.zig");
 pub const run = @import("run.zig");
 pub const help = @import("help.zig");
 pub const version = @import("version.zig");
@@ -10,6 +14,7 @@ pub const delete = @import("delete.zig");
 pub const list = @import("list.zig");
 
 // Re-export commonly used types
+pub const BaseCommand = base_command.BaseCommand;
 pub const CommandRegistry = registry.CommandRegistry;
 pub const registerBuiltinCommands = registry.registerBuiltinCommands;
 pub const initGlobalRegistry = registry.initGlobalRegistry;

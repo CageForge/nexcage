@@ -1,7 +1,7 @@
 const std = @import("std");
 const core = @import("core");
 const backends = @import("backends");
-const constants = @import("constants.zig");
+const constants = core.constants;
 const errors = @import("errors.zig");
 const base_command = @import("base_command.zig");
 

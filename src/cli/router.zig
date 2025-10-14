@@ -1,15 +1,18 @@
 const std = @import("std");
 const core = @import("core");
 const backends = @import("backends");
-const constants = @import("constants.zig");
+const constants = core.constants;
+const types = core.types;
+const logging = core.logging;
+const config_module = core.config;
 
 pub const BackendRouter = struct {
     const Self = @This();
 
     allocator: std.mem.Allocator,
-    logger: ?*core.LogContext,
+    logger: ?*logging.LogContext,
 
-    pub fn init(allocator: std.mem.Allocator, logger: ?*core.LogContext) Self {
+    pub fn init(allocator: std.mem.Allocator, logger: ?*logging.LogContext) Self {
         return Self{
             .allocator = allocator,
             .logger = logger,
@@ -21,18 +24,18 @@ pub const BackendRouter = struct {
         self: *Self,
         operation: Operation,
         container_id: []const u8,
-        runtime_type: core.types.RuntimeType,
+        runtime_type: types.RuntimeType,
         config: ?Config,
-    ) !core.types.SandboxConfig {
+    ) !types.SandboxConfig {
         const name_buf = try self.allocator.dupe(u8, container_id);
 
         return switch (operation) {
-            .create => |create_config| core.types.SandboxConfig{
+            .create => |create_config| types.SandboxConfig{
                 .allocator = self.allocator,
                 .name = name_buf,
                 .runtime_type = runtime_type,
                 .image = try self.allocator.dupe(u8, create_config.image),
-                .resources = core.types.ResourceLimits{
+                .resources = types.ResourceLimits{
                     .memory = constants.DEFAULT_MEMORY_BYTES,
                     .cpu = constants.DEFAULT_CPU_CORES,
                     .disk = null,
@@ -40,7 +43,7 @@ pub const BackendRouter = struct {
                 },
                 .security = null,
                 .network = if (config) |cfg| cfg.network else switch (runtime_type) {
-                    .lxc => core.types.NetworkConfig{
+                    .lxc => types.NetworkConfig{
                         .bridge = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
                         .ip = null,
                         .gateway = null,
@@ -51,7 +54,7 @@ pub const BackendRouter = struct {
                 },
                 .storage = null,
             },
-            .run => |run_config| core.types.SandboxConfig{
+            .run => |run_config| types.SandboxConfig{
                 .allocator = self.allocator,
                 .name = name_buf,
                 .runtime_type = runtime_type,
@@ -61,7 +64,7 @@ pub const BackendRouter = struct {
                 .network = null,
                 .storage = null,
             },
-            else => core.types.SandboxConfig{
+            else => types.SandboxConfig{
                 .allocator = self.allocator,
                 .name = name_buf,
                 .runtime_type = runtime_type,
@@ -74,7 +77,7 @@ pub const BackendRouter = struct {
     }
 
     /// Cleanup allocated resources in SandboxConfig
-    fn cleanupSandboxConfig(self: *Self, operation: Operation, sandbox_config: *const core.types.SandboxConfig) void {
+    fn cleanupSandboxConfig(self: *Self, operation: Operation, sandbox_config: *const types.SandboxConfig) void {
         switch (operation) {
             .create, .run => {
                 if (sandbox_config.image) |img| self.allocator.free(img);
@@ -88,7 +91,7 @@ pub const BackendRouter = struct {
     }
 
     pub fn routeAndExecute(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
-        var config_loader = core.ConfigLoader.init(self.allocator);
+        var config_loader = config_module.ConfigLoader.init(self.allocator);
         var cfg = try config_loader.loadDefault();
         defer cfg.deinit();
 
@@ -100,11 +103,11 @@ pub const BackendRouter = struct {
 
         // Convert RuntimeType to ContainerType for backend execution
         const ctype = switch (runtime_type) {
-            .lxc => core.types.ContainerType.lxc,
-            .crun => core.types.ContainerType.crun,
-            .runc => core.types.ContainerType.runc,
-            .vm => core.types.ContainerType.vm,
-            else => core.types.ContainerType.lxc, // fallback
+            .lxc => types.ContainerType.lxc,
+            .crun => types.ContainerType.crun,
+            .runc => types.ContainerType.runc,
+            .vm => types.ContainerType.vm,
+            else => types.ContainerType.lxc, // fallback
         };
 
         if (self.logger) |log| {
@@ -214,6 +217,6 @@ pub const RunConfig = struct {
 };
 
 pub const Config = struct {
-    network: ?core.types.NetworkConfig = null,
-    resources: ?core.types.ResourceLimits = null,
+    network: ?types.NetworkConfig = null,
+    resources: ?types.ResourceLimits = null,
 };
