@@ -267,6 +267,15 @@ pub const BackendRouter = struct {
                     }
                 }
 
+                // Environment variables note: pct does not provide a direct CLI flag
+                // to set arbitrary environment variables at container config time.
+                // We log a warning and skip for now.
+                if (bundle_config.environment) |_| {
+                    if (self.logger) |log| {
+                        try log.warn("Environment variables from OCI bundle are not applied via pct; skipping", .{});
+                    }
+                }
+
                 // Store mapping
                 try vmid_mgr.storeMapping(container_id, vmid, bundle_path);
 
