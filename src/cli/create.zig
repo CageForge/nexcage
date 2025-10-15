@@ -69,7 +69,6 @@ pub const CreateCommand = struct {
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
         const bridge_buf = try allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME);
-        defer allocator.free(bridge_buf);
 
         const config = router.Config{
             .network = core.types.NetworkConfig{
