@@ -241,8 +241,31 @@ pub const BackendRouter = struct {
                 // Generate unique VMID
                 const vmid = try vmid_mgr.generateVmid(container_id);
 
+                // Build net0 arg from provided config (bridge)
+                var net0: ?[]const u8 = null;
+                if (config) |cfg_in| if (cfg_in.network) |net| if (net.bridge) |br| {
+                    net0 = try std.fmt.allocPrint(self.allocator, "name=eth0,bridge={s}", .{ br });
+                };
+                defer if (net0) |n| self.allocator.free(n);
+
                 // Create LXC container using pct CLI
-                try self.createLxcWithPct(vmid, container_id, &bundle_config);
+                try self.createLxcWithPct(vmid, container_id, &bundle_config, net0);
+
+                // Configure mounts from bundle (best-effort)
+                if (bundle_config.mounts) |mounts| {
+                    var idx: u8 = 0;
+                    while (idx < mounts.len) : (idx += 1) {
+                        const m = mounts[idx];
+                        if (m.source != null and m.destination != null) {
+                            var pct2 = backends.proxmox_lxc.pct.Pct.init(self.allocator, self.logger);
+                            // Read-only if type is not null and equals "ro" in options (simple heuristic)
+                            const ro = if (m.options) |opt| std.mem.indexOf(u8, opt, "ro") != null else false;
+                            backends.proxmox_lxc.pct.Pct.setMount(&pct2, vmid, idx, m.source.?, m.destination.?, ro) catch {
+                                if (self.logger) |log| log.warn("mount idx={d} skipped", .{ idx }) catch {};
+                            };
+                        }
+                    }
+                }
 
                 // Store mapping
                 try vmid_mgr.storeMapping(container_id, vmid, bundle_path);
@@ -312,65 +335,18 @@ pub const BackendRouter = struct {
     }
 
     /// Create LXC container using pct CLI
-    fn createLxcWithPct(self: *Self, vmid: u32, hostname: []const u8, bundle_config: *const backends.proxmox_lxc.oci_bundle.OciBundleConfig) !void {
+    fn createLxcWithPct(self: *Self, vmid: u32, hostname: []const u8, bundle_config: *const backends.proxmox_lxc.oci_bundle.OciBundleConfig, net0: ?[]const u8) !void {
         if (self.logger) |log| {
             try log.info("Creating LXC container {d} with pct CLI", .{vmid});
         }
 
-        // Build pct create command
-        var args = std.ArrayListUnmanaged([]const u8){};
-        defer args.deinit(self.allocator);
+        var pct = backends.proxmox_lxc.pct.Pct.init(self.allocator, self.logger);
 
-        try args.append(self.allocator, "pct");
-        try args.append(self.allocator, "create");
-        
-        const vmid_str = try std.fmt.allocPrint(self.allocator, "{d}", .{vmid});
-        defer self.allocator.free(vmid_str);
-        try args.append(self.allocator, vmid_str);
-
-        // Use rootfs from OCI bundle
-        try args.append(self.allocator, bundle_config.rootfs_path);
-
-        // Set hostname
         const hostname_to_use = bundle_config.hostname orelse hostname;
-        const hostname_arg = try std.fmt.allocPrint(self.allocator, "--hostname {s}", .{hostname_to_use});
-        defer self.allocator.free(hostname_arg);
-        try args.append(self.allocator, hostname_arg);
+        const memory_mb: ?u64 = if (bundle_config.memory_limit) |m| m / (1024 * 1024) else null;
+        const cores: ?u32 = if (bundle_config.cpu_limit) |cpu| @as(u32, @intFromFloat(cpu)) else null;
 
-        // Set unprivileged
-        try args.append(self.allocator, "--unprivileged");
-        try args.append(self.allocator, "1");
-
-        // Set memory if specified
-        if (bundle_config.memory_limit) |memory| {
-            const memory_mb = memory / (1024 * 1024);
-            const memory_arg = try std.fmt.allocPrint(self.allocator, "--memory {d}", .{memory_mb});
-            defer self.allocator.free(memory_arg);
-            try args.append(self.allocator, memory_arg);
-        }
-
-        // Set cores if specified
-        if (bundle_config.cpu_limit) |cpu| {
-            const cores = @as(u32, @intFromFloat(cpu));
-            const cores_arg = try std.fmt.allocPrint(self.allocator, "--cores {d}", .{cores});
-            defer self.allocator.free(cores_arg);
-            try args.append(self.allocator, cores_arg);
-        }
-
-        // Execute pct create command
-        const result = try std.process.Child.run(.{
-            .allocator = self.allocator,
-            .argv = args.items,
-        });
-        defer self.allocator.free(result.stdout);
-        defer self.allocator.free(result.stderr);
-
-        if (result.term.Exited != 0) {
-            if (self.logger) |log| {
-                try log.err("Failed to create LXC container: {s}", .{result.stderr});
-            }
-            return error.LxcCreationFailed;
-        }
+        try pct.create(vmid, bundle_config.rootfs_path, hostname_to_use, memory_mb, cores, net0);
 
         if (self.logger) |log| {
             try log.info("Successfully created LXC container {d}", .{vmid});
@@ -379,53 +355,20 @@ pub const BackendRouter = struct {
 
     /// Start LXC container using pct CLI
     fn startLxcWithPct(self: *Self, vmid: u32) !void {
-        const result = try std.process.Child.run(.{
-            .allocator = self.allocator,
-            .argv = &[_][]const u8{ "pct", "start", try std.fmt.allocPrint(self.allocator, "{d}", .{vmid}) },
-        });
-        defer self.allocator.free(result.stdout);
-        defer self.allocator.free(result.stderr);
-
-        if (result.term.Exited != 0) {
-            if (self.logger) |log| {
-                try log.err("Failed to start LXC container {d}: {s}", .{ vmid, result.stderr });
-            }
-            return error.LxcStartFailed;
-        }
+        var pct = backends.proxmox_lxc.pct.Pct.init(self.allocator, self.logger);
+        try pct.start(vmid);
     }
 
     /// Stop LXC container using pct CLI
     fn stopLxcWithPct(self: *Self, vmid: u32) !void {
-        const result = try std.process.Child.run(.{
-            .allocator = self.allocator,
-            .argv = &[_][]const u8{ "pct", "stop", try std.fmt.allocPrint(self.allocator, "{d}", .{vmid}) },
-        });
-        defer self.allocator.free(result.stdout);
-        defer self.allocator.free(result.stderr);
-
-        if (result.term.Exited != 0) {
-            if (self.logger) |log| {
-                try log.err("Failed to stop LXC container {d}: {s}", .{ vmid, result.stderr });
-            }
-            return error.LxcStopFailed;
-        }
+        var pct = backends.proxmox_lxc.pct.Pct.init(self.allocator, self.logger);
+        try pct.stop(vmid);
     }
 
     /// Delete LXC container using pct CLI
     fn deleteLxcWithPct(self: *Self, vmid: u32) !void {
-        const result = try std.process.Child.run(.{
-            .allocator = self.allocator,
-            .argv = &[_][]const u8{ "pct", "destroy", try std.fmt.allocPrint(self.allocator, "{d}", .{vmid}) },
-        });
-        defer self.allocator.free(result.stdout);
-        defer self.allocator.free(result.stderr);
-
-        if (result.term.Exited != 0) {
-            if (self.logger) |log| {
-                try log.err("Failed to delete LXC container {d}: {s}", .{ vmid, result.stderr });
-            }
-            return error.LxcDeleteFailed;
-        }
+        var pct = backends.proxmox_lxc.pct.Pct.init(self.allocator, self.logger);
+        try pct.destroy(vmid);
     }
 };
 
