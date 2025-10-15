@@ -460,6 +460,8 @@ pub const ConfigLoader = struct {
             return .runc;
         } else if (std.mem.eql(u8, type_str, "vm")) {
             return .vm;
+        } else if (std.mem.eql(u8, type_str, "proxmox-lxc")) {
+            return .proxmox_lxc;
         }
         return .lxc; // default
     }
@@ -586,6 +588,7 @@ pub const Config = struct {
             .crun => .crun,
             .runc => .runc,
             .vm => .vm,
+            .proxmox_lxc => .proxmox_lxc,
             else => self.container_config.default_container_type,
         };
     }

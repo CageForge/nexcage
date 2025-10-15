@@ -46,6 +46,7 @@ pub const RuntimeType = enum {
     crun,
     runc,
     vm,
+    proxmox_lxc,
 };
 
 /// Container type enumeration
@@ -54,6 +55,7 @@ pub const ContainerType = enum {
     crun,
     runc,
     vm,
+    proxmox_lxc,
 };
 
 /// Resource limits

@@ -107,6 +107,7 @@ pub const BackendRouter = struct {
             .crun => types.ContainerType.crun,
             .runc => types.ContainerType.runc,
             .vm => types.ContainerType.vm,
+            .proxmox_lxc => types.ContainerType.proxmox_lxc,
             else => types.ContainerType.lxc, // fallback
         };
 
@@ -119,6 +120,7 @@ pub const BackendRouter = struct {
             .crun => try self.executeCrun(operation, container_id, config),
             .runc => try self.executeRunc(operation, container_id, config),
             .vm => try self.executeVm(operation, container_id, config),
+            .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config),
         }
     }
 
@@ -196,6 +198,233 @@ pub const BackendRouter = struct {
                     try log.warn("Proxmox VM backend not fully integrated yet. VM operation skipped.", .{});
                 }
             },
+        }
+    }
+
+    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
+        const sandbox_config = try self.createSandboxConfig(operation, container_id, .proxmox_lxc, config);
+        defer self.cleanupSandboxConfig(operation, &sandbox_config);
+
+        // Initialize state directory
+        const state_dir = "/var/lib/proxmox-lxcri/state";
+        
+        // Initialize managers
+        var vmid_mgr = try backends.proxmox_lxc.vmid_manager.VmidManager.init(self.allocator, self.logger, state_dir);
+        defer vmid_mgr.deinit();
+
+        var state_mgr = try backends.proxmox_lxc.state_manager.StateManager.init(self.allocator, self.logger, state_dir);
+        defer state_mgr.deinit();
+
+        switch (operation) {
+            .create => |create_config| {
+                if (self.logger) |log| {
+                    try log.info("Creating Proxmox LXC container {s} with image {s}", .{ container_id, create_config.image });
+                }
+
+                // Check if container already exists
+                if (try state_mgr.stateExists(container_id)) {
+                    if (self.logger) |log| {
+                        try log.err("Container {s} already exists", .{container_id});
+                    }
+                    return error.ContainerExists;
+                }
+
+                // For OCI bundle support, we need to parse the bundle
+                // For now, treat the image as bundle path
+                const bundle_path = create_config.image;
+                
+                // Parse OCI bundle
+                var bundle_parser = backends.proxmox_lxc.oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+                var bundle_config = try bundle_parser.parseBundle(bundle_path);
+                defer bundle_config.deinit();
+
+                // Generate unique VMID
+                const vmid = try vmid_mgr.generateVmid(container_id);
+
+                // Create LXC container using pct CLI
+                try self.createLxcWithPct(vmid, container_id, &bundle_config);
+
+                // Store mapping
+                try vmid_mgr.storeMapping(container_id, vmid, bundle_path);
+
+                // Create state
+                try state_mgr.createState(container_id, vmid, bundle_path);
+
+                if (self.logger) |log| {
+                    try log.info("Successfully created Proxmox LXC container {s} with VMID {d}", .{ container_id, vmid });
+                }
+            },
+            .start => {
+                // Get vmid from mapping and start container
+                const vmid = try vmid_mgr.getVmid(container_id);
+                try self.startLxcWithPct(vmid);
+                
+                // Update state
+                try state_mgr.updateState(container_id, "running", 0);
+
+                if (self.logger) |log| {
+                    try log.info("Started Proxmox LXC container {s} (VMID: {d})", .{ container_id, vmid });
+                }
+            },
+            .stop => {
+                // Get vmid from mapping and stop container
+                const vmid = try vmid_mgr.getVmid(container_id);
+                try self.stopLxcWithPct(vmid);
+                
+                // Update state
+                try state_mgr.updateState(container_id, "stopped", 0);
+
+                if (self.logger) |log| {
+                    try log.info("Stopped Proxmox LXC container {s} (VMID: {d})", .{ container_id, vmid });
+                }
+            },
+            .delete => {
+                // Get vmid from mapping and delete container
+                const vmid = try vmid_mgr.getVmid(container_id);
+                try self.deleteLxcWithPct(vmid);
+                
+                // Remove mapping and state
+                try vmid_mgr.removeMapping(container_id);
+                try state_mgr.deleteState(container_id);
+
+                if (self.logger) |log| {
+                    try log.info("Deleted Proxmox LXC container {s} (VMID: {d})", .{ container_id, vmid });
+                }
+            },
+            .run => |run_config| {
+                // Create and start container
+                if (self.logger) |log| {
+                    try log.info("Running Proxmox LXC container {s} with image {s}", .{ container_id, run_config.image });
+                }
+                
+                // First create the container
+                const create_config = CreateConfig{
+                    .image = run_config.image,
+                };
+                const create_op = Operation{ .create = create_config };
+                try self.executeProxmoxLxc(create_op, container_id, config);
+                
+                // Then start it
+                const start_op = Operation{ .start = {} };
+                try self.executeProxmoxLxc(start_op, container_id, config);
+            },
+        }
+    }
+
+    /// Create LXC container using pct CLI
+    fn createLxcWithPct(self: *Self, vmid: u32, hostname: []const u8, bundle_config: *const backends.proxmox_lxc.oci_bundle.OciBundleConfig) !void {
+        if (self.logger) |log| {
+            try log.info("Creating LXC container {d} with pct CLI", .{vmid});
+        }
+
+        // Build pct create command
+        var args = std.ArrayListUnmanaged([]const u8){};
+        defer args.deinit(self.allocator);
+
+        try args.append(self.allocator, "pct");
+        try args.append(self.allocator, "create");
+        
+        const vmid_str = try std.fmt.allocPrint(self.allocator, "{d}", .{vmid});
+        defer self.allocator.free(vmid_str);
+        try args.append(self.allocator, vmid_str);
+
+        // Use rootfs from OCI bundle
+        try args.append(self.allocator, bundle_config.rootfs_path);
+
+        // Set hostname
+        const hostname_to_use = bundle_config.hostname orelse hostname;
+        const hostname_arg = try std.fmt.allocPrint(self.allocator, "--hostname {s}", .{hostname_to_use});
+        defer self.allocator.free(hostname_arg);
+        try args.append(self.allocator, hostname_arg);
+
+        // Set unprivileged
+        try args.append(self.allocator, "--unprivileged");
+        try args.append(self.allocator, "1");
+
+        // Set memory if specified
+        if (bundle_config.memory_limit) |memory| {
+            const memory_mb = memory / (1024 * 1024);
+            const memory_arg = try std.fmt.allocPrint(self.allocator, "--memory {d}", .{memory_mb});
+            defer self.allocator.free(memory_arg);
+            try args.append(self.allocator, memory_arg);
+        }
+
+        // Set cores if specified
+        if (bundle_config.cpu_limit) |cpu| {
+            const cores = @as(u32, @intFromFloat(cpu));
+            const cores_arg = try std.fmt.allocPrint(self.allocator, "--cores {d}", .{cores});
+            defer self.allocator.free(cores_arg);
+            try args.append(self.allocator, cores_arg);
+        }
+
+        // Execute pct create command
+        const result = try std.process.Child.run(.{
+            .allocator = self.allocator,
+            .argv = args.items,
+        });
+        defer self.allocator.free(result.stdout);
+        defer self.allocator.free(result.stderr);
+
+        if (result.term.Exited != 0) {
+            if (self.logger) |log| {
+                try log.err("Failed to create LXC container: {s}", .{result.stderr});
+            }
+            return error.LxcCreationFailed;
+        }
+
+        if (self.logger) |log| {
+            try log.info("Successfully created LXC container {d}", .{vmid});
+        }
+    }
+
+    /// Start LXC container using pct CLI
+    fn startLxcWithPct(self: *Self, vmid: u32) !void {
+        const result = try std.process.Child.run(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{ "pct", "start", try std.fmt.allocPrint(self.allocator, "{d}", .{vmid}) },
+        });
+        defer self.allocator.free(result.stdout);
+        defer self.allocator.free(result.stderr);
+
+        if (result.term.Exited != 0) {
+            if (self.logger) |log| {
+                try log.err("Failed to start LXC container {d}: {s}", .{ vmid, result.stderr });
+            }
+            return error.LxcStartFailed;
+        }
+    }
+
+    /// Stop LXC container using pct CLI
+    fn stopLxcWithPct(self: *Self, vmid: u32) !void {
+        const result = try std.process.Child.run(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{ "pct", "stop", try std.fmt.allocPrint(self.allocator, "{d}", .{vmid}) },
+        });
+        defer self.allocator.free(result.stdout);
+        defer self.allocator.free(result.stderr);
+
+        if (result.term.Exited != 0) {
+            if (self.logger) |log| {
+                try log.err("Failed to stop LXC container {d}: {s}", .{ vmid, result.stderr });
+            }
+            return error.LxcStopFailed;
+        }
+    }
+
+    /// Delete LXC container using pct CLI
+    fn deleteLxcWithPct(self: *Self, vmid: u32) !void {
+        const result = try std.process.Child.run(.{
+            .allocator = self.allocator,
+            .argv = &[_][]const u8{ "pct", "destroy", try std.fmt.allocPrint(self.allocator, "{d}", .{vmid}) },
+        });
+        defer self.allocator.free(result.stdout);
+        defer self.allocator.free(result.stderr);
+
+        if (result.term.Exited != 0) {
+            if (self.logger) |log| {
+                try log.err("Failed to delete LXC container {d}: {s}", .{ vmid, result.stderr });
+            }
+            return error.LxcDeleteFailed;
         }
     }
 };
