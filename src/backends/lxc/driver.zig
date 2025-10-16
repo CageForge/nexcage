@@ -49,21 +49,36 @@ pub const LxcDriver = struct {
         // Map image to ostemplate (simple heuristic) - unused for now
         _ = config.image;
 
-        // Workaround for segmentation fault: use simple pct list instead of create
-        // This allows the system to work while we investigate the segfault issue
+        // Use pct create command
         const args = [_][]const u8{
             "pct",
-            "list",
+            "create",
+            vmid,
+            "local:vztmpl/ubuntu-20.04-standard_20.04-1_amd64.tar.gz", // Default template
+            "--hostname", config.name,
+            "--memory", "512",
+            "--cores", "1",
+            "--net0", "name=eth0,bridge=vmbr0,ip=dhcp",
         };
 
         if (self.logger) |log| {
-            try log.debug("LXC create: Using workaround (pct list) due to segmentation fault in pct create", .{});
-            try log.warn("LXC container creation disabled due to segmentation fault. Use workaround: pct create manually", .{});
+            try log.debug("LXC create: Creating container with pct create", .{});
         }
 
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
+        
+        // Debug output
+        const stdout = std.fs.File.stdout();
+        try stdout.writeAll("DEBUG: pct create result - exit_code: ");
+        try stdout.writeAll(std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{result.exit_code}) catch "unknown");
+        try stdout.writeAll(", stdout: ");
+        try stdout.writeAll(result.stdout);
+        try stdout.writeAll(", stderr: ");
+        try stdout.writeAll(result.stderr);
+        try stdout.writeAll("\n");
+        
         if (result.exit_code != 0) {
             if (self.logger) |log| try log.err("Failed to create LXC via pct: {s}", .{result.stderr});
             return mapLxcError(result.exit_code, result.stderr);

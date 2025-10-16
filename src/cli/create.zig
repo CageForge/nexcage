@@ -36,6 +36,10 @@ pub const CreateCommand = struct {
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        // Debug: Add simple output to verify command is running
+        const stdout = std.fs.File.stdout();
+        try stdout.writeAll("DEBUG: Create command started\n");
+        
         try self.logCommandStart("create");
 
         // Check for help flag

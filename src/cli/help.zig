@@ -20,38 +20,39 @@ pub const HelpCommand = struct {
     }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        const global_registry = registry.getGlobalRegistry() orelse return errors.CliError.OperationFailed;
-
+        // Use stdout instead of debug.print for proper output
+        const stdout = std.fs.File.stdout();
+        
         if (options.args) |args| {
             if (args.len > 0) {
                 // Show help for specific command
                 const command_name = args[0];
-                const help_text = try global_registry.getHelp(command_name, allocator);
+                const help_text = try self.getCommandHelp(command_name, allocator);
                 defer allocator.free(help_text);
-                std.debug.print("{s}\n", .{help_text});
+                try stdout.writeAll(help_text);
+                try stdout.writeAll("\n");
             } else {
                 // Show general help
                 const help_text = try self.help(allocator);
                 defer allocator.free(help_text);
-                std.debug.print("{s}\n", .{help_text});
+                try stdout.writeAll(help_text);
             }
         } else {
             // Show general help
             const help_text = try self.help(allocator);
             defer allocator.free(help_text);
-            std.debug.print("{s}\n", .{help_text});
+            try stdout.writeAll(help_text);
         }
+    }
+
+    fn getCommandHelp(self: *Self, command_name: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+        _ = self;
+        // For now, return a simple help message
+        return std.fmt.allocPrint(allocator, "Help for command '{s}' - use 'nexcage {s} --help' for detailed help", .{command_name, command_name});
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-
-        const global_registry = registry.getGlobalRegistry() orelse {
-            return allocator.dupe(u8, "Error: Command registry not initialized");
-        };
-
-        const command_names = try global_registry.list(allocator);
-        defer allocator.free(command_names);
 
         var help_text = std.array_list.Managed(u8).init(allocator);
         defer help_text.deinit();
@@ -59,13 +60,15 @@ pub const HelpCommand = struct {
         try help_text.appendSlice("nexcage - Proxmox LXC Runtime Interface\n\n");
         try help_text.appendSlice("Usage: nexcage [COMMAND] [OPTIONS]\n\n");
         try help_text.appendSlice("Commands:\n");
-
-        for (command_names) |name| {
-            const command = global_registry.get(name) orelse continue;
-            try help_text.writer().print("  {s:<12} {s}\n", .{ name, command.description });
-        }
-
-        try help_text.appendSlice("\nUse 'nexcage help <command>' for more information about a command.\n");
+        try help_text.appendSlice("  create     Create a new container\n");
+        try help_text.appendSlice("  start      Start a container\n");
+        try help_text.appendSlice("  stop       Stop a container\n");
+        try help_text.appendSlice("  delete     Delete a container\n");
+        try help_text.appendSlice("  list       List containers\n");
+        try help_text.appendSlice("  run        Run a command in a container\n");
+        try help_text.appendSlice("  help       Show this help message\n");
+        try help_text.appendSlice("  version    Show version information\n");
+        try help_text.appendSlice("\nUse 'nexcage <command> --help' for command-specific help\n");
 
         return help_text.toOwnedSlice();
     }
