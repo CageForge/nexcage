@@ -116,7 +116,7 @@ pub const BackendRouter = struct {
         }
 
         switch (ctype) {
-            .lxc => try self.executeLxc(operation, container_id, config),
+            .lxc => try self.executeProxmoxLxc(operation, container_id, config),
             .crun => try self.executeCrun(operation, container_id, config),
             .runc => try self.executeRunc(operation, container_id, config),
             .vm => try self.executeVm(operation, container_id, config),
@@ -124,21 +124,35 @@ pub const BackendRouter = struct {
         }
     }
 
-    fn executeLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
-        const sandbox_config = try self.createSandboxConfig(operation, container_id, .lxc, config);
+    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
+        const sandbox_config = try self.createSandboxConfig(operation, container_id, .proxmox_lxc, config);
         defer self.cleanupSandboxConfig(operation, &sandbox_config);
 
-        const lxc_backend = try backends.lxc.LxcBackend.init(self.allocator, sandbox_config);
-        defer lxc_backend.deinit();
+        // Create Proxmox LXC backend with default config
+        const proxmox_config = types.ProxmoxLxcBackendConfig{
+            .proxmox_host = "localhost",
+            .proxmox_port = 8006,
+            .proxmox_token = "",
+            .proxmox_node = "localhost",
+            .verify_ssl = false,
+            .timeout = 30,
+        };
+
+        const proxmox_backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(self.allocator, proxmox_config);
+        defer proxmox_backend.deinit();
+
+        if (self.logger) |log| {
+            proxmox_backend.setLogger(log);
+        }
 
         switch (operation) {
-            .create => try lxc_backend.create(sandbox_config),
-            .start => try lxc_backend.start(container_id),
-            .stop => try lxc_backend.stop(container_id),
-            .delete => try lxc_backend.delete(container_id),
+            .create => try proxmox_backend.create(sandbox_config),
+            .start => try proxmox_backend.start(container_id),
+            .stop => try proxmox_backend.stop(container_id),
+            .delete => try proxmox_backend.delete(container_id),
             .run => {
-                try lxc_backend.create(sandbox_config);
-                try lxc_backend.start(container_id);
+                try proxmox_backend.create(sandbox_config);
+                try proxmox_backend.start(container_id);
             },
         }
     }
@@ -201,147 +215,6 @@ pub const BackendRouter = struct {
         }
     }
 
-    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
-        const sandbox_config = try self.createSandboxConfig(operation, container_id, .proxmox_lxc, config);
-        defer self.cleanupSandboxConfig(operation, &sandbox_config);
-
-        // Initialize state directory
-        const state_dir = "/var/lib/proxmox-lxcri/state";
-        
-        // Initialize managers
-        var vmid_mgr = try backends.proxmox_lxc.vmid_manager.VmidManager.init(self.allocator, self.logger, state_dir);
-        defer vmid_mgr.deinit();
-
-        var state_mgr = try backends.proxmox_lxc.state_manager.StateManager.init(self.allocator, self.logger, state_dir);
-        defer state_mgr.deinit();
-
-        switch (operation) {
-            .create => |create_config| {
-                if (self.logger) |log| {
-                    try log.info("Creating Proxmox LXC container {s} with image {s}", .{ container_id, create_config.image });
-                }
-
-                // Check if container already exists
-                if (try state_mgr.stateExists(container_id)) {
-                    if (self.logger) |log| {
-                        try log.err("Container {s} already exists", .{container_id});
-                    }
-                    return error.ContainerExists;
-                }
-
-                // For OCI bundle support, we need to parse the bundle
-                // For now, treat the image as bundle path
-                const bundle_path = create_config.image;
-                
-                // Parse OCI bundle
-                var bundle_parser = backends.proxmox_lxc.oci_bundle.OciBundleParser.init(self.allocator, self.logger);
-                var bundle_config = try bundle_parser.parseBundle(bundle_path);
-                defer bundle_config.deinit();
-
-                // Generate unique VMID
-                const vmid = try vmid_mgr.generateVmid(container_id);
-
-                // Build net0 arg from provided config (bridge)
-                var net0: ?[]const u8 = null;
-                if (config) |cfg_in| if (cfg_in.network) |net| if (net.bridge) |br| {
-                    net0 = try std.fmt.allocPrint(self.allocator, "name=eth0,bridge={s}", .{ br });
-                };
-                defer if (net0) |n| self.allocator.free(n);
-
-                // Create LXC container using pct CLI
-                try self.createLxcWithPct(vmid, container_id, &bundle_config, net0);
-
-                // Configure mounts from bundle (best-effort)
-                if (bundle_config.mounts) |mounts| {
-                    var idx: u8 = 0;
-                    while (idx < mounts.len) : (idx += 1) {
-                        const m = mounts[idx];
-                        if (m.source != null and m.destination != null) {
-                            var pct2 = backends.proxmox_lxc.pct.Pct.init(self.allocator, self.logger);
-                            // Read-only if type is not null and equals "ro" in options (simple heuristic)
-                            const ro = if (m.options) |opt| std.mem.indexOf(u8, opt, "ro") != null else false;
-                            backends.proxmox_lxc.pct.Pct.setMount(&pct2, vmid, idx, m.source.?, m.destination.?, ro) catch {
-                                if (self.logger) |log| log.warn("mount idx={d} skipped", .{ idx }) catch {};
-                            };
-                        }
-                    }
-                }
-
-                // Environment variables note: pct does not provide a direct CLI flag
-                // to set arbitrary environment variables at container config time.
-                // We log a warning and skip for now.
-                if (bundle_config.environment) |_| {
-                    if (self.logger) |log| {
-                        try log.warn("Environment variables from OCI bundle are not applied via pct; skipping", .{});
-                    }
-                }
-
-                // Store mapping
-                try vmid_mgr.storeMapping(container_id, vmid, bundle_path);
-
-                // Create state
-                try state_mgr.createState(container_id, vmid, bundle_path);
-
-                if (self.logger) |log| {
-                    try log.info("Successfully created Proxmox LXC container {s} with VMID {d}", .{ container_id, vmid });
-                }
-            },
-            .start => {
-                // Get vmid from mapping and start container
-                const vmid = try vmid_mgr.getVmid(container_id);
-                try self.startLxcWithPct(vmid);
-                
-                // Update state
-                try state_mgr.updateState(container_id, "running", 0);
-
-                if (self.logger) |log| {
-                    try log.info("Started Proxmox LXC container {s} (VMID: {d})", .{ container_id, vmid });
-                }
-            },
-            .stop => {
-                // Get vmid from mapping and stop container
-                const vmid = try vmid_mgr.getVmid(container_id);
-                try self.stopLxcWithPct(vmid);
-                
-                // Update state
-                try state_mgr.updateState(container_id, "stopped", 0);
-
-                if (self.logger) |log| {
-                    try log.info("Stopped Proxmox LXC container {s} (VMID: {d})", .{ container_id, vmid });
-                }
-            },
-            .delete => {
-                // Get vmid from mapping and delete container
-                const vmid = try vmid_mgr.getVmid(container_id);
-                try self.deleteLxcWithPct(vmid);
-                
-                // Remove mapping and state
-                try vmid_mgr.removeMapping(container_id);
-                try state_mgr.deleteState(container_id);
-
-                if (self.logger) |log| {
-                    try log.info("Deleted Proxmox LXC container {s} (VMID: {d})", .{ container_id, vmid });
-                }
-            },
-            .run => |run_config| {
-                // Create and start container
-                if (self.logger) |log| {
-                    try log.info("Running Proxmox LXC container {s} with image {s}", .{ container_id, run_config.image });
-                }
-                
-                // First create the container
-                const create_config = CreateConfig{
-                    .image = run_config.image,
-                };
-                const create_op = Operation{ .create = create_config };
-                try self.executeProxmoxLxc(create_op, container_id, config);
-                
-                // Then start it
-                const start_op = Operation{ .start = {} };
-                try self.executeProxmoxLxc(start_op, container_id, config);
-            },
-        }
-    }
 
     /// Create LXC container using pct CLI
     fn createLxcWithPct(self: *Self, vmid: u32, hostname: []const u8, bundle_config: *const backends.proxmox_lxc.oci_bundle.OciBundleConfig, net0: ?[]const u8) !void {

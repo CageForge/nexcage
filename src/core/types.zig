@@ -282,3 +282,13 @@ pub const ContainerConfig = struct {
 pub const SIGINT = 2;
 pub const SIGTERM = 15;
 pub const SIGHUP = 1;
+
+/// Proxmox LXC backend configuration
+pub const ProxmoxLxcBackendConfig = struct {
+    proxmox_host: []const u8,
+    proxmox_port: u16 = 8006,
+    proxmox_token: []const u8,
+    proxmox_node: []const u8,
+    verify_ssl: bool = false,
+    timeout: ?u64 = null,
+};

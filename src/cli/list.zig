@@ -43,10 +43,9 @@ pub const ListCommand = struct {
         }
 
         // List from each backend type
-        try self.listFromBackend(allocator, .lxc, &all_containers);
+        try self.listFromBackend(allocator, .proxmox_lxc, &all_containers);
         try self.listFromBackend(allocator, .crun, &all_containers);
         try self.listFromBackend(allocator, .runc, &all_containers);
-        try self.listFromBackend(allocator, .proxmox_lxc, &all_containers);
         try self.listFromBackend(allocator, .vm, &all_containers);
 
         // Print aggregated results (similar to runc list format)
@@ -114,7 +113,16 @@ pub const ListCommand = struct {
                     }
                 }
 
-                const lxc_backend = backends.lxc.LxcBackend.init(allocator, sandbox_config) catch {
+                const proxmox_config = core.types.ProxmoxLxcBackendConfig{
+                    .proxmox_host = "localhost",
+                    .proxmox_port = 8006,
+                    .proxmox_token = "",
+                    .proxmox_node = "localhost",
+                    .verify_ssl = false,
+                    .timeout = 30,
+                };
+
+                const lxc_backend = backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config) catch {
                     return; // Skip if LXC backend not available
                 };
                 defer lxc_backend.deinit();
@@ -127,38 +135,24 @@ pub const ListCommand = struct {
                 }
             },
             .proxmox_lxc => {
-                // List Proxmox LXC containers via pct
-                var pct = backends.proxmox_lxc.pct.Pct.init(allocator, null);
-                var result = pct.run(&[_][]const u8{"pct", "list"}) catch return;
-                defer result.deinit(allocator);
+                // List Proxmox LXC containers via driver
+                const proxmox_config = core.types.ProxmoxLxcBackendConfig{
+                    .proxmox_host = "localhost",
+                    .proxmox_port = 8006,
+                    .proxmox_token = "",
+                    .proxmox_node = "localhost",
+                    .verify_ssl = false,
+                    .timeout = 30,
+                };
+
+                const proxmox_backend = backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config) catch return;
+                defer proxmox_backend.deinit();
+
+                const proxmox_containers = proxmox_backend.list(allocator) catch return;
+                defer allocator.free(proxmox_containers);
                 
-                if (result.exit_code != 0) return; // Skip if pct fails
-                
-                // Parse pct list output (simple parsing)
-                var lines = std.mem.splitScalar(u8, result.stdout, '\n');
-                var line_idx: u32 = 0;
-                while (lines.next()) |line| {
-                    if (line_idx == 0) {
-                        line_idx += 1;
-                        continue; // Skip header
-                    }
-                    if (line.len == 0) continue;
-                    
-                    // Simple parsing: assume format "VMID STATUS NAME"
-                    var fields = std.mem.splitScalar(u8, line, ' ');
-                    const vmid_str = fields.next() orelse continue;
-                    const status_str = fields.next() orelse "unknown";
-                    const name_str = fields.next() orelse "unknown";
-                    
-                    const container = core.ContainerInfo{
-                        .allocator = allocator,
-                        .id = try allocator.dupe(u8, vmid_str),
-                        .name = try allocator.dupe(u8, name_str),
-                        .status = try allocator.dupe(u8, status_str),
-                        .backend_type = try allocator.dupe(u8, "proxmox-lxc"),
-                        .runtime = try allocator.dupe(u8, "pct"),
-                    };
-                    try containers.append(allocator, container);
+                for (proxmox_containers) |*c| {
+                    try containers.append(allocator, c.*);
                 }
             },
             .crun, .runc => {
