@@ -118,6 +118,30 @@ fn registerCommand(
     try registry.register(iface);
 }
 
+fn registerCommandWithLogger(
+    registry: *CommandRegistry,
+    cmd: anytype,
+    comptime CommandType: type,
+    logger: *const core.LogContext,
+) !void {
+    const iface = try registry.allocator.create(interfaces.CommandInterface);
+    iface.* = .{
+        .name = cmd.name,
+        .description = cmd.description,
+        .ctx = cmd,
+        .execute = @ptrCast(&CommandType.execute),
+        .help = @ptrCast(&CommandType.help),
+        .validate = @ptrCast(&CommandType.validate),
+    };
+    
+    // Set logger for the command
+    if (@hasDecl(CommandType, "setLogger")) {
+        cmd.setLogger(@constCast(logger));
+    }
+    
+    try registry.register(iface);
+}
+
 /// Register all built-in commands
 pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
     try registerCommand(registry, &run_cmd, run.RunCommand);
@@ -128,4 +152,16 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
     try registerCommand(registry, &stop_cmd, stop.StopCommand);
     try registerCommand(registry, &delete_cmd, delete.DeleteCommand);
     try registerCommand(registry, &list_cmd, list.ListCommand);
+}
+
+/// Register all built-in commands with logger
+pub fn registerBuiltinCommandsWithLogger(registry: *CommandRegistry, logger: *const core.LogContext) !void {
+    try registerCommandWithLogger(registry, &run_cmd, run.RunCommand, logger);
+    try registerCommandWithLogger(registry, &help_cmd, help.HelpCommand, logger);
+    try registerCommandWithLogger(registry, &version_cmd, version.VersionCommand, logger);
+    try registerCommandWithLogger(registry, &create_cmd, create.CreateCommand, logger);
+    try registerCommandWithLogger(registry, &start_cmd, start.StartCommand, logger);
+    try registerCommandWithLogger(registry, &stop_cmd, stop.StopCommand, logger);
+    try registerCommandWithLogger(registry, &delete_cmd, delete.DeleteCommand, logger);
+    try registerCommandWithLogger(registry, &list_cmd, list.ListCommand, logger);
 }

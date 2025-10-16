@@ -40,7 +40,7 @@ pub const AppContext = struct {
         var command_registry = cli.CommandRegistry.init(allocator);
 
         // Register built-in commands
-        try cli.registerBuiltinCommands(&command_registry);
+        try cli.registerBuiltinCommandsWithLogger(&command_registry, &logger);
 
         return AppContext{
             .allocator = allocator,
