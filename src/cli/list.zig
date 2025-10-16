@@ -6,28 +6,6 @@ const constants = core.constants;
 const errors = @import("errors.zig");
 const base_command = @import("base_command.zig");
 
-/// Container info for aggregated listing
-const ContainerInfo = struct {
-    allocator: std.mem.Allocator,
-    id: []const u8,
-    name: []const u8,
-    status: []const u8,
-    backend_type: []const u8,
-    created: ?[]const u8 = null,
-    image: ?[]const u8 = null,
-    runtime: ?[]const u8 = null,
-
-    pub fn deinit(self: *ContainerInfo) void {
-        self.allocator.free(self.id);
-        self.allocator.free(self.name);
-        self.allocator.free(self.status);
-        self.allocator.free(self.backend_type);
-        if (self.created) |c| self.allocator.free(c);
-        if (self.image) |i| self.allocator.free(i);
-        if (self.runtime) |r| self.allocator.free(r);
-    }
-};
-
 /// List command implementation for modular architecture
 pub const ListCommand = struct {
     const Self = @This();
@@ -56,7 +34,7 @@ pub const ListCommand = struct {
         _ = options; // Not used in aggregated listing
 
         // Collect containers from all backends
-        var all_containers = std.ArrayListUnmanaged(ContainerInfo){};
+        var all_containers = std.ArrayListUnmanaged(core.ContainerInfo){};
         defer {
             for (all_containers.items) |*container| {
                 container.deinit();
@@ -104,11 +82,11 @@ pub const ListCommand = struct {
         // Command completed
     }
 
-    fn listFromBackend(self: *Self, allocator: std.mem.Allocator, backend_type: core.types.RuntimeType, containers: *std.ArrayListUnmanaged(ContainerInfo)) !void {
+    fn listFromBackend(self: *Self, allocator: std.mem.Allocator, backend_type: core.types.RuntimeType, containers: *std.ArrayListUnmanaged(core.ContainerInfo)) !void {
         _ = self; // Avoid unused warnings
         switch (backend_type) {
             .lxc => {
-                // List LXC containers
+                // List LXC containers using backend
                 const sandbox_config = core.types.SandboxConfig{
                     .allocator = allocator,
                     .name = try allocator.dupe(u8, "default"),
@@ -145,16 +123,7 @@ pub const ListCommand = struct {
                 defer allocator.free(lxc_containers);
                 
                 for (lxc_containers) |*c| {
-                    const container = ContainerInfo{
-                        .allocator = allocator,
-                        .id = try allocator.dupe(u8, c.name),
-                        .name = try allocator.dupe(u8, c.name),
-                        .status = try allocator.dupe(u8, @tagName(c.state)),
-                        .backend_type = try allocator.dupe(u8, "lxc"),
-                        .runtime = try allocator.dupe(u8, "lxc"),
-                    };
-                    try containers.append(allocator, container);
-                    c.deinit();
+                    try containers.append(allocator, c.*);
                 }
             },
             .proxmox_lxc => {
@@ -181,7 +150,7 @@ pub const ListCommand = struct {
                     const status_str = fields.next() orelse "unknown";
                     const name_str = fields.next() orelse "unknown";
                     
-                    const container = ContainerInfo{
+                    const container = core.ContainerInfo{
                         .allocator = allocator,
                         .id = try allocator.dupe(u8, vmid_str),
                         .name = try allocator.dupe(u8, name_str),

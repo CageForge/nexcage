@@ -16,6 +16,7 @@ pub const StorageConfig = types.StorageConfig;
 pub const SecurityConfig = types.SecurityConfig;
 pub const ResourceLimits = types.ResourceLimits;
 pub const RuntimeOptions = types.RuntimeOptions;
+pub const ContainerInfo = interfaces.ContainerInfo;
 pub const LogLevel = logging.LogLevel;
 pub const LogContext = logging.LogContext;
 pub const Config = config.Config;

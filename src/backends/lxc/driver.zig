@@ -171,7 +171,7 @@ pub const LxcDriver = struct {
         }
     }
 
-    pub fn list(self: *Self, allocator: std.mem.Allocator) ![]interfaces.ContainerInfo {
+    pub fn list(self: *Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
         if (self.logger) |log| {
             try log.info("Listing LXC containers", .{});
         }
@@ -295,13 +295,6 @@ pub const LxcDriver = struct {
         }
     }
 
-    fn mapState(state_str: []const u8) interfaces.ContainerState {
-        if (std.ascii.eqlIgnoreCase(state_str, "RUNNING")) return interfaces.ContainerState.running;
-        if (std.ascii.eqlIgnoreCase(state_str, "STOPPED")) return interfaces.ContainerState.stopped;
-        if (std.ascii.eqlIgnoreCase(state_str, "CREATED")) return interfaces.ContainerState.created;
-        if (std.ascii.eqlIgnoreCase(state_str, "PAUSED")) return interfaces.ContainerState.paused;
-        return interfaces.ContainerState.unknown;
-    }
 
     fn mapLxcError(exit_code: u8, stderr: []const u8) core.Error {
         _ = exit_code;
@@ -324,27 +317,27 @@ pub const LxcDriver = struct {
         return core.Error.RuntimeError;
     }
 
-    fn parseLxcLsJson(allocator: std.mem.Allocator, json_bytes: []const u8) ![]interfaces.ContainerInfo {
+    fn parseLxcLsJson(allocator: std.mem.Allocator, json_bytes: []const u8) ![]core.ContainerInfo {
         var pr = std.json.parseFromSlice(std.json.Value, allocator, json_bytes, .{}) catch {
-            return allocator.alloc(interfaces.ContainerInfo, 0);
+            return allocator.alloc(core.ContainerInfo, 0);
         };
         defer pr.deinit();
 
         const value = pr.value;
-        if (value != .array) return allocator.alloc(interfaces.ContainerInfo, 0);
+        if (value != .array) return allocator.alloc(core.ContainerInfo, 0);
 
         const arr = value.array;
-        var containers = try allocator.alloc(interfaces.ContainerInfo, arr.items.len);
+        var containers = try allocator.alloc(core.ContainerInfo, arr.items.len);
         var count: usize = 0;
         for (arr.items) |item| {
             switch (item) {
                 .string => |s| {
-                    containers[count] = interfaces.ContainerInfo{
+                    containers[count] = core.ContainerInfo{
                         .allocator = allocator,
                         .id = try allocator.dupe(u8, s),
                         .name = try allocator.dupe(u8, s),
-                        .state = interfaces.ContainerState.unknown,
-                        .runtime_type = .lxc,
+                        .status = try allocator.dupe(u8, "unknown"),
+                        .backend_type = try allocator.dupe(u8, "lxc"),
                     };
                     count += 1;
                 },
@@ -360,13 +353,14 @@ pub const LxcDriver = struct {
                         }
                     }
                     if (name_opt) |name_val| {
-                        const st = if (state_str_opt) |st_str| mapState(st_str) else interfaces.ContainerState.unknown;
-                        containers[count] = interfaces.ContainerInfo{
+                        const status_str = if (state_str_opt) |st_str| st_str else "unknown";
+                        containers[count] = core.ContainerInfo{
                             .allocator = allocator,
                             .id = try allocator.dupe(u8, name_val),
                             .name = try allocator.dupe(u8, name_val),
-                            .state = st,
-                            .runtime_type = .lxc,
+                            .status = try allocator.dupe(u8, status_str),
+                            .backend_type = try allocator.dupe(u8, "lxc"),
+                            .runtime = try allocator.dupe(u8, "lxc"),
                         };
                         count += 1;
                     }
@@ -384,10 +378,10 @@ pub const LxcDriver = struct {
         return containers;
     }
 
-    fn parsePctList(allocator: std.mem.Allocator, text: []const u8) ![]interfaces.ContainerInfo {
+    fn parsePctList(allocator: std.mem.Allocator, text: []const u8) ![]core.ContainerInfo {
         // pct list typical table with header: VMID NAME STATUS ...
         var lines = std.mem.splitScalar(u8, text, '\n');
-        var items = try allocator.alloc(interfaces.ContainerInfo, 0);
+        var items = try allocator.alloc(core.ContainerInfo, 0);
         var count: usize = 0;
         // skip header
         var first = true;
@@ -400,17 +394,17 @@ pub const LxcDriver = struct {
             const vmid = it.next() orelse continue;
             const name = it.next() orelse vmid;
             const status = it.next() orelse "unknown";
-            const state = mapState(status);
             // grow array
             const new_len = count + 1;
             const new_items = try allocator.realloc(items, new_len);
             items = new_items;
-            items[count] = interfaces.ContainerInfo{
+            items[count] = core.ContainerInfo{
                 .allocator = allocator,
-                .id = try allocator.dupe(u8, name),
+                .id = try allocator.dupe(u8, vmid),
                 .name = try allocator.dupe(u8, name),
-                .state = state,
-                .runtime_type = .lxc,
+                .status = try allocator.dupe(u8, status),
+                .backend_type = try allocator.dupe(u8, "lxc"),
+                .runtime = try allocator.dupe(u8, "lxc"),
             };
             count = new_len;
         }
@@ -581,7 +575,7 @@ pub const LxcBackend = struct {
         try self.driver.delete(container_id);
     }
 
-    pub fn list(self: *Self, allocator: std.mem.Allocator) ![]interfaces.ContainerInfo {
+    pub fn list(self: *Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
         return try self.driver.list(allocator);
     }
 

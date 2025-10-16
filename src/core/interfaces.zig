@@ -34,22 +34,25 @@ pub const BackendInterface = struct {
     exec: *const fn (self: *Self, container_id: []const u8, command: []const []const u8, allocator: std.mem.Allocator) Error!void,
 };
 
-/// Container information
+/// Standardized container information structure
 pub const ContainerInfo = struct {
     allocator: std.mem.Allocator,
     id: []const u8,
     name: []const u8,
-    state: ContainerState,
-    runtime_type: types.RuntimeType,
-    created_at: ?i64 = null,
-    started_at: ?i64 = null,
+    status: []const u8,
+    backend_type: []const u8,
+    created: ?[]const u8 = null,
     image: ?[]const u8 = null,
-    pid: ?u32 = null,
+    runtime: ?[]const u8 = null,
 
     pub fn deinit(self: *ContainerInfo) void {
         self.allocator.free(self.id);
         self.allocator.free(self.name);
-        if (self.image) |img| self.allocator.free(img);
+        self.allocator.free(self.status);
+        self.allocator.free(self.backend_type);
+        if (self.created) |c| self.allocator.free(c);
+        if (self.image) |i| self.allocator.free(i);
+        if (self.runtime) |r| self.allocator.free(r);
     }
 };
 

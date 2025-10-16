@@ -4,7 +4,6 @@ const types = @import("types.zig");
 const proxmox_api = @import("integrations/proxmox-api");
 
 /// Proxmox LXC backend driver
-/// Proxmox LXC backend driver
 pub const ProxmoxLxcDriver = struct {
     const Self = @This();
 
@@ -120,6 +119,35 @@ pub const ProxmoxLxcDriver = struct {
     }
 
     /// List LXC containers
+    pub fn list(self: *Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
+        if (self.logger) |log| {
+            try log.info("Listing LXC containers via Proxmox API");
+        }
+
+        const api_containers = try self.operations.listContainers();
+        defer {
+            for (api_containers) |container| {
+                container.deinit();
+            }
+            self.allocator.free(api_containers);
+        }
+
+        var containers = try allocator.alloc(core.ContainerInfo, api_containers.len);
+        for (api_containers, 0..) |api_container, i| {
+            containers[i] = core.ContainerInfo{
+                .allocator = allocator,
+                .id = try allocator.dupe(u8, api_container.vmid),
+                .name = try allocator.dupe(u8, api_container.name),
+                .status = try allocator.dupe(u8, api_container.status),
+                .backend_type = try allocator.dupe(u8, "proxmox-lxc"),
+                .runtime = try allocator.dupe(u8, "pct"),
+                .image = if (api_container.ostemplate) |ost| try allocator.dupe(u8, ost) else null,
+            };
+        }
+
+        return containers;
+    }
+
     pub fn listContainers(self: *Self) ![]types.LxcInfo {
         if (self.logger) |log| {
             try log.info("Listing LXC containers");
