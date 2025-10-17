@@ -28,6 +28,10 @@ nexcage create --name <id> --image <bundle_dir> [--runtime lxc|crun|runc|vm]
 - `<bundle_dir>` must contain `config.json` (OCI bundle)
 - If `config.json` contains `annotations.org.opencontainers.image.ref.name` (or `image`), the value is treated as LXC template name and validated against `pveam list/available`. If available, it will be used as `local:vztmpl/<image>` for `pct create`.
 - If no valid image is found, a fallback template is auto-selected from `pveam available`.
+- Mounts/volumes from `config.json` are validated before start:
+  - host paths must exist and be accessible
+  - storage refs `<storage>:<path>` are checked via `pvesm list <storage>`
+  - after creation, mounts are appended to `/etc/pve/lxc/<vmid>.conf` as `mpX`, then verified via `pct config <vmid>`
 
 Examples:
 ```bash
