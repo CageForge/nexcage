@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("core");
 const types = @import("types.zig");
+const oci_bundle = @import("oci_bundle.zig");
 
 /// Result of running a command
 const CommandResult = struct {
@@ -68,6 +69,9 @@ pub const ProxmoxLxcDriver = struct {
             } else {
                 if (self.logger) |log| try log.warn("No image reference found in bundle config.json (annotations/image)", .{});
             }
+
+            // Validate bundle mounts/volumes availability
+            try self.validateBundleVolumes(bundle_path);
         }
 
         // Generate VMID from name (Proxmox requires numeric vmid)
@@ -138,6 +142,53 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         if (self.logger) |log| try log.info("Proxmox LXC container created via pct: {s} (vmid {s})", .{ config.name, vmid });
+    }
+
+    /// Validate that mounts in bundle config point to existing host paths or valid Proxmox storage refs
+    fn validateBundleVolumes(self: *Self, bundle_path: []const u8) !void {
+        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var cfg = try parser.parseBundle(bundle_path);
+        defer cfg.deinit();
+
+        // Iterate mounts (if present)
+        if (cfg.mounts) |mounts| {
+            for (mounts) |*m| {
+                const src_opt = m.source;
+                if (src_opt == null) continue;
+                const src = src_opt.?;
+
+            // If looks like storage reference: <storage>:<path>
+            if (std.mem.indexOfScalar(u8, src, ':')) |colon_idx| {
+                const storage = src[0..colon_idx];
+                const rest = std.mem.trim(u8, src[colon_idx+1..], " \t\r\n");
+                if (storage.len > 0 and rest.len > 0 and storage[0] != '/') {
+                    if (!(try self.storageHasPath(storage, rest))) {
+                        if (self.logger) |log| try log.err("Storage volume not found: {s}:{s}", .{ storage, rest });
+                        return core.Error.NotFound;
+                    }
+                    continue;
+                }
+            }
+
+                // Otherwise treat as host path (absolute)
+                if (std.fs.cwd().access(src, .{})) |_| {
+                    // ok
+                } else |err| {
+                    if (self.logger) |log| try log.err("Host path for mount not accessible: {s} ({})", .{ src, err });
+                    return core.Error.NotFound;
+                }
+            }
+        }
+    }
+
+    /// Check if Proxmox storage contains given path via `pvesm list <storage>`
+    fn storageHasPath(self: *Self, storage: []const u8, entry: []const u8) !bool {
+        const args = [_][]const u8{ "pvesm", "list", storage };
+        const res = self.runCommand(&args) catch return false;
+        defer self.allocator.free(res.stdout);
+        defer self.allocator.free(res.stderr);
+        if (res.exit_code != 0) return false;
+        return std.mem.indexOf(u8, res.stdout, entry) != null;
     }
 
     /// Start LXC container using pct command
