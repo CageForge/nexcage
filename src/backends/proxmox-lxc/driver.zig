@@ -78,8 +78,28 @@ pub const ProxmoxLxcDriver = struct {
         const vmid = try std.fmt.allocPrint(self.allocator, "{d}", .{vmid_calc});
         defer self.allocator.free(vmid);
 
-        // Find available template
-        const template = try self.findAvailableTemplate();
+        // Resolve template to use: prefer bundle image if present & available
+        var template: []u8 = undefined;
+        var use_bundle_image = false;
+        if (config.image) |bundle_path2| {
+            var d = std.fs.cwd().openDir(bundle_path2, .{}) catch null;
+            if (d) |*dir_ptr| {
+                defer dir_ptr.close();
+                const img2 = try self.parseBundleImage(dir_ptr.*);
+                if (img2) |image_name| {
+                    defer self.allocator.free(image_name);
+                    if (try self.templateExists(image_name)) {
+                        template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}", .{image_name});
+                        use_bundle_image = true;
+                    }
+                }
+            }
+        }
+        if (!use_bundle_image) {
+            const t = try self.findAvailableTemplate();
+            template = try self.allocator.dupe(u8, t);
+            self.allocator.free(t);
+        }
         defer self.allocator.free(template);
 
         // Use pct create command
