@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core");
 const types = @import("types.zig");
 const oci_bundle = @import("oci_bundle.zig");
+const image_converter = @import("image_converter.zig");
 
 /// Result of running a command
 const CommandResult = struct {
@@ -37,13 +38,60 @@ pub const ProxmoxLxcDriver = struct {
         self.logger = logger;
     }
 
+    /// Process OCI bundle - convert to template if needed, return template name
+    fn processOciBundle(self: *Self, bundle_path: []const u8, container_name: []const u8) !?[]const u8 {
+        if (self.logger) |log| try log.info("Processing OCI bundle: {s}", .{bundle_path});
+
+        // Parse bundle to check if it's a standard OCI bundle
+        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var cfg = try parser.parseBundle(bundle_path);
+        defer cfg.deinit();
+
+        // Check if this bundle has an image reference that exists as a template
+        const maybe_image = try self.parseBundleImageFromConfig(&cfg);
+        if (maybe_image) |image_ref| {
+            defer self.allocator.free(image_ref);
+            
+            // Check if template already exists
+            if (try self.templateExists(image_ref)) {
+                if (self.logger) |log| try log.info("Using existing template: {s}", .{image_ref});
+                return image_ref;
+            }
+        }
+
+        // If no existing template found, convert OCI bundle to template
+        const template_name = try std.fmt.allocPrint(self.allocator, "{s}-{d}", .{ container_name, std.time.timestamp() });
+        
+        if (self.logger) |log| try log.info("Converting OCI bundle to template: {s}", .{template_name});
+        
+        var converter = image_converter.ImageConverter.init(self.allocator, self.logger);
+        try converter.convertOciToProxmoxTemplate(bundle_path, template_name, "local");
+
+        if (self.logger) |log| try log.info("Successfully converted OCI bundle to template: {s}", .{template_name});
+        
+        return template_name;
+    }
+
+    /// Parse image reference from OCI bundle config
+    fn parseBundleImageFromConfig(self: *Self, config: *const oci_bundle.OciBundleConfig) !?[]const u8 {
+        if (config.annotations) |annotations| {
+            if (annotations.get("org.opencontainers.image.ref.name")) |image_ref| {
+                return try self.allocator.dupe(u8, image_ref.string);
+            }
+        }
+        return null;
+    }
+
     /// Create LXC container using pct command
     pub fn create(self: *Self, config: core.types.SandboxConfig) !void {
         if (self.logger) |log| {
             try log.info("Creating Proxmox LXC container: {s}", .{config.name});
         }
         
-        // Validate bundle image if provided (bundle path with config.json)
+        // Process bundle image if provided (bundle path with config.json)
+        var template_name: ?[]const u8 = null;
+        defer if (template_name) |tname| self.allocator.free(tname);
+        
         if (config.image) |bundle_path| {
             // Ensure bundle directory exists
             var bundle_dir = std.fs.cwd().openDir(bundle_path, .{}) catch |err| {
@@ -58,20 +106,8 @@ pub const ProxmoxLxcDriver = struct {
                 return core.Error.FileNotFound;
             };
 
-            // Extract image/template reference from bundle config.json and validate against available templates
-            const maybe_image = try self.parseBundleImage(bundle_dir);
-            if (maybe_image) |image_ref| {
-                defer self.allocator.free(image_ref);
-                if (!(try self.templateExists(image_ref))) {
-                    if (self.logger) |log| try log.err("Bundle image not available on node: {s}", .{image_ref});
-                    return core.Error.NotFound;
-                }
-            } else {
-                if (self.logger) |log| try log.warn("No image reference found in bundle config.json (annotations/image)", .{});
-            }
-
-            // Validate bundle mounts/volumes availability
-            try self.validateBundleVolumes(bundle_path);
+            // Process OCI bundle - convert to template if needed
+            template_name = try self.processOciBundle(bundle_path, config.name);
         }
 
         // Generate VMID from name (Proxmox requires numeric vmid)
@@ -82,24 +118,11 @@ pub const ProxmoxLxcDriver = struct {
         const vmid = try std.fmt.allocPrint(self.allocator, "{d}", .{vmid_calc});
         defer self.allocator.free(vmid);
 
-        // Resolve template to use: prefer bundle image if present & available
+        // Resolve template to use: prefer converted template or find available one
         var template: []u8 = undefined;
-        var use_bundle_image = false;
-        if (config.image) |bundle_path2| {
-            var d = std.fs.cwd().openDir(bundle_path2, .{}) catch null;
-            if (d) |*dir_ptr| {
-                defer dir_ptr.close();
-                const img2 = try self.parseBundleImage(dir_ptr.*);
-                if (img2) |image_name| {
-                    defer self.allocator.free(image_name);
-                    if (try self.templateExists(image_name)) {
-                        template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}", .{image_name});
-                        use_bundle_image = true;
-                    }
-                }
-            }
-        }
-        if (!use_bundle_image) {
+        if (template_name) |tname| {
+            template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}.tar.zst", .{tname});
+        } else {
             const t = try self.findAvailableTemplate();
             template = try self.allocator.dupe(u8, t);
             self.allocator.free(t);

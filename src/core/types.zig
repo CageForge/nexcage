@@ -285,10 +285,17 @@ pub const SIGHUP = 1;
 
 /// Proxmox LXC backend configuration
 pub const ProxmoxLxcBackendConfig = struct {
+    allocator: std.mem.Allocator,
     proxmox_host: []const u8,
     proxmox_port: u16 = 8006,
     proxmox_token: []const u8,
     proxmox_node: []const u8,
     verify_ssl: bool = false,
     timeout: ?u64 = null,
+
+    pub fn deinit(self: *ProxmoxLxcBackendConfig) void {
+        self.allocator.free(self.proxmox_host);
+        self.allocator.free(self.proxmox_token);
+        self.allocator.free(self.proxmox_node);
+    }
 };

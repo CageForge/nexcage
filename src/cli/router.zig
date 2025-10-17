@@ -130,6 +130,7 @@ pub const BackendRouter = struct {
 
         // Create Proxmox LXC backend with default config
         const proxmox_config = types.ProxmoxLxcBackendConfig{
+            .allocator = self.allocator,
             .proxmox_host = "localhost",
             .proxmox_port = 8006,
             .proxmox_token = "",

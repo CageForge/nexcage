@@ -114,6 +114,7 @@ pub const ListCommand = struct {
                 }
 
                 const proxmox_config = core.types.ProxmoxLxcBackendConfig{
+                    .allocator = allocator,
                     .proxmox_host = "localhost",
                     .proxmox_port = 8006,
                     .proxmox_token = "",
@@ -137,6 +138,7 @@ pub const ListCommand = struct {
             .proxmox_lxc => {
                 // List Proxmox LXC containers via driver
                 const proxmox_config = core.types.ProxmoxLxcBackendConfig{
+                    .allocator = allocator,
                     .proxmox_host = "localhost",
                     .proxmox_port = 8006,
                     .proxmox_token = "",

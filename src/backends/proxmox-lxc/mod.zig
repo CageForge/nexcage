@@ -8,3 +8,4 @@ pub const vmid_manager = @import("vmid_manager.zig");
 pub const state_manager = @import("state_manager.zig");
 pub const performance = @import("performance.zig");
 pub const pct = @import("pct.zig");
+pub const image_converter = @import("image_converter.zig");
