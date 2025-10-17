@@ -19,6 +19,7 @@ pub const ImageConverter = struct {
     /// Convert OCI bundle to LXC rootfs directory
     pub fn convertOciToLxcRootfs(self: *Self, oci_bundle_path: []const u8, output_dir: []const u8) !void {
         if (self.logger) |log| try log.info("Converting OCI bundle to LXC rootfs: {s} -> {s}", .{ oci_bundle_path, output_dir });
+        if (self.logger) |log| try log.info("Logger is working in convertOciToLxcRootfs", .{});
 
         // Parse OCI bundle configuration
         var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
