@@ -42,6 +42,34 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Creating Proxmox LXC container: {s}", .{config.name});
         }
         
+        // Validate bundle image if provided (bundle path with config.json)
+        if (config.image) |bundle_path| {
+            // Ensure bundle directory exists
+            var bundle_dir = std.fs.cwd().openDir(bundle_path, .{}) catch |err| {
+                if (self.logger) |log| try log.err("Bundle path not found: {s} ({})", .{ bundle_path, err });
+                return core.Error.FileNotFound;
+            };
+            defer bundle_dir.close();
+
+            // Ensure config.json exists in the bundle
+            bundle_dir.access("config.json", .{}) catch |err| {
+                if (self.logger) |log| try log.err("config.json not found in bundle: {s} ({})", .{ bundle_path, err });
+                return core.Error.FileNotFound;
+            };
+
+            // Extract image/template reference from bundle config.json and validate against available templates
+            const maybe_image = try self.parseBundleImage(bundle_dir);
+            if (maybe_image) |image_ref| {
+                defer self.allocator.free(image_ref);
+                if (!(try self.templateExists(image_ref))) {
+                    if (self.logger) |log| try log.err("Bundle image not available on node: {s}", .{image_ref});
+                    return core.Error.NotFound;
+                }
+            } else {
+                if (self.logger) |log| try log.warn("No image reference found in bundle config.json (annotations/image)", .{});
+            }
+        }
+
         // Generate VMID from name (Proxmox requires numeric vmid)
         var hasher = std.hash.Wyhash.init(0);
         hasher.update(config.name);
@@ -236,6 +264,73 @@ pub const ProxmoxLxcDriver = struct {
         return self.allocator.dupe(u8, "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.gz");
     }
 
+    /// Parse bundle config.json to get image reference (annotations or rootfs.image)
+    fn parseBundleImage(self: *Self, bundle_dir: std.fs.Dir) !?[]u8 {
+        const file = bundle_dir.openFile("config.json", .{}) catch return null;
+        defer file.close();
+
+        // Read small chunk (best-effort, we only need to find a line with image)
+        var buf: [8192]u8 = undefined;
+        const n = try file.readAll(&buf);
+        const data = buf[0..n];
+
+        // Try to find annotation like: "org.opencontainers.image.ref.name": "ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
+        if (std.mem.indexOf(u8, data, "org.opencontainers.image.ref.name") ) |idx| {
+            // naive extract value between quotes after colon
+            const slice = data[idx..];
+            if (std.mem.indexOf(u8, slice, ":") ) |colon| {
+                const after = std.mem.trim(u8, slice[colon+1..], " \t\r\n");
+                if (after.len >= 2) {
+                    // find first quote
+                    if (std.mem.indexOfScalar(u8, after, '"')) |q1| {
+                        const rest = after[q1+1..];
+                        if (std.mem.indexOfScalar(u8, rest, '"')) |q2| {
+                            const val = rest[0..q2];
+                            return try self.allocator.dupe(u8, val);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: try to find "image": "..."
+        if (std.mem.indexOf(u8, data, "\"image\"") ) |idx2| {
+            const slice2 = data[idx2..];
+            if (std.mem.indexOf(u8, slice2, ":") ) |colon2| {
+                const after2 = std.mem.trim(u8, slice2[colon2+1..], " \t\r\n");
+                if (after2.len >= 2) {
+                    if (std.mem.indexOfScalar(u8, after2, '"')) |q1b| {
+                        const rest2 = after2[q1b+1..];
+                        if (std.mem.indexOfScalar(u8, rest2, '"')) |q2b| {
+                            const val2 = rest2[0..q2b];
+                            return try self.allocator.dupe(u8, val2);
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// Check if given template exists on node (either downloaded or available to download)
+    fn templateExists(self: *Self, template_name: []const u8) !bool {
+        // First, check downloaded templates
+        const list_downloaded = [_][]const u8{ "pveam", "list", "local:vztmpl" };
+        const res1 = self.runCommand(&list_downloaded) catch return false;
+        defer self.allocator.free(res1.stdout);
+        defer self.allocator.free(res1.stderr);
+        if (res1.exit_code == 0 and std.mem.indexOf(u8, res1.stdout, template_name) != null) return true;
+
+        // Then, check available templates
+        const list_available = [_][]const u8{ "pveam", "available" };
+        const res2 = self.runCommand(&list_available) catch return false;
+        defer self.allocator.free(res2.stdout);
+        defer self.allocator.free(res2.stderr);
+        if (res2.exit_code == 0 and std.mem.indexOf(u8, res2.stdout, template_name) != null) return true;
+
+        return false;
+    }
     /// Get VMID by container name
     fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
         const pct_args = [_][]const u8{ "pct", "list" };
