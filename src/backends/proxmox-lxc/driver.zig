@@ -141,6 +141,13 @@ pub const ProxmoxLxcDriver = struct {
             return self.mapPctError(result.exit_code, result.stderr);
         }
 
+        // Apply mounts from bundle into /etc/pve/lxc/<vmid>.conf and verify via pct config
+        if (config.image) |bundle_for_mounts| {
+            if (self.logger) |log| try log.info("Applying mounts from bundle: {s}", .{bundle_for_mounts});
+            try self.applyMountsToLxcConfig(vmid, bundle_for_mounts);
+            try self.verifyMountsInConfig(vmid);
+        }
+
         if (self.logger) |log| try log.info("Proxmox LXC container created via pct: {s} (vmid {s})", .{ config.name, vmid });
     }
 
@@ -189,6 +196,124 @@ pub const ProxmoxLxcDriver = struct {
         defer self.allocator.free(res.stderr);
         if (res.exit_code != 0) return false;
         return std.mem.indexOf(u8, res.stdout, entry) != null;
+    }
+
+    /// Append mounts from bundle config to /etc/pve/lxc/<vmid>.conf using mpX syntax
+    fn applyMountsToLxcConfig(self: *Self, vmid: []const u8, bundle_path: []const u8) !void {
+        if (self.logger) |log| try log.info("Parsing bundle for mounts: {s}", .{bundle_path});
+        
+        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var cfg = try parser.parseBundle(bundle_path);
+        defer cfg.deinit();
+
+        if (cfg.mounts == null) {
+            if (self.logger) |log| try log.info("No mounts found in bundle config", .{});
+            return;
+        }
+        const mounts = cfg.mounts.?;
+        
+        if (self.logger) |log| try log.info("Found {d} mounts in bundle", .{mounts.len});
+
+        const conf_path = try std.fmt.allocPrint(self.allocator, "/etc/pve/lxc/{s}.conf", .{vmid});
+        defer self.allocator.free(conf_path);
+
+        // Read existing to determine next mp index
+        const existing_data = try self.readFileAll(conf_path);
+        defer if (existing_data) |buf| self.allocator.free(buf);
+        var next_idx: u32 = 0;
+        if (existing_data) |buf| {
+            next_idx = self.findNextMpIndex(buf);
+        }
+
+        // Open config for append
+        var file = try std.fs.openFileAbsolute(conf_path, .{ .mode = .read_write });
+        defer file.close();
+        try file.seekFromEnd(0);
+
+        var i: u32 = 0;
+        while (i < mounts.len) : (i += 1) {
+            const m = mounts[i];
+            if (m.destination == null) {
+                if (self.logger) |log| try log.warn("Mount {d} has no destination, skipping", .{i});
+                continue;
+            }
+            const dest = m.destination.?;
+
+            const src_opt = m.source;
+            if (src_opt == null) {
+                if (self.logger) |log| try log.warn("Mount {d} has no source, skipping", .{i});
+                continue;
+            }
+            const src = src_opt.?;
+
+            // Build mp line
+            const mp_line = try self.buildMpLine(next_idx, src, dest, m.options);
+            defer self.allocator.free(mp_line);
+            
+            if (self.logger) |log| try log.info("Adding mp{d}: {s}", .{ next_idx, mp_line });
+            try file.writeAll(mp_line);
+            try file.writeAll("\n");
+            next_idx += 1;
+        }
+    }
+
+    /// Verify config contains mp entries via pct config
+    fn verifyMountsInConfig(self: *Self, vmid: []const u8) !void {
+        const args = [_][]const u8{ "pct", "config", vmid };
+        const res = try self.runCommand(&args);
+        defer self.allocator.free(res.stdout);
+        defer self.allocator.free(res.stderr);
+        if (res.exit_code != 0) return core.Error.OperationFailed;
+        // Presence of "mp" lines indicates success (best-effort)
+        if (std.mem.indexOf(u8, res.stdout, "mp0:") == null and std.mem.indexOf(u8, res.stdout, "mp1:") == null) {
+            if (self.logger) |log| try log.warn("No mp entries visible in pct config after update", .{});
+        }
+    }
+
+    /// Build mpX line from src/dest/options
+    fn buildMpLine(self: *Self, idx: u32, src: []const u8, dest: []const u8, options: ?[]const u8) ![]u8 {
+        // If src looks like storage ref (<storage>:<path> and not absolute path)
+        const is_storage = (std.mem.indexOfScalar(u8, src, ':') != null) and (src.len > 0 and src[0] != '/');
+        const opt = options orelse "";
+        if (is_storage) {
+            return std.fmt.allocPrint(self.allocator, "mp{d}: {s},mp={s}{s}{s}", .{ idx, src, dest, if (opt.len > 0) "," else "", opt });
+        } else {
+            return std.fmt.allocPrint(self.allocator, "mp{d}: {s},mp={s}{s}{s}", .{ idx, src, dest, if (opt.len > 0) "," else "", opt });
+        }
+    }
+
+    /// Read file to memory (optional)
+    fn readFileAll(self: *Self, path: []const u8) !?[]u8 {
+        const file = std.fs.openFileAbsolute(path, .{}) catch return null;
+        defer file.close();
+        const stat = try file.stat();
+        var buf = try self.allocator.alloc(u8, @intCast(stat.size));
+        const n = try file.readAll(buf);
+        return buf[0..n];
+    }
+
+    /// Find next mp index from existing config content
+    fn findNextMpIndex(self: *Self, data: []const u8) u32 {
+        _ = self;
+        var max_idx: u32 = 0;
+        var lines = std.mem.splitScalar(u8, data, '\n');
+        while (lines.next()) |line| {
+            if (line.len < 4) continue;
+            if (line[0] == 'm' and line[1] == 'p') {
+                // parse digits until ':'
+                var j: usize = 2;
+                var val: u32 = 0;
+                var ok = false;
+                while (j < line.len and line[j] >= '0' and line[j] <= '9') : (j += 1) {
+                    val = val * 10 + @as(u32, @intCast(line[j] - '0'));
+                    ok = true;
+                }
+                if (ok and j < line.len and line[j] == ':') {
+                    if (val + 1 > max_idx) max_idx = val + 1;
+                }
+            }
+        }
+        return max_idx;
     }
 
     /// Start LXC container using pct command
