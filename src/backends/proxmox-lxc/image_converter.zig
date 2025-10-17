@@ -106,7 +106,10 @@ pub const ImageConverter = struct {
         } else {
             // If not an archive, treat as directory and copy contents
             if (self.logger) |log| try log.info("Treating as directory: {s}", .{archive_path});
-            var source_dir = try std.fs.cwd().openDir(archive_path, .{});
+            var source_dir = std.fs.cwd().openDir(archive_path, .{}) catch |err| {
+                if (self.logger) |log| try log.err("Cannot open directory: {s} ({})", .{ archive_path, err });
+                return err;
+            };
             defer source_dir.close();
             try self.copyDirectoryRecursive(source_dir, dest_path);
         }
