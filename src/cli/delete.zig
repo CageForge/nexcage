@@ -33,6 +33,15 @@ pub const DeleteCommand = struct {
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         try self.logCommandStart("delete");
 
+        // Check for help flag
+        if (options.help) {
+            const help_text = try self.help(allocator);
+            defer allocator.free(help_text);
+            const stdout = std.fs.File.stdout();
+            try stdout.writeAll(help_text);
+            return;
+        }
+
         // Validate required options using validation utility
         const container_id = try validation.ValidationUtils.requireContainerId(options, self.base.logger, "delete");
 
