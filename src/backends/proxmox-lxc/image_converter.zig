@@ -79,12 +79,17 @@ pub const ImageConverter = struct {
         if (self.logger) |log| try log.info("Extracting rootfs: {s} -> {s}", .{ source_path, dest_path });
 
         // Check if source is a directory or archive
+        if (self.logger) |log| try log.info("Attempting to open source path: {s}", .{source_path});
         var source_dir = std.fs.cwd().openDir(source_path, .{}) catch |err| switch (err) {
             error.FileNotFound => {
+                if (self.logger) |log| try log.info("Source path not found as directory, trying as archive: {s}", .{source_path});
                 // Try as archive
                 return self.extractArchive(source_path, dest_path);
             },
-            else => return err,
+            else => {
+                if (self.logger) |log| try log.err("Failed to open source path: {s} ({})", .{ source_path, err });
+                return err;
+            },
         };
         defer source_dir.close();
 
