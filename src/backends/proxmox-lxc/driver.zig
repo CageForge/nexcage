@@ -221,8 +221,9 @@ pub const ProxmoxLxcDriver = struct {
         var lines = std.mem.splitScalar(u8, list_result.stdout, '\n');
         while (lines.next()) |line| {
             if (std.mem.indexOf(u8, line, "ubuntu") != null and std.mem.indexOf(u8, line, "standard") != null) {
-                // Extract template name from line
+                // Extract template name from line (format: "system ubuntu-22.04-standard_22.04-1_amd64.tar.zst")
                 var fields = std.mem.splitScalar(u8, line, ' ');
+                _ = fields.next(); // Skip "system"
                 if (fields.next()) |template_name| {
                     const full_template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}", .{template_name});
                     if (self.logger) |log| try log.info("Found available template: {s}", .{full_template});
@@ -238,12 +239,12 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Get default template (fallback)
     fn getDefaultTemplate(self: *Self) ![]const u8 {
-        // Try common template names
+        // Try common template names (updated with correct extensions)
         const templates = [_][]const u8{
-            "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.gz",
-            "local:vztmpl/ubuntu-20.04-standard_20.04-1_amd64.tar.gz",
-            "local:vztmpl/debian-11-standard_11.7-1_amd64.tar.gz",
-            "local:vztmpl/debian-12-standard_12.2-1_amd64.tar.gz",
+            "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst",
+            "local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst",
+            "local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst",
+            "local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz",
         };
 
         for (templates) |template| {
@@ -261,7 +262,7 @@ pub const ProxmoxLxcDriver = struct {
 
         // Last resort - return a basic template
         if (self.logger) |log| try log.warn("No templates found, using basic template", .{});
-        return self.allocator.dupe(u8, "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.gz");
+        return self.allocator.dupe(u8, "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst");
     }
 
     /// Parse bundle config.json to get image reference (annotations or rootfs.image)
