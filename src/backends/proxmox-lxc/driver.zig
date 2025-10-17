@@ -41,6 +41,7 @@ pub const ProxmoxLxcDriver = struct {
     /// Process OCI bundle - convert to template if needed, return template name
     fn processOciBundle(self: *Self, bundle_path: []const u8, container_name: []const u8) !?[]const u8 {
         if (self.logger) |log| try log.info("Processing OCI bundle: {s}", .{bundle_path});
+        if (self.logger) |log| try log.info("Logger is working in processOciBundle", .{});
 
         // Parse bundle to check if it's a standard OCI bundle
         var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
