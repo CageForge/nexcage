@@ -30,6 +30,7 @@ pub const ImageConverter = struct {
 
         // Extract rootfs from OCI bundle
         const rootfs_source = try self.getRootfsPath(oci_bundle_path, &config);
+        defer self.allocator.free(rootfs_source);
         try self.extractRootfs(rootfs_source, output_dir);
 
         // Apply LXC-specific configurations
@@ -103,7 +104,11 @@ pub const ImageConverter = struct {
         } else if (std.mem.endsWith(u8, archive_path, ".tar")) {
             try self.extractTar(archive_path, dest_path);
         } else {
-            return error.UnsupportedArchiveFormat;
+            // If not an archive, treat as directory and copy contents
+            if (self.logger) |log| try log.info("Treating as directory: {s}", .{archive_path});
+            var source_dir = try std.fs.cwd().openDir(archive_path, .{});
+            defer source_dir.close();
+            try self.copyDirectoryRecursive(source_dir, dest_path);
         }
     }
 

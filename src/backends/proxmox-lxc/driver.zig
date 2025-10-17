@@ -61,6 +61,7 @@ pub const ProxmoxLxcDriver = struct {
 
         // If no existing template found, convert OCI bundle to template
         const template_name = try std.fmt.allocPrint(self.allocator, "{s}-{d}", .{ container_name, std.time.timestamp() });
+        defer self.allocator.free(template_name);
         
         if (self.logger) |log| try log.info("Converting OCI bundle to template: {s}", .{template_name});
         
@@ -69,7 +70,8 @@ pub const ProxmoxLxcDriver = struct {
 
         if (self.logger) |log| try log.info("Successfully converted OCI bundle to template: {s}", .{template_name});
         
-        return template_name;
+        // Return a copy since we're freeing the original
+        return try self.allocator.dupe(u8, template_name);
     }
 
     /// Parse image reference from OCI bundle config
