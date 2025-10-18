@@ -24,7 +24,7 @@ pub const AppContext = struct {
     pub fn init(allocator: std.mem.Allocator, args: []const []const u8) !AppContext {
         // Load main configuration first
         var config_loader = core.ConfigLoader.init(allocator);
-        const config = try config_loader.loadDefault();
+        var config = try config_loader.loadDefault();
         
         // Load logging configuration with priority: command line args > config file > environment > defaults
         const logging_cfg = try core.logging_config.LoggingConfig.loadWithPriority(allocator, args, &config);
@@ -72,6 +72,9 @@ pub const AppContext = struct {
 
         // Cleanup logging configuration
         self.logging_config.deinit(self.allocator);
+
+        // TODO: Fix memory leaks in config parsing - config.deinit() causes segfault
+        // self.config.deinit();
 
         // TODO: Implement backend cleanup
         // if (self.backend) |backend| {

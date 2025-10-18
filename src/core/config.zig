@@ -131,6 +131,14 @@ pub const ConfigLoader = struct {
                 switch (routing_value) {
                     .array => |routing_array| {
                         var routing_rules = try self.allocator.alloc(types.RoutingRule, routing_array.items.len);
+                        errdefer {
+                            // Clean up routing rules if there's an error
+                            for (routing_rules) |*rule| {
+                                rule.deinit(self.allocator);
+                            }
+                            self.allocator.free(routing_rules);
+                        }
+                        
                         for (routing_array.items, 0..) |rule_item, i| {
                             switch (rule_item) {
                                 .object => |rule_obj| {
@@ -372,6 +380,14 @@ pub const ConfigLoader = struct {
                 switch (routing_value) {
                     .array => |routing_array| {
                         var routing_rules = try self.allocator.alloc(types.RoutingRule, routing_array.items.len);
+                        errdefer {
+                            // Clean up routing rules if there's an error
+                            for (routing_rules) |*rule| {
+                                rule.deinit(self.allocator);
+                            }
+                            self.allocator.free(routing_rules);
+                        }
+                        
                         for (routing_array.items, 0..) |rule_item, i| {
                             switch (rule_item) {
                                 .object => |rule_obj| {

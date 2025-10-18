@@ -30,8 +30,31 @@ pub const ListCommand = struct {
         try self.base.logError(format, args);
     }
 
+    pub fn showHelp(self: *const Self) !void {
+        _ = self; // Avoid unused parameter warning
+        const stdout = std.fs.File.stdout();
+        try stdout.writeAll("Usage: nexcage list [OPTIONS]\n\n");
+        try stdout.writeAll("List containers and virtual machines from all backends\n\n");
+        try stdout.writeAll("OPTIONS:\n");
+        try stdout.writeAll("  --help, -h    Show this help message\n");
+        try stdout.writeAll("  --debug       Enable debug logging\n");
+        try stdout.writeAll("  --log-file    Specify log file path\n");
+        try stdout.writeAll("  --log-level   Set logging level (trace, debug, info, warn, error, fatal)\n\n");
+        try stdout.writeAll("EXAMPLES:\n");
+        try stdout.writeAll("  nexcage list                    # List all containers\n");
+        try stdout.writeAll("  nexcage list --debug            # List with debug logging\n");
+        try stdout.writeAll("  nexcage list --log-file /tmp/log # List with custom log file\n\n");
+        try stdout.writeAll("OUTPUT FORMAT:\n");
+        try stdout.writeAll("  ID      IMAGE   COMMAND  CREATED  STATUS  BACKEND  NAMES\n");
+        try stdout.writeAll("  <id>    <img>   <cmd>    <time>   <state> <type>   <name>\n");
+    }
+
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        _ = options; // Not used in aggregated listing
+        // Check for help flag first
+        if (options.help) {
+            try self.showHelp();
+            return;
+        }
 
         // Collect containers from all backends
         var all_containers = std.ArrayListUnmanaged(core.ContainerInfo){};
