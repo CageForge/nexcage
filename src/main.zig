@@ -12,6 +12,8 @@ pub const AppContext = struct {
     allocator: std.mem.Allocator,
     config: core.Config,
     logger: core.LogContext,
+    advanced_logger: ?core.simple_advanced_logging.SimpleAdvancedLogging = null,
+    logging_config: core.logging_config.LoggingConfig,
     // error_handler: core.DefaultErrorHandler, // TODO: Implement error handler
     command_registry: cli.CommandRegistry,
     // backend: ?*core.BackendInterface = null, // TODO: Implement backend interface
@@ -19,15 +21,24 @@ pub const AppContext = struct {
     // storage_provider: ?*core.StorageProvider = null, // TODO: Implement storage provider
     // image_provider: ?*core.ImageProvider = null, // TODO: Implement image provider
 
-    pub fn init(allocator: std.mem.Allocator) !AppContext {
-        // Load configuration
+    pub fn init(allocator: std.mem.Allocator, args: []const []const u8) !AppContext {
+        // Load logging configuration from command line arguments
+        const logging_cfg = try core.logging_config.LoggingConfig.loadFromArgs(allocator, args);
+        
+        // Load main configuration
         var config_loader = core.ConfigLoader.init(allocator);
         const config = try config_loader.loadDefault();
 
-        // Initialize logger
+        // Initialize basic logger
         const stdout = std.fs.File.stdout();
         var buffer: [1024]u8 = undefined;
         const logger = core.LogContext.init(allocator, stdout.writer(&buffer), config.log_level, "nexcage");
+
+        // Initialize advanced logger if debug mode or file logging is enabled
+        var advanced_logger: ?core.simple_advanced_logging.SimpleAdvancedLogging = null;
+        if (logging_cfg.debug_mode or logging_cfg.enable_file_logging) {
+            advanced_logger = try core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, logging_cfg.debug_mode, logging_cfg.log_file_path);
+        }
 
         // Initialize error handler
         // TODO: Implement DefaultErrorHandler
@@ -46,12 +57,22 @@ pub const AppContext = struct {
             .allocator = allocator,
             .config = config,
             .logger = logger,
+            .advanced_logger = advanced_logger,
+            .logging_config = logging_cfg,
             // .error_handler = error_handler, // TODO: Implement error handler
             .command_registry = command_registry,
         };
     }
 
     pub fn deinit(self: *AppContext) void {
+        // Cleanup advanced logger
+        if (self.advanced_logger) |*logger| {
+            logger.deinit();
+        }
+
+        // Cleanup logging configuration
+        self.logging_config.deinit(self.allocator);
+
         // TODO: Implement backend cleanup
         // if (self.backend) |backend| {
         //     backend.deinit();
@@ -136,20 +157,54 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // Initialize application context
-    var app = try AppContext.init(allocator);
-    defer app.deinit();
-
-    // Parse command line arguments
+    // Parse command line arguments first
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
+
+    // Initialize application context with command line arguments
+    var app = try AppContext.init(allocator, args);
+    defer app.deinit();
+
+    // Log application startup
+    if (app.advanced_logger) |*logger| {
+        try logger.info("Starting nexcage v{s}", .{build_options.app_version});
+        try logger.logSystemInfo();
+    }
 
     if (args.len < 2) {
         try app.logger.err("No command specified. Use 'help' for available commands.", .{});
         return;
     }
 
-    const command_name = args[1];
+    // Find the actual command (skip flags)
+    var command_name = args[1];
+    var command_args = args[2..];
+    
+    // Skip debug/verbose flags to find the actual command
+    var i: usize = 1;
+    while (i < args.len) {
+        if (std.mem.eql(u8, args[i], "--debug") or std.mem.eql(u8, args[i], "--verbose")) {
+            i += 1;
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--log-file") and i + 1 < args.len) {
+            i += 2; // Skip --log-file and its value
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--log-level") and i + 1 < args.len) {
+            i += 2; // Skip --log-level and its value
+            continue;
+        }
+        // Found the actual command
+        command_name = args[i];
+        command_args = args[i + 1..];
+        break;
+    }
+    
+    // Log command execution start
+    if (app.advanced_logger) |*logger| {
+        try logger.logCommandStart(command_name, command_args);
+    }
     
     // Handle help command
     if (std.mem.eql(u8, command_name, "--help") or std.mem.eql(u8, command_name, "-h")) {
@@ -168,8 +223,6 @@ pub fn main() !void {
         try app.logger.info("Use 'nexcage <command> --help' for command-specific help", .{});
         return;
     }
-    
-    const command_args = args[2..];
 
     // Parse runtime options
     var options = try parseRuntimeOptions(allocator, command_name, command_args, &app.config);
@@ -186,6 +239,11 @@ pub fn main() !void {
 
         // Execute command (which will handle help)
         try app.command_registry.execute(command_name, options, allocator);
+        
+        // Log command completion
+        if (app.advanced_logger) |*logger| {
+            try logger.logCommandComplete(command_name, true);
+        }
         return;
     }
 
@@ -197,6 +255,11 @@ pub fn main() !void {
 
     // Execute command
     try app.command_registry.execute(command_name, options, allocator);
+    
+    // Log command completion
+    if (app.advanced_logger) |*logger| {
+        try logger.logCommandComplete(command_name, true);
+    }
 }
 
 /// Parse runtime options from command line arguments

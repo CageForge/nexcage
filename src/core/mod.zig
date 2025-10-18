@@ -3,6 +3,8 @@ pub const types = @import("types.zig");
 pub const interfaces = @import("interfaces.zig");
 pub const errors = @import("errors.zig");
 pub const logging = @import("logging.zig");
+pub const simple_advanced_logging = @import("simple_advanced_logging.zig");
+pub const logging_config = @import("logging_config.zig");
 pub const config = @import("config.zig");
 pub const constants = @import("constants.zig");
 
