@@ -22,12 +22,12 @@ pub const AppContext = struct {
     // image_provider: ?*core.ImageProvider = null, // TODO: Implement image provider
 
     pub fn init(allocator: std.mem.Allocator, args: []const []const u8) !AppContext {
-        // Load logging configuration from command line arguments
-        const logging_cfg = try core.logging_config.LoggingConfig.loadFromArgs(allocator, args);
-        
-        // Load main configuration
+        // Load main configuration first
         var config_loader = core.ConfigLoader.init(allocator);
         const config = try config_loader.loadDefault();
+        
+        // Load logging configuration with priority: command line args > config file > environment > defaults
+        const logging_cfg = try core.logging_config.LoggingConfig.loadWithPriority(allocator, args, &config);
 
         // Initialize basic logger
         const stdout = std.fs.File.stdout();

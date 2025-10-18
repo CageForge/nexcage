@@ -23,31 +23,31 @@ pub const LoggingConfig = struct {
         if (std.process.getEnvVarOwned(allocator, "NEXCAGE_DEBUG")) |debug_str| {
             defer allocator.free(debug_str);
             config.debug_mode = std.mem.eql(u8, debug_str, "1") or std.mem.eql(u8, debug_str, "true");
-        }
+        } else |_| {}
 
         // Check for log file path
         if (std.process.getEnvVarOwned(allocator, "NEXCAGE_LOG_FILE")) |log_file| {
             config.log_file_path = log_file;
             config.enable_file_logging = true;
-        }
+        } else |_| {}
 
         // Check for log level
         if (std.process.getEnvVarOwned(allocator, "NEXCAGE_LOG_LEVEL")) |level_str| {
             defer allocator.free(level_str);
             config.log_level = parseLogLevel(level_str) orelse .info;
-        }
+        } else |_| {}
 
         // Check for performance tracking
         if (std.process.getEnvVarOwned(allocator, "NEXCAGE_PERF_TRACKING")) |perf_str| {
             defer allocator.free(perf_str);
             config.enable_performance_tracking = std.mem.eql(u8, perf_str, "1") or std.mem.eql(u8, perf_str, "true");
-        }
+        } else |_| {}
 
         // Check for memory tracking
         if (std.process.getEnvVarOwned(allocator, "NEXCAGE_MEMORY_TRACKING")) |mem_str| {
             defer allocator.free(mem_str);
             config.enable_memory_tracking = std.mem.eql(u8, mem_str, "1") or std.mem.eql(u8, mem_str, "true");
-        }
+        } else |_| {}
 
         return config;
     }
@@ -86,6 +86,95 @@ pub const LoggingConfig = struct {
         }
 
         return config;
+    }
+
+    /// Load logging configuration from config file
+    pub fn loadFromConfig(allocator: std.mem.Allocator, config: *const @import("config.zig").Config) !Self {
+        var logging_config = Self{};
+
+        // Load from config file
+        logging_config.debug_mode = config.log_level == .debug;
+        logging_config.log_level = config.log_level;
+        
+        if (config.log_file) |log_file| {
+            logging_config.log_file_path = try allocator.dupe(u8, log_file);
+            logging_config.enable_file_logging = true;
+        }
+
+        return logging_config;
+    }
+
+    /// Load logging configuration with priority: command line args > config file > environment > defaults
+    pub fn loadWithPriority(allocator: std.mem.Allocator, args: []const []const u8, config: ?*const @import("config.zig").Config) !Self {
+        // Start with defaults
+        var logging_config = try createDefault(allocator);
+
+        // Load from config file if available (lowest priority)
+        if (config) |cfg| {
+            const file_config = try loadFromConfig(allocator, cfg);
+            // Merge file config into our config
+            logging_config.debug_mode = file_config.debug_mode;
+            logging_config.log_level = file_config.log_level;
+            if (file_config.log_file_path) |log_file| {
+                if (logging_config.log_file_path) |old_path| {
+                    allocator.free(old_path);
+                }
+                logging_config.log_file_path = log_file;
+                logging_config.enable_file_logging = true;
+            }
+            logging_config.enable_performance_tracking = file_config.enable_performance_tracking;
+            logging_config.enable_memory_tracking = file_config.enable_memory_tracking;
+        }
+
+        // Load from environment variables (medium priority)
+        const env_config = loadFromEnv(allocator) catch logging_config;
+        // Merge environment config, but only if values are set
+        if (env_config.debug_mode) {
+            logging_config.debug_mode = true;
+            logging_config.log_level = .debug;
+        }
+        if (env_config.log_file_path) |log_file| {
+            if (logging_config.log_file_path) |old_path| {
+                allocator.free(old_path);
+            }
+            logging_config.log_file_path = log_file;
+            logging_config.enable_file_logging = true;
+        }
+        if (env_config.log_level != .info) { // Only override if not default
+            logging_config.log_level = env_config.log_level;
+        }
+        if (env_config.enable_performance_tracking) {
+            logging_config.enable_performance_tracking = true;
+        }
+        if (env_config.enable_memory_tracking) {
+            logging_config.enable_memory_tracking = true;
+        }
+
+        // Load from command line arguments (highest priority)
+        const args_config = try loadFromArgs(allocator, args);
+        // Merge command line config, overriding everything else
+        if (args_config.debug_mode) {
+            logging_config.debug_mode = true;
+            logging_config.log_level = .debug;
+        }
+        if (args_config.log_file_path) |log_file| {
+            if (logging_config.log_file_path) |old_path| {
+                allocator.free(old_path);
+            }
+            logging_config.log_file_path = log_file;
+            logging_config.enable_file_logging = true;
+        }
+        if (args_config.log_level != .info) { // Only override if not default
+            logging_config.log_level = args_config.log_level;
+        }
+        if (args_config.enable_performance_tracking) {
+            logging_config.enable_performance_tracking = true;
+        }
+        if (args_config.enable_memory_tracking) {
+            logging_config.enable_memory_tracking = true;
+        }
+
+        return logging_config;
     }
 
     /// Create default logging configuration

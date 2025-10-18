@@ -1,0 +1,63 @@
+{
+  "runtime_type": "proxmox-lxc",
+  "default_runtime": "proxmox-lxc",
+  "log_level": "debug",
+  "log_file": "/var/log/nexcage/nexcage.log",
+  "data_dir": "/var/lib/nexcage",
+  "cache_dir": "/var/cache/nexcage",
+  "temp_dir": "/tmp/nexcage",
+  "runtime": {
+    "log_level": "debug",
+    "log_path": "/var/log/nexcage/runtime.log",
+    "root_path": "/var/lib/nexcage",
+    "routing": [
+      {
+        "pattern": "test-*",
+        "runtime": "proxmox-lxc"
+      },
+      {
+        "pattern": "prod-*",
+        "runtime": "proxmox-lxc"
+      },
+      {
+        "pattern": "dev-*",
+        "runtime": "lxc"
+      }
+    ]
+  },
+  "network": {
+    "bridge": "vmbr0",
+    "ip": "10.0.0.1",
+    "gateway": "10.0.0.1"
+  },
+  "security": {
+    "seccomp": true,
+    "apparmor": true,
+    "read_only": false
+  },
+  "resources": {
+    "memory": 512,
+    "cpu": 1.0,
+    "disk": 1024,
+    "network_bandwidth": 100
+  },
+  "container_config": {
+    "crun_name_patterns": ["crun-*"],
+    "default_container_type": "proxmox-lxc",
+    "routing": [
+      {
+        "pattern": "test-*",
+        "runtime": "proxmox-lxc"
+      },
+      {
+        "pattern": "prod-*",
+        "runtime": "proxmox-lxc"
+      },
+      {
+        "pattern": "dev-*",
+        "runtime": "lxc"
+      }
+    ],
+    "default_runtime": "proxmox-lxc"
+  }
+}
