@@ -48,6 +48,9 @@ zig build
 ## Testing
 - CI smoke/unit run on GitHub Actions
 - E2E tests run on self-hosted Proxmox runner
+- **Debug Logging**: See [DEBUG_LOGGING_GUIDE.md](docs/DEBUG_LOGGING_GUIDE.md)
+- **Troubleshooting**: See [TROUBLESHOOTING_GUIDE.md](docs/TROUBLESHOOTING_GUIDE.md)
+- **Test Results**: See [TESTING_RESULTS.md](docs/TESTING_RESULTS.md)
 - Details: TESTING.md and PROXMOX_TESTING.md
 
 ## Security & Policies
