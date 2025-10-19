@@ -590,9 +590,9 @@ pub const ProxmoxLxcDriver = struct {
             // Split by whitespace columns - handle multiple spaces
             var it = std.mem.tokenizeAny(u8, trimmed, " \t");
             const vmid_str = it.next() orelse continue;
-            _ = it.next(); // Skip Status column
-            _ = it.next(); // Skip Lock column
-            const name_str = it.next() orelse vmid_str;
+            _ = it.next() orelse continue; // Skip Status column
+            _ = it.next() orelse continue; // Skip Lock column
+            const name_str = it.next() orelse vmid_str; // Name column
 
             if (self.logger) |log| try log.info("Checking: vmid='{s}', name='{s}', looking for='{s}'", .{ vmid_str, name_str, name });
             std.debug.print("DEBUG: Checking: vmid='{s}', name='{s}', looking for='{s}'\n", .{ vmid_str, name_str, name });
