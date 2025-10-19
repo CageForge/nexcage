@@ -569,8 +569,10 @@ pub const ProxmoxLxcDriver = struct {
         defer self.allocator.free(pct_res.stderr);
 
         if (self.logger) |log| try log.info("pct list result: exit_code={d}, stdout='{s}', stderr='{s}'", .{ pct_res.exit_code, pct_res.stdout, pct_res.stderr });
+        std.debug.print("DEBUG: pct list result: exit_code={d}, stdout='{s}', stderr='{s}'\n", .{ pct_res.exit_code, pct_res.stdout, pct_res.stderr });
 
         if (pct_res.exit_code != 0) {
+            std.debug.print("DEBUG: pct list failed with exit_code={d}\n", .{pct_res.exit_code});
             return core.Error.NotFound;
         }
 
@@ -593,9 +595,11 @@ pub const ProxmoxLxcDriver = struct {
             const name_str = it.next() orelse vmid_str;
 
             if (self.logger) |log| try log.info("Checking: vmid='{s}', name='{s}', looking for='{s}'", .{ vmid_str, name_str, name });
+            std.debug.print("DEBUG: Checking: vmid='{s}', name='{s}', looking for='{s}'\n", .{ vmid_str, name_str, name });
 
             if (std.mem.eql(u8, name_str, name)) {
                 if (self.logger) |log| try log.info("Found match: vmid='{s}', name='{s}'", .{ vmid_str, name_str });
+                std.debug.print("DEBUG: Found match: vmid='{s}', name='{s}'\n", .{ vmid_str, name_str });
                 return self.allocator.dupe(u8, vmid_str);
             }
         }
