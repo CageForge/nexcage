@@ -71,8 +71,9 @@ pub const ImageConverter = struct {
 
     /// Get rootfs path from OCI bundle
     fn getRootfsPath(self: *Self, bundle_path: []const u8, config: *const oci_bundle.OciBundleConfig) ![]const u8 {
-        // Use rootfs_path from config
-        return try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ bundle_path, config.rootfs_path });
+        _ = bundle_path; // Avoid unused parameter warning
+        // Use rootfs_path from config (already contains full path)
+        return try self.allocator.dupe(u8, config.rootfs_path);
     }
 
     /// Extract rootfs from source to destination
