@@ -587,12 +587,18 @@ pub const ProxmoxLxcDriver = struct {
             const trimmed = std.mem.trim(u8, line, " \t\r");
             if (trimmed.len == 0) continue;
 
-            // Split by whitespace columns - handle multiple spaces
-            var it = std.mem.tokenizeAny(u8, trimmed, " \t");
-            const vmid_str = it.next() orelse continue;
-            _ = it.next() orelse continue; // Skip Status column
-            _ = it.next() orelse continue; // Skip Lock column
-            const name_str = it.next() orelse vmid_str; // Name column
+            // Parse fixed-width columns from pct list output
+            // Format: "VMID       Status     Lock         Name"
+            // Example: "101        stopped                 container-1"
+            if (trimmed.len < 50) continue; // Skip short lines
+            
+            // Extract VMID (first 10 characters)
+            const vmid_str = std.mem.trim(u8, trimmed[0..10], " \t");
+            if (vmid_str.len == 0) continue;
+            
+            // Extract Name (last column, starting from position 50)
+            const name_start = @min(50, trimmed.len);
+            const name_str = std.mem.trim(u8, trimmed[name_start..], " \t");
 
             if (self.logger) |log| try log.info("Checking: vmid='{s}', name='{s}', looking for='{s}'", .{ vmid_str, name_str, name });
             std.debug.print("DEBUG: Checking: vmid='{s}', name='{s}', looking for='{s}'\n", .{ vmid_str, name_str, name });
