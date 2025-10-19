@@ -344,12 +344,15 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Start LXC container using pct command
     pub fn start(self: *Self, container_id: []const u8) !void {
+        std.debug.print("DEBUG: start() called with container_id: {s}\n", .{container_id});
+        
         if (self.logger) |log| {
             try log.info("Starting Proxmox LXC container: {s}", .{container_id});
         }
 
         // Resolve VMID by name via pct list
         if (self.logger) |log| try log.info("Looking up VMID for container: {s}", .{container_id});
+        std.debug.print("DEBUG: About to call getVmidByName\n", .{});
         const vmid = try self.getVmidByName(container_id);
         defer self.allocator.free(vmid);
 
@@ -557,8 +560,10 @@ pub const ProxmoxLxcDriver = struct {
     }
     /// Get VMID by container name
     fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
+        std.debug.print("DEBUG: getVmidByName() called with name: {s}\n", .{name});
         const pct_args = [_][]const u8{ "pct", "list" };
         if (self.logger) |log| try log.info("Running pct list command", .{});
+        std.debug.print("DEBUG: About to run pct list\n", .{});
         const pct_res = try self.runCommand(&pct_args);
         defer self.allocator.free(pct_res.stdout);
         defer self.allocator.free(pct_res.stderr);
