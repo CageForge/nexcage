@@ -303,20 +303,39 @@ pub const ImageConverter = struct {
             \\#!/bin/sh
             \\# LXC init script
             \\
-            \\# Mount essential filesystems
-            \\mount -t proc proc /proc
-            \\mount -t sysfs sysfs /sys
-            \\mount -t devtmpfs devtmpfs /dev
+            \\# Set PATH
+            \\export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            \\
+            \\# Mount essential filesystems (if not already mounted)
+            \\[ ! -d /proc/self ] && mount -t proc proc /proc 2>/dev/null || true
+            \\[ ! -d /sys/kernel ] && mount -t sysfs sysfs /sys 2>/dev/null || true
+            \\[ ! -c /dev/console ] && mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+            \\
+            \\# Create essential device nodes
+            \\[ ! -c /dev/console ] && mknod /dev/console c 5 1 2>/dev/null || true
+            \\[ ! -c /dev/null ] && mknod /dev/null c 1 3 2>/dev/null || true
+            \\[ ! -c /dev/zero ] && mknod /dev/zero c 1 5 2>/dev/null || true
+            \\
+            \\# Set hostname
+            \\if [ -f /etc/hostname ]; then
+            \\    hostname $(cat /etc/hostname) 2>/dev/null || true
+            \\fi
             \\
             \\# Start essential services
             \\if [ -x /etc/init.d/rcS ]; then
             \\    /etc/init.d/rcS
             \\fi
             \\
-            \\# Keep container running
-            \\while true; do
-            \\    sleep 3600
-            \\done
+            \\# Start main process
+            \\if [ -x /bin/sh ]; then
+            \\    exec /bin/sh
+            \\else
+            \\    # Keep container running
+            \\    while true; do
+            \\        echo "Container is running..."
+            \\        sleep 30
+            \\    done
+            \\fi
             \\
         ;
         try file.writeAll(init_script);

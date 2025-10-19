@@ -148,6 +148,8 @@ pub const ProxmoxLxcDriver = struct {
             "--memory", "512",
             "--cores", "1",
             "--net0", "name=eth0,bridge=vmbr0,ip=dhcp",
+            "--ostype", "ubuntu",
+            "--unprivileged", "0",
         };
 
         if (self.logger) |log| {
