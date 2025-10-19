@@ -576,9 +576,11 @@ pub const ProxmoxLxcDriver = struct {
             const trimmed = std.mem.trim(u8, line, " \t\r");
             if (trimmed.len == 0) continue;
 
-            // Split by whitespace columns
-            var it = std.mem.tokenizeScalar(u8, trimmed, ' ');
+            // Split by whitespace columns - handle multiple spaces
+            var it = std.mem.tokenizeAny(u8, trimmed, " \t");
             const vmid_str = it.next() orelse continue;
+            _ = it.next(); // Skip Status column
+            _ = it.next(); // Skip Lock column
             const name_str = it.next() orelse vmid_str;
 
             if (std.mem.eql(u8, name_str, name)) {
