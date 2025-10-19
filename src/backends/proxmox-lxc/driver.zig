@@ -557,9 +557,12 @@ pub const ProxmoxLxcDriver = struct {
     /// Get VMID by container name
     fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
         const pct_args = [_][]const u8{ "pct", "list" };
+        if (self.logger) |log| try log.info("Running pct list command", .{});
         const pct_res = try self.runCommand(&pct_args);
         defer self.allocator.free(pct_res.stdout);
         defer self.allocator.free(pct_res.stderr);
+
+        if (self.logger) |log| try log.info("pct list result: exit_code={d}, stdout='{s}', stderr='{s}'", .{ pct_res.exit_code, pct_res.stdout, pct_res.stderr });
 
         if (pct_res.exit_code != 0) {
             return core.Error.NotFound;
