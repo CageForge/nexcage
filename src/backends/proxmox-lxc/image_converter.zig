@@ -232,8 +232,17 @@ pub const ImageConverter = struct {
 
     /// Set hostname in rootfs
     fn setHostname(self: *Self, rootfs_path: []const u8, hostname: []const u8) !void {
-        const hostname_path = try std.fmt.allocPrint(self.allocator, "{s}/etc/hostname", .{rootfs_path});
+        const etc_dir = try std.fmt.allocPrint(self.allocator, "{s}/etc", .{rootfs_path});
+        defer self.allocator.free(etc_dir);
+        
+        const hostname_path = try std.fmt.allocPrint(self.allocator, "{s}/hostname", .{etc_dir});
         defer self.allocator.free(hostname_path);
+
+        // Create etc directory if it doesn't exist
+        std.fs.cwd().makeDir(etc_dir) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
 
         const file = try std.fs.cwd().createFile(hostname_path, .{});
         defer file.close();
@@ -245,8 +254,17 @@ pub const ImageConverter = struct {
     fn configureNetwork(self: *Self, rootfs_path: []const u8, config: *const oci_bundle.OciBundleConfig) !void {
         _ = config;
         // Create basic network configuration
-        const network_path = try std.fmt.allocPrint(self.allocator, "{s}/etc/network/interfaces", .{rootfs_path});
+        const network_dir = try std.fmt.allocPrint(self.allocator, "{s}/etc/network", .{rootfs_path});
+        defer self.allocator.free(network_dir);
+        
+        const network_path = try std.fmt.allocPrint(self.allocator, "{s}/interfaces", .{network_dir});
         defer self.allocator.free(network_path);
+
+        // Create network directory if it doesn't exist
+        std.fs.cwd().makeDir(network_dir) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
 
         const file = try std.fs.cwd().createFile(network_path, .{});
         defer file.close();
