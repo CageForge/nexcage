@@ -82,7 +82,7 @@ pub const ImageConverter = struct {
 
         // Check if source is a directory or archive
         if (self.logger) |log| try log.info("Attempting to open source path: {s}", .{source_path});
-        var source_dir = std.fs.cwd().openDir(source_path, .{}) catch |err| switch (err) {
+        var source_dir = std.fs.cwd().openDir(source_path, .{ .iterate = true }) catch |err| switch (err) {
             error.FileNotFound => {
                 if (self.logger) |log| try log.info("Source path not found as directory, trying as archive: {s}", .{source_path});
                 // Try as archive
@@ -171,7 +171,7 @@ pub const ImageConverter = struct {
             switch (entry.kind) {
                 .directory => {
                     try std.fs.cwd().makePath(source_path);
-                    var subdir = try source_dir.openDir(entry.name, .{});
+                    var subdir = try source_dir.openDir(entry.name, .{ .iterate = true });
                     defer subdir.close();
                     try self.copyDirectoryRecursive(subdir, source_path);
                 },
