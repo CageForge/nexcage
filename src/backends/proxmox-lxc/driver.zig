@@ -597,9 +597,9 @@ pub const ProxmoxLxcDriver = struct {
             const vmid_str = std.mem.trim(u8, trimmed[0..10], " \t");
             if (vmid_str.len == 0) continue;
             
-            // Extract Name (last column, starting from position 40)
-            // Name column starts around position 40 in pct list output
-            const name_start = @min(40, trimmed.len);
+            // Extract Name (last column, starting from position 33)
+            // Name column starts around position 33 in pct list output
+            const name_start = @min(33, trimmed.len);
             const name_str = std.mem.trim(u8, trimmed[name_start..], " \t");
 
             if (self.logger) |log| try log.info("Checking: vmid='{s}', name='{s}', looking for='{s}'", .{ vmid_str, name_str, name });
