@@ -349,6 +349,7 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // Resolve VMID by name via pct list
+        if (self.logger) |log| try log.info("Looking up VMID for container: {s}", .{container_id});
         const vmid = try self.getVmidByName(container_id);
         defer self.allocator.free(vmid);
 
