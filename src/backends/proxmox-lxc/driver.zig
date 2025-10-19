@@ -590,7 +590,8 @@ pub const ProxmoxLxcDriver = struct {
             // Parse fixed-width columns from pct list output
             // Format: "VMID       Status     Lock         Name"
             // Example: "101        stopped                 container-1"
-            if (trimmed.len < 50) continue; // Skip short lines
+            std.debug.print("DEBUG: Processing line: '{s}' (len={d})\n", .{ trimmed, trimmed.len });
+            if (trimmed.len < 20) continue; // Skip short lines
             
             // Extract VMID (first 10 characters)
             const vmid_str = std.mem.trim(u8, trimmed[0..10], " \t");
