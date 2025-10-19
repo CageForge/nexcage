@@ -284,8 +284,17 @@ pub const ImageConverter = struct {
     fn setupInitSystem(self: *Self, rootfs_path: []const u8, config: *const oci_bundle.OciBundleConfig) !void {
         _ = config;
         // Create basic init script for LXC
-        const init_path = try std.fmt.allocPrint(self.allocator, "{s}/sbin/init", .{rootfs_path});
+        const sbin_dir = try std.fmt.allocPrint(self.allocator, "{s}/sbin", .{rootfs_path});
+        defer self.allocator.free(sbin_dir);
+        
+        const init_path = try std.fmt.allocPrint(self.allocator, "{s}/init", .{sbin_dir});
         defer self.allocator.free(init_path);
+
+        // Create sbin directory if it doesn't exist
+        std.fs.cwd().makeDir(sbin_dir) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
 
         const file = try std.fs.cwd().createFile(init_path, .{});
         defer file.close();
