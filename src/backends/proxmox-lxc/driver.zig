@@ -18,6 +18,7 @@ pub const ProxmoxLxcDriver = struct {
     allocator: std.mem.Allocator,
     config: core.types.ProxmoxLxcBackendConfig,
     logger: ?*core.LogContext = null,
+    debug_mode: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, config: core.types.ProxmoxLxcBackendConfig) !*Self {
         const driver = try allocator.alloc(Self, 1);
@@ -36,6 +37,11 @@ pub const ProxmoxLxcDriver = struct {
     /// Set logger
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
         self.logger = logger;
+    }
+
+    /// Set debug mode
+    pub fn setDebugMode(self: *Self, debug_mode: bool) void {
+        self.debug_mode = debug_mode;
     }
 
     /// Process OCI bundle - convert to template if needed, return template name
@@ -344,15 +350,12 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Start LXC container using pct command
     pub fn start(self: *Self, container_id: []const u8) !void {
-        std.debug.print("DEBUG: start() called with container_id: {s}\n", .{container_id});
-        
         if (self.logger) |log| {
             try log.info("Starting Proxmox LXC container: {s}", .{container_id});
         }
 
         // Resolve VMID by name via pct list
         if (self.logger) |log| try log.info("Looking up VMID for container: {s}", .{container_id});
-        std.debug.print("DEBUG: About to call getVmidByName\n", .{});
         const vmid = try self.getVmidByName(container_id);
         defer self.allocator.free(vmid);
 
@@ -560,19 +563,21 @@ pub const ProxmoxLxcDriver = struct {
     }
     /// Get VMID by container name
     fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
-        std.debug.print("DEBUG: getVmidByName() called with name: {s}\n", .{name});
+        if (self.debug_mode) std.debug.print("DEBUG: getVmidByName() called with name: {s}\n", .{name});
+        
         const pct_args = [_][]const u8{ "pct", "list" };
         if (self.logger) |log| try log.info("Running pct list command", .{});
-        std.debug.print("DEBUG: About to run pct list\n", .{});
+        if (self.debug_mode) std.debug.print("DEBUG: About to run pct list\n", .{});
+        
         const pct_res = try self.runCommand(&pct_args);
         defer self.allocator.free(pct_res.stdout);
         defer self.allocator.free(pct_res.stderr);
 
         if (self.logger) |log| try log.info("pct list result: exit_code={d}, stdout='{s}', stderr='{s}'", .{ pct_res.exit_code, pct_res.stdout, pct_res.stderr });
-        std.debug.print("DEBUG: pct list result: exit_code={d}, stdout='{s}', stderr='{s}'\n", .{ pct_res.exit_code, pct_res.stdout, pct_res.stderr });
+        if (self.debug_mode) std.debug.print("DEBUG: pct list result: exit_code={d}, stdout='{s}', stderr='{s}'\n", .{ pct_res.exit_code, pct_res.stdout, pct_res.stderr });
 
         if (pct_res.exit_code != 0) {
-            std.debug.print("DEBUG: pct list failed with exit_code={d}\n", .{pct_res.exit_code});
+            if (self.debug_mode) std.debug.print("DEBUG: pct list failed with exit_code={d}\n", .{pct_res.exit_code});
             return core.Error.NotFound;
         }
 
@@ -590,7 +595,7 @@ pub const ProxmoxLxcDriver = struct {
             // Parse fixed-width columns from pct list output
             // Format: "VMID       Status     Lock         Name"
             // Example: "101        stopped                 container-1"
-            std.debug.print("DEBUG: Processing line: '{s}' (len={d})\n", .{ trimmed, trimmed.len });
+            if (self.debug_mode) std.debug.print("DEBUG: Processing line: '{s}' (len={d})\n", .{ trimmed, trimmed.len });
             if (trimmed.len < 20) continue; // Skip short lines
             
             // Extract VMID (first 10 characters)
@@ -603,11 +608,11 @@ pub const ProxmoxLxcDriver = struct {
             const name_str = std.mem.trim(u8, trimmed[name_start..], " \t");
 
             if (self.logger) |log| try log.info("Checking: vmid='{s}', name='{s}', looking for='{s}'", .{ vmid_str, name_str, name });
-            std.debug.print("DEBUG: Checking: vmid='{s}', name='{s}', looking for='{s}'\n", .{ vmid_str, name_str, name });
+            if (self.debug_mode) std.debug.print("DEBUG: Checking: vmid='{s}', name='{s}', looking for='{s}'\n", .{ vmid_str, name_str, name });
 
             if (std.mem.eql(u8, name_str, name)) {
                 if (self.logger) |log| try log.info("Found match: vmid='{s}', name='{s}'", .{ vmid_str, name_str });
-                std.debug.print("DEBUG: Found match: vmid='{s}', name='{s}'\n", .{ vmid_str, name_str });
+                if (self.debug_mode) std.debug.print("DEBUG: Found match: vmid='{s}', name='{s}'\n", .{ vmid_str, name_str });
                 return self.allocator.dupe(u8, vmid_str);
             }
         }

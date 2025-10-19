@@ -11,11 +11,20 @@ pub const BackendRouter = struct {
 
     allocator: std.mem.Allocator,
     logger: ?*logging.LogContext,
+    debug_mode: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, logger: ?*logging.LogContext) Self {
         return Self{
             .allocator = allocator,
             .logger = logger,
+        };
+    }
+
+    pub fn initWithDebug(allocator: std.mem.Allocator, logger: ?*logging.LogContext, debug_mode: bool) Self {
+        return Self{
+            .allocator = allocator,
+            .logger = logger,
+            .debug_mode = debug_mode,
         };
     }
 
@@ -145,6 +154,9 @@ pub const BackendRouter = struct {
         if (self.logger) |log| {
             proxmox_backend.setLogger(log);
         }
+        
+        // Set debug mode
+        proxmox_backend.setDebugMode(self.debug_mode);
 
         switch (operation) {
             .create => try proxmox_backend.create(sandbox_config),

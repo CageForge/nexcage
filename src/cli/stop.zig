@@ -48,7 +48,7 @@ pub const StopCommand = struct {
         try self.logOperation("Stopping container", container_id);
 
         // Use router for backend selection and execution
-        var backend_router = router.BackendRouter.init(allocator, self.base.logger);
+        var backend_router = router.BackendRouter.initWithDebug(allocator, self.base.logger, options.debug);
 
         const operation = router.Operation{ .stop = {} };
         try backend_router.routeAndExecute(operation, container_id, null);
