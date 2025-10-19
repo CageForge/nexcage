@@ -325,8 +325,19 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             options.workdir = try allocator.dupe(u8, args[i + 1]);
             i += 2;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
-            // This is likely the image name or command
-            if (options.image == null) {
+            // This is likely the image name, container ID, or command
+            if (options.command == .start or options.command == .stop or options.command == .delete) {
+                // For start/stop/delete, first argument is container ID
+                if (options.container_id == null) {
+                    options.container_id = try allocator.dupe(u8, arg);
+                } else {
+                    // This is a command argument
+                    if (options.args == null) {
+                        options.args = args[i..];
+                    }
+                    break;
+                }
+            } else if (options.image == null) {
                 options.image = try allocator.dupe(u8, arg);
             } else {
                 // This is a command argument
