@@ -1,12 +1,12 @@
-# Sprint 6.5: Final Release v0.5.0
+# Sprint 6.5: Final Release v0.6.0
 
-**Date**: 2025-01-15  
+**Date**: 2025-10-21 
 **Status**: ✅ COMPLETED  
 **Duration**: 1 day  
 
 ## 🎯 **Sprint Goals**
 
-Prepare and release stable version v0.5.0 with all core functionality working.
+Prepare and release stable version v0.6.0 with all core functionality working.
 
 ## ✅ **Completed Tasks**
 
@@ -108,4 +108,4 @@ nexcage list
 
 ---
 
-**Sprint 6.5 completed successfully! Ready for v0.5.0 release.**
+**Sprint 6.5 completed successfully! Ready for v0.6.0 release.**
