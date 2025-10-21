@@ -1,6 +1,6 @@
 # Development Workflow
 
-This document outlines the development workflow for the Proxmox LXC CRI project.
+This document outlines the development workflow for the Nexcage runtime project.
 
 ## 1. Task Selection and Refinement
 

@@ -8,18 +8,14 @@ flowchart TD
   CORE[Core Types/Errors/Config]
   BACKENDS[[Backends]]
   LXC[LXC Driver]
-  PROX[Proxmox API]
-  OCI[OCI Layer]
   UTILS[Utils]
 
   CLI --> CORE
   CLI --> BACKENDS
-  BACKENDS --> LXC
-  BACKENDS --> PROX
-  BACKENDS --> OCI
-  LXC -->|executes| Host[LXC tools]
-  PROX -->|HTTPS| Proxmox[Proxmox Cluster]
-  OCI --> CORE
+  BACKENDS --> Proxmox LXC
+  BACKENDS --> Crun
+  BACKENDS --> Runc
+  Proxmox LXC -->|pct CLI| Proxmox[Proxmox Cluster]
   CORE --> UTILS
 ```
 

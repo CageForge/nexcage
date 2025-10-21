@@ -16,7 +16,7 @@ The project includes specialized testing for Proxmox VE environments:
 
 ### Proxmox Server Configuration
 
-- **Host**: `mgr.cp.if.ua`
+- **Host**: `your-proxmox.server`
 - **User**: `root`
 - **Binary Path**: `/usr/local/bin`
 - **Config Path**: `/etc/nexcage`
@@ -58,7 +58,7 @@ Tests can be configured through environment variables:
 
 ```bash
 # Proxmox test configuration
-export PVE_HOST="root@mgr.cp.if.ua"
+export PVE_HOST="root@your-proxmox.server"
 export PVE_PATH="/usr/local/bin"
 export CONFIG_PATH="/etc/nexcage"
 export LOG_PATH="/var/log/nexcage"

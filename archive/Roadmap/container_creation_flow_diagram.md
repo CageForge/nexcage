@@ -1,7 +1,7 @@
 # Container Creation Flow Diagram
 
 ## Overview
-This document contains a visual representation of the container creation process in Proxmox LXCRI using Mermaid diagrams.
+This document contains a visual representation of the container creation process in Nexcage runtime using Mermaid diagrams.
 
 ## Main Flow Diagram
 

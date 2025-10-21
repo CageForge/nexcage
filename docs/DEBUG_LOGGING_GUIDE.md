@@ -2,7 +2,7 @@
 
 ## Overview
 
-nexcage has an advanced logging system that allows detailed tracking of command execution, problem diagnosis, and performance analysis. The system supports DEBUG mode, file logging, and detailed execution time logging.
+Nexcage has an advanced logging system that allows detailed tracking of command execution, problem diagnosis, and performance analysis. The system supports DEBUG mode, file logging, and detailed execution time logging.
 
 ## Key Features
 

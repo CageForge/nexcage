@@ -1,4 +1,4 @@
-# Proxmox LXCRI Onboarding Guide
+# Nexcage Onboarding Guide
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ For a quick setup, run the bootstrap script:
 
 ```bash
 # Download and run bootstrap script
-curl -O https://raw.githubusercontent.com/your-org/nexcage/main/scripts/bootstrap.sh
+curl -O https://raw.githubusercontent.com/cageforge/nexcage/main/scripts/bootstrap.sh
 chmod +x bootstrap.sh
 sudo ./bootstrap.sh
 ```

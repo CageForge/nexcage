@@ -153,15 +153,33 @@ pub const ConfigLoader = struct {
                                             else => "lxc",
                                         } else "lxc";
                                     
+                                    const pattern_dup = self.allocator.dupe(u8, pattern) catch |err| {
+                                        // Clean up already allocated rules
+                                        for (routing_rules[0..i]) |*rule| {
+                                            rule.deinit(self.allocator);
+                                        }
+                                        self.allocator.free(routing_rules);
+                                        return err;
+                                    };
+                                    
                                     routing_rules[i] = types.RoutingRule{
-                                        .pattern = try self.allocator.dupe(u8, pattern),
+                                        .pattern = pattern_dup,
                                         .runtime = self.parseRuntimeType(runtime_str),
                                     };
                                 },
                                 else => {
                                     // Initialize with default values for invalid entries
+                                    const empty_pattern = self.allocator.dupe(u8, "") catch |err| {
+                                        // Clean up already allocated rules
+                                        for (routing_rules[0..i]) |*rule| {
+                                            rule.deinit(self.allocator);
+                                        }
+                                        self.allocator.free(routing_rules);
+                                        return err;
+                                    };
+                                    
                                     routing_rules[i] = types.RoutingRule{
-                                        .pattern = try self.allocator.dupe(u8, ""),
+                                        .pattern = empty_pattern,
                                         .runtime = .lxc,
                                     };
                                 },
@@ -402,15 +420,33 @@ pub const ConfigLoader = struct {
                                             else => "lxc",
                                         } else "lxc";
                                     
+                                    const pattern_dup = self.allocator.dupe(u8, pattern) catch |err| {
+                                        // Clean up already allocated rules
+                                        for (routing_rules[0..i]) |*rule| {
+                                            rule.deinit(self.allocator);
+                                        }
+                                        self.allocator.free(routing_rules);
+                                        return err;
+                                    };
+                                    
                                     routing_rules[i] = types.RoutingRule{
-                                        .pattern = try self.allocator.dupe(u8, pattern),
+                                        .pattern = pattern_dup,
                                         .runtime = self.parseRuntimeType(runtime_str),
                                     };
                                 },
                                 else => {
                                     // Initialize with default values for invalid entries
+                                    const empty_pattern = self.allocator.dupe(u8, "") catch |err| {
+                                        // Clean up already allocated rules
+                                        for (routing_rules[0..i]) |*rule| {
+                                            rule.deinit(self.allocator);
+                                        }
+                                        self.allocator.free(routing_rules);
+                                        return err;
+                                    };
+                                    
                                     routing_rules[i] = types.RoutingRule{
-                                        .pattern = try self.allocator.dupe(u8, ""),
+                                        .pattern = empty_pattern,
                                         .runtime = .lxc,
                                     };
                                 },
@@ -686,9 +722,20 @@ pub const Config = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.allocator.free(self.default_runtime);
+        // Free default_runtime if it's allocated (not a literal)
+        // Check if it's not one of the default literals
+        if (!std.mem.eql(u8, self.default_runtime, "lxc") and 
+            !std.mem.eql(u8, self.default_runtime, "proxmox-lxc") and
+            !std.mem.eql(u8, self.default_runtime, "crun") and
+            !std.mem.eql(u8, self.default_runtime, "runc")) {
+            self.allocator.free(self.default_runtime);
+        }
         if (self.log_file) |log_file| {
-            self.allocator.free(log_file);
+            // Only free if it's not a default literal
+            if (!std.mem.eql(u8, log_file, "/tmp/nexcage-logs/nexcage.log") and
+                !std.mem.eql(u8, log_file, "/var/log/nexcage/nexcage.log")) {
+                self.allocator.free(log_file);
+            }
         }
         self.allocator.free(self.data_dir);
         self.allocator.free(self.cache_dir);

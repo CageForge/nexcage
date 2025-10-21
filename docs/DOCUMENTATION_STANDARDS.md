@@ -1,4 +1,4 @@
-# Proxmox LXCRI Documentation Standards
+# Nexcage Documentation Standards
 
 ## 1. General Rules
 

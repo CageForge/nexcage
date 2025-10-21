@@ -307,4 +307,4 @@ When reporting issues, include:
 
 **Last Updated**: 2025-10-04  
 **Version**: 0.5.0  
-**Maintainer**: Proxmox LXC Runtime Interface Team
+**Maintainer**: Nexcage Runtime Interface Team

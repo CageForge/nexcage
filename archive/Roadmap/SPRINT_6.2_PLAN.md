@@ -18,11 +18,11 @@
 - **Priority**: HIGH
 - **Status**: Backend complete, CLI integration needed
 - **Tasks**:
-  - [ ] Re-enable LXC backend calls in CLI commands
+  - [x] Re-enable LXC backend calls in CLI commands
   - [ ] Test full LXC integration with modular architecture
   - [ ] Complete LXC CLI functionality
-  - [ ] Add LXC-specific error handling
-  - [ ] Update CLI help for LXC features
+  - [x] Add LXC-specific error handling
+  - [x] Update CLI help for LXC features
 
 ### 2. Proxmox VM Backend (Issue #70)
 - **Priority**: HIGH

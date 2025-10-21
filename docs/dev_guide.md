@@ -1,4 +1,4 @@
-# Proxmox LXCRI Development Guide
+# Nexcage Development Guide
 
 ## Development Environment Setup
 
@@ -12,7 +12,7 @@
 ### Build Environment
 ```bash
 # Clone repository
-git clone https://github.com/your-org/nexcage.git
+git clone https://github.com/cageforge/nexcage.git
 cd nexcage
 
 # Install dependencies
@@ -28,17 +28,7 @@ zig build
 ```
 
 ## Debugging
-
-### Logging
-```zig
-// Add logging to your code
-const std = @import("std");
-const log = std.log.scoped(.your_component);
-
-log.info("Operation started", .{});
-log.err("Operation failed: {s}", .{error_message});
-log.debug("Debug info: {d}", .{value});
-```
+[docs/DEBUG_LOGGING_GUIDE.md]
 
 ### Debug Build
 ```bash
@@ -46,7 +36,7 @@ log.debug("Debug info: {d}", .{value});
 zig build -Doptimize=Debug
 
 # Run with debug logging
-PROXMOX_LXCRI_LOG_LEVEL=debug ./zig-out/bin/nexcage
+NEXCAGE_LOG_LEVEL=debug ./zig-out/bin/nexcage
 ```
 
 ### GDB Debugging
@@ -73,7 +63,7 @@ tcpdump -i any -w network.pcap
 
 ## Adding New Features
 
-### 1. Project Structure
+### 1. Project Structure (old structure, legacy)
 ```
 src/
 ├── oci/           # OCI runtime implementation
@@ -168,7 +158,7 @@ The `your_new_hook` hook is executed during the container lifecycle...
 - [ ] Logging appropriate
 - [ ] Performance considered
 
-### 4. Performance Considerations
+### 4. Performance Considerations (deprecated)
 
 ```zig
 // Use arena allocator for temporary allocations
@@ -184,7 +174,7 @@ const slice = try allocator.dupe(u8, original);
 defer allocator.free(slice);
 ```
 
-### 5. Error Handling
+### 5. Error Handling (deprecated)
 
 ```zig
 // Use error sets for specific errors
@@ -251,7 +241,7 @@ perf report
 ### 1. Version Bumping
 ```bash
 # Update version in build.zig
-version = "0.2.0";
+version = "0.7.0";
 ```
 
 ### 2. Changelog
@@ -262,12 +252,12 @@ git log --pretty=format:"%h %s" v0.0.9..HEAD
 
 ### 3. Release Tag
 ```bash
-git tag -a v0.2.0 -m "Release v0.2.0"
-git push origin v0.2.0
+git tag -a v0.7.0 -m "Release v0.7.0"
+git push origin v0.7.0
 ```
 
 ### 4. Documentation
-- Update API documentation
+- Update CLI documentation
 - Update user guide
 - Update release notes
 
@@ -303,7 +293,7 @@ nc -zv container-ip port
 
 1. **Enable Verbose Logging**
 ```bash
-PROXMOX_LXCRI_LOG_LEVEL=debug ./zig-out/bin/nexcage
+NEXCAGE_LOG_LEVEL=debug ./zig-out/bin/nexcage
 ```
 
 2. **Check System Logs**

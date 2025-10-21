@@ -2,7 +2,7 @@
 
 ## Overview
 
-Proxmox LXCRI v0.4.0 introduces a modular architecture that follows SOLID principles, providing clean separation of concerns and extensibility.
+Nexcage v0.4.0 introduces a modular architecture that follows SOLID principles, providing clean separation of concerns and extensibility.
 
 ## Architecture Principles
 

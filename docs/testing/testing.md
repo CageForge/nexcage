@@ -2,7 +2,7 @@
 
 ## Overview
 
-Proxmox LXCRI includes a comprehensive testing suite that covers all major components of the OCI Image System. The testing framework is designed to ensure code quality, performance, and reliability across different scenarios.
+Nexcage includes a comprehensive testing suite that covers all major components of the OCI Image System. The testing framework is designed to ensure code quality, performance, and reliability across different scenarios.
 
 ## Test Structure
 

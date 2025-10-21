@@ -101,22 +101,28 @@ pub const ProxmoxLxcDriver = struct {
         var template_name: ?[]const u8 = null;
         defer if (template_name) |tname| self.allocator.free(tname);
         
-        if (config.image) |bundle_path| {
-            // Ensure bundle directory exists
-            var bundle_dir = std.fs.cwd().openDir(bundle_path, .{}) catch |err| {
-                if (self.logger) |log| try log.err("Bundle path not found: {s} ({})", .{ bundle_path, err });
-                return core.Error.FileNotFound;
-            };
-            defer bundle_dir.close();
+        if (config.image) |image_path| {
+            // Check if it's a Proxmox template (ends with .tar.zst or contains :)
+            if (std.mem.endsWith(u8, image_path, ".tar.zst") or std.mem.indexOf(u8, image_path, ":") != null) {
+                // It's a Proxmox template, use it directly
+                template_name = try self.allocator.dupe(u8, image_path);
+            } else {
+                // It's an OCI bundle - ensure bundle directory exists
+                var bundle_dir = std.fs.cwd().openDir(image_path, .{}) catch |err| {
+                    if (self.logger) |log| try log.err("Bundle path not found: {s} ({})", .{ image_path, err });
+                    return core.Error.FileNotFound;
+                };
+                defer bundle_dir.close();
 
-            // Ensure config.json exists in the bundle
-            bundle_dir.access("config.json", .{}) catch |err| {
-                if (self.logger) |log| try log.err("config.json not found in bundle: {s} ({})", .{ bundle_path, err });
-                return core.Error.FileNotFound;
-            };
+                // Ensure config.json exists in the bundle
+                bundle_dir.access("config.json", .{}) catch |err| {
+                    if (self.logger) |log| try log.err("config.json not found in bundle: {s} ({})", .{ image_path, err });
+                    return core.Error.FileNotFound;
+                };
 
-            // Process OCI bundle - convert to template if needed
-            template_name = try self.processOciBundle(bundle_path, config.name);
+                // Process OCI bundle - convert to template if needed
+                template_name = try self.processOciBundle(image_path, config.name);
+            }
         }
 
         // Generate VMID from name (Proxmox requires numeric vmid)
@@ -130,7 +136,14 @@ pub const ProxmoxLxcDriver = struct {
         // Resolve template to use: prefer converted template or find available one
         var template: []u8 = undefined;
         if (template_name) |tname| {
-            template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}.tar.zst", .{tname});
+            // Check if template already has storage prefix (contains :)
+            if (std.mem.indexOf(u8, tname, ":") != null) {
+                // Template already has storage prefix, use as is
+                template = try self.allocator.dupe(u8, tname);
+            } else {
+                // Template is just a name, add storage prefix
+                template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}.tar.zst", .{tname});
+            }
         } else {
             const t = try self.findAvailableTemplate();
             template = try self.allocator.dupe(u8, t);
@@ -155,20 +168,30 @@ pub const ProxmoxLxcDriver = struct {
         if (self.logger) |log| {
             try log.debug("Proxmox LXC create: Creating container with pct create", .{});
         }
+        
+        // Debug: print template name (only in debug mode)
+        if (self.debug_mode) {
+            const stdout = std.fs.File.stdout();
+            try stdout.writeAll("DEBUG: template = '");
+            try stdout.writeAll(template);
+            try stdout.writeAll("'\n");
+        }
 
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
         
-        // Debug output
-        const stdout = std.fs.File.stdout();
-        try stdout.writeAll("DEBUG: pct create result - exit_code: ");
-        try stdout.writeAll(std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{result.exit_code}) catch "unknown");
-        try stdout.writeAll(", stdout: ");
-        try stdout.writeAll(result.stdout);
-        try stdout.writeAll(", stderr: ");
-        try stdout.writeAll(result.stderr);
-        try stdout.writeAll("\n");
+        // Debug output (only in debug mode)
+        if (self.debug_mode) {
+            const stdout = std.fs.File.stdout();
+            try stdout.writeAll("DEBUG: pct create result - exit_code: ");
+            try stdout.writeAll(std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{result.exit_code}) catch "unknown");
+            try stdout.writeAll(", stdout: ");
+            try stdout.writeAll(result.stdout);
+            try stdout.writeAll(", stderr: ");
+            try stdout.writeAll(result.stderr);
+            try stdout.writeAll("\n");
+        }
         
         if (result.exit_code != 0) {
             if (self.logger) |log| try log.err("Failed to create Proxmox LXC via pct: {s}", .{result.stderr});

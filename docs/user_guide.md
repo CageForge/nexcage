@@ -2,7 +2,7 @@
 
 ## Overview
 
-This user guide provides comprehensive instructions for using Proxmox LXCRI with the new OCI Image System. It covers installation, configuration, basic usage, and advanced features for container management.
+This user guide provides comprehensive instructions for using Nexcage with the new OCI Image System. It covers installation, configuration, basic usage, and advanced features for container management.
 
 ## Table of Contents
 
@@ -126,9 +126,9 @@ sudo systemctl start nexcage
 
 ```bash
 # Set environment variables
-export PROXMOX_LXCRI_CONFIG="/etc/nexcage/config.json"
-export PROXMOX_LXCRI_LOG_LEVEL="info"
-export PROXMOX_LXCRI_STORAGE_PATH="/var/lib/nexcage"
+export NEXCAGE_CONFIG="/etc/nexcage/config.json"
+export NEXCAGE_LOG_LEVEL="info"
+export NEXCAGE_STORAGE_PATH="/var/lib/nexcage"
 ```
 
 ## Basic Usage
@@ -500,7 +500,7 @@ nexcage optimize
 
 ```bash
 # Enable debug logging
-export PROXMOX_LXCRI_LOG_LEVEL="debug"
+export NEXCAGE_LOG_LEVEL="debug"
 
 # Run with verbose output
 nexcage --verbose create --name test ubuntu:22.04
@@ -607,7 +607,7 @@ nexcage exec dev-env \
 
 ## Conclusion
 
-This user guide covers the essential aspects of using Proxmox LXCRI with the OCI Image System. The system provides powerful container management capabilities with advanced features like LayerFS, metadata caching, and ZFS integration.
+This user guide covers the essential aspects of using Nexcage with the OCI Image System. The system provides powerful container management capabilities with advanced features like LayerFS, metadata caching, and ZFS integration.
 
 For more detailed information, refer to:
 - [API Documentation](api.md)

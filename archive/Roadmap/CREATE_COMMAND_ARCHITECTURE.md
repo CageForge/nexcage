@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `create` command in nexcage implements a sophisticated architecture that automatically handles OCI bundle conversion to Proxmox LXC templates. This document details the complete flow from CLI invocation to container creation.
+The `create` command in Nexcage implements a sophisticated architecture that automatically handles OCI bundle conversion to Proxmox LXC templates. This document details the complete flow from CLI invocation to container creation.
 
 ## Architecture Flow
 

@@ -1,4 +1,4 @@
-# Video Tutorial Scripts for Proxmox LXCRI
+# Video Tutorial Scripts for Тучсфпу
 
 ## 📹 Tutorial Series Overview
 

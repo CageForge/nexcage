@@ -9,7 +9,7 @@ This document contains detailed testing results for the nexcage configuration pr
 - **OS**: Linux (Ubuntu/Debian)
 - **Architecture**: x86_64
 - **Zig Version**: 0.15.1
-- **Test Date**: January 2025
+- **Test Date**: Octouber 2025
 - **Test Duration**: ~30 minutes
 
 ## Test Scenarios

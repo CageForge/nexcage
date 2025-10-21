@@ -73,8 +73,8 @@ pub const AppContext = struct {
         // Cleanup logging configuration
         self.logging_config.deinit(self.allocator);
 
-        // TODO: Fix memory leaks in config parsing - config.deinit() causes segfault
-        // self.config.deinit();
+        // Cleanup main configuration
+        self.config.deinit();
 
         // TODO: Implement backend cleanup
         // if (self.backend) |backend| {
@@ -93,7 +93,7 @@ pub const AppContext = struct {
         self.command_registry.deinit();
         cli.deinitGlobalRegistry();
         self.logger.deinit();
-        self.config.deinit();
+        // config.deinit() already called above
     }
 
     /// Initialize backend based on configuration
