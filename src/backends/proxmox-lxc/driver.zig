@@ -101,6 +101,9 @@ pub const ProxmoxLxcDriver = struct {
         var template_name: ?[]const u8 = null;
         defer if (template_name) |tname| self.allocator.free(tname);
         
+        // Keep track of original OCI bundle path for mounts
+        var oci_bundle_path: ?[]const u8 = null;
+        
         if (config.image) |image_path| {
             // Check if it's a Proxmox template (ends with .tar.zst or contains :)
             if (std.mem.endsWith(u8, image_path, ".tar.zst") or std.mem.indexOf(u8, image_path, ":") != null) {
@@ -120,6 +123,9 @@ pub const ProxmoxLxcDriver = struct {
                     return core.Error.FileNotFound;
                 };
 
+                // Save OCI bundle path for mounts processing
+                oci_bundle_path = image_path;
+                
                 // Process OCI bundle - convert to template if needed
                 template_name = try self.processOciBundle(image_path, config.name);
             }
@@ -199,8 +205,8 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // Apply mounts from bundle into /etc/pve/lxc/<vmid>.conf and verify via pct config
-        if (config.image) |bundle_for_mounts| {
-            if (self.logger) |log| try log.info("Applying mounts from bundle: {s}", .{bundle_for_mounts});
+        if (oci_bundle_path) |bundle_for_mounts| {
+            if (self.logger) |log| try log.info("Applying mounts from OCI bundle: {s}", .{bundle_for_mounts});
             try self.applyMountsToLxcConfig(vmid, bundle_for_mounts);
             try self.verifyMountsInConfig(vmid);
         }

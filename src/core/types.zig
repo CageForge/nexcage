@@ -247,7 +247,7 @@ pub const RoutingRule = struct {
     pattern: []const u8,
     runtime: RuntimeType,
 
-    pub fn deinit(self: *RoutingRule, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *const RoutingRule, allocator: std.mem.Allocator) void {
         allocator.free(self.pattern);
     }
 };
@@ -270,9 +270,8 @@ pub const ContainerConfig = struct {
         allocator.free(self.crun_name_patterns);
         
         // Clean up routing rules
-        for (self.routing) |*rule| {
-            var mutable_rule = rule.*;
-            mutable_rule.deinit(allocator);
+        for (self.routing) |rule| {
+            rule.deinit(allocator);
         }
         allocator.free(self.routing);
     }

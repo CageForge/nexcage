@@ -80,7 +80,7 @@ pub const ConfigLoader = struct {
         if (value.object.get("default_runtime")) |default_value| {
             switch (default_value) {
                 .string => |default_str| {
-                    // replace allocated string safely
+                    // Replace allocated string safely - always free old value since it's always allocated
                     self.allocator.free(config.default_runtime);
                     config.default_runtime = try self.allocator.dupe(u8, default_str);
                 },
@@ -187,17 +187,13 @@ pub const ConfigLoader = struct {
                         }
                         
                         // Update container config with new routing rules
-                        var container_cfg = config.container_config;
-                        
                         // Clean up existing routing rules if any
-                        for (container_cfg.routing) |*rule| {
-                            var mutable_rule = rule.*;
-                            mutable_rule.deinit(self.allocator);
+                        for (config.container_config.routing) |rule| {
+                            rule.deinit(self.allocator);
                         }
-                        self.allocator.free(container_cfg.routing);
+                        self.allocator.free(config.container_config.routing);
                         
-                        container_cfg.routing = routing_rules;
-                        config.container_config = container_cfg;
+                        config.container_config.routing = routing_rules;
                     },
                     else => {},
                 }
@@ -218,7 +214,10 @@ pub const ConfigLoader = struct {
         if (value.object.get("log_file")) |file_value| {
             switch (file_value) {
                 .string => |file_str| {
-                    if (config.log_file) |old| self.allocator.free(old);
+                    if (config.log_file) |old| {
+                        // Always free old value since it's always allocated if present
+                        self.allocator.free(old);
+                    }
                     config.log_file = try self.allocator.dupe(u8, file_str);
                 },
                 else => {},
@@ -452,6 +451,12 @@ pub const ConfigLoader = struct {
                                 },
                             }
                         }
+                        // Clean up existing routing rules if any
+                        for (config.container_config.routing) |rule| {
+                            rule.deinit(self.allocator);
+                        }
+                        self.allocator.free(config.container_config.routing);
+                        
                         container_cfg.routing = routing_rules;
                     },
                     else => {},
@@ -600,7 +605,7 @@ pub const Config = struct {
         return Config{
             .allocator = allocator,
             .runtime_type = runtime_type,
-            .default_runtime = try allocator.dupe(u8, "lxc"),
+            .default_runtime = try allocator.dupe(u8, "proxmox-lxc"),
             .log_level = logging.LogLevel.info,
             .log_file = null,
             .data_dir = try allocator.dupe(u8, "/var/lib/nexcage"),
@@ -722,20 +727,12 @@ pub const Config = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        // Free default_runtime if it's allocated (not a literal)
-        // Check if it's not one of the default literals
-        if (!std.mem.eql(u8, self.default_runtime, "lxc") and 
-            !std.mem.eql(u8, self.default_runtime, "proxmox-lxc") and
-            !std.mem.eql(u8, self.default_runtime, "crun") and
-            !std.mem.eql(u8, self.default_runtime, "runc")) {
-            self.allocator.free(self.default_runtime);
-        }
+        // Always free default_runtime - it's always allocated dynamically in init() or parseConfig()
+        self.allocator.free(self.default_runtime);
+        
         if (self.log_file) |log_file| {
-            // Only free if it's not a default literal
-            if (!std.mem.eql(u8, log_file, "/tmp/nexcage-logs/nexcage.log") and
-                !std.mem.eql(u8, log_file, "/var/log/nexcage/nexcage.log")) {
-                self.allocator.free(log_file);
-            }
+            // Always free log_file - it's allocated by parseConfig
+            self.allocator.free(log_file);
         }
         self.allocator.free(self.data_dir);
         self.allocator.free(self.cache_dir);
