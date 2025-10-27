@@ -264,30 +264,125 @@ pub const ZFSClient = struct {
         try self.executeZFSCommand(&args);
     }
 
-    /// Get the mountpoint of a dataset
-    pub fn getDatasetMountpoint(self: *Self, dataset: []const u8) ![]const u8 {
-        if (self.logger) |log| {
-            try log.info("Getting mountpoint for dataset: {s}", .{dataset});
+    /// Destroy a dataset
+    pub fn destroyDataset(self: *Self, dataset: []const u8) !void {
+        if (dataset.len == 0) {
+            return types.ZFSError.InvalidDataset;
         }
 
-        const result = try utils.fs.runCommand(self.allocator, &[_][]const u8{ "zfs", "get", "-H", "-o", "value", "mountpoint", dataset }, .{});
+        if (self.logger) |log| {
+            try log.info("Destroying ZFS dataset: {s}", .{dataset});
+        }
+
+        // Check if dataset exists
+        if (!try self.datasetExists(dataset)) {
+            if (self.logger) |log| {
+                try log.warn("Dataset does not exist: {s}", .{dataset});
+            }
+            return;
+        }
+
+        const args = [_][]const u8{ "destroy", "-r", dataset };
+        try self.executeZFSCommand(&args);
+
+        if (self.logger) |log| {
+            try log.info("Successfully destroyed ZFS dataset: {s}", .{dataset});
+        }
+    }
+
+    /// List all datasets matching a pattern
+    pub fn listDatasets(self: *Self, pattern: []const u8) ![][]const u8 {
+        if (self.logger) |log| {
+            try log.info("Listing ZFS datasets matching: {s}", .{pattern});
+        }
+
+        const result = try utils.fs.runCommand(self.allocator, &[_][]const u8{ "zfs", "list", "-H", "-o", "name", "-r", pattern }, .{});
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
             if (self.logger) |log| {
-                try log.@"error"("Failed to get dataset mountpoint, exit code: {d}", .{result.exit_code});
+                try log.@"error"("Failed to list datasets, exit code: {d}", .{result.exit_code});
+            }
+            return types.ZFSError.CommandExecutionFailed;
+        }
+
+        // Parse the output to extract dataset names
+        var datasets = std.ArrayList([]const u8).init(self.allocator);
+        var lines = std.mem.split(u8, result.stdout, "\n");
+
+        while (lines.next()) |line| {
+            const trimmed = std.mem.trim(u8, line, " \t\r\n");
+            if (trimmed.len > 0) {
+                const dataset_name = try self.allocator.dupe(u8, trimmed);
+                try datasets.append(dataset_name);
+            }
+        }
+
+        if (self.logger) |log| {
+            try log.info("Found {d} datasets matching: {s}", .{ datasets.items.len, pattern });
+        }
+        return datasets.toOwnedSlice();
+    }
+
+    /// Set a property on a dataset
+    pub fn setProperty(self: *Self, dataset: []const u8, property: []const u8, value: []const u8) !void {
+        if (dataset.len == 0 or property.len == 0) {
+            return types.ZFSError.InvalidDataset;
+        }
+
+        if (self.logger) |log| {
+            try log.info("Setting property {s}={s} on dataset: {s}", .{ property, value, dataset });
+        }
+
+        const result = try utils.fs.runCommand(self.allocator, &[_][]const u8{ "zfs", "set", property, "=", value, dataset }, .{});
+        defer self.allocator.free(result.stdout);
+        defer self.allocator.free(result.stderr);
+
+        if (result.exit_code != 0) {
+            if (self.logger) |log| {
+                try log.@"error"("Failed to set property, exit code: {d}", .{result.exit_code});
+                if (result.stderr.len > 0) {
+                    try log.@"error"("ZFS stderr: {s}", .{result.stderr});
+                }
+            }
+            return types.ZFSError.CommandExecutionFailed;
+        }
+
+        if (self.logger) |log| {
+            try log.info("Successfully set property {s}={s} on dataset: {s}", .{ property, value, dataset });
+        }
+    }
+
+    /// Get a property value from a dataset
+    pub fn getProperty(self: *Self, dataset: []const u8, property: []const u8) ![]const u8 {
+        if (self.logger) |log| {
+            try log.info("Getting property {s} from dataset: {s}", .{ property, dataset });
+        }
+
+        const result = try utils.fs.runCommand(self.allocator, &[_][]const u8{ "zfs", "get", "-H", "-o", "value", property, dataset }, .{});
+        defer self.allocator.free(result.stdout);
+        defer self.allocator.free(result.stderr);
+
+        if (result.exit_code != 0) {
+            if (self.logger) |log| {
+                try log.@"error"("Failed to get property, exit code: {d}", .{result.exit_code});
             }
             return types.ZFSError.DatasetNotFound;
         }
 
-        const mountpoint = std.mem.trim(u8, result.stdout, " \t\r\n");
-        const owned_mountpoint = try self.allocator.dupe(u8, mountpoint);
+        const prop_value = std.mem.trim(u8, result.stdout, " \t\r\n");
+        const owned_value = try self.allocator.dupe(u8, prop_value);
 
         if (self.logger) |log| {
-            try log.info("Dataset {s} mountpoint: {s}", .{ dataset, owned_mountpoint });
+            try log.info("Property {s} on dataset {s}: {s}", .{ property, dataset, owned_value });
         }
-        return owned_mountpoint;
+        return owned_value;
+    }
+
+    /// Get the mountpoint of a dataset
+    pub fn getDatasetMountpoint(self: *Self, dataset: []const u8) ![]const u8 {
+        return self.getProperty(dataset, "mountpoint");
     }
 
     /// Copy data from source path to ZFS dataset
