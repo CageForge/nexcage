@@ -7,6 +7,7 @@ pub const simple_advanced_logging = @import("simple_advanced_logging.zig");
 pub const logging_config = @import("logging_config.zig");
 pub const config = @import("config.zig");
 pub const constants = @import("constants.zig");
+pub const integrity = @import("integrity.zig");
 
 // Re-export commonly used types
 pub const Error = types.Error;
@@ -23,3 +24,5 @@ pub const LogLevel = logging.LogLevel;
 pub const LogContext = logging.LogContext;
 pub const Config = config.Config;
 pub const ConfigLoader = config.ConfigLoader;
+pub const IntegrityChecker = integrity.IntegrityChecker;
+pub const IntegrityReport = integrity.IntegrityReport;
