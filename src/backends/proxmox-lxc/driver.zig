@@ -144,7 +144,7 @@ pub const ProxmoxLxcDriver = struct {
             if (self.logger) |log| {
                 try log.err("Container with VMID {s} already exists. Try a different container name.", .{vmid});
             }
-            return core.Error.NotFound; // Already exists
+            return core.Error.OperationFailed; // Already exists
         }
 
         // Resolve template to use: prefer converted template or find available one
@@ -728,7 +728,7 @@ pub const ProxmoxLxcDriver = struct {
             if (self.logger) |log| {
                 log.warn("Container with this name already exists. Consider using a different name or delete the existing container.", .{}) catch {};
             }
-            return core.Error.NotFound; // Will be mapped to AlreadyExists in error message
+            return core.Error.OperationFailed; // Already exists
         }
         
         if (std.mem.indexOf(u8, s, "No such file or directory") != null or
