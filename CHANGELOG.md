@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2025-10-27
+
+### ✨ Enhancement Release: Improved Error Handling
+
+This release focuses on improving error handling for Proxmox LXC backend, providing better error messages and validation.
+
+### Changed
+- **Enhanced pct Error Mapping**: Comprehensive error mapping for all pct command scenarios
+- **Improved Error Messages**: Better error messages with actionable feedback for users
+- **Detailed Logging**: Added detailed logging for debugging pct command failures
+- **Error Categorization**: Better error categorization (Timeout, PermissionDenied, InvalidInput, NetworkError, etc.)
+
+### Added
+- **VMID Validation**: Check VMID uniqueness before creating containers
+- **Comprehensive Error Detection**: Detect common pct command error scenarios
+- **Enhanced Error Context**: Detailed error information with logging
+
+### Fixed
+- **Error Code Semantics**: Fixed incorrect error codes for existing resources (changed from NotFound to OperationFailed)
+- **VMID Collision Prevention**: Proper validation prevents duplicate container creation
+- **Error Message Clarity**: Clear, actionable error messages help users resolve issues quickly
+
+### Technical Details
+- **Error Handling**: Comprehensive error mapping for all pct command errors
+- **Validation**: VMID validation before container creation
+- **Logging**: Detailed logging for debugging and troubleshooting
+- **User Experience**: Better error messages with actionable feedback
+
+---
+
 ## [0.6.0] - 2025-01-15
 
 ### 🎉 Major Release: Backend Integration & Legacy Cleanup
