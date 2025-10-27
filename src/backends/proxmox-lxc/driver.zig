@@ -138,6 +138,14 @@ pub const ProxmoxLxcDriver = struct {
         const vmid_calc: u32 = (vmid_num % 900000) + 100; // 100..900099
         const vmid = try std.fmt.allocPrint(self.allocator, "{d}", .{vmid_calc});
         defer self.allocator.free(vmid);
+        
+        // Validate VMID uniqueness - check if container with this VMID already exists
+        if (try self.vmidExists(vmid)) {
+            if (self.logger) |log| {
+                try log.err("Container with VMID {s} already exists. Try a different container name.", .{vmid});
+            }
+            return core.Error.NotFound; // Already exists
+        }
 
         // Resolve template to use: prefer converted template or find available one
         var template: []u8 = undefined;
@@ -592,6 +600,37 @@ pub const ProxmoxLxcDriver = struct {
 
         return false;
     }
+    /// Check if VMID already exists in Proxmox
+    fn vmidExists(self: *Self, vmid: []const u8) !bool {
+        const pct_args = [_][]const u8{ "pct", "list" };
+        const pct_res = self.runCommand(&pct_args) catch return false;
+        defer self.allocator.free(pct_res.stdout);
+        defer self.allocator.free(pct_res.stderr);
+        
+        if (pct_res.exit_code != 0) return false;
+        
+        // Parse pct list output to find VMID
+        var lines = std.mem.splitScalar(u8, pct_res.stdout, '\n');
+        var first = true;
+        while (lines.next()) |line| {
+            if (first) {
+                first = false;
+                continue; // Skip header
+            }
+            const trimmed = std.mem.trim(u8, line, " \t\r");
+            if (trimmed.len < 20) continue; // Skip short lines
+            
+            // Extract VMID (first 10 characters)
+            const vmid_str = std.mem.trim(u8, trimmed[0..10], " \t");
+            
+            if (std.mem.eql(u8, vmid_str, vmid)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
     /// Get VMID by container name
     fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
         if (self.debug_mode) std.debug.print("DEBUG: getVmidByName() called with name: {s}\n", .{name});
@@ -674,26 +713,60 @@ pub const ProxmoxLxcDriver = struct {
         };
     }
 
-    /// Map pct command errors to core errors
+    /// Map pct command errors to core errors with enhanced error messages
     fn mapPctError(self: *Self, exit_code: u8, stderr: []const u8) core.Error {
-        _ = self;
         _ = exit_code;
         const s = stderr;
+        
+        // Extract and log detailed error information
+        if (self.logger) |log| {
+            log.err("pct command failed: {s}", .{stderr}) catch {};
+        }
+        
+        // Comprehensive error mapping with detailed messages
+        if (std.mem.indexOf(u8, s, "already exists") != null) {
+            if (self.logger) |log| {
+                log.warn("Container with this name already exists. Consider using a different name or delete the existing container.", .{}) catch {};
+            }
+            return core.Error.NotFound; // Will be mapped to AlreadyExists in error message
+        }
+        
         if (std.mem.indexOf(u8, s, "No such file or directory") != null or
             std.mem.indexOf(u8, s, "does not exist") != null or
             std.mem.indexOf(u8, s, "not found") != null)
         {
             return core.Error.NotFound;
         }
-        if (std.mem.indexOf(u8, s, "Permission denied") != null) {
+        
+        if (std.mem.indexOf(u8, s, "Permission denied") != null or
+            std.mem.indexOf(u8, s, "permission denied") != null)
+        {
             return core.Error.PermissionDenied;
         }
-        if (std.mem.indexOf(u8, s, "already exists") != null) {
-            return core.Error.OperationFailed;
-        }
-        if (std.mem.indexOf(u8, s, "timeout") != null) {
+        
+        if (std.mem.indexOf(u8, s, "timeout") != null or
+            std.mem.indexOf(u8, s, "Timed out") != null)
+        {
             return core.Error.Timeout;
         }
+        
+        if (std.mem.indexOf(u8, s, "Resource temporarily unavailable") != null) {
+            return core.Error.OperationFailed;
+        }
+        
+        if (std.mem.indexOf(u8, s, "Invalid argument") != null or
+            std.mem.indexOf(u8, s, "invalid") != null)
+        {
+            return core.Error.InvalidInput;
+        }
+        
+        if (std.mem.indexOf(u8, s, "cannot connect") != null or
+            std.mem.indexOf(u8, s, "Connection refused") != null)
+        {
+            return core.Error.NetworkError;
+        }
+        
+        // Default to OperationFailed for all other errors
         return core.Error.OperationFailed;
     }
 
