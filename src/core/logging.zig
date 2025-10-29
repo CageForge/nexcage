@@ -14,16 +14,19 @@ pub const LogLevel = enum(u8) {
 /// Log context
 pub const LogContext = struct {
     allocator: std.mem.Allocator,
-    writer: std.fs.File.Writer,
+    file: std.fs.File,
     level: LogLevel,
     component: []const u8,
     timestamp: bool = true,
     colorize: bool = true,
 
-    pub fn init(allocator: std.mem.Allocator, writer: std.fs.File.Writer, level: LogLevel, component: []const u8) LogContext {
+    pub fn init(allocator: std.mem.Allocator, _: std.fs.File.Writer, level: LogLevel, component: []const u8) LogContext {
+        // In Zig 0.15.1, Writer doesn't expose file directly, so we store File separately
+        // For stdout, we use stdout() directly
+        const stdout = std.fs.File.stdout();
         return LogContext{
             .allocator = allocator,
-            .writer = writer,
+            .file = stdout,
             .level = level,
             .component = component,
         };
@@ -58,50 +61,99 @@ pub const LogContext = struct {
     }
 
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
-        // Early return if log level is below threshold
-        if (@intFromEnum(level) < @intFromEnum(self.level)) return;
+        // Safety check: validate self pointer and fields before any access
+        // Use stderr for debug output to avoid recursion
+        const stderr = std.fs.File.stderr();
+        stderr.writeAll("[LOG] log: Starting\n") catch {};
         
-        // Safety check: if allocator is null or invalid, skip logging
-        // This prevents crashes when allocator becomes invalid
-        _ = self.allocator; // Check that allocator is accessible
+        // Check self pointer validity by accessing fields
+        stderr.writeAll("[LOG] log: Checking self.level\n") catch {};
+        const current_level = self.level;
+        stderr.writeAll("[LOG] log: self.level = ") catch {};
+        const level_str_val = @tagName(current_level);
+        stderr.writeAll(level_str_val) catch {};
+        stderr.writeAll("\n") catch {};
+        
+        // Early return if log level is below threshold
+        stderr.writeAll("[LOG] log: Checking log level threshold\n") catch {};
+        const level_int = @intFromEnum(level);
+        const threshold_int = @intFromEnum(current_level);
+        
+        if (level_int < threshold_int) {
+            stderr.writeAll("[LOG] log: Log level below threshold, returning\n") catch {};
+            return;
+        }
+        stderr.writeAll("[LOG] log: Log level OK, continuing\n") catch {};
+        
+        // Use page_allocator for logger to avoid segfault from invalid allocator
+        // The logger's allocator might become invalid during execution
+        const safe_allocator = std.heap.page_allocator;
+        
+        stderr.writeAll("[LOG] log: Before allocator test\n") catch {};
+        const test_alloc = safe_allocator.alloc(u8, 1) catch {
+            stderr.writeAll("[LOG] log: Allocator test failed, skipping\n") catch {};
+            return;
+        };
+        defer safe_allocator.free(test_alloc);
+        stderr.writeAll("[LOG] log: Allocator test passed\n") catch {};
 
+        stderr.writeAll("[LOG] log: Getting timestamp\n") catch {};
         const timestamp = if (self.timestamp) blk: {
             const now = std.time.timestamp();
             const seconds = @as(u64, @intCast(now));
             break :blk seconds;
         } else 0;
+        stderr.writeAll("[LOG] log: Timestamp obtained\n") catch {};
 
+        stderr.writeAll("[LOG] log: Getting level strings\n") catch {};
         const level_str = self.getLevelString(level);
         const color = if (self.colorize) self.getLevelColor(level) else "";
         const reset = if (self.colorize) "\x1b[0m" else "";
+        stderr.writeAll("[LOG] log: Level strings obtained\n") catch {};
 
+        stderr.writeAll("[LOG] log: Before allocPrint\n") catch {};
+        
         if (self.timestamp) {
-            const message = std.fmt.allocPrint(self.allocator, "{s}[{d}] {s}{s} {s}: " ++ format ++ "{s}\n", .{
+            const message = std.fmt.allocPrint(safe_allocator, "{s}[{d}] {s}{s} {s}: " ++ format ++ "{s}\n", .{
                 color,
                 timestamp,
                 level_str,
                 reset,
                 self.component,
             } ++ args ++ .{reset}) catch {
-                // If allocator fails, skip logging to avoid crash
-                // Log errors silently to prevent cascading failures
+                stderr.writeAll("[LOG] log: allocPrint failed, skipping\n") catch {};
                 return;
             };
-            defer self.allocator.free(message);
-            _ = self.writer.file.writeAll(message) catch {};
+            defer safe_allocator.free(message);
+            stderr.writeAll("[LOG] log: allocPrint succeeded, len = ") catch {};
+            const len_str = try std.fmt.allocPrint(safe_allocator, "{d}", .{message.len});
+            defer safe_allocator.free(len_str);
+            stderr.writeAll(len_str) catch {};
+            stderr.writeAll("\n") catch {};
+            stderr.writeAll("[LOG] log: Before file.writeAll\n") catch {};
+            // Use file.writeAll directly to avoid segfault
+            self.file.writeAll(message) catch {
+                stderr.writeAll("[LOG] log: file.writeAll failed\n") catch {};
+            };
+            stderr.writeAll("[LOG] log: file.writeAll completed\n") catch {};
         } else {
-            const message = std.fmt.allocPrint(self.allocator, "{s}{s} {s}: " ++ format ++ "{s}\n", .{
+            const message = std.fmt.allocPrint(safe_allocator, "{s}{s} {s}: " ++ format ++ "{s}\n", .{
                 color,
                 level_str,
                 self.component,
             } ++ args ++ .{reset}) catch {
-                // If allocator fails, skip logging to avoid crash
-                // Log errors silently to prevent cascading failures
+                stderr.writeAll("[LOG] log: allocPrint failed (no timestamp), skipping\n") catch {};
                 return;
             };
-            defer self.allocator.free(message);
-            _ = self.writer.file.writeAll(message) catch {};
+            defer safe_allocator.free(message);
+            stderr.writeAll("[LOG] log: Before file.writeAll (no timestamp)\n") catch {};
+            // Use file.writeAll directly to avoid segfault
+            self.file.writeAll(message) catch {
+                stderr.writeAll("[LOG] log: file.writeAll failed (no timestamp)\n") catch {};
+            };
+            stderr.writeAll("[LOG] log: file.writeAll completed (no timestamp)\n") catch {};
         }
+        stderr.writeAll("[LOG] log: Finished\n") catch {};
     }
 
     fn getLevelString(self: *LogContext, level: LogLevel) []const u8 {
@@ -155,8 +207,10 @@ pub const StructuredLogger = struct {
         const timestamp = std.time.timestamp();
         const level_str = self.getLevelString(level);
 
-        // Create JSON-like structured log
-        try self.writer.print("{{\"timestamp\":{d},\"level\":\"{s}\",\"component\":\"{s}\",\"message\":\"{s}\"", .{
+        // Create JSON-like structured log using single writer
+        var empty_buf: [0]u8 = undefined;
+        var writer = self.file.writer(&empty_buf);
+        try writer.print("{{\"timestamp\":{d},\"level\":\"{s}\",\"component\":\"{s}\",\"message\":\"{s}\"", .{
             timestamp,
             level_str,
             self.component,
@@ -165,45 +219,51 @@ pub const StructuredLogger = struct {
 
         // Add fields if provided
         if (@TypeOf(fields) != @TypeOf({})) {
-            try self.writer.print(",\"fields\":{{", .{});
+            try writer.print(",\"fields\":{{", .{});
 
             const fields_info = @typeInfo(@TypeOf(fields));
             if (fields_info == .Struct) {
                 inline for (fields_info.Struct.fields, 0..) |field, i| {
-                    if (i > 0) try self.writer.print(",", .{});
-                    try self.writer.print("\"{s}\":", .{field.name});
+                    if (i > 0) try writer.print(",", .{});
+                    try writer.print("\"{s}\":", .{field.name});
 
                     const field_value = @field(fields, field.name);
-                    try self.logValue(field_value);
+                    try self.logValueWithWriter(writer, field_value);
                 }
             }
 
-            try self.writer.print("}}", .{});
+            try writer.print("}}", .{});
         }
 
-        try self.writer.print("}}\n", .{});
+        try writer.print("}}\n", .{});
     }
 
     fn logValue(self: *StructuredLogger, value: anytype) !void {
+        const empty_buf: [0]u8 = undefined;
+        const writer = self.file.writer(&empty_buf);
+        try self.logValueWithWriter(writer, value);
+    }
+
+    fn logValueWithWriter(writer: std.fs.File.Writer, value: anytype) !void {
         const T = @TypeOf(value);
         switch (@typeInfo(T)) {
-            .Int, .Float => try self.writer.print("{d}", .{value}),
-            .Bool => try self.writer.print("{}", .{value}),
+            .Int, .Float => try writer.print("{d}", .{value}),
+            .Bool => try writer.print("{}", .{value}),
             .Pointer => |ptr| {
                 if (ptr.size == .Slice and ptr.child == u8) {
-                    try self.writer.print("\"{s}\"", .{value});
+                    try writer.print("\"{s}\"", .{value});
                 } else {
-                    try self.writer.print("\"<pointer>\"", .{});
+                    try writer.print("\"<pointer>\"", .{});
                 }
             },
             .Optional => |_| {
                 if (value) |v| {
-                    try self.logValue(v);
+                    try logValueWithWriter(writer, v);
                 } else {
-                    try self.writer.print("null", .{});
+                    try writer.print("null", .{});
                 }
             },
-            else => try self.writer.print("\"<unknown>\"", .{}),
+            else => try writer.print("\"<unknown>\"", .{}),
         }
     }
 

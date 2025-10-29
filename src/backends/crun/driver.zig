@@ -134,6 +134,22 @@ pub const CrunDriver = struct {
         }
     }
 
+    /// Kill an OCI container using crun
+    pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
+        if (self.logger) |log| {
+            try log.info("Killing OCI container with crun: {s} signal {s}", .{container_id, signal});
+        }
+        try validation.SecurityValidation.validateContainerId(container_id);
+        const args = [_][]const u8{ "crun", "kill", container_id, signal };
+        const result = try self.runCommand(&args);
+        defer self.allocator.free(result.stdout);
+        defer self.allocator.free(result.stderr);
+        if (result.exit_code != 0) {
+            if (self.logger) |log| try log.err("Failed to kill OCI container with crun: {s}", .{result.stderr});
+            return error.CrunStopFailed;
+        }
+    }
+
     /// Delete an OCI container using crun
     pub fn delete(self: *Self, container_id: []const u8) !void {
         if (self.logger) |log| {

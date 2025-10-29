@@ -30,9 +30,10 @@ pub const AppContext = struct {
         const logging_cfg = try core.logging_config.LoggingConfig.loadWithPriority(allocator, args, &config);
 
         // Initialize basic logger
+        // Use stdout writer with empty buffer (Zig 0.15.1 requires buffer parameter)
         const stdout = std.fs.File.stdout();
-        var buffer: [1024]u8 = undefined;
-        const logger = core.LogContext.init(allocator, stdout.writer(&buffer), config.log_level, "nexcage");
+        var empty_buffer: [0]u8 = undefined;
+        const logger = core.LogContext.init(allocator, stdout.writer(&empty_buffer), config.log_level, "nexcage");
 
         // Initialize advanced logger if debug mode or file logging is enabled
         var advanced_logger: ?core.simple_advanced_logging.SimpleAdvancedLogging = null;
@@ -219,6 +220,7 @@ pub fn main() !void {
         try app.logger.info("  stop      Stop a container", .{});
         try app.logger.info("  delete    Delete a container", .{});
         try app.logger.info("  list      List containers", .{});
+        try app.logger.info("  kill      Send a signal to a container", .{});
         try app.logger.info("  run       Run a command in a container", .{});
         try app.logger.info("  help      Show this help message", .{});
         try app.logger.info("  version   Show version information", .{});
@@ -326,7 +328,7 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             i += 2;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             // This is likely the image name, container ID, or command
-            if (options.command == .start or options.command == .stop or options.command == .delete or options.command == .state) {
+            if (options.command == .start or options.command == .stop or options.command == .delete or options.command == .state or options.command == .kill) {
                 // For start/stop/delete/state, first argument is container ID
                 if (options.container_id == null) {
                     options.container_id = try allocator.dupe(u8, arg);
@@ -368,6 +370,7 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "help")) return .help;
     if (std.mem.eql(u8, command_str, "version")) return .version;
     if (std.mem.eql(u8, command_str, "state")) return .state;
+    if (std.mem.eql(u8, command_str, "kill")) return .kill;
     return .help; // Default to help
 }
 

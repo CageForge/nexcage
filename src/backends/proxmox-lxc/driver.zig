@@ -136,26 +136,92 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Create ZFS dataset for container
     pub fn createContainerDataset(self: *Self, container_name: []const u8, vmid: []const u8) !?[]const u8 {
-        if (!self.isZFSAvailable() or self.zfs_pool == null) {
-            if (self.logger) |log| log.warn("ZFS not available, skipping dataset creation", .{}) catch {};
+        const stderr = std.fs.File.stderr();
+        stderr.writeAll("[DRIVER] createContainerDataset: ENTRY\n") catch {};
+        stderr.writeAll("[DRIVER] createContainerDataset: container_name = '") catch {};
+        stderr.writeAll(container_name) catch {};
+        stderr.writeAll("', vmid = '") catch {};
+        stderr.writeAll(vmid) catch {};
+        stderr.writeAll("'\n") catch {};
+        
+        stderr.writeAll("[DRIVER] createContainerDataset: Checking ZFS availability and pool\n") catch {};
+        const zfs_avail = self.isZFSAvailable();
+        const pool_set = self.zfs_pool != null;
+        stderr.writeAll("[DRIVER] createContainerDataset: zfs_avail = ") catch {};
+        if (zfs_avail) {
+            stderr.writeAll("true") catch {};
+        } else {
+            stderr.writeAll("false") catch {};
+        }
+        stderr.writeAll(", pool_set = ") catch {};
+        if (pool_set) {
+            stderr.writeAll("true\n") catch {};
+        } else {
+            stderr.writeAll("false\n") catch {};
+        }
+        
+        if (!zfs_avail or !pool_set) {
+            stderr.writeAll("[DRIVER] createContainerDataset: ZFS not available or pool not set, returning null\n") catch {};
+            // Skip logger to avoid segfault
+            // if (self.logger) |log| log.warn("ZFS not available, skipping dataset creation", .{}) catch {};
             return null;
         }
 
+        stderr.writeAll("[DRIVER] createContainerDataset: Getting pool value\n") catch {};
         const pool = self.zfs_pool.?;
+        stderr.writeAll("[DRIVER] createContainerDataset: pool = '") catch {};
+        stderr.writeAll(pool) catch {};
+        stderr.writeAll("'\n") catch {};
         
         // Create dataset name: pool/containers/container_name-vmid
+        stderr.writeAll("[DRIVER] createContainerDataset: Creating dataset name\n") catch {};
         const dataset_name = try std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ pool, container_name, vmid });
         defer self.allocator.free(dataset_name);
+        stderr.writeAll("[DRIVER] createContainerDataset: dataset_name = '") catch {};
+        stderr.writeAll(dataset_name) catch {};
+        stderr.writeAll("'\n") catch {};
 
-        if (self.logger) |log| log.info("Creating ZFS dataset for container: {s}", .{dataset_name}) catch {};
+        // Skip logger to avoid segfault
+        // if (self.logger) |log| log.info("Creating ZFS dataset for container: {s}", .{dataset_name}) catch {};
+        stderr.writeAll("[DRIVER] createContainerDataset: Logger skipped\n") catch {};
 
         // Create the dataset
+        stderr.writeAll("[DRIVER] createContainerDataset: Before zfs create command\n") catch {};
         {
             const args = [_][]const u8{ "zfs", "create", dataset_name };
+            stderr.writeAll("[DRIVER] createContainerDataset: Executing zfs create\n") catch {};
             const res = try self.runCommand(&args);
+            stderr.writeAll("[DRIVER] createContainerDataset: zfs create command returned\n") catch {};
+            stderr.writeAll("[DRIVER] createContainerDataset: res.stdout len = ") catch {};
+            const stdout_len_str = try std.fmt.allocPrint(self.allocator, "{d}", .{res.stdout.len});
+            defer self.allocator.free(stdout_len_str);
+            stderr.writeAll(stdout_len_str) catch {};
+            stderr.writeAll(", res.stderr len = ") catch {};
+            const stderr_len_str = try std.fmt.allocPrint(self.allocator, "{d}", .{res.stderr.len});
+            defer self.allocator.free(stderr_len_str);
+            stderr.writeAll(stderr_len_str) catch {};
+            stderr.writeAll("\n") catch {};
+            
+            if (res.stderr.len > 0) {
+                stderr.writeAll("[DRIVER] createContainerDataset: zfs stderr = '") catch {};
+                stderr.writeAll(res.stderr) catch {};
+                stderr.writeAll("'\n") catch {};
+            }
+            
+            stderr.writeAll("[DRIVER] createContainerDataset: res.exit_code = ") catch {};
+            const exit_str = try std.fmt.allocPrint(self.allocator, "{d}", .{res.exit_code});
+            defer self.allocator.free(exit_str);
+            stderr.writeAll(exit_str) catch {};
+            stderr.writeAll("\n") catch {};
             defer self.allocator.free(res.stdout);
             defer self.allocator.free(res.stderr);
-            if (res.exit_code != 0) return core.Error.OperationFailed;
+            stderr.writeAll("[DRIVER] createContainerDataset: Before exit_code check\n") catch {};
+            if (res.exit_code != 0) {
+                stderr.writeAll("[DRIVER] createContainerDataset: zfs create failed, returning null (continuing without ZFS dataset)\n") catch {};
+                // Return null to continue without ZFS dataset instead of failing
+                return null;
+            }
+            stderr.writeAll("[DRIVER] createContainerDataset: zfs create succeeded\n") catch {};
         }
         // Set compression and other properties
         {
@@ -309,89 +375,309 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Create LXC container using pct command
     pub fn create(self: *Self, config: core.types.SandboxConfig) !void {
-        if (self.logger) |log| {
-            log.info("Creating Proxmox LXC container: {s}", .{config.name}) catch {};
+        const stderr = std.fs.File.stderr();
+        const stdout = std.fs.File.stdout();
+        
+        // Use stderr for immediate output (unbuffered)
+        stderr.writeAll("[DRIVER] create: ENTRY\n") catch {};
+        stderr.writeAll("[DRIVER] create: container name = '") catch {};
+        stderr.writeAll(config.name) catch {};
+        stderr.writeAll("'\n") catch {};
+        stderr.writeAll("[DRIVER] create: debug_mode = ") catch {};
+        if (self.debug_mode) {
+            stderr.writeAll("true\n") catch {};
+        } else {
+            stderr.writeAll("false\n") catch {};
         }
         
+        if (self.debug_mode) {
+            try stdout.writeAll("[DRIVER] create: Starting (detailed debug)\n");
+            try stdout.writeAll("[DRIVER] create: container name = '");
+            try stdout.writeAll(config.name);
+            try stdout.writeAll("'\n");
+        }
+        
+        stderr.writeAll("[DRIVER] create: Before logger check\n") catch {};
+        
+        // Use logger if available - with additional safety checks
+        if (self.logger) |log| {
+            const name = config.name;
+            if (name.len > 0) {
+                stderr.writeAll("[DRIVER] create: Checking logger validity\n") catch {};
+                
+                // Additional safety checks before calling logger
+                // Check if allocator pointer is valid by trying to access it
+                _ = log.allocator;
+                stderr.writeAll("[DRIVER] create: Logger allocator check passed\n") catch {};
+                
+                // Check if file is valid
+                _ = log.file;
+                stderr.writeAll("[DRIVER] create: Logger file check passed\n") catch {};
+                
+                stderr.writeAll("[DRIVER] create: Calling logger.info\n") catch {};
+                
+                // Try to use logger with explicit error handling
+                log.info("Creating Proxmox LXC container: {s}", .{name}) catch {
+                    stderr.writeAll("[DRIVER] create: Logger.info failed with error\n") catch {};
+                    // Continue execution even if logging fails
+                };
+                stderr.writeAll("[DRIVER] create: Logger.info completed\n") catch {};
+            }
+        } else {
+            stderr.writeAll("[DRIVER] create: No logger available\n") catch {};
+        }
+        
+        stderr.writeAll("[DRIVER] create: Processing image\n") catch {};
+        
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Processing image (detailed)\n");
+        
         // Process bundle image if provided (bundle path with config.json)
+        stderr.writeAll("[DRIVER] create: Initializing template_name variable\n") catch {};
         var template_name: ?[]const u8 = null;
         defer if (template_name) |tname| self.allocator.free(tname);
         
         // Keep track of original OCI bundle path for mounts
+        stderr.writeAll("[DRIVER] create: Initializing oci_bundle_path variable\n") catch {};
         var oci_bundle_path: ?[]const u8 = null;
         
+        stderr.writeAll("[DRIVER] create: Checking if config.image exists\n") catch {};
         if (config.image) |image_path| {
+            stderr.writeAll("[DRIVER] create: Image provided: '") catch {};
+            stderr.writeAll(image_path) catch {};
+            stderr.writeAll("'\n") catch {};
+            
+            if (self.debug_mode) {
+                try stdout.writeAll("[DRIVER] create: Image provided: '");
+                try stdout.writeAll(image_path);
+                try stdout.writeAll("'\n");
+            }
             // Check if it's a Proxmox template (ends with .tar.zst or contains :)
-            if (std.mem.endsWith(u8, image_path, ".tar.zst") or std.mem.indexOf(u8, image_path, ":") != null) {
-                // It's a Proxmox template, use it directly
-                template_name = try self.allocator.dupe(u8, image_path);
+            stderr.writeAll("[DRIVER] create: Checking image type\n") catch {};
+            const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
+            const has_colon = std.mem.indexOf(u8, image_path, ":") != null;
+            stderr.writeAll("[DRIVER] create: is_tar = ") catch {};
+            if (is_tar) {
+                stderr.writeAll("true\n") catch {};
             } else {
+                stderr.writeAll("false\n") catch {};
+            }
+            stderr.writeAll("[DRIVER] create: has_colon = ") catch {};
+            if (has_colon) {
+                stderr.writeAll("true\n") catch {};
+            } else {
+                stderr.writeAll("false\n") catch {};
+            }
+            
+            if (is_tar or has_colon) {
+                stderr.writeAll("[DRIVER] create: Image is Proxmox template\n") catch {};
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Image is Proxmox template\n");
+                // It's a Proxmox template, use it directly
+                stderr.writeAll("[DRIVER] create: Duplicating template name\n") catch {};
+                template_name = try self.allocator.dupe(u8, image_path);
+                stderr.writeAll("[DRIVER] create: Template name duplicated successfully\n") catch {};
+                
+                stderr.writeAll("[DRIVER] create: After template_name assignment, checking next step\n") catch {};
+                stderr.writeAll("[DRIVER] create: template_name is set: ") catch {};
+                if (template_name) |_| {
+                    stderr.writeAll("yes\n") catch {};
+                } else {
+                    stderr.writeAll("no\n") catch {};
+                }
+            } else {
+                stderr.writeAll("[DRIVER] create: Image is OCI bundle, processing\n") catch {};
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Image is OCI bundle, processing\n");
                 // It's an OCI bundle - ensure bundle directory exists
                 var bundle_dir = std.fs.cwd().openDir(image_path, .{}) catch |err| {
                     if (self.logger) |log| log.err("Bundle path not found: {s} ({})", .{ image_path, err }) catch {};
+                    if (self.debug_mode) {
+                        try stdout.writeAll("[DRIVER] create: ERROR: Bundle path not found\n");
+                    }
                     return core.Error.FileNotFound;
                 };
                 defer bundle_dir.close();
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Bundle directory opened\n");
 
                 // Ensure config.json exists in the bundle
                 bundle_dir.access("config.json", .{}) catch |err| {
                     if (self.logger) |log| log.err("config.json not found in bundle: {s} ({})", .{ image_path, err }) catch {};
+                    if (self.debug_mode) {
+                        try stdout.writeAll("[DRIVER] create: ERROR: config.json not found\n");
+                    }
                     return core.Error.FileNotFound;
                 };
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: config.json found in bundle\n");
 
                 // Save OCI bundle path for mounts processing
                 oci_bundle_path = image_path;
                 
                 // Process OCI bundle - convert to template if needed
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Processing OCI bundle\n");
                 template_name = try self.processOciBundle(image_path, config.name);
+                if (self.debug_mode) {
+                    try stdout.writeAll("[DRIVER] create: OCI bundle processed, template_name set\n");
+                }
             }
+        } else {
+            stderr.writeAll("[DRIVER] create: No image provided\n") catch {};
+            if (self.debug_mode) try stdout.writeAll("[DRIVER] create: No image provided\n");
         }
 
+        stderr.writeAll("[DRIVER] create: After image processing, before VMID generation\n") catch {};
+        stderr.writeAll("[DRIVER] create: Generating VMID from name\n") catch {};
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Generating VMID from name\n");
+        
         // Generate VMID from name (Proxmox requires numeric vmid)
+        stderr.writeAll("[DRIVER] create: Initializing hash\n") catch {};
         var hasher = std.hash.Wyhash.init(0);
+        stderr.writeAll("[DRIVER] create: Updating hash with container name\n") catch {};
+        stderr.writeAll("[DRIVER] create: container name = '") catch {};
+        stderr.writeAll(config.name) catch {};
+        stderr.writeAll("'\n") catch {};
         hasher.update(config.name);
+        stderr.writeAll("[DRIVER] create: Getting hash final value\n") catch {};
         const vmid_num: u32 = @truncate(hasher.final());
+        stderr.writeAll("[DRIVER] create: Calculating VMID\n") catch {};
         const vmid_calc: u32 = (vmid_num % 900000) + 100; // 100..900099
+        stderr.writeAll("[DRIVER] create: Allocating VMID string\n") catch {};
         const vmid = try std.fmt.allocPrint(self.allocator, "{d}", .{vmid_calc});
         defer self.allocator.free(vmid);
+        stderr.writeAll("[DRIVER] create: VMID allocated: ") catch {};
+        stderr.writeAll(vmid) catch {};
+        stderr.writeAll("\n") catch {};
+        
+        if (self.debug_mode) {
+            try stdout.writeAll("[DRIVER] create: VMID calculated: ");
+            try stdout.writeAll(vmid);
+            try stdout.writeAll("\n");
+        }
         
         // Validate VMID uniqueness - check if container with this VMID already exists
-        if (try self.vmidExists(vmid)) {
+        stderr.writeAll("[DRIVER] create: Checking VMID uniqueness\n") catch {};
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Checking VMID uniqueness\n");
+        
+        stderr.writeAll("[DRIVER] create: Before vmidExists call\n") catch {};
+        const vmid_exists = try self.vmidExists(vmid);
+        stderr.writeAll("[DRIVER] create: After vmidExists call, result = ") catch {};
+        if (vmid_exists) {
+            stderr.writeAll("true\n") catch {};
+        } else {
+            stderr.writeAll("false\n") catch {};
+        }
+        
+        if (vmid_exists) {
             if (self.logger) |log| {
                 log.err("Container with VMID {s} already exists. Try a different container name.", .{vmid}) catch {};
             }
+            if (self.debug_mode) {
+                try stdout.writeAll("[DRIVER] create: ERROR: VMID already exists\n");
+            }
+            stderr.writeAll("[DRIVER] create: ERROR: VMID already exists\n") catch {};
             return core.Error.OperationFailed; // Already exists
         }
+        stderr.writeAll("[DRIVER] create: VMID is unique\n") catch {};
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: VMID is unique\n");
 
+        stderr.writeAll("[DRIVER] create: Resolving template\n") catch {};
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Resolving template\n");
+        
         // Resolve template to use: prefer converted template or find available one
+        stderr.writeAll("[DRIVER] create: Before template resolution\n") catch {};
         var template: []u8 = undefined;
+        stderr.writeAll("[DRIVER] create: Checking if template_name exists\n") catch {};
         if (template_name) |tname| {
+            stderr.writeAll("[DRIVER] create: template_name provided: '") catch {};
+            stderr.writeAll(tname) catch {};
+            stderr.writeAll("'\n") catch {};
+            if (self.debug_mode) {
+                try stdout.writeAll("[DRIVER] create: Template name provided: '");
+                try stdout.writeAll(tname);
+                try stdout.writeAll("'\n");
+            }
             // Check if template already has storage prefix (contains :)
-            if (std.mem.indexOf(u8, tname, ":") != null) {
+            stderr.writeAll("[DRIVER] create: Checking for storage prefix in template name\n") catch {};
+            const has_storage = std.mem.indexOf(u8, tname, ":") != null;
+            if (has_storage) {
+                stderr.writeAll("[DRIVER] create: Template has storage prefix, using as is\n") catch {};
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Template has storage prefix, using as is\n");
                 // Template already has storage prefix, use as is
+                stderr.writeAll("[DRIVER] create: Duplicating template name\n") catch {};
                 template = try self.allocator.dupe(u8, tname);
+                stderr.writeAll("[DRIVER] create: Template duplicated\n") catch {};
             } else {
+                stderr.writeAll("[DRIVER] create: Template is just name, adding storage prefix\n") catch {};
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Template is just name, adding storage prefix\n");
                 // Template is just a name, add storage prefix
+                stderr.writeAll("[DRIVER] create: Formatting template with storage prefix\n") catch {};
                 template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}.tar.zst", .{tname});
+                stderr.writeAll("[DRIVER] create: Template formatted\n") catch {};
             }
         } else {
+            stderr.writeAll("[DRIVER] create: No template name, finding available template\n") catch {};
+            if (self.debug_mode) try stdout.writeAll("[DRIVER] create: No template name, finding available template\n");
+            stderr.writeAll("[DRIVER] create: Calling findAvailableTemplate\n") catch {};
             const t = try self.findAvailableTemplate();
+            stderr.writeAll("[DRIVER] create: Template found, duplicating\n") catch {};
             template = try self.allocator.dupe(u8, t);
             self.allocator.free(t);
+            stderr.writeAll("[DRIVER] create: Template duplicated and free'd\n") catch {};
         }
         defer self.allocator.free(template);
-
-        // Create ZFS dataset for container if ZFS is available
-        var zfs_dataset: ?[]const u8 = null;
-        defer if (zfs_dataset) |dataset| self.allocator.free(dataset);
         
-        if (self.isZFSAvailable()) {
-            zfs_dataset = try self.createContainerDataset(config.name, vmid);
-            if (zfs_dataset) |dataset| {
-                if (self.logger) |log| log.info("Created ZFS dataset for container: {s}", .{dataset}) catch {};
-            }
+        stderr.writeAll("[DRIVER] create: Final template: '") catch {};
+        stderr.writeAll(template) catch {};
+        stderr.writeAll("'\n") catch {};
+        if (self.debug_mode) {
+            try stdout.writeAll("[DRIVER] create: Final template: '");
+            try stdout.writeAll(template);
+            try stdout.writeAll("'\n");
         }
 
+        stderr.writeAll("[DRIVER] create: Checking ZFS availability\n") catch {};
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Checking ZFS availability\n");
+        
+        // Create ZFS dataset for container if ZFS is available
+        stderr.writeAll("[DRIVER] create: Before ZFS dataset variable initialization\n") catch {};
+        var zfs_dataset: ?[]const u8 = null;
+        defer if (zfs_dataset) |dataset| self.allocator.free(dataset);
+        stderr.writeAll("[DRIVER] create: ZFS dataset variable initialized\n") catch {};
+        
+        stderr.writeAll("[DRIVER] create: Before isZFSAvailable call\n") catch {};
+        const zfs_available = self.isZFSAvailable();
+        stderr.writeAll("[DRIVER] create: After isZFSAvailable call, result = ") catch {};
+        if (zfs_available) {
+            stderr.writeAll("true\n") catch {};
+        } else {
+            stderr.writeAll("false\n") catch {};
+        }
+        
+        if (zfs_available) {
+            stderr.writeAll("[DRIVER] create: ZFS available, creating dataset\n") catch {};
+            if (self.debug_mode) try stdout.writeAll("[DRIVER] create: ZFS available, creating dataset\n");
+            stderr.writeAll("[DRIVER] create: Before createContainerDataset call\n") catch {};
+            zfs_dataset = try self.createContainerDataset(config.name, vmid);
+            stderr.writeAll("[DRIVER] create: After createContainerDataset call\n") catch {};
+            if (zfs_dataset) |dataset| {
+                stderr.writeAll("[DRIVER] create: ZFS dataset created: '") catch {};
+                stderr.writeAll(dataset) catch {};
+                stderr.writeAll("'\n") catch {};
+                // Skip logger to avoid segfault
+                // if (self.logger) |log| log.info("Created ZFS dataset for container: {s}", .{dataset}) catch {};
+                if (self.debug_mode) {
+                    try stdout.writeAll("[DRIVER] create: ZFS dataset created: '");
+                    try stdout.writeAll(dataset);
+                    try stdout.writeAll("'\n");
+                }
+            } else {
+                stderr.writeAll("[DRIVER] create: ZFS dataset creation returned null\n") catch {};
+            }
+        } else {
+            stderr.writeAll("[DRIVER] create: ZFS not available, skipping dataset\n") catch {};
+            if (self.debug_mode) try stdout.writeAll("[DRIVER] create: ZFS not available, skipping dataset\n");
+        }
+
+        stderr.writeAll("[DRIVER] create: Building pct create command arguments\n") catch {};
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Building pct create command arguments\n");
+        
         // Use pct create command
         var args: []const []const u8 = undefined;
         
@@ -449,33 +735,47 @@ pub const ProxmoxLxcDriver = struct {
             log.debug("Proxmox LXC create: Creating container with pct create", .{}) catch {};
         }
         
-        // Debug: print template name (only in debug mode)
+        // Debug: print all arguments (only in debug mode)
         if (self.debug_mode) {
-            const stdout = std.fs.File.stdout();
-            try stdout.writeAll("DEBUG: template = '");
-            try stdout.writeAll(template);
-            try stdout.writeAll("'\n");
+            try stdout.writeAll("[DRIVER] create: pct create arguments:\n");
+            for (args, 0..) |arg, i| {
+                try stdout.writeAll("[DRIVER]   args[");
+                const idx_str = try std.fmt.allocPrint(self.allocator, "{d}", .{i});
+                defer self.allocator.free(idx_str);
+                try stdout.writeAll(idx_str);
+                try stdout.writeAll("] = '");
+                try stdout.writeAll(arg);
+                try stdout.writeAll("'\n");
+            }
         }
 
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Executing pct create command\n");
         const result = try self.runCommand(args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
         
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: pct create command completed\n");
+        
         // Debug output (only in debug mode)
         if (self.debug_mode) {
-            const stdout = std.fs.File.stdout();
-            try stdout.writeAll("DEBUG: pct create result - exit_code: ");
-            try stdout.writeAll(std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{result.exit_code}) catch "unknown");
-            try stdout.writeAll(", stdout: ");
+            try stdout.writeAll("[DRIVER] create: pct create result:\n");
+            try stdout.writeAll("[DRIVER]   exit_code: ");
+            const exit_str = try std.fmt.allocPrint(self.allocator, "{d}", .{result.exit_code});
+            defer self.allocator.free(exit_str);
+            try stdout.writeAll(exit_str);
+            try stdout.writeAll("\n[DRIVER]   stdout: ");
             try stdout.writeAll(result.stdout);
-            try stdout.writeAll(", stderr: ");
+            try stdout.writeAll("\n[DRIVER]   stderr: ");
             try stdout.writeAll(result.stderr);
             try stdout.writeAll("\n");
         }
         
         if (result.exit_code != 0) {
+            if (self.debug_mode) try stdout.writeAll("[DRIVER] create: ERROR: pct create failed\n");
+            
             // On failure, do not delete dataset; rename with -failed suffix
             if (zfs_dataset) |dataset| {
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Renaming ZFS dataset with -failed suffix\n");
                 const failed = std.mem.concat(self.allocator, u8, &.{ dataset, "-failed" }) catch null;
                 if (failed) |new_name| {
                     defer self.allocator.free(new_name);
@@ -489,14 +789,33 @@ pub const ProxmoxLxcDriver = struct {
             return self.mapPctError(result.exit_code, result.stderr);
         }
 
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: pct create succeeded\n");
+
         // Apply mounts from bundle into /etc/pve/lxc/<vmid>.conf and verify via pct config
         if (oci_bundle_path) |bundle_for_mounts| {
+            if (self.debug_mode) {
+                try stdout.writeAll("[DRIVER] create: Applying mounts from OCI bundle: '");
+                try stdout.writeAll(bundle_for_mounts);
+                try stdout.writeAll("'\n");
+            }
             if (self.logger) |log| log.info("Applying mounts from OCI bundle: {s}", .{bundle_for_mounts}) catch {};
             try self.applyMountsToLxcConfig(vmid, bundle_for_mounts);
             try self.verifyMountsInConfig(vmid);
+            if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Mounts applied and verified\n");
         }
 
+        if (self.debug_mode) {
+            try stdout.writeAll("[DRIVER] create: Container created successfully\n");
+            try stdout.writeAll("[DRIVER] create: VMID: ");
+            try stdout.writeAll(vmid);
+            try stdout.writeAll(", Name: ");
+            try stdout.writeAll(config.name);
+            try stdout.writeAll("\n");
+        }
+        
         if (self.logger) |log| log.info("Proxmox LXC container created via pct: {s} (vmid {s})", .{ config.name, vmid }) catch {};
+        
+        if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Finished\n");
     }
 
     /// Validate that mounts in bundle config point to existing host paths or valid Proxmox storage refs
@@ -758,6 +1077,26 @@ pub const ProxmoxLxcDriver = struct {
 
         if (self.logger) |log| {
             log.info("Proxmox LXC container deleted successfully: {s}", .{container_id}) catch {};
+        }
+    }
+
+    /// Send signal to container using pct exec kill
+    pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
+        if (self.logger) |log| {
+            log.info("Sending signal {s} to Proxmox LXC container: {s}", .{ signal, container_id }) catch {};
+        }
+
+        const vmid = try self.getVmidByName(container_id);
+        defer self.allocator.free(vmid);
+
+        // pct exec <vmid> -- kill -s <signal> 1
+        const args = [_][]const u8{ "pct", "exec", vmid, "--", "kill", "-s", signal, "1" };
+        const result = try self.runCommand(&args);
+        defer self.allocator.free(result.stdout);
+        defer self.allocator.free(result.stderr);
+        if (result.exit_code != 0) {
+            if (self.logger) |log| log.err("Failed to send signal {s} to {s}: {s}", .{ signal, container_id, result.stderr }) catch {};
+            return self.mapPctError(result.exit_code, result.stderr);
         }
     }
 
