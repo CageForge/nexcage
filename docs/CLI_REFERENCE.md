@@ -26,8 +26,10 @@ Create a new container (backend is auto-selected by routing rules; LXC by defaul
 nexcage create --name <id> --image <bundle_dir> [--runtime lxc|crun|runc|vm]
 ```
 - `<bundle_dir>` must contain `config.json` (OCI bundle)
-- If `config.json` contains `annotations.org.opencontainers.image.ref.name` (or `image`), the value is treated as LXC template name and validated against `pveam list/available`. If available, it will be used as `local:vztmpl/<image>` for `pct create`.
-- If no valid image is found, a fallback template is auto-selected from `pveam available`.
+- Proxmox template formats supported:
+  - `*.tar.zst`
+  - `<storage>:vztmpl/<name>.tar.zst`
+- Docker-style refs like `ubuntu:20.04` are not treated as Proxmox templates.
 - Mounts/volumes from `config.json` are validated before start:
   - host paths must exist and be accessible
   - storage refs `<storage>:<path>` are checked via `pvesm list <storage>`
@@ -71,3 +73,17 @@ nexcage list
 Notes:
 - E2E requires running on Proxmox host with necessary tools
 - See docs/DEV_QUICKSTART.md for setup and docs/architecture/ for details
+
+### state
+Return OCI-compatible state JSON for a container.
+```bash
+nexcage state --name <id>
+```
+- Output includes: `ociVersion`, `id`, `status`, `pid`, `bundle`, `annotations`.
+
+### kill
+Send a signal to a container process.
+```bash
+nexcage kill --name <id> --signal <SIGTERM|SIGKILL|...>
+```
+- Implemented for proxmox-lxc, crun, runc backends.
