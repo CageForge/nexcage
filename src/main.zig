@@ -326,8 +326,8 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             i += 2;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             // This is likely the image name, container ID, or command
-            if (options.command == .start or options.command == .stop or options.command == .delete) {
-                // For start/stop/delete, first argument is container ID
+            if (options.command == .start or options.command == .stop or options.command == .delete or options.command == .state) {
+                // For start/stop/delete/state, first argument is container ID
                 if (options.container_id == null) {
                     options.container_id = try allocator.dupe(u8, arg);
                 } else {
@@ -367,6 +367,7 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "run")) return .run;
     if (std.mem.eql(u8, command_str, "help")) return .help;
     if (std.mem.eql(u8, command_str, "version")) return .version;
+    if (std.mem.eql(u8, command_str, "state")) return .state;
     return .help; // Default to help
 }
 

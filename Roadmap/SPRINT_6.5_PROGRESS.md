@@ -49,7 +49,7 @@ Time spent: +0.4h (merge+verify: 0.3h, comms: 0.1h)
 
 Time spent: +0.5h (test run: 0.3h, debug: 0.2h)
 
-### 2025-01-30
+### 2025-10-29
 - Fixed segmentation fault in version and list commands:
   - Root cause: CommandInterface.execute/help/validate function pointers didn't pass `self` (ctx)
   - Solution: Updated CommandInterface to accept `self: *CommandInterface` as first parameter
@@ -64,4 +64,20 @@ Time spent: +0.5h (test run: 0.3h, debug: 0.2h)
   - Integration with proxmox-lxc backend via pct status/list
   
 Time spent: 2.5h (issue creation: 0.1h, segfault debug+fix: 2.0h, testing: 0.4h)
+
+### 2025-10-29 (state command)
+- Implemented OCI-compliant `state` command:
+  - Created `src/cli/state.zig` following same pattern as `start`, `stop` commands
+  - Command uses router for backend routing and queries backend via `list()` method
+  - Maps backend status to OCI status values (created|running|stopped|paused)
+  - Outputs OCI-compatible JSON with ociVersion, id, status, pid, bundle, annotations
+  - Registered command in `src/cli/registry.zig`
+  - Added `.state` operation to `router.Operation` enum
+  - Added `.state` to `Command` enum in `types.zig`
+  - Updated `parseCommand` and `parseRuntimeOptions` in `main.zig` to handle state command
+  - Supports proxmox-lxc backend (primary), fallback for crun/runc/vm
+  
+- Known issue: Logger initialization crash during command execution (needs separate fix)
+
+Time spent: 1.5h (implementation: 1.0h, testing+debugging: 0.5h)
 
