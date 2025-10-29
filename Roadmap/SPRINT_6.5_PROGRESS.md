@@ -226,3 +226,17 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 #### Time Spent
 - ~0.4h (правки + збірка + швидка перевірка)
 
+### 2025-10-29: Input validators hardening (foundation)
+
+#### Summary
+- Added reusable validators in `src/cli/validation.zig`:
+  - `validateHostname`, `validateVmidString`, `validateStorageName`, `validateSafePath`, `validateEnvKV`
+- No behavior changes yet; functions are ready to be wired where needed.
+
+#### Results
+- ✅ Build green; utilities available for CLI/backends
+- ⏳ Wiring across commands/backends to follow
+
+#### Time Spent
+- ~0.4h (implementation + build)
+
