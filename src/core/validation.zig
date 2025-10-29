@@ -104,6 +104,53 @@ pub const SecurityValidation = struct {
     pub fn validateCpuCores(cores: u32) !void {
         if (cores == 0 or cores > 128) return types.Error.InvalidInput;
     }
+
+    /// Validate generic size in bytes against min/max
+    pub fn validateSizeRange(bytes: u64, min_bytes: u64, max_bytes: u64) !void {
+        if (bytes < min_bytes or bytes > max_bytes) return types.Error.InvalidInput;
+    }
+
+    /// Validate environment variable name (POSIX-ish)
+    pub fn validateEnvName(name: []const u8) !void {
+        if (name.len == 0 or name.len > 128) return types.Error.InvalidInput;
+        if (!((name[0] >= 'A' and name[0] <= 'Z') or (name[0] == '_'))) return types.Error.InvalidInput;
+        for (name) |c| {
+            const ok = (c >= 'A' and c <= 'Z') or (c >= 'a' and c <= 'z') or (c >= '0' and c <= '9') or (c == '_');
+            if (!ok) return types.Error.InvalidInput;
+        }
+    }
+
+    /// Validate environment variable value (no control chars)
+    pub fn validateEnvValue(value: []const u8) !void {
+        if (value.len > 4096) return types.Error.InvalidInput;
+        for (value) |c| {
+            if (c < 32 and c != '\t') return types.Error.InvalidInput;
+        }
+    }
+
+    /// Validate storage name (alnum, dash, underscore, 1..64)
+    pub fn validateStorageName(name: []const u8) !void {
+        if (name.len == 0 or name.len > 64) return types.Error.InvalidInput;
+        for (name) |c| {
+            const ok = (c >= 'A' and c <= 'Z') or (c >= 'a' and c <= 'z') or (c >= '0' and c <= '9') or (c == '-') or (c == '_');
+            if (!ok) return types.Error.InvalidInput;
+        }
+    }
+
+    /// Validate single path component (no '/', no traversal tokens)
+    pub fn validatePathComponent(comp: []const u8) !void {
+        if (comp.len == 0 or comp.len > 255) return types.Error.InvalidInput;
+        if (std.mem.indexOf(u8, comp, "/") != null) return types.Error.InvalidInput;
+        if (std.mem.eql(u8, comp, ".") or std.mem.eql(u8, comp, "..")) return types.Error.InvalidInput;
+        for (comp) |c| {
+            if (c == 0) return types.Error.InvalidInput;
+        }
+    }
+
+    /// Validate simple rate limit (ops per second within bound)
+    pub fn validateRateLimit(ops_per_sec: u32, max_ops: u32) !void {
+        if (ops_per_sec == 0 or ops_per_sec > max_ops) return types.Error.InvalidInput;
+    }
 };
 
 /// Path security utilities
