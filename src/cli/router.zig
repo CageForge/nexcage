@@ -162,6 +162,11 @@ pub const BackendRouter = struct {
                 try proxmox_backend.create(sandbox_config);
                 try proxmox_backend.start(container_id);
             },
+            .state => {
+                // State operation handled by command, backend returns info
+                // Router just ensures backend is initialized
+                // No-op here, command will call backend directly
+            },
         }
     }
 
@@ -181,6 +186,9 @@ pub const BackendRouter = struct {
                 if (self.logger) |log| {
                     try log.warn("Crun run operation not implemented", .{});
                 }
+            },
+            .state => {
+                // State operation handled by command
             },
         }
     }
@@ -202,6 +210,9 @@ pub const BackendRouter = struct {
                     try log.warn("Runc run operation not implemented", .{});
                 }
             },
+            .state => {
+                // State operation handled by command
+            },
         }
     }
 
@@ -215,7 +226,7 @@ pub const BackendRouter = struct {
                     try log.warn("Proxmox VM backend not fully integrated yet. VM creation for image {s} skipped.", .{create_config.image});
                 }
             },
-            .start, .stop, .delete, .run => {
+            .start, .stop, .delete, .run, .state => {
                 if (self.logger) |log| {
                     try log.warn("Proxmox VM backend not fully integrated yet. VM operation skipped.", .{});
                 }
@@ -268,6 +279,7 @@ pub const Operation = union(enum) {
     stop: void,
     delete: void,
     run: RunConfig,
+    state: void,
 };
 
 pub const CreateConfig = struct {

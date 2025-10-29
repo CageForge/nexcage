@@ -190,6 +190,7 @@ pub const Command = enum {
     run,
     help,
     version,
+    state,
 };
 
 /// Runtime options

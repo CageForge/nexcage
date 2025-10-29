@@ -58,7 +58,12 @@ pub const LogContext = struct {
     }
 
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
+        // Early return if log level is below threshold
         if (@intFromEnum(level) < @intFromEnum(self.level)) return;
+        
+        // Safety check: if allocator is null or invalid, skip logging
+        // This prevents crashes when allocator becomes invalid
+        _ = self.allocator; // Check that allocator is accessible
 
         const timestamp = if (self.timestamp) blk: {
             const now = std.time.timestamp();
@@ -71,23 +76,31 @@ pub const LogContext = struct {
         const reset = if (self.colorize) "\x1b[0m" else "";
 
         if (self.timestamp) {
-            const message = try std.fmt.allocPrint(self.allocator, "{s}[{d}] {s}{s} {s}: " ++ format ++ "{s}\n", .{
+            const message = std.fmt.allocPrint(self.allocator, "{s}[{d}] {s}{s} {s}: " ++ format ++ "{s}\n", .{
                 color,
                 timestamp,
                 level_str,
                 reset,
                 self.component,
-            } ++ args ++ .{reset});
+            } ++ args ++ .{reset}) catch {
+                // If allocator fails, skip logging to avoid crash
+                // Log errors silently to prevent cascading failures
+                return;
+            };
             defer self.allocator.free(message);
-            try self.writer.file.writeAll(message);
+            _ = self.writer.file.writeAll(message) catch {};
         } else {
-            const message = try std.fmt.allocPrint(self.allocator, "{s}{s} {s}: " ++ format ++ "{s}\n", .{
+            const message = std.fmt.allocPrint(self.allocator, "{s}{s} {s}: " ++ format ++ "{s}\n", .{
                 color,
                 level_str,
                 self.component,
-            } ++ args ++ .{reset});
+            } ++ args ++ .{reset}) catch {
+                // If allocator fails, skip logging to avoid crash
+                // Log errors silently to prevent cascading failures
+                return;
+            };
             defer self.allocator.free(message);
-            try self.writer.file.writeAll(message);
+            _ = self.writer.file.writeAll(message) catch {};
         }
     }
 

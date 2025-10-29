@@ -34,6 +34,16 @@ pub const RunCommand = struct {
     }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        const stdout = std.fs.File.stdout();
+
+        // Check for help flag first
+        if (options.help) {
+            const help_text = try self.help(allocator);
+            defer allocator.free(help_text);
+            try stdout.writeAll(help_text);
+            return;
+        }
+
         try self.logCommandStart("run");
 
         // Validate required options using validation utility
