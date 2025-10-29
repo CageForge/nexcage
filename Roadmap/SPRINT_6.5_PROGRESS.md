@@ -26,3 +26,10 @@ Time spent: 1.7h (planning: 0.4h, build fixes: 0.3h, version system + CI: 1.0h)
 
 Time spent: 0.6h (debug: 0.3h, fixes: 0.2h, build+verification: 0.1h)
 
+### 2025-10-29 (cont.)
+- Enforce CLI-only Proxmox interaction policy:
+  - Removed `proxmox-api` module wiring from `build.zig` (no API usage at runtime).
+  - Verified `zig build` succeeds after removal.
+
+Time spent: +0.2h (cleanup: 0.2h)
+
