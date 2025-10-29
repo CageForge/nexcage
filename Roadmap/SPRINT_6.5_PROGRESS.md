@@ -33,3 +33,9 @@ Time spent: 0.6h (debug: 0.3h, fixes: 0.2h, build+verification: 0.1h)
 
 Time spent: +0.2h (cleanup: 0.2h)
 
+### 2025-10-29 (merge)
+- Merged PR 123 (plugin system rewrite) into PR 122 branch; build green.
+- Prepared PR 122 for merge to main (threads resolved, comments added).
+
+Time spent: +0.4h (merge+verify: 0.3h, comms: 0.1h)
+
