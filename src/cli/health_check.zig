@@ -14,11 +14,13 @@ pub const HealthCommand = struct {
         self.base.setLogger(logger);
         }
         
-    pub fn validate(_: *Self, _: core.RuntimeOptions) !void {
+    pub fn validate(_: *Self, _: []const []const u8) !void {
         // No validation needed for health check
     }
     
-    pub fn help() []const u8 {
+    pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
+        _ = self;
+        _ = allocator;
         return 
             \\Health Check Command
             \\

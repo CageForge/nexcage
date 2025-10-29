@@ -28,27 +28,37 @@ pub const VersionCommand = struct {
     }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        _ = self;
         _ = options;
+
+        const stdout = std.fs.File.stdout();
 
         // Read version from VERSION file
         const version_file = std.fs.cwd().openFile("VERSION", .{}) catch {
-            std.debug.print("nexcage version 0.0.0-dev (VERSION file not found)\n", .{});
+            const msg = "nexcage version 0.0.0-dev (VERSION file not found)\n";
+            try stdout.writeAll(msg);
             return;
         };
         defer version_file.close();
         
         const version_bytes = version_file.readToEndAlloc(allocator, 64) catch {
-            std.debug.print("nexcage version 0.0.0-dev (failed to read VERSION)\n", .{});
+            const msg = "nexcage version 0.0.0-dev (failed to read VERSION)\n";
+            try stdout.writeAll(msg);
             return;
         };
         defer allocator.free(version_bytes);
         
         const version_str = std.mem.trim(u8, version_bytes, " \n\r\t");
         const version = getVersionInfo(version_str);
-        const version_text = try self.formatVersion(version, allocator);
-        defer allocator.free(version_text);
-
-        std.debug.print("{s}\n", .{version_text});
+        
+        // Simple version output - format in one call
+        const version_output = if (version.build) |build| 
+            try std.fmt.allocPrint(allocator, "nexcage version {d}.{d}.{d}-{s}\n", .{ version.major, version.minor, version.patch, build })
+        else 
+            try std.fmt.allocPrint(allocator, "nexcage version {d}.{d}.{d}\n", .{ version.major, version.minor, version.patch });
+        defer allocator.free(version_output);
+        
+        try stdout.writeAll(version_output);
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
@@ -65,35 +75,6 @@ pub const VersionCommand = struct {
         _ = self;
         _ = args;
         // Version command doesn't require any arguments
-    }
-
-    fn formatVersion(self: *Self, version: VersionInfo, allocator: std.mem.Allocator) ![]u8 {
-        _ = self;
-
-        var version_text = std.array_list.Managed(u8).init(allocator);
-        defer version_text.deinit();
-
-        try version_text.writer().print("nexcage version {d}.{d}.{d}", .{
-            version.major,
-            version.minor,
-            version.patch,
-        });
-
-        if (version.build) |build| {
-            try version_text.writer().print("-{s}", .{build});
-        }
-
-        if (version.commit) |commit| {
-            try version_text.writer().print(" (commit: {s})", .{commit});
-        }
-
-        if (version.date) |date| {
-            try version_text.writer().print(" (built: {s})", .{date});
-        }
-
-        try version_text.appendSlice("\n");
-
-        return version_text.toOwnedSlice();
     }
 };
 

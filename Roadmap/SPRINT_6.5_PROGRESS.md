@@ -39,3 +39,29 @@ Time spent: +0.2h (cleanup: 0.2h)
 
 Time spent: +0.4h (merge+verify: 0.3h, comms: 0.1h)
 
+### 2025-10-29 (smoke test)
+- Ran smoke tests on Proxmox mgr.cp.if.ua via scripts/proxmox_only_test.sh:
+  - Infrastructure checks: PASS (build, copy, SSH, PVE env, storage, network)
+  - ReleaseFast binary deployed (Debug had memory leak detections)
+  - **Issue**: Segmentation fault on command execution (version, list)
+  - Success rate: 36% (16/44 passed; negative tests OK, functional tests fail)
+  - Needs investigation: segfault likely due to runtime/memory/config issue
+
+Time spent: +0.5h (test run: 0.3h, debug: 0.2h)
+
+### 2025-01-30
+- Fixed segmentation fault in version and list commands:
+  - Root cause: CommandInterface.execute/help/validate function pointers didn't pass `self` (ctx)
+  - Solution: Updated CommandInterface to accept `self: *CommandInterface` as first parameter
+  - Created wrapper functions in registry.zig that extract ctx from CommandInterface and pass as self to concrete commands
+  - Fixed error set compatibility using @errorCast for proper error propagation
+  - Fixed health_check.zig help() and validate() signatures to match interface
+  - Replaced std.debug.print with stdout.writeAll in version.zig for Release mode compatibility
+  - Verified version and list commands work on both local and Proxmox server (mgr.cp.if.ua)
+  
+- Created GitHub issue #125 for state command implementation:
+  - Command to retrieve container state/status information
+  - Integration with proxmox-lxc backend via pct status/list
+  
+Time spent: 2.5h (issue creation: 0.1h, segfault debug+fix: 2.0h, testing: 0.4h)
+
