@@ -282,7 +282,6 @@ pub const ImageConverter = struct {
 
     /// Set up init system
     fn setupInitSystem(self: *Self, rootfs_path: []const u8, config: *const oci_bundle.OciBundleConfig) !void {
-        _ = config;
         // Create basic init script for LXC
         const sbin_dir = try std.fmt.allocPrint(self.allocator, "{s}/sbin", .{rootfs_path});
         defer self.allocator.free(sbin_dir);
@@ -299,7 +298,11 @@ pub const ImageConverter = struct {
         const file = try std.fs.cwd().createFile(init_path, .{});
         defer file.close();
         
-        const init_script = 
+        // Determine the main process command from OCI config
+        const main_command = try self.determineMainCommand(config);
+        defer self.allocator.free(main_command);
+        
+        const init_script = try std.fmt.allocPrint(self.allocator,
             \\#!/bin/sh
             \\# LXC init script
             \\
@@ -326,21 +329,102 @@ pub const ImageConverter = struct {
             \\    /etc/init.d/rcS
             \\fi
             \\
-            \\# Start main process
-            \\if [ -x /bin/sh ]; then
-            \\    exec /bin/sh
-            \\else
-            \\    # Keep container running
-            \\    while true; do
-            \\        echo "Container is running..."
-            \\        sleep 30
-            \\    done
-            \\fi
+            \\# Start main process: {s}
+            \\{s}
             \\
-        ;
+        , .{ main_command, main_command });
+        defer self.allocator.free(init_script);
+        
         try file.writeAll(init_script);
         
+        if (self.logger) |log| {
+            try log.info("Created LXC init script with command: {s}", .{main_command});
+        }
+        
         // Note: chmod would be needed here in a real implementation
+    }
+    
+    /// Determine the main command to run based on OCI config
+    fn determineMainCommand(self: *Self, config: *const oci_bundle.OciBundleConfig) ![]const u8 {
+        // Priority: ENTRYPOINT + CMD > process.args > fallback to /bin/sh
+        
+        // Check if we have ENTRYPOINT from metadata.json
+        if (config.entrypoint) |entrypoint| {
+            if (entrypoint.len > 0) {
+                // Calculate total length needed for command string
+                var total_len: usize = 0;
+                var first_arg = true;
+                for (entrypoint) |arg| {
+                    if (!first_arg) total_len += 1; // +1 for space separator
+                    total_len += arg.len;
+                    first_arg = false;
+                }
+                if (config.cmd) |cmd| {
+                    for (cmd) |arg| {
+                        if (!first_arg) total_len += 1; // +1 for space separator
+                        total_len += arg.len;
+                        first_arg = false;
+                    }
+                }
+                
+                // Build command string by concatenating ENTRYPOINT + CMD
+                var cmd_str = try self.allocator.alloc(u8, total_len);
+                var pos: usize = 0;
+                first_arg = true;
+                
+                // Add ENTRYPOINT arguments
+                for (entrypoint) |arg| {
+                    if (!first_arg) {
+                        cmd_str[pos] = ' ';
+                        pos += 1;
+                    }
+                    @memcpy(cmd_str[pos..pos + arg.len], arg);
+                    pos += arg.len;
+                    first_arg = false;
+                }
+                
+                // Add CMD arguments if present
+                if (config.cmd) |cmd| {
+                    for (cmd) |arg| {
+                        if (!first_arg) {
+                            cmd_str[pos] = ' ';
+                            pos += 1;
+                        }
+                        @memcpy(cmd_str[pos..pos + arg.len], arg);
+                        pos += arg.len;
+                        first_arg = false;
+                    }
+                }
+                
+                const full_command = cmd_str[0..pos];
+                
+                if (self.logger) |log| {
+                    try log.info("Using ENTRYPOINT + CMD: {s}", .{full_command});
+                }
+                
+                return full_command;
+            }
+        }
+        
+        // Fallback to process.args from config.json
+        if (config.process_args) |args| {
+            if (args.len > 0) {
+                const full_command = try std.mem.join(self.allocator, " ", args);
+                
+                if (self.logger) |log| {
+                    try log.info("Using process.args: {s}", .{full_command});
+                }
+                
+                return full_command;
+            }
+        }
+        
+        // Final fallback to /bin/sh
+        if (self.logger) |log| {
+            try log.info("No specific command found, using fallback: /bin/sh", .{});
+        }
+        
+        return try self.allocator.dupe(u8, "/bin/sh");
     }
 
     /// Create template archive from rootfs

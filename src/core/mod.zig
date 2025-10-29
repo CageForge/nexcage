@@ -8,6 +8,7 @@ pub const logging_config = @import("logging_config.zig");
 pub const config = @import("config.zig");
 pub const constants = @import("constants.zig");
 pub const integrity = @import("integrity.zig");
+pub const validation = @import("validation.zig");
 
 // Re-export commonly used types
 pub const Error = types.Error;

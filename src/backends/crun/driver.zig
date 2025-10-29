@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("core");
+const validation = @import("core").validation;
 
 /// Crun backend driver for OCI containers
 pub const CrunDriver = struct {
@@ -25,8 +26,14 @@ pub const CrunDriver = struct {
             try log.info("Creating OCI container with crun: {s}", .{config.name});
         }
 
-        // Create OCI bundle directory
-        const bundle_path = try std.fmt.allocPrint(self.allocator, "/var/lib/nexcage/bundles/{s}", .{config.name});
+        // Validate container name
+        try validation.SecurityValidation.validateContainerId(config.name);
+
+        // Create OCI bundle directory with path validation
+        const bundle_path = try validation.PathSecurity.validateBundlePath(
+            try std.fmt.allocPrint(self.allocator, "/var/lib/nexcage/bundles/{s}", .{config.name}),
+            self.allocator
+        );
         defer self.allocator.free(bundle_path);
 
         // Create bundle directory
@@ -70,6 +77,9 @@ pub const CrunDriver = struct {
             try log.info("Starting OCI container with crun: {s}", .{container_id});
         }
 
+        // Validate container ID
+        try validation.SecurityValidation.validateContainerId(container_id);
+
         const args = [_][]const u8{
             "crun",
             "start",
@@ -97,6 +107,9 @@ pub const CrunDriver = struct {
         if (self.logger) |log| {
             try log.info("Stopping OCI container with crun: {s}", .{container_id});
         }
+
+        // Validate container ID
+        try validation.SecurityValidation.validateContainerId(container_id);
 
         const args = [_][]const u8{
             "crun",
@@ -126,6 +139,9 @@ pub const CrunDriver = struct {
         if (self.logger) |log| {
             try log.info("Deleting OCI container with crun: {s}", .{container_id});
         }
+
+        // Validate container ID
+        try validation.SecurityValidation.validateContainerId(container_id);
 
         const args = [_][]const u8{
             "crun",
@@ -183,7 +199,12 @@ pub const CrunDriver = struct {
     /// Generate basic OCI config.json
     fn generateOciConfig(self: *Self, config: core.types.SandboxConfig, bundle_path: []const u8) !void {
         _ = config;
-        const config_path = try std.fmt.allocPrint(self.allocator, "{s}/config.json", .{bundle_path});
+        
+        // Validate bundle path
+        const validated_bundle_path = try validation.PathSecurity.validateBundlePath(bundle_path, self.allocator);
+        defer self.allocator.free(validated_bundle_path);
+        
+        const config_path = try validation.PathSecurity.secureJoin(self.allocator, validated_bundle_path, "config.json");
         defer self.allocator.free(config_path);
 
         const file = try std.fs.cwd().createFile(config_path, .{});
