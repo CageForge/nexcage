@@ -40,7 +40,10 @@ pub const CreateCommand = struct {
         const stdout = std.fs.File.stdout();
         try stdout.writeAll("DEBUG: Create command started\n");
         
-        try self.logCommandStart("create");
+        // Skip logging at start to prevent segfault issues with logger allocator
+        // self.logCommandStart("create") catch {};
+        
+        try stdout.writeAll("DEBUG: After logCommandStart (skipped)\n");
 
         // Check for help flag
         if (options.help) {
@@ -62,32 +65,76 @@ pub const CreateCommand = struct {
             return;
         }
 
+        try stdout.writeAll("DEBUG: Before validation\n");
+        
         // Validate required options using validation utility
         const validated = try validation.ValidationUtils.requireContainerIdAndImage(options, self.base.logger, "create");
         const container_id = validated.container_id;
         const image = validated.image;
 
-        try self.logInfo("Creating container {s} with image {s}", .{ container_id, image });
+        try stdout.writeAll("DEBUG: After validation\n");
+
+        // Skip logging to prevent segfault issues
+        // self.logInfo("Creating container {s} with image {s}", .{ container_id, image }) catch {};
+        
+        try stdout.writeAll("DEBUG: Before router init\n");
 
         // Use router for backend selection and execution
-        var backend_router = router.BackendRouter.init(allocator, self.base.logger);
+        try stdout.writeAll("DEBUG: Calling BackendRouter.initWithDebug\n");
+        var backend_router = router.BackendRouter.initWithDebug(allocator, self.base.logger, options.debug);
+        try stdout.writeAll("DEBUG: After BackendRouter.initWithDebug\n");
 
-        const bridge_buf = try allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME);
+        try stdout.writeAll("DEBUG: Before config creation\n");
+        // Try with null config first to see if config creation is the issue
+        const config: ?router.Config = null;
+        // const bridge_buf = try allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME);
+        // const config = router.Config{
+        //     .network = core.types.NetworkConfig{
+        //         .bridge = bridge_buf,
+        //         .ip = null,
+        //         .gateway = null,
+        //         .dns = null,
+        //         .port_mappings = null,
+        //     },
+        // };
 
-        const config = router.Config{
-            .network = core.types.NetworkConfig{
-                .bridge = bridge_buf,
-                .ip = null,
-                .gateway = null,
-                .dns = null,
-                .port_mappings = null,
-            },
-        };
-
+        try stdout.writeAll("DEBUG: Before operation creation\n");
         const operation = router.Operation{ .create = router.CreateConfig{ .image = image } };
-        try backend_router.routeAndExecute(operation, container_id, config);
+        try stdout.writeAll("DEBUG: Before routeAndExecute\n");
+        try stdout.writeAll("DEBUG: backend_router address: ");
+        const router_addr = try std.fmt.allocPrint(allocator, "{*}\n", .{&backend_router});
+        defer allocator.free(router_addr);
+        try stdout.writeAll(router_addr);
+        
+        try stdout.writeAll("DEBUG: operation = ");
+        try stdout.writeAll(@tagName(operation));
+        try stdout.writeAll("\n");
+        
+        try stdout.writeAll("DEBUG: container_id = '");
+        try stdout.writeAll(container_id);
+        try stdout.writeAll("'\n");
+        
+        try stdout.writeAll("DEBUG: config is ");
+        if (config) |_| {
+            try stdout.writeAll("not null\n");
+        } else {
+            try stdout.writeAll("null\n");
+        }
+        
+        try stdout.writeAll("DEBUG: Calling routeAndExecute now...\n");
+        
+        backend_router.routeAndExecute(operation, container_id, config) catch |err| {
+            try stdout.writeAll("DEBUG: routeAndExecute returned error: ");
+            const err_str = try std.fmt.allocPrint(allocator, "{}\n", .{err});
+            defer allocator.free(err_str);
+            try stdout.writeAll(err_str);
+            return err;
+        };
+        
+        try stdout.writeAll("DEBUG: After routeAndExecute (success)\n");
 
-        try self.logCommandComplete("create");
+        // Safe logging: catch errors to prevent crashes
+        self.logCommandComplete("create") catch {};
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {

@@ -36,14 +36,40 @@ pub const BackendRouter = struct {
         runtime_type: types.RuntimeType,
         config: ?Config,
     ) !types.SandboxConfig {
+        const stdout = std.fs.File.stdout();
+        
+        if (self.debug_mode) {
+            try stdout.writeAll("[ROUTER] createSandboxConfig: Starting\n");
+            try stdout.writeAll("[ROUTER] createSandboxConfig: container_id = '");
+            try stdout.writeAll(container_id);
+            try stdout.writeAll("'\n");
+        }
+        
+        if (self.debug_mode) try stdout.writeAll("[ROUTER] createSandboxConfig: Duplicating container_id\n");
         const name_buf = try self.allocator.dupe(u8, container_id);
+        if (self.debug_mode) try stdout.writeAll("[ROUTER] createSandboxConfig: name_buf created\n");
 
+        if (self.debug_mode) try stdout.writeAll("[ROUTER] createSandboxConfig: Creating SandboxConfig\n");
+        
         return switch (operation) {
-            .create => |create_config| types.SandboxConfig{
+            .create => |create_config| blk: {
+                if (self.debug_mode) {
+                    try stdout.writeAll("[ROUTER] createSandboxConfig: operation is .create\n");
+                    try stdout.writeAll("[ROUTER] createSandboxConfig: create_config.image = '");
+                    try stdout.writeAll(create_config.image);
+                    try stdout.writeAll("'\n");
+                }
+                if (self.debug_mode) try stdout.writeAll("[ROUTER] createSandboxConfig: Duplicating image\n");
+                const image_buf = try self.allocator.dupe(u8, create_config.image);
+                if (self.debug_mode) try stdout.writeAll("[ROUTER] createSandboxConfig: image_buf created\n");
+                if (self.debug_mode) {
+                    try stdout.writeAll("[ROUTER] createSandboxConfig: Building SandboxConfig struct\n");
+                }
+                const sandbox_cfg = types.SandboxConfig{
                 .allocator = self.allocator,
                 .name = name_buf,
                 .runtime_type = runtime_type,
-                .image = try self.allocator.dupe(u8, create_config.image),
+                .image = image_buf,
                 .resources = types.ResourceLimits{
                     .memory = constants.DEFAULT_MEMORY_BYTES,
                     .cpu = constants.DEFAULT_CPU_CORES,
@@ -52,16 +78,22 @@ pub const BackendRouter = struct {
                 },
                 .security = null,
                 .network = if (config) |cfg| cfg.network else switch (runtime_type) {
-                    .lxc => types.NetworkConfig{
-                        .bridge = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
-                        .ip = null,
-                        .gateway = null,
-                        .dns = null,
-                        .port_mappings = null,
+                    .lxc => net_blk: {
+                        if (self.debug_mode) try stdout.writeAll("[ROUTER] createSandboxConfig: Creating network config for LXC\n");
+                        break :net_blk types.NetworkConfig{
+                            .bridge = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
+                            .ip = null,
+                            .gateway = null,
+                            .dns = null,
+                            .port_mappings = null,
+                        };
                     },
                     else => null,
                 },
                 .storage = null,
+                };
+                if (self.debug_mode) try stdout.writeAll("[ROUTER] createSandboxConfig: SandboxConfig created successfully\n");
+                break :blk sandbox_cfg;
             },
             .run => |run_config| types.SandboxConfig{
                 .allocator = self.allocator,
@@ -100,15 +132,65 @@ pub const BackendRouter = struct {
     }
 
     pub fn routeAndExecute(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
+        // Use stderr for debug output to avoid buffering issues
+        const stderr = std.fs.File.stderr();
+        
+        // Immediately write to stderr (unbuffered) to catch segfault location
+        stderr.writeAll("[ROUTER] routeAndExecute: ENTRY\n") catch {};
+        
+        // Check self pointer validity by accessing fields (suppress unused warnings)
+        _ = self.allocator;
+        _ = self.debug_mode;
+        
+        stderr.writeAll("[ROUTER] routeAndExecute: Self check passed\n") catch {};
+        
+        if (self.debug_mode) {
+            stderr.writeAll("[ROUTER] routeAndExecute: Starting (debug mode ON)\n") catch {};
+            stderr.writeAll("[ROUTER] routeAndExecute: container_id = '") catch {};
+            stderr.writeAll(container_id) catch {};
+            stderr.writeAll("'\n") catch {};
+        } else {
+            stderr.writeAll("[ROUTER] routeAndExecute: Starting (debug mode OFF)\n") catch {};
+        }
+        
+        stderr.writeAll("[ROUTER] routeAndExecute: Before ConfigLoader init\n") catch {};
         var config_loader = config_module.ConfigLoader.init(self.allocator);
-        var cfg = try config_loader.loadDefault();
+        stderr.writeAll("[ROUTER] routeAndExecute: ConfigLoader initialized\n") catch {};
+        
+        if (self.debug_mode) {
+            stderr.writeAll("[ROUTER] routeAndExecute: Loading default config\n") catch {};
+        }
+        
+        stderr.writeAll("[ROUTER] routeAndExecute: Calling loadDefault\n") catch {};
+        var cfg = config_loader.loadDefault() catch |err| {
+            stderr.writeAll("[ROUTER] routeAndExecute: ERROR in loadDefault\n") catch {};
+            return err;
+        };
         defer cfg.deinit();
+        stderr.writeAll("[ROUTER] routeAndExecute: Default config loaded successfully\n") catch {};
+        
+        if (self.debug_mode) {
+            stderr.writeAll("[ROUTER] routeAndExecute: Config loaded, proceeding\n") catch {};
+        }
 
         // Use the new routing system that supports regex patterns
+        stderr.writeAll("[ROUTER] routeAndExecute: Before getRoutedRuntime\n") catch {};
         const runtime_type = cfg.getRoutedRuntime(container_id);
-        if (self.logger) |log| {
-            try log.info("Routing container '{s}' to runtime: {s}", .{ container_id, @tagName(runtime_type) });
+        stderr.writeAll("[ROUTER] routeAndExecute: After getRoutedRuntime\n") catch {};
+        
+        if (self.debug_mode) {
+            stderr.writeAll("[ROUTER] routeAndExecute: Runtime type: ") catch {};
+            const rt_str = @tagName(runtime_type);
+            stderr.writeAll(rt_str) catch {};
+            stderr.writeAll("\n") catch {};
         }
+        
+        stderr.writeAll("[ROUTER] routeAndExecute: Before logger routing info\n") catch {};
+        // Skip logger call to avoid segfault - logger allocator might be invalid
+        // if (self.logger) |log| {
+        //     log.info("Routing container '{s}' to runtime: {s}", .{ container_id, @tagName(runtime_type) }) catch {};
+        // }
+        stderr.writeAll("[ROUTER] routeAndExecute: After logger routing info (skipped)\n") catch {};
 
         // Convert RuntimeType to ContainerType for backend execution
         const ctype = switch (runtime_type) {
@@ -119,45 +201,95 @@ pub const BackendRouter = struct {
             .proxmox_lxc => types.ContainerType.proxmox_lxc,
             else => types.ContainerType.lxc, // fallback
         };
+        stderr.writeAll("[ROUTER] routeAndExecute: ContainerType converted\n") catch {};
 
-        if (self.logger) |log| {
-            try log.info("Executing with backend: {s} for container: {s}", .{ @tagName(ctype), container_id });
-        }
+        stderr.writeAll("[ROUTER] routeAndExecute: Before logger execution info\n") catch {};
+        // Skip logger call to avoid segfault
+        // if (self.logger) |log| {
+        //     log.info("Executing with backend: {s} for container: {s}", .{ @tagName(ctype), container_id }) catch {};
+        // }
+        stderr.writeAll("[ROUTER] routeAndExecute: Before switch statement\n") catch {};
 
         switch (ctype) {
-            .lxc => try self.executeProxmoxLxc(operation, container_id, config),
-            .crun => try self.executeCrun(operation, container_id, config),
-            .runc => try self.executeRunc(operation, container_id, config),
-            .vm => try self.executeVm(operation, container_id, config),
-            .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config),
+            .lxc => {
+                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeProxmoxLxc (lxc)\n") catch {};
+                try self.executeProxmoxLxc(operation, container_id, config);
+                stderr.writeAll("[ROUTER] routeAndExecute: executeProxmoxLxc completed\n") catch {};
+            },
+            .crun => {
+                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeCrun\n") catch {};
+                try self.executeCrun(operation, container_id, config);
+            },
+            .runc => {
+                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeRunc\n") catch {};
+                try self.executeRunc(operation, container_id, config);
+            },
+            .vm => {
+                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeVm\n") catch {};
+                try self.executeVm(operation, container_id, config);
+            },
+            .proxmox_lxc => {
+                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeProxmoxLxc (proxmox_lxc)\n") catch {};
+                try self.executeProxmoxLxc(operation, container_id, config);
+                stderr.writeAll("[ROUTER] routeAndExecute: executeProxmoxLxc completed\n") catch {};
+            },
         }
+        stderr.writeAll("[ROUTER] routeAndExecute: Switch completed\n") catch {};
+        stderr.writeAll("[ROUTER] routeAndExecute: FINISHED\n") catch {};
     }
 
     fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
+        const stderr = std.fs.File.stderr();
+        
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: ENTRY\n") catch {};
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: container_id = '") catch {};
+        stderr.writeAll(container_id) catch {};
+        stderr.writeAll("'\n") catch {};
+        
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: Before createSandboxConfig\n") catch {};
         const sandbox_config = try self.createSandboxConfig(operation, container_id, .proxmox_lxc, config);
         defer self.cleanupSandboxConfig(operation, &sandbox_config);
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: Sandbox config created\n") catch {};
 
         // Create Proxmox LXC backend with default config
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: Creating ProxmoxLxcBackendConfig\n") catch {};
         const proxmox_config = types.ProxmoxLxcBackendConfig{
             .allocator = self.allocator,
             .default_bridge = if (config) |cfg| if (cfg.network) |net| net.bridge else null else null,
         };
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: Config created\n") catch {};
 
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: Initializing ProxmoxLxcDriver\n") catch {};
         const proxmox_backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(self.allocator, proxmox_config);
         defer proxmox_backend.deinit();
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: Driver initialized\n") catch {};
 
+        // Set logger if available
         if (self.logger) |log| {
+            stderr.writeAll("[ROUTER] executeProxmoxLxc: Setting logger\n") catch {};
             proxmox_backend.setLogger(log);
+            stderr.writeAll("[ROUTER] executeProxmoxLxc: Logger set\n") catch {};
+        } else {
+            stderr.writeAll("[ROUTER] executeProxmoxLxc: No logger available\n") catch {};
         }
         
         // Set debug mode
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: Setting debug mode\n") catch {};
         proxmox_backend.setDebugMode(self.debug_mode);
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: Debug mode set\n") catch {};
 
+        stderr.writeAll("[ROUTER] executeProxmoxLxc: Before operation switch\n") catch {};
+        
         switch (operation) {
-            .create => try proxmox_backend.create(sandbox_config),
+            .create => {
+                stderr.writeAll("[ROUTER] executeProxmoxLxc: Calling backend.create\n") catch {};
+                try proxmox_backend.create(sandbox_config);
+                stderr.writeAll("[ROUTER] executeProxmoxLxc: backend.create completed\n") catch {};
+            },
             .start => try proxmox_backend.start(container_id),
             .stop => try proxmox_backend.stop(container_id),
             .delete => try proxmox_backend.delete(container_id),
+            .kill => |kill_cfg| try proxmox_backend.kill(container_id, kill_cfg.signal),
             .run => {
                 try proxmox_backend.create(sandbox_config);
                 try proxmox_backend.start(container_id);
@@ -182,6 +314,7 @@ pub const BackendRouter = struct {
             .start => try crun_backend.start(container_id),
             .stop => try crun_backend.stop(container_id),
             .delete => try crun_backend.delete(container_id),
+            .kill => |kill_cfg| try crun_backend.kill(container_id, kill_cfg.signal),
             .run => {
                 if (self.logger) |log| {
                     try log.warn("Crun run operation not implemented", .{});
@@ -205,6 +338,7 @@ pub const BackendRouter = struct {
             .start => try runc_backend.start(container_id),
             .stop => try runc_backend.stop(container_id),
             .delete => try runc_backend.delete(container_id),
+            .kill => |kill_cfg| try runc_backend.kill(container_id, kill_cfg.signal),
             .run => {
                 if (self.logger) |log| {
                     try log.warn("Runc run operation not implemented", .{});
@@ -226,7 +360,7 @@ pub const BackendRouter = struct {
                     try log.warn("Proxmox VM backend not fully integrated yet. VM creation for image {s} skipped.", .{create_config.image});
                 }
             },
-            .start, .stop, .delete, .run, .state => {
+            .start, .stop, .delete, .run, .state, .kill => {
                 if (self.logger) |log| {
                     try log.warn("Proxmox VM backend not fully integrated yet. VM operation skipped.", .{});
                 }
@@ -280,6 +414,7 @@ pub const Operation = union(enum) {
     delete: void,
     run: RunConfig,
     state: void,
+    kill: KillConfig,
 };
 
 pub const CreateConfig = struct {
@@ -288,6 +423,10 @@ pub const CreateConfig = struct {
 
 pub const RunConfig = struct {
     image: []const u8,
+};
+
+pub const KillConfig = struct {
+    signal: []const u8,
 };
 
 pub const Config = struct {

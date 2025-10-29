@@ -191,6 +191,7 @@ pub const Command = enum {
     help,
     version,
     state,
+    kill,
 };
 
 /// Runtime options

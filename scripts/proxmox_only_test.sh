@@ -214,6 +214,12 @@ run_test "Remote List Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --hel
 # Test 15: Remote run help
 run_test "Remote Run Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage run --help'"
 
+# Test 15a: Remote state help
+run_test "Remote State Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state --help'"
+
+# Test 15b: Remote kill help
+run_test "Remote Kill Help" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage kill --help'"
+
 # Test 16: Test create command (should fail without proper setup)
 run_test_expected_fail "Remote Create Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-container --image ubuntu:20.04'"
 
@@ -229,8 +235,14 @@ run_test_expected_fail "Remote Delete Command (Expected Fail)" "ssh $PVE_HOST 'c
 # Test 20: Test list command (should work)
 run_test "Remote List Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list'"
 
+# Test 20a: Test state command (should work with existing containers)
+run_test "Remote State Command" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state 101 || ./nexcage state 999'"
+
 # Test 21: Test run command (should fail without container)
 run_test_expected_fail "Remote Run Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage run --name test-container --command /bin/echo hello'"
+
+# Test 21a: Test kill command (should fail without container or on stopped container)
+run_test_expected_fail "Remote Kill Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage kill test-nonexistent-container'"
 
 # Test 22: Test invalid command (should fail)
 run_test_expected_fail "Remote Invalid Command (Expected Fail)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage invalid-command'"
@@ -244,27 +256,36 @@ run_test_expected_fail "Remote Invalid Runtime (Expected Fail)" "ssh $PVE_HOST '
 # Test 25: Test config file loading
 run_test "Remote Config Loading" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test --image ubuntu --config $CONFIG_PATH/config.json --help'"
 
-# Test 26: Test LXC container creation (if LXC tools available)
+# Test 26: Test Proxmox-LXC container creation (if LXC tools available)
 if check_remote_command "pct"; then
-    echo -e "${YELLOW}🧪 Testing LXC container creation...${NC}"
+    echo -e "${YELLOW}🧪 Testing  Proxmox LXC container creation...${NC}"
     
-    # Test 27: Create LXC container
-    run_test "LXC Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-lxc-container --image ubuntu:20.04 --runtime lxc'"
+    # Test 27: Create Proxmox-LXC container
+    run_test "Proxmox-LXC Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-lxc-container --image ubuntu:20.04 --runtime proxmox-lxc'"
     
-    # Test 28: List LXC containers
-    run_test "LXC Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --runtime lxc'"
+    # Test 28: List Proxmox-LXC containers
+    run_test "Proxmox-LXC Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --runtime proxmox-lxc'"
     
-    # Test 29: Start LXC container
-    run_test "LXC Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-lxc-container --runtime lxc'"
+    # Test 29: Start Proxmox-LXC container
+    run_test "Proxmox-LXC Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-lxc-container --runtime proxmox-lxc'"
     
-    # Test 30: Stop LXC container
-    run_test "LXC Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-lxc-container --runtime lxc'"
+    # Test 29a: State Proxmox-LXC container (while running)
+    run_test "Proxmox-LXC Container State (Running)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-lxc-container'"
     
-    # Test 31: Delete LXC container
-    run_test "LXC Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-lxc-container --runtime lxc'"
+    # Test 29b: Kill Proxmox-LXC container with SIGTERM
+    run_test "Proxmox-LXC Container Kill (SIGTERM)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage kill -s SIGTERM test-lxc-container'"
+    
+    # Test 30: Stop Proxmox-LXC container
+    run_test "Proxmox-LXC Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-lxc-container --runtime proxmox-lxc'"
+    
+    # Test 30a: State Proxmox-LXC container (while stopped)
+    run_test "Proxmox-LXC Container State (Stopped)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-lxc-container'"
+    
+    # Test 31: Delete Proxmox-LXC container
+    run_test "Proxmox-LXC Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-lxc-container --runtime proxmox-lxc'"
 else
-    echo -e "${YELLOW}⏭️ Skipping LXC tests - LXC tools not available${NC}"
-    log_test_result "LXC Container Tests" "SKIP" "LXC tools not available" "0ms"
+    echo -e "${YELLOW}⏭️ Skipping Proxmox-LXC tests - LXC tools not available${NC}"
+    log_test_result "Proxmox-LXC Container Tests" "SKIP" "LXC tools not available" "0ms"
 fi
 
 # Test 32: Test OCI container creation (if crun available)
@@ -280,8 +301,17 @@ if check_remote_command "crun"; then
     # Test 35: Start OCI container
     run_test "OCI Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-oci-container --runtime crun'"
     
+    # Test 35a: State OCI container (while running)
+    run_test "OCI Container State (Running)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-oci-container'"
+    
+    # Test 35b: Kill OCI container with SIGTERM
+    run_test "OCI Container Kill (SIGTERM)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage kill -s SIGTERM test-oci-container'"
+    
     # Test 36: Stop OCI container
     run_test "OCI Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-oci-container --runtime crun'"
+    
+    # Test 36a: State OCI container (while stopped)
+    run_test "OCI Container State (Stopped)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-oci-container'"
     
     # Test 37: Delete OCI container
     run_test "OCI Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-oci-container --runtime crun'"
@@ -303,8 +333,17 @@ if check_remote_command "runc"; then
     # Test 41: Start runc container
     run_test "Runc Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-runc-container --runtime runc'"
     
+    # Test 41a: State runc container (while running)
+    run_test "Runc Container State (Running)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-runc-container'"
+    
+    # Test 41b: Kill runc container with SIGTERM
+    run_test "Runc Container Kill (SIGTERM)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage kill -s SIGTERM test-runc-container'"
+    
     # Test 42: Stop runc container
     run_test "Runc Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-runc-container --runtime runc'"
+    
+    # Test 42a: State runc container (while stopped)
+    run_test "Runc Container State (Stopped)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-runc-container'"
     
     # Test 43: Delete runc container
     run_test "Runc Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-runc-container --runtime runc'"

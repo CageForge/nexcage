@@ -13,6 +13,7 @@ const delete = @import("delete.zig");
 const list = @import("list.zig");
 const health = @import("health_check.zig");
 const state = @import("state.zig");
+const kill = @import("kill.zig");
 // const template = @import("template.zig");
 
 /// CLI command registry using StaticStringMap
@@ -104,6 +105,7 @@ var delete_cmd = delete.DeleteCommand{};
 var list_cmd = list.ListCommand{};
 var health_cmd = health.HealthCommand{};
 var state_cmd = state.StateCommand{};
+var kill_cmd = kill.KillCommand{};
 // var template_cmd = template.TemplateCommand{};
 
 /// Generic command registration helper
@@ -218,6 +220,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
     try registerCommand(registry, &list_cmd, list.ListCommand);
     try registerCommand(registry, &health_cmd, health.HealthCommand);
     try registerCommand(registry, &state_cmd, state.StateCommand);
+    try registerCommand(registry, &kill_cmd, kill.KillCommand);
     // try registerCommand(registry, &template_cmd, template.TemplateCommand);
 }
 
@@ -233,5 +236,6 @@ pub fn registerBuiltinCommandsWithLogger(registry: *CommandRegistry, logger: *co
     try registerCommandWithLogger(registry, &list_cmd, list.ListCommand, logger);
     try registerCommandWithLogger(registry, &health_cmd, health.HealthCommand, logger);
     try registerCommandWithLogger(registry, &state_cmd, state.StateCommand, logger);
+    try registerCommandWithLogger(registry, &kill_cmd, kill.KillCommand, logger);
     // try registerCommandWithLogger(registry, &template_cmd, template.TemplateCommand, logger);
 }
