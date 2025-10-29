@@ -194,6 +194,19 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 - Branch: `fix/zfs-validation`
 - Status: Ready for testing
 
+### 2025-10-29: Proxmox E2E run (post-fixes)
+
+#### Summary
+- Ran `scripts/proxmox_e2e_test.sh` after logging gating, image parsing fix, and hostname validation wiring.
+- Suite summary: 57 total, 34 passed (59%), 23 failed.
+- Failures concentrated in functional create/start/stop/kill/delete flows (expected pending Proxmox create stabilization and image/template provisioning).
+
+#### Artifacts
+- Report: `test-reports/proxmox_e2e_test_report_20251029_194308.md`
+
+#### Time Spent
+- ~0.5h (execution + triage)
+
 ### 2025-10-29: Image parsing fix (Proxmox template vs Docker ref)
 
 #### Summary
