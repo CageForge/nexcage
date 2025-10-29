@@ -285,16 +285,17 @@ pub const SIGHUP = 1;
 /// Proxmox LXC backend configuration
 pub const ProxmoxLxcBackendConfig = struct {
     allocator: std.mem.Allocator,
-    proxmox_host: []const u8,
-    proxmox_port: u16 = 8006,
-    proxmox_token: []const u8,
-    proxmox_node: []const u8,
-    verify_ssl: bool = false,
-    timeout: ?u64 = null,
+    // Optional overrides from config file
+    zfs_pool: ?[]const u8 = null,
+    default_memory_mb: ?u32 = null,
+    default_cores: ?u32 = null,
+    default_bridge: ?[]const u8 = null,
+    default_ostype: ?[]const u8 = null,
+    default_unprivileged: ?bool = null,
 
     pub fn deinit(self: *ProxmoxLxcBackendConfig) void {
-        self.allocator.free(self.proxmox_host);
-        self.allocator.free(self.proxmox_token);
-        self.allocator.free(self.proxmox_node);
+        if (self.zfs_pool) |p| self.allocator.free(p);
+        if (self.default_bridge) |b| self.allocator.free(b);
+        if (self.default_ostype) |o| self.allocator.free(o);
     }
 };
