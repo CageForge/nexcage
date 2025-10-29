@@ -1,4 +1,61 @@
-## Sprint 6.5 Progress — Full Modular Refactor
+## Sprint 6.5 Progress
+
+## 2025-10-29: Fixed Create Command Segfault (PR #128)
+
+### Problem Identified
+- **Critical segfault** occurred during `create` command execution when logger was invoked
+- Segfault happened specifically on second `logger.info()` call
+- Root cause: Logger's allocator became invalid between calls
+- File.Writer usage was incompatible with Zig 0.15.1
+
+### Solution Implemented
+1. **Logger Allocator Fix**:
+   - Changed logger to use `std.heap.page_allocator` for all allocations
+   - This ensures allocator remains valid throughout execution
+   - Fixes segfault that occurred when logger tried to use invalid allocator
+
+2. **File Storage Fix**:
+   - Changed `LogContext` to store `File` directly instead of `Writer`
+   - Updated to use `file.writeAll()` instead of `writer.file.writeAll()`
+   - Fixes Zig 0.15.1 compatibility issues
+
+3. **Comprehensive Debug Logging**:
+   - Added extensive debug output throughout create command flow
+   - Debug logging in router, driver, and logger functions
+   - Helps diagnose issues in production
+
+4. **Error Handling Improvements**:
+   - ZFS dataset creation errors now return null and continue without ZFS
+   - Better error messages for debugging
+
+### Files Changed
+- `src/core/logging.zig`: Fixed logger allocator, File storage, page_allocator usage
+- `src/main.zig`: Fixed logger initialization (removed stack buffer)
+- `src/backends/proxmox-lxc/driver.zig`: Added debug logging, improved ZFS error handling
+- `src/cli/router.zig`: Added debug logging, restored logger usage
+- `src/cli/create.zig`: Enhanced debug logging
+
+### Testing Results
+- ✅ **No more segfault** when logger.info() is called
+- ✅ Create command execution progresses successfully to pct create
+- ✅ Logger works correctly throughout execution
+- ✅ ZFS errors handled gracefully (continues without ZFS if pool doesn't exist)
+- ✅ Tested on Proxmox server `mgr.cp.if.ua`
+
+### Time Spent
+- Diagnosis: ~2 hours
+- Fix implementation: ~1 hour
+- Testing: ~30 minutes
+- **Total: ~3.5 hours**
+
+### PR
+- **PR #128**: [fix: Resolve segfault in create command caused by logger allocator](https://github.com/CageForge/nexcage/pull/128)
+- Branch: `fix/create-segfault-logger`
+- Status: Ready for review
+
+---
+
+# Sprint 6.5 Progress — Full Modular Refactor
 
 ### 2025-10-14
 - Created `Roadmap/SPRINT_6.5_PLAN.md`.
