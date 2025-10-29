@@ -137,7 +137,7 @@ pub const ProxmoxLxcDriver = struct {
     /// Create ZFS dataset for container
     pub fn createContainerDataset(self: *Self, container_name: []const u8, vmid: []const u8) !?[]const u8 {
         if (!self.isZFSAvailable() or self.zfs_pool == null) {
-            if (self.logger) |log| try log.warn("ZFS not available, skipping dataset creation", .{});
+            if (self.logger) |log| log.warn("ZFS not available, skipping dataset creation", .{}) catch {};
             return null;
         }
 
@@ -147,7 +147,7 @@ pub const ProxmoxLxcDriver = struct {
         const dataset_name = try std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ pool, container_name, vmid });
         defer self.allocator.free(dataset_name);
 
-        if (self.logger) |log| try log.info("Creating ZFS dataset for container: {s}", .{dataset_name});
+        if (self.logger) |log| log.info("Creating ZFS dataset for container: {s}", .{dataset_name}) catch {};
 
         // Create the dataset
         {
@@ -180,7 +180,7 @@ pub const ProxmoxLxcDriver = struct {
             if (res3.exit_code != 0) return core.Error.OperationFailed;
         }
 
-        if (self.logger) |log| try log.info("Successfully created ZFS dataset: {s}", .{dataset_name});
+        if (self.logger) |log| log.info("Successfully created ZFS dataset: {s}", .{dataset_name}) catch {};
         
         // Return the dataset name (caller should free it)
         return try self.allocator.dupe(u8, dataset_name);
@@ -189,11 +189,11 @@ pub const ProxmoxLxcDriver = struct {
     /// Destroy ZFS dataset for container
     pub fn destroyContainerDataset(self: *Self, dataset_name: []const u8) !void {
         if (!self.isZFSAvailable()) {
-            if (self.logger) |log| try log.warn("ZFS not available, skipping dataset destruction", .{});
+            if (self.logger) |log| log.warn("ZFS not available, skipping dataset destruction", .{}) catch {};
             return;
         }
 
-        if (self.logger) |log| try log.info("Destroying ZFS dataset: {s}", .{dataset_name});
+        if (self.logger) |log| log.info("Destroying ZFS dataset: {s}", .{dataset_name}) catch {};
         
         const args = [_][]const u8{ "zfs", "destroy", "-r", dataset_name };
         const res = try self.runCommand(&args);
@@ -201,7 +201,7 @@ pub const ProxmoxLxcDriver = struct {
         defer self.allocator.free(res.stderr);
         if (res.exit_code != 0) return core.Error.OperationFailed;
         
-        if (self.logger) |log| try log.info("Successfully destroyed ZFS dataset: {s}", .{dataset_name});
+        if (self.logger) |log| log.info("Successfully destroyed ZFS dataset: {s}", .{dataset_name}) catch {};
     }
 
     /// Get ZFS dataset mountpoint for container
@@ -222,8 +222,8 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Process OCI bundle - convert to template if needed, return template name
     fn processOciBundle(self: *Self, bundle_path: []const u8, container_name: []const u8) !?[]const u8 {
-        if (self.logger) |log| try log.info("Processing OCI bundle: {s}", .{bundle_path});
-        if (self.logger) |log| try log.info("Logger is working in processOciBundle", .{});
+        if (self.logger) |log| log.info("Processing OCI bundle: {s}", .{bundle_path}) catch {};
+        if (self.logger) |log| log.info("Logger is working in processOciBundle", .{}) catch {};
 
         // Parse bundle to check if it's a standard OCI bundle
         var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
@@ -237,7 +237,7 @@ pub const ProxmoxLxcDriver = struct {
             
             // Check if template already exists
             if (try self.templateExists(image_ref)) {
-                if (self.logger) |log| try log.info("Using existing template: {s}", .{image_ref});
+                if (self.logger) |log| log.info("Using existing template: {s}", .{image_ref}) catch {};
                 return image_ref;
             }
         }
@@ -246,12 +246,12 @@ pub const ProxmoxLxcDriver = struct {
         const template_name = try std.fmt.allocPrint(self.allocator, "{s}-{d}", .{ container_name, std.time.timestamp() });
         defer self.allocator.free(template_name);
         
-        if (self.logger) |log| try log.info("Converting OCI bundle to template: {s}", .{template_name});
+        if (self.logger) |log| log.info("Converting OCI bundle to template: {s}", .{template_name}) catch {};
         
         var converter = image_converter.ImageConverter.init(self.allocator, self.logger);
         try converter.convertOciToProxmoxTemplate(bundle_path, template_name, "local");
 
-        if (self.logger) |log| try log.info("Successfully converted OCI bundle to template: {s}", .{template_name});
+        if (self.logger) |log| log.info("Successfully converted OCI bundle to template: {s}", .{template_name}) catch {};
         
         // Add template to cache with metadata
         var template_info = try template_manager.TemplateInfo.init(
@@ -264,7 +264,7 @@ pub const ProxmoxLxcDriver = struct {
         // Extract metadata from OCI bundle if available
         var metadata_parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
         var metadata_cfg = metadata_parser.parseBundle(bundle_path) catch |err| {
-            if (self.logger) |log| try log.warn("Failed to parse bundle for metadata: {}", .{err});
+            if (self.logger) |log| log.warn("Failed to parse bundle for metadata: {}", .{err}) catch {};
             try self.template_manager.addTemplate(template_name, template_info);
             return try self.allocator.dupe(u8, template_name);
         };
@@ -310,7 +310,7 @@ pub const ProxmoxLxcDriver = struct {
     /// Create LXC container using pct command
     pub fn create(self: *Self, config: core.types.SandboxConfig) !void {
         if (self.logger) |log| {
-            try log.info("Creating Proxmox LXC container: {s}", .{config.name});
+            log.info("Creating Proxmox LXC container: {s}", .{config.name}) catch {};
         }
         
         // Process bundle image if provided (bundle path with config.json)
@@ -328,14 +328,14 @@ pub const ProxmoxLxcDriver = struct {
             } else {
                 // It's an OCI bundle - ensure bundle directory exists
                 var bundle_dir = std.fs.cwd().openDir(image_path, .{}) catch |err| {
-                    if (self.logger) |log| try log.err("Bundle path not found: {s} ({})", .{ image_path, err });
+                    if (self.logger) |log| log.err("Bundle path not found: {s} ({})", .{ image_path, err }) catch {};
                     return core.Error.FileNotFound;
                 };
                 defer bundle_dir.close();
 
                 // Ensure config.json exists in the bundle
                 bundle_dir.access("config.json", .{}) catch |err| {
-                    if (self.logger) |log| try log.err("config.json not found in bundle: {s} ({})", .{ image_path, err });
+                    if (self.logger) |log| log.err("config.json not found in bundle: {s} ({})", .{ image_path, err }) catch {};
                     return core.Error.FileNotFound;
                 };
 
@@ -358,7 +358,7 @@ pub const ProxmoxLxcDriver = struct {
         // Validate VMID uniqueness - check if container with this VMID already exists
         if (try self.vmidExists(vmid)) {
             if (self.logger) |log| {
-                try log.err("Container with VMID {s} already exists. Try a different container name.", .{vmid});
+                log.err("Container with VMID {s} already exists. Try a different container name.", .{vmid}) catch {};
             }
             return core.Error.OperationFailed; // Already exists
         }
@@ -388,7 +388,7 @@ pub const ProxmoxLxcDriver = struct {
         if (self.isZFSAvailable()) {
             zfs_dataset = try self.createContainerDataset(config.name, vmid);
             if (zfs_dataset) |dataset| {
-                if (self.logger) |log| try log.info("Created ZFS dataset for container: {s}", .{dataset});
+                if (self.logger) |log| log.info("Created ZFS dataset for container: {s}", .{dataset}) catch {};
             }
         }
 
@@ -446,7 +446,7 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         if (self.logger) |log| {
-            try log.debug("Proxmox LXC create: Creating container with pct create", .{});
+            log.debug("Proxmox LXC create: Creating container with pct create", .{}) catch {};
         }
         
         // Debug: print template name (only in debug mode)
@@ -485,18 +485,18 @@ pub const ProxmoxLxcDriver = struct {
                 }
             }
             
-            if (self.logger) |log| try log.err("Failed to create Proxmox LXC via pct: {s}", .{result.stderr});
+            if (self.logger) |log| log.err("Failed to create Proxmox LXC via pct: {s}", .{result.stderr}) catch {};
             return self.mapPctError(result.exit_code, result.stderr);
         }
 
         // Apply mounts from bundle into /etc/pve/lxc/<vmid>.conf and verify via pct config
         if (oci_bundle_path) |bundle_for_mounts| {
-            if (self.logger) |log| try log.info("Applying mounts from OCI bundle: {s}", .{bundle_for_mounts});
+            if (self.logger) |log| log.info("Applying mounts from OCI bundle: {s}", .{bundle_for_mounts}) catch {};
             try self.applyMountsToLxcConfig(vmid, bundle_for_mounts);
             try self.verifyMountsInConfig(vmid);
         }
 
-        if (self.logger) |log| try log.info("Proxmox LXC container created via pct: {s} (vmid {s})", .{ config.name, vmid });
+        if (self.logger) |log| log.info("Proxmox LXC container created via pct: {s} (vmid {s})", .{ config.name, vmid }) catch {};
     }
 
     /// Validate that mounts in bundle config point to existing host paths or valid Proxmox storage refs
@@ -518,7 +518,7 @@ pub const ProxmoxLxcDriver = struct {
                 const rest = std.mem.trim(u8, src[colon_idx+1..], " \t\r\n");
                 if (storage.len > 0 and rest.len > 0 and storage[0] != '/') {
                     if (!(try self.storageHasPath(storage, rest))) {
-                        if (self.logger) |log| try log.err("Storage volume not found: {s}:{s}", .{ storage, rest });
+                        if (self.logger) |log| log.err("Storage volume not found: {s}:{s}", .{ storage, rest }) catch {};
                         return core.Error.NotFound;
                     }
                     continue;
@@ -529,7 +529,7 @@ pub const ProxmoxLxcDriver = struct {
                 if (std.fs.cwd().access(src, .{})) |_| {
                     // ok
                 } else |err| {
-                    if (self.logger) |log| try log.err("Host path for mount not accessible: {s} ({})", .{ src, err });
+                    if (self.logger) |log| log.err("Host path for mount not accessible: {s} ({})", .{ src, err }) catch {};
                     return core.Error.NotFound;
                 }
             }
@@ -548,19 +548,19 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Append mounts from bundle config to /etc/pve/lxc/<vmid>.conf using mpX syntax
     fn applyMountsToLxcConfig(self: *Self, vmid: []const u8, bundle_path: []const u8) !void {
-        if (self.logger) |log| try log.info("Parsing bundle for mounts: {s}", .{bundle_path});
+        if (self.logger) |log| log.info("Parsing bundle for mounts: {s}", .{bundle_path}) catch {};
         
         var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
         var cfg = try parser.parseBundle(bundle_path);
         defer cfg.deinit();
 
         if (cfg.mounts == null) {
-            if (self.logger) |log| try log.info("No mounts found in bundle config", .{});
+            if (self.logger) |log| log.info("No mounts found in bundle config", .{}) catch {};
             return;
         }
         const mounts = cfg.mounts.?;
         
-        if (self.logger) |log| try log.info("Found {d} mounts in bundle", .{mounts.len});
+        if (self.logger) |log| log.info("Found {d} mounts in bundle", .{mounts.len}) catch {};
 
         const conf_path = try std.fmt.allocPrint(self.allocator, "/etc/pve/lxc/{s}.conf", .{vmid});
         defer self.allocator.free(conf_path);
@@ -582,14 +582,14 @@ pub const ProxmoxLxcDriver = struct {
         while (i < mounts.len) : (i += 1) {
             const m = mounts[i];
             if (m.destination == null) {
-                if (self.logger) |log| try log.warn("Mount {d} has no destination, skipping", .{i});
+                if (self.logger) |log| log.warn("Mount {d} has no destination, skipping", .{i}) catch {};
                 continue;
             }
             const dest = m.destination.?;
 
             const src_opt = m.source;
             if (src_opt == null) {
-                if (self.logger) |log| try log.warn("Mount {d} has no source, skipping", .{i});
+                if (self.logger) |log| log.warn("Mount {d} has no source, skipping", .{i}) catch {};
                 continue;
             }
             const src = src_opt.?;
@@ -598,7 +598,7 @@ pub const ProxmoxLxcDriver = struct {
             const mp_line = try self.buildMpLine(next_idx, src, dest, m.options);
             defer self.allocator.free(mp_line);
             
-            if (self.logger) |log| try log.info("Adding mp{d}: {s}", .{ next_idx, mp_line });
+            if (self.logger) |log| log.info("Adding mp{d}: {s}", .{ next_idx, mp_line }) catch {};
             try file.writeAll(mp_line);
             try file.writeAll("\n");
             next_idx += 1;
@@ -614,7 +614,7 @@ pub const ProxmoxLxcDriver = struct {
         if (res.exit_code != 0) return core.Error.OperationFailed;
         // Presence of "mp" lines indicates success (best-effort)
         if (std.mem.indexOf(u8, res.stdout, "mp0:") == null and std.mem.indexOf(u8, res.stdout, "mp1:") == null) {
-            if (self.logger) |log| try log.warn("No mp entries visible in pct config after update", .{});
+            if (self.logger) |log| log.warn("No mp entries visible in pct config after update", .{}) catch {};
         }
     }
 
@@ -667,11 +667,11 @@ pub const ProxmoxLxcDriver = struct {
     /// Start LXC container using pct command
     pub fn start(self: *Self, container_id: []const u8) !void {
         if (self.logger) |log| {
-            try log.info("Starting Proxmox LXC container: {s}", .{container_id});
+            log.info("Starting Proxmox LXC container: {s}", .{container_id}) catch {};
         }
 
         // Resolve VMID by name via pct list
-        if (self.logger) |log| try log.info("Looking up VMID for container: {s}", .{container_id});
+        if (self.logger) |log| log.info("Looking up VMID for container: {s}", .{container_id}) catch {};
         const vmid = try self.getVmidByName(container_id);
         defer self.allocator.free(vmid);
 
@@ -683,19 +683,19 @@ pub const ProxmoxLxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
-            if (self.logger) |log| try log.err("Failed to start Proxmox LXC container {s}: {s}", .{ container_id, result.stderr });
+            if (self.logger) |log| log.err("Failed to start Proxmox LXC container {s}: {s}", .{ container_id, result.stderr }) catch {};
             return self.mapPctError(result.exit_code, result.stderr);
         }
 
         if (self.logger) |log| {
-            try log.info("Proxmox LXC container started successfully: {s}", .{container_id});
+            log.info("Proxmox LXC container started successfully: {s}", .{container_id}) catch {};
         }
     }
 
     /// Stop LXC container using pct command
     pub fn stop(self: *Self, container_id: []const u8) !void {
         if (self.logger) |log| {
-            try log.info("Stopping Proxmox LXC container: {s}", .{container_id});
+            log.info("Stopping Proxmox LXC container: {s}", .{container_id}) catch {};
         }
 
         // Resolve VMID by name via pct list
@@ -710,19 +710,19 @@ pub const ProxmoxLxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
-            if (self.logger) |log| try log.err("Failed to stop Proxmox LXC container {s}: {s}", .{ container_id, result.stderr });
+            if (self.logger) |log| log.err("Failed to stop Proxmox LXC container {s}: {s}", .{ container_id, result.stderr }) catch {};
             return self.mapPctError(result.exit_code, result.stderr);
         }
 
         if (self.logger) |log| {
-            try log.info("Proxmox LXC container stopped successfully: {s}", .{container_id});
+            log.info("Proxmox LXC container stopped successfully: {s}", .{container_id}) catch {};
         }
     }
 
     /// Delete LXC container using pct command
     pub fn delete(self: *Self, container_id: []const u8) !void {
         if (self.logger) |log| {
-            try log.info("Deleting Proxmox LXC container: {s}", .{container_id});
+            log.info("Deleting Proxmox LXC container: {s}", .{container_id}) catch {};
         }
 
         // Resolve VMID by name via pct list
@@ -737,7 +737,7 @@ pub const ProxmoxLxcDriver = struct {
         defer self.allocator.free(result.stderr);
 
         if (result.exit_code != 0) {
-            if (self.logger) |log| try log.err("Failed to delete Proxmox LXC container {s}: {s}", .{ container_id, result.stderr });
+            if (self.logger) |log| log.err("Failed to delete Proxmox LXC container {s}: {s}", .{ container_id, result.stderr }) catch {};
             return self.mapPctError(result.exit_code, result.stderr);
         }
 
@@ -757,7 +757,7 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         if (self.logger) |log| {
-            try log.info("Proxmox LXC container deleted successfully: {s}", .{container_id});
+            log.info("Proxmox LXC container deleted successfully: {s}", .{container_id}) catch {};
         }
     }
 
@@ -766,14 +766,14 @@ pub const ProxmoxLxcDriver = struct {
         // First, try to list available templates
         const list_args = [_][]const u8{ "pveam", "available" };
         const list_result = self.runCommand(&list_args) catch |err| {
-            if (self.logger) |log| try log.warn("Failed to list available templates: {}", .{err});
+            if (self.logger) |log| log.warn("Failed to list available templates: {}", .{err}) catch {};
             return self.getDefaultTemplate();
         };
         defer self.allocator.free(list_result.stdout);
         defer self.allocator.free(list_result.stderr);
 
         if (list_result.exit_code != 0) {
-            if (self.logger) |log| try log.warn("pveam available failed: {s}", .{list_result.stderr});
+            if (self.logger) |log| log.warn("pveam available failed: {s}", .{list_result.stderr}) catch {};
             return self.getDefaultTemplate();
         }
 
@@ -786,14 +786,14 @@ pub const ProxmoxLxcDriver = struct {
                 _ = fields.next(); // Skip "system"
                 if (fields.next()) |template_name| {
                     const full_template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}", .{template_name});
-                    if (self.logger) |log| try log.info("Found available template: {s}", .{full_template});
+                    if (self.logger) |log| log.info("Found available template: {s}", .{full_template}) catch {};
                     return full_template;
                 }
             }
         }
 
         // Fallback to default template
-        if (self.logger) |log| try log.warn("No suitable template found, using default", .{});
+        if (self.logger) |log| log.warn("No suitable template found, using default", .{}) catch {};
         return self.getDefaultTemplate();
     }
 
@@ -815,13 +815,13 @@ pub const ProxmoxLxcDriver = struct {
             defer self.allocator.free(check_result.stderr);
 
             if (check_result.exit_code == 0 and std.mem.indexOf(u8, check_result.stdout, template) != null) {
-                if (self.logger) |log| try log.info("Using default template: {s}", .{template});
+                if (self.logger) |log| log.info("Using default template: {s}", .{template}) catch {};
                 return self.allocator.dupe(u8, template);
             }
         }
 
         // Last resort - return a basic template
-        if (self.logger) |log| try log.warn("No templates found, using basic template", .{});
+        if (self.logger) |log| log.warn("No templates found, using basic template", .{}) catch {};
         return self.allocator.dupe(u8, "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst");
     }
 
@@ -928,14 +928,14 @@ pub const ProxmoxLxcDriver = struct {
         if (self.debug_mode) std.debug.print("DEBUG: getVmidByName() called with name: {s}\n", .{name});
         
         const pct_args = [_][]const u8{ "pct", "list" };
-        if (self.logger) |log| try log.info("Running pct list command", .{});
+        if (self.logger) |log| log.info("Running pct list command", .{}) catch {};
         if (self.debug_mode) std.debug.print("DEBUG: About to run pct list\n", .{});
         
         const pct_res = try self.runCommand(&pct_args);
         defer self.allocator.free(pct_res.stdout);
         defer self.allocator.free(pct_res.stderr);
 
-        if (self.logger) |log| try log.info("pct list result: exit_code={d}, stdout='{s}', stderr='{s}'", .{ pct_res.exit_code, pct_res.stdout, pct_res.stderr });
+        if (self.logger) |log| log.info("pct list result: exit_code={d}, stdout='{s}', stderr='{s}'", .{ pct_res.exit_code, pct_res.stdout, pct_res.stderr }) catch {};
         if (self.debug_mode) std.debug.print("DEBUG: pct list result: exit_code={d}, stdout='{s}', stderr='{s}'\n", .{ pct_res.exit_code, pct_res.stdout, pct_res.stderr });
 
         if (pct_res.exit_code != 0) {
@@ -969,11 +969,11 @@ pub const ProxmoxLxcDriver = struct {
             const name_start = @min(33, trimmed.len);
             const name_str = std.mem.trim(u8, trimmed[name_start..], " \t");
 
-            if (self.logger) |log| try log.info("Checking: vmid='{s}', name='{s}', looking for='{s}'", .{ vmid_str, name_str, name });
+            if (self.logger) |log| log.info("Checking: vmid='{s}', name='{s}', looking for='{s}'", .{ vmid_str, name_str, name }) catch {};
             if (self.debug_mode) std.debug.print("DEBUG: Checking: vmid='{s}', name='{s}', looking for='{s}'\n", .{ vmid_str, name_str, name });
 
             if (std.mem.eql(u8, name_str, name)) {
-                if (self.logger) |log| try log.info("Found match: vmid='{s}', name='{s}'", .{ vmid_str, name_str });
+                if (self.logger) |log| log.info("Found match: vmid='{s}', name='{s}'", .{ vmid_str, name_str }) catch {};
                 if (self.debug_mode) std.debug.print("DEBUG: Found match: vmid='{s}', name='{s}'\n", .{ vmid_str, name_str });
                 return self.allocator.dupe(u8, vmid_str);
             }
@@ -989,7 +989,7 @@ pub const ProxmoxLxcDriver = struct {
             .argv = args,
             .max_output_bytes = 1024 * 1024, // 1MB
         }) catch |err| {
-            if (self.logger) |log| try log.err("Failed to run command: {}", .{err});
+            if (self.logger) |log| log.err("Failed to run command: {}", .{err}) catch {};
             return core.Error.OperationFailed;
         };
 
@@ -1065,7 +1065,7 @@ pub const ProxmoxLxcDriver = struct {
     /// List LXC containers using pct command
     pub fn list(self: *Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
         if (self.logger) |log| {
-            try log.info("Listing LXC containers via pct command", .{});
+            log.info("Listing LXC containers via pct command", .{}) catch {};
         }
 
         const pct_args = [_][]const u8{ "pct", "list" };

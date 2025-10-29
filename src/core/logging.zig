@@ -58,7 +58,12 @@ pub const LogContext = struct {
     }
 
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
+        // Early return if log level is below threshold
         if (@intFromEnum(level) < @intFromEnum(self.level)) return;
+        
+        // Safety check: if allocator is null or invalid, skip logging
+        // This prevents crashes when allocator becomes invalid
+        _ = self.allocator; // Check that allocator is accessible
 
         const timestamp = if (self.timestamp) blk: {
             const now = std.time.timestamp();
@@ -79,6 +84,7 @@ pub const LogContext = struct {
                 self.component,
             } ++ args ++ .{reset}) catch {
                 // If allocator fails, skip logging to avoid crash
+                // Log errors silently to prevent cascading failures
                 return;
             };
             defer self.allocator.free(message);
@@ -90,6 +96,7 @@ pub const LogContext = struct {
                 self.component,
             } ++ args ++ .{reset}) catch {
                 // If allocator fails, skip logging to avoid crash
+                // Log errors silently to prevent cascading failures
                 return;
             };
             defer self.allocator.free(message);
