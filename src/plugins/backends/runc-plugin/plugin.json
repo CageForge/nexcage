@@ -1,0 +1,50 @@
+{
+  "name": "runc-backend",
+  "version": "1.0.0",
+  "description": "Runc OCI container runtime backend plugin for NexCage",
+  "author": "NexCage Team",
+  "homepage": "https://github.com/cageforge/nexcage",
+  "license": "Apache-2.0",
+  "api_version": 1,
+  "nexcage_version": "0.7.0",
+  "dependencies": [],
+  "capabilities": [
+    "container_create",
+    "container_start",
+    "container_stop", 
+    "container_delete",
+    "container_exec",
+    "container_list",
+    "container_info",
+    "host_command",
+    "filesystem_read",
+    "filesystem_write",
+    "logging"
+  ],
+  "resource_requirements": {
+    "max_memory_mb": 128,
+    "max_cpu_percent": 10,
+    "max_file_descriptors": 200,
+    "max_threads": 5,
+    "timeout_seconds": 60,
+    "max_network_connections": 10,
+    "max_disk_usage_mb": 100
+  },
+  "provides_backend": true,
+  "provides_cli_commands": false,
+  "provides_integrations": false,
+  "provides_monitoring": false,
+  "binary_dependencies": [
+    {
+      "name": "runc",
+      "version": ">=1.0.0",
+      "description": "OCI container runtime",
+      "check_command": "runc --version"
+    }
+  ],
+  "system_requirements": {
+    "os": ["linux"],
+    "architecture": ["x86_64", "aarch64"],
+    "kernel_version": ">=3.10"
+  }
+}

@@ -12,6 +12,7 @@ pub const start = @import("start.zig");
 pub const stop = @import("stop.zig");
 pub const delete = @import("delete.zig");
 pub const list = @import("list.zig");
+pub const plugin_integration = @import("plugin_integration.zig");
 
 // Re-export commonly used types
 pub const BaseCommand = base_command.BaseCommand;
@@ -21,6 +22,14 @@ pub const registerBuiltinCommandsWithLogger = registry.registerBuiltinCommandsWi
 pub const initGlobalRegistry = registry.initGlobalRegistry;
 pub const getGlobalRegistry = registry.getGlobalRegistry;
 pub const deinitGlobalRegistry = registry.deinitGlobalRegistry;
+
+// Plugin integration exports
+pub const EnhancedCommandRegistry = plugin_integration.EnhancedCommandRegistry;
+pub const CommandLookupResult = plugin_integration.CommandLookupResult;
+pub const CommandStats = plugin_integration.CommandStats;
+pub const initGlobalEnhancedRegistry = plugin_integration.initGlobalEnhancedRegistry;
+pub const getGlobalEnhancedRegistry = plugin_integration.getGlobalEnhancedRegistry;
+pub const deinitGlobalEnhancedRegistry = plugin_integration.deinitGlobalEnhancedRegistry;
 pub const RunCommand = run.RunCommand;
 pub const HelpCommand = help.HelpCommand;
 pub const VersionCommand = version.VersionCommand;

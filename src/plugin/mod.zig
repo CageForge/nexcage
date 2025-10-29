@@ -8,12 +8,26 @@ pub const manager = @import("manager.zig");
 pub const hooks = @import("hooks.zig");
 pub const context = @import("context.zig");
 pub const validation = @import("validation.zig");
+pub const cli_extension = @import("cli_extension.zig");
+pub const cli_manager = @import("cli_manager.zig");
+pub const config_extension = @import("config_extension.zig");
+pub const config_manager = @import("config_manager.zig");
+pub const sandbox = @import("sandbox.zig");
 
 // Re-export main types for convenience
 pub const Plugin = plugin.Plugin;
 pub const PluginManager = manager.PluginManager;
 pub const HookSystem = hooks.HookSystem;
 pub const PluginContext = context.PluginContext;
+pub const CliExtension = cli_extension.CliExtension;
+pub const CliPluginManager = cli_manager.CliPluginManager;
+pub const CliContext = cli_extension.CliContext;
+pub const CliCommand = cli_extension.CliCommand;
+pub const ConfigExtension = config_extension.ConfigExtension;
+pub const ConfigPluginManager = config_manager.ConfigPluginManager;
+pub const ConfigContext = config_extension.ConfigContext;
+pub const EnhancedConfig = config_manager.EnhancedConfig;
+pub const SecuritySandbox = sandbox.SecuritySandbox;
 
 // Plugin API version for compatibility
 pub const PLUGIN_API_VERSION: u32 = 1;
