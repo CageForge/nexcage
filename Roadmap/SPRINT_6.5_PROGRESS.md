@@ -253,3 +253,15 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 #### Time Spent
 - ~0.4h (implementation + build)
 
+### 2025-10-29: Path security hardening (bundle validation)
+
+#### Summary
+- `proxmox-lxc` create flow now validates OCI bundle path using `core.validation.PathSecurity.validateBundlePath` before opening.
+- Prevents directory traversal and enforces allowed prefixes for bundles.
+
+#### Results
+- ✅ Build green; safer path handling in driver
+
+#### Time Spent
+- ~0.3h (implementation + build)
+

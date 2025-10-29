@@ -598,15 +598,20 @@ pub const ProxmoxLxcDriver = struct {
             } else {
                 stderr.writeAll("[DRIVER] create: Image is OCI bundle, processing\n") catch {};
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Image is OCI bundle, processing\n");
-                // It's an OCI bundle - ensure bundle directory exists
-                var bundle_dir = std.fs.cwd().openDir(image_path, .{}) catch |err| {
+                // It's an OCI bundle - validate path boundaries and ensure directory exists
+                const safe_bundle_path = core.validation.PathSecurity.validateBundlePath(image_path, self.allocator) catch |verr| {
+                    if (self.logger) |log| log.err("Bundle path validation failed: {s} ({})", .{ image_path, verr }) catch {};
+                    return core.Error.InvalidInput;
+                };
+                defer self.allocator.free(safe_bundle_path);
+                var bundle_dir = std.fs.cwd().openDir(safe_bundle_path, .{}) catch |err| {
                     // If path is not a directory and looks like docker image ref (e.g., ubuntu:20.04),
                     // do NOT treat it as Proxmox template; return a clear error for now.
                     if (!is_proxmox_template and has_colon and !has_slash) {
                         if (self.logger) |log| log.err("Unsupported image reference: {s}. Use Proxmox template (.tar.zst or storage:vztmpl/...) or local OCI bundle directory.", .{ image_path }) catch {};
                         return core.Error.InvalidConfig;
                     }
-                    if (self.logger) |log| log.err("Bundle path not found: {s} ({})", .{ image_path, err }) catch {};
+                    if (self.logger) |log| log.err("Bundle path not found: {s} ({})", .{ safe_bundle_path, err }) catch {};
                     if (self.debug_mode) {
                         try stdout.writeAll("[DRIVER] create: ERROR: Bundle path not found\n");
                     }
@@ -626,11 +631,11 @@ pub const ProxmoxLxcDriver = struct {
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: config.json found in bundle\n");
 
                 // Save OCI bundle path for mounts processing
-                oci_bundle_path = image_path;
+                oci_bundle_path = safe_bundle_path;
                 
                 // Process OCI bundle - convert to template if needed
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Processing OCI bundle\n");
-                template_name = try self.processOciBundle(image_path, config.name);
+                template_name = try self.processOciBundle(safe_bundle_path, config.name);
                 if (self.debug_mode) {
                     try stdout.writeAll("[DRIVER] create: OCI bundle processed, template_name set\n");
                 }
