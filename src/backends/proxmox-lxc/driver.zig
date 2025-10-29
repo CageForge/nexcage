@@ -98,6 +98,51 @@ pub const ProxmoxLxcDriver = struct {
         return res.exit_code == 0;
     }
 
+    /// Check if ZFS pool exists
+    fn poolExists(self: *Self, pool_name: []const u8) bool {
+        // pool_name should already be just the pool name (e.g., "tank", "rpool")
+        const args = [_][]const u8{ "zpool", "list", "-H", "-o", "name", pool_name };
+        const res = self.runCommand(&args) catch return false;
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        
+        // Check if pool name appears in output (should be exact match on a line)
+        if (res.exit_code != 0) return false;
+        var lines = std.mem.splitScalar(u8, res.stdout, '\n');
+        while (lines.next()) |line| {
+            const trimmed = std.mem.trim(u8, line, " \t\r\n");
+            if (std.mem.eql(u8, trimmed, pool_name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Check if ZFS dataset exists
+    fn datasetExists(self: *Self, dataset_name: []const u8) bool {
+        const args = [_][]const u8{ "zfs", "list", "-H", "-o", "name", dataset_name };
+        const res = self.runCommand(&args) catch return false;
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        
+        // Check if dataset name appears in output
+        return res.exit_code == 0 and std.mem.indexOf(u8, res.stdout, dataset_name) != null;
+    }
+
+    /// Get parent dataset path from full dataset path
+    fn getParentDataset(self: *Self, dataset_name: []const u8) ?[]const u8 {
+        _ = self;
+        // Find last '/' to get parent
+        if (std.mem.lastIndexOf(u8, dataset_name, "/")) |idx| {
+            return dataset_name[0..idx];
+        }
+        return null;
+    }
+
     /// Check minimal ZFS version compatibility (best-effort)
     fn isZfsCompatible(self: *Self, min_major: u32, min_minor: u32) bool {
         const args = [_][]const u8{ "zfs", "version" };
@@ -168,18 +213,80 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         stderr.writeAll("[DRIVER] createContainerDataset: Getting pool value\n") catch {};
-        const pool = self.zfs_pool.?;
-        stderr.writeAll("[DRIVER] createContainerDataset: pool = '") catch {};
-        stderr.writeAll(pool) catch {};
+        const pool_config = self.zfs_pool.?;
+        stderr.writeAll("[DRIVER] createContainerDataset: pool_config = '") catch {};
+        stderr.writeAll(pool_config) catch {};
         stderr.writeAll("'\n") catch {};
         
-        // Create dataset name: pool/containers/container_name-vmid
+        // Extract pool name from config (e.g., "tank" from "tank/containers" or just "tank")
+        const pool_name: []const u8 = if (std.mem.indexOf(u8, pool_config, "/")) |idx| pool_config[0..idx] else pool_config;
+        stderr.writeAll("[DRIVER] createContainerDataset: Extracted pool_name = '") catch {};
+        stderr.writeAll(pool_name) catch {};
+        stderr.writeAll("'\n") catch {};
+        
+        // Verify pool exists
+        stderr.writeAll("[DRIVER] createContainerDataset: Checking if pool exists\n") catch {};
+        if (!self.poolExists(pool_name)) {
+            stderr.writeAll("[DRIVER] createContainerDataset: Pool does not exist, returning null\n") catch {};
+            return null;
+        }
+        stderr.writeAll("[DRIVER] createContainerDataset: Pool exists\n") catch {};
+        
+        // Create dataset name: use pool_config as base if it contains path, otherwise use pool_name/containers
+        // If pool_config is "tank/containers", use it directly, otherwise use "pool_name/containers"
+        const base_path: []const u8 = if (std.mem.indexOf(u8, pool_config, "/")) |_| pool_config else try std.fmt.allocPrint(self.allocator, "{s}/containers", .{pool_name});
+        defer if (base_path.ptr != pool_config.ptr) self.allocator.free(base_path);
+        
+        stderr.writeAll("[DRIVER] createContainerDataset: base_path = '") catch {};
+        stderr.writeAll(base_path) catch {};
+        stderr.writeAll("'\n") catch {};
+        
+        // Create dataset name: base_path/container_name-vmid
         stderr.writeAll("[DRIVER] createContainerDataset: Creating dataset name\n") catch {};
-        const dataset_name = try std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ pool, container_name, vmid });
+        const dataset_name = try std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ base_path, container_name, vmid });
         defer self.allocator.free(dataset_name);
         stderr.writeAll("[DRIVER] createContainerDataset: dataset_name = '") catch {};
         stderr.writeAll(dataset_name) catch {};
         stderr.writeAll("'\n") catch {};
+        
+        // Check if dataset already exists
+        stderr.writeAll("[DRIVER] createContainerDataset: Checking if dataset already exists\n") catch {};
+        if (self.datasetExists(dataset_name)) {
+            stderr.writeAll("[DRIVER] createContainerDataset: Dataset already exists, returning existing name\n") catch {};
+            // Return existing dataset name
+            return try self.allocator.dupe(u8, dataset_name);
+        }
+        stderr.writeAll("[DRIVER] createContainerDataset: Dataset does not exist, will create\n") catch {};
+        
+        // Check if parent dataset exists, create if missing
+        if (self.getParentDataset(dataset_name)) |parent_dataset| {
+            stderr.writeAll("[DRIVER] createContainerDataset: Checking parent dataset: '") catch {};
+            stderr.writeAll(parent_dataset) catch {};
+            stderr.writeAll("'\n") catch {};
+            
+            if (!self.datasetExists(parent_dataset)) {
+                stderr.writeAll("[DRIVER] createContainerDataset: Parent dataset does not exist, creating\n") catch {};
+                const parent_args = [_][]const u8{ "zfs", "create", "-p", parent_dataset };
+                const parent_res = self.runCommand(&parent_args) catch {
+                    stderr.writeAll("[DRIVER] createContainerDataset: Failed to create parent dataset\n") catch {};
+                    return null;
+                };
+                defer {
+                    self.allocator.free(parent_res.stdout);
+                    self.allocator.free(parent_res.stderr);
+                }
+                
+                if (parent_res.exit_code != 0) {
+                    stderr.writeAll("[DRIVER] createContainerDataset: Parent dataset creation failed, stderr = '") catch {};
+                    stderr.writeAll(parent_res.stderr) catch {};
+                    stderr.writeAll("'\n") catch {};
+                    return null;
+                }
+                stderr.writeAll("[DRIVER] createContainerDataset: Parent dataset created successfully\n") catch {};
+            } else {
+                stderr.writeAll("[DRIVER] createContainerDataset: Parent dataset exists\n") catch {};
+            }
+        }
 
         // Skip logger to avoid segfault
         // if (self.logger) |log| log.info("Creating ZFS dataset for container: {s}", .{dataset_name}) catch {};

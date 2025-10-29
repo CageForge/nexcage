@@ -145,3 +145,52 @@ Time spent: 2.5h (issue creation: 0.1h, segfault debug+fix: 2.0h, testing: 0.4h)
 
 Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing: 0.5h)
 
+### 2025-10-29: Fixed ZFS Pool and Dataset Validation (WIP)
+
+#### Problem Identified
+- **Missing validation** before creating ZFS datasets during container creation
+- Container creation attempted to create datasets on non-existent pools (e.g., "tank" pool not found)
+- No check if dataset already exists before creation
+- Parent datasets not created automatically when missing
+
+#### Solution Implemented
+1. **Pool Existence Check**:
+   - Added `poolExists()` function to verify ZFS pool exists before creating datasets
+   - Extracts pool name from config (e.g., "tank" from "tank/containers")
+   - Uses `zpool list` to verify pool exists
+   - Returns `null` from `createContainerDataset()` if pool doesn't exist (continues without ZFS)
+
+2. **Dataset Existence Check**:
+   - Added `datasetExists()` function to check if dataset already exists
+   - Uses `zfs list` to verify dataset existence
+   - Returns existing dataset name if found, preventing duplicate creation
+
+3. **Parent Dataset Creation**:
+   - Added `getParentDataset()` function to extract parent path from full dataset path
+   - Automatically creates parent dataset with `zfs create -p` if missing
+   - Handles nested dataset paths (e.g., creates "tank/containers" before "tank/containers/container-vmid")
+
+4. **Improved Dataset Path Handling**:
+   - Extracts pool name correctly from config (supports both "pool" and "pool/path" formats)
+   - Uses base path from config if it contains a path separator
+   - Falls back to "pool_name/containers" if config only specifies pool name
+
+#### Files Changed
+- `src/backends/proxmox-lxc/driver.zig`:
+  - Added `poolExists()` function (lines 101-121)
+  - Added `datasetExists()` function (lines 123-133)
+  - Added `getParentDataset()` function (lines 135-143)
+  - Enhanced `createContainerDataset()` with validation checks (lines 209-268)
+
+#### Testing Status
+- ✅ Compilation successful
+- ⏳ Testing on Proxmox server pending
+
+#### Time Spent
+- Implementation: ~1.5h
+- Testing: pending
+
+#### Branch
+- Branch: `fix/zfs-validation`
+- Status: Ready for testing
+
