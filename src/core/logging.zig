@@ -71,23 +71,29 @@ pub const LogContext = struct {
         const reset = if (self.colorize) "\x1b[0m" else "";
 
         if (self.timestamp) {
-            const message = try std.fmt.allocPrint(self.allocator, "{s}[{d}] {s}{s} {s}: " ++ format ++ "{s}\n", .{
+            const message = std.fmt.allocPrint(self.allocator, "{s}[{d}] {s}{s} {s}: " ++ format ++ "{s}\n", .{
                 color,
                 timestamp,
                 level_str,
                 reset,
                 self.component,
-            } ++ args ++ .{reset});
+            } ++ args ++ .{reset}) catch {
+                // If allocator fails, skip logging to avoid crash
+                return;
+            };
             defer self.allocator.free(message);
-            try self.writer.file.writeAll(message);
+            _ = self.writer.file.writeAll(message) catch {};
         } else {
-            const message = try std.fmt.allocPrint(self.allocator, "{s}{s} {s}: " ++ format ++ "{s}\n", .{
+            const message = std.fmt.allocPrint(self.allocator, "{s}{s} {s}: " ++ format ++ "{s}\n", .{
                 color,
                 level_str,
                 self.component,
-            } ++ args ++ .{reset});
+            } ++ args ++ .{reset}) catch {
+                // If allocator fails, skip logging to avoid crash
+                return;
+            };
             defer self.allocator.free(message);
-            try self.writer.file.writeAll(message);
+            _ = self.writer.file.writeAll(message) catch {};
         }
     }
 

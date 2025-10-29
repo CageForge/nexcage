@@ -76,8 +76,15 @@ Time spent: 2.5h (issue creation: 0.1h, segfault debug+fix: 2.0h, testing: 0.4h)
   - Added `.state` to `Command` enum in `types.zig`
   - Updated `parseCommand` and `parseRuntimeOptions` in `main.zig` to handle state command
   - Supports proxmox-lxc backend (primary), fallback for crun/runc/vm
+  - Fixed logger crash by adding error handling in `core/logging.zig` (catch allocator failures)
+  - Tested successfully on Proxmox server `mgr.cp.if.ua`:
+    - Command `state 101` returns correct OCI-compatible JSON with status "stopped"
+    - Command `state 501` returns correct OCI-compatible JSON
+    - Command `state 999` correctly identifies existing container
+    - Help command works correctly
+    - Logger no longer crashes after adding error handling to allocator failures
   
-- Known issue: Logger initialization crash during command execution (needs separate fix)
+- Known issue: None (logger fix resolved crash issue)
 
-Time spent: 1.5h (implementation: 1.0h, testing+debugging: 0.5h)
+Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing: 0.5h)
 

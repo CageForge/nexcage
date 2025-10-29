@@ -28,7 +28,6 @@ pub const StateCommand = struct {
     }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        try self.logCommandStart("state");
         const stdout = std.fs.File.stdout();
 
         // Check for help flag
@@ -39,8 +38,11 @@ pub const StateCommand = struct {
             return;
         }
 
-        // Validate required options using validation utility
-        const container_id = try validation.ValidationUtils.requireContainerId(options, self.base.logger, "state");
+        // Validate required options - extract container_id without using logger to avoid allocator issues
+        const container_id = options.container_id orelse {
+            try stdout.writeAll("Error: Container ID is required for state command\n");
+            return;
+        };
 
         // Try to determine runtime type from config or default to proxmox_lxc
         var runtime_type: types.RuntimeType = .proxmox_lxc;
@@ -49,10 +51,6 @@ pub const StateCommand = struct {
             var cfg = try config_loader.loadDefault();
             defer cfg.deinit();
             runtime_type = cfg.getRoutedRuntime(container_id);
-        }
-
-        if (self.base.logger) |log| {
-            try log.info("Routing container '{s}' to runtime: {s}", .{ container_id, @tagName(runtime_type) });
         }
 
         // Get container info from backend based on runtime type
@@ -74,7 +72,6 @@ pub const StateCommand = struct {
         defer allocator.free(json);
 
         try stdout.writeAll(json);
-        try self.logCommandComplete("state");
     }
 
     fn getContainerInfo(self: *Self, allocator: std.mem.Allocator, runtime_type: types.RuntimeType, container_id: []const u8) !core.ContainerInfo {

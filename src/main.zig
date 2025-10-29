@@ -204,9 +204,9 @@ pub fn main() !void {
         break;
     }
     
-    // Log command execution start
+    // Log command execution start - safely handle logger errors
     if (app.advanced_logger) |*logger| {
-        try logger.logCommandStart(command_name, command_args);
+        logger.logCommandStart(command_name, command_args) catch {};
     }
     
     // Handle help command
@@ -243,9 +243,9 @@ pub fn main() !void {
         // Execute command (which will handle help)
         try app.command_registry.execute(command_name, options, allocator);
         
-        // Log command completion
+        // Log command completion - safely handle logger errors
         if (app.advanced_logger) |*logger| {
-            try logger.logCommandComplete(command_name, true);
+            logger.logCommandComplete(command_name, true) catch {};
         }
         return;
     }
@@ -259,9 +259,9 @@ pub fn main() !void {
     // Execute command
     try app.command_registry.execute(command_name, options, allocator);
     
-    // Log command completion
+    // Log command completion - safely handle logger errors
     if (app.advanced_logger) |*logger| {
-        try logger.logCommandComplete(command_name, true);
+        logger.logCommandComplete(command_name, true) catch {};
     }
 }
 
