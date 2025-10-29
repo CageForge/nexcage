@@ -293,6 +293,46 @@ pub const ProxmoxLxcDriver = struct {
         template_info.metadata = metadata;
         try self.template_manager.addTemplate(template_name, template_info);
         
+        // Add template to cache with metadata
+        var template_info = try template_manager.TemplateInfo.init(
+            self.allocator, 
+            template_name, 
+            0, // Size will be updated later
+            .oci_bundle
+        );
+        
+        // Extract metadata from OCI bundle if available
+        var metadata_parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var metadata_cfg = metadata_parser.parseBundle(bundle_path) catch |err| {
+            if (self.logger) |log| try log.warn("Failed to parse bundle for metadata: {}", .{err});
+            try self.template_manager.addTemplate(template_name, template_info);
+            return try self.allocator.dupe(u8, template_name);
+        };
+        defer metadata_cfg.deinit();
+        
+        // Create metadata from OCI bundle
+        var metadata = template_manager.TemplateMetadata.init(self.allocator);
+        if (metadata_cfg.image_name) |name| metadata.image_name = try self.allocator.dupe(u8, name);
+        if (metadata_cfg.image_tag) |tag| metadata.image_tag = try self.allocator.dupe(u8, tag);
+        if (metadata_cfg.entrypoint) |ep| {
+            var entrypoint_array = try self.allocator.alloc([]const u8, ep.len);
+            for (ep, 0..) |arg, i| {
+                entrypoint_array[i] = try self.allocator.dupe(u8, arg);
+            }
+            metadata.entrypoint = entrypoint_array;
+        }
+        if (metadata_cfg.cmd) |cmd| {
+            var cmd_array = try self.allocator.alloc([]const u8, cmd.len);
+            for (cmd, 0..) |arg, i| {
+                cmd_array[i] = try self.allocator.dupe(u8, arg);
+            }
+            metadata.cmd = cmd_array;
+        }
+        if (metadata_cfg.working_directory) |wd| metadata.working_directory = try self.allocator.dupe(u8, wd);
+        
+        template_info.metadata = metadata;
+        try self.template_manager.addTemplate(template_name, template_info);
+        
         // Return a copy since we're freeing the original
         return try self.allocator.dupe(u8, template_name);
     }
