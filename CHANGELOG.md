@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-10-29
+
+### 🚀 Feature + Hardening Release: OCI kill/state, Proxmox fixes, security
+
+This release delivers new OCI-compatible commands and multiple stability and security improvements across the Proxmox LXC backend and CLI.
+
+### Added
+- OCI `kill` command with `--signal` option (wired to proxmox-lxc, crun, runc)
+- OCI `state` command returning OCI-compatible JSON
+- Extensive debug tracing (opt-in via `--debug`)
+- Foundational input validators (hostname/vmid/storage/path/env)
+
+### Changed
+- Debug output is gated by flags (`--debug`) to reduce noise by default
+- Proxmox LXC: image parsing corrected — Proxmox templates vs docker-style refs
+- Proxmox LXC: ZFS dataset creation validates pool/dataset existence; creates parents
+- Path security hardening: bundle path validation and boundary checks
+- Logging: safer allocator usage, writer changes to prevent segfaults
+
+### Fixed
+- Create command segfault due to logger allocator misuse
+- ZFS errors when pool does not exist — now gracefully degraded or auto-creates parents
+- Misclassification of `ubuntu:20.04` as Proxmox template
+
+### Notes
+- E2E: base smoke stable; functional flows pending create/start stabilization on target PVE
+
+---
+
 ## [0.6.1] - 2025-10-27
 
 ### ✨ Enhancement Release: Improved Error Handling
@@ -35,7 +64,7 @@ This release focuses on improving error handling for Proxmox LXC backend, provid
 
 ---
 
-## [0.6.0] - 2025-01-15
+## [0.6.0] - 2025-10-15
 
 ### 🎉 Major Release: Backend Integration & Legacy Cleanup
 

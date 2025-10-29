@@ -265,3 +265,17 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 #### Time Spent
 - ~0.3h (implementation + build)
 
+### 2025-10-29: Release prep (v0.7.0 bump & changelog)
+
+#### Summary
+- Bumped version to `0.7.0` and added CHANGELOG entry summarizing:
+  - OCI `kill` and `state` commands
+  - Logging gating, image parsing fix, ZFS validation, path security
+  - Input validators and segfault fix in create flow
+
+#### Results
+- ✅ Build green after version bump
+
+#### Time Spent
+- ~0.2h (docs + verification)
+
