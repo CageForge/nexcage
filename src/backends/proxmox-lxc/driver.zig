@@ -558,26 +558,31 @@ pub const ProxmoxLxcDriver = struct {
                 try stdout.writeAll(image_path);
                 try stdout.writeAll("'\n");
             }
-            // Check if it's a Proxmox template (ends with .tar.zst or contains :)
+            // Classify image type:
+            // - Proxmox template if:
+            //   a) ends with .tar.zst
+            //   b) contains ":vztmpl/" (storage template path)
+            // - Otherwise:
+            //   c) treat as OCI bundle path if directory exists
+            //   d) strings like "ubuntu:20.04" are NOT proxmox templates
             stderr.writeAll("[DRIVER] create: Checking image type\n") catch {};
             const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
+            const has_vztmpl = std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
             const has_colon = std.mem.indexOf(u8, image_path, ":") != null;
+            const has_slash = std.mem.indexOf(u8, image_path, "/") != null;
+            const is_proxmox_template = is_tar or has_vztmpl;
             stderr.writeAll("[DRIVER] create: is_tar = ") catch {};
-            if (is_tar) {
-                stderr.writeAll("true\n") catch {};
-            } else {
-                stderr.writeAll("false\n") catch {};
-            }
+            if (is_tar) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
+            stderr.writeAll("[DRIVER] create: has_vztmpl = ") catch {};
+            if (has_vztmpl) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
             stderr.writeAll("[DRIVER] create: has_colon = ") catch {};
-            if (has_colon) {
-                stderr.writeAll("true\n") catch {};
-            } else {
-                stderr.writeAll("false\n") catch {};
-            }
+            if (has_colon) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
+            stderr.writeAll("[DRIVER] create: has_slash = ") catch {};
+            if (has_slash) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
             
-            if (is_tar or has_colon) {
-                stderr.writeAll("[DRIVER] create: Image is Proxmox template\n") catch {};
-                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Image is Proxmox template\n");
+            if (is_proxmox_template) {
+                stderr.writeAll("[DRIVER] create: Image classified as Proxmox template\n") catch {};
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Image classified as Proxmox template\n");
                 // It's a Proxmox template, use it directly
                 stderr.writeAll("[DRIVER] create: Duplicating template name\n") catch {};
                 template_name = try self.allocator.dupe(u8, image_path);
@@ -595,6 +600,12 @@ pub const ProxmoxLxcDriver = struct {
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Image is OCI bundle, processing\n");
                 // It's an OCI bundle - ensure bundle directory exists
                 var bundle_dir = std.fs.cwd().openDir(image_path, .{}) catch |err| {
+                    // If path is not a directory and looks like docker image ref (e.g., ubuntu:20.04),
+                    // do NOT treat it as Proxmox template; return a clear error for now.
+                    if (!is_proxmox_template and has_colon and !has_slash) {
+                        if (self.logger) |log| log.err("Unsupported image reference: {s}. Use Proxmox template (.tar.zst or storage:vztmpl/...) or local OCI bundle directory.", .{ image_path }) catch {};
+                        return core.Error.InvalidConfig;
+                    }
                     if (self.logger) |log| log.err("Bundle path not found: {s} ({})", .{ image_path, err }) catch {};
                     if (self.debug_mode) {
                         try stdout.writeAll("[DRIVER] create: ERROR: Bundle path not found\n");

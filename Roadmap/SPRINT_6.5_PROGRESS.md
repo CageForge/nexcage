@@ -194,3 +194,35 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 - Branch: `fix/zfs-validation`
 - Status: Ready for testing
 
+### 2025-10-29: Image parsing fix (Proxmox template vs Docker ref)
+
+#### Summary
+- Adjusted image classification in `src/backends/proxmox-lxc/driver.zig`:
+  - Proxmox template: `*.tar.zst` or strings containing `:vztmpl/`
+  - OCI bundle: existing directory with `config.json`
+  - Docker-style refs like `ubuntu:20.04` are NOT treated as Proxmox templates
+- Non-directory refs with `:` but no `/` now yield a clear error (unsupported type) instead of misclassification.
+
+#### Results
+- ✅ Prevents false-positive template detection for `ubuntu:20.04`
+- ✅ Keeps Proxmox template paths working (`local:vztmpl/...tar.zst`)
+- ⏳ Pull/convert for Docker refs is out of scope for this sprint
+
+#### Time Spent
+- ~0.5h (implementation + build)
+
+### 2025-10-29: Logging gated by --debug (noise reduction)
+
+#### Summary
+- Прибрано безумовні діагностичні виводи з CLI:
+  - `src/cli/create.zig`: усі `DEBUG:` повідомлення тепер під `options.debug`
+  - `src/cli/router.zig`: stderr-логування тепер показується лише за `self.debug_mode`
+- Поведінка за замовчуванням стала тихою; повний трейс доступний через `--debug`.
+
+#### Results
+- ✅ `zig build` — успішно
+- ✅ Менше шуму у звичайному режимі; дебаг лишився повним при потребі
+
+#### Time Spent
+- ~0.4h (правки + збірка + швидка перевірка)
+
