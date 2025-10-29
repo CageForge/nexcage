@@ -51,6 +51,12 @@ pub const RunCommand = struct {
         const container_id = validated.container_id;
         const image = validated.image;
 
+        // Additional input hardening: hostname-like container_id
+        core.validation.SecurityValidation.validateHostname(container_id) catch {
+            const errh = @import("errors.zig").createErrorHandler(self.base.logger);
+            return errh.invalidInput("Invalid container name/hostname: {s}", .{container_id});
+        };
+
         // Use router for backend selection and execution
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 

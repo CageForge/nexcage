@@ -77,6 +77,12 @@ pub const CreateCommand = struct {
         const container_id = validated.container_id;
         const image = validated.image;
 
+        // Additional input hardening: hostname-like container_id
+        core.validation.SecurityValidation.validateHostname(container_id) catch {
+            const errh = @import("errors.zig").createErrorHandler(self.base.logger);
+            return errh.invalidInput("Invalid container name/hostname: {s}", .{container_id});
+        };
+
         if (options.debug) {
             try stdout.writeAll("DEBUG: After validation\n");
         }

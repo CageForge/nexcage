@@ -231,11 +231,11 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 #### Summary
 - Added reusable validators in `src/cli/validation.zig`:
   - `validateHostname`, `validateVmidString`, `validateStorageName`, `validateSafePath`, `validateEnvKV`
-- No behavior changes yet; functions are ready to be wired where needed.
+- Wired hostname validation in `create` and `run` commands (invalid names -> InvalidInput).
 
 #### Results
 - ✅ Build green; utilities available for CLI/backends
-- ⏳ Wiring across commands/backends to follow
+- ✅ Hostname validation enforced in `create`/`run`
 
 #### Time Spent
 - ~0.4h (implementation + build)
