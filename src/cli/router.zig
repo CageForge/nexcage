@@ -140,12 +140,7 @@ pub const BackendRouter = struct {
         // Create Proxmox LXC backend with default config
         const proxmox_config = types.ProxmoxLxcBackendConfig{
             .allocator = self.allocator,
-            .proxmox_host = "localhost",
-            .proxmox_port = 8006,
-            .proxmox_token = "",
-            .proxmox_node = "localhost",
-            .verify_ssl = false,
-            .timeout = 30,
+            .default_bridge = if (config) |cfg| if (cfg.network) |net| net.bridge else null else null,
         };
 
         const proxmox_backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(self.allocator, proxmox_config);

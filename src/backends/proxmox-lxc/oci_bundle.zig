@@ -54,7 +54,42 @@ pub const OciBundleParser = struct {
         });
         defer parsed.deinit();
 
-        return try self.parseOciConfig(&parsed.value, rootfs_path);
+        var bundle_config = try self.parseOciConfig(&parsed.value, rootfs_path);
+        
+        // Try to parse metadata.json if it exists
+        const metadata_path = try std.fs.path.join(self.allocator, &[_][]const u8{ bundle_path, "metadata.json" });
+        defer self.allocator.free(metadata_path);
+        
+        if (std.fs.cwd().openFile(metadata_path, .{})) |metadata_file| {
+            defer metadata_file.close();
+            
+            const metadata_content = metadata_file.readToEndAlloc(self.allocator, 1024 * 1024) catch |err| {
+                if (self.logger) |log| {
+                    try log.warn("Failed to read metadata.json: {}", .{err});
+                }
+                return bundle_config;
+            };
+            defer self.allocator.free(metadata_content);
+            
+            const metadata_parsed = std.json.parseFromSlice(std.json.Value, self.allocator, metadata_content, .{
+                .allocate = .alloc_always,
+                .ignore_unknown_fields = true,
+            }) catch |err| {
+                if (self.logger) |log| {
+                    try log.warn("Failed to parse metadata.json: {}", .{err});
+                }
+                return bundle_config;
+            };
+            defer metadata_parsed.deinit();
+            
+            try self.parseMetadata(&metadata_parsed.value, &bundle_config);
+        } else |_| {
+            if (self.logger) |log| {
+                try log.info("No metadata.json found in bundle, using config.json only", .{});
+            }
+        }
+        
+        return bundle_config;
     }
 
     /// Parse OCI config.json and extract relevant fields
@@ -212,6 +247,85 @@ pub const OciBundleParser = struct {
 
         return bundle_config;
     }
+    
+    /// Parse metadata.json and extract image information
+    fn parseMetadata(self: *OciBundleParser, metadata: *const std.json.Value, config: *OciBundleConfig) !void {
+        if (metadata.* != .object) {
+            return;
+        }
+        
+        const obj = metadata.object;
+        
+        // Parse image name and tag from metadata.json
+        if (obj.get("image")) |image_val| {
+            if (image_val == .string) {
+                const image_str = image_val.string;
+                
+                // Split image:tag format if colon is present
+                if (std.mem.indexOf(u8, image_str, ":")) |colon_pos| {
+                    config.image_name = try self.allocator.dupe(u8, image_str[0..colon_pos]);
+                    config.image_tag = try self.allocator.dupe(u8, image_str[colon_pos + 1..]);
+                } else {
+                    config.image_name = try self.allocator.dupe(u8, image_str);
+                }
+                
+                if (self.logger) |log| {
+                    try log.info("Parsed image from metadata: {s}", .{image_str});
+                }
+            }
+        }
+        
+        // Parse ENTRYPOINT from metadata.json
+        if (obj.get("entrypoint")) |entrypoint_val| {
+            if (entrypoint_val == .array) {
+                const entrypoint_array = entrypoint_val.array;
+                var entrypoint = try self.allocator.alloc([]const u8, entrypoint_array.items.len);
+                
+                for (entrypoint_array.items, 0..) |ep_val, i| {
+                    if (ep_val == .string) {
+                        entrypoint[i] = try self.allocator.dupe(u8, ep_val.string);
+                    }
+                }
+                
+                config.entrypoint = entrypoint;
+                
+                if (self.logger) |log| {
+                    try log.info("Parsed ENTRYPOINT from metadata: {d} args", .{entrypoint_array.items.len});
+                }
+            }
+        }
+        
+        // Parse CMD from metadata.json
+        if (obj.get("cmd")) |cmd_val| {
+            if (cmd_val == .array) {
+                const cmd_array = cmd_val.array;
+                var cmd = try self.allocator.alloc([]const u8, cmd_array.items.len);
+                
+                for (cmd_array.items, 0..) |cmd_item, i| {
+                    if (cmd_item == .string) {
+                        cmd[i] = try self.allocator.dupe(u8, cmd_item.string);
+                    }
+                }
+                
+                config.cmd = cmd;
+                
+                if (self.logger) |log| {
+                    try log.info("Parsed CMD from metadata: {d} args", .{cmd_array.items.len});
+                }
+            }
+        }
+        
+        // Parse working directory from metadata.json
+        if (obj.get("workingDir")) |workdir_val| {
+            if (workdir_val == .string) {
+                config.working_directory = try self.allocator.dupe(u8, workdir_val.string);
+                
+                if (self.logger) |log| {
+                    try log.info("Parsed working directory from metadata: {s}", .{workdir_val.string});
+                }
+            }
+        }
+    }
 };
 
 /// OCI Bundle configuration extracted from config.json
@@ -240,6 +354,13 @@ pub const OciBundleConfig = struct {
     no_new_privileges: ?bool = null,
     oom_score_adj: ?i32 = null,
     root_readonly: ?bool = null,
+    
+    // Metadata.json fields extracted from OCI image metadata
+    image_name: ?[]const u8 = null,
+    image_tag: ?[]const u8 = null,
+    entrypoint: ?[]const []const u8 = null,
+    cmd: ?[]const []const u8 = null,
+    working_directory: ?[]const u8 = null,
 
     pub fn deinit(self: *OciBundleConfig) void {
         self.allocator.free(self.rootfs_path);
@@ -290,6 +411,19 @@ pub const OciBundleConfig = struct {
         if (self.cgroups_path) |path| self.allocator.free(path);
         if (self.apparmor_profile) |profile| self.allocator.free(profile);
         if (self.selinux_label) |label| self.allocator.free(label);
+        
+        // Cleanup metadata.json fields
+        if (self.image_name) |name| self.allocator.free(name);
+        if (self.image_tag) |tag| self.allocator.free(tag);
+        if (self.entrypoint) |ep| {
+            for (ep) |arg| self.allocator.free(arg);
+            self.allocator.free(ep);
+        }
+        if (self.cmd) |cmd| {
+            for (cmd) |arg| self.allocator.free(arg);
+            self.allocator.free(cmd);
+        }
+        if (self.working_directory) |wd| self.allocator.free(wd);
     }
 };
 

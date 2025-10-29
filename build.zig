@@ -23,20 +23,11 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Proxmox API module
-    const proxmox_api_mod = b.addModule("proxmox-api", .{
-        .root_source_file = b.path("src/integrations/proxmox-api/mod.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-        },
-    });
-
     // Backends module
     const backends_mod = b.addModule("backends", .{
         .root_source_file = b.path("src/backends/mod.zig"),
         .imports = &.{
             .{ .name = "core", .module = core_mod },
-            .{ .name = "proxmox-api", .module = proxmox_api_mod },
             .{ .name = "utils", .module = utils_mod },
         },
     });

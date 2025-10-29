@@ -136,15 +136,7 @@ pub const ListCommand = struct {
                     }
                 }
 
-                const proxmox_config = core.types.ProxmoxLxcBackendConfig{
-                    .allocator = allocator,
-                    .proxmox_host = "localhost",
-                    .proxmox_port = 8006,
-                    .proxmox_token = "",
-                    .proxmox_node = "localhost",
-                    .verify_ssl = false,
-                    .timeout = 30,
-                };
+                const proxmox_config = core.types.ProxmoxLxcBackendConfig{ .allocator = allocator };
 
                 const lxc_backend = backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config) catch {
                     return; // Skip if LXC backend not available
@@ -160,15 +152,7 @@ pub const ListCommand = struct {
             },
             .proxmox_lxc => {
                 // List Proxmox LXC containers via driver
-                const proxmox_config = core.types.ProxmoxLxcBackendConfig{
-                    .allocator = allocator,
-                    .proxmox_host = "localhost",
-                    .proxmox_port = 8006,
-                    .proxmox_token = "",
-                    .proxmox_node = "localhost",
-                    .verify_ssl = false,
-                    .timeout = 30,
-                };
+                const proxmox_config = core.types.ProxmoxLxcBackendConfig{ .allocator = allocator };
 
                 const proxmox_backend = backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config) catch return;
                 defer proxmox_backend.deinit();

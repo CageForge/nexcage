@@ -3,6 +3,7 @@ const core = @import("core");
 const types = @import("types.zig");
 const oci_bundle = @import("oci_bundle.zig");
 const image_converter = @import("image_converter.zig");
+const template_manager = @import("template_manager.zig");
 
 /// Result of running a command
 const CommandResult = struct {
@@ -10,6 +11,7 @@ const CommandResult = struct {
     stderr: []u8,
     exit_code: u8,
 };
+
 
 /// Proxmox LXC backend driver
 pub const ProxmoxLxcDriver = struct {
@@ -19,18 +21,34 @@ pub const ProxmoxLxcDriver = struct {
     config: core.types.ProxmoxLxcBackendConfig,
     logger: ?*core.LogContext = null,
     debug_mode: bool = false,
+    template_manager: template_manager.TemplateManager,
+    zfs_pool: ?[]const u8 = null,
 
     pub fn init(allocator: std.mem.Allocator, config: core.types.ProxmoxLxcBackendConfig) !*Self {
         const driver = try allocator.alloc(Self, 1);
+        
+        // Initialize template manager with cache directory
+        const cache_dir = "/tmp/nexcage-template-cache";
+        const template_mgr = template_manager.TemplateManager.init(allocator, null, cache_dir);
+        
         driver[0] = Self{
             .allocator = allocator,
             .config = config,
+            .template_manager = template_mgr,
+            .zfs_pool = blk: {
+                if (config.zfs_pool) |p| break :blk try allocator.dupe(u8, p);
+                break :blk try allocator.dupe(u8, "tank/containers");
+            },
         };
 
         return &driver[0];
     }
 
     pub fn deinit(self: *Self) void {
+        self.template_manager.deinit();
+        if (self.zfs_pool) |pool| {
+            self.allocator.free(pool);
+        }
         self.allocator.destroy(self);
     }
 
@@ -42,6 +60,164 @@ pub const ProxmoxLxcDriver = struct {
     /// Set debug mode
     pub fn setDebugMode(self: *Self, debug_mode: bool) void {
         self.debug_mode = debug_mode;
+    }
+
+    /// No-op: direct ZFS CLI integration (no wrapper/client)
+    pub fn setZFSClient(self: *Self) void {
+        _ = self;
+    }
+
+    /// List all cached templates
+    pub fn listTemplates(self: *Self) ![][]const u8 {
+        return self.template_manager.listTemplates();
+    }
+
+    /// Verify template integrity
+    pub fn verifyTemplate(self: *Self, template_name: []const u8) !bool {
+        return self.template_manager.verifyTemplate(template_name);
+    }
+
+    /// Prune old templates
+    pub fn pruneTemplates(self: *Self, max_age_days: u32) !void {
+        return self.template_manager.pruneTemplates(max_age_days);
+    }
+
+    /// Get template information
+    pub fn getTemplateInfo(self: *Self, template_name: []const u8) ?template_manager.TemplateInfo {
+        return self.template_manager.getTemplate(template_name);
+    }
+
+    /// Check if ZFS is available (via CLI)
+    pub fn isZFSAvailable(self: *Self) bool {
+        const args = [_][]const u8{ "zfs", "version" };
+        const res = self.runCommand(&args) catch return false;
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        return res.exit_code == 0;
+    }
+
+    /// Check minimal ZFS version compatibility (best-effort)
+    fn isZfsCompatible(self: *Self, min_major: u32, min_minor: u32) bool {
+        const args = [_][]const u8{ "zfs", "version" };
+        const res = self.runCommand(&args) catch return false;
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) return false;
+        // Parse like: "zfs-2.2.2-1\nzfs-kmod-2.2.2-1"
+        var it = std.mem.splitScalar(u8, res.stdout, '\n');
+        while (it.next()) |line| {
+            if (std.mem.indexOf(u8, line, "zfs-") != null) {
+                if (std.mem.indexOfScalar(u8, line, '-') ) |dash_idx| {
+                    const v = line[dash_idx+1..];
+                    // take major.minor
+                    var dot = std.mem.splitScalar(u8, v, '.');
+                    const maj_s = dot.next() orelse continue;
+                    const min_s = dot.next() orelse continue;
+                    const maj = std.fmt.parseInt(u32, maj_s, 10) catch continue;
+                    const min = std.fmt.parseInt(u32, min_s, 10) catch continue;
+                    if (maj > min_major or (maj == min_major and min >= min_minor)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// Set ZFS pool for containers
+    pub fn setZFSPool(self: *Self, pool: []const u8) !void {
+        if (self.zfs_pool) |old_pool| {
+            self.allocator.free(old_pool);
+        }
+        self.zfs_pool = try self.allocator.dupe(u8, pool);
+    }
+
+    /// Create ZFS dataset for container
+    pub fn createContainerDataset(self: *Self, container_name: []const u8, vmid: []const u8) !?[]const u8 {
+        if (!self.isZFSAvailable() or self.zfs_pool == null) {
+            if (self.logger) |log| try log.warn("ZFS not available, skipping dataset creation", .{});
+            return null;
+        }
+
+        const pool = self.zfs_pool.?;
+        
+        // Create dataset name: pool/containers/container_name-vmid
+        const dataset_name = try std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ pool, container_name, vmid });
+        defer self.allocator.free(dataset_name);
+
+        if (self.logger) |log| try log.info("Creating ZFS dataset for container: {s}", .{dataset_name});
+
+        // Create the dataset
+        {
+            const args = [_][]const u8{ "zfs", "create", dataset_name };
+            const res = try self.runCommand(&args);
+            defer self.allocator.free(res.stdout);
+            defer self.allocator.free(res.stderr);
+            if (res.exit_code != 0) return core.Error.OperationFailed;
+        }
+        // Set compression and other properties
+        {
+            const args1 = [_][]const u8{ "zfs", "set", "compression=lz4", dataset_name };
+            const res1 = try self.runCommand(&args1);
+            defer self.allocator.free(res1.stdout);
+            defer self.allocator.free(res1.stderr);
+            if (res1.exit_code != 0) return core.Error.OperationFailed;
+        }
+        {
+            const args2 = [_][]const u8{ "zfs", "set", "atime=off", dataset_name };
+            const res2 = try self.runCommand(&args2);
+            defer self.allocator.free(res2.stdout);
+            defer self.allocator.free(res2.stderr);
+            if (res2.exit_code != 0) return core.Error.OperationFailed;
+        }
+        {
+            const args3 = [_][]const u8{ "zfs", "set", "sync=disabled", dataset_name };
+            const res3 = try self.runCommand(&args3);
+            defer self.allocator.free(res3.stdout);
+            defer self.allocator.free(res3.stderr);
+            if (res3.exit_code != 0) return core.Error.OperationFailed;
+        }
+
+        if (self.logger) |log| try log.info("Successfully created ZFS dataset: {s}", .{dataset_name});
+        
+        // Return the dataset name (caller should free it)
+        return try self.allocator.dupe(u8, dataset_name);
+    }
+
+    /// Destroy ZFS dataset for container
+    pub fn destroyContainerDataset(self: *Self, dataset_name: []const u8) !void {
+        if (!self.isZFSAvailable()) {
+            if (self.logger) |log| try log.warn("ZFS not available, skipping dataset destruction", .{});
+            return;
+        }
+
+        if (self.logger) |log| try log.info("Destroying ZFS dataset: {s}", .{dataset_name});
+        
+        const args = [_][]const u8{ "zfs", "destroy", "-r", dataset_name };
+        const res = try self.runCommand(&args);
+        defer self.allocator.free(res.stdout);
+        defer self.allocator.free(res.stderr);
+        if (res.exit_code != 0) return core.Error.OperationFailed;
+        
+        if (self.logger) |log| try log.info("Successfully destroyed ZFS dataset: {s}", .{dataset_name});
+    }
+
+    /// Get ZFS dataset mountpoint for container
+    pub fn getContainerDatasetMountpoint(self: *Self, dataset_name: []const u8) !?[]const u8 {
+        if (!self.isZFSAvailable()) {
+            return null;
+        }
+
+        const args = [_][]const u8{ "zfs", "get", "-H", "-o", "value", "mountpoint", dataset_name };
+        const res = try self.runCommand(&args);
+        defer self.allocator.free(res.stderr);
+        if (res.exit_code != 0) return null;
+        const trimmed = std.mem.trim(u8, res.stdout, " \t\r\n");
+        const mount = try self.allocator.dupe(u8, trimmed);
+        self.allocator.free(res.stdout);
+        return mount;
     }
 
     /// Process OCI bundle - convert to template if needed, return template name
@@ -76,6 +252,46 @@ pub const ProxmoxLxcDriver = struct {
         try converter.convertOciToProxmoxTemplate(bundle_path, template_name, "local");
 
         if (self.logger) |log| try log.info("Successfully converted OCI bundle to template: {s}", .{template_name});
+        
+        // Add template to cache with metadata
+        var template_info = try template_manager.TemplateInfo.init(
+            self.allocator, 
+            template_name, 
+            0, // Size will be updated later
+            .oci_bundle
+        );
+        
+        // Extract metadata from OCI bundle if available
+        var metadata_parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var metadata_cfg = metadata_parser.parseBundle(bundle_path) catch |err| {
+            if (self.logger) |log| try log.warn("Failed to parse bundle for metadata: {}", .{err});
+            try self.template_manager.addTemplate(template_name, template_info);
+            return try self.allocator.dupe(u8, template_name);
+        };
+        defer metadata_cfg.deinit();
+        
+        // Create metadata from OCI bundle
+        var metadata = template_manager.TemplateMetadata.init(self.allocator);
+        if (metadata_cfg.image_name) |name| metadata.image_name = try self.allocator.dupe(u8, name);
+        if (metadata_cfg.image_tag) |tag| metadata.image_tag = try self.allocator.dupe(u8, tag);
+        if (metadata_cfg.entrypoint) |ep| {
+            var entrypoint_array = try self.allocator.alloc([]const u8, ep.len);
+            for (ep, 0..) |arg, i| {
+                entrypoint_array[i] = try self.allocator.dupe(u8, arg);
+            }
+            metadata.entrypoint = entrypoint_array;
+        }
+        if (metadata_cfg.cmd) |cmd| {
+            var cmd_array = try self.allocator.alloc([]const u8, cmd.len);
+            for (cmd, 0..) |arg, i| {
+                cmd_array[i] = try self.allocator.dupe(u8, arg);
+            }
+            metadata.cmd = cmd_array;
+        }
+        if (metadata_cfg.working_directory) |wd| metadata.working_directory = try self.allocator.dupe(u8, wd);
+        
+        template_info.metadata = metadata;
+        try self.template_manager.addTemplate(template_name, template_info);
         
         // Return a copy since we're freeing the original
         return try self.allocator.dupe(u8, template_name);
@@ -165,19 +381,69 @@ pub const ProxmoxLxcDriver = struct {
         }
         defer self.allocator.free(template);
 
+        // Create ZFS dataset for container if ZFS is available
+        var zfs_dataset: ?[]const u8 = null;
+        defer if (zfs_dataset) |dataset| self.allocator.free(dataset);
+        
+        if (self.isZFSAvailable()) {
+            zfs_dataset = try self.createContainerDataset(config.name, vmid);
+            if (zfs_dataset) |dataset| {
+                if (self.logger) |log| try log.info("Created ZFS dataset for container: {s}", .{dataset});
+            }
+        }
+
         // Use pct create command
-        const args = [_][]const u8{
-            "pct",
-            "create",
-            vmid,
-            template,
-            "--hostname", config.name,
-            "--memory", "512",
-            "--cores", "1",
-            "--net0", "name=eth0,bridge=vmbr0,ip=dhcp",
-            "--ostype", "ubuntu",
-            "--unprivileged", "0",
+        var args: []const []const u8 = undefined;
+        
+        // Build dynamic args from config and defaults
+        const mem_mb_str = blk: {
+            const mem_bytes = if (config.resources) |r| r.memory orelse (core.constants.DEFAULT_MEMORY_BYTES) else core.constants.DEFAULT_MEMORY_BYTES;
+            const mb: u64 = mem_bytes / (1024 * 1024);
+            break :blk try std.fmt.allocPrint(self.allocator, "{d}", .{mb});
         };
+        defer self.allocator.free(mem_mb_str);
+
+        const cores_str = blk: {
+            const c: f64 = if (config.resources) |r| (r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES)) else @as(f64, core.constants.DEFAULT_CPU_CORES);
+            const ci: u32 = @intFromFloat(c);
+            break :blk try std.fmt.allocPrint(self.allocator, "{d}", .{ci});
+        };
+        defer self.allocator.free(cores_str);
+
+        const bridge = blk: {
+            if (config.network) |net| {
+                if (net.bridge) |b| break :blk b;
+            }
+            break :blk core.constants.DEFAULT_BRIDGE_NAME;
+        };
+        const net0 = try std.fmt.allocPrint(self.allocator, "name=eth0,bridge={s},ip=dhcp", .{bridge});
+        defer self.allocator.free(net0);
+
+        const ostype = self.config.default_ostype orelse "ubuntu";
+        const unprivileged_str = if (self.config.default_unprivileged) |u| if (u) "1" else "0" else "0";
+
+        if (zfs_dataset) |dataset| {
+            args = &[_][]const u8{
+                "pct", "create", vmid, template,
+                "--hostname", config.name,
+                "--memory", mem_mb_str,
+                "--cores", cores_str,
+                "--net0", net0,
+                "--ostype", ostype,
+                "--unprivileged", unprivileged_str,
+                "--rootfs", dataset,
+            };
+        } else {
+            args = &[_][]const u8{
+                "pct", "create", vmid, template,
+                "--hostname", config.name,
+                "--memory", mem_mb_str,
+                "--cores", cores_str,
+                "--net0", net0,
+                "--ostype", ostype,
+                "--unprivileged", unprivileged_str,
+            };
+        }
 
         if (self.logger) |log| {
             try log.debug("Proxmox LXC create: Creating container with pct create", .{});
@@ -191,7 +457,7 @@ pub const ProxmoxLxcDriver = struct {
             try stdout.writeAll("'\n");
         }
 
-        const result = try self.runCommand(&args);
+        const result = try self.runCommand(args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
         
@@ -208,6 +474,17 @@ pub const ProxmoxLxcDriver = struct {
         }
         
         if (result.exit_code != 0) {
+            // On failure, do not delete dataset; rename with -failed suffix
+            if (zfs_dataset) |dataset| {
+                const failed = std.mem.concat(self.allocator, u8, &.{ dataset, "-failed" }) catch null;
+                if (failed) |new_name| {
+                    defer self.allocator.free(new_name);
+                    const rn = [_][]const u8{ "zfs", "rename", "-r", dataset, new_name };
+                    const rn_res = self.runCommand(&rn) catch null;
+                    if (rn_res) |resx| { self.allocator.free(resx.stdout); self.allocator.free(resx.stderr); }
+                }
+            }
+            
             if (self.logger) |log| try log.err("Failed to create Proxmox LXC via pct: {s}", .{result.stderr});
             return self.mapPctError(result.exit_code, result.stderr);
         }
@@ -462,6 +739,21 @@ pub const ProxmoxLxcDriver = struct {
         if (result.exit_code != 0) {
             if (self.logger) |log| try log.err("Failed to delete Proxmox LXC container {s}: {s}", .{ container_id, result.stderr });
             return self.mapPctError(result.exit_code, result.stderr);
+        }
+
+        // If ZFS used, rename dataset with -delete suffix instead of destroying
+        if (self.zfs_pool) |pool| {
+            const dataset_name = std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ pool, container_id, vmid }) catch null;
+            if (dataset_name) |ds| {
+                defer self.allocator.free(ds);
+                const new_name = std.mem.concat(self.allocator, u8, &.{ ds, "-delete" }) catch null;
+                if (new_name) |nn| {
+                    defer self.allocator.free(nn);
+                    const rn = [_][]const u8{ "zfs", "rename", "-r", ds, nn };
+                    const rn_res = self.runCommand(&rn) catch null;
+                    if (rn_res) |resx| { self.allocator.free(resx.stdout); self.allocator.free(resx.stderr); }
+                }
+            }
         }
 
         if (self.logger) |log| {
