@@ -145,3 +145,137 @@ Time spent: 2.5h (issue creation: 0.1h, segfault debug+fix: 2.0h, testing: 0.4h)
 
 Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing: 0.5h)
 
+### 2025-10-29: Fixed ZFS Pool and Dataset Validation (WIP)
+
+#### Problem Identified
+- **Missing validation** before creating ZFS datasets during container creation
+- Container creation attempted to create datasets on non-existent pools (e.g., "tank" pool not found)
+- No check if dataset already exists before creation
+- Parent datasets not created automatically when missing
+
+#### Solution Implemented
+1. **Pool Existence Check**:
+   - Added `poolExists()` function to verify ZFS pool exists before creating datasets
+   - Extracts pool name from config (e.g., "tank" from "tank/containers")
+   - Uses `zpool list` to verify pool exists
+   - Returns `null` from `createContainerDataset()` if pool doesn't exist (continues without ZFS)
+
+2. **Dataset Existence Check**:
+   - Added `datasetExists()` function to check if dataset already exists
+   - Uses `zfs list` to verify dataset existence
+   - Returns existing dataset name if found, preventing duplicate creation
+
+3. **Parent Dataset Creation**:
+   - Added `getParentDataset()` function to extract parent path from full dataset path
+   - Automatically creates parent dataset with `zfs create -p` if missing
+   - Handles nested dataset paths (e.g., creates "tank/containers" before "tank/containers/container-vmid")
+
+4. **Improved Dataset Path Handling**:
+   - Extracts pool name correctly from config (supports both "pool" and "pool/path" formats)
+   - Uses base path from config if it contains a path separator
+   - Falls back to "pool_name/containers" if config only specifies pool name
+
+#### Files Changed
+- `src/backends/proxmox-lxc/driver.zig`:
+  - Added `poolExists()` function (lines 101-121)
+  - Added `datasetExists()` function (lines 123-133)
+  - Added `getParentDataset()` function (lines 135-143)
+  - Enhanced `createContainerDataset()` with validation checks (lines 209-268)
+
+#### Testing Status
+- ✅ Compilation successful
+- ⏳ Testing on Proxmox server pending
+
+#### Time Spent
+- Implementation: ~1.5h
+- Testing: pending
+
+#### Branch
+- Branch: `fix/zfs-validation`
+- Status: Ready for testing
+
+### 2025-10-29: Proxmox E2E run (post-fixes)
+
+#### Summary
+- Ran `scripts/proxmox_e2e_test.sh` after logging gating, image parsing fix, and hostname validation wiring.
+- Suite summary: 57 total, 34 passed (59%), 23 failed.
+- Failures concentrated in functional create/start/stop/kill/delete flows (expected pending Proxmox create stabilization and image/template provisioning).
+
+#### Artifacts
+- Report: `test-reports/proxmox_e2e_test_report_20251029_194308.md`
+
+#### Time Spent
+- ~0.5h (execution + triage)
+
+### 2025-10-29: Image parsing fix (Proxmox template vs Docker ref)
+
+#### Summary
+- Adjusted image classification in `src/backends/proxmox-lxc/driver.zig`:
+  - Proxmox template: `*.tar.zst` or strings containing `:vztmpl/`
+  - OCI bundle: existing directory with `config.json`
+  - Docker-style refs like `ubuntu:20.04` are NOT treated as Proxmox templates
+- Non-directory refs with `:` but no `/` now yield a clear error (unsupported type) instead of misclassification.
+
+#### Results
+- ✅ Prevents false-positive template detection for `ubuntu:20.04`
+- ✅ Keeps Proxmox template paths working (`local:vztmpl/...tar.zst`)
+- ⏳ Pull/convert for Docker refs is out of scope for this sprint
+
+#### Time Spent
+- ~0.5h (implementation + build)
+
+### 2025-10-29: Logging gated by --debug (noise reduction)
+
+#### Summary
+- Прибрано безумовні діагностичні виводи з CLI:
+  - `src/cli/create.zig`: усі `DEBUG:` повідомлення тепер під `options.debug`
+  - `src/cli/router.zig`: stderr-логування тепер показується лише за `self.debug_mode`
+- Поведінка за замовчуванням стала тихою; повний трейс доступний через `--debug`.
+
+#### Results
+- ✅ `zig build` — успішно
+- ✅ Менше шуму у звичайному режимі; дебаг лишився повним при потребі
+
+#### Time Spent
+- ~0.4h (правки + збірка + швидка перевірка)
+
+### 2025-10-29: Input validators hardening (foundation)
+
+#### Summary
+- Added reusable validators in `src/cli/validation.zig`:
+  - `validateHostname`, `validateVmidString`, `validateStorageName`, `validateSafePath`, `validateEnvKV`
+- Wired hostname validation in `create` and `run` commands (invalid names -> InvalidInput).
+
+#### Results
+- ✅ Build green; utilities available for CLI/backends
+- ✅ Hostname validation enforced in `create`/`run`
+
+#### Time Spent
+- ~0.4h (implementation + build)
+
+### 2025-10-29: Path security hardening (bundle validation)
+
+#### Summary
+- `proxmox-lxc` create flow now validates OCI bundle path using `core.validation.PathSecurity.validateBundlePath` before opening.
+- Prevents directory traversal and enforces allowed prefixes for bundles.
+
+#### Results
+- ✅ Build green; safer path handling in driver
+
+#### Time Spent
+- ~0.3h (implementation + build)
+
+### 2025-10-29: Release prep (v0.7.0 bump & changelog)
+
+#### Summary
+- Bumped version to `0.7.0` and added CHANGELOG entry summarizing:
+  - OCI `kill` and `state` commands
+  - Logging gating, image parsing fix, ZFS validation, path security
+  - Input validators and segfault fix in create flow
+
+#### Results
+- ✅ Build green after version bump
+
+#### Time Spent
+- ~0.2h (docs + verification)
+

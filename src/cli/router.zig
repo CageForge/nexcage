@@ -135,48 +135,50 @@ pub const BackendRouter = struct {
         // Use stderr for debug output to avoid buffering issues
         const stderr = std.fs.File.stderr();
         
-        // Immediately write to stderr (unbuffered) to catch segfault location
-        stderr.writeAll("[ROUTER] routeAndExecute: ENTRY\n") catch {};
+        if (self.debug_mode) {
+            // Immediately write to stderr (unbuffered) to catch segfault location
+            stderr.writeAll("[ROUTER] routeAndExecute: ENTRY\n") catch {};
+        }
         
         // Check self pointer validity by accessing fields (suppress unused warnings)
         _ = self.allocator;
         _ = self.debug_mode;
         
-        stderr.writeAll("[ROUTER] routeAndExecute: Self check passed\n") catch {};
+        if (self.debug_mode) {
+            stderr.writeAll("[ROUTER] routeAndExecute: Self check passed\n") catch {};
+        }
         
         if (self.debug_mode) {
             stderr.writeAll("[ROUTER] routeAndExecute: Starting (debug mode ON)\n") catch {};
             stderr.writeAll("[ROUTER] routeAndExecute: container_id = '") catch {};
             stderr.writeAll(container_id) catch {};
             stderr.writeAll("'\n") catch {};
-        } else {
-            stderr.writeAll("[ROUTER] routeAndExecute: Starting (debug mode OFF)\n") catch {};
         }
         
-        stderr.writeAll("[ROUTER] routeAndExecute: Before ConfigLoader init\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Before ConfigLoader init\n") catch {};
         var config_loader = config_module.ConfigLoader.init(self.allocator);
-        stderr.writeAll("[ROUTER] routeAndExecute: ConfigLoader initialized\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: ConfigLoader initialized\n") catch {};
         
         if (self.debug_mode) {
             stderr.writeAll("[ROUTER] routeAndExecute: Loading default config\n") catch {};
         }
         
-        stderr.writeAll("[ROUTER] routeAndExecute: Calling loadDefault\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Calling loadDefault\n") catch {};
         var cfg = config_loader.loadDefault() catch |err| {
-            stderr.writeAll("[ROUTER] routeAndExecute: ERROR in loadDefault\n") catch {};
+            if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: ERROR in loadDefault\n") catch {};
             return err;
         };
         defer cfg.deinit();
-        stderr.writeAll("[ROUTER] routeAndExecute: Default config loaded successfully\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Default config loaded successfully\n") catch {};
         
         if (self.debug_mode) {
             stderr.writeAll("[ROUTER] routeAndExecute: Config loaded, proceeding\n") catch {};
         }
 
         // Use the new routing system that supports regex patterns
-        stderr.writeAll("[ROUTER] routeAndExecute: Before getRoutedRuntime\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Before getRoutedRuntime\n") catch {};
         const runtime_type = cfg.getRoutedRuntime(container_id);
-        stderr.writeAll("[ROUTER] routeAndExecute: After getRoutedRuntime\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: After getRoutedRuntime\n") catch {};
         
         if (self.debug_mode) {
             stderr.writeAll("[ROUTER] routeAndExecute: Runtime type: ") catch {};
@@ -185,12 +187,12 @@ pub const BackendRouter = struct {
             stderr.writeAll("\n") catch {};
         }
         
-        stderr.writeAll("[ROUTER] routeAndExecute: Before logger routing info\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Before logger routing info\n") catch {};
         // Skip logger call to avoid segfault - logger allocator might be invalid
         // if (self.logger) |log| {
         //     log.info("Routing container '{s}' to runtime: {s}", .{ container_id, @tagName(runtime_type) }) catch {};
         // }
-        stderr.writeAll("[ROUTER] routeAndExecute: After logger routing info (skipped)\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: After logger routing info (skipped)\n") catch {};
 
         // Convert RuntimeType to ContainerType for backend execution
         const ctype = switch (runtime_type) {
@@ -201,90 +203,92 @@ pub const BackendRouter = struct {
             .proxmox_lxc => types.ContainerType.proxmox_lxc,
             else => types.ContainerType.lxc, // fallback
         };
-        stderr.writeAll("[ROUTER] routeAndExecute: ContainerType converted\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: ContainerType converted\n") catch {};
 
-        stderr.writeAll("[ROUTER] routeAndExecute: Before logger execution info\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Before logger execution info\n") catch {};
         // Skip logger call to avoid segfault
         // if (self.logger) |log| {
         //     log.info("Executing with backend: {s} for container: {s}", .{ @tagName(ctype), container_id }) catch {};
         // }
-        stderr.writeAll("[ROUTER] routeAndExecute: Before switch statement\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Before switch statement\n") catch {};
 
         switch (ctype) {
             .lxc => {
-                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeProxmoxLxc (lxc)\n") catch {};
+                if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Calling executeProxmoxLxc (lxc)\n") catch {};
                 try self.executeProxmoxLxc(operation, container_id, config);
-                stderr.writeAll("[ROUTER] routeAndExecute: executeProxmoxLxc completed\n") catch {};
+                if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: executeProxmoxLxc completed\n") catch {};
             },
             .crun => {
-                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeCrun\n") catch {};
+                if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Calling executeCrun\n") catch {};
                 try self.executeCrun(operation, container_id, config);
             },
             .runc => {
-                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeRunc\n") catch {};
+                if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Calling executeRunc\n") catch {};
                 try self.executeRunc(operation, container_id, config);
             },
             .vm => {
-                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeVm\n") catch {};
+                if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Calling executeVm\n") catch {};
                 try self.executeVm(operation, container_id, config);
             },
             .proxmox_lxc => {
-                stderr.writeAll("[ROUTER] routeAndExecute: Calling executeProxmoxLxc (proxmox_lxc)\n") catch {};
+                if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Calling executeProxmoxLxc (proxmox_lxc)\n") catch {};
                 try self.executeProxmoxLxc(operation, container_id, config);
-                stderr.writeAll("[ROUTER] routeAndExecute: executeProxmoxLxc completed\n") catch {};
+                if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: executeProxmoxLxc completed\n") catch {};
             },
         }
-        stderr.writeAll("[ROUTER] routeAndExecute: Switch completed\n") catch {};
-        stderr.writeAll("[ROUTER] routeAndExecute: FINISHED\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: Switch completed\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] routeAndExecute: FINISHED\n") catch {};
     }
 
     fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
         const stderr = std.fs.File.stderr();
         
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: ENTRY\n") catch {};
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: container_id = '") catch {};
-        stderr.writeAll(container_id) catch {};
-        stderr.writeAll("'\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: ENTRY\n") catch {};
+        if (self.debug_mode) {
+            stderr.writeAll("[ROUTER] executeProxmoxLxc: container_id = '") catch {};
+            stderr.writeAll(container_id) catch {};
+            stderr.writeAll("'\n") catch {};
+        }
         
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: Before createSandboxConfig\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Before createSandboxConfig\n") catch {};
         const sandbox_config = try self.createSandboxConfig(operation, container_id, .proxmox_lxc, config);
         defer self.cleanupSandboxConfig(operation, &sandbox_config);
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: Sandbox config created\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Sandbox config created\n") catch {};
 
         // Create Proxmox LXC backend with default config
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: Creating ProxmoxLxcBackendConfig\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Creating ProxmoxLxcBackendConfig\n") catch {};
         const proxmox_config = types.ProxmoxLxcBackendConfig{
             .allocator = self.allocator,
             .default_bridge = if (config) |cfg| if (cfg.network) |net| net.bridge else null else null,
         };
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: Config created\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Config created\n") catch {};
 
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: Initializing ProxmoxLxcDriver\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Initializing ProxmoxLxcDriver\n") catch {};
         const proxmox_backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(self.allocator, proxmox_config);
         defer proxmox_backend.deinit();
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: Driver initialized\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Driver initialized\n") catch {};
 
         // Set logger if available
         if (self.logger) |log| {
-            stderr.writeAll("[ROUTER] executeProxmoxLxc: Setting logger\n") catch {};
+            if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Setting logger\n") catch {};
             proxmox_backend.setLogger(log);
-            stderr.writeAll("[ROUTER] executeProxmoxLxc: Logger set\n") catch {};
+            if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Logger set\n") catch {};
         } else {
-            stderr.writeAll("[ROUTER] executeProxmoxLxc: No logger available\n") catch {};
+            if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: No logger available\n") catch {};
         }
         
         // Set debug mode
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: Setting debug mode\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Setting debug mode\n") catch {};
         proxmox_backend.setDebugMode(self.debug_mode);
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: Debug mode set\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Debug mode set\n") catch {};
 
-        stderr.writeAll("[ROUTER] executeProxmoxLxc: Before operation switch\n") catch {};
+        if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Before operation switch\n") catch {};
         
         switch (operation) {
             .create => {
-                stderr.writeAll("[ROUTER] executeProxmoxLxc: Calling backend.create\n") catch {};
+                if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: Calling backend.create\n") catch {};
                 try proxmox_backend.create(sandbox_config);
-                stderr.writeAll("[ROUTER] executeProxmoxLxc: backend.create completed\n") catch {};
+                if (self.debug_mode) stderr.writeAll("[ROUTER] executeProxmoxLxc: backend.create completed\n") catch {};
             },
             .start => try proxmox_backend.start(container_id),
             .stop => try proxmox_backend.stop(container_id),

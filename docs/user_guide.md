@@ -146,33 +146,26 @@ nexcage [COMMAND] [OPTIONS] [ARGUMENTS]
 - `stop` - Stop a container
 - `delete` - Delete a container
 - `list` - List containers
-- `info` - Show container information
-- `image` - Manage container images
-- `exec` - Execute command in container
-- `logs` - Show container logs
+- `state` - Show OCI-compatible container state
+- `kill` - Send signal to a container
 
 ### Basic Container Operations
 
 #### Create Container
 ```bash
-# Create a basic container
+# Create from OCI bundle directory (must contain config.json)
 nexcage create \
   --name my-container \
-  --image ubuntu:22.04 \
-  --memory 512 \
-  --cores 1 \
-  --storage zfs
+  --image /path/to/oci-bundle
+```
 
-# Create with custom configuration
-nexcage create \
-  --name web-server \
-  --image nginx:alpine \
-  --memory 1024 \
-  --cores 2 \
-  --storage zfs \
-  --network bridge=vmbr0 \
-  --mount /host/path:/container/path \
-  --env NODE_ENV=production
+Signals and state:
+```bash
+# Send SIGTERM to a container
+nexcage kill --name my-container --signal SIGTERM
+
+# Get OCI state JSON
+nexcage state --name my-container
 ```
 
 #### Start Container
@@ -206,6 +199,13 @@ nexcage list --status running
 ```
 
 ## Image Management
+
+### Working with Proxmox Templates and OCI Bundles
+
+Images
+-----
+- For Proxmox LXC, use templates like `local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst` or a `.tar.zst` template file.
+- Docker-style refs (e.g., `ubuntu:20.04`) are not fetched by Nexcage; use Proxmox templates or provide an OCI bundle directory with `config.json`.
 
 ### Working with OCI Images
 
