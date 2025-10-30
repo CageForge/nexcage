@@ -294,3 +294,24 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 #### Time Spent
 - ~0.2h (build + tests)
 
+### 2025-10-30: Proxmox e2e (proxmox_only_test.sh)
+
+#### Summary
+- Executed remote Proxmox-only suite twice (non-interactive + fallback):
+  - Total: 57, Passed: 34, Failed: 23, Skipped: 0, Success: 59%
+- Failures clustered in functional create/start/stop/kill/state(delete) for Proxmox/OCI/runc flows.
+- Help/version/list/state baseline pass; environment/storage/network checks pass.
+
+#### Artifacts
+- Reports:
+  - `test-reports/proxmox_only_test_report_20251030_170605.md`
+  - `test-reports/proxmox_only_test_report_20251030_170712.md`
+
+#### Next Actions
+- Inspect failing cases for create/start lifecycle in `src/backends/proxmox-lxc/driver.zig` and related CLI flows.
+- Verify image/template availability on PVE; ensure template path parsing and bundle validation align with docs.
+- Re-run after fixes.
+
+#### Time Spent
+- ~0.4h (runs + triage)
+
