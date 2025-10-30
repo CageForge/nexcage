@@ -279,3 +279,18 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 #### Time Spent
 - ~0.2h (docs + verification)
 
+### 2025-10-30: Local build and tests verification
+
+#### Summary
+- Ran local build with bundled Zig 0.15.1: `./zig/zig build` — success
+- Ran unit/integration tests: `./zig/zig build test` — success
+- Ready to proceed with Proxmox e2e on `mgr.cp.if.ua` (requires remote access)
+
+#### Results
+- ✅ Local build OK
+- ✅ Local tests OK
+- ⏳ Proxmox e2e pending (networked environment)
+
+#### Time Spent
+- ~0.2h (build + tests)
+
