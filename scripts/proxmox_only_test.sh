@@ -71,6 +71,27 @@ log_test_result() {
     esac
 }
 
+# Ensure Proxmox template exists (best-effort)
+ensure_proxmox_template() {
+    local template_name="$1"   # e.g. ubuntu-22.04-standard_22.04-1_amd64.tar.zst
+    echo -e "${YELLOW}🔍 Ensuring Proxmox template available: ${template_name}${NC}"
+    # Check if listed in local storage
+    if ssh "$PVE_HOST" "pveam list local:vztmpl | grep -q ${template_name}" >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ Template present in local:vztmpl${NC}"
+        return 0
+    fi
+    # Try to find in available list and download
+    if ssh "$PVE_HOST" "pveam available | grep -q ${template_name}" >/dev/null 2>&1; then
+        echo -e "${YELLOW}⬇️  Downloading template ${template_name} to local:vztmpl...${NC}"
+        if ssh "$PVE_HOST" "pveam download local ${template_name}" >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ Downloaded template${NC}"
+            return 0
+        fi
+    fi
+    echo -e "${YELLOW}⚠️ Could not auto-provision template: ${template_name}. Some tests may fail.${NC}"
+    return 1
+}
+
 # Function to run a test with timing
 run_test() {
     local test_name="$1"
@@ -259,9 +280,11 @@ run_test "Remote Config Loading" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage creat
 # Test 26: Test Proxmox-LXC container creation (if LXC tools available)
 if check_remote_command "pct"; then
     echo -e "${YELLOW}🧪 Testing  Proxmox LXC container creation...${NC}"
+    # Best-effort: ensure a common ubuntu template exists
+    ensure_proxmox_template "ubuntu-22.04-standard_22.04-1_amd64.tar.zst" || true
     
     # Test 27: Create Proxmox-LXC container
-    run_test "Proxmox-LXC Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-lxc-container --image ubuntu:20.04 --runtime proxmox-lxc'"
+    run_test "Proxmox-LXC Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-lxc-container --image local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst --runtime proxmox-lxc'"
     
     # Test 28: List Proxmox-LXC containers
     run_test "Proxmox-LXC Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --runtime proxmox-lxc'"
