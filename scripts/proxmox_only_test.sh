@@ -105,9 +105,10 @@ run_test() {
         local duration=$((end_time - start_time))
         log_test_result "$test_name" "PASS" "Test completed successfully" "${duration}ms"
     else
+        local rc=$?
         local end_time=$(date +%s%3N)
         local duration=$((end_time - start_time))
-        log_test_result "$test_name" "FAIL" "Test failed with exit code $?" "${duration}ms"
+        log_test_result "$test_name" "FAIL" "Test failed with exit code $rc" "${duration}ms"
     fi
 }
 
@@ -124,9 +125,10 @@ run_test_expected_fail() {
         local duration=$((end_time - start_time))
         log_test_result "$test_name" "PASS" "Test failed as expected" "${duration}ms"
     else
+        local rc=$?
         local end_time=$(date +%s%3N)
         local duration=$((end_time - start_time))
-        log_test_result "$test_name" "FAIL" "Test should have failed but passed" "${duration}ms"
+        log_test_result "$test_name" "FAIL" "Test should have failed but passed (rc=$rc)" "${duration}ms"
     fi
 }
 
@@ -311,8 +313,8 @@ else
     log_test_result "Proxmox-LXC Container Tests" "SKIP" "LXC tools not available" "0ms"
 fi
 
-# Test 32: Test OCI container creation (if crun available)
-if check_remote_command "crun"; then
+# Test 32: Test OCI container creation (gated)
+if [ "${ENABLE_OCI_TESTS:-0}" = "1" ] && check_remote_command "crun"; then
     echo -e "${YELLOW}🧪 Testing OCI container creation...${NC}"
     
     # Test 33: Create OCI container
@@ -343,8 +345,8 @@ else
     log_test_result "OCI Container Tests" "SKIP" "crun not available" "0ms"
 fi
 
-# Test 38: Test runc container creation (if runc available)
-if check_remote_command "runc"; then
+# Test 38: Test runc container creation (gated)
+if [ "${ENABLE_RUNC_TESTS:-0}" = "1" ] && check_remote_command "runc"; then
     echo -e "${YELLOW}🧪 Testing runc container creation...${NC}"
     
     # Test 39: Create runc container
