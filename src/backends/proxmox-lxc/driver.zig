@@ -1166,6 +1166,9 @@ pub const ProxmoxLxcDriver = struct {
         if (self.logger) |log| {
             log.info("Proxmox LXC container started successfully: {s}", .{container_id}) catch {};
         }
+
+        // Update OCI state file to running
+        self.writeOciState(container_id, "running") catch {};
     }
 
     /// Stop LXC container using pct command
@@ -1193,6 +1196,9 @@ pub const ProxmoxLxcDriver = struct {
         if (self.logger) |log| {
             log.info("Proxmox LXC container stopped successfully: {s}", .{container_id}) catch {};
         }
+
+        // Update OCI state file to stopped
+        self.writeOciState(container_id, "stopped") catch {};
     }
 
     /// Delete LXC container using pct command
@@ -1235,6 +1241,25 @@ pub const ProxmoxLxcDriver = struct {
         if (self.logger) |log| {
             log.info("Proxmox LXC container deleted successfully: {s}", .{container_id}) catch {};
         }
+    }
+
+    /// Write minimal OCI state.json into /run/nexcage/<container_id>/state.json
+    fn writeOciState(self: *Self, container_id: []const u8, status: []const u8) !void {
+        const state_dir = "/run/nexcage";
+        try std.fs.cwd().makePath(state_dir);
+        const container_dir = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ state_dir, container_id });
+        defer self.allocator.free(container_dir);
+        try std.fs.cwd().makePath(container_dir);
+        const state_path = try std.fmt.allocPrint(self.allocator, "{s}/state.json", .{ container_dir });
+        defer self.allocator.free(state_path);
+        const file = try std.fs.cwd().createFile(state_path, .{ .truncate = true, .read = false });
+        defer file.close();
+        const json = try std.fmt.allocPrint(self.allocator,
+            "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": 0,\n  \"bundle\": null,\n  \"annotations\": {{}}\n}}\n",
+            .{ container_id, status },
+        );
+        defer self.allocator.free(json);
+        try file.writeAll(json);
     }
 
     /// Send signal to container using pct exec kill
