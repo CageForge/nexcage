@@ -161,12 +161,6 @@ jobs:
             target: x86_64-linux
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.version || github.ref }}
-          fetch-depth: 0
-
       - name: Print environment info
         run: |
           echo "Runner: $(hostname)"
