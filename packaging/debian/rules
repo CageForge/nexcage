@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-# Debian package build rules for proxmox-lxcri
+# Debian package build rules for nexcage
 # Uses Zig build system
 
 %:
@@ -18,26 +18,23 @@ override_dh_auto_test:
 	zig build test
 
 override_dh_auto_install:
-	# Install binary to /usr/bin
-	install -D -m 755 zig-out/bin/proxmox-lxcri debian/proxmox-lxcri/usr/bin/proxmox-lxcri
+	# Install binary to /usr/bin (binary name is nexcage)
+	install -D -m 755 zig-out/bin/nexcage debian/nexcage/usr/bin/nexcage
 	
 	# Install configuration files
-	install -D -m 644 packaging/config/proxmox-lxcri.json debian/proxmox-lxcri/etc/proxmox-lxcri/proxmox-lxcri.json
-	install -D -m 644 packaging/config/config.json debian/proxmox-lxcri/etc/proxmox-lxcri/config.json
+	install -D -m 644 packaging/config/config.json debian/nexcage/etc/nexcage/config.json.example || true
+	install -D -m 644 packaging/config/proxmox-lxcri.json debian/nexcage/etc/nexcage/proxmox-lxcri.json.example || true
 	
-	# Install systemd service file
-	install -D -m 644 packaging/systemd/proxmox-lxcri.service debian/proxmox-lxcri/lib/systemd/system/proxmox-lxcri.service
-	
-	# Install man page
-	install -D -m 644 packaging/man/proxmox-lxcri.1 debian/proxmox-lxcri/usr/share/man/man1/proxmox-lxcri.1
+	# Install man page (if exists)
+	install -D -m 644 packaging/man/proxmox-lxcri.1 debian/nexcage/usr/share/man/man1/nexcage.1 || true
 	
 	# Install documentation
-	install -D -m 644 docs/zfs-checkpoint-guide.md debian/proxmox-lxcri/usr/share/doc/proxmox-lxcri/zfs-checkpoint-guide.md
-	install -D -m 644 docs/architecture.md debian/proxmox-lxcri/usr/share/doc/proxmox-lxcri/architecture.md
-	install -D -m 644 README.md debian/proxmox-lxcri/usr/share/doc/proxmox-lxcri/README.md
+	mkdir -p debian/nexcage/usr/share/doc/nexcage
+	install -D -m 644 README.md debian/nexcage/usr/share/doc/nexcage/README.md
+	[ -f docs/architecture.md ] && install -D -m 644 docs/architecture.md debian/nexcage/usr/share/doc/nexcage/architecture.md || true
 	
 	# Install bash completion
-	install -D -m 644 packaging/completion/proxmox-lxcri.bash debian/proxmox-lxcri/usr/share/bash-completion/completions/proxmox-lxcri
+	install -D -m 644 packaging/completion/nexcage.bash debian/nexcage/usr/share/bash-completion/completions/nexcage 2>/dev/null || true
 
 override_dh_auto_clean:
 	# Clean build artifacts

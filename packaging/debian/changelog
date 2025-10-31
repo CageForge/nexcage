@@ -1,35 +1,28 @@
-proxmox-lxcri (0.3.0-1) unstable; urgency=medium
+nexcage (0.7.1-1) stable; urgency=medium
 
-  * Revolutionary ZFS checkpoint/restore system implementation
-  * Hybrid architecture: ZFS snapshots (primary) + CRIU fallback (secondary)
-  * Lightning performance: filesystem-level snapshots in seconds vs minutes
-  * Smart ZFS availability detection with graceful CRIU fallback
-  * Enhanced command set: checkpoint, restore, run, and spec commands
-  * 300%+ performance improvement with StaticStringMap command parsing
-  * Production-ready Proxmox ZFS infrastructure integration
-  * Comprehensive documentation and troubleshooting guides
-  * Modernized CI/CD pipeline with automated releases
-  * Multi-architecture support (x86_64, aarch64)
+  * Release v0.7.1 - libcrun ABI integration & stability fixes
+  * libcrun ABI integration with FFI bindings
+  * OCI state.json persistence with PID tracking
+  * Robust kill command with multiple execution paths
+  * Build compatibility fixes for Zig 0.15.1
+  * Default network bridge changed to vmbr50
+  * CNCF compliance improvements (DCO, SBOM, Provenance)
+  * E2E test improvements (93% pass rate)
+  * Input validation and security hardening
+  * Optional libcrun/systemd linking for portability
 
- -- Proxmox LXCRI Team <maintainers@proxmox-lxcri.io>  Sun, 29 Dec 2024 12:00:00 +0000
+ -- CageForge Team <contact@cageforge.com>  Fri, 31 Oct 2025 17:30:00 +0100
 
-proxmox-lxcri (0.2.0-1) unstable; urgency=medium
+nexcage (0.7.0-1) stable; urgency=medium
 
-  * Complete OCI Image System implementation
-  * Advanced performance optimizations (20%+ improvement)
-  * Comprehensive testing suite with 50+ tests
-  * Enhanced memory management (15-25% reduction)
-  * Advanced caching with O(1) complexity LRU operations
-  * Complete documentation suite
+  * Release v0.7.0 - kill/state commands, Proxmox fixes, security hardening
+  * OCI-compliant state command implementation
+  * Kill command with SIGTERM/SIGKILL support
+  * Proxmox-LXC driver improvements
+  * Security input validation framework
+  * Logger stability fixes
+  * Debug logging gated by --debug flag
+  * Path security validation for OCI bundles
+  * ZFS pool and dataset validation
 
- -- Proxmox LXCRI Team <maintainers@proxmox-lxcri.io>  Mon, 19 Aug 2024 10:00:00 +0000
-
-proxmox-lxcri (0.1.0-1) unstable; urgency=low
-
-  * Initial release
-  * Basic CRI implementation for Proxmox LXC
-  * Pod and container lifecycle management
-  * Configuration management and logging system
-  * Proxmox VE API integration
-
- -- Proxmox LXCRI Team <maintainers@proxmox-lxcri.io>  Wed, 01 Mar 2024 10:00:00 +0000
+ -- CageForge Team <contact@cageforge.com>  Mon, 28 Oct 2025 12:00:00 +0100
