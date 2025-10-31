@@ -8,12 +8,12 @@ const types = @import("types.zig");
 pub fn validateConfigType(comptime ConfigType: type) void {
     comptime {
         const type_info = @typeInfo(ConfigType);
-        if (type_info != .Struct) {
-            @compileError("ConfigType must be a struct");
-        }
+        const struct_info = switch (type_info) {
+            .Struct => |s| s,
+            else => @compileError("ConfigType must be a struct, got " ++ @typeName(ConfigType)),
+        };
 
         // Check for runtime_type field
-        const struct_info = type_info.Struct;
         var has_runtime_type = false;
         for (struct_info.fields) |field| {
             if (std.mem.eql(u8, field.name, "runtime_type")) {
@@ -26,12 +26,7 @@ pub fn validateConfigType(comptime ConfigType: type) void {
         }
 
         // Validate that deinit exists
-        if (@hasDecl(ConfigType, "deinit")) {
-            const deinit_info = @typeInfo(@TypeOf(ConfigType.deinit));
-            if (deinit_info != .Fn) {
-                @compileError("Config type 'deinit' must be a function");
-            }
-        } else {
+        if (!@hasDecl(ConfigType, "deinit")) {
             @compileError("Config type must implement 'deinit()' method");
         }
     }
@@ -41,11 +36,10 @@ pub fn validateConfigType(comptime ConfigType: type) void {
 pub fn hasRequiredFields(comptime T: type, comptime required_fields: []const []const u8) bool {
     comptime {
         const type_info = @typeInfo(T);
-        if (type_info != .Struct) {
-            return false;
-        }
-
-        const struct_info = type_info.Struct;
+        const struct_info = switch (type_info) {
+            .Struct => |s| s,
+            else => return false,
+        };
         for (required_fields) |field_name| {
             var found = false;
             for (struct_info.fields) |field| {
@@ -75,11 +69,10 @@ pub fn assertHasField(comptime T: type, comptime field_name: []const u8) void {
 pub fn hasField(comptime T: type, comptime field_name: []const u8) bool {
     comptime {
         const type_info = @typeInfo(T);
-        if (type_info != .Struct) {
-            return false;
-        }
-
-        const struct_info = type_info.Struct;
+        const struct_info = switch (type_info) {
+            .Struct => |s| s,
+            else => return false,
+        };
         for (struct_info.fields) |field| {
             if (std.mem.eql(u8, field.name, field_name)) {
                 return true;
@@ -143,8 +136,9 @@ pub fn validateNetworkConfig() void {
 pub fn validateConfigStruct(comptime ConfigType: type, comptime required_fields: []const []const u8) void {
     comptime {
         const type_info = @typeInfo(ConfigType);
-        if (type_info != .Struct) {
-            @compileError("ConfigType must be a struct");
+        switch (type_info) {
+            .Struct => {},
+            else => @compileError("ConfigType must be a struct"),
         }
 
         // Check required fields
