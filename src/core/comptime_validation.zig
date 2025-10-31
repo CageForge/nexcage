@@ -7,10 +7,21 @@ const types = @import("types.zig");
 /// Validate that a config type has required fields
 pub fn validateConfigType(comptime ConfigType: type) void {
     comptime {
-        // Check for required fields in Config struct
-        if (@hasDecl(ConfigType, "runtime_type")) {
-            // Runtime type field exists - good
-        } else {
+        const type_info = @typeInfo(ConfigType);
+        if (type_info != .Struct) {
+            @compileError("ConfigType must be a struct");
+        }
+
+        // Check for runtime_type field
+        const struct_info = type_info.Struct;
+        var has_runtime_type = false;
+        for (struct_info.fields) |field| {
+            if (std.mem.eql(u8, field.name, "runtime_type")) {
+                has_runtime_type = true;
+                break;
+            }
+        }
+        if (!has_runtime_type) {
             @compileError("Config type must have 'runtime_type' field");
         }
 
