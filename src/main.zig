@@ -162,11 +162,7 @@ pub fn main() !void {
     // Check if help was requested
     if (options.help) {
         // Help is handled by individual commands
-        // Initialize providers
-        // Backend initialization handled by BackendRouter in core/router.zig
-        try app.initNetworkProvider();
-        try app.initStorageProvider();
-        try app.initImageProvider();
+        // Backend and provider initialization handled by BackendRouter in core/router.zig
 
         // Execute command (which will handle help)
         try app.command_registry.execute(command_name, options, allocator);
@@ -178,12 +174,7 @@ pub fn main() !void {
         return;
     }
 
-    // Initialize providers
-    try app.initBackend();
-    try app.initNetworkProvider();
-    try app.initStorageProvider();
-    try app.initImageProvider();
-
+    // Backend and provider initialization handled by BackendRouter in core/router.zig
     // Execute command
     try app.command_registry.execute(command_name, options, allocator);
     
