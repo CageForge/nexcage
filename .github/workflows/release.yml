@@ -111,11 +111,17 @@ jobs:
           zig build -Doptimize=ReleaseFast
 
       - name: Create artifact
+        id: build
         run: |
           mkdir -p dist
           BIN_NAME=nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
           cp zig-out/bin/nexcage "dist/${BIN_NAME}"
           chmod +x "dist/${BIN_NAME}"
+          
+          # Generate SHA256 hash for SLSA provenance
+          SHA256=$(sha256sum "dist/${BIN_NAME}" | cut -d' ' -f1)
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "artifact_path=dist/${BIN_NAME}" >> $GITHUB_OUTPUT
 
       - name: Generate SBOM (SPDX JSON)
         uses: anchore/sbom-action@v0
@@ -125,17 +131,72 @@ jobs:
           output-file: dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
           format: spdx-json
 
+      - name: Generate SBOM (CycloneDX JSON)
+        uses: cyclonedx/cyclonedx-action@v1
+        with:
+          output-format: json
+          output-file: dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.cdx.json
+          # Scan the built binary and source code
+          build-dir: .
+          scan-targets: dist/${BIN_NAME}
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
           path: dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
 
-      - name: Upload SBOM artifact
+      - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
-          path: dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
+          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom
+          path: |
+            dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
+            dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.cdx.json
+
+      - name: Generate SLSA Provenance
+        id: slsa
+        continue-on-error: true  # SLSA requires additional setup
+        run: |
+          # Generate minimal SLSA provenance (will be enhanced later)
+          ARTIFACT_PATH="${{ steps.build.outputs.artifact_path }}"
+          SHA256="${{ steps.build.outputs.sha256 }}"
+          
+          # Create provenance directory
+          mkdir -p dist
+          
+          # Generate basic provenance JSON
+          cat > dist/provenance.json << EOF
+          {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": [
+              {
+                "name": "${{ steps.build.outputs.artifact_path }}",
+                "digest": {
+                  "sha256": "${SHA256}"
+                }
+              }
+            ],
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "predicate": {
+              "buildDefinition": {
+                "buildType": "https://github.com/actions/v1",
+                "externalParameters": {
+                  "workflow": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                }
+              }
+            }
+          }
+          EOF
+          
+          echo "SLSA provenance generated"
+
+      - name: Upload SLSA Provenance
+        uses: actions/upload-artifact@v4
+        if: steps.slsa.outcome == 'success'
+        with:
+          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.provenance
+          path: dist/provenance.json
 
   build-deb:
     name: Build DEB Packages
@@ -240,9 +301,11 @@ jobs:
         run: |
           mkdir -p release
           # Binaries
-          find artifacts -name "nexcage-*" -type f -exec cp {} release/ \;
-          # SBOMs (SPDX JSON)
-          find artifacts -name "*.sbom.spdx.json" -type f -exec cp {} release/ \;
+          find artifacts -name "nexcage-*" -type f ! -name "*.sbom*" ! -name "*.provenance*" -exec cp {} release/ \;
+          # SBOMs (SPDX JSON and CycloneDX JSON)
+          find artifacts -name "*.sbom*" -type f -exec cp {} release/ \;
+          # SLSA Provenance
+          find artifacts -name "*.provenance*" -type f -exec cp {} release/ \; || true
           ls -la release/
 
       - name: Create checksums
