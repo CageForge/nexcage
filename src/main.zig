@@ -163,7 +163,7 @@ pub fn main() !void {
     if (options.help) {
         // Help is handled by individual commands
         // Initialize providers
-        try app.initBackend();
+        // Backend initialization handled by BackendRouter in core/router.zig
         try app.initNetworkProvider();
         try app.initStorageProvider();
         try app.initImageProvider();
