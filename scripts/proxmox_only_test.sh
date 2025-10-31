@@ -307,8 +307,8 @@ if check_remote_command "pct"; then
     # Test 29a: State Proxmox-LXC container (while running)
     run_test "Proxmox-LXC Container State (Running)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-lxc-container'"
     
-    # Test 29b: Kill Proxmox-LXC container with SIGTERM
-    run_test "Proxmox-LXC Container Kill (SIGTERM)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage kill -s SIGTERM test-lxc-container'"
+    # Test 29b: Kill Proxmox-LXC container with SIGTERM (with debug to see exec attempts)
+    run_test "Proxmox-LXC Container Kill (SIGTERM)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage --debug kill -s SIGTERM test-lxc-container 2>&1 | head -100'"
     
     # Test 30: Stop Proxmox-LXC container
     run_test "Proxmox-LXC Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-lxc-container --runtime proxmox-lxc'"

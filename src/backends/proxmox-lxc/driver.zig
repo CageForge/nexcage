@@ -1289,34 +1289,8 @@ pub const ProxmoxLxcDriver = struct {
         const vmid = try self.getVmidByName(container_id);
         defer self.allocator.free(vmid);
 
-        // Try multiple ways to send SIG to PID 1 inside container; consider success if container transitions to stopped.
-        var success = false;
-        // Attempt 1: kill from PATH
+        // Check if container is already stopped - if so, kill is a no-op success
         {
-            const a = [_][]const u8{ "pct", "exec", vmid, "--", "kill", "-s", signal, "1" };
-            const r = self.runCommand(&a) catch null;
-            if (r) |res| { defer self.allocator.free(res.stdout); defer self.allocator.free(res.stderr); if (res.exit_code == 0) success = true; }
-        }
-        // Attempt 2: /bin/kill
-        if (!success) {
-            const a = [_][]const u8{ "pct", "exec", vmid, "--", "/bin/kill", "-s", signal, "1" };
-            const r = self.runCommand(&a) catch null;
-            if (r) |res| { defer self.allocator.free(res.stdout); defer self.allocator.free(res.stderr); if (res.exit_code == 0) success = true; }
-        }
-        // Attempt 3: /usr/bin/kill
-        if (!success) {
-            const a = [_][]const u8{ "pct", "exec", vmid, "--", "/usr/bin/kill", "-s", signal, "1" };
-            const r = self.runCommand(&a) catch null;
-            if (r) |res| { defer self.allocator.free(res.stdout); defer self.allocator.free(res.stderr); if (res.exit_code == 0) success = true; }
-        }
-        // Attempt 4: shell fallback ignores failure
-        if (!success) {
-            const a = [_][]const u8{ "pct", "exec", vmid, "--", "/bin/sh", "-c", "kill -s TERM 1 || true" };
-            const r = self.runCommand(&a) catch null;
-            if (r) |res| { defer self.allocator.free(res.stdout); defer self.allocator.free(res.stderr); success = true; }
-        }
-        // If direct signal attempts failed, poll status for a short window; if stopped, treat as success
-        if (!success) {
             const st_args = [_][]const u8{ "pct", "status", vmid };
             const st_res = self.runCommand(&st_args) catch null;
             if (st_res) |r| {
@@ -1324,7 +1298,111 @@ pub const ProxmoxLxcDriver = struct {
                 defer self.allocator.free(r.stderr);
                 if (r.exit_code == 0) {
                     const trimmed = std.mem.trim(u8, r.stdout, " \t\r\n");
-                    if (std.mem.indexOf(u8, trimmed, "stopped") != null) success = true;
+                    if (self.debug_mode) {
+                        _ = std.fs.File.stdout().writeAll("[KILL] pre-check status=") catch {};
+                        _ = std.fs.File.stdout().writeAll(trimmed) catch {};
+                        _ = std.fs.File.stdout().writeAll("\n") catch {};
+                    }
+                    if (std.mem.indexOf(u8, trimmed, "stopped") != null) {
+                        // Container already stopped, no-op success
+                        if (self.logger) |log| log.info("Container {s} already stopped, kill is no-op", .{container_id}) catch {};
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Try multiple ways to send SIG to PID 1 inside container; consider success if container transitions to stopped.
+        var success = false;
+        // Attempt 1: kill from PATH
+        {
+            const a = [_][]const u8{ "pct", "exec", vmid, "--", "kill", "-s", signal, "1" };
+            const r = self.runCommand(&a) catch null;
+            if (r) |res| {
+                if (self.debug_mode) {
+                    _ = std.fs.File.stdout().writeAll("[KILL] attempt1 rc=\n") catch {};
+                }
+                defer self.allocator.free(res.stdout);
+                defer self.allocator.free(res.stderr);
+                if (self.debug_mode) {
+                    _ = std.fs.File.stdout().writeAll("[KILL] attempt1 stdout=\n") catch {};
+                    _ = std.fs.File.stdout().writeAll(res.stdout) catch {};
+                    _ = std.fs.File.stdout().writeAll("\n[KILL] attempt1 stderr=\n") catch {};
+                    _ = std.fs.File.stdout().writeAll(res.stderr) catch {};
+                    _ = std.fs.File.stdout().writeAll("\n") catch {};
+                }
+                if (res.exit_code == 0) success = true;
+            }
+        }
+        // Attempt 2: /bin/kill
+        if (!success) {
+            const a = [_][]const u8{ "pct", "exec", vmid, "--", "/bin/kill", "-s", signal, "1" };
+            const r = self.runCommand(&a) catch null;
+            if (r) |res| {
+                defer self.allocator.free(res.stdout);
+                defer self.allocator.free(res.stderr);
+                if (self.debug_mode) {
+                    _ = std.fs.File.stdout().writeAll("[KILL] attempt2 stdout=\n") catch {};
+                    _ = std.fs.File.stdout().writeAll(res.stdout) catch {};
+                    _ = std.fs.File.stdout().writeAll("\n[KILL] attempt2 stderr=\n") catch {};
+                    _ = std.fs.File.stdout().writeAll(res.stderr) catch {};
+                    _ = std.fs.File.stdout().writeAll("\n") catch {};
+                }
+                if (res.exit_code == 0) success = true;
+            }
+        }
+        // Attempt 3: /usr/bin/kill
+        if (!success) {
+            const a = [_][]const u8{ "pct", "exec", vmid, "--", "/usr/bin/kill", "-s", signal, "1" };
+            const r = self.runCommand(&a) catch null;
+            if (r) |res| {
+                defer self.allocator.free(res.stdout);
+                defer self.allocator.free(res.stderr);
+                if (self.debug_mode) {
+                    _ = std.fs.File.stdout().writeAll("[KILL] attempt3 stdout=\n") catch {};
+                    _ = std.fs.File.stdout().writeAll(res.stdout) catch {};
+                    _ = std.fs.File.stdout().writeAll("\n[KILL] attempt3 stderr=\n") catch {};
+                    _ = std.fs.File.stdout().writeAll(res.stderr) catch {};
+                    _ = std.fs.File.stdout().writeAll("\n") catch {};
+                }
+                if (res.exit_code == 0) success = true;
+            }
+        }
+        // Attempt 4: shell fallback ignores failure
+        if (!success) {
+            const a = [_][]const u8{ "pct", "exec", vmid, "--", "/bin/sh", "-c", "kill -s TERM 1 || true" };
+            const r = self.runCommand(&a) catch null;
+            if (r) |res| {
+                defer self.allocator.free(res.stdout);
+                defer self.allocator.free(res.stderr);
+                if (self.debug_mode) {
+                    _ = std.fs.File.stdout().writeAll("[KILL] attempt4 stdout=\n") catch {};
+                    _ = std.fs.File.stdout().writeAll(res.stdout) catch {};
+                    _ = std.fs.File.stdout().writeAll("\n[KILL] attempt4 stderr=\n") catch {};
+                    _ = std.fs.File.stdout().writeAll(res.stderr) catch {};
+                    _ = std.fs.File.stdout().writeAll("\n") catch {};
+                }
+                success = true;
+            }
+        }
+        // If direct attempts failed, poll status a few times and accept success if container is stopped
+        if (!success) {
+            var tries: usize = 0;
+            while (tries < 10 and !success) : (tries += 1) {
+                const st_args = [_][]const u8{ "pct", "status", vmid };
+                const st_res = self.runCommand(&st_args) catch null;
+                if (st_res) |r| {
+                    defer self.allocator.free(r.stdout);
+                    defer self.allocator.free(r.stderr);
+                    if (r.exit_code == 0) {
+                        const trimmed = std.mem.trim(u8, r.stdout, " \t\r\n");
+                        if (self.debug_mode) {
+                            _ = std.fs.File.stdout().writeAll("[KILL] poll status=\n") catch {};
+                            _ = std.fs.File.stdout().writeAll(trimmed) catch {};
+                            _ = std.fs.File.stdout().writeAll("\n") catch {};
+                        }
+                        if (std.mem.indexOf(u8, trimmed, "stopped") != null) { success = true; break; }
+                    }
                 }
             }
         }
