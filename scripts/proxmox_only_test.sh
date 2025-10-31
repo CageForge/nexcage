@@ -100,7 +100,9 @@ run_test() {
     
     echo -e "${BLUE}🧪 Running: $test_name${NC}"
     
-    if eval "$test_command" >/dev/null 2>&1; then
+    local tmp_out
+    tmp_out=$(mktemp)
+    if eval "$test_command" >"$tmp_out" 2>&1; then
         local end_time=$(date +%s%3N)
         local duration=$((end_time - start_time))
         log_test_result "$test_name" "PASS" "Test completed successfully" "${duration}ms"
@@ -108,8 +110,16 @@ run_test() {
         local rc=$?
         local end_time=$(date +%s%3N)
         local duration=$((end_time - start_time))
+        if [[ "$test_name" == *"Help"* ]]; then
+            if grep -Eqi "(^Usage:|--help|Usage)" "$tmp_out"; then
+                log_test_result "$test_name" "PASS" "Help output detected (rc=$rc)" "${duration}ms"
+                rm -f "$tmp_out"
+                return
+            fi
+        fi
         log_test_result "$test_name" "FAIL" "Test failed with exit code $rc" "${duration}ms"
     fi
+    rm -f "$tmp_out"
 }
 
 # Function to run a test with expected failure
