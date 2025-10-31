@@ -53,24 +53,44 @@ pub const StateCommand = struct {
             runtime_type = cfg.getRoutedRuntime(container_id);
         }
 
-        // Get container info from backend based on runtime type
-        const info = try self.getContainerInfo(allocator, runtime_type, container_id);
-        defer {
-            var mutable_info = info;
-            mutable_info.deinit();
+        // Read persisted state file if exists
+        const bundle_opt: ?[]const u8 = null;
+        const annotations_present = false;
+        {
+            const state_path = try std.fmt.allocPrint(allocator, "/run/nexcage/{s}/state.json", .{container_id});
+            defer allocator.free(state_path);
+            const f = std.fs.cwd().openFile(state_path, .{}) catch null;
+            if (f) |file| {
+                // For now we only acknowledge presence; bundle/annotations stay default
+                file.close();
+            }
         }
 
-        // Map backend status to OCI status values
-        const oci_status = try mapStatusToOCI(info.status, allocator);
+        // Query live state via backend list/info
+        var backend_status: []u8 = try allocator.dupe(u8, "unknown");
+        defer allocator.free(backend_status);
+        const info = self.getContainerInfo(allocator, runtime_type, container_id) catch null;
+        const pid_value: i32 = 0;
+        if (info) |ci| {
+            defer {
+                var m = ci;
+                m.deinit();
+            }
+            allocator.free(backend_status);
+            backend_status = try allocator.dupe(u8, ci.status);
+        }
+
+        const oci_status = try mapStatusToOCI(backend_status, allocator);
         defer allocator.free(oci_status);
 
-        // Prepare OCI-compatible state JSON
+        const bundle_json = if (bundle_opt) |b| try std.fmt.allocPrint(allocator, "\"{s}\"", .{b}) else try allocator.dupe(u8, "null");
+        defer allocator.free(bundle_json);
+        const annotations_json = if (annotations_present) "{}" else "{}";
         const json = try std.fmt.allocPrint(allocator,
-            "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": 0,\n  \"bundle\": null,\n  \"annotations\": {{}}\n}}\n",
-            .{ info.id, oci_status },
+            "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": {s},\n  \"annotations\": {s}\n}}\n",
+            .{ container_id, oci_status, pid_value, bundle_json, annotations_json },
         );
         defer allocator.free(json);
-
         try stdout.writeAll(json);
     }
 

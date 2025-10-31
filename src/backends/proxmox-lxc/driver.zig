@@ -937,6 +937,40 @@ pub const ProxmoxLxcDriver = struct {
         }
         
         if (self.logger) |log| log.info("Proxmox LXC container created via pct: {s} (vmid {s})", .{ config.name, vmid }) catch {};
+        // Persist OCI-compatible state file: /run/nexcage/<container_id>/state.json
+        {
+            const state_dir = "/run/nexcage";
+            std.fs.cwd().makePath(state_dir) catch {};
+            const container_dir = std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ state_dir, config.name }) catch null;
+            if (container_dir) |cdir| {
+                defer self.allocator.free(cdir);
+                std.fs.cwd().makePath(cdir) catch {};
+                const state_path = std.fmt.allocPrint(self.allocator, "{s}/state.json", .{ cdir }) catch null;
+                if (state_path) |spath| {
+                    defer self.allocator.free(spath);
+                    const file = std.fs.cwd().createFile(spath, .{ .truncate = true, .read = false }) catch null;
+                    if (file) |f| {
+                        defer f.close();
+                        // Determine bundle from oci_bundle_path if present
+                        const bundle_json = if (oci_bundle_path) |bp| std.fmt.allocPrint(self.allocator, "\"{s}\"", .{bp}) catch null else null;
+                        if (bundle_json) |bj| {
+                            defer self.allocator.free(bj);
+                            const content = std.fmt.allocPrint(self.allocator,
+                                "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"created\",\n  \"pid\": 0,\n  \"bundle\": {s},\n  \"annotations\": {{}}\n}}\n",
+                                .{ config.name, bj },
+                            ) catch null;
+                            if (content) |json| { defer self.allocator.free(json); _ = f.writeAll(json) catch {}; }
+                        } else {
+                            const content = std.fmt.allocPrint(self.allocator,
+                                "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"created\",\n  \"pid\": 0,\n  \"bundle\": null,\n  \"annotations\": {{}}\n}}\n",
+                                .{ config.name },
+                            ) catch null;
+                            if (content) |json| { defer self.allocator.free(json); _ = f.writeAll(json) catch {}; }
+                        }
+                    }
+                }
+            }
+        }
         
         if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Finished\n");
     }
