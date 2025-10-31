@@ -31,10 +31,11 @@ tests/
 └── ...
 
 scripts/
-├── run_tests_with_report.sh  # Unit test runner with reporting
-├── e2e_test_with_report.sh   # E2E test runner with reporting
-├── ci_test_with_report.sh    # CI test runner with reporting
-└── ...
+├── proxmox_e2e_test.sh       # Proxmox E2E test runner
+├── proxmox_only_test.sh      # Proxmox-only test runner
+├── check_dependencies.sh     # Dependency checker
+├── bump_version.sh            # Version bumping
+└── archive/                   # Archived scripts (one-time setup, old test runners)
 
 test-reports/                 # Generated test reports
 ├── unit_test_report_*.md     # Unit test reports
@@ -61,19 +62,18 @@ make test-all     # All test suites
 ### Manual Test Execution
 
 ```bash
-# Unit tests with reporting
-./scripts/run_tests_with_report.sh
+# Proxmox E2E tests
+./scripts/proxmox_e2e_test.sh
 
-# E2E tests with reporting
-./scripts/e2e_test_with_report.sh
-
-# CI tests with reporting
-./scripts/ci_test_with_report.sh
+# Proxmox-only tests
+./scripts/proxmox_only_test.sh
 
 # Direct test execution
 zig build test
 zig run tests/test_runner.zig
 ```
+
+**Note**: Legacy test reporting scripts have been archived to `scripts/archive/`. Use the Makefile commands or direct Zig test execution instead.
 
 ### Test Configuration
 
@@ -173,8 +173,8 @@ Test complete workflows:
 # Run E2E tests
 make test-e2e
 
-# Manual E2E testing
-./scripts/e2e_test_with_report.sh
+# Manual E2E testing (Proxmox)
+./scripts/proxmox_e2e_test.sh
 ```
 
 **Coverage:**
@@ -189,11 +189,8 @@ make test-e2e
 Test continuous integration scenarios:
 
 ```bash
-# Run CI tests
+# Manual CI testing (via Makefile)
 make test-ci
-
-# Manual CI testing
-./scripts/ci_test_with_report.sh
 ```
 
 **Coverage:**
