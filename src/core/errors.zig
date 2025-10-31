@@ -322,7 +322,6 @@ pub const ErrorWithContext = union(enum) {
             },
             .contextual => |e| {
                 _ = fmt;
-                _ = options;
                 try writer.print("{}: {s}", .{ e.error_type, e.context.message });
                 if (e.context.source) |src| {
                     try writer.print(" (source: {s}", .{src});
@@ -331,6 +330,7 @@ pub const ErrorWithContext = union(enum) {
                     }
                     try writer.writeAll(")");
                 }
+                _ = options;
             },
             .chained => |e| {
                 try writer.print("{}: {s}", .{ e.error_type, e.context.message });
