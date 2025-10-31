@@ -48,6 +48,9 @@ jobs:
           else
             VERSION=${GITHUB_REF#refs/tags/v}
           fi
+          echo "Extracted version: $VERSION"
+          echo "GITHUB_REF: ${{ github.ref }}"
+          echo "Event name: ${{ github.event_name }}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build
