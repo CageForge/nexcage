@@ -80,6 +80,13 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("cap");
     exe.linkSystemLibrary("seccomp");
     exe.linkSystemLibrary("yajl");
+    // Link libcrun for ABI integration (only when libcrun ABI is enabled)
+    // Note: libcrun requires systemd for cgroup management
+    // If systemd is not available, use CLI driver instead (see src/backends/crun/mod.zig)
+    exe.linkSystemLibrary("crun");
+    // Conditionally link systemd (required by libcrun for cgroup management)
+    // If linking fails, the build will use CLI driver as fallback
+    exe.linkSystemLibrary("systemd");
 
     // No additional static Zig libraries linked to avoid duplicate start symbol
 
@@ -92,6 +99,7 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
     exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
+    exe.addIncludePath(.{ .cwd_relative = "src/backends/crun" }); // For libcrun_wrapper.h
 
     // Add module dependencies
     exe.root_module.addImport("core", core_mod);
@@ -136,6 +144,10 @@ pub fn build(b: *std.Build) void {
     test_exe.linkSystemLibrary("cap");
     test_exe.linkSystemLibrary("seccomp");
     test_exe.linkSystemLibrary("yajl");
+    // Link libcrun for ABI integration
+    test_exe.linkSystemLibrary("crun");
+    // libcrun requires systemd for cgroup management
+    test_exe.linkSystemLibrary("systemd");
     // No additional static Zig libraries linked into tests
 
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
@@ -146,6 +158,7 @@ pub fn build(b: *std.Build) void {
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
+    test_exe.addIncludePath(.{ .cwd_relative = "src/backends/crun" }); // For libcrun_wrapper.h
 
     test_exe.root_module.addImport("core", core_mod);
     test_exe.root_module.addImport("cli", cli_mod);

@@ -38,9 +38,6 @@ Legend: [date] file — brief description (if inferable by name). Files without 
 - SPRINT_7.1_IMMEDIATE_ACTIONS.md
 
 ### Undated (supporting reports and audits)
-- CODE_AUDIT_REPORT.md
-- CODE_CLEANUP_SUMMARY.md
-- CRITICAL_STABILIZATION_TASKS.md
 - GITHUB_ACTIONS_FIXES_SUMMARY.md
 - ISSUE_90_ANALYSIS.md
 - MEMORY_LEAKS_FIX_REPORT.md

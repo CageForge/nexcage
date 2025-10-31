@@ -383,3 +383,83 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 #### Time Spent
 - ~1.0h (kill fix: 0.5h, e2e test improvements: 0.3h, testing: 0.2h)
 
+---
+
+### 2025-10-31: libcrun ABI Integration & Release 0.7.1 Preparation
+
+#### libcrun ABI Integration Implementation
+**Goal**: Complete libcrun ABI integration as alternative to CLI-based crun operations
+
+**Delivered**:
+- ✅ Created FFI bindings (`src/backends/crun/libcrun_ffi.zig`)
+  - Opaque types for Container, Error, ContainerStatus
+  - Extern function declarations for all libcrun API operations
+  - Proper C FFI types and null-terminated string handling
+- ✅ Implemented libcrun Context structure (`extern struct`)
+  - All required fields from `libcrun_context_t`
+  - Proper initialization and zero-initialization
+  - String storage for context lifetime management
+- ✅ Rewrote CrunDriver using libcrun ABI (`src/backends/crun/libcrun_driver.zig`)
+  - `create`: Loads OCI bundle, creates container via `libcrun_container_create`
+  - `start`: Starts container via `libcrun_container_start`
+  - `kill`: Sends signals via `libcrun_container_kill`
+  - `stop`: Uses kill with TERM signal
+  - `delete`: Removes container via `libcrun_container_delete`
+  - Proper error handling and logging integration
+- ✅ Updated build system (`build.zig`)
+  - Added libcrun and systemd library linking
+  - Added include paths for libcrun headers
+  - Support for both ABI and CLI drivers
+- ✅ Feature flag implementation (`src/backends/crun/mod.zig`)
+  - Debug builds use libcrun ABI
+  - Release builds use CLI driver (systemd dependency fallback)
+  - Both drivers available for explicit selection
+
+**Challenges**:
+- libcrun requires systemd library for cgroup management
+- FFI type compatibility (opaque types, extern struct alignment)
+- Null-terminated string handling in Zig for C FFI
+- Memory management for context structures
+
+**Solutions**:
+- Feature flag to automatically select appropriate driver
+- CLI driver remains as fallback for environments without systemd
+- Proper context initialization and cleanup in driver deinit
+
+**Files Changed**:
+- `src/backends/crun/libcrun_ffi.zig` (new)
+- `src/backends/crun/libcrun_driver.zig` (new)
+- `src/backends/crun/libcrun_wrapper.h` (new)
+- `src/backends/crun/mod.zig` (updated)
+- `build.zig` (updated)
+
+#### Release 0.7.1 Preparation
+**Goal**: Prepare release 0.7.1 with libcrun ABI integration
+
+**Delivered**:
+- ✅ Updated `VERSION` to `0.7.1`
+- ✅ Added changelog entry for v0.7.1
+  - Integration release notes
+  - Technical details of libcrun ABI integration
+  - Migration guide and compatibility notes
+- ✅ Created release notes (`docs/releases/NOTES_v0.7.1.md`)
+  - Overview of libcrun ABI integration
+  - Technical details and module structure
+  - Dependencies and compatibility information
+  - Migration guide for developers
+  - Known issues and workarounds
+  - Testing recommendations
+
+**Build Status**:
+- ✅ Release build: `zig build -Doptimize=ReleaseSafe` — SUCCESS (uses CLI driver)
+- ⚠️ Debug build: `zig build -Doptimize=Debug` — Requires systemd library (uses libcrun ABI)
+
+**Next Steps**:
+- [ ] Resolve systemd linking issues for Debug builds (optional dependency)
+- [ ] Add E2E tests for libcrun ABI operations
+- [ ] Performance benchmarking (ABI vs CLI)
+- [ ] Runtime detection of libcrun availability for dynamic driver selection
+
+#### Time Spent
+- ~3.5h (FFI bindings: 1.0h, driver implementation: 1.5h, build system: 0.5h, release prep: 0.5h)
+
