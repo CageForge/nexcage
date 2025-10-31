@@ -27,6 +27,13 @@ jobs:
             artifact_name: nexcage-linux-x86_64
 
     steps:
+      - name: Print environment info
+        run: |
+          echo "Runner: $(hostname)"
+          echo "Kernel: $(uname -a)"
+          echo "User: $(whoami)"
+          echo "Zig version: $(zig version 2>/dev/null || echo 'Zig will be installed')"
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -160,8 +167,23 @@ jobs:
           ref: ${{ github.event.inputs.version || github.ref }}
           fetch-depth: 0
 
+      - name: Print environment info
+        run: |
+          echo "Runner: $(hostname)"
+          echo "Kernel: $(uname -a)"
+          echo "User: $(whoami)"
+          command -v pct && pct version || echo "pct not found"
+          command -v pveversion && pveversion -v || echo "pveversion not found"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
+          fetch-depth: 0
+
       - name: Install build dependencies
         run: |
+          # On Proxmox runner, some dependencies may be pre-installed
           sudo apt-get update
           sudo apt-get install -y \
             debhelper \
@@ -169,7 +191,7 @@ jobs:
             build-essential \
             fakeroot \
             lintian \
-            dh-systemd
+            dh-systemd || echo "Some packages may already be installed"
 
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
