@@ -221,7 +221,6 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
     try registerCommand(registry, &health_cmd, health.HealthCommand);
     try registerCommand(registry, &state_cmd, state.StateCommand);
     try registerCommand(registry, &kill_cmd, kill.KillCommand);
-    // try registerCommand(registry, &template_cmd, template.TemplateCommand);
 }
 
 /// Register all built-in commands with logger
@@ -237,5 +236,4 @@ pub fn registerBuiltinCommandsWithLogger(registry: *CommandRegistry, logger: *co
     try registerCommandWithLogger(registry, &health_cmd, health.HealthCommand, logger);
     try registerCommandWithLogger(registry, &state_cmd, state.StateCommand, logger);
     try registerCommandWithLogger(registry, &kill_cmd, kill.KillCommand, logger);
-    // try registerCommandWithLogger(registry, &template_cmd, template.TemplateCommand, logger);
 }

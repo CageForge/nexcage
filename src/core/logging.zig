@@ -69,15 +69,13 @@ pub const LogContext = struct {
         // Check self pointer validity by accessing fields
         stderr.writeAll("[LOG] log: Checking self.level\n") catch {};
         const current_level = self.level;
-        stderr.writeAll("[LOG] log: self.level = ") catch {};
-        const level_str_val = @tagName(current_level);
-        stderr.writeAll(level_str_val) catch {};
-        stderr.writeAll("\n") catch {};
+        const current_level_int: u8 = @intFromEnum(current_level);
+        stderr.writeAll("[LOG] log: self.level checked\n") catch {};
         
         // Early return if log level is below threshold
         stderr.writeAll("[LOG] log: Checking log level threshold\n") catch {};
         const level_int = @intFromEnum(level);
-        const threshold_int = @intFromEnum(current_level);
+        const threshold_int: u8 = if (current_level_int <= @intFromEnum(LogLevel.fatal)) current_level_int else @intFromEnum(LogLevel.info);
         
         if (level_int < threshold_int) {
             stderr.writeAll("[LOG] log: Log level below threshold, returning\n") catch {};
@@ -208,8 +206,8 @@ pub const StructuredLogger = struct {
         const level_str = self.getLevelString(level);
 
         // Create JSON-like structured log using single writer
-        var empty_buf: [0]u8 = undefined;
-        var writer = self.file.writer(&empty_buf);
+        // Use the provided writer for structured logger
+        var writer = self.writer;
         try writer.print("{{\"timestamp\":{d},\"level\":\"{s}\",\"component\":\"{s}\",\"message\":\"{s}\"", .{
             timestamp,
             level_str,
@@ -239,9 +237,7 @@ pub const StructuredLogger = struct {
     }
 
     fn logValue(self: *StructuredLogger, value: anytype) !void {
-        const empty_buf: [0]u8 = undefined;
-        const writer = self.file.writer(&empty_buf);
-        try self.logValueWithWriter(writer, value);
+        try self.logValueWithWriter(self.writer, value);
     }
 
     fn logValueWithWriter(writer: std.fs.File.Writer, value: anytype) !void {

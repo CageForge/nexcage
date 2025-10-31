@@ -78,7 +78,7 @@ pub const BackendRouter = struct {
                 },
                 .security = null,
                 .network = if (config) |cfg| cfg.network else switch (runtime_type) {
-                    .lxc => net_blk: {
+                    .lxc, .proxmox_lxc => net_blk: {
                         if (self.debug_mode) try stdout.writeAll("[ROUTER] createSandboxConfig: Creating network config for LXC\n");
                         break :net_blk types.NetworkConfig{
                             .bridge = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),

@@ -45,6 +45,80 @@ Documentation improvements are also welcome! If you notice inaccuracies or have 
 - Update documentation as needed
 - Ensure your code passes all tests
 
+## Developer Certificate of Origin (DCO)
+
+This project requires all contributions to be signed off with the Developer Certificate of Origin (DCO). This is a lightweight way for contributors to certify that they wrote or have the right to submit the code they are contributing.
+
+### How to Sign Off
+
+When making commits, you must sign off each commit:
+
+```bash
+git commit --signoff -m "Your commit message"
+```
+
+Or amend existing commits:
+```bash
+git commit --amend --signoff
+```
+
+For multiple commits in a PR:
+```bash
+git rebase --signoff HEAD~<number-of-commits>
+```
+
+### DCO Check
+
+All pull requests are automatically checked for DCO signoff. If your PR fails the DCO check:
+
+1. Add signoff to your commits:
+   ```bash
+   git commit --amend --signoff
+   git push --force-with-lease
+   ```
+
+2. The DCO check will automatically re-run and pass once all commits are signed off.
+
+### DCO Text
+
+By signing off, you certify that your contribution is in accordance with the Developer Certificate of Origin (version 1.1):
+
+```
+Developer Certificate of Origin
+Version 1.1
+
+Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+
+Everyone is permitted to copy and distribute verbatim copies of this
+license document, but changing it is not allowed.
+
+Developer's Certificate of Origin 1.1
+
+By making a contribution to this project, I certify that:
+
+(a) The contribution was created in whole or in part by me and I
+    have the right to submit it under the open source license
+    indicated in the file; or
+
+(b) The contribution is based upon previous work that, to the best
+    of my knowledge, is covered under an appropriate open source
+    license and I have the right under that license to submit that
+    work with modifications, whether created in whole or in part
+    by me, under the same open source license (unless I am
+    permitted to submit under a different license), as indicated
+    in the file; or
+
+(c) The contribution was provided directly to me by some other
+    person who certified (a), (b) or (c) and I have not modified
+    it.
+
+(d) I understand and agree that this project and the contribution
+    are public and that a record of the contribution (including all
+    personal information I submit with it, including my sign-off) is
+    maintained indefinitely and may be redistributed consistent with
+    this project or the open source license(s) involved.
+```
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the Apache License 2.0.

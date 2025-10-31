@@ -74,12 +74,22 @@ pub fn build(b: *std.Build) void {
     // Link system libraries
     exe.linkSystemLibrary("c");
     
-    // Try to link optional system libraries (may not be available in all environments)
-    // Note: linkSystemLibrary doesn't return an error, so we can't use catch {}
-    // Instead, we'll link them directly and let the build fail if they're not available
+    // Required system libraries
     exe.linkSystemLibrary("cap");
     exe.linkSystemLibrary("seccomp");
     exe.linkSystemLibrary("yajl");
+    
+    // Optional: Link libcrun and systemd only if libcrun ABI is enabled
+    // Check if libcrun ABI is enabled by checking the feature flag
+    // Note: We can't directly check the flag from build.zig, so we'll use a workaround:
+    // Try to link them, but since USE_LIBCRUN_ABI defaults to false, they won't be used at runtime
+    // The linking will only succeed if the libraries are installed, which is fine
+    // If they're not available, we'll skip linking them (requires build option)
+    const link_libcrun = b.option(bool, "link-libcrun", "Link libcrun and systemd libraries (default: false)") orelse false;
+    if (link_libcrun) {
+        exe.linkSystemLibrary("crun");
+        exe.linkSystemLibrary("systemd");
+    }
 
     // No additional static Zig libraries linked to avoid duplicate start symbol
 
@@ -92,6 +102,7 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
     exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
+    exe.addIncludePath(.{ .cwd_relative = "src/backends/crun" }); // For libcrun_wrapper.h
 
     // Add module dependencies
     exe.root_module.addImport("core", core_mod);
@@ -130,12 +141,17 @@ pub fn build(b: *std.Build) void {
 
     test_exe.linkSystemLibrary("c");
     
-    // Try to link optional system libraries (may not be available in all environments)
-    // Note: linkSystemLibrary doesn't return an error, so we can't use catch {}
-    // Instead, we'll link them directly and let the build fail if they're not available
+    // Required system libraries for tests
     test_exe.linkSystemLibrary("cap");
     test_exe.linkSystemLibrary("seccomp");
     test_exe.linkSystemLibrary("yajl");
+    
+    // Optional: Link libcrun and systemd only if requested
+    const link_libcrun = b.option(bool, "link-libcrun", "Link libcrun and systemd libraries (default: false)") orelse false;
+    if (link_libcrun) {
+        test_exe.linkSystemLibrary("crun");
+        test_exe.linkSystemLibrary("systemd");
+    }
     // No additional static Zig libraries linked into tests
 
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
@@ -146,6 +162,7 @@ pub fn build(b: *std.Build) void {
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
+    test_exe.addIncludePath(.{ .cwd_relative = "src/backends/crun" }); // For libcrun_wrapper.h
 
     test_exe.root_module.addImport("core", core_mod);
     test_exe.root_module.addImport("cli", cli_mod);
