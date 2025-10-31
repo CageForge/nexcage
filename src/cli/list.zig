@@ -165,10 +165,12 @@ pub const ListCommand = struct {
                 }
             },
             .crun, .runc => {
-                // TODO: Implement CRUN/RUNC listing
+                // Note: CRUN/RUNC listing not yet implemented
+                // Backend drivers exist but list() method needs implementation
             },
             .vm => {
-                // TODO: Implement VM listing
+                // Note: VM listing not yet implemented
+                // Proxmox VM backend is functional but list() method pending
             },
             else => {},
         }

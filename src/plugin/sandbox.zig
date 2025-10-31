@@ -322,7 +322,8 @@ pub const SecuritySandbox = struct {
             .{ violation.plugin_name, violation.violation_type, violation.description }
         );
 
-        // TODO: Implement security violation response (alerts, plugin suspension, etc.)
+        // Note: Security violation response (alerts, plugin suspension) not yet implemented
+        // Future: Add plugin suspension, alert notifications, and policy enforcement
     }
 };
 
@@ -619,8 +620,9 @@ pub const PluginSandbox = struct {
     }
 
     fn setupNamespaces(self: *Self) !void {
-        // TODO: Implement Linux namespace setup using unshare()
-        // This would create PID, NET, MNT, USER namespaces as needed
+        // Note: Linux namespace setup using unshare() not yet implemented
+        // This would create PID, NET, MNT, USER namespaces for plugin isolation
+        // Future enhancement for stronger plugin isolation
         _ = self;
         std.log.debug("Namespace isolation setup (not implemented)", .{});
     }

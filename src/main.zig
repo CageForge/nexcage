@@ -14,12 +14,7 @@ pub const AppContext = struct {
     logger: core.LogContext,
     advanced_logger: ?core.simple_advanced_logging.SimpleAdvancedLogging = null,
     logging_config: core.logging_config.LoggingConfig,
-    // error_handler: core.DefaultErrorHandler, // TODO: Implement error handler
     command_registry: cli.CommandRegistry,
-    // backend: ?*core.BackendInterface = null, // TODO: Implement backend interface
-    // network_provider: ?*core.NetworkProvider = null, // TODO: Implement network provider
-    // storage_provider: ?*core.StorageProvider = null, // TODO: Implement storage provider
-    // image_provider: ?*core.ImageProvider = null, // TODO: Implement image provider
 
     pub fn init(allocator: std.mem.Allocator, args: []const []const u8) !AppContext {
         // Load main configuration first
@@ -41,9 +36,8 @@ pub const AppContext = struct {
             advanced_logger = try core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, logging_cfg.debug_mode, logging_cfg.log_file_path);
         }
 
-        // Initialize error handler
-        // TODO: Implement DefaultErrorHandler
-        // const error_handler = core.DefaultErrorHandler.init(allocator, &logger.writer);
+        // Error handling is done through core.errors.ErrorHandler interface
+        // DefaultErrorHandler is available in core.errors module
 
         // Initialize global command registry
         try cli.initGlobalRegistry(allocator);
@@ -60,7 +54,6 @@ pub const AppContext = struct {
             .logger = logger,
             .advanced_logger = advanced_logger,
             .logging_config = logging_cfg,
-            // .error_handler = error_handler, // TODO: Implement error handler
             .command_registry = command_registry,
         };
     }
@@ -77,82 +70,15 @@ pub const AppContext = struct {
         // Cleanup main configuration
         self.config.deinit();
 
-        // TODO: Implement backend cleanup
-        // if (self.backend) |backend| {
-        //     backend.deinit();
-        // }
-        // if (self.network_provider) |net| {
-        //     net.deinit();
-        // }
-        // if (self.storage_provider) |stor| {
-        //     stor.deinit();
-        // }
-        // if (self.image_provider) |img| {
-        //     img.deinit();
-        // }
-
         self.command_registry.deinit();
         cli.deinitGlobalRegistry();
         self.logger.deinit();
         // config.deinit() already called above
     }
 
-    /// Initialize backend based on configuration
-    pub fn initBackend(self: *AppContext) !void {
-        const name = try self.allocator.dupe(u8, "default");
-        defer self.allocator.free(name);
-        
-        const sandbox_config = core.SandboxConfig{
-            .allocator = self.allocator,
-            .name = name,
-            .runtime_type = self.config.runtime_type,
-        };
-        _ = sandbox_config; // TODO: Use when backend selection is implemented
-
-        // TODO: Implement backend selection
-        // switch (self.config.runtime_type) {
-        //     .lxc => {
-        //         const lxc_backend = try backends.lxc.LxcBackend.init(self.allocator, sandbox_config);
-        //         self.backend = lxc_backend;
-        //     },
-        //     .qemu => {
-        //         // TODO: Implement QEMU backend
-        //         return core.Error.UnsupportedOperation;
-        //     },
-        //     .crun, .runc => {
-        //         // TODO: Implement crun/runc backend
-        //         return core.Error.UnsupportedOperation;
-        //     },
-        //     .vm => {
-        //         // TODO: Implement VM backend
-        //         return core.Error.UnsupportedOperation;
-        //     },
-        // }
-    }
-
-    /// Initialize network provider
-    pub fn initNetworkProvider(self: *AppContext) !void {
-        // TODO: Implement network provider initialization
-        // For now, use NFS as network provider
-        // In a real implementation, you would choose based on configuration
-        // const nfs_provider = try integrations.nfs.NfsNetworkProvider.init(self.allocator, self.config.network);
-        // self.network_provider = nfs_provider;
-        _ = self;
-    }
-
-    /// Initialize storage provider
-    pub fn initStorageProvider(self: *AppContext) !void {
-        // TODO: Implement storage provider initialization
-        // For now, we don't have a sandbox config with storage
-        // In a real implementation, you would get storage config from sandbox
-        _ = self;
-    }
-
-    /// Initialize image provider
-    pub fn initImageProvider(self: *AppContext) !void {
-        _ = self;
-        // TODO: Implement image provider initialization
-    }
+    // Backend routing is now handled by BackendRouter in core/router.zig
+    // Network, storage, and image providers are integrated via backends
+    // Legacy provider initialization methods removed - functionality moved to modular backend system
 };
 
 /// Main function

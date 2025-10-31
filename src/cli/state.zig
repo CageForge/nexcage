@@ -133,7 +133,8 @@ pub const StateCommand = struct {
                 return types.Error.NotFound;
             },
             .crun, .runc, .vm => {
-                // TODO: Implement info() for crun/runc/vm backends
+                // Note: info() for crun/runc/vm backends not yet fully implemented
+                // These backends are functional but state info needs enhancement
                 // For now, return a minimal ContainerInfo with unknown status
                 return core.ContainerInfo{
                     .allocator = allocator,
