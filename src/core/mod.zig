@@ -9,6 +9,7 @@ pub const config = @import("config.zig");
 pub const constants = @import("constants.zig");
 pub const integrity = @import("integrity.zig");
 pub const validation = @import("validation.zig");
+pub const comptime_validation = @import("comptime_validation.zig");
 
 // Re-export commonly used types
 pub const Error = types.Error;

@@ -2,6 +2,14 @@ const std = @import("std");
 const types = @import("types.zig");
 const logging = @import("logging.zig");
 const ArrayList = std.ArrayList;
+const comptime_validation = @import("comptime_validation.zig");
+
+// Compile-time validation of config structures
+comptime {
+    comptime_validation.validateSandboxConfig();
+    comptime_validation.validateResourceLimits();
+    comptime_validation.validateNetworkConfig();
+}
 
 /// Configuration loader and manager
 pub const ConfigLoader = struct {
