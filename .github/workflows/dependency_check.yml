@@ -107,13 +107,29 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Get crun version from deps
         id: current_crun
         run: |
           if [ -d "deps/crun" ]; then
             cd deps/crun
-            CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short HEAD)
+            # Check if it's a git repository
+            if [ -d ".git" ]; then
+              # Try to get tag, if not available use commit hash
+              if CURRENT_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null); then
+                CURRENT_VERSION="$CURRENT_TAG"
+              elif CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
+                CURRENT_VERSION="$CURRENT_TAG"
+              else
+                CURRENT_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+              fi
+            else
+              # Not a git repo, try to find version in files (VERSION, Makefile, etc.)
+              CURRENT_VERSION=$(grep -rE "VERSION|version" Makefile.am configure.ac NEWS 2>/dev/null | \
+                grep -oP '\d+\.\d+\.\d+' | head -1 || \
+                echo "unknown")
+            fi
             echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
             cd ../..
           else
