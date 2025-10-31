@@ -40,17 +40,29 @@ jobs:
       - name: Check OCI Image Spec version
         id: oci_image
         run: |
-          LATEST_IMAGE=$(curl -s https://api.github.com/repos/opencontainers/image-spec/releases/latest | jq -r '.tag_name')
-          CURRENT_IMAGE=$(grep -r "image-spec" .github/workflows/ deps/ 2>/dev/null | head -1 | grep -oP 'v\d+\.\d+\.\d+' || echo "unknown")
+          # Get latest OCI Image Spec release
+          LATEST_IMAGE=$(curl -s https://api.github.com/repos/opencontainers/image-spec/releases/latest | jq -r '.tag_name // empty')
+          
+          # Try to find current version in documentation or deps
+          CURRENT_IMAGE=$(grep -rE "(image-spec|Image Spec|OCI Image)" README.md CHANGELOG.md docs/ deps/ 2>/dev/null | \
+            grep -oP 'v\d+\.\d+\.\d+' | head -1 || \
+            echo "unknown")
+          
+          # If not found in docs, check submodules
+          if [ "$CURRENT_IMAGE" = "unknown" ]; then
+            CURRENT_IMAGE=$(grep -r "image-spec" .github/ deps/crun/libocispec/ 2>/dev/null | \
+              grep -oP 'v\d+\.\d+\.\d+' | head -1 || \
+              echo "unknown")
+          fi
           
           echo "latest_image_spec=$LATEST_IMAGE" >> $GITHUB_OUTPUT
           echo "current_image_spec=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
           
-          if [ "$LATEST_IMAGE" != "$CURRENT_IMAGE" ] && [ "$CURRENT_IMAGE" != "unknown" ]; then
+          if [ -n "$LATEST_IMAGE" ] && [ "$LATEST_IMAGE" != "$CURRENT_IMAGE" ] && [ "$CURRENT_IMAGE" != "unknown" ]; then
             echo "⚠️ OCI Image Spec update available: $CURRENT_IMAGE → $LATEST_IMAGE"
             echo "update_available=true" >> $GITHUB_OUTPUT
           else
-            echo "✅ OCI Image Spec is up to date"
+            echo "✅ OCI Image Spec check completed (current: $CURRENT_IMAGE, latest: $LATEST_IMAGE)"
             echo "update_available=false" >> $GITHUB_OUTPUT
           fi
 
@@ -159,23 +171,26 @@ jobs:
       - name: Check latest Proxmox VE release
         id: latest_pve
         run: |
-          # Proxmox VE releases are tracked via their pve-manager package
-          # Check Proxmox forum or download page for latest version
-          LATEST_VERSION=$(curl -s "https://www.proxmox.com/en/downloads" | \
+          # Proxmox VE releases are tracked via their forum RSS or pve-manager package
+          # Try multiple sources to get latest version
+          LATEST_VERSION=$(curl -s -L "https://www.proxmox.com/en/downloads" 2>/dev/null | \
             grep -oP 'Proxmox VE \K\d+\.\d+' | head -1 || \
-            curl -s "https://api.github.com/repos/proxmox/pve-manager/releases/latest" | \
-            jq -r '.tag_name' | sed 's/[^0-9.]//g' || \
+            curl -s "https://api.github.com/repos/proxmox/pve-manager/releases/latest" 2>/dev/null | \
+            jq -r '.tag_name' | grep -oP '\d+\.\d+' | head -1 || \
+            curl -s "https://api.github.com/repos/proxmox/pve-common/releases/latest" 2>/dev/null | \
+            jq -r '.tag_name' | grep -oP '\d+\.\d+' | head -1 || \
             echo "unknown")
           
           echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
           
           CURRENT="${{ steps.current_pve.outputs.current_version }}"
           
+          # Compare versions (handles both "7.4" and "7.4.0" formats)
           if [ "$LATEST_VERSION" != "$CURRENT" ] && [ "$LATEST_VERSION" != "unknown" ] && [ "$CURRENT" != "unknown" ]; then
             echo "ℹ️ Proxmox VE new release available: $CURRENT → $LATEST_VERSION"
             echo "update_available=true" >> $GITHUB_OUTPUT
           else
-            echo "✅ Proxmox VE version check completed"
+            echo "✅ Proxmox VE version check completed (current: $CURRENT, latest: $LATEST_VERSION)"
             echo "update_available=false" >> $GITHUB_OUTPUT
           fi
 
