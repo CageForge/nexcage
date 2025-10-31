@@ -18,12 +18,11 @@ permissions:
 jobs:
   build:
     name: Build Release Binaries
-    runs-on: ${{ matrix.os }}
+    runs-on: [proxmox]
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-linux
+          - target: x86_64-linux
             arch: amd64
             artifact_name: nexcage-linux-x86_64
 
@@ -147,12 +146,11 @@ jobs:
 
   build-deb:
     name: Build DEB Packages
-    runs-on: ${{ matrix.os }}
+    runs-on: [proxmox]
     strategy:
       matrix:
         include:
-          - os: ubuntu-22.04
-            arch: amd64
+          - arch: amd64
             target: x86_64-linux
 
     steps:
