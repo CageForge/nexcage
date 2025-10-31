@@ -168,3 +168,175 @@ pub const ErrorReporter = struct {
         self.handler.handle(error_type, context, self.allocator);
     }
 };
+
+/// Error context builder for easy error creation with context
+pub const ErrorContextBuilder = struct {
+    allocator: std.mem.Allocator,
+    context: ErrorContext,
+
+    pub fn init(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) !ErrorContextBuilder {
+        const message = try std.fmt.allocPrint(allocator, fmt, args);
+        return ErrorContextBuilder{
+            .allocator = allocator,
+            .context = ErrorContext{
+                .allocator = allocator,
+                .message = message,
+                .source = null,
+                .line = null,
+                .column = null,
+                .stack_trace = null,
+            },
+        };
+    }
+
+    pub fn withSource(self: *ErrorContextBuilder, source: []const u8) !void {
+        self.context.source = try self.allocator.dupe(u8, source);
+    }
+
+    pub fn withLocation(self: *ErrorContextBuilder, line: u32, column: u32) void {
+        self.context.line = line;
+        self.context.column = column;
+    }
+
+    pub fn withStackTrace(self: *ErrorContextBuilder, stack_trace: []const u8) !void {
+        self.context.stack_trace = try self.allocator.dupe(u8, stack_trace);
+    }
+
+    pub fn build(self: *ErrorContextBuilder) ErrorContext {
+        const context = self.context;
+        // Don't free here - caller owns the context
+        return context;
+    }
+
+    pub fn deinit(self: *ErrorContextBuilder) void {
+        self.context.deinit();
+    }
+};
+
+/// Helper functions for creating errors with context
+pub fn createErrorContext(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) !ErrorContext {
+    const message = try std.fmt.allocPrint(allocator, fmt, args);
+    return ErrorContext{
+        .allocator = allocator,
+        .message = message,
+        .source = null,
+        .line = null,
+        .column = null,
+        .stack_trace = null,
+    };
+}
+
+/// Create error context with file location
+pub fn createErrorContextWithSource(
+    allocator: std.mem.Allocator,
+    comptime fmt: []const u8,
+    args: anytype,
+    source_file: []const u8,
+    line: u32,
+) !ErrorContext {
+    const message = try std.fmt.allocPrint(allocator, fmt, args);
+    errdefer allocator.free(message);
+    
+    const source = try allocator.dupe(u8, source_file);
+    errdefer allocator.free(source);
+    
+    return ErrorContext{
+        .allocator = allocator,
+        .message = message,
+        .source = source,
+        .line = line,
+        .column = null,
+        .stack_trace = null,
+    };
+}
+
+/// Error wrapper that preserves context
+pub const ContextualError = struct {
+    error_type: types.Error,
+    context: ?ErrorContext = null,
+    cause: ?anyerror = null,
+
+    pub fn init(error_type: types.Error) ContextualError {
+        return ContextualError{
+            .error_type = error_type,
+            .context = null,
+            .cause = null,
+        };
+    }
+
+    pub fn withContext(self: ContextualError, context: ErrorContext) ContextualError {
+        return ContextualError{
+            .error_type = self.error_type,
+            .context = context,
+            .cause = self.cause,
+        };
+    }
+
+    pub fn withCause(self: ContextualError, cause: anyerror) ContextualError {
+        return ContextualError{
+            .error_type = self.error_type,
+            .context = self.context,
+            .cause = cause,
+        };
+    }
+
+    pub fn format(self: ContextualError, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
+        try writer.print("{}", .{self.error_type});
+        if (self.context) |ctx| {
+            try writer.print(": {s}", .{ctx.message});
+        }
+        if (self.cause) |c| {
+            try writer.print(" (caused by: {})", .{c});
+        }
+    }
+
+    pub fn deinit(self: *ContextualError, allocator: std.mem.Allocator) void {
+        _ = allocator;
+        if (self.context) |*ctx| {
+            ctx.deinit();
+        }
+    }
+};
+
+/// Enhanced error types with context support
+pub const ErrorWithContext = union(enum) {
+    simple: types.Error,
+    contextual: struct {
+        error_type: types.Error,
+        context: ErrorContext,
+    },
+    chained: struct {
+        error_type: types.Error,
+        context: ErrorContext,
+        cause: *ErrorWithContext,
+    },
+
+    pub fn format(self: ErrorWithContext, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (self) {
+            .simple => |err| {
+                _ = fmt;
+                _ = options;
+                try writer.print("{}", .{err});
+            },
+            .contextual => |e| {
+                _ = fmt;
+                _ = options;
+                try writer.print("{}: {s}", .{ e.error_type, e.context.message });
+                if (e.context.source) |src| {
+                    try writer.print(" (source: {s}", .{src});
+                    if (e.context.line) |line| {
+                        try writer.print(", line: {d}", .{line});
+                    }
+                    try writer.writeAll(")");
+                }
+            },
+            .chained => |e| {
+                try writer.print("{}: {s}", .{ e.error_type, e.context.message });
+                try writer.writeAll(" -> ");
+                try e.cause.format(fmt, options, writer);
+            },
+        }
+    }
+};

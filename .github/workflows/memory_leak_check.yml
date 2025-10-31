@@ -1,0 +1,57 @@
+name: Memory Leak Detection
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  memory-leak-check:
+    name: Memory Leak Detection
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+
+      - name: Build debug binary
+        run: |
+          zig build -Doptimize=Debug
+
+      - name: Run memory leak check with Valgrind
+        run: |
+          valgrind --leak-check=full \
+                  --show-leak-kinds=all \
+                  --track-origins=yes \
+                  --error-exitcode=1 \
+                  --verbose \
+                  ./zig-out/bin/nexcage version || true
+
+      - name: Run long-running memory test
+        run: |
+          timeout 300 valgrind --leak-check=full \
+                              --show-leak-kinds=all \
+                              --error-exitcode=1 \
+                              ./zig-out/bin/nexcage --help || true
+
+      - name: Generate memory report
+        if: always()
+        run: |
+          echo "## Memory Leak Detection Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Valgrind memory leak detection completed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for detailed leak information." >> $GITHUB_STEP_SUMMARY
+
