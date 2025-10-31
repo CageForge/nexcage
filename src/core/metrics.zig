@@ -54,10 +54,10 @@ pub const MetricsRegistry = struct {
         const help_owned = try self.allocator.dupe(u8, help);
         errdefer self.allocator.free(help_owned);
         
-        var counter = Counter.init(self.allocator, name_owned, help_owned);
-        errdefer counter.deinit(self.allocator);
+        var counter_metric = Counter.init(self.allocator, name_owned, help_owned);
+        errdefer counter_metric.deinit(self.allocator);
         
-        try self.counters.put(name_owned, counter);
+        try self.counters.put(name_owned, counter_metric);
         return self.counters.getPtr(name_owned).?;
     }
     
@@ -73,10 +73,10 @@ pub const MetricsRegistry = struct {
         const help_owned = try self.allocator.dupe(u8, help);
         errdefer self.allocator.free(help_owned);
         
-        var gauge = Gauge.init(self.allocator, name_owned, help_owned);
-        errdefer gauge.deinit(self.allocator);
+        var gauge_metric = Gauge.init(self.allocator, name_owned, help_owned);
+        errdefer gauge_metric.deinit(self.allocator);
         
-        try self.gauges.put(name_owned, gauge);
+        try self.gauges.put(name_owned, gauge_metric);
         return self.gauges.getPtr(name_owned).?;
     }
     
