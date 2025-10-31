@@ -146,8 +146,7 @@ pub fn build(b: *std.Build) void {
     test_exe.linkSystemLibrary("seccomp");
     test_exe.linkSystemLibrary("yajl");
     
-    // Optional: Link libcrun and systemd only if requested
-    const link_libcrun = b.option(bool, "link-libcrun", "Link libcrun and systemd libraries (default: false)") orelse false;
+    // Optional: Link libcrun and systemd only if requested (reuse link_libcrun from above)
     if (link_libcrun) {
         test_exe.linkSystemLibrary("crun");
         test_exe.linkSystemLibrary("systemd");
