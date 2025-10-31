@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
 
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
@@ -38,7 +40,12 @@ jobs:
       - name: Extract version from tag
         id: get_version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION=${{ github.event.inputs.version }}
+            VERSION=${VERSION#v}
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build
@@ -146,6 +153,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
 
       - name: Install build dependencies
         run: |
@@ -168,7 +177,12 @@ jobs:
       - name: Extract version from tag
         id: get_version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION=${{ github.event.inputs.version }}
+            VERSION=${VERSION#v}
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "debian_version=${VERSION}-1" >> $GITHUB_OUTPUT
 
@@ -274,15 +288,26 @@ jobs:
         id: extract_notes
         run: |
           # Extract release notes from CHANGELOG.md for current version
-          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION=${{ github.event.inputs.version }}
+            VERSION=${VERSION#v}
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
           echo "Extracting notes for version $VERSION"
           
           # Create release notes
-          # TODO: Create release notes from sprint summary
-          
-          echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
-          cat docs/releases/NOTES_v${VERSION}.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          if [ -f "docs/releases/NOTES_v${VERSION}.md" ]; then
+            echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+            cat docs/releases/NOTES_v${VERSION}.md >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+            echo "Release v${VERSION}" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "See CHANGELOG.md for details." >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
