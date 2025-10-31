@@ -1,0 +1,213 @@
+name: Dependency Updates Check
+
+on:
+  schedule:
+    # Run weekly on Mondays at 09:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      check_all:
+        description: 'Check all dependencies (OCI, crun, Proxmox)'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  check-oci-specs:
+    name: Check OCI Specs Updates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check OCI Runtime Spec version
+        id: oci_runtime
+        run: |
+          LATEST_RUNTIME=$(curl -s https://api.github.com/repos/opencontainers/runtime-spec/releases/latest | jq -r '.tag_name')
+          CURRENT_RUNTIME=$(grep -r "runtime-spec" .github/workflows/ deps/ 2>/dev/null | head -1 | grep -oP 'v\d+\.\d+\.\d+' || echo "unknown")
+          
+          echo "latest_runtime_spec=$LATEST_RUNTIME" >> $GITHUB_OUTPUT
+          echo "current_runtime_spec=$CURRENT_RUNTIME" >> $GITHUB_OUTPUT
+          
+          if [ "$LATEST_RUNTIME" != "$CURRENT_RUNTIME" ] && [ "$CURRENT_RUNTIME" != "unknown" ]; then
+            echo "⚠️ OCI Runtime Spec update available: $CURRENT_RUNTIME → $LATEST_RUNTIME"
+            echo "update_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ OCI Runtime Spec is up to date"
+            echo "update_available=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check OCI Image Spec version
+        id: oci_image
+        run: |
+          LATEST_IMAGE=$(curl -s https://api.github.com/repos/opencontainers/image-spec/releases/latest | jq -r '.tag_name')
+          CURRENT_IMAGE=$(grep -r "image-spec" .github/workflows/ deps/ 2>/dev/null | head -1 | grep -oP 'v\d+\.\d+\.\d+' || echo "unknown")
+          
+          echo "latest_image_spec=$LATEST_IMAGE" >> $GITHUB_OUTPUT
+          echo "current_image_spec=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
+          
+          if [ "$LATEST_IMAGE" != "$CURRENT_IMAGE" ] && [ "$CURRENT_IMAGE" != "unknown" ]; then
+            echo "⚠️ OCI Image Spec update available: $CURRENT_IMAGE → $LATEST_IMAGE"
+            echo "update_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ OCI Image Spec is up to date"
+            echo "update_available=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Issue for OCI Updates
+        if: steps.oci_runtime.outputs.update_available == 'true' || steps.oci_image.outputs.update_available == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runtimeUpdate = '${{ steps.oci_runtime.outputs.update_available }}' === 'true';
+            const imageUpdate = '${{ steps.oci_image.outputs.update_available }}' === 'true';
+            
+            let body = '## OCI Specifications Update Available\n\n';
+            
+            if (runtimeUpdate) {
+              body += `### OCI Runtime Spec\n`;
+              body += `- Current: ${{ steps.oci_runtime.outputs.current_runtime_spec }}\n`;
+              body += `- Latest: ${{ steps.oci_runtime.outputs.latest_runtime_spec }}\n\n`;
+            }
+            
+            if (imageUpdate) {
+              body += `### OCI Image Spec\n`;
+              body += `- Current: ${{ steps.oci_image.outputs.current_image_spec }}\n`;
+              body += `- Latest: ${{ steps.oci_image.outputs.latest_image_spec }}\n\n`;
+            }
+            
+            body += `This issue was automatically created by the Dependency Updates Check workflow.\n`;
+            body += `Please review and update the OCI specifications if needed.`;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Dependency] OCI Spec Updates Available`,
+              body: body,
+              labels: ['dependencies', 'oci', 'automated']
+            });
+
+  check-crun:
+    name: Check crun Updates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Get crun version from deps
+        id: current_crun
+        run: |
+          if [ -d "deps/crun" ]; then
+            cd deps/crun
+            CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short HEAD)
+            echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            cd ../..
+          else
+            echo "current_version=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check latest crun release
+        id: latest_crun
+        run: |
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/containers/crun/releases/latest | jq -r '.tag_name')
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          
+          CURRENT="${{ steps.current_crun.outputs.current_version }}"
+          
+          if [ "$LATEST_VERSION" != "$CURRENT" ] && [ "$CURRENT" != "unknown" ]; then
+            echo "⚠️ crun update available: $CURRENT → $LATEST_VERSION"
+            echo "update_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ crun is up to date"
+            echo "update_available=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Issue for crun Update
+        if: steps.latest_crun.outputs.update_available == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Dependency] crun Update Available: ${{ steps.current_crun.outputs.current_version }} → ${{ steps.latest_crun.outputs.latest_version }}`,
+              body: `## crun Library Update Available\n\n` +
+                    `- **Current Version**: ${{ steps.current_crun.outputs.current_version }}\n` +
+                    `- **Latest Version**: ${{ steps.latest_crun.outputs.latest_version }}\n\n` +
+                    `This issue was automatically created by the Dependency Updates Check workflow.\n` +
+                    `Please review and update crun if needed.\n\n` +
+                    `Release: https://github.com/containers/crun/releases/tag/${{ steps.latest_crun.outputs.latest_version }}`,
+              labels: ['dependencies', 'crun', 'automated']
+            });
+
+  check-proxmox:
+    name: Check Proxmox VE Releases
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get current Proxmox VE version from docs/config
+        id: current_pve
+        run: |
+          CURRENT_VERSION=$(grep -r "proxmox.*ve\|pve.*version\|proxmox.*version" README.md CHANGELOG.md docs/ 2>/dev/null | \
+            grep -oP '\d+\.\d+' | head -1 || echo "unknown")
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check latest Proxmox VE release
+        id: latest_pve
+        run: |
+          # Proxmox VE releases are tracked via their pve-manager package
+          # Check Proxmox forum or download page for latest version
+          LATEST_VERSION=$(curl -s "https://www.proxmox.com/en/downloads" | \
+            grep -oP 'Proxmox VE \K\d+\.\d+' | head -1 || \
+            curl -s "https://api.github.com/repos/proxmox/pve-manager/releases/latest" | \
+            jq -r '.tag_name' | sed 's/[^0-9.]//g' || \
+            echo "unknown")
+          
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          
+          CURRENT="${{ steps.current_pve.outputs.current_version }}"
+          
+          if [ "$LATEST_VERSION" != "$CURRENT" ] && [ "$LATEST_VERSION" != "unknown" ] && [ "$CURRENT" != "unknown" ]; then
+            echo "ℹ️ Proxmox VE new release available: $CURRENT → $LATEST_VERSION"
+            echo "update_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Proxmox VE version check completed"
+            echo "update_available=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Issue for Proxmox VE Release
+        if: steps.latest_pve.outputs.update_available == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Dependency] Proxmox VE Release Available: ${{ steps.current_pve.outputs.current_version }} → ${{ steps.latest_pve.outputs.latest_version }}`,
+              body: `## Proxmox VE Release Update\n\n` +
+                    `- **Current Version**: ${{ steps.current_pve.outputs.current_version }}\n` +
+                    `- **Latest Version**: ${{ steps.latest_pve.outputs.latest_version }}\n\n` +
+                    `This issue was automatically created by the Dependency Updates Check workflow.\n` +
+                    `Please review Proxmox VE release notes and test compatibility if needed.\n\n` +
+                    `Download: https://www.proxmox.com/en/downloads`,
+              labels: ['dependencies', 'proxmox', 'release', 'automated']
+            });
+
+  summary:
+    name: Dependency Check Summary
+    runs-on: ubuntu-latest
+    needs: [check-oci-specs, check-crun, check-proxmox]
+    if: always()
+    steps:
+      - name: Check Summary
+        run: |
+          echo "## Dependency Check Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All dependency checks completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check individual jobs for detailed results." >> $GITHUB_STEP_SUMMARY
+

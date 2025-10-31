@@ -48,3 +48,10 @@ updates:
       prefix: "chore(docker)"
       include: "scope"
 
+  # Note: OCI specs, crun, and Proxmox VE are monitored via
+  # .github/workflows/dependency_check.yml workflow
+  # Dependabot doesn't support direct monitoring of:
+  # - OCI Runtime/Image Specs (specifications, not packages)
+  # - crun library (C library, typically via git submodule)
+  # - Proxmox VE releases (external system, not a package)
+
