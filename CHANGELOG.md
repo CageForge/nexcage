@@ -5,6 +5,91 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2025-10-31
+
+### 🎯 Code Quality & Observability Release: Error Handling, Memory Safety, Testing, Metrics
+
+This release focuses on codebase quality improvements from Sprint 6.6, including comprehensive error handling, memory leak detection, test coverage increases, structured logging, Prometheus metrics, and automated dependency monitoring.
+
+### Added
+- **Error Handling System**: 
+  - `ErrorContext` with detailed error information (message, source, line, column, stack trace)
+  - `ErrorContextBuilder` for fluent error context creation
+  - `ContextualError` and `ErrorWithContext` for error chaining
+  - Helper functions: `createErrorContext`, `createErrorContextWithSource`
+- **Memory Leak Detection**:
+  - Automated memory audit script (`scripts/memory_leak_audit.sh`)
+  - Valgrind integration in CI (`.github/workflows/memory_leak_check.yml`)
+  - Memory leak audit report (`docs/MEMORY_LEAK_AUDIT_REPORT.md`)
+  - Enhanced errdefer usage in critical paths
+- **Comptime Validation**:
+  - Comptime validation module (`src/core/comptime_validation.zig`)
+  - Type-safe ConfigBuilder pattern
+  - Comptime string operations (StringOps)
+  - Runtime type parsing at compile time
+- **Structured JSON Logging**:
+  - JSON logger (`src/core/json_logging.zig`)
+  - Structured log output with timestamp, level, component, message
+  - Custom fields support via `logWithFields()`
+  - Proper JSON escaping
+- **Prometheus Metrics**:
+  - Metrics registry (`src/core/metrics.zig`)
+  - Counter, Gauge, and Histogram metric types
+  - Label support for metrics
+  - Prometheus text format export
+- **Test Coverage**:
+  - 4 new test files for core modules
+  - ~25+ new test functions
+  - Coverage increased from ~60% to ~75-80%
+  - Tests for router, errors, comptime_validation, validation modules
+- **Dependency Monitoring**:
+  - Dependabot configuration for GitHub Actions and Docker
+  - Custom workflow for OCI specs, crun, and Proxmox VE monitoring
+  - Automatic GitHub issue creation for available updates
+  - Weekly scheduled checks
+
+### Changed
+- **Memory Management**:
+  - Added errdefer for all allocations in `router.zig`
+  - Improved error path cleanup safety
+  - Better memory lifecycle documentation
+- **Code Cleanup**:
+  - Removed ~60 lines of obsolete code
+  - Clarified 10+ TODO comments with better context
+  - Removed unused AppContext fields and methods
+- **Error Handling**:
+  - Replaced `format()` with `formatError()` in ErrorWithContext
+  - Improved error message formatting
+  - Better error context propagation
+
+### Fixed
+- **Memory Leaks**: Added errdefer statements in critical allocation paths
+- **Code Quality**: Removed shadowing issues in metrics module
+- **Build System**: Fixed comptime validation syntax for Zig 0.15.1 compatibility
+- **Documentation**: Updated all documentation to reflect new features
+
+### Documentation
+- `docs/MEMORY_LEAK_AUDIT_REPORT.md` - Memory audit results
+- `docs/CODE_CLEANUP_REPORT.md` - Code cleanup summary
+- `docs/COMPTIME_IMPROVEMENTS.md` - Comptime features documentation
+- `docs/TEST_COVERAGE_IMPROVEMENTS.md` - Test coverage tracking
+- `docs/OBSERVABILITY_IMPROVEMENTS.md` - Observability features guide
+- `docs/releases/NOTES_v0.7.2.md` - Release notes
+
+### Infrastructure
+- Dependabot configuration for automated dependency updates
+- Custom dependency check workflow for OCI specs, crun, Proxmox VE
+- Memory leak check workflow in CI
+- Enhanced test infrastructure
+
+### Notes
+- Comptime validation auto-validation disabled due to Zig 0.15.1 syntax limitations
+- JSON logging and metrics available but require manual integration
+- Test coverage improvements ensure better stability
+- Dependency monitoring helps track critical updates automatically
+
+---
+
 ## [0.7.1] - 2025-10-31
 
 ### 🔧 Integration + Stability Release: libcrun ABI, OCI state.json, Proxmox fixes
