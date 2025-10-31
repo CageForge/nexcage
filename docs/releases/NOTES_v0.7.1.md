@@ -227,6 +227,25 @@ E2E tests verify:
 - **Template Provisioning**: Automatic template download and provisioning in E2E tests
 - **Output Validation**: Enhanced test output capture and validation
 
+## Post-Release Additions (Included in 0.7.1-1)
+
+### DEB Package Support
+- **Automatic Package Building**: DEB packages are automatically built during releases
+- **Package Name**: `nexcage` (formerly proxmox-lxcri)
+- **Installation**: `sudo dpkg -i nexcage-<version>-amd64.deb`
+- **Included**: Binary, configuration files, documentation, bash completion
+
+### CNCF Compliance Enhancements
+- **DCO Checking**: Automatic Developer Certificate of Origin verification for PRs
+- **OpenSSF Scorecards**: Weekly security scoring and continuous monitoring
+- **SBOM Generation**: Both SPDX and CycloneDX formats for all releases
+- **SLSA Provenance**: Build attestation and provenance tracking
+
+### Codebase Quality
+- **Repository Cleanup**: Removed 29 obsolete files, archived 21 unused files
+- **Maturity Improvement**: Codebase maturity increased from 7.9 to 8.5/10
+- **Better Organization**: Archive directories for old roadmap files and scripts
+
 ## Future Work
 
 - [ ] Make libcrun ABI default in all builds when available
@@ -235,6 +254,9 @@ E2E tests verify:
 - [ ] Add comprehensive E2E tests for libcrun ABI
 - [ ] Performance benchmarking comparing ABI vs CLI
 - [ ] VM backend full implementation (currently failing in E2E tests)
+- [ ] APT repository for easy updates
+- [ ] Structured logging (JSON format)
+- [ ] Prometheus metrics export
 
 ## Contributors
 

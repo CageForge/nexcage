@@ -48,11 +48,33 @@ This release adds libcrun ABI integration and includes critical fixes and improv
   - Context structure alignment for libcrun API compatibility
 - **Build Compatibility**: Removed `std.time.sleep` usage, replaced with `std.time.sleep(ns_per_ms)` for Zig 0.15.1
 
+### Added (Post-v0.7.0)
+- **DEB Package Support**: Automatic DEB package building for releases
+  - Package name: `nexcage`
+  - Installation via `dpkg -i nexcage-<version>-amd64.deb`
+  - Configuration files and documentation included
+- **CNCF Compliance Improvements**:
+  - DCO (Developer Certificate of Origin) check workflow
+  - OpenSSF Scorecards integration
+  - CycloneDX SBOM generation
+  - SLSA Provenance support
+- **Codebase Quality Improvements**:
+  - Repository cleanup (removed 29 obsolete files)
+  - Archive organization (21 files moved to archive/)
+  - Enhanced .gitignore for build artifacts
+  - Codebase maturity: 7.9 → 8.5/10
+
+### Changed (Post-v0.7.0)
+- **Build System**: Optional libcrun/systemd linking (disabled by default for portability)
+- **Documentation**: Added quality improvement plans and best practices guides
+
 ### Notes
 - libcrun ABI requires systemd library for cgroup management
 - CLI driver remains available as fallback when systemd is not available
 - Debug builds use libcrun ABI, Release builds use CLI driver by default
 - E2E test success rate improved from 88% to 93% (40/43 tests passing)
+- DEB packages are automatically built on release tags
+- All releases include SBOMs (SPDX + CycloneDX) and SLSA provenance
 
 ---
 
