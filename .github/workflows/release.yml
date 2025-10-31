@@ -226,9 +226,12 @@ jobs:
           VERSION=${{ steps.get_version.outputs.version }}
           mkdir -p ../dist
           
-          # Copy source to build directory
+          # Copy source to build directory (exclude .git for permissions)
           mkdir -p ../build-deb
-          cp -r . ../build-deb/nexcage-${VERSION}
+          # Use rsync or cp with exclusion, or create tarball and extract
+          rsync -a --exclude='.git' --exclude='.github/workflows/*.disabled' --exclude='zig-out' --exclude='zig-cache' --exclude='dist' --exclude='test-reports' --exclude='*.deb' . ../build-deb/nexcage-${VERSION}/ || \
+          (mkdir -p ../build-deb/nexcage-${VERSION} && \
+           find . -maxdepth 1 ! -name '.' ! -name '.git' ! -name 'zig-out' ! -name 'zig-cache' ! -name 'dist' ! -name 'test-reports' ! -name '*.deb' -exec cp -r {} ../build-deb/nexcage-${VERSION}/ \;)
           cd ../build-deb/nexcage-${VERSION}
           
           # Update changelog with current version
