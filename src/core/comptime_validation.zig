@@ -8,10 +8,10 @@ const types = @import("types.zig");
 pub fn validateConfigType(comptime ConfigType: type) void {
     comptime {
         const type_info = @typeInfo(ConfigType);
-        const struct_info = switch (type_info) {
-            .Struct => |s| s,
-            else => @compileError("ConfigType must be a struct, got " ++ @typeName(ConfigType)),
-        };
+        if (type_info != .Struct) {
+            @compileError("ConfigType must be a struct, got " ++ @typeName(ConfigType));
+        }
+        const struct_info = type_info.Struct;
 
         // Check for runtime_type field
         var has_runtime_type = false;
@@ -36,10 +36,10 @@ pub fn validateConfigType(comptime ConfigType: type) void {
 pub fn hasRequiredFields(comptime T: type, comptime required_fields: []const []const u8) bool {
     comptime {
         const type_info = @typeInfo(T);
-        const struct_info = switch (type_info) {
-            .Struct => |s| s,
-            else => return false,
-        };
+        if (type_info != .Struct) {
+            return false;
+        }
+        const struct_info = type_info.Struct;
         for (required_fields) |field_name| {
             var found = false;
             for (struct_info.fields) |field| {
@@ -69,10 +69,10 @@ pub fn assertHasField(comptime T: type, comptime field_name: []const u8) void {
 pub fn hasField(comptime T: type, comptime field_name: []const u8) bool {
     comptime {
         const type_info = @typeInfo(T);
-        const struct_info = switch (type_info) {
-            .Struct => |s| s,
-            else => return false,
-        };
+        if (type_info != .Struct) {
+            return false;
+        }
+        const struct_info = type_info.Struct;
         for (struct_info.fields) |field| {
             if (std.mem.eql(u8, field.name, field_name)) {
                 return true;
@@ -136,9 +136,8 @@ pub fn validateNetworkConfig() void {
 pub fn validateConfigStruct(comptime ConfigType: type, comptime required_fields: []const []const u8) void {
     comptime {
         const type_info = @typeInfo(ConfigType);
-        switch (type_info) {
-            .Struct => {},
-            else => @compileError("ConfigType must be a struct"),
+        if (type_info != .Struct) {
+            @compileError("ConfigType must be a struct");
         }
 
         // Check required fields
