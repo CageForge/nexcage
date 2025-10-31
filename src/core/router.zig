@@ -28,41 +28,61 @@ pub const BackendRouter = struct {
         config: ?Config,
     ) !types.SandboxConfig {
         const name_buf = try self.allocator.dupe(u8, container_id);
+        errdefer self.allocator.free(name_buf);
 
         return switch (operation) {
-            .create => |create_config| types.SandboxConfig{
-                .allocator = self.allocator,
-                .name = name_buf,
-                .runtime_type = runtime_type,
-                .image = try self.allocator.dupe(u8, create_config.image),
-                .resources = types.ResourceLimits{
-                    .memory = constants.DEFAULT_MEMORY_BYTES,
-                    .cpu = constants.DEFAULT_CPU_CORES,
-                    .disk = null,
-                    .network_bandwidth = null,
-                },
-                .security = null,
-                .network = if (config) |cfg| cfg.network else switch (runtime_type) {
-                    .lxc => types.NetworkConfig{
-                        .bridge = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
-                        .ip = null,
-                        .gateway = null,
-                        .dns = null,
-                        .port_mappings = null,
+            .create => |create_config| blk: {
+                const image_buf = try self.allocator.dupe(u8, create_config.image);
+                errdefer self.allocator.free(image_buf);
+                
+                const network_config: ?types.NetworkConfig = if (config) |cfg| cfg.network else switch (runtime_type) {
+                    .lxc => blk2: {
+                        const bridge_buf = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME);
+                        errdefer self.allocator.free(bridge_buf);
+                        break :blk2 types.NetworkConfig{
+                            .bridge = bridge_buf,
+                            .ip = null,
+                            .gateway = null,
+                            .dns = null,
+                            .port_mappings = null,
+                        };
                     },
                     else => null,
-                },
-                .storage = null,
+                };
+                errdefer if (network_config) |net| {
+                    if (net.bridge) |bridge| self.allocator.free(bridge);
+                };
+                
+                break :blk types.SandboxConfig{
+                    .allocator = self.allocator,
+                    .name = name_buf,
+                    .runtime_type = runtime_type,
+                    .image = image_buf,
+                    .resources = types.ResourceLimits{
+                        .memory = constants.DEFAULT_MEMORY_BYTES,
+                        .cpu = constants.DEFAULT_CPU_CORES,
+                        .disk = null,
+                        .network_bandwidth = null,
+                    },
+                    .security = null,
+                    .network = network_config,
+                    .storage = null,
+                };
             },
-            .run => |run_config| types.SandboxConfig{
-                .allocator = self.allocator,
-                .name = name_buf,
-                .runtime_type = runtime_type,
-                .image = try self.allocator.dupe(u8, run_config.image),
-                .resources = null,
-                .security = null,
-                .network = null,
-                .storage = null,
+            .run => |run_config| blk: {
+                const image_buf = try self.allocator.dupe(u8, run_config.image);
+                errdefer self.allocator.free(image_buf);
+                
+                break :blk types.SandboxConfig{
+                    .allocator = self.allocator,
+                    .name = name_buf,
+                    .runtime_type = runtime_type,
+                    .image = image_buf,
+                    .resources = null,
+                    .security = null,
+                    .network = null,
+                    .storage = null,
+                };
             },
             else => types.SandboxConfig{
                 .allocator = self.allocator,
