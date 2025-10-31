@@ -313,15 +313,13 @@ pub const ErrorWithContext = union(enum) {
         cause: *ErrorWithContext,
     },
 
-    pub fn format(self: ErrorWithContext, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+    /// Format error for display
+    pub fn formatError(self: ErrorWithContext, writer: anytype) !void {
         switch (self) {
             .simple => |err| {
-                _ = fmt;
-                _ = options;
                 try writer.print("{}", .{err});
             },
             .contextual => |e| {
-                _ = fmt;
                 try writer.print("{}: {s}", .{ e.error_type, e.context.message });
                 if (e.context.source) |src| {
                     try writer.print(" (source: {s}", .{src});
@@ -330,12 +328,11 @@ pub const ErrorWithContext = union(enum) {
                     }
                     try writer.writeAll(")");
                 }
-                _ = options;
             },
             .chained => |e| {
                 try writer.print("{}: {s}", .{ e.error_type, e.context.message });
                 try writer.writeAll(" -> ");
-                try e.cause.format(fmt, options, writer);
+                try e.cause.formatError(writer);
             },
         }
     }
