@@ -315,3 +315,42 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 #### Time Spent
 - ~0.4h (runs + triage)
 
+### 2025-10-31: State.json OCI integration implementation & E2E verification
+
+#### Summary
+- Implemented OCI-compatible state.json persistence in `/run/nexcage/<container_id>/state.json`:
+  - Created on successful `create` (status: "created", pid: 0)
+  - Updated to "running" + actual PID on successful `start` (via `pct exec <vmid> -- cat /proc/1/stat`)
+  - Updated to "stopped" + pid: 0 on successful `stop`
+  - State command reads file presence and queries live state from backend
+- Updated `src/backends/proxmox-lxc/driver.zig`:
+  - Added `writeOciState()` function for persistent state updates
+  - Added `getInitPid()` function to retrieve PID 1 inside container
+  - Integrated state.json updates into `create`, `start`, `stop` flows
+- Updated `src/cli/state.zig`:
+  - Reads `/run/nexcage/<container_id>/state.json` if present
+  - Queries backend for live status and PID
+  - Returns OCI-compatible JSON output
+
+#### E2E Test Results
+- **Success Rate: 88% (38/43 tests passed)** — improvement from 66% to 88%
+- ✅ **Proxmox-LXC Container State (Running)** — PASS
+- ✅ **Proxmox-LXC Container State (Stopped)** — PASS
+- ✅ Proxmox-LXC Container Creation — PASS
+- ✅ Proxmox-LXC Container Start — PASS
+- ✅ Proxmox-LXC Container Stop — PASS
+- ✅ Proxmox-LXC Container Delete — PASS
+- ❌ Proxmox-LXC Container Kill (SIGTERM) — FAIL (exit code 255, needs investigation)
+- ❌ Remote Run Help — FAIL (SSH exit code 255, non-critical)
+- ❌ VM Creation Test — FAIL (exit code 1)
+
+#### Artifacts
+- Report: `test-reports/proxmox_only_test_report_20251031_142455.md`
+- Git commits:
+  - `state(proxmox-lxc): write OCI state.json on create; implement OCI state output`
+  - `state(proxmox-lxc): update /run/nexcage/<id>/state.json on start/stop (running/stopped)`
+  - `state(proxmox-lxc): set pid in state.json on start via pct exec (/proc/1/stat)`
+
+#### Time Spent
+- ~1.5h (implementation: 0.8h, build fixes: 0.3h, e2e testing: 0.4h)
+
