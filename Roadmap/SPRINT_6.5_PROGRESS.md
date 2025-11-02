@@ -537,3 +537,65 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 - Documentation: ~0.5h
 - **Total: ~6.0h**
 
+---
+
+### 2025-11-02: Template Conversion Fixes & Memory Leak Resolution
+
+#### Summary
+**Part 1: Memory Leak Fix in Template Manager**
+- ✅ Fixed memory leak in `processOciBundle()`:
+  - Added `errdefer template_info.deinit(self.allocator)` for error cleanup
+  - Added `errdefer metadata.deinit(self.allocator)` for metadata cleanup
+  - Added `defer template_info.deinit(self.allocator)` after `addTemplate()` (which clones)
+  - Added cleanup for entrypoint and cmd arrays with errdefer blocks
+  - Proper resource management throughout the function
+
+**Part 2: Template Archive & Validation Improvements**
+- ✅ Enhanced `validateRootfsDirectory` with recursive file counting:
+  - Changed from top-level only to recursive directory traversal
+  - Properly counts all files in subdirectories (e.g., `bin/sh`)
+  - Added validation before and after LXC configurations are applied
+- ✅ Verified archive creation includes all files:
+  - Confirmed `bin/sh`, `sbin/init`, `etc/hostname` are included
+  - Archive size validation working correctly
+
+**Part 3: pct create Command Fixes**
+- ✅ Fixed cores=0 issue:
+  - CPU shares (512) / 1024.0 was resulting in 0 cores
+  - Added minimum of 1 core guarantee: `if (calculated < 1.0) 1.0 else calculated`
+  - Applied to both bundle_config and final calculation
+- ✅ Enhanced error handling for pct create:
+  - Added detailed debug output for exit codes, stdout, stderr
+  - Better handling of "already exists" scenarios
+  - Improved error messages for debugging
+
+#### Files Changed
+- `src/backends/proxmox-lxc/driver.zig`:
+  - Fixed memory leak in `processOciBundle()` (errdefer/defer blocks)
+  - Fixed cores calculation (minimum 1 core)
+  - Enhanced pct create error handling and debug output
+- `src/backends/proxmox-lxc/image_converter.zig`:
+  - Enhanced `validateRootfsDirectory` with recursive counting
+  - Added validation before and after LXC configs
+
+#### Testing Results
+- ✅ Memory leak resolved: No more leaks detected in template_manager
+- ✅ Archive creation verified: All files (bin/sh, sbin/init, etc) included correctly
+- ✅ Recursive validation working: Correctly counts files in subdirectories
+- ✅ Cores fix verified: Containers now created with minimum 1 core (was 0)
+- ✅ **Container creation successful**: VMID 72421 created successfully on Proxmox server
+- ✅ pct create command working: Exit code 0, container configured correctly
+
+#### Known Issues
+- Template still shows warnings about `/etc/os-release` not found (expected for minimal bundle)
+- Architecture detection falls back to `amd64` (normal behavior)
+- ostype detection shows `unmanaged` (expected for custom OCI bundles)
+
+#### Time Spent
+- Memory leak fix: ~0.5h
+- Recursive validation implementation: ~0.3h
+- Cores fix: ~0.2h
+- Enhanced error handling: ~0.3h
+- Testing on Proxmox: ~0.5h
+- **Total: ~1.8h**
+

@@ -35,10 +35,17 @@ pub const ImageConverter = struct {
         try self.extractRootfs(rootfs_source, output_dir);
         
         // Validate rootfs was copied correctly (before applying LXC configs)
+        // Note: This validates after copy but before applying configs
+        std.debug.print("[IMAGE_CONVERTER] Validating rootfs after copy (before LXC configs)\n", .{});
         try self.validateRootfsDirectory(output_dir);
 
-        // Apply LXC-specific configurations
+        // Apply LXC-specific configurations (adds directories, configs, but doesn't remove files)
+        std.debug.print("[IMAGE_CONVERTER] Applying LXC configurations\n", .{});
         try self.applyLxcConfigurations(output_dir, &config);
+        
+        // Validate again after applying configs to ensure files are still there
+        std.debug.print("[IMAGE_CONVERTER] Validating rootfs after LXC configs\n", .{});
+        try self.validateRootfsDirectory(output_dir);
 
         if (self.logger) |log| try log.info("Successfully converted OCI bundle to LXC rootfs", .{});
     }
@@ -572,19 +579,35 @@ pub const ImageConverter = struct {
         };
         defer rootfs_handle.close();
         
-        // Count files and directories (at top level first, then recursively)
+        // Count files and directories recursively
         var file_count: usize = 0;
         var dir_count: usize = 0;
-        var iterator = rootfs_handle.iterate();
         
-        // First pass - count top level
-        while (try iterator.next()) |entry| {
-            switch (entry.kind) {
-                .file => file_count += 1,
-                .directory => dir_count += 1,
-                else => {},
+        // Helper function to count recursively
+        const countRecursive = struct {
+            fn count(dir: std.fs.Dir, path: []const u8, allocator: std.mem.Allocator, files: *usize, dirs: *usize) !void {
+                var iterator = dir.iterate();
+                while (try iterator.next()) |entry| {
+                    switch (entry.kind) {
+                        .file => {
+                            files.* += 1;
+                        },
+                        .directory => {
+                            dirs.* += 1;
+                            // Recursively count in subdirectory
+                            const subdir_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ path, entry.name });
+                            defer allocator.free(subdir_path);
+                            var subdir = try dir.openDir(entry.name, .{ .iterate = true });
+                            defer subdir.close();
+                            try count(subdir, subdir_path, allocator, files, dirs);
+                        },
+                        else => {},
+                    }
+                }
             }
-        }
+        }.count;
+        
+        try countRecursive(rootfs_handle, rootfs_dir, self.allocator, &file_count, &dir_count);
         
         std.debug.print("[IMAGE_CONVERTER] Rootfs validation: {d} files, {d} directories found\n", .{ file_count, dir_count });
         
