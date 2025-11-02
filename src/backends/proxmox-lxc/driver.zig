@@ -543,9 +543,12 @@ pub const ProxmoxLxcDriver = struct {
         var template_name: ?[]const u8 = null;
         defer if (template_name) |tname| self.allocator.free(tname);
         
-        // Keep track of original OCI bundle path for mounts
+        // Keep track of original OCI bundle path for mounts and resources
         stderr.writeAll("[DRIVER] create: Initializing oci_bundle_path variable\n") catch {};
         var oci_bundle_path: ?[]const u8 = null;
+        // Store parsed bundle config for resources and namespaces
+        var bundle_config: ?oci_bundle.OciBundleConfig = null;
+        defer if (bundle_config) |*bc| bc.deinit();
         
         stderr.writeAll("[DRIVER] create: Checking if config.image exists\n") catch {};
         if (config.image) |image_path| {
@@ -632,6 +635,13 @@ pub const ProxmoxLxcDriver = struct {
 
                 // Save OCI bundle path for mounts processing
                 oci_bundle_path = safe_bundle_path;
+                
+                // Parse bundle config for resources and namespaces (before processing template)
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Parsing bundle config for resources\n");
+                var bundle_parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+                const parsed_bundle_cfg = try bundle_parser.parseBundle(safe_bundle_path);
+                // Note: We'll defer deinit after using it for resources/namespaces
+                bundle_config = parsed_bundle_cfg;
                 
                 // Process OCI bundle - convert to template if needed
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Processing OCI bundle\n");
@@ -804,16 +814,28 @@ pub const ProxmoxLxcDriver = struct {
         // Use pct create command
         var args: []const []const u8 = undefined;
         
-        // Build dynamic args from config and defaults
+        // Build dynamic args from config, bundle config (priority), and defaults
+        // Priority: bundle_config.resources > config.resources > defaults
         const mem_mb_str = blk: {
-            const mem_bytes = if (config.resources) |r| r.memory orelse (core.constants.DEFAULT_MEMORY_BYTES) else core.constants.DEFAULT_MEMORY_BYTES;
+            const mem_bytes = if (bundle_config) |bc| blk2: {
+                // Use bundle config memory limit if available (OCI bundle takes priority)
+                if (bc.memory_limit) |bundle_mem| break :blk2 bundle_mem;
+                break :blk2 if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES;
+            } else if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES;
             const mb: u64 = mem_bytes / (1024 * 1024);
             break :blk try std.fmt.allocPrint(self.allocator, "{d}", .{mb});
         };
         defer self.allocator.free(mem_mb_str);
 
         const cores_str = blk: {
-            const c: f64 = if (config.resources) |r| (r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES)) else @as(f64, core.constants.DEFAULT_CPU_CORES);
+            const c: f64 = if (bundle_config) |bc| blk2: {
+                // Use bundle config CPU limit if available (OCI bundle takes priority)
+                if (bc.cpu_limit) |bundle_cpu| {
+                    // Convert CPU shares to cores (rough approximation: shares/1024 = cores ratio)
+                    break :blk2 bundle_cpu / 1024.0;
+                }
+                break :blk2 if (config.resources) |r| (r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES)) else @as(f64, core.constants.DEFAULT_CPU_CORES);
+            } else if (config.resources) |r| (r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES)) else @as(f64, core.constants.DEFAULT_CPU_CORES);
             const ci: u32 = @intFromFloat(c);
             break :blk try std.fmt.allocPrint(self.allocator, "{d}", .{ci});
         };
@@ -926,6 +948,17 @@ pub const ProxmoxLxcDriver = struct {
             try self.verifyMountsInConfig(vmid);
             if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Mounts applied and verified\n");
         }
+
+        // Apply namespaces from bundle (if available)
+        if (bundle_config) |bc| {
+            if (bc.namespaces) |namespaces| {
+                if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Applying namespaces from OCI bundle\n");
+                if (self.logger) |log| log.info("Applying {d} namespaces from OCI bundle", .{namespaces.len}) catch {};
+                try self.applyNamespacesToLxcConfig(vmid, namespaces);
+            }
+        }
+
+        // Cleanup bundle config after use (moved to defer at declaration)
 
         if (self.debug_mode) {
             try stdout.writeAll("[DRIVER] create: Container created successfully\n");
@@ -1078,6 +1111,97 @@ pub const ProxmoxLxcDriver = struct {
             try file.writeAll(mp_line);
             try file.writeAll("\n");
             next_idx += 1;
+        }
+    }
+
+    /// Apply namespaces from OCI bundle to LXC container via pct set --features
+    /// Maps OCI namespace types to LXC features where applicable
+    fn applyNamespacesToLxcConfig(self: *Self, vmid: []const u8, namespaces: []const oci_bundle.NamespaceConfig) !void {
+        if (self.logger) |log| log.info("Applying {d} namespaces to LXC container {s}", .{ namespaces.len, vmid }) catch {};
+
+        // Build features list based on namespaces
+        // Use ArrayListUnmanaged for slice elements as per Zig 0.15.1
+        var features = std.ArrayListUnmanaged([]const u8){};
+        errdefer {
+            for (features.items) |feat| self.allocator.free(feat);
+            features.deinit(self.allocator);
+        }
+        defer {
+            for (features.items) |feat| self.allocator.free(feat);
+            features.deinit(self.allocator);
+        }
+
+        // Track which namespaces we've seen
+        var has_user_ns = false;
+
+        // Parse namespaces and determine LXC features
+        for (namespaces) |ns| {
+            if (std.mem.eql(u8, ns.type, "user")) {
+                has_user_ns = true;
+                // user namespace typically means unprivileged (already set in pct create)
+                if (self.logger) |log| log.info("Found user namespace - unprivileged mode already enabled", .{}) catch {};
+            }
+            // Other namespaces (pid, network, ipc, uts, mount, cgroup) are default in LXC
+        }
+
+        // Add LXC-specific features based on namespace requirements
+        // If container needs nesting (e.g., for Docker-in-LXC or podman)
+        // We enable nesting if user namespace is present (common for container runtimes)
+        if (has_user_ns) {
+            try features.append(self.allocator, try self.allocator.dupe(u8, "nesting=1"));
+            try features.append(self.allocator, try self.allocator.dupe(u8, "keyctl=1"));
+        } else {
+            // Default minimal features for proper isolation
+            try features.append(self.allocator, try self.allocator.dupe(u8, "keyctl=1"));
+        }
+
+        // Build features string: "nesting=1,keyctl=1"
+        var features_str = std.ArrayListUnmanaged(u8){};
+        defer features_str.deinit(self.allocator);
+        
+        for (features.items, 0..) |feat, i| {
+            if (i > 0) try features_str.append(self.allocator, ',');
+            try features_str.appendSlice(self.allocator, feat);
+        }
+
+        // Apply features via pct set
+        const vmid_str = try std.fmt.allocPrint(self.allocator, "{s}", .{vmid});
+        defer self.allocator.free(vmid_str);
+
+        const features_str_owned = try features_str.toOwnedSlice(self.allocator);
+        defer self.allocator.free(features_str_owned);
+        
+        const args = [_][]const u8{ "pct", "set", vmid_str, "--features", features_str_owned };
+        
+        if (self.debug_mode) {
+            const stdout = std.fs.File.stdout();
+            try stdout.writeAll("[DRIVER] applyNamespacesToLxcConfig: Running: pct set ");
+            try stdout.writeAll(vmid_str);
+            try stdout.writeAll(" --features ");
+            try stdout.writeAll(features_str_owned);
+            try stdout.writeAll("\n");
+        }
+
+        const result = try self.runCommand(&args);
+        defer {
+            self.allocator.free(result.stdout);
+            self.allocator.free(result.stderr);
+        }
+
+        if (result.exit_code != 0) {
+            if (self.logger) |log| {
+                log.err("Failed to apply namespaces/features to container {s}: {s}", .{ vmid_str, result.stderr }) catch {};
+            }
+            return core.Error.RuntimeError;
+        }
+
+        if (self.logger) |log| {
+            log.info("Successfully applied features to container {s}: {s}", .{ vmid_str, features_str_owned }) catch {};
+        }
+
+        if (self.debug_mode) {
+            const stdout = std.fs.File.stdout();
+            try stdout.writeAll("[DRIVER] applyNamespacesToLxcConfig: Features applied successfully\n");
         }
     }
 

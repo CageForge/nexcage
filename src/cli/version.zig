@@ -33,25 +33,14 @@ pub const VersionCommand = struct {
 
         const stdout = std.fs.File.stdout();
 
-        // Read version from VERSION file
-        const version_file = std.fs.cwd().openFile("VERSION", .{}) catch {
-            const msg = "nexcage version 0.0.0-dev (VERSION file not found)\n";
-            try stdout.writeAll(msg);
-            return;
-        };
-        defer version_file.close();
+        // Use version from core module (embedded at build time)
+        // This is more reliable than reading from file at runtime
+        const version_str = core.version.getVersion();
         
-        const version_bytes = version_file.readToEndAlloc(allocator, 64) catch {
-            const msg = "nexcage version 0.0.0-dev (failed to read VERSION)\n";
-            try stdout.writeAll(msg);
-            return;
-        };
-        defer allocator.free(version_bytes);
-        
-        const version_str = std.mem.trim(u8, version_bytes, " \n\r\t");
+        // Parse version string (can be "0.7.2" or "0.7.2-suffix")
         const version = getVersionInfo(version_str);
         
-        // Simple version output - format in one call
+        // Format version output
         const version_output = if (version.build) |build| 
             try std.fmt.allocPrint(allocator, "nexcage version {d}.{d}.{d}-{s}\n", .{ version.major, version.minor, version.patch, build })
         else 
@@ -80,8 +69,14 @@ pub const VersionCommand = struct {
 
 /// Get version information
 pub fn getVersionInfo(version_str: []const u8) VersionInfo {
-    // Parse version string (e.g., "0.5.0")
-    var parts = std.mem.splitSequence(u8, version_str, ".");
+    // Parse version string (e.g., "0.7.2" or "0.7.2-beta")
+    // Split by "-" to separate version from build suffix
+    var version_parts = std.mem.splitSequence(u8, version_str, "-");
+    const base_version = version_parts.next() orelse "0.0.0";
+    const build_suffix = version_parts.next();
+    
+    // Parse major.minor.patch from base version
+    var parts = std.mem.splitSequence(u8, base_version, ".");
     
     const major_str = parts.next() orelse "0";
     const minor_str = parts.next() orelse "0";
@@ -95,8 +90,8 @@ pub fn getVersionInfo(version_str: []const u8) VersionInfo {
         .major = major,
         .minor = minor,
         .patch = patch,
-        .build = "release",
-        .commit = "unknown",
-        .date = "unknown",
+        .build = build_suffix, // Only set if build suffix exists (e.g., "-beta", "-rc1")
+        .commit = null,
+        .date = null,
     };
 }

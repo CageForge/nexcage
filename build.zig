@@ -10,10 +10,19 @@ pub fn build(b: *std.Build) void {
 
     // zig-json dependency removed for Zig 0.15.1 compatibility
 
+    // Read VERSION file early for build options
+    const version_bytes = std.fs.cwd().readFileAlloc(b.allocator, "VERSION", 64) catch @panic("Failed to read VERSION file");
+    const app_version = std.mem.trim(u8, version_bytes, " \n\r\t");
+
+    // Create build options (one instance shared across all modules)
+    const build_options = b.addOptions();
+    build_options.addOption([]const u8, "app_version", app_version);
+
     // Core module
     const core_mod = b.addModule("core", .{
         .root_source_file = b.path("src/core/mod.zig"),
     });
+    core_mod.addOptions("build_options", build_options);
 
     // Utils module
     const utils_mod = b.addModule("utils", .{
@@ -50,21 +59,14 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Read VERSION file and pass to modules via options
-    const version_bytes = std.fs.cwd().readFileAlloc(b.allocator, "VERSION", 64) catch @panic("Failed to read VERSION file");
-    const app_version = std.mem.trim(u8, version_bytes, " \n\r\t");
-
-    // Build options shared across modules
-    const build_options = b.addOptions();
-    build_options.addOption([]const u8, "app_version", app_version);
-
     // Main executable
     const main_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-    main_mod.addOptions("build_options", build_options);
+    // Note: build_options are NOT added to main_mod to avoid conflicts
+    // Version is accessed via core.version.getVersion() instead
     
     const exe = b.addExecutable(.{
         .name = "nexcage",
@@ -132,7 +134,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    test_mod.addOptions("build_options", build_options);
+    // Note: build_options are NOT added to test_mod to avoid conflicts
+    // Version is accessed via core.version.getVersion() instead
     
     const test_exe = b.addTest(.{
         .name = "test",

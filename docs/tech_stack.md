@@ -1,6 +1,6 @@
-# Proxmox LXCRI Technical Stack
+# Nexcage Technical Stack
 
-This document describes the technical stack used in the Proxmox LXCRI project, including versions, features, and reasons for technology selection.
+This document describes the technical stack used in the Nexcage project, including versions, features, and reasons for technology selection.
 
 ## Core Technologies
 

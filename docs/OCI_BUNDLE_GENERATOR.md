@@ -173,17 +173,29 @@ pct create <vmid> /dev/null \
 
 ### Namespaces
 
-| OCI Namespace | LXC Config |
-|---------------|------------|
-| `user` | `--unprivileged 1` |
-| `pid`, `network`, `ipc`, `uts`, `mount` | Default in LXC |
+| OCI Namespace | LXC Config | Implementation |
+|---------------|------------|----------------|
+| `user` | `--unprivileged 1` + `--features nesting=1,keyctl=1` | Automatically applied via `pct set` after creation |
+| `pid`, `network`, `ipc`, `uts`, `mount`, `cgroup` | Default in LXC | No additional configuration needed |
+
+**Namespace Processing:**
+- Namespaces are parsed from `linux.namespaces` array in config.json
+- User namespace detection enables nesting and keyctl features
+- Features are applied using `pct set <vmid> --features <features>` after container creation
+- All standard OCI namespaces are supported and properly isolated
 
 ### Features
 
-| OCI Feature | LXC Option |
-|-------------|------------|
-| Nested containers | `--features nesting=1` |
-| User namespace | `--features keyctl=1` |
+| OCI Namespace Type | LXC Features Applied |
+|-------------------|---------------------|
+| `user` namespace present | `nesting=1,keyctl=1` |
+| No user namespace | `keyctl=1` (minimal) |
+
+**Feature Application Flow:**
+1. Parse namespaces from OCI bundle config.json
+2. Detect user namespace (if present)
+3. Create container with `pct create` (unprivileged mode)
+4. Apply features via `pct set --features` based on namespace types
 
 ### Environment Variables
 

@@ -463,3 +463,77 @@ Time spent: 2.0h (implementation: 1.0h, testing+debugging: 0.5h, Proxmox testing
 #### Time Spent
 - ~3.5h (FFI bindings: 1.0h, driver implementation: 1.5h, build system: 0.5h, release prep: 0.5h)
 
+---
+
+### 2025-11-02: OCI Bundle Resources & Namespaces Support + Template Conversion Debugging
+
+#### Summary
+**Part 1: OCI Bundle Resources and Namespaces Implementation**
+- ✅ Implemented resource limits parsing from OCI bundle config.json:
+  - Memory limit from `linux.resources.memory.limit` (converted from bytes to MB)
+  - CPU shares from `linux.resources.cpu.shares` (converted to cores by dividing by 1024.0)
+  - Priority order: bundle_config > SandboxConfig > defaults
+- ✅ Implemented OCI namespaces parsing from `linux.namespaces` array:
+  - Parses all namespace types: pid, network, ipc, uts, mount, user, cgroup
+  - Detects user namespace and maps to Proxmox LXC features
+- ✅ Applied namespaces to Proxmox LXC containers:
+  - User namespace → `nesting=1,keyctl=1` features via `pct set --features`
+  - Other namespaces are default (no special LXC config needed)
+- ✅ Created unit tests for resources and namespaces parsing (`tests/backends/proxmox-lxc/resources_namespaces_test.zig`)
+
+**Part 2: Template Conversion Debugging and Fixes**
+- ✅ Added detailed logging to `copyDirectoryRecursive`:
+  - Logs each file, directory, symlink being copied
+  - Counts files, directories, symlinks, errors
+  - Uses `std.debug.print` for guaranteed output even if logger fails
+- ✅ Added `validateRootfsDirectory` function:
+  - Validates rootfs exists before creating archive
+  - Counts files and directories
+  - Warns if rootfs is empty or minimal
+  - Called before archive creation
+- ✅ Enhanced error handling:
+  - Added `core.Error.CopyFailed`, `RootfsNotFound`, `EmptyRootfs`, `ArchiveCreationFailed`
+  - Improved error messages with detailed context
+- ✅ Verified file copying works correctly:
+  - Testing showed files are successfully copied (`[IMAGE_CONVERTER] Copying file: sh -> ...`)
+  - Confirmed `bin/sh` file is copied successfully
+
+#### Files Changed
+- `src/backends/proxmox-lxc/driver.zig`:
+  - Added resource limits from bundle_config (memory_limit, cpu_limit)
+  - Added `applyNamespacesToLxcConfig()` function
+  - Integrated namespace application after container creation
+- `src/backends/proxmox-lxc/oci_bundle.zig`:
+  - Added `namespaces` field to `OciBundleConfig`
+  - Implemented namespace parsing in `parseOciConfig()`
+- `src/backends/proxmox-lxc/image_converter.zig`:
+  - Enhanced `copyDirectoryRecursive` with detailed logging
+  - Added `validateRootfsDirectory` function
+  - Improved error handling throughout
+  - Added validation before archive creation
+- `src/core/types.zig`:
+  - Added error types: `CopyFailed`, `RootfsNotFound`, `EmptyRootfs`, `ArchiveCreationFailed`
+- `docs/ANALYSIS_CREATE_PROXMOX_LXC.md`: Updated with implementation details
+- `docs/OCI_BUNDLE_GENERATOR.md`: Updated with namespace mapping information
+- `docs/TEMPLATE_CONVERSION_DEBUG.md`: Created debugging analysis document
+- `docs/TEST_RESULTS_PROXMOX.md`: Created test results document
+- `tests/backends/proxmox-lxc/resources_namespaces_test.zig`: Unit tests for parsing
+
+#### Testing Results
+- ✅ Unit tests pass: Resources and namespaces parsing works correctly
+- ✅ Bundle parsing verified: Memory (256MB) and CPU (512 shares → 1 core) correctly extracted
+- ✅ Namespace parsing verified: All 6 namespaces (pid, network, ipc, uts, mount, user) detected
+- ✅ File copying verified: Logs show successful copying (`[IMAGE_CONVERTER] Copying file: sh`)
+- ⚠️ Template conversion issue: Memory leak in `template_manager.zig:218` and `OperationFailed` from pct create (separate issues)
+
+#### Known Issues
+- Memory leak in `template_manager.zig:218` (TemplateInfo initialization)
+- `pct create` returns `OperationFailed` (needs investigation of pct command execution)
+
+#### Time Spent
+- Resources & Namespaces implementation: ~2.5h
+- Template conversion debugging: ~2.0h
+- Testing on Proxmox server: ~1.0h
+- Documentation: ~0.5h
+- **Total: ~6.0h**
+

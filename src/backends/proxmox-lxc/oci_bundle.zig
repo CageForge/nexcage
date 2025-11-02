@@ -238,6 +238,41 @@ pub const OciBundleParser = struct {
                         }
                     }
                 }
+
+                // Parse namespaces
+                if (linux_obj.get("namespaces")) |namespaces_val| {
+                    if (namespaces_val == .array) {
+                        const ns_array = namespaces_val.array;
+                        var namespaces = try self.allocator.alloc(NamespaceConfig, ns_array.items.len);
+                        for (ns_array.items, 0..) |ns_val, i| {
+                            if (ns_val == .object) {
+                                const ns_obj = ns_val.object;
+                                namespaces[i] = NamespaceConfig{
+                                    .allocator = self.allocator,
+                                    .type = if (ns_obj.get("type")) |t|
+                                        if (t == .string) try self.allocator.dupe(u8, t.string) else 
+                                            try self.allocator.dupe(u8, "pid")
+                                    else try self.allocator.dupe(u8, "pid"),
+                                    .path = if (ns_obj.get("path")) |p|
+                                        if (p == .string) try self.allocator.dupe(u8, p.string) else null
+                                    else null,
+                                };
+                            } else {
+                                // Default to pid namespace if not an object
+                                namespaces[i] = NamespaceConfig{
+                                    .allocator = self.allocator,
+                                    .type = try self.allocator.dupe(u8, "pid"),
+                                    .path = null,
+                                };
+                            }
+                        }
+                        bundle_config.namespaces = namespaces;
+                        
+                        if (self.logger) |log| {
+                            try log.info("Parsed {d} namespaces from OCI bundle", .{ns_array.items.len});
+                        }
+                    }
+                }
             }
         }
 

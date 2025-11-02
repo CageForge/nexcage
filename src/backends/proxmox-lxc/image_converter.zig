@@ -33,6 +33,9 @@ pub const ImageConverter = struct {
         const rootfs_source = try self.getRootfsPath(oci_bundle_path, &config);
         defer self.allocator.free(rootfs_source);
         try self.extractRootfs(rootfs_source, output_dir);
+        
+        // Validate rootfs was copied correctly (before applying LXC configs)
+        try self.validateRootfsDirectory(output_dir);
 
         // Apply LXC-specific configurations
         try self.applyLxcConfigurations(output_dir, &config);
@@ -161,34 +164,159 @@ pub const ImageConverter = struct {
         }
     }
 
-    /// Copy directory recursively
+    /// Copy directory recursively with detailed logging and error handling
     fn copyDirectoryRecursive(self: *Self, source_dir: std.fs.Dir, dest_path: []const u8) !void {
+        var file_count: usize = 0;
+        var dir_count: usize = 0;
+        var symlink_count: usize = 0;
+        var error_count: usize = 0;
+        
+        // Always output to stderr for debugging even if logger fails
+        std.debug.print("[IMAGE_CONVERTER] Starting recursive copy to: {s}\n", .{dest_path});
+        
+        if (self.logger) |log| {
+            log.info("Starting recursive copy to: {s}", .{dest_path}) catch |err| {
+                std.debug.print("[IMAGE_CONVERTER] Logger failed: {}\n", .{err});
+            };
+        }
+        
         var iterator = source_dir.iterate();
         while (try iterator.next()) |entry| {
-            const source_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ dest_path, entry.name });
-            defer self.allocator.free(source_path);
+            const dest_file_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ dest_path, entry.name });
+            defer self.allocator.free(dest_file_path);
 
             switch (entry.kind) {
                 .directory => {
-                    try std.fs.cwd().makePath(source_path);
-                    var subdir = try source_dir.openDir(entry.name, .{ .iterate = true });
+                    if (self.logger) |log| {
+                        try log.debug("Copying directory: {s} -> {s}", .{ entry.name, dest_file_path });
+                    }
+                    dir_count += 1;
+                    std.fs.cwd().makePath(dest_file_path) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to create directory {s}: {}", .{ dest_file_path, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
+                    
+                    var subdir = source_dir.openDir(entry.name, .{ .iterate = true }) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to open subdirectory {s}: {}", .{ entry.name, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
                     defer subdir.close();
-                    try self.copyDirectoryRecursive(subdir, source_path);
+                    
+                    try self.copyDirectoryRecursive(subdir, dest_file_path);
                 },
                 .file => {
-                    const source_file = try source_dir.openFile(entry.name, .{});
+                    std.debug.print("[IMAGE_CONVERTER] Copying file: {s} -> {s}\n", .{ entry.name, dest_file_path });
+                    
+                    if (self.logger) |log| {
+                        log.debug("Copying file: {s} -> {s}", .{ entry.name, dest_file_path }) catch {};
+                    }
+                    file_count += 1;
+                    
+                    const source_file = source_dir.openFile(entry.name, .{}) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to open source file {s}: {}", .{ entry.name, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
                     defer source_file.close();
-                    const dest_file = try std.fs.cwd().createFile(source_path, .{});
+                    
+                    // Ensure parent directory exists
+                    const parent_dir = std.fs.path.dirname(dest_file_path) orelse dest_path;
+                    std.fs.cwd().makePath(parent_dir) catch |err| switch (err) {
+                        error.PathAlreadyExists => {},
+                        else => {
+                            if (self.logger) |log| {
+                                try log.err("Failed to create parent directory {s}: {}", .{ parent_dir, err });
+                            }
+                            error_count += 1;
+                            return err;
+                        },
+                    };
+                    
+                    const dest_file = std.fs.cwd().createFile(dest_file_path, .{}) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to create destination file {s}: {}", .{ dest_file_path, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
                     defer dest_file.close();
+                    
                     _ = try source_file.copyRangeAll(0, dest_file, 0, std.math.maxInt(u64));
+                    
+                    if (self.logger) |log| {
+                        try log.debug("Successfully copied file: {s}", .{entry.name});
+                    }
                 },
                 .sym_link => {
-                    const link_target = try source_dir.readLink(entry.name, &[_]u8{});
-                    try std.fs.cwd().symLink(link_target, source_path, .{});
+                    if (self.logger) |log| {
+                        try log.debug("Copying symlink: {s} -> {s}", .{ entry.name, dest_file_path });
+                    }
+                    symlink_count += 1;
+                    
+                    // Ensure parent directory exists
+                    const parent_dir = std.fs.path.dirname(dest_file_path) orelse dest_path;
+                    std.fs.cwd().makePath(parent_dir) catch |err| switch (err) {
+                        error.PathAlreadyExists => {},
+                        else => {
+                            if (self.logger) |log| {
+                                try log.err("Failed to create parent directory for symlink {s}: {}", .{ parent_dir, err });
+                            }
+                            error_count += 1;
+                            return err;
+                        },
+                    };
+                    
+                    const link_target = source_dir.readLink(entry.name, &[_]u8{}) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to read symlink target {s}: {}", .{ entry.name, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
+                    
+                    std.fs.cwd().symLink(link_target, dest_file_path, .{}) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to create symlink {s} -> {s}: {}", .{ dest_file_path, link_target, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
                 },
                 else => {
-                    if (self.logger) |log| try log.warn("Skipping unsupported entry type: {s}", .{entry.name});
+                    if (self.logger) |log| {
+                        try log.warn("Skipping unsupported entry type {s}: {s}", .{ @tagName(entry.kind), entry.name });
+                    }
                 },
+            }
+        }
+        
+        // Always output to stderr for debugging
+        std.debug.print("[IMAGE_CONVERTER] Copy completed: {d} files, {d} directories, {d} symlinks, {d} errors in {s}\n", 
+            .{ file_count, dir_count, symlink_count, error_count, dest_path });
+        
+        if (self.logger) |log| {
+            log.info("Copy completed: {d} files, {d} directories, {d} symlinks, {d} errors in {s}", 
+                .{ file_count, dir_count, symlink_count, error_count, dest_path }) catch {};
+        }
+        
+        if (error_count > 0) {
+            if (self.logger) |log| {
+                try log.err("Copy operation had {d} errors", .{error_count});
+            }
+            return core.Error.CopyFailed;
+        }
+        
+        if (file_count == 0 and dir_count == 0) {
+            if (self.logger) |log| {
+                try log.warn("No files or directories copied to {s}", .{dest_path});
             }
         }
     }
@@ -427,13 +555,71 @@ pub const ImageConverter = struct {
         return try self.allocator.dupe(u8, "/bin/sh");
     }
 
+    /// Validate rootfs directory before creating archive
+    fn validateRootfsDirectory(self: *Self, rootfs_dir: []const u8) !void {
+        std.debug.print("[IMAGE_CONVERTER] Validating rootfs directory: {s}\n", .{rootfs_dir});
+        
+        if (self.logger) |log| {
+            log.info("Validating rootfs directory: {s}", .{rootfs_dir}) catch {};
+        }
+        
+        // Check if directory exists
+        var rootfs_handle = std.fs.cwd().openDir(rootfs_dir, .{ .iterate = true }) catch |err| {
+            if (self.logger) |log| {
+                try log.err("Rootfs directory does not exist: {s} ({})", .{ rootfs_dir, err });
+            }
+            return core.Error.RootfsNotFound;
+        };
+        defer rootfs_handle.close();
+        
+        // Count files and directories (at top level first, then recursively)
+        var file_count: usize = 0;
+        var dir_count: usize = 0;
+        var iterator = rootfs_handle.iterate();
+        
+        // First pass - count top level
+        while (try iterator.next()) |entry| {
+            switch (entry.kind) {
+                .file => file_count += 1,
+                .directory => dir_count += 1,
+                else => {},
+            }
+        }
+        
+        std.debug.print("[IMAGE_CONVERTER] Rootfs validation: {d} files, {d} directories found\n", .{ file_count, dir_count });
+        
+        if (self.logger) |log| {
+            log.info("Rootfs validation: {d} files, {d} directories found", .{ file_count, dir_count }) catch {};
+        }
+        
+        // Require at least some content
+        if (file_count == 0 and dir_count == 0) {
+            if (self.logger) |log| {
+                try log.err("Rootfs directory is empty: {s}", .{rootfs_dir});
+            }
+            return core.Error.EmptyRootfs;
+        }
+        
+        // Warn if very minimal
+        if (file_count < 3) {
+            if (self.logger) |log| {
+                try log.warn("Rootfs directory has very few files ({d}), archive may be minimal", .{file_count});
+            }
+        }
+    }
+
     /// Create template archive from rootfs
     fn createTemplateArchive(self: *Self, rootfs_dir: []const u8, template_name: []const u8) ![]const u8 {
+        // Validate rootfs before creating archive
+        try self.validateRootfsDirectory(rootfs_dir);
+        
         const archive_name = try std.fmt.allocPrint(self.allocator, "{s}.tar.zst", .{template_name});
         const archive_path = try std.fmt.allocPrint(self.allocator, "/tmp/{s}", .{archive_name});
         defer self.allocator.free(archive_name);
 
-        if (self.logger) |log| try log.info("Creating template archive: {s}", .{archive_path});
+        if (self.logger) |log| {
+            try log.info("Creating template archive: {s} from {s}", .{ archive_path, rootfs_dir });
+        }
 
         const args = [_][]const u8{ "tar", "--zstd", "-cf", archive_path, "-C", rootfs_dir, "." };
         const result = try self.runCommand(&args);
@@ -441,8 +627,31 @@ pub const ImageConverter = struct {
         defer self.allocator.free(result.stderr);
         
         if (result.exit_code != 0) {
-            if (self.logger) |log| try log.err("Failed to create template archive: {s}", .{result.stderr});
-            return error.ArchiveCreationFailed;
+            if (self.logger) |log| {
+                try log.err("Failed to create template archive (exit code {d}): {s}", .{ result.exit_code, result.stderr });
+            }
+            return core.Error.ArchiveCreationFailed;
+        }
+        
+        // Verify archive was created and has reasonable size
+        var archive_file = std.fs.cwd().openFile(archive_path, .{}) catch |err| {
+            if (self.logger) |log| {
+                try log.err("Failed to verify archive file: {s} ({})", .{ archive_path, err });
+            }
+            return core.Error.ArchiveCreationFailed;
+        };
+        defer archive_file.close();
+        
+        const archive_stat = try archive_file.stat();
+        if (self.logger) |log| {
+            try log.info("Template archive created: {s} ({d} bytes)", .{ archive_path, archive_stat.size });
+        }
+        
+        // Warn if archive is suspiciously small (< 500 bytes typically indicates only metadata)
+        if (archive_stat.size < 500) {
+            if (self.logger) |log| {
+                try log.warn("Archive is very small ({d} bytes), may not contain rootfs content", .{archive_stat.size});
+            }
         }
 
         return archive_path;

@@ -12,6 +12,7 @@ pub const validation = @import("validation.zig");
 pub const comptime_validation = @import("comptime_validation.zig");
 pub const json_logging = @import("json_logging.zig");
 pub const metrics = @import("metrics.zig");
+pub const version = @import("version.zig");
 
 // Re-export commonly used types
 pub const Error = types.Error;

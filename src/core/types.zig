@@ -17,6 +17,10 @@ pub const Error = error{
     InvalidInput,
     OperationFailed,
     UnsupportedOperation,
+    CopyFailed,
+    RootfsNotFound,
+    EmptyRootfs,
+    ArchiveCreationFailed,
 };
 
 /// Sandbox configuration

@@ -36,18 +36,19 @@ pub const CrunDriver = struct {
         );
         defer self.allocator.free(bundle_path);
 
-        // Create bundle directory
-        std.fs.cwd().makePath(bundle_path) catch |err| {
+        // Verify bundle directory exists (according to OCI spec, bundle must be provided)
+        var bundle_dir = try std.fs.cwd().openDir(bundle_path, .{});
+        defer bundle_dir.close();
+
+        // Verify config.json exists in bundle (OCI spec requires it to be present)
+        bundle_dir.access("config.json", .{}) catch |err| {
             if (self.logger) |log| {
-                try log.err("Failed to create bundle directory {s}: {}", .{ bundle_path, err });
+                try log.err("config.json not found in bundle {s}: {}", .{ bundle_path, err });
             }
-            return err;
+            return core.Error.FileNotFound;
         };
 
-        // Generate basic OCI config.json
-        try self.generateOciConfig(config, bundle_path);
-
-        // Run crun create command
+        // Run crun create command (bundle must contain config.json according to OCI spec)
         const args = [_][]const u8{
             "crun",
             "create",
@@ -212,23 +213,9 @@ pub const CrunDriver = struct {
         };
     }
 
-    /// Generate basic OCI config.json
-    fn generateOciConfig(self: *Self, config: core.types.SandboxConfig, bundle_path: []const u8) !void {
-        _ = config;
-        
-        // Validate bundle path
-        const validated_bundle_path = try validation.PathSecurity.validateBundlePath(bundle_path, self.allocator);
-        defer self.allocator.free(validated_bundle_path);
-        
-        const config_path = try validation.PathSecurity.secureJoin(self.allocator, validated_bundle_path, "config.json");
-        defer self.allocator.free(config_path);
-
-        const file = try std.fs.cwd().createFile(config_path, .{});
-        defer file.close();
-
-        // Minimal OCI config.json
-        try file.writeAll("{\"ociVersion\":\"1.0.0\",\"process\":{\"terminal\":true,\"user\":{\"uid\":0,\"gid\":0},\"args\":[\"/bin/sh\"],\"env\":[\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"]},\"root\":{\"path\":\"rootfs\",\"readonly\":false},\"hostname\":\"container\",\"linux\":{\"namespaces\":[{\"type\":\"pid\"},{\"type\":\"network\"},{\"type\":\"ipc\"},{\"type\":\"uts\"},{\"type\":\"mount\"}]}}");
-    }
+    // Note: generateOciConfig removed - according to OCI Runtime Spec,
+    // config.json must be provided in the bundle before calling create.
+    // Runtime should not generate config.json.
 };
 
 const CommandResult = struct {

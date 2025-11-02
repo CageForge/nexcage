@@ -1,6 +1,5 @@
 const std = @import("std");
 const core = @import("core");
-const build_options = @import("build_options");
 const cli = @import("cli");
 const backends = @import("backends");
 const integrations = @import("integrations");
@@ -97,7 +96,7 @@ pub fn main() !void {
 
     // Log application startup
     if (app.advanced_logger) |*logger| {
-        try logger.info("Starting nexcage v{s}", .{build_options.app_version});
+        try logger.info("Starting nexcage v{s}", .{core.version.getVersion()});
         try logger.logSystemInfo();
     }
 
@@ -138,7 +137,7 @@ pub fn main() !void {
     
     // Handle help command
     if (std.mem.eql(u8, command_name, "--help") or std.mem.eql(u8, command_name, "-h")) {
-        try app.logger.info("Proxmox LXC Runtime Interface v{s}", .{build_options.app_version});
+        try app.logger.info("Proxmox LXC Runtime Interface v{s}", .{core.version.getVersion()});
         try app.logger.info("", .{});
         try app.logger.info("Available commands:", .{});
         try app.logger.info("  create    Create a new container", .{});
