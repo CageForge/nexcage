@@ -5,6 +5,72 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2025-11-02
+
+### 🔧 Bug Fix Release: Memory Leaks, Template Conversion, OCI Resources
+
+This release fixes critical bugs in template conversion and OCI bundle processing, resolves memory leaks, and adds support for OCI bundle resource limits and namespaces.
+
+### Added
+- **OCI Bundle Resources Support**: 
+  - Parse `memory_limit` from `linux.resources.memory.limit` (bytes to MB conversion)
+  - Parse `cpu_limit` from `linux.resources.cpu.shares` (shares/1024.0 to cores conversion)
+  - Priority: bundle_config > SandboxConfig > defaults
+- **OCI Namespaces Support**:
+  - Parse all OCI namespaces from `linux.namespaces` array (pid, network, ipc, uts, mount, user, cgroup)
+  - Map user namespace to Proxmox LXC features (`nesting=1,keyctl=1`) via `pct set --features`
+  - Automatic feature configuration based on namespace presence
+- **Enhanced Validation**:
+  - Recursive file counting in `validateRootfsDirectory` (counts files in subdirectories)
+  - Validation before and after LXC configurations are applied
+  - Detailed logging for file operations in `copyDirectoryRecursive`
+
+### Fixed
+- **Memory Leak in Template Manager**: 
+  - Added `errdefer template_info.deinit()` for error cleanup
+  - Added `errdefer metadata.deinit()` for metadata cleanup
+  - Added `defer template_info.deinit()` after `addTemplate()` (which clones)
+  - Proper cleanup for entrypoint and cmd arrays with errdefer blocks
+- **Template Archive Issues**:
+  - Archive now correctly includes all files (verified: `bin/sh`, `sbin/init`, `etc/hostname`)
+  - Fixed recursive validation to count files in subdirectories
+  - Enhanced error handling in `copyDirectoryRecursive`
+- **CPU Cores Calculation**:
+  - Fixed `cores=0` issue when CPU shares < 1024
+  - Added minimum of 1 core guarantee: `if (calculated < 1.0) 1.0 else calculated`
+  - Applied to both bundle_config and final calculation
+- **pct create Error Handling**:
+  - Enhanced debug output for exit codes, stdout, stderr
+  - Better handling of "already exists" scenarios
+  - Improved error messages for debugging
+
+### Changed
+- **Error Types**: Added `CopyFailed`, `RootfsNotFound`, `EmptyRootfs`, `ArchiveCreationFailed` to `core.Error`
+- **Image Converter**: Enhanced `copyDirectoryRecursive` with detailed logging and error handling
+- **Template Validation**: Switched from top-level only to recursive directory traversal
+
+### Testing
+- ✅ Memory leak resolved: No more leaks detected in template_manager
+- ✅ Archive creation verified: All files included correctly
+- ✅ Recursive validation working: Correctly counts files in subdirectories
+- ✅ Cores fix verified: Containers now created with minimum 1 core (was 0)
+- ✅ Container creation successful: Verified on Proxmox server (VMID 31386, 72421)
+- ✅ pct create command working: Exit code 0, container configured correctly
+
+### Documentation
+- `docs/ANALYSIS_CREATE_PROXMOX_LXC.md` - Updated with implementation details
+- `docs/OCI_BUNDLE_GENERATOR.md` - Updated with namespace mapping information
+- `docs/TEMPLATE_CONVERSION_DEBUG.md` - Debugging analysis document
+- `docs/TEST_RESULTS_PROXMOX.md` - Test results document
+- `docs/INTEGRATION_TEST_PROXMOX.md` - Integration testing guide
+
+### Notes
+- Template warnings about `/etc/os-release` not found are expected for minimal OCI bundles
+- Architecture detection falls back to `amd64` (normal behavior)
+- ostype detection shows `unmanaged` for custom OCI bundles (expected)
+
+---
+
 ## [0.7.2] - 2025-10-31
 
 ### 🎯 Code Quality & Observability Release: Error Handling, Memory Safety, Testing, Metrics
