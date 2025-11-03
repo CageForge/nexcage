@@ -1,0 +1,31 @@
+name: build (vendored libcrun)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  vendored-build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential autoconf automake libtool pkg-config \
+            libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
+            libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
+
+      - name: Prepare vendored crun headers
+        run: zig build prepare-crun
+
+      - name: Build (vendored)
+        run: zig build -Duse-vendored-libcrun=true --summary all
+
+

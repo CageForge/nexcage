@@ -242,6 +242,50 @@ pub const CrunDriver = struct {
         }
     }
 
+    /// Execute a command in a running container (best-effort; may be limited by libcrun API)
+    pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8) !void {
+        if (self.logger) |log| {
+            try log.info("Exec in OCI container with libcrun: {s}", .{container_id});
+        }
+
+        // Validate
+        try validation.SecurityValidation.validateContainerId(container_id);
+        if (argv.len == 0) return core.Error.InvalidInput;
+
+        // Initialize minimal context
+        const ctx = try self.initContext("", container_id);
+
+        // Build C argv (NULL-terminated)
+        var tmp = std.ArrayListUnmanaged([]u8){};
+        defer {
+            if (tmp.items.len > 0) {
+                for (tmp.items) |s| self.allocator.free(s);
+                self.allocator.free(tmp.items);
+            }
+        }
+        var c_argv = std.ArrayListUnmanaged([*:0]const u8){};
+        defer if (c_argv.items.len > 0) self.allocator.free(c_argv.items);
+
+        var i: usize = 0;
+        while (i < argv.len) : (i += 1) {
+            const s_z = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{argv[i]});
+            try tmp.append(self.allocator, s_z);
+            try c_argv.append(self.allocator, s_z[0..s_z.len - 1 :0].ptr);
+        }
+        try c_argv.append(self.allocator, null);
+
+        // If libcrun exec API available, call it via FFI; otherwise return unsupported
+        _ = ctx; // avoid unused if exec FFI not present
+        if (self.logger) |log| try log.warn("libcrun exec not wired; skipping (no-op)", .{});
+        return core.Error.OperationNotSupported;
+    }
+
+    /// Run: create then start a container from provided config
+    pub fn run(self: *Self, config: core.types.SandboxConfig) !void {
+        try self.create(config);
+        try self.start(config.name);
+    }
+
     /// Generate basic OCI config.json
     fn generateOciConfig(self: *Self, config: core.types.SandboxConfig, bundle_path: []const u8) !void {
         _ = config;

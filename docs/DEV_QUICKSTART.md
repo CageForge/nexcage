@@ -5,13 +5,16 @@ This guide helps you set up a development environment quickly.
 ## Requirements
 - OS: Ubuntu 22.04/24.04 (Proxmox VE host recommended)
 - Arch: amd64 (x86_64)
-- Packages: libcap-dev, libseccomp-dev, libyajl-dev
+- Packages: build-essential, autoconf, automake, libtool, pkg-config, libyajl-dev, libcap-dev, libseccomp-dev, libsystemd-dev, libbpf-dev, libapparmor-dev, libselinux1-dev, libcriu-dev
 - Compiler: Zig 0.15.1
 
 ## Setup
 ```bash
 sudo apt-get update
-sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+sudo apt-get install -y \
+  build-essential autoconf automake libtool pkg-config \
+  libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
+  libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
 # install Zig 0.15.1 and ensure zig is on PATH
 zig version
 ```
@@ -35,7 +38,15 @@ zig build
 
 ## Debugging
 - Enable debug logs with `--debug` or `--verbose`
-- Check system libs presence: `ldconfig -p | grep -E 'libcap|libseccomp|libyajl'`
+- Check system libs presence: `ldconfig -p | grep -E 'libcap|libseccomp|libyajl|libsystemd'`
+
+## Vendored libcrun build
+
+```bash
+make deps
+make prepare-crun
+make build-vendored
+```
 
 ## Next
 - CLI Reference: docs/CLI_REFERENCE.md

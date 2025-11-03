@@ -38,8 +38,9 @@ sudo apt install -y \
     curl \
     wget \
     pkg-config \
-    libseccomp-dev \
-    libsystemd-dev \
+    build-essential autoconf automake libtool pkg-config \
+    libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
+    libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev \
     zfsutils-linux
 
 # Install container runtime dependencies (for testing)
