@@ -1,0 +1,67 @@
+name: crun vendor sync
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # every Monday 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq curl rsync
+
+      - name: Check latest crun tag
+        id: latest
+        run: |
+          LATEST=$(curl -fsSL https://api.github.com/repos/containers/crun/releases/latest | jq -r .tag_name)
+          echo "latest_tag=$LATEST" >> $GITHUB_OUTPUT
+
+      - name: Read current vendor tag
+        id: current
+        run: |
+          if [[ -f deps/crun/.upstream_tag ]]; then
+            CUR=$(head -n1 deps/crun/.upstream_tag)
+          else
+            CUR=""
+          fi
+          echo "current_tag=$CUR" >> $GITHUB_OUTPUT
+
+      - name: Decide update
+        id: decide
+        run: |
+          echo "Current: ${{ steps.current.outputs.current_tag }} | Latest: ${{ steps.latest.outputs.latest_tag }}"
+          if [[ "${{ steps.latest.outputs.latest_tag }}" != "${{ steps.current.outputs.current_tag }}" ]]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sync to latest (if needed)
+        if: steps.decide.outputs.update_needed == 'true'
+        run: |
+          bash scripts/sync_crun_vendor.sh --version "${{ steps.latest.outputs.latest_tag }}"
+
+      - name: Create Pull Request
+        if: steps.decide.outputs.update_needed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "deps(crun): sync to ${{ steps.latest.outputs.latest_tag }}"
+          title: "deps(crun): sync to ${{ steps.latest.outputs.latest_tag }}"
+          body: |
+            This PR syncs vendored crun headers/sources in `deps/crun` to `${{ steps.latest.outputs.latest_tag }}`.
+
+            - Updated via `scripts/sync_crun_vendor.sh`
+            - Marker: `deps/crun/.upstream_tag`
+          branch: chore/sync-crun-${{ steps.latest.outputs.latest_tag }}
+          delete-branch: true
+
+      - name: Done
+        run: echo "No update needed" 
+
