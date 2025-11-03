@@ -2,6 +2,24 @@ const std = @import("std");
 const Build = std.Build;
 const fs = std.fs;
 
+// Helper to collect .c files recursively with simple filters
+fn collectC(dir_path: []const u8, list: *std.ArrayListUnmanaged([]const u8), allocator: std.mem.Allocator) !void {
+    var dir = try std.fs.cwd().openDir(dir_path, .{ .iterate = true });
+    defer dir.close();
+    var it = dir.iterate();
+    while (try it.next()) |e| {
+        const child_path = try std.fs.path.join(allocator, &[_][]const u8{ dir_path, e.name });
+        defer allocator.free(child_path);
+        if (e.kind == .file) {
+            if (std.mem.endsWith(u8, e.name, ".c") and std.mem.indexOf(u8, e.name, "test") == null) {
+                try list.append(allocator, try allocator.dupe(u8, child_path));
+            }
+        } else if (e.kind == .directory) {
+            try collectC(child_path, list, allocator);
+        }
+    }
+}
+
 // Version information is sourced from VERSION file at build time
 
 pub fn build(b: *std.Build) void {
@@ -88,9 +106,47 @@ pub fn build(b: *std.Build) void {
     // The linking will only succeed if the libraries are installed, which is fine
     // If they're not available, we'll skip linking them (requires build option)
     const link_libcrun = b.option(bool, "link-libcrun", "Link libcrun and systemd libraries (default: false)") orelse false;
-    if (link_libcrun) {
-        exe.linkSystemLibrary("crun");
-        exe.linkSystemLibrary("systemd");
+    const link_libcrun_in_debug = b.option(bool, "link-libcrun-in-debug", "Allow linking libcrun/systemd in Debug builds (default: false)") orelse false;
+    const use_vendored_libcrun = b.option(bool, "use-vendored-libcrun", "Build and link vendored libcrun from deps/crun (default: false)") orelse false;
+
+    var vendored_enabled = false;
+    if (use_vendored_libcrun) {
+        // Build static library from deps/crun sources
+        var c_files: std.ArrayListUnmanaged([]const u8) = .{};
+        defer {
+            // free duplicated paths
+            if (c_files.items.len > 0) {
+                for (c_files.items) |p| b.allocator.free(p);
+                b.allocator.free(c_files.items);
+            }
+        }
+
+        // Collect libcrun core and libocispec sources (exclude tests via name filter)
+        collectC("deps/crun/src/libcrun", &c_files, b.allocator) catch |err| {
+            std.debug.print("[build] warn: failed collecting libcrun sources: {s}\n", .{@errorName(err)});
+        };
+        collectC("deps/crun/libocispec/src", &c_files, b.allocator) catch |err| {
+            std.debug.print("[build] warn: failed collecting libocispec sources: {s}\n", .{@errorName(err)});
+        };
+
+        const c_files_slice = c_files.toOwnedSlice(b.allocator) catch @panic("alloc failed");
+        defer b.allocator.free(c_files_slice);
+        exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
+        exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
+        exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
+        exe.addCSourceFiles(.{ .files = c_files_slice, .flags = &[_][]const u8{ "-std=gnu11", "-D_GNU_SOURCE" } });
+        exe.linkSystemLibrary("yajl");
+        exe.linkSystemLibrary("cap");
+        exe.linkSystemLibrary("seccomp");
+        exe.linkLibC();
+        vendored_enabled = true;
+    }
+    if (!vendored_enabled and link_libcrun) {
+        const is_debug = optimize == .Debug;
+        if (!is_debug or link_libcrun_in_debug) {
+            exe.linkSystemLibrary("crun");
+            exe.linkSystemLibrary("systemd");
+        }
     }
 
     // No additional static Zig libraries linked to avoid duplicate start symbol
@@ -150,9 +206,15 @@ pub fn build(b: *std.Build) void {
     test_exe.linkSystemLibrary("yajl");
     
     // Optional: Link libcrun and systemd only if requested (reuse link_libcrun from above)
-    if (link_libcrun) {
-        test_exe.linkSystemLibrary("crun");
-        test_exe.linkSystemLibrary("systemd");
+    if (vendored_enabled) {
+        // mirror include/c files for tests too
+        // We do not re-add C sources for tests to avoid duplicate objs; tests link only Zig code.
+    } else if (link_libcrun) {
+        const is_debug_t = optimize == .Debug;
+        if (!is_debug_t or link_libcrun_in_debug) {
+            test_exe.linkSystemLibrary("crun");
+            test_exe.linkSystemLibrary("systemd");
+        }
     }
     // No additional static Zig libraries linked into tests
 

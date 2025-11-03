@@ -150,6 +150,33 @@ At the end of each sprint:
    - Binary artifacts
    - Documentation updates
 
+## Build Notes: libcrun ABI Linking
+
+Linking `libcrun` and `libsystemd` is optional and disabled by default.
+
+```bash
+# Link in non-Debug builds only
+zig build -Dlink-libcrun=true
+
+# Allow linking in Debug (if needed)
+zig build -Dlink-libcrun=true -Dlink-libcrun-in-debug=true
+```
+
+If these libraries are not present on the system, omit these flags (the runtime will use the CLI fallback driver).
+
+## Experimental: Vendored libcrun build
+
+You can attempt to compile vendored `libcrun`/`libocispec` directly from `deps/crun`:
+
+```bash
+zig build -Duse-vendored-libcrun=true
+```
+
+Notes:
+- Requires generated `config.h` and proper feature defines from crun's build system (autotools/meson). This repo does not generate them yet.
+- Expected to fail out-of-the-box; intended for contributors experimenting with fully static integration.
+- Prefer system `libcrun` via `-Dlink-libcrun=true` for production builds.
+
 ## Version Numbering
 - Major version (X): Breaking changes
 - Minor version (Y): New features
