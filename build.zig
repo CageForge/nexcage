@@ -2,6 +2,24 @@ const std = @import("std");
 const Build = std.Build;
 const fs = std.fs;
 
+// Helper to collect .c files recursively with simple filters
+fn collectC(dir_path: []const u8, list: *std.ArrayListUnmanaged([]const u8), allocator: std.mem.Allocator) !void {
+    var dir = try std.fs.cwd().openDir(dir_path, .{ .iterate = true });
+    defer dir.close();
+    var it = dir.iterate();
+    while (try it.next()) |e| {
+        const child_path = try std.fs.path.join(allocator, &[_][]const u8{ dir_path, e.name });
+        defer allocator.free(child_path);
+        if (e.kind == .file) {
+            if (std.mem.endsWith(u8, e.name, ".c") and std.mem.indexOf(u8, e.name, "test") == null) {
+                try list.append(allocator, try allocator.dupe(u8, child_path));
+            }
+        } else if (e.kind == .directory) {
+            try collectC(child_path, list, allocator);
+        }
+    }
+}
+
 // Version information is sourced from VERSION file at build time
 
 pub fn build(b: *std.Build) void {
@@ -81,17 +99,52 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("seccomp");
     exe.linkSystemLibrary("yajl");
     
-    // Optional: Link libcrun and systemd only if libcrun ABI is enabled
-    // Check if libcrun ABI is enabled by checking the feature flag
-    // Note: We can't directly check the flag from build.zig, so we'll use a workaround:
-    // Try to link them, but since USE_LIBCRUN_ABI defaults to false, they won't be used at runtime
-    // The linking will only succeed if the libraries are installed, which is fine
-    // If they're not available, we'll skip linking them (requires build option)
-    const link_libcrun = b.option(bool, "link-libcrun", "Link libcrun and systemd libraries (default: false)") orelse false;
-    if (link_libcrun) {
-        exe.linkSystemLibrary("crun");
-        exe.linkSystemLibrary("systemd");
+    // Vendored libcrun build (system libcrun linking removed)
+    const use_vendored_libcrun = b.option(bool, "use-vendored-libcrun", "Build and link vendored libcrun from deps/crun (default: false)") orelse false;
+
+    var vendored_enabled = false;
+    if (use_vendored_libcrun) {
+        // Check system deps (pkg-config) and generate headers if missing
+        const deps_check = b.addSystemCommand(&.{ "bash", "-lc", "pkg-config --exists libseccomp yajl libcap libsystemd" });
+        exe.step.dependOn(&deps_check.step);
+        var need_gen: bool = false;
+        if (std.fs.cwd().access("deps/crun/config.h", .{})) |_| { } else |_| { need_gen = true; }
+        if (std.fs.cwd().access("deps/crun/git-version.h", .{})) |_| { } else |_| { need_gen = true; }
+        const gen_headers = b.addSystemCommand(&.{ "bash", "scripts/gen_crun_headers_local.sh" });
+        if (need_gen) exe.step.dependOn(&gen_headers.step);
+
+        // Build static library from deps/crun sources
+        var c_files: std.ArrayListUnmanaged([]const u8) = .{};
+        defer {
+            // free duplicated paths
+            if (c_files.items.len > 0) {
+                for (c_files.items) |p| b.allocator.free(p);
+                b.allocator.free(c_files.items);
+            }
+        }
+
+        // Collect libcrun core and libocispec sources (exclude tests via name filter)
+        collectC("deps/crun/src/libcrun", &c_files, b.allocator) catch |err| {
+            std.debug.print("[build] warn: failed collecting libcrun sources: {s}\n", .{@errorName(err)});
+        };
+        collectC("deps/crun/libocispec/src", &c_files, b.allocator) catch |err| {
+            std.debug.print("[build] warn: failed collecting libocispec sources: {s}\n", .{@errorName(err)});
+        };
+
+        const c_files_slice = c_files.toOwnedSlice(b.allocator) catch @panic("alloc failed");
+        defer b.allocator.free(c_files_slice);
+        exe.addIncludePath(.{ .cwd_relative = "deps/crun" }); // for generated config.h
+        exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
+        exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
+        exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
+        exe.addCSourceFiles(.{ .files = c_files_slice, .flags = &[_][]const u8{ "-std=gnu11", "-D_GNU_SOURCE", "-Wno-macro-redefined", "-DLIBCRUN_PUBLIC=", "-include", "seccomp.h", "-include", "sys/syscall.h" } });
+        exe.linkSystemLibrary("yajl");
+        exe.linkSystemLibrary("cap");
+        exe.linkSystemLibrary("seccomp");
+        exe.linkLibC();
+        vendored_enabled = true;
     }
+    // System libcrun linking removed by project policy
 
     // No additional static Zig libraries linked to avoid duplicate start symbol
 
@@ -128,6 +181,13 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the application");
     run_step.dependOn(&run_cmd.step);
 
+    // Prepare vendored crun headers and check system deps explicitly
+    const deps_check_step = b.addSystemCommand(&.{ "bash", "-lc", "pkg-config --exists libseccomp yajl libcap libsystemd" });
+    const gen_headers_step = b.addSystemCommand(&.{ "bash", "scripts/gen_crun_headers_local.sh" });
+    const prepare_step = b.step("prepare-crun", "Generate crun headers and verify system dependencies");
+    prepare_step.dependOn(&deps_check_step.step);
+    prepare_step.dependOn(&gen_headers_step.step);
+
     // Add test step
     const test_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -150,9 +210,8 @@ pub fn build(b: *std.Build) void {
     test_exe.linkSystemLibrary("yajl");
     
     // Optional: Link libcrun and systemd only if requested (reuse link_libcrun from above)
-    if (link_libcrun) {
-        test_exe.linkSystemLibrary("crun");
-        test_exe.linkSystemLibrary("systemd");
+    if (vendored_enabled) {
+        // tests use Zig-only path; ABI exercised in integration tests
     }
     // No additional static Zig libraries linked into tests
 

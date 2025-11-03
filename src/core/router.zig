@@ -163,6 +163,7 @@ pub const BackendRouter = struct {
 
     fn executeCrun(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
         var crun_backend = backends.crun.CrunDriver.init(self.allocator, self.logger);
+        defer crun_backend.deinit();
 
         switch (operation) {
             .create => {
@@ -173,10 +174,11 @@ pub const BackendRouter = struct {
             .start => try crun_backend.start(container_id),
             .stop => try crun_backend.stop(container_id),
             .delete => try crun_backend.delete(container_id),
-            .run => {
-                if (self.logger) |log| {
-                    try log.warn("Crun run operation not implemented", .{});
-                }
+            .run => |run_cfg| {
+                const sandbox_config = try self.createSandboxConfig(operation, container_id, .crun, config);
+                defer self.cleanupSandboxConfig(operation, &sandbox_config);
+                _ = run_cfg; // image already applied by createSandboxConfig
+                try crun_backend.run(sandbox_config);
             },
         }
     }

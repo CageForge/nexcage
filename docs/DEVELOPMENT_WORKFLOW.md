@@ -150,6 +150,53 @@ At the end of each sprint:
    - Binary artifacts
    - Documentation updates
 
+## Build Notes: Vendored libcrun (project policy)
+
+Only vendored `libcrun` is supported. System `libcrun` linking is removed.
+
+Before building, generate a minimal `config.h`:
+
+```bash
+bash scripts/gen_crun_config_h.sh
+```
+
+Alternatively, generate full headers via autotools locally or in Docker:
+
+```bash
+# Local toolchain (requires autotools & -dev libs)
+bash scripts/gen_crun_headers_local.sh
+
+# Docker-based (no local toolchain needed)
+bash scripts/gen_crun_headers_docker.sh
+```
+
+Then enable vendored build attempt (requires headers present):
+
+```bash
+zig build -Duse-vendored-libcrun=true
+```
+
+### Makefile shortcuts
+
+```bash
+make deps             # apt install required packages
+make prepare-crun     # zig build prepare-crun (headers + pkg-config check)
+make build-vendored   # prepare + build with vendored libcrun
+```
+
+### CI
+
+Vendored build runs in GitHub Actions workflow:
+- `.github/workflows/build_vendored.yml`
+  - Installs required apt packages
+  - Runs `zig build prepare-crun`
+  - Builds with `-Duse-vendored-libcrun=true`
+
+Notes:
+- Requires generated `config.h` and proper feature defines from crun's build system (autotools/meson). This repo does not generate them yet.
+- Expected to fail out-of-the-box; intended for contributors experimenting with fully static integration.
+  CLI fallback remains available when vendored ABI is disabled.
+
 ## Version Numbering
 - Major version (X): Breaking changes
 - Minor version (Y): New features

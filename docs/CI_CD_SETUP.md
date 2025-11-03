@@ -1,3 +1,20 @@
+## Vendored libcrun build
+
+This repository builds vendored `libcrun` in CI to ensure ABI compatibility is preserved.
+
+Workflow: `.github/workflows/build_vendored.yml`
+
+Steps:
+- Install system dependencies via apt (libseccomp-dev, libyajl-dev, libcap-dev, libsystemd-dev, etc.)
+- Run `zig build prepare-crun` to generate headers and verify pkg-config deps
+- Run `zig build -Duse-vendored-libcrun=true`
+
+Local equivalent:
+```bash
+make deps
+make build-vendored
+```
+
 # GitHub CI/CD Setup for Proxmox Testing
 
 This document provides step-by-step instructions for setting up automated CI/CD testing on Proxmox server `mgr.cp.if.ua`.

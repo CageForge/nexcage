@@ -48,7 +48,10 @@ cd nexcage
 2. Install dependencies:
 ```bash
 sudo apt-get update
-sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+sudo apt-get install -y \
+  build-essential autoconf automake libtool pkg-config \
+  libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
+  libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
 ```
 
 3. Install Zig 0.15.1:

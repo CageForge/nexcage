@@ -1,0 +1,28 @@
+name: crun headers generate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config \
+            libyajl-dev libcap-dev libseccomp-dev libsystemd-dev curl
+      - name: Generate headers (local toolchain)
+        run: |
+          bash scripts/gen_crun_headers_local.sh || exit 1
+      - name: Commit and PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "deps(crun): generate config.h & git-version.h for vendored build"
+          title: "deps(crun): generate config.h & git-version.h"
+          body: |
+            This PR updates `deps/crun/config.h` and `deps/crun/git-version.h` using local toolchain.
+          branch: chore/gen-crun-headers
+          delete-branch: true
+
