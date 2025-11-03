@@ -1,0 +1,46 @@
+site_name: NexCage Docs
+site_description: Next-generation container runtime for Proxmox VE using LXC and OCI backends
+site_url: https://cageforge.github.io/nexcage/
+repo_url: https://github.com/CageForge/nexcage
+repo_name: CageForge/nexcage
+copyright: "© 2025 CageForge"
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.expand
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+
+nav:
+  - Overview: index.md
+  - Getting Started:
+    - Install: INSTALL.md
+    - Dev Quickstart: DEV_QUICKSTART.md
+    - Development Workflow: DEVELOPMENT_WORKFLOW.md
+    - Ubuntu Dev Setup: DEVELOPMENT_UBUNTU.md
+  - User Guide: user_guide.md
+  - Architecture:
+    - Overview: architecture/OVERVIEW.md
+  - CI/CD: CI_CD_SETUP.md
+  - Dependencies: DEPENDENCIES.md
+  - Proxmox Testing: PROXMOX_TESTING.md
+
+docs_dir: docs
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - meta
+  - toc:
+      permalink: true
+
