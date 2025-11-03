@@ -1,0 +1,1828 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.3/RELEASE_PROCESS/">
+      
+      
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>Proxmox LXCRI Release Process Guide - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#proxmox-lxcri-release-process-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Proxmox LXCRI Release Process Guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../user_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CI_CD_SETUP/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_WORKFLOW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CI_CD_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      📋 Prerequisites
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📋 Prerequisites">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#required-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      Required Access
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#required-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      Required Tools
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development Environment
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#release-process-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚀 Release Process Steps
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🚀 Release Process Steps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-pre-release-preparation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Pre-Release Preparation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 1: Pre-Release Preparation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-version-planning" class="md-nav__link">
+    <span class="md-ellipsis">
+      1.1 Version Planning
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-code-freeze-and-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      1.2 Code Freeze and Testing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-documentation-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      1.3 Documentation Review
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-version-updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Version Updates
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 2: Version Updates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-update-version-in-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.1 Update Version in Code
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-update-documentation-versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.2 Update Documentation Versions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-update-changelogmd" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.3 Update CHANGELOG.md
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-pre-release-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 3: Pre-Release Validation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 3: Pre-Release Validation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-build-and-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.1 Build and Test
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-package-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.2 Package Validation
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-commit-release-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 4: Commit Release Changes
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 4: Commit Release Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-create-release-commit" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.1 Create Release Commit
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-verify-ci-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.2 Verify CI Status
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-create-release-tag" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 5: Create Release Tag
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 5: Create Release Tag">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-create-annotated-tag" class="md-nav__link">
+    <span class="md-ellipsis">
+      5.1 Create Annotated Tag
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-push-tag-to-trigger-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      5.2 Push Tag to Trigger Release
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-monitor-release-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 6: Monitor Release Build
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 6: Monitor Release Build">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-watch-github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      6.1 Watch GitHub Actions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-verify-artifacts-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      6.2 Verify Artifacts Generation
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-7-post-release-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 7: Post-Release Validation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 7: Post-Release Validation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-test-release-assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      7.1 Test Release Assets
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-verify-package-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      7.2 Verify Package Installation
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-8-post-release-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 8: Post-Release Tasks
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 8: Post-Release Tasks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#81-update-development-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      8.1 Update Development Environment
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#82-announce-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      8.2 Announce Release
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#83-prepare-for-next-development-cycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      8.3 Prepare for Next Development Cycle
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔧 Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔧 Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#release-workflow-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      Release Workflow Fails
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deb-package-build-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      DEB Package Build Fails
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#version-inconsistencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Version Inconsistencies
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recovery-procedures" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recovery Procedures
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recovery Procedures">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#delete-and-recreate-tag" class="md-nav__link">
+    <span class="md-ellipsis">
+      Delete and Recreate Tag
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fix-release-after-publishing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fix Release After Publishing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#release-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      📋 Release Checklist
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      🎯 Best Practices
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🎯 Best Practices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#version-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Version Strategy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tag-messages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tag Messages
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#release-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Release Notes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#communication" class="md-nav__link">
+    <span class="md-ellipsis">
+      Communication
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/RELEASE_PROCESS.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="proxmox-lxcri-release-process-guide">Proxmox LXCRI Release Process Guide<a class="headerlink" href="#proxmox-lxcri-release-process-guide" title="Permanent link">&para;</a></h1>
+<p>This document outlines the complete step-by-step process for creating and publishing releases of Proxmox LXCRI with automated DEB package generation.</p>
+<h2 id="prerequisites">📋 Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<h3 id="required-access">Required Access<a class="headerlink" href="#required-access" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>GitHub Repository</strong>: Write access to <code>cageforge/nexcage</code></li>
+<li><strong>Git Configuration</strong>: Properly configured local Git environment</li>
+<li><strong>GPG Key</strong>: For signing releases (recommended)</li>
+</ul>
+<h3 id="required-tools">Required Tools<a class="headerlink" href="#required-tools" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Install required tools</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>update
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>git<span class="w"> </span>gh<span class="w"> </span>zig
+
+<span class="c1"># Verify installations</span>
+git<span class="w"> </span>--version
+gh<span class="w"> </span>--version
+zig<span class="w"> </span>version
+
+<span class="c1"># Authenticate with GitHub CLI</span>
+gh<span class="w"> </span>auth<span class="w"> </span>login
+</code></pre></div>
+
+<h3 id="development-environment">Development Environment<a class="headerlink" href="#development-environment" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Clone repository</span>
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/cageforge/nexcage.git
+<span class="nb">cd</span><span class="w"> </span>nexcage
+
+<span class="c1"># Ensure clean working directory</span>
+git<span class="w"> </span>status
+git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>main
+</code></pre></div>
+
+<h2 id="release-process-steps">🚀 Release Process Steps<a class="headerlink" href="#release-process-steps" title="Permanent link">&para;</a></h2>
+<h3 id="step-1-pre-release-preparation">Step 1: Pre-Release Preparation<a class="headerlink" href="#step-1-pre-release-preparation" title="Permanent link">&para;</a></h3>
+<h4 id="11-version-planning">1.1 Version Planning<a class="headerlink" href="#11-version-planning" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Determine next version based on changes</span>
+<span class="c1"># - Major (X.0.0): Breaking changes</span>
+<span class="c1"># - Minor (X.Y.0): New features, backward compatible</span>
+<span class="c1"># - Patch (X.Y.Z): Bug fixes, backward compatible</span>
+
+<span class="c1"># Example: Current v0.3.0 → Next v0.3.1 (patch) or v0.4.0 (minor)</span>
+<span class="nv">NEXT_VERSION</span><span class="o">=</span><span class="s2">&quot;0.4.0&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Planning release: v</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<h4 id="12-code-freeze-and-testing">1.2 Code Freeze and Testing<a class="headerlink" href="#12-code-freeze-and-testing" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Ensure all code is committed</span>
+git<span class="w"> </span>add<span class="w"> </span>.
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Final changes for v</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="c1"># Run comprehensive tests</span>
+zig<span class="w"> </span>build<span class="w"> </span><span class="nb">test</span>
+
+<span class="c1"># Build and test locally</span>
+zig<span class="w"> </span>build<span class="w"> </span>-Doptimize<span class="o">=</span>ReleaseFast
+./zig-out/bin/nexcage<span class="w"> </span>version
+./zig-out/bin/nexcage<span class="w"> </span>--help
+</code></pre></div>
+
+<h4 id="13-documentation-review">1.3 Documentation Review<a class="headerlink" href="#13-documentation-review" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check all documentation is up to date</span>
+git<span class="w"> </span>status<span class="w"> </span>docs/
+
+<span class="c1"># Verify examples work with current code</span>
+<span class="c1"># Update any outdated documentation</span>
+</code></pre></div>
+
+<h3 id="step-2-version-updates">Step 2: Version Updates<a class="headerlink" href="#step-2-version-updates" title="Permanent link">&para;</a></h3>
+<h4 id="21-update-version-in-code">2.1 Update Version in Code<a class="headerlink" href="#21-update-version-in-code" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Update binary version in help system</span>
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/version [0-9]\+\.[0-9]\+\.[0-9]\+/version &#39;</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s1">&#39;/&#39;</span><span class="w"> </span>src/oci/help.zig
+
+<span class="c1"># Verify the change</span>
+grep<span class="w"> </span><span class="s2">&quot;version.*</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>src/oci/help.zig
+</code></pre></div>
+
+<h4 id="22-update-documentation-versions">2.2 Update Documentation Versions<a class="headerlink" href="#22-update-documentation-versions" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Update README.md version badge</span>
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/Version-[0-9]\+\.[0-9]\+\.[0-9]\+/Version-&#39;</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s1">&#39;/&#39;</span><span class="w"> </span>README.md
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/tag\/v[0-9]\+\.[0-9]\+\.[0-9]\+/tag\/v&#39;</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s1">&#39;/&#39;</span><span class="w"> </span>README.md
+
+<span class="c1"># Update installation examples</span>
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/nexcage_[0-9]\+\.[0-9]\+\.[0-9]\+-1/nexcage_&#39;</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s1">&#39;-1/&#39;</span><span class="w"> </span>README.md
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/nexcage_[0-9]\+\.[0-9]\+\.[0-9]\+-1/nexcage_&#39;</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s1">&#39;-1/&#39;</span><span class="w"> </span>docs/INSTALLATION.md
+
+<span class="c1"># Update package changelog</span>
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;1s/([0-9]\+\.[0-9]\+\.[0-9]\+-1)/(&#39;</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s1">&#39;-1)/&#39;</span><span class="w"> </span>packaging/debian/changelog
+</code></pre></div>
+
+<h4 id="23-update-changelogmd">2.3 Update CHANGELOG.md<a class="headerlink" href="#23-update-changelogmd" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Edit CHANGELOG.md to move features from [Unreleased] to new version</span>
+<span class="c1"># Add new [Unreleased] section for future changes</span>
+
+<span class="c1"># Example structure:</span>
+cat<span class="w"> </span>&gt;&gt;<span class="w"> </span>CHANGELOG_UPDATE.md<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">## [Unreleased]</span>
+
+<span class="s">### Planned</span>
+<span class="s">- Future enhancements and improvements</span>
+
+<span class="s">## [${NEXT_VERSION}] - $(date +%Y-%m-%d)</span>
+
+<span class="s">### Added</span>
+<span class="s">- [List new features]</span>
+
+<span class="s">### Changed  </span>
+<span class="s">- [List changes]</span>
+
+<span class="s">### Fixed</span>
+<span class="s">- [List bug fixes]</span>
+
+<span class="s">EOF</span>
+
+<span class="c1"># Manually merge this into docs/CHANGELOG.md</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Update docs/CHANGELOG.md with version </span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Remember to set the correct date: </span><span class="k">$(</span>date<span class="w"> </span>+%Y-%m-%d<span class="k">)</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<h3 id="step-3-pre-release-validation">Step 3: Pre-Release Validation<a class="headerlink" href="#step-3-pre-release-validation" title="Permanent link">&para;</a></h3>
+<h4 id="31-build-and-test">3.1 Build and Test<a class="headerlink" href="#31-build-and-test" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Clean build</span>
+rm<span class="w"> </span>-rf<span class="w"> </span>zig-out/<span class="w"> </span>zig-cache/
+zig<span class="w"> </span>build<span class="w"> </span>-Doptimize<span class="o">=</span>ReleaseFast
+
+<span class="c1"># Validate version</span>
+./zig-out/bin/nexcage<span class="w"> </span>version<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+
+<span class="c1"># Test key functionality</span>
+./zig-out/bin/nexcage<span class="w"> </span><span class="nb">help</span>
+./zig-out/bin/nexcage<span class="w"> </span><span class="nb">help</span><span class="w"> </span>checkpoint
+./zig-out/bin/nexcage<span class="w"> </span><span class="nb">help</span><span class="w"> </span>restore
+</code></pre></div>
+
+<h4 id="32-package-validation">3.2 Package Validation<a class="headerlink" href="#32-package-validation" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Test DEB package structure</span>
+find<span class="w"> </span>packaging/debian<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.control&quot;</span><span class="w"> </span>-o<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.rules&quot;</span><span class="w"> </span>-o<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.changelog&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>ls<span class="w"> </span>-la
+
+<span class="c1"># Validate changelog format</span>
+head<span class="w"> </span>-n<span class="w"> </span><span class="m">10</span><span class="w"> </span>packaging/debian/changelog
+
+<span class="c1"># Check for any linting issues</span>
+<span class="k">if</span><span class="w"> </span><span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>lintian<span class="w"> </span>&gt;/dev/null<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Lintian available for package validation&quot;</span>
+<span class="k">else</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Consider installing lintian: sudo apt install lintian&quot;</span>
+<span class="k">fi</span>
+</code></pre></div>
+
+<h3 id="step-4-commit-release-changes">Step 4: Commit Release Changes<a class="headerlink" href="#step-4-commit-release-changes" title="Permanent link">&para;</a></h3>
+<h4 id="41-create-release-commit">4.1 Create Release Commit<a class="headerlink" href="#41-create-release-commit" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Stage all changes</span>
+git<span class="w"> </span>add<span class="w"> </span>.
+
+<span class="c1"># Create release commit</span>
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;🔖 Release v</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+
+<span class="s2">📈 VERSION UPDATE:</span>
+<span class="s2">- Updated binary version to </span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+<span class="s2">- Updated documentation and examples</span>
+<span class="s2">- Updated package changelog</span>
+<span class="s2">- Updated README.md version references</span>
+
+<span class="s2">🎯 RELEASE READY:</span>
+<span class="s2">- All tests passing</span>
+<span class="s2">- Documentation updated</span>
+<span class="s2">- Package configuration validated</span>
+<span class="s2">- Ready for tag creation</span>
+
+<span class="s2">Status: RELEASE v</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2"> PREPARED ✅&quot;</span>
+
+<span class="c1"># Push changes</span>
+git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>main
+</code></pre></div>
+
+<h4 id="42-verify-ci-status">4.2 Verify CI Status<a class="headerlink" href="#42-verify-ci-status" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check GitHub Actions status</span>
+gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--limit<span class="w"> </span><span class="m">5</span>
+
+<span class="c1"># Wait for CI to pass before proceeding</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Ensure all CI checks pass before creating tag&quot;</span>
+</code></pre></div>
+
+<h3 id="step-5-create-release-tag">Step 5: Create Release Tag<a class="headerlink" href="#step-5-create-release-tag" title="Permanent link">&para;</a></h3>
+<h4 id="51-create-annotated-tag">5.1 Create Annotated Tag<a class="headerlink" href="#51-create-annotated-tag" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create comprehensive tag message</span>
+git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;🚀 Release v</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+
+<span class="s2">🌟 MAJOR FEATURES:</span>
+<span class="k">$(</span>grep<span class="w"> </span>-A<span class="w"> </span><span class="m">10</span><span class="w"> </span><span class="s2">&quot;## \[</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">\]&quot;</span><span class="w"> </span>docs/CHANGELOG.md<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span>+3<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-n<span class="w"> </span>-1<span class="k">)</span>
+
+<span class="s2">🎯 RELEASE HIGHLIGHTS:</span>
+<span class="s2">- Production-ready functionality</span>
+<span class="s2">- Comprehensive testing validated</span>
+<span class="s2">- Professional DEB packaging</span>
+<span class="s2">- Multi-architecture support</span>
+
+<span class="s2">📦 INSTALLATION:</span>
+<span class="s2">DEB Package (Ubuntu/Debian):</span>
+<span class="s2">  wget https://github.com/cageforge/nexcage/releases/download/v</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">/nexcage_</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">-1_amd64.deb</span>
+<span class="s2">  sudo dpkg -i nexcage_</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">-1_amd64.deb</span>
+
+<span class="s2">Binary Installation:</span>
+<span class="s2">  wget https://github.com/cageforge/nexcage/releases/download/v</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">/nexcage-linux-x86_64</span>
+<span class="s2">  chmod +x nexcage-linux-x86_64</span>
+<span class="s2">  sudo mv nexcage-linux-x86_64 /usr/local/bin/nexcage</span>
+
+<span class="s2">📚 DOCUMENTATION:</span>
+<span class="s2">- Installation Guide: docs/INSTALLATION.md</span>
+<span class="s2">- ZFS Guide: docs/zfs-checkpoint-guide.md</span>
+<span class="s2">- Architecture: docs/architecture.md</span>
+
+<span class="s2">This release delivers production-ready container runtime functionality.&quot;</span>
+
+<span class="c1"># Verify tag was created</span>
+git<span class="w"> </span>tag<span class="w"> </span>-v<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="o">||</span><span class="w"> </span>git<span class="w"> </span>tag<span class="w"> </span>-n<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+</code></pre></div>
+
+<h4 id="52-push-tag-to-trigger-release">5.2 Push Tag to Trigger Release<a class="headerlink" href="#52-push-tag-to-trigger-release" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Push tag to GitHub (this triggers automated release workflow)</span>
+git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✅ Tag v</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2"> pushed to GitHub&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;🔄 GitHub Actions will now:&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;   1. Build binaries for x86_64 and ARM64&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;   2. Create DEB packages for both architectures&quot;</span><span class="w">  </span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;   3. Run package validation tests&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;   4. Create GitHub release with all artifacts&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;   5. Generate comprehensive release notes&quot;</span>
+</code></pre></div>
+
+<h3 id="step-6-monitor-release-build">Step 6: Monitor Release Build<a class="headerlink" href="#step-6-monitor-release-build" title="Permanent link">&para;</a></h3>
+<h4 id="61-watch-github-actions">6.1 Watch GitHub Actions<a class="headerlink" href="#61-watch-github-actions" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Monitor the release workflow</span>
+gh<span class="w"> </span>run<span class="w"> </span>watch
+
+<span class="c1"># Alternative: Check via web</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Monitor release progress at:&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;https://github.com/cageforge/nexcage/actions&quot;</span>
+</code></pre></div>
+
+<h4 id="62-verify-artifacts-generation">6.2 Verify Artifacts Generation<a class="headerlink" href="#62-verify-artifacts-generation" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check if release workflow completes successfully</span>
+gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--workflow<span class="o">=</span>release.yml<span class="w"> </span>--limit<span class="w"> </span><span class="m">1</span>
+
+<span class="c1"># Once complete, verify release was created</span>
+gh<span class="w"> </span>release<span class="w"> </span>view<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+
+<span class="c1"># List release assets</span>
+gh<span class="w"> </span>release<span class="w"> </span>view<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="w"> </span>--json<span class="w"> </span>assets<span class="w"> </span>--jq<span class="w"> </span><span class="s1">&#39;.assets[].name&#39;</span>
+</code></pre></div>
+
+<h3 id="step-7-post-release-validation">Step 7: Post-Release Validation<a class="headerlink" href="#step-7-post-release-validation" title="Permanent link">&para;</a></h3>
+<h4 id="71-test-release-assets">7.1 Test Release Assets<a class="headerlink" href="#71-test-release-assets" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Download and test DEB package</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>/tmp/release-test
+<span class="nb">cd</span><span class="w"> </span>/tmp/release-test
+
+<span class="c1"># Download DEB package</span>
+gh<span class="w"> </span>release<span class="w"> </span>download<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="w"> </span>--pattern<span class="w"> </span><span class="s2">&quot;*.deb&quot;</span>
+
+<span class="c1"># Test DEB package (in container to avoid system changes)</span>
+docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-v<span class="w"> </span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span>:/test<span class="w"> </span>ubuntu:22.04<span class="w"> </span>bash<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+<span class="s2">    apt update &amp;&amp; apt install -y /test/*.deb</span>
+<span class="s2">    nexcage version</span>
+<span class="s2">    nexcage help</span>
+<span class="s2">&quot;</span>
+
+<span class="c1"># Download and test binary</span>
+gh<span class="w"> </span>release<span class="w"> </span>download<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="w"> </span>--pattern<span class="w"> </span><span class="s2">&quot;*linux-x86_64&quot;</span>
+chmod<span class="w"> </span>+x<span class="w"> </span>nexcage-linux-x86_64
+./nexcage-linux-x86_64<span class="w"> </span>version
+
+<span class="c1"># Cleanup</span>
+<span class="nb">cd</span><span class="w"> </span>-<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span>/tmp/release-test
+</code></pre></div>
+
+<h4 id="72-verify-package-installation">7.2 Verify Package Installation<a class="headerlink" href="#72-verify-package-installation" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Test installation instructions from release notes</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Test the installation commands from the release:&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;https://github.com/cageforge/nexcage/releases/tag/v</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="c1"># Verify checksums if available</span>
+gh<span class="w"> </span>release<span class="w"> </span>view<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="w"> </span>--json<span class="w"> </span>assets<span class="w"> </span>--jq<span class="w"> </span><span class="s1">&#39;.assets[] | select(.name | contains(&quot;sha256&quot;)) | .name&#39;</span>
+</code></pre></div>
+
+<h3 id="step-8-post-release-tasks">Step 8: Post-Release Tasks<a class="headerlink" href="#step-8-post-release-tasks" title="Permanent link">&para;</a></h3>
+<h4 id="81-update-development-environment">8.1 Update Development Environment<a class="headerlink" href="#81-update-development-environment" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Switch back to main development</span>
+git<span class="w"> </span>checkout<span class="w"> </span>main
+git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>main
+
+<span class="c1"># Verify local environment matches released state</span>
+git<span class="w"> </span>log<span class="w"> </span>--oneline<span class="w"> </span>-5
+git<span class="w"> </span>tag<span class="w"> </span>--sort<span class="o">=</span>-version:refname<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-5
+</code></pre></div>
+
+<h4 id="82-announce-release">8.2 Announce Release<a class="headerlink" href="#82-announce-release" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create announcement template</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>RELEASE_ANNOUNCEMENT.md<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s"># 🚀 Proxmox LXCRI v${NEXT_VERSION} Released!</span>
+
+<span class="s">We&#39;re excited to announce the release of Proxmox LXCRI v${NEXT_VERSION}!</span>
+
+<span class="s">## 🌟 Key Features</span>
+<span class="s">- [Highlight major features from CHANGELOG]</span>
+
+<span class="s">## 📦 Installation</span>
+<span class="s">\`\`\`bash</span>
+<span class="s"># DEB Package (Ubuntu/Debian)</span>
+<span class="s">wget https://github.com/cageforge/nexcage/releases/download/v${NEXT_VERSION}/nexcage_${NEXT_VERSION}-1_amd64.deb</span>
+<span class="s">sudo dpkg -i nexcage_${NEXT_VERSION}-1_amd64.deb</span>
+
+<span class="s"># Binary Installation</span>
+<span class="s">wget https://github.com/cageforge/nexcage/releases/download/v${NEXT_VERSION}/nexcage-linux-x86_64</span>
+<span class="s">chmod +x nexcage-linux-x86_64</span>
+<span class="s">sudo mv nexcage-linux-x86_64 /usr/local/bin/nexcage</span>
+<span class="s">\`\`\`</span>
+
+<span class="s">## 📚 Documentation</span>
+<span class="s">- [Installation Guide](docs/INSTALLATION.md)</span>
+<span class="s">- [ZFS Checkpoint Guide](docs/zfs-checkpoint-guide.md)</span>
+<span class="s">- [Release Notes](https://github.com/cageforge/nexcage/releases/tag/v${NEXT_VERSION})</span>
+
+<span class="s">Thank you to all contributors who made this release possible!</span>
+<span class="s">EOF</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Use RELEASE_ANNOUNCEMENT.md for social media, forums, etc.&quot;</span>
+</code></pre></div>
+
+<h4 id="83-prepare-for-next-development-cycle">8.3 Prepare for Next Development Cycle<a class="headerlink" href="#83-prepare-for-next-development-cycle" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create next development version in [Unreleased] section</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Consider updating docs/CHANGELOG.md [Unreleased] section with:&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;- Planned features for next release&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;- Known issues to address&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;- Community requests&quot;</span>
+
+<span class="c1"># Update roadmap if needed</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Update Roadmap/ROADMAP.md with:&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;- Completed features from this release&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;- Next sprint/version planning&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;- Updated progress metrics&quot;</span>
+</code></pre></div>
+
+<h2 id="troubleshooting">🔧 Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="common-issues">Common Issues<a class="headerlink" href="#common-issues" title="Permanent link">&para;</a></h3>
+<h4 id="release-workflow-fails">Release Workflow Fails<a class="headerlink" href="#release-workflow-fails" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check workflow logs</span>
+gh<span class="w"> </span>run<span class="w"> </span>view<span class="w"> </span>--log
+
+<span class="c1"># Common fixes:</span>
+<span class="c1"># 1. Check Zig version in workflow matches project requirements</span>
+<span class="c1"># 2. Verify all files are committed and pushed</span>
+<span class="c1"># 3. Check for syntax errors in packaging files</span>
+<span class="c1"># 4. Ensure tag follows semantic versioning</span>
+</code></pre></div>
+
+<h4 id="deb-package-build-fails">DEB Package Build Fails<a class="headerlink" href="#deb-package-build-fails" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Test package build locally with Docker</span>
+docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-v<span class="w"> </span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span>:/src<span class="w"> </span>-w<span class="w"> </span>/src<span class="w"> </span>ubuntu:22.04<span class="w"> </span>bash<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+<span class="s2">    apt update &amp;&amp; apt install -y debhelper devscripts build-essential fakeroot</span>
+<span class="s2">    # Add Zig installation steps</span>
+<span class="s2">    # Run package build commands</span>
+<span class="s2">&quot;</span>
+</code></pre></div>
+
+<h4 id="version-inconsistencies">Version Inconsistencies<a class="headerlink" href="#version-inconsistencies" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check all version references</span>
+grep<span class="w"> </span>-r<span class="w"> </span><span class="s2">&quot;0\.3\.0&quot;</span><span class="w"> </span>.<span class="w"> </span>--exclude-dir<span class="o">=</span>.git<span class="w"> </span>--exclude-dir<span class="o">=</span>zig-out<span class="w"> </span>--exclude-dir<span class="o">=</span>zig-cache
+grep<span class="w"> </span>-r<span class="w"> </span><span class="s2">&quot;v0\.3\.0&quot;</span><span class="w"> </span>.<span class="w"> </span>--exclude-dir<span class="o">=</span>.git<span class="w"> </span>--exclude-dir<span class="o">=</span>zig-out<span class="w"> </span>--exclude-dir<span class="o">=</span>zig-cache
+
+<span class="c1"># Update any missed references</span>
+<span class="c1"># Ensure consistency across all files</span>
+</code></pre></div>
+
+<h3 id="recovery-procedures">Recovery Procedures<a class="headerlink" href="#recovery-procedures" title="Permanent link">&para;</a></h3>
+<h4 id="delete-and-recreate-tag">Delete and Recreate Tag<a class="headerlink" href="#delete-and-recreate-tag" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># If tag needs to be recreated (only before public release)</span>
+git<span class="w"> </span>tag<span class="w"> </span>-d<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>:refs/tags/v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+
+<span class="c1"># Fix issues and recreate tag</span>
+git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span><span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Updated tag message&quot;</span>
+git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v<span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="si">}</span>
+</code></pre></div>
+
+<h4 id="fix-release-after-publishing">Fix Release After Publishing<a class="headerlink" href="#fix-release-after-publishing" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># For critical fixes after release</span>
+<span class="nv">PATCH_VERSION</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="p">%.*</span><span class="si">}</span><span class="s2">.</span><span class="k">$((</span><span class="si">${</span><span class="nv">NEXT_VERSION</span><span class="p">##*.</span><span class="si">}</span><span class="o">+</span><span class="m">1</span><span class="k">))</span><span class="s2">&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Create patch release: v</span><span class="si">${</span><span class="nv">PATCH_VERSION</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="c1"># Follow same process with patch changes</span>
+</code></pre></div>
+
+<h2 id="release-checklist">📋 Release Checklist<a class="headerlink" href="#release-checklist" title="Permanent link">&para;</a></h2>
+<p>Copy this checklist for each release:</p>
+<div class="codehilite"><pre><span></span><code><span class="n">Release</span><span class="w"> </span><span class="n">v</span><span class="o">$</span><span class="p">{</span><span class="n">NEXT_VERSION</span><span class="p">}</span><span class="w"> </span><span class="n">Checklist</span><span class="p">:</span>
+
+<span class="n">Pre</span><span class="o">-</span><span class="n">Release</span><span class="p">:</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Code</span><span class="w"> </span><span class="n">freeze</span><span class="w"> </span><span class="ow">and</span><span class="w"> </span><span class="n">final</span><span class="w"> </span><span class="n">testing</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">src</span><span class="o">/</span><span class="n">oci</span><span class="o">/</span><span class="n">help</span><span class="o">.</span><span class="n">zig</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="n">references</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">documentation</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">packaging</span><span class="o">/</span><span class="n">debian</span><span class="o">/</span><span class="n">changelog</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">docs</span><span class="o">/</span><span class="n">CHANGELOG</span><span class="o">.</span><span class="n">md</span><span class="w"> </span><span class="n">with</span><span class="w"> </span><span class="n">release</span><span class="w"> </span><span class="n">date</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Commit</span><span class="w"> </span><span class="n">all</span><span class="w"> </span><span class="n">changes</span><span class="w"> </span><span class="n">with</span><span class="w"> </span><span class="n">proper</span><span class="w"> </span><span class="n">message</span>
+
+<span class="n">Release</span><span class="p">:</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Verify</span><span class="w"> </span><span class="n">CI</span><span class="w"> </span><span class="n">passes</span><span class="w"> </span><span class="n">on</span><span class="w"> </span><span class="n">main</span><span class="w"> </span><span class="n">branch</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Create</span><span class="w"> </span><span class="n">annotated</span><span class="w"> </span><span class="n">git</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="n">with</span><span class="w"> </span><span class="n">comprehensive</span><span class="w"> </span><span class="n">message</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Push</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">trigger</span><span class="w"> </span><span class="n">automated</span><span class="w"> </span><span class="n">release</span><span class="w"> </span><span class="n">workflow</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Monitor</span><span class="w"> </span><span class="n">GitHub</span><span class="w"> </span><span class="n">Actions</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">successful</span><span class="w"> </span><span class="n">completion</span>
+
+<span class="n">Post</span><span class="o">-</span><span class="n">Release</span><span class="p">:</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Verify</span><span class="w"> </span><span class="n">GitHub</span><span class="w"> </span><span class="n">release</span><span class="w"> </span><span class="n">created</span><span class="w"> </span><span class="n">with</span><span class="w"> </span><span class="n">all</span><span class="w"> </span><span class="n">artifacts</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Test</span><span class="w"> </span><span class="n">DEB</span><span class="w"> </span><span class="n">package</span><span class="w"> </span><span class="n">installation</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Test</span><span class="w"> </span><span class="n">binary</span><span class="w"> </span><span class="n">download</span><span class="w"> </span><span class="ow">and</span><span class="w"> </span><span class="n">execution</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Verify</span><span class="w"> </span><span class="n">release</span><span class="w"> </span><span class="n">notes</span><span class="w"> </span><span class="n">are</span><span class="w"> </span><span class="n">accurate</span><span class="w"> </span><span class="ow">and</span><span class="w"> </span><span class="n">complete</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Announce</span><span class="w"> </span><span class="n">release</span><span class="w"> </span><span class="n">through</span><span class="w"> </span><span class="n">appropriate</span><span class="w"> </span><span class="n">channels</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">development</span><span class="w"> </span><span class="n">environment</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">next</span><span class="w"> </span><span class="n">cycle</span>
+
+<span class="n">Artifacts</span><span class="w"> </span><span class="n">Verified</span><span class="p">:</span>
+<span class="err">□</span><span class="w"> </span><span class="n">nexcage</span><span class="o">-</span><span class="n">linux</span><span class="o">-</span><span class="n">x86_64</span><span class="w"> </span><span class="n">binary</span>
+<span class="err">□</span><span class="w"> </span><span class="n">nexcage</span><span class="o">-</span><span class="n">linux</span><span class="o">-</span><span class="n">aarch64</span><span class="w"> </span><span class="n">binary</span><span class="w">  </span>
+<span class="err">□</span><span class="w"> </span><span class="n">nexcage_</span><span class="o">$</span><span class="p">{</span><span class="n">NEXT_VERSION</span><span class="p">}</span><span class="o">-</span><span class="mi">1</span><span class="n">_amd64</span><span class="o">.</span><span class="n">deb</span><span class="w"> </span><span class="n">package</span>
+<span class="err">□</span><span class="w"> </span><span class="n">nexcage_</span><span class="o">$</span><span class="p">{</span><span class="n">NEXT_VERSION</span><span class="p">}</span><span class="o">-</span><span class="mi">1</span><span class="n">_arm64</span><span class="o">.</span><span class="n">deb</span><span class="w"> </span><span class="n">package</span>
+<span class="err">□</span><span class="w"> </span><span class="n">checksums</span><span class="o">.</span><span class="n">txt</span><span class="w"> </span><span class="n">with</span><span class="w"> </span><span class="n">SHA256</span><span class="w"> </span><span class="n">hashes</span>
+<span class="err">□</span><span class="w"> </span><span class="n">Comprehensive</span><span class="w"> </span><span class="n">release</span><span class="w"> </span><span class="n">notes</span><span class="w"> </span><span class="n">with</span><span class="w"> </span><span class="n">installation</span><span class="w"> </span><span class="n">instructions</span>
+</code></pre></div>
+
+<h2 id="best-practices">🎯 Best Practices<a class="headerlink" href="#best-practices" title="Permanent link">&para;</a></h2>
+<h3 id="version-strategy">Version Strategy<a class="headerlink" href="#version-strategy" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Major</strong>: Breaking changes, API changes</li>
+<li><strong>Minor</strong>: New features, backward compatible</li>
+<li><strong>Patch</strong>: Bug fixes, security updates</li>
+</ul>
+<h3 id="tag-messages">Tag Messages<a class="headerlink" href="#tag-messages" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Use comprehensive, detailed tag messages</li>
+<li>Include feature highlights and installation instructions</li>
+<li>Reference documentation and breaking changes</li>
+</ul>
+<h3 id="release-notes">Release Notes<a class="headerlink" href="#release-notes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Automated generation includes installation instructions</li>
+<li>Highlight major features and improvements</li>
+<li>Include migration guide for breaking changes</li>
+</ul>
+<h3 id="communication">Communication<a class="headerlink" href="#communication" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Announce releases through multiple channels</li>
+<li>Provide clear upgrade instructions</li>
+<li>Document any required configuration changes</li>
+</ul>
+<hr />
+<p><strong>🎉 Happy Releasing!</strong></p>
+<p>This process ensures consistent, professional releases with automated DEB package generation and comprehensive documentation.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

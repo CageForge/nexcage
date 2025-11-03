@@ -1,0 +1,1472 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.3/CODEBASE_MATURITY_REPORT/">
+      
+      
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>Codebase Maturity Assessment Report - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#codebase-maturity-assessment-report" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Codebase Maturity Assessment Report
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../user_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CI_CD_SETUP/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_WORKFLOW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CI_CD_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#executive-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Executive Summary
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#detailed-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      📊 Detailed Analysis
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📊 Detailed Analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-github-workflows-needs-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. GitHub Workflows (🔴 Needs Cleanup)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. GitHub Workflows (🔴 Needs Cleanup)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#disabled-workflows-9-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disabled Workflows (9 files)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#active-workflows-9-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Active Workflows (9 files)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-build-files-review-needed" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Build Files (🟡 Review Needed)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Build Files (🟡 Review Needed)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#alternative-build-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Alternative Build Files
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-source-code-duplicates-needs-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Source Code Duplicates (🟡 Needs Resolution)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Source Code Duplicates (🟡 Needs Resolution)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cli-health-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      CLI Health Commands
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-roadmap-documentation-excessive" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Roadmap Documentation (🟡 Excessive)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Roadmap Documentation (🟡 Excessive)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#analysis-by-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      Analysis by Type:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-build-artifacts-in-repository-critical" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Build Artifacts in Repository (🔴 Critical)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Build Artifacts in Repository (🔴 Critical)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#directories-that-should-not-be-in-git" class="md-nav__link">
+    <span class="md-ellipsis">
+      Directories That Should Not Be in Git:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dependencies:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-configuration-files-good" class="md-nav__link">
+    <span class="md-ellipsis">
+      6. Configuration Files (🟢 Good)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-documentation-structure-excellent" class="md-nav__link">
+    <span class="md-ellipsis">
+      7. Documentation Structure (🟢 Excellent)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-source-code-organization-excellent" class="md-nav__link">
+    <span class="md-ellipsis">
+      8. Source Code Organization (🟢 Excellent)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-test-infrastructure-good" class="md-nav__link">
+    <span class="md-ellipsis">
+      9. Test Infrastructure (🟢 Good)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-scripts-directory-review-needed" class="md-nav__link">
+    <span class="md-ellipsis">
+      10. Scripts Directory (🟡 Review Needed)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommended-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      🎯 Recommended Actions
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🎯 Recommended Actions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#priority-1-critical-cleanup-immediate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Priority 1: Critical Cleanup (Immediate)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#priority-2-organization-short-term" class="md-nav__link">
+    <span class="md-ellipsis">
+      Priority 2: Organization (Short-term)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#priority-3-optimization-medium-term" class="md-nav__link">
+    <span class="md-ellipsis">
+      Priority 3: Optimization (Medium-term)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#maturity-scorecard" class="md-nav__link">
+    <span class="md-ellipsis">
+      📈 Maturity Scorecard
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strengths" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✅ Strengths
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#areas-for-improvement" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔧 Areas for Improvement
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      📝 Conclusion
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/CODEBASE_MATURITY_REPORT.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="codebase-maturity-assessment-report">Codebase Maturity Assessment Report<a class="headerlink" href="#codebase-maturity-assessment-report" title="Permanent link">&para;</a></h1>
+<p><strong>Date</strong>: 2025-10-31<br />
+<strong>Scope</strong>: Full codebase analysis for maturity and cleanup opportunities</p>
+<h2 id="executive-summary">Executive Summary<a class="headerlink" href="#executive-summary" title="Permanent link">&para;</a></h2>
+<p><strong>Overall Maturity Level</strong>: 🟡 <strong>Medium-High</strong> (7/10)</p>
+<p>The codebase shows good structure and organization, with proper CNCF compliance, testing infrastructure, and documentation. However, there are opportunities for cleanup and optimization:</p>
+<ul>
+<li>✅ <strong>Strengths</strong>: Well-organized structure, comprehensive documentation, active CI/CD</li>
+<li>⚠️ <strong>Areas for Improvement</strong>: Disabled workflows, duplicate files, build artifacts in repo, excessive roadmap docs</li>
+</ul>
+<hr />
+<h2 id="detailed-analysis">📊 Detailed Analysis<a class="headerlink" href="#detailed-analysis" title="Permanent link">&para;</a></h2>
+<h3 id="1-github-workflows-needs-cleanup">1. GitHub Workflows (🔴 Needs Cleanup)<a class="headerlink" href="#1-github-workflows-needs-cleanup" title="Permanent link">&para;</a></h3>
+<h4 id="disabled-workflows-9-files">Disabled Workflows (9 files)<a class="headerlink" href="#disabled-workflows-9-files" title="Permanent link">&para;</a></h4>
+<p><strong>Status</strong>: Should be archived or deleted</p>
+<p>Located in <code>.github/workflows/</code>:
+1. <code>ci_with_reports.yml.disabled</code> - Old CI with reporting (replaced by ci_cncf.yml)
+2. <code>docs.yml.disabled</code> - Documentation workflow (could be reactivated)
+3. <code>multi-platform-ci.yml.disabled</code> - Multi-platform CI (may be useful later)
+4. <code>oci_smoke.yml.disabled</code> - OCI smoke tests
+5. <code>permissions.yml.disabled</code> - Permissions management
+6. <code>proxmox_ci.yml.disabled</code> - Proxmox CI (replaced by proxmox_e2e.yml)
+7. <code>proxmox_self_hosted.yml.disabled</code> - Self-hosted Proxmox CI
+8. <code>proxmox_tests.yml.disabled</code> - Proxmox tests (replaced by proxmox_e2e.yml)
+9. <code>simple_ci.yml.disabled</code> - Simple CI (replaced by ci_cncf.yml)</p>
+<p><strong>Recommendation</strong>:
+- <strong>Delete</strong>: <code>ci_with_reports.yml.disabled</code>, <code>simple_ci.yml.disabled</code>, <code>proxmox_ci.yml.disabled</code>, <code>proxmox_tests.yml.disabled</code> (replaced)
+- <strong>Archive</strong>: Keep others in <code>.github/workflows/archive/</code> for reference if needed</p>
+<h4 id="active-workflows-9-files">Active Workflows (9 files)<a class="headerlink" href="#active-workflows-9-files" title="Permanent link">&para;</a></h4>
+<p>✅ All active workflows are well-maintained and necessary:
+- <code>ci_cncf.yml</code> - Main CI
+- <code>dco.yml</code> - DCO checking
+- <code>release.yml</code> - Releases
+- <code>scorecards.yml</code> - Security scanning
+- <code>security.yml</code> - Security checks
+- <code>proxmox_e2e.yml</code> - E2E tests
+- <code>crun_e2e.yml</code> - Crun tests
+- <code>dependencies.yml</code> - Dependency checks
+- <code>version-check.yml</code> - Version validation
+- <code>test_runner0.yml</code> - Runner tests</p>
+<hr />
+<h3 id="2-build-files-review-needed">2. Build Files (🟡 Review Needed)<a class="headerlink" href="#2-build-files-review-needed" title="Permanent link">&para;</a></h3>
+<h4 id="alternative-build-files">Alternative Build Files<a class="headerlink" href="#alternative-build-files" title="Permanent link">&para;</a></h4>
+<p><strong>Status</strong>: May be redundant</p>
+<ol>
+<li><code>build_modular_only.zig</code> (137 lines, Oct 10)</li>
+<li><strong>Purpose</strong>: Alternative build for modular architecture</li>
+<li><strong>Status</strong>: Unused, appears to be old experiment</li>
+<li>
+<p><strong>Recommendation</strong>: <strong>DELETE</strong> - functionality merged into <code>build.zig</code></p>
+</li>
+<li>
+<p><code>build_test.zig</code> (1036 bytes, Oct 8)</p>
+</li>
+<li><strong>Purpose</strong>: Test-specific build configuration</li>
+<li><strong>Status</strong>: Unclear if still used</li>
+<li>
+<p><strong>Recommendation</strong>: <strong>INVESTIGATE</strong> - Check if tests use this</p>
+</li>
+<li>
+<p><code>test_mysql_conversion.zig</code> (root directory)</p>
+</li>
+<li><strong>Purpose</strong>: Standalone test for MySQL OCI conversion</li>
+<li><strong>Status</strong>: Test file in wrong location</li>
+<li><strong>Recommendation</strong>: <strong>MOVE</strong> to <code>tests/</code> or <strong>DELETE</strong> if outdated</li>
+</ol>
+<hr />
+<h3 id="3-source-code-duplicates-needs-resolution">3. Source Code Duplicates (🟡 Needs Resolution)<a class="headerlink" href="#3-source-code-duplicates-needs-resolution" title="Permanent link">&para;</a></h3>
+<h4 id="cli-health-commands">CLI Health Commands<a class="headerlink" href="#cli-health-commands" title="Permanent link">&para;</a></h4>
+<p><strong>Status</strong>: Duplicate implementations</p>
+<ol>
+<li><code>src/cli/health.zig</code> (82 lines)</li>
+<li>Uses old logging API (<code>core.logging.Logger</code>)</li>
+<li>
+<p>Has initialization methods (<code>init</code>, <code>deinit</code>)</p>
+</li>
+<li>
+<p><code>src/cli/health_check.zig</code> (79 lines)</p>
+</li>
+<li>Uses new logging API (<code>core.LogContext</code>)</li>
+<li>Modern structure matching other commands</li>
+</ol>
+<p><strong>Current Usage</strong>: Only <code>health_check.zig</code> is imported in <code>registry.zig</code></p>
+<p><strong>Recommendation</strong>: <strong>DELETE</strong> <code>health.zig</code> (old version)</p>
+<hr />
+<h3 id="4-roadmap-documentation-excessive">4. Roadmap Documentation (🟡 Excessive)<a class="headerlink" href="#4-roadmap-documentation-excessive" title="Permanent link">&para;</a></h3>
+<p><strong>Total Files</strong>: 42 markdown files in <code>Roadmap/</code></p>
+<h4 id="analysis-by-type">Analysis by Type:<a class="headerlink" href="#analysis-by-type" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Sprint Progress/Closure</strong>: ~15 files (many are superseded by consolidated docs)</li>
+<li><strong>Plans</strong>: ~8 files (some outdated)</li>
+<li><strong>Reports</strong>: ~10 files (various analyses)</li>
+<li><strong>Consolidated</strong>: <code>ALL_SPRINTS_CONSOLIDATED.md</code> (should be primary reference)</li>
+</ul>
+<p><strong>Recommendation</strong>:
+1. <strong>Keep</strong>: 
+   - <code>ALL_SPRINTS_CONSOLIDATED.md</code> (primary index)
+   - <code>SPRINT_6.5_*</code> files (recent/active)
+   - <code>SPRINT_7.0_PLAN.md</code>, <code>SPRINT_7.1_*</code> (active planning)</p>
+<ol>
+<li>
+<p><strong>Archive</strong>: Move old sprint docs (6.1-6.4) to <code>Roadmap/archive/</code></p>
+</li>
+<li>
+<p><strong>Consolidate</strong>: Merge multiple progress files into single per-sprint files</p>
+</li>
+</ol>
+<hr />
+<h3 id="5-build-artifacts-in-repository-critical">5. Build Artifacts in Repository (🔴 Critical)<a class="headerlink" href="#5-build-artifacts-in-repository-critical" title="Permanent link">&para;</a></h3>
+<h4 id="directories-that-should-not-be-in-git">Directories That Should Not Be in Git:<a class="headerlink" href="#directories-that-should-not-be-in-git" title="Permanent link">&para;</a></h4>
+<ol>
+<li><code>zig/</code> (161MB) - Zig compiler binaries</li>
+<li><strong>Issue</strong>: Should be downloaded, not stored in repo</li>
+<li>
+<p><strong>Recommendation</strong>: Add to <code>.gitignore</code>, remove from repo</p>
+</li>
+<li>
+<p><code>zig-out/</code> (3MB) - Build output directory</p>
+</li>
+<li><strong>Issue</strong>: Generated files should not be committed</li>
+<li>
+<p><strong>Recommendation</strong>: Already in <code>.gitignore</code>, but may need cleanup</p>
+</li>
+<li>
+<p><code>test-reports/</code> (73KB) - Test reports</p>
+</li>
+<li><strong>Issue</strong>: Generated reports</li>
+<li><strong>Recommendation</strong>: Ensure in <code>.gitignore</code></li>
+</ol>
+<h4 id="dependencies">Dependencies:<a class="headerlink" href="#dependencies" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>deps/</code> (5.2MB) - External dependencies (crun, bfc)</li>
+<li><strong>Status</strong>: ✅ Appropriate for vendored dependencies</li>
+<li><strong>Note</strong>: Consider using git submodules or package manager</li>
+</ul>
+<hr />
+<h3 id="6-configuration-files-good">6. Configuration Files (🟢 Good)<a class="headerlink" href="#6-configuration-files-good" title="Permanent link">&para;</a></h3>
+<p><strong>Status</strong>: ✅ Well-organized
+- <code>config.json.example</code> - Template
+- <code>config.logging.example.json</code> - Logging template
+- Multiple example files for different use cases</p>
+<p><strong>No issues found</strong></p>
+<hr />
+<h3 id="7-documentation-structure-excellent">7. Documentation Structure (🟢 Excellent)<a class="headerlink" href="#7-documentation-structure-excellent" title="Permanent link">&para;</a></h3>
+<p><strong>Status</strong>: ✅ Comprehensive and well-organized</p>
+<p><strong>Structure</strong>:
+- <code>docs/</code> - Main documentation (30+ files)
+- <code>docs/architecture/</code> - Architecture docs
+- <code>docs/releases/</code> - Release notes
+- <code>docs/ISSUE_TEMPLATE/</code> - Issue templates
+- <code>docs/testing/</code> - Testing guides</p>
+<p><strong>Quality</strong>: High-quality, up-to-date documentation</p>
+<hr />
+<h3 id="8-source-code-organization-excellent">8. Source Code Organization (🟢 Excellent)<a class="headerlink" href="#8-source-code-organization-excellent" title="Permanent link">&para;</a></h3>
+<p><strong>Structure</strong>: ✅ Very well organized</p>
+<div class="codehilite"><pre><span></span><code>src/
+├── backends/    # Runtime backends (proxmox-lxc, crun, runc, vm)
+├── cli/         # CLI commands
+├── core/        # Core functionality
+├── integrations/# System integrations
+├── plugin/      # Plugin system
+└── utils/        # Utilities
+</code></pre></div>
+
+<p><strong>Status</strong>: Clean, modular architecture</p>
+<hr />
+<h3 id="9-test-infrastructure-good">9. Test Infrastructure (🟢 Good)<a class="headerlink" href="#9-test-infrastructure-good" title="Permanent link">&para;</a></h3>
+<p><strong>Location</strong>: <code>tests/</code> (81 files)
+<strong>Status</strong>: ✅ Comprehensive test coverage</p>
+<p><strong>Note</strong>: Some test files were moved from <code>src/backends/</code> (good practice)</p>
+<hr />
+<h3 id="10-scripts-directory-review-needed">10. Scripts Directory (🟡 Review Needed)<a class="headerlink" href="#10-scripts-directory-review-needed" title="Permanent link">&para;</a></h3>
+<p><strong>Location</strong>: <code>scripts/</code> (20+ files)</p>
+<p><strong>Analysis</strong>:
+- ✅ Active scripts: <code>proxmox_e2e_test.sh</code>, <code>proxmox_only_test.sh</code>
+- ❓ Review needed: Some scripts may be outdated or unused</p>
+<p><strong>Recommendation</strong>: Audit scripts for usage, consolidate if possible</p>
+<hr />
+<h2 id="recommended-actions">🎯 Recommended Actions<a class="headerlink" href="#recommended-actions" title="Permanent link">&para;</a></h2>
+<h3 id="priority-1-critical-cleanup-immediate">Priority 1: Critical Cleanup (Immediate)<a class="headerlink" href="#priority-1-critical-cleanup-immediate" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>Remove build artifacts from git</strong>:
+   <code>bash
+   # Add to .gitignore if not present
+   echo "zig/" &gt;&gt; .gitignore
+   echo "zig-out/" &gt;&gt; .gitignore
+   git rm -r --cached zig/ zig-out/</code></p>
+</li>
+<li>
+<p><strong>Delete disabled workflows</strong> (replaced ones):
+   <code>bash
+   rm .github/workflows/{ci_with_reports,simple_ci,proxmox_ci,proxmox_tests}.yml.disabled</code></p>
+</li>
+<li>
+<p><strong>Delete old build files</strong>:
+   <code>bash
+   rm build_modular_only.zig
+   # Investigate and remove test_mysql_conversion.zig or move to tests/</code></p>
+</li>
+<li>
+<p><strong>Remove duplicate health command</strong>:
+   <code>bash
+   rm src/cli/health.zig  # Keep health_check.zig</code></p>
+</li>
+</ol>
+<h3 id="priority-2-organization-short-term">Priority 2: Organization (Short-term)<a class="headerlink" href="#priority-2-organization-short-term" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>Archive old roadmap files</strong>:
+   <code>bash
+   mkdir -p Roadmap/archive
+   mv Roadmap/SPRINT_6.{1,2,3,4}_* Roadmap/archive/</code></p>
+</li>
+<li>
+<p><strong>Review and consolidate scripts</strong>:</p>
+</li>
+<li>Audit <code>scripts/</code> for unused files</li>
+<li>Consolidate similar scripts</li>
+</ol>
+<h3 id="priority-3-optimization-medium-term">Priority 3: Optimization (Medium-term)<a class="headerlink" href="#priority-3-optimization-medium-term" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Evaluate deps/ strategy</strong>:</li>
+<li>Consider git submodules for crun/bfc</li>
+<li>
+<p>Or document vendoring rationale</p>
+</li>
+<li>
+<p><strong>Documentation cleanup</strong>:</p>
+</li>
+<li>Update any references to deleted files</li>
+<li>Ensure all docs reference current structure</li>
+</ol>
+<hr />
+<h2 id="maturity-scorecard">📈 Maturity Scorecard<a class="headerlink" href="#maturity-scorecard" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Score</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Code Organization</strong></td>
+<td>9/10</td>
+<td>✅ Excellent modular structure</td>
+</tr>
+<tr>
+<td><strong>Documentation</strong></td>
+<td>9/10</td>
+<td>✅ Comprehensive and up-to-date</td>
+</tr>
+<tr>
+<td><strong>CI/CD</strong></td>
+<td>8/10</td>
+<td>✅ Active workflows, needs disabled cleanup</td>
+</tr>
+<tr>
+<td><strong>Testing</strong></td>
+<td>8/10</td>
+<td>✅ Good coverage, well-organized</td>
+</tr>
+<tr>
+<td><strong>Build System</strong></td>
+<td>7/10</td>
+<td>⚠️ Some redundancy, needs cleanup</td>
+</tr>
+<tr>
+<td><strong>Repository Hygiene</strong></td>
+<td>6/10</td>
+<td>🔴 Build artifacts, disabled files</td>
+</tr>
+<tr>
+<td><strong>CNCF Compliance</strong></td>
+<td>10/10</td>
+<td>✅ Fully compliant</td>
+</tr>
+<tr>
+<td><strong>Overall</strong></td>
+<td><strong>7.9/10</strong></td>
+<td>🟡 <strong>Medium-High</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="strengths">✅ Strengths<a class="headerlink" href="#strengths" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Excellent modular architecture</strong> - Clean separation of concerns</li>
+<li><strong>Comprehensive documentation</strong> - Well-documented codebase</li>
+<li><strong>CNCF compliant</strong> - Full compliance with best practices</li>
+<li><strong>Active CI/CD</strong> - Robust testing and deployment</li>
+<li><strong>Good code quality</strong> - Consistent patterns and structure</li>
+</ol>
+<hr />
+<h2 id="areas-for-improvement">🔧 Areas for Improvement<a class="headerlink" href="#areas-for-improvement" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Repository cleanup</strong> - Remove build artifacts, disabled files</li>
+<li><strong>Documentation consolidation</strong> - Archive old roadmap docs</li>
+<li><strong>Build system simplification</strong> - Remove redundant build files</li>
+<li><strong>Script organization</strong> - Audit and consolidate scripts</li>
+<li><strong>Dependency management</strong> - Consider submodules or clearer vendoring</li>
+</ol>
+<hr />
+<h2 id="conclusion">📝 Conclusion<a class="headerlink" href="#conclusion" title="Permanent link">&para;</a></h2>
+<p>The codebase demonstrates <strong>high maturity</strong> with excellent organization, comprehensive documentation, and strong CNCF compliance. The main areas for improvement are <strong>repository hygiene</strong> (removing build artifacts and disabled files) and <strong>documentation consolidation</strong> (archiving old sprint docs).</p>
+<p>With the recommended cleanup actions, the codebase would reach <strong>8.5/10 maturity</strong> with minimal effort.</p>
+<hr />
+<p><strong>Next Steps</strong>:
+1. Review and approve cleanup recommendations
+2. Create cleanup PR with Priority 1 items
+3. Schedule Priority 2 cleanup for next sprint
+4. Consider Priority 3 items for roadmap planning</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

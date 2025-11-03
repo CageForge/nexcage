@@ -1,0 +1,1742 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.3/architecture/">
+      
+      
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>Proxmox LXCRI Architecture - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#proxmox-lxcri-architecture" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Proxmox LXCRI Architecture
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../user_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CI_CD_SETUP/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_WORKFLOW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CI_CD_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#system-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      System Context
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#container-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Architecture
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#component-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Component Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Component Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#runtime-service" class="md-nav__link">
+    <span class="md-ellipsis">
+      Runtime Service
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-service" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Service
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-service" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network Service
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#security-service" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Service
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#code-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Code Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Code Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#key-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Key Classes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Flow
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Considerations
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Considerations
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#system-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      System Architecture
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Core Components
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-oci-runtime-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. OCI Runtime Implementation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-storage-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Storage Manager
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-network-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Network Manager
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-security-module" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Security Module
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#command-flow-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      Command Flow Details
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Command Flow Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create" class="md-nav__link">
+    <span class="md-ellipsis">
+      create
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start" class="md-nav__link">
+    <span class="md-ellipsis">
+      start
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state" class="md-nav__link">
+    <span class="md-ellipsis">
+      state
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kill" class="md-nav__link">
+    <span class="md-ellipsis">
+      kill
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      delete
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      State Management
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Handling
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#zfs-checkpointrestore-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      ZFS Checkpoint/Restore Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ZFS Checkpoint/Restore Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#overview_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#architecture-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture Components
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-components_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Core Components
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dataset-organization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dataset Organization
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and Metrics
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/architecture.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="proxmox-lxcri-architecture">Proxmox LXCRI Architecture<a class="headerlink" href="#proxmox-lxcri-architecture" title="Permanent link">&para;</a></h1>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>Proxmox LXCRI (LXC Runtime Interface) is a container runtime interface that enables running OCI-compliant containers on Proxmox VE using LXC. The system is designed to work with Kubernetes through containerd and provides a complete solution for container management, storage, networking, and security.</p>
+<h2 id="system-context">System Context<a class="headerlink" href="#system-context" title="Permanent link">&para;</a></h2>
+<p>The system interacts with several external actors:</p>
+<ol>
+<li><strong>Kubernetes</strong>: Manages container lifecycle through CRI</li>
+<li><strong>System Administrator</strong>: Configures and manages the runtime</li>
+<li><strong>Developer</strong>: Develops and maintains the system</li>
+</ol>
+<p>The system also interacts with Proxmox VE for:
+- Container runtime (LXC)
+- Storage management (ZFS)
+- Network configuration</p>
+<h2 id="container-architecture">Container Architecture<a class="headerlink" href="#container-architecture" title="Permanent link">&para;</a></h2>
+<p>The system consists of several main containers:</p>
+<ol>
+<li><strong>containerd</strong>:</li>
+<li>CRI Plugin: Implements Kubernetes Container Runtime Interface</li>
+<li>
+<p>OCI Runtime: Manages OCI-compliant containers</p>
+</li>
+<li>
+<p><strong>Proxmox LXCRI</strong>:</p>
+</li>
+<li>Runtime Service: Manages container lifecycle</li>
+<li>Storage Service: Handles container storage</li>
+<li>Network Service: Manages container networking</li>
+<li>
+<p>Security Service: Enforces security policies</p>
+</li>
+<li>
+<p><strong>Proxmox VE</strong>:</p>
+</li>
+<li>LXC Runtime: Executes containers</li>
+<li>ZFS Storage: Provides storage backend</li>
+<li>Network Stack: Handles networking</li>
+</ol>
+<h2 id="component-architecture">Component Architecture<a class="headerlink" href="#component-architecture" title="Permanent link">&para;</a></h2>
+<h3 id="runtime-service">Runtime Service<a class="headerlink" href="#runtime-service" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>State Manager</strong>:</li>
+<li>Container State: Tracks container lifecycle</li>
+<li>
+<p>State Storage: Persists container state</p>
+</li>
+<li>
+<p><strong>Hook System</strong>:</p>
+</li>
+<li>Hook Executor: Executes container hooks</li>
+<li>
+<p>Hook Context: Provides hook execution context</p>
+</li>
+<li>
+<p><strong>Bundle Validator</strong>:</p>
+</li>
+<li>Spec Validator: Validates OCI spec</li>
+<li>Config Validator: Validates container config</li>
+</ol>
+<h3 id="storage-service">Storage Service<a class="headerlink" href="#storage-service" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Dataset Manager</strong>:</li>
+<li>ZFS Operations: Manages ZFS datasets</li>
+<li>
+<p>Dataset Config: Handles dataset configuration</p>
+</li>
+<li>
+<p><strong>Layer Manager</strong>:</p>
+</li>
+<li>Layer Storage: Manages container layers</li>
+<li>
+<p>Layer Operations: Handles layer operations</p>
+</li>
+<li>
+<p><strong>Image Manager</strong>:</p>
+</li>
+<li>Image Storage: Manages container images</li>
+<li>Image Operations: Handles image operations</li>
+</ol>
+<h3 id="network-service">Network Service<a class="headerlink" href="#network-service" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>VLAN Manager</strong>:</li>
+<li>VLAN Config: Manages VLAN configuration</li>
+<li>
+<p>VLAN Operations: Handles VLAN operations</p>
+</li>
+<li>
+<p><strong>Bridge Manager</strong>:</p>
+</li>
+<li>Bridge Config: Manages bridge configuration</li>
+<li>
+<p>Bridge Operations: Handles bridge operations</p>
+</li>
+<li>
+<p><strong>IP Manager</strong>:</p>
+</li>
+<li>IP Config: Manages IP configuration</li>
+<li>IP Operations: Handles IP operations</li>
+</ol>
+<h3 id="security-service">Security Service<a class="headerlink" href="#security-service" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>AppArmor/SELinux</strong>:</li>
+<li>Profile Manager: Manages security profiles</li>
+<li>
+<p>Policy Enforcer: Enforces security policies</p>
+</li>
+<li>
+<p><strong>Seccomp</strong>:</p>
+</li>
+<li>Filter Manager: Manages seccomp filters</li>
+<li>
+<p>Profile Loader: Loads seccomp profiles</p>
+</li>
+<li>
+<p><strong>Capabilities</strong>:</p>
+</li>
+<li>Cap Manager: Manages Linux capabilities</li>
+<li>Cap Enforcer: Enforces capability restrictions</li>
+</ol>
+<h2 id="code-architecture">Code Architecture<a class="headerlink" href="#code-architecture" title="Permanent link">&para;</a></h2>
+<h3 id="key-classes">Key Classes<a class="headerlink" href="#key-classes" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>ContainerState</strong>:</li>
+<li>Tracks container lifecycle state</li>
+<li>Manages container metadata</li>
+<li>
+<p>Handles state persistence</p>
+</li>
+<li>
+<p><strong>HookExecutor</strong>:</p>
+</li>
+<li>Executes container hooks</li>
+<li>Manages hook timeouts</li>
+<li>
+<p>Handles hook errors</p>
+</li>
+<li>
+<p><strong>HookContext</strong>:</p>
+</li>
+<li>Provides hook execution context</li>
+<li>Manages environment variables</li>
+<li>
+<p>Validates context data</p>
+</li>
+<li>
+<p><strong>DatasetManager</strong>:</p>
+</li>
+<li>Manages ZFS datasets</li>
+<li>Handles dataset operations</li>
+<li>
+<p>Provides dataset information</p>
+</li>
+<li>
+<p><strong>LayerManager</strong>:</p>
+</li>
+<li>Manages container layers</li>
+<li>Handles layer operations</li>
+<li>
+<p>Manages layer storage</p>
+</li>
+<li>
+<p><strong>ImageManager</strong>:</p>
+</li>
+<li>Manages container images</li>
+<li>Handles image operations</li>
+<li>Manages image storage</li>
+</ol>
+<h2 id="data-flow">Data Flow<a class="headerlink" href="#data-flow" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Container Creation</strong>:</li>
+<li>Kubernetes sends create request</li>
+<li>containerd validates request</li>
+<li>Proxmox LXCRI creates container</li>
+<li>
+<p>LXC starts container</p>
+</li>
+<li>
+<p><strong>Container Lifecycle</strong>:</p>
+</li>
+<li>State Manager tracks state</li>
+<li>Hook System executes hooks</li>
+<li>
+<p>Security Service enforces policies</p>
+</li>
+<li>
+<p><strong>Storage Operations</strong>:</p>
+</li>
+<li>Image Manager pulls images</li>
+<li>Layer Manager creates layers</li>
+<li>
+<p>Dataset Manager manages storage</p>
+</li>
+<li>
+<p><strong>Network Operations</strong>:</p>
+</li>
+<li>Network Service configures network</li>
+<li>Proxmox VE sets up networking</li>
+<li>Container gets network access</li>
+</ol>
+<h2 id="security-considerations">Security Considerations<a class="headerlink" href="#security-considerations" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Container Isolation</strong>:</li>
+<li>LXC provides process isolation</li>
+<li>AppArmor/SELinux enforces access control</li>
+<li>
+<p>Seccomp filters system calls</p>
+</li>
+<li>
+<p><strong>Resource Management</strong>:</p>
+</li>
+<li>ZFS provides storage isolation</li>
+<li>Network namespaces provide network isolation</li>
+<li>
+<p>Cgroups manage resource limits</p>
+</li>
+<li>
+<p><strong>Access Control</strong>:</p>
+</li>
+<li>Linux capabilities restrict privileges</li>
+<li>Security profiles enforce policies</li>
+<li>Network policies control access</li>
+</ol>
+<h2 id="performance-considerations">Performance Considerations<a class="headerlink" href="#performance-considerations" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Storage Performance</strong>:</li>
+<li>ZFS provides efficient storage</li>
+<li>Layer management optimizes space</li>
+<li>
+<p>Caching improves performance</p>
+</li>
+<li>
+<p><strong>Network Performance</strong>:</p>
+</li>
+<li>VLANs provide network isolation</li>
+<li>Bridges optimize network traffic</li>
+<li>
+<p>IP management ensures efficiency</p>
+</li>
+<li>
+<p><strong>Runtime Performance</strong>:</p>
+</li>
+<li>LXC provides lightweight containers</li>
+<li>Hook system minimizes overhead</li>
+<li>State management optimizes operations</li>
+</ol>
+<h2 id="system-architecture">System Architecture<a class="headerlink" href="#system-architecture" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code><span class="n">containerd</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">nexcage</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Proxmox</span><span class="w"> </span><span class="n">API</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">LXC</span><span class="o">/</span><span class="n">QEMU</span>
+<span class="w">     </span><span class="o">|</span><span class="w">              </span><span class="o">|</span><span class="w">              </span><span class="o">|</span>
+<span class="w">     </span><span class="o">|</span><span class="w">              </span><span class="o">|</span><span class="w">              </span><span class="n">v</span>
+<span class="w">     </span><span class="o">|</span><span class="w">              </span><span class="n">v</span><span class="w">          </span><span class="n">ZFS</span><span class="w"> </span><span class="n">Storage</span>
+<span class="w">     </span><span class="n">v</span><span class="w">          </span><span class="n">ZFS</span><span class="w"> </span><span class="n">Pool</span>
+<span class="n">OCI</span><span class="w"> </span><span class="n">Bundle</span>
+</code></pre></div>
+
+<h2 id="core-components">Core Components<a class="headerlink" href="#core-components" title="Permanent link">&para;</a></h2>
+<h3 id="1-oci-runtime-implementation">1. OCI Runtime Implementation<a class="headerlink" href="#1-oci-runtime-implementation" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Implements OCI Runtime Specification v1.0</li>
+<li>Handles container lifecycle commands</li>
+<li>Manages state transitions</li>
+<li>Implements hooks system</li>
+</ul>
+<h3 id="2-storage-manager">2. Storage Manager<a class="headerlink" href="#2-storage-manager" title="Permanent link">&para;</a></h3>
+<ul>
+<li>ZFS dataset management</li>
+<li>Volume snapshots and clones</li>
+<li>Layer management</li>
+<li><strong>ZFS Checkpoint/Restore System</strong></li>
+<li>Lightning-fast container state snapshots</li>
+<li>Automatic ZFS detection and CRIU fallback</li>
+<li>Timestamp-based snapshot organization</li>
+<li>Latest checkpoint auto-selection</li>
+<li>Image storage</li>
+</ul>
+<h3 id="3-network-manager">3. Network Manager<a class="headerlink" href="#3-network-manager" title="Permanent link">&para;</a></h3>
+<ul>
+<li>VLAN configuration</li>
+<li>Bridge management</li>
+<li>IP allocation</li>
+<li>DNS configuration</li>
+</ul>
+<h3 id="4-security-module">4. Security Module<a class="headerlink" href="#4-security-module" title="Permanent link">&para;</a></h3>
+<ul>
+<li>AppArmor/SELinux profiles</li>
+<li>Seccomp filters</li>
+<li>Resource isolation</li>
+<li>Capability management</li>
+</ul>
+<h2 id="command-flow-details">Command Flow Details<a class="headerlink" href="#command-flow-details" title="Permanent link">&para;</a></h2>
+<h3 id="create">create<a class="headerlink" href="#create" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">containerd</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">nexcage</span><span class="w"> </span><span class="n">create</span>
+<span class="w">  </span><span class="mf">1.</span><span class="w"> </span><span class="kr">Validate</span><span class="w"> </span><span class="n">bundle</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Check</span><span class="w"> </span><span class="n">config</span><span class="p">.</span><span class="n">json</span><span class="w"> </span><span class="n">existence</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="kr">Validate</span><span class="w"> </span><span class="n">bundle</span><span class="w"> </span><span class="n">structure</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="nf">Parse</span><span class="w"> </span><span class="kr">and</span><span class="w"> </span><span class="kr">validate</span><span class="w"> </span><span class="n">config</span>
+
+<span class="w">  </span><span class="mf">2.</span><span class="w"> </span><span class="n">Create</span><span class="w"> </span><span class="n">ZFS</span><span class="w"> </span><span class="nf">dataset</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Generate</span><span class="w"> </span><span class="nf">dataset</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">ID</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Create</span><span class="w"> </span><span class="nf">dataset</span><span class="w"> </span><span class="n">with</span><span class="w"> </span><span class="n">appropriate</span><span class="w"> </span><span class="n">properties</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="nf">Set</span><span class="w"> </span><span class="n">quota</span><span class="w"> </span><span class="kr">and</span><span class="w"> </span><span class="n">reservation</span>
+
+<span class="w">  </span><span class="mf">3.</span><span class="w"> </span><span class="n">Setup</span><span class="w"> </span><span class="n">rootfs</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Copy</span><span class="w"> </span><span class="n">bundle</span><span class="w"> </span><span class="n">rootfs</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">ZFS</span><span class="w"> </span><span class="nf">dataset</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="kr">Apply</span><span class="w"> </span><span class="n">filesystem</span><span class="w"> </span><span class="n">options</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Configure</span><span class="w"> </span><span class="n">mountpoints</span>
+
+<span class="w">  </span><span class="mf">4.</span><span class="w"> </span><span class="n">Configure</span><span class="w"> </span><span class="n">LXC</span><span class="w"> </span><span class="n">container</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Generate</span><span class="w"> </span><span class="n">LXC</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="n">OCI</span><span class="w"> </span><span class="n">spec</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="nf">Set</span><span class="w"> </span><span class="n">resource</span><span class="w"> </span><span class="n">limits</span><span class="w"> </span><span class="p">(</span><span class="n">CPU</span><span class="p">,</span><span class="w"> </span><span class="n">memory</span><span class="p">)</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Configure</span><span class="w"> </span><span class="n">network</span><span class="w"> </span><span class="n">interfaces</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Setup</span><span class="w"> </span><span class="n">storage</span><span class="w"> </span><span class="n">mounts</span>
+
+<span class="w">  </span><span class="mf">5.</span><span class="w"> </span><span class="n">Execute</span><span class="w"> </span><span class="n">pre</span><span class="o">-</span><span class="n">create</span><span class="w"> </span><span class="n">hooks</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Run</span><span class="w"> </span><span class="n">prestart</span><span class="w"> </span><span class="n">hooks</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Handle</span><span class="w"> </span><span class="n">hook</span><span class="w"> </span><span class="n">timeouts</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="nf">Process</span><span class="w"> </span><span class="n">hook</span><span class="w"> </span><span class="n">results</span>
+
+<span class="w">  </span><span class="mf">6.</span><span class="w"> </span><span class="n">Create</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">via</span><span class="w"> </span><span class="n">Proxmox</span><span class="w"> </span><span class="n">API</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Call</span><span class="w"> </span><span class="n">LXC</span><span class="w"> </span><span class="n">create</span><span class="w"> </span><span class="n">API</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="kr">Wait</span><span class="w"> </span><span class="n">for</span><span class="w"> </span><span class="n">creation</span><span class="w"> </span><span class="n">completion</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Verify</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">status</span>
+
+<span class="w">  </span><span class="mf">7.</span><span class="w"> </span><span class="n">Save</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">state</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Write</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">configured</span><span class="w"> </span><span class="n">root</span><span class="w"> </span><span class="n">directory</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">status</span><span class="w"> </span><span class="n">file</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Save</span><span class="w"> </span><span class="n">runtime</span><span class="w"> </span><span class="n">metadata</span>
+</code></pre></div>
+
+<h3 id="start">start<a class="headerlink" href="#start" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">containerd</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">nexcage</span><span class="w"> </span><span class="n">start</span>
+<span class="w">  </span><span class="mf">1.</span><span class="w"> </span><span class="kr">Load</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">state</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Read</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="n">disk</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="kr">Validate</span><span class="w"> </span><span class="n">current</span><span class="w"> </span><span class="n">status</span>
+
+<span class="w">  </span><span class="mf">2.</span><span class="w"> </span><span class="n">Execute</span><span class="w"> </span><span class="n">pre</span><span class="o">-</span><span class="n">start</span><span class="w"> </span><span class="n">hooks</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Run</span><span class="w"> </span><span class="n">createRuntime</span><span class="w"> </span><span class="n">hooks</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Run</span><span class="w"> </span><span class="n">createContainer</span><span class="w"> </span><span class="n">hooks</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="nf">Process</span><span class="w"> </span><span class="n">hook</span><span class="w"> </span><span class="n">results</span>
+
+<span class="w">  </span><span class="mf">3.</span><span class="w"> </span><span class="n">Start</span><span class="w"> </span><span class="n">container</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Call</span><span class="w"> </span><span class="n">Proxmox</span><span class="w"> </span><span class="n">API</span><span class="w"> </span><span class="n">start</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="kr">Wait</span><span class="w"> </span><span class="n">for</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">start</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Monitor</span><span class="w"> </span><span class="n">startup</span><span class="w"> </span><span class="nf">process</span>
+
+<span class="w">  </span><span class="mf">4.</span><span class="w"> </span><span class="n">Execute</span><span class="w"> </span><span class="n">post</span><span class="o">-</span><span class="n">start</span><span class="w"> </span><span class="n">hooks</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Run</span><span class="w"> </span><span class="n">poststart</span><span class="w"> </span><span class="n">hooks</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">state</span>
+
+<span class="w">  </span><span class="mf">5.</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">state</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">status</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">running</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Save</span><span class="w"> </span><span class="n">new</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">disk</span>
+</code></pre></div>
+
+<h3 id="state">state<a class="headerlink" href="#state" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">containerd</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">nexcage</span><span class="w"> </span><span class="n">state</span>
+<span class="w">  </span><span class="mf">1.</span><span class="w"> </span><span class="kr">Load</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">metadata</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Read</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="n">disk</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="kr">Validate</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="n">file</span>
+
+<span class="w">  </span><span class="mf">2.</span><span class="w"> </span><span class="n">Query</span><span class="w"> </span><span class="n">Proxmox</span><span class="w"> </span><span class="n">API</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Get</span><span class="w"> </span><span class="n">current</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">status</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="nf">Fetch</span><span class="w"> </span><span class="n">resource</span><span class="w"> </span><span class="n">usage</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Get</span><span class="w"> </span><span class="n">network</span><span class="w"> </span><span class="n">status</span>
+
+<span class="w">  </span><span class="mf">3.</span><span class="w"> </span><span class="n">Generate</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="n">response</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Format</span><span class="w"> </span><span class="n">according</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">OCI</span><span class="w"> </span><span class="n">spec</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Include</span><span class="w"> </span><span class="kr">all</span><span class="w"> </span><span class="n">required</span><span class="w"> </span><span class="n">fields</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Add</span><span class="w"> </span><span class="n">annotations</span>
+
+<span class="w">  </span><span class="mf">4.</span><span class="w"> </span><span class="kr">Return</span><span class="w"> </span><span class="n">state</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="kr">Output</span><span class="w"> </span><span class="n">JSON</span><span class="w"> </span><span class="n">formatted</span><span class="w"> </span><span class="n">state</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Include</span><span class="w"> </span><span class="n">status</span><span class="p">,</span><span class="w"> </span><span class="n">pid</span><span class="p">,</span><span class="w"> </span><span class="n">bundle</span>
+</code></pre></div>
+
+<h3 id="kill">kill<a class="headerlink" href="#kill" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">containerd</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">nexcage</span><span class="w"> </span><span class="n">kill</span>
+<span class="w">  </span><span class="mf">1.</span><span class="w"> </span><span class="n">Load</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">state</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Validate</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">exists</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Check</span><span class="w"> </span><span class="n">current</span><span class="w"> </span><span class="n">status</span>
+
+<span class="w">  </span><span class="mf">2.</span><span class="w"> </span><span class="n">Process</span><span class="w"> </span><span class="k">signal</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Map</span><span class="w"> </span><span class="k">signal</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">LXC</span><span class="w"> </span><span class="n">operation</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Handle</span><span class="w"> </span><span class="n">special</span><span class="w"> </span><span class="n">signals</span>
+
+<span class="w">  </span><span class="mf">3.</span><span class="w"> </span><span class="n">Execute</span><span class="w"> </span><span class="n">kill</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Send</span><span class="w"> </span><span class="k">signal</span><span class="w"> </span><span class="n">via</span><span class="w"> </span><span class="n">Proxmox</span><span class="w"> </span><span class="n">API</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Wait</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">completion</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Handle</span><span class="w"> </span><span class="n">timeouts</span>
+
+<span class="w">  </span><span class="mf">4.</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">state</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Update</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">status</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Save</span><span class="w"> </span><span class="n">new</span><span class="w"> </span><span class="n">state</span>
+</code></pre></div>
+
+<h3 id="delete">delete<a class="headerlink" href="#delete" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">containerd</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">nexcage</span><span class="w"> </span><span class="n">delete</span>
+<span class="w">  </span><span class="mf">1.</span><span class="w"> </span><span class="kr">Load</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">state</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Check</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="nf">exists</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Verify</span><span class="w"> </span><span class="n">container</span><span class="w"> </span><span class="n">stopped</span>
+
+<span class="w">  </span><span class="mf">2.</span><span class="w"> </span><span class="n">Execute</span><span class="w"> </span><span class="n">pre</span><span class="o">-</span><span class="n">delete</span><span class="w"> </span><span class="n">hooks</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Run</span><span class="w"> </span><span class="n">poststop</span><span class="w"> </span><span class="n">hooks</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Clean</span><span class="w"> </span><span class="n">up</span><span class="w"> </span><span class="n">resources</span>
+
+<span class="w">  </span><span class="mf">3.</span><span class="w"> </span><span class="n">Delete</span><span class="w"> </span><span class="n">container</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Remove</span><span class="w"> </span><span class="n">LXC</span><span class="w"> </span><span class="n">container</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Delete</span><span class="w"> </span><span class="n">ZFS</span><span class="w"> </span><span class="nf">dataset</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Clean</span><span class="w"> </span><span class="n">network</span><span class="w"> </span><span class="n">config</span>
+
+<span class="w">  </span><span class="mf">4.</span><span class="w"> </span><span class="n">Cleanup</span><span class="w"> </span><span class="n">state</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Remove</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="n">files</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Clean</span><span class="w"> </span><span class="n">metadata</span>
+<span class="w">     </span><span class="o">-</span><span class="w"> </span><span class="n">Remove</span><span class="w"> </span><span class="n">runtime</span><span class="w"> </span><span class="n">files</span>
+</code></pre></div>
+
+<h2 id="state-management">State Management<a class="headerlink" href="#state-management" title="Permanent link">&para;</a></h2>
+<p>Container state is maintained in the configured root directory:</p>
+<div class="codehilite"><pre><span></span><code>/run/nexcage/
+  ├── containers/
+  │   └── &lt;container-id&gt;/
+  │       ├── state.json    # Current state
+  │       ├── config.json   # Container config
+  │       └── hooks/        # Hook state
+  └── runtime/
+      └── events.log       # Runtime events
+</code></pre></div>
+
+<h2 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
+<p>Each operation implements comprehensive error handling:</p>
+<ol>
+<li><strong>Validation Errors</strong></li>
+<li>Bundle validation</li>
+<li>State consistency</li>
+<li>
+<p>Resource availability</p>
+</li>
+<li>
+<p><strong>Runtime Errors</strong></p>
+</li>
+<li>API communication</li>
+<li>Resource allocation</li>
+<li>
+<p>Hook execution</p>
+</li>
+<li>
+<p><strong>Recovery Procedures</strong></p>
+</li>
+<li>Resource cleanup</li>
+<li>State restoration</li>
+<li>Partial completion handling</li>
+</ol>
+<h2 id="zfs-checkpointrestore-architecture">ZFS Checkpoint/Restore Architecture<a class="headerlink" href="#zfs-checkpointrestore-architecture" title="Permanent link">&para;</a></h2>
+<h3 id="overview_1">Overview<a class="headerlink" href="#overview_1" title="Permanent link">&para;</a></h3>
+<p>The ZFS Checkpoint/Restore system provides enterprise-grade container state management through a hybrid approach that prioritizes ZFS snapshots while maintaining CRIU compatibility.</p>
+<h3 id="architecture-components">Architecture Components<a class="headerlink" href="#architecture-components" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>┌─────────────────────────────────────────────────────────────┐
+│                    ZFS Checkpoint/Restore                    │
+├─────────────────────────────────────────────────────────────┤
+│  ┌───────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │  ZFS Manager  │───▶│ Snapshot Mgr │───▶│   Dataset    │  │
+│  │   Detection   │    │   Creation   │    │  Management  │  │
+│  └───────────────┘    └──────────────┘    └──────────────┘  │
+│           │                     │                    │      │
+│           ▼                     ▼                    ▼      │
+│  ┌───────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │ CRIU Fallback │    │  Timestamp   │    │    Latest    │  │
+│  │   Detection   │    │   Naming     │    │  Selection   │  │
+│  └───────────────┘    └──────────────┘    └──────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+</code></pre></div>
+
+<h3 id="core-components_1">Core Components<a class="headerlink" href="#core-components_1" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>ZFS Manager (<code>src/zfs/mod.zig</code>)</strong>:</li>
+<li>Automatic ZFS availability detection</li>
+<li>Dataset existence validation</li>
+<li>Snapshot creation and management</li>
+<li>
+<p>Error handling and logging</p>
+</li>
+<li>
+<p><strong>Checkpoint Controller</strong>:</p>
+</li>
+<li>Container state analysis</li>
+<li>Consistency checking</li>
+<li>Hybrid routing (ZFS/CRIU)</li>
+<li>
+<p>Performance optimization</p>
+</li>
+<li>
+<p><strong>Restore Engine</strong>:</p>
+</li>
+<li>Latest checkpoint detection</li>
+<li>Timestamp parsing and filtering</li>
+<li>ZFS rollback operations</li>
+<li>State verification</li>
+</ol>
+<h3 id="dataset-organization">Dataset Organization<a class="headerlink" href="#dataset-organization" title="Permanent link">&para;</a></h3>
+<p><strong>Structure Pattern:</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="n">tank</span><span class="o">/</span><span class="n">containers</span><span class="o">/&lt;</span><span class="n">container_id</span><span class="o">&gt;</span>
+<span class="err">├──</span><span class="w"> </span><span class="nv">@checkpoint</span><span class="o">-</span><span class="mi">1691234567</span>
+<span class="err">├──</span><span class="w"> </span><span class="nv">@checkpoint</span><span class="o">-</span><span class="mi">1691234890</span>
+<span class="err">└──</span><span class="w"> </span><span class="nv">@checkpoint</span><span class="o">-</span><span class="mi">1691235123</span>
+</code></pre></div>
+
+<p><strong>Performance Characteristics:</strong>
+- ZFS Creation: ~1-3 seconds
+- ZFS Restore: ~2-5 seconds<br />
+- CRIU Fallback: ~10-60 seconds
+- Storage Overhead: ~0-5% (ZFS COW)</p>
+<h2 id="monitoring-and-metrics">Monitoring and Metrics<a class="headerlink" href="#monitoring-and-metrics" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Container Metrics</strong></li>
+<li>Resource usage</li>
+<li>Network statistics</li>
+<li>
+<p>Storage utilization</p>
+</li>
+<li>
+<p><strong>Runtime Metrics</strong></p>
+</li>
+<li>Operation latency</li>
+<li>Error rates</li>
+<li>
+<p>API response times</p>
+</li>
+<li>
+<p><strong>Health Monitoring</strong></p>
+</li>
+<li>Container health checks</li>
+<li>Runtime status</li>
+<li>
+<p>Resource availability</p>
+</li>
+<li>
+<p><strong>ZFS Metrics</strong></p>
+</li>
+<li>Snapshot creation time</li>
+<li>Storage usage patterns</li>
+<li>Dataset health status</li>
+<li>Checkpoint success rates </li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

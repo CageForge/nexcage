@@ -1,0 +1,2972 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.3/user_guide/">
+      
+      
+        <link rel="prev" href="../DEVELOPMENT_UBUNTU/">
+      
+      
+        <link rel="next" href="../architecture/OVERVIEW/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>User Guide - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#user-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              User Guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CI_CD_SETUP/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_WORKFLOW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Table of Contents
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      System Requirements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#installation-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installation Steps
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation Steps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-clone-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Clone Repository
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-install-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Install Dependencies
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-build-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Build Project
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-install-system-service-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Install System Service (Optional)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Files
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration Files">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#main-configuration-configjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      Main Configuration (config.json)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-configuration-proxmox-configjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Configuration (proxmox-config.json)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Environment Variables
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basic-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      Basic Usage
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Basic Usage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#command-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Command Structure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#available-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      Available Commands
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#basic-container-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Basic Container Operations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Basic Container Operations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      Start Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stop-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      Stop Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#list-containers" class="md-nav__link">
+    <span class="md-ellipsis">
+      List Containers
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#image-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Image Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#working-with-proxmox-templates-and-oci-bundles" class="md-nav__link">
+    <span class="md-ellipsis">
+      Working with Proxmox Templates and OCI Bundles
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#images" class="md-nav__link">
+    <span class="md-ellipsis">
+      Images
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Images">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#working-with-oci-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      Working with OCI Images
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Working with OCI Images">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pull-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pull Image
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#list-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      List Images
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inspect-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inspect Image
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#remove-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Remove Image
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Operations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Image Operations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#import-local-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Import Local Image
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#export-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Export Image
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#container-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Operations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Container Operations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#container-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Lifecycle
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Container Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create-and-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create and Start
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#execute-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      Execute Commands
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#container-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Logs
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resource-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resource-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network Configuration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Advanced Features
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Features">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layerfs-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      LayerFS Operations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="LayerFS Operations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layer-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer Management
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      Metadata Cache
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Optimization
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Optimization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parallel-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parallel Processing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#memory-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Memory Management
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#zfs-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      ZFS Integration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ZFS Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#zfs-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      ZFS Operations
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#container-wont-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Won't Start
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-pull-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Pull Issues
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Issues
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debug-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      Debug Mode
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#web-application-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Web Application Deployment
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Web Application Deployment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-create-web-application-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Create Web Application Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-scale-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Scale Application
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#database-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      Database Container
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Database Container">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-create-database-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Create Database Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-backup-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Backup Database
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development Environment
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Development Environment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-create-development-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Create Development Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-install-development-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Install Development Tools
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conclusion
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CI_CD_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Table of Contents
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      System Requirements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#installation-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installation Steps
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation Steps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-clone-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Clone Repository
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-install-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Install Dependencies
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-build-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Build Project
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-install-system-service-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Install System Service (Optional)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Files
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration Files">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#main-configuration-configjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      Main Configuration (config.json)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-configuration-proxmox-configjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Configuration (proxmox-config.json)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Environment Variables
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basic-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      Basic Usage
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Basic Usage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#command-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Command Structure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#available-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      Available Commands
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#basic-container-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Basic Container Operations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Basic Container Operations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      Start Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stop-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      Stop Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#list-containers" class="md-nav__link">
+    <span class="md-ellipsis">
+      List Containers
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#image-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Image Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#working-with-proxmox-templates-and-oci-bundles" class="md-nav__link">
+    <span class="md-ellipsis">
+      Working with Proxmox Templates and OCI Bundles
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#images" class="md-nav__link">
+    <span class="md-ellipsis">
+      Images
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Images">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#working-with-oci-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      Working with OCI Images
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Working with OCI Images">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pull-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pull Image
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#list-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      List Images
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inspect-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inspect Image
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#remove-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Remove Image
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Operations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Image Operations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#import-local-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Import Local Image
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#export-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      Export Image
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#container-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Operations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Container Operations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#container-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Lifecycle
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Container Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create-and-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create and Start
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#execute-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      Execute Commands
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#container-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Logs
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resource-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resource-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network Configuration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Advanced Features
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Features">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layerfs-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      LayerFS Operations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="LayerFS Operations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layer-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer Management
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      Metadata Cache
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Optimization
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Optimization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parallel-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parallel Processing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#memory-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Memory Management
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#zfs-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      ZFS Integration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ZFS Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#zfs-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      ZFS Operations
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#container-wont-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Won't Start
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-pull-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Pull Issues
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Issues
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debug-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      Debug Mode
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#web-application-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Web Application Deployment
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Web Application Deployment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-create-web-application-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Create Web Application Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-scale-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Scale Application
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#database-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      Database Container
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Database Container">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-create-database-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Create Database Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-backup-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Backup Database
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development Environment
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Development Environment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-create-development-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Create Development Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-install-development-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Install Development Tools
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conclusion
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/user_guide.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="user-guide">User Guide<a class="headerlink" href="#user-guide" title="Permanent link">&para;</a></h1>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>This user guide provides comprehensive instructions for using Nexcage with the new OCI Image System. It covers installation, configuration, basic usage, and advanced features for container management.</p>
+<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<ol>
+<li><a href="#installation">Installation</a></li>
+<li><a href="#configuration">Configuration</a></li>
+<li><a href="#basic-usage">Basic Usage</a></li>
+<li><a href="#image-management">Image Management</a></li>
+<li><a href="#container-operations">Container Operations</a></li>
+<li><a href="#advanced-features">Advanced Features</a></li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+<li><a href="#examples">Examples</a></li>
+</ol>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<h3 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Operating System</strong>: Linux (Ubuntu 20.04+, Debian 11+, CentOS 8+)</li>
+<li><strong>Kernel</strong>: Linux 5.0 or later</li>
+<li><strong>Zig Compiler</strong>: Version 0.15.1 or later</li>
+<li><strong>Proxmox VE</strong>: Version 7.0 or later (for full integration)</li>
+<li><strong>ZFS</strong>: ZFS utilities and kernel modules</li>
+<li><strong>Storage</strong>: Minimum 10GB available space</li>
+</ul>
+<h3 id="system-requirements">System Requirements<a class="headerlink" href="#system-requirements" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>CPU</strong>: 2 cores minimum, 4+ cores recommended</li>
+<li><strong>Memory</strong>: 4GB RAM minimum, 8GB+ recommended</li>
+<li><strong>Storage</strong>: 10GB minimum, SSD recommended for performance</li>
+<li><strong>Network</strong>: Network interface with internet access</li>
+</ul>
+<h3 id="installation-steps">Installation Steps<a class="headerlink" href="#installation-steps" title="Permanent link">&para;</a></h3>
+<h4 id="1-clone-repository">1. Clone Repository<a class="headerlink" href="#1-clone-repository" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/cageforge/nexcage.git
+<span class="nb">cd</span><span class="w"> </span>nexcage
+</code></pre></div>
+
+<h4 id="2-install-dependencies">2. Install Dependencies<a class="headerlink" href="#2-install-dependencies" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Install system dependencies</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>update
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>build-essential<span class="w"> </span>zfsutils-linux
+
+<span class="c1"># Install Zig compiler (if not already installed)</span>
+wget<span class="w"> </span>https://ziglang.org/download/0.15.1/zig-linux-x86_64-0.15.1.tar.xz
+tar<span class="w"> </span>-xf<span class="w"> </span>zig-linux-x86_64-0.15.1.tar.xz
+sudo<span class="w"> </span>mv<span class="w"> </span>zig-linux-x86_64-0.15.1<span class="w"> </span>/opt/
+<span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;export PATH=&quot;/opt/zig-linux-x86_64-0.15.1:$PATH&quot;&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
+<span class="nb">source</span><span class="w"> </span>~/.bashrc
+</code></pre></div>
+
+<h4 id="3-build-project">3. Build Project<a class="headerlink" href="#3-build-project" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Build the project</span>
+./zig-linux-x86_64-0.15.1/zig<span class="w"> </span>build
+
+<span class="c1"># Verify installation</span>
+./zig-out/bin/nexcage<span class="w"> </span>--version
+</code></pre></div>
+
+<h4 id="4-install-system-service-optional">4. Install System Service (Optional)<a class="headerlink" href="#4-install-system-service-optional" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Copy service file</span>
+sudo<span class="w"> </span>cp<span class="w"> </span>nexcage.service<span class="w"> </span>/etc/systemd/system/
+
+<span class="c1"># Enable and start service</span>
+sudo<span class="w"> </span>systemctl<span class="w"> </span>daemon-reload
+sudo<span class="w"> </span>systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>nexcage
+sudo<span class="w"> </span>systemctl<span class="w"> </span>start<span class="w"> </span>nexcage
+</code></pre></div>
+
+<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<h3 id="configuration-files">Configuration Files<a class="headerlink" href="#configuration-files" title="Permanent link">&para;</a></h3>
+<h4 id="main-configuration-configjson">Main Configuration (<code>config.json</code>)<a class="headerlink" href="#main-configuration-configjson" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;proxmox&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;host&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;192.168.1.100&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;port&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8006</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;root@pam&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your_password&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;node&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pve-node-1&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;storage&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;zfs&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;pool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tank&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;dataset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;containers&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;network&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;bridge&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vmbr0&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;vlan&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;images&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;cache_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;storage_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/var/lib/nexcage/images&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h4 id="proxmox-configuration-proxmox-configjson">Proxmox Configuration (<code>proxmox-config.json</code>)<a class="headerlink" href="#proxmox-configuration-proxmox-configjson" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;api&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;host&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;192.168.1.100&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;port&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8006</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;root@pam&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;token_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nexcage&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;token_value&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your_api_token&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;cluster&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;pve-node-1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pve-node-2&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Set environment variables</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">NEXCAGE_CONFIG</span><span class="o">=</span><span class="s2">&quot;/etc/nexcage/config.json&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">NEXCAGE_LOG_LEVEL</span><span class="o">=</span><span class="s2">&quot;info&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">NEXCAGE_STORAGE_PATH</span><span class="o">=</span><span class="s2">&quot;/var/lib/nexcage&quot;</span>
+</code></pre></div>
+
+<h2 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h2>
+<h3 id="command-structure">Command Structure<a class="headerlink" href="#command-structure" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>nexcage<span class="w"> </span><span class="o">[</span>COMMAND<span class="o">]</span><span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span><span class="o">[</span>ARGUMENTS<span class="o">]</span>
+</code></pre></div>
+
+<h3 id="available-commands">Available Commands<a class="headerlink" href="#available-commands" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>create</code> - Create a new container</li>
+<li><code>start</code> - Start a container</li>
+<li><code>stop</code> - Stop a container</li>
+<li><code>delete</code> - Delete a container</li>
+<li><code>list</code> - List containers</li>
+<li><code>state</code> - Show OCI-compatible container state</li>
+<li><code>kill</code> - Send signal to a container</li>
+</ul>
+<h3 id="basic-container-operations">Basic Container Operations<a class="headerlink" href="#basic-container-operations" title="Permanent link">&para;</a></h3>
+<h4 id="create-container">Create Container<a class="headerlink" href="#create-container" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create from OCI bundle directory (must contain config.json)</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>my-container<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>/path/to/oci-bundle
+</code></pre></div>
+
+<p>Signals and state:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Send SIGTERM to a container</span>
+nexcage<span class="w"> </span><span class="nb">kill</span><span class="w"> </span>--name<span class="w"> </span>my-container<span class="w"> </span>--signal<span class="w"> </span>SIGTERM
+
+<span class="c1"># Get OCI state JSON</span>
+nexcage<span class="w"> </span>state<span class="w"> </span>--name<span class="w"> </span>my-container
+</code></pre></div>
+
+<h4 id="start-container">Start Container<a class="headerlink" href="#start-container" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Start a container</span>
+nexcage<span class="w"> </span>start<span class="w"> </span>my-container
+
+<span class="c1"># Start with specific options</span>
+nexcage<span class="w"> </span>start<span class="w"> </span>my-container<span class="w"> </span>--detach<span class="w"> </span>--interactive
+</code></pre></div>
+
+<h4 id="stop-container">Stop Container<a class="headerlink" href="#stop-container" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Stop gracefully</span>
+nexcage<span class="w"> </span>stop<span class="w"> </span>my-container
+
+<span class="c1"># Force stop</span>
+nexcage<span class="w"> </span>stop<span class="w"> </span>my-container<span class="w"> </span>--force
+</code></pre></div>
+
+<h4 id="list-containers">List Containers<a class="headerlink" href="#list-containers" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># List all containers</span>
+nexcage<span class="w"> </span>list
+
+<span class="c1"># List with details</span>
+nexcage<span class="w"> </span>list<span class="w"> </span>--format<span class="w"> </span>json
+
+<span class="c1"># List running containers only</span>
+nexcage<span class="w"> </span>list<span class="w"> </span>--status<span class="w"> </span>running
+</code></pre></div>
+
+<h2 id="image-management">Image Management<a class="headerlink" href="#image-management" title="Permanent link">&para;</a></h2>
+<h3 id="working-with-proxmox-templates-and-oci-bundles">Working with Proxmox Templates and OCI Bundles<a class="headerlink" href="#working-with-proxmox-templates-and-oci-bundles" title="Permanent link">&para;</a></h3>
+<h2 id="images">Images<a class="headerlink" href="#images" title="Permanent link">&para;</a></h2>
+<ul>
+<li>For Proxmox LXC, use templates like <code>local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst</code> or a <code>.tar.zst</code> template file.</li>
+<li>Docker-style refs (e.g., <code>ubuntu:20.04</code>) are not fetched by Nexcage; use Proxmox templates or provide an OCI bundle directory with <code>config.json</code>.</li>
+</ul>
+<h3 id="working-with-oci-images">Working with OCI Images<a class="headerlink" href="#working-with-oci-images" title="Permanent link">&para;</a></h3>
+<h4 id="pull-image">Pull Image<a class="headerlink" href="#pull-image" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Pull from Docker Hub</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>pull<span class="w"> </span>ubuntu:22.04
+
+<span class="c1"># Pull from private registry</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>pull<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--registry<span class="w"> </span>my-registry.com<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--username<span class="w"> </span>myuser<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--password<span class="w"> </span>mypass<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>myapp:latest
+</code></pre></div>
+
+<h4 id="list-images">List Images<a class="headerlink" href="#list-images" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># List all images</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>list
+
+<span class="c1"># List with details</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>list<span class="w"> </span>--format<span class="w"> </span>json
+
+<span class="c1"># Show image layers</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>list<span class="w"> </span>--show-layers
+</code></pre></div>
+
+<h4 id="inspect-image">Inspect Image<a class="headerlink" href="#inspect-image" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Show image details</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>inspect<span class="w"> </span>ubuntu:22.04
+
+<span class="c1"># Show image configuration</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>inspect<span class="w"> </span>ubuntu:22.04<span class="w"> </span>--config
+
+<span class="c1"># Show image layers</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>inspect<span class="w"> </span>ubuntu:22.04<span class="w"> </span>--layers
+</code></pre></div>
+
+<h4 id="remove-image">Remove Image<a class="headerlink" href="#remove-image" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Remove image</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>remove<span class="w"> </span>ubuntu:22.04
+
+<span class="c1"># Force remove (even if used by containers)</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>remove<span class="w"> </span>ubuntu:22.04<span class="w"> </span>--force
+</code></pre></div>
+
+<h3 id="image-operations">Image Operations<a class="headerlink" href="#image-operations" title="Permanent link">&para;</a></h3>
+<h4 id="import-local-image">Import Local Image<a class="headerlink" href="#import-local-image" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Import from tar file</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>import<span class="w"> </span>my-image.tar
+
+<span class="c1"># Import from directory</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>import<span class="w"> </span>/path/to/image/directory
+
+<span class="c1"># Import with custom name</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>import<span class="w"> </span>my-image.tar<span class="w"> </span>--name<span class="w"> </span>myapp:latest
+</code></pre></div>
+
+<h4 id="export-image">Export Image<a class="headerlink" href="#export-image" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Export to tar file</span>
+nexcage<span class="w"> </span>image<span class="w"> </span><span class="nb">export</span><span class="w"> </span>ubuntu:22.04<span class="w"> </span>--output<span class="w"> </span>ubuntu-22.04.tar
+
+<span class="c1"># Export specific layers</span>
+nexcage<span class="w"> </span>image<span class="w"> </span><span class="nb">export</span><span class="w"> </span>ubuntu:22.04<span class="w"> </span>--layers<span class="w"> </span>--output<span class="w"> </span>ubuntu-layers.tar
+</code></pre></div>
+
+<h2 id="container-operations">Container Operations<a class="headerlink" href="#container-operations" title="Permanent link">&para;</a></h2>
+<h3 id="container-lifecycle">Container Lifecycle<a class="headerlink" href="#container-lifecycle" title="Permanent link">&para;</a></h3>
+<h4 id="create-and-start">Create and Start<a class="headerlink" href="#create-and-start" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create and start in one command</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>my-app<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>myapp:latest<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--start
+
+<span class="c1"># Create with auto-start</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>my-app<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>myapp:latest<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--auto-start
+</code></pre></div>
+
+<h4 id="execute-commands">Execute Commands<a class="headerlink" href="#execute-commands" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Execute single command</span>
+nexcage<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>my-container<span class="w"> </span>ls<span class="w"> </span>-la
+
+<span class="c1"># Execute interactive shell</span>
+nexcage<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>my-container<span class="w"> </span>--interactive<span class="w"> </span>--tty<span class="w"> </span>/bin/bash
+
+<span class="c1"># Execute with specific user</span>
+nexcage<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>my-container<span class="w"> </span>--user<span class="w"> </span>root<span class="w"> </span>whoami
+</code></pre></div>
+
+<h4 id="container-logs">Container Logs<a class="headerlink" href="#container-logs" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Show container logs</span>
+nexcage<span class="w"> </span>logs<span class="w"> </span>my-container
+
+<span class="c1"># Follow logs</span>
+nexcage<span class="w"> </span>logs<span class="w"> </span>my-container<span class="w"> </span>--follow
+
+<span class="c1"># Show logs with timestamps</span>
+nexcage<span class="w"> </span>logs<span class="w"> </span>my-container<span class="w"> </span>--timestamps
+
+<span class="c1"># Show last N lines</span>
+nexcage<span class="w"> </span>logs<span class="w"> </span>my-container<span class="w"> </span>--tail<span class="w"> </span><span class="m">100</span>
+</code></pre></div>
+
+<h3 id="resource-management">Resource Management<a class="headerlink" href="#resource-management" title="Permanent link">&para;</a></h3>
+<h4 id="resource-limits">Resource Limits<a class="headerlink" href="#resource-limits" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Set memory limit</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>my-container<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>ubuntu:22.04<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--memory<span class="w"> </span><span class="m">1024</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--memory-swap<span class="w"> </span><span class="m">2048</span>
+
+<span class="c1"># Set CPU limits</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>my-container<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>ubuntu:22.04<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--cores<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--cpu-shares<span class="w"> </span><span class="m">1024</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--cpu-quota<span class="w"> </span><span class="m">50000</span>
+
+<span class="c1"># Set storage limits</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>my-container<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>ubuntu:22.04<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--storage-size<span class="w"> </span>10G<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--storage-type<span class="w"> </span>zfs
+</code></pre></div>
+
+<h4 id="network-configuration">Network Configuration<a class="headerlink" href="#network-configuration" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Bridge networking</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>my-container<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>ubuntu:22.04<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--network<span class="w"> </span><span class="nv">bridge</span><span class="o">=</span>vmbr0
+
+<span class="c1"># Host networking</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>my-container<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>ubuntu:22.04<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--network<span class="w"> </span>host
+
+<span class="c1"># Custom network</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>my-container<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>ubuntu:22.04<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--network<span class="w"> </span><span class="nv">custom</span><span class="o">=</span>my-network
+</code></pre></div>
+
+<h2 id="advanced-features">Advanced Features<a class="headerlink" href="#advanced-features" title="Permanent link">&para;</a></h2>
+<h3 id="layerfs-operations">LayerFS Operations<a class="headerlink" href="#layerfs-operations" title="Permanent link">&para;</a></h3>
+<h4 id="layer-management">Layer Management<a class="headerlink" href="#layer-management" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Show layer information</span>
+nexcage<span class="w"> </span>layer<span class="w"> </span>list
+
+<span class="c1"># Show layer dependencies</span>
+nexcage<span class="w"> </span>layer<span class="w"> </span>dependencies<span class="w"> </span>ubuntu:22.04
+
+<span class="c1"># Validate layer integrity</span>
+nexcage<span class="w"> </span>layer<span class="w"> </span>validate<span class="w"> </span>ubuntu:22.04
+
+<span class="c1"># Optimize layer access</span>
+nexcage<span class="w"> </span>layer<span class="w"> </span>optimize<span class="w"> </span>ubuntu:22.04
+</code></pre></div>
+
+<h4 id="metadata-cache">Metadata Cache<a class="headerlink" href="#metadata-cache" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Show cache statistics</span>
+nexcage<span class="w"> </span>cache<span class="w"> </span>stats
+
+<span class="c1"># Clear cache</span>
+nexcage<span class="w"> </span>cache<span class="w"> </span>clear
+
+<span class="c1"># Show cache entries</span>
+nexcage<span class="w"> </span>cache<span class="w"> </span>list
+
+<span class="c1"># Optimize cache</span>
+nexcage<span class="w"> </span>cache<span class="w"> </span>optimize
+</code></pre></div>
+
+<h3 id="performance-optimization">Performance Optimization<a class="headerlink" href="#performance-optimization" title="Permanent link">&para;</a></h3>
+<h4 id="parallel-processing">Parallel Processing<a class="headerlink" href="#parallel-processing" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Enable parallel layer processing</span>
+nexcage<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>parallel.processing<span class="w"> </span><span class="nb">true</span>
+nexcage<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>parallel.workers<span class="w"> </span><span class="m">4</span>
+
+<span class="c1"># Show performance metrics</span>
+nexcage<span class="w"> </span>performance<span class="w"> </span>metrics
+
+<span class="c1"># Run performance benchmark</span>
+nexcage<span class="w"> </span>performance<span class="w"> </span>benchmark
+</code></pre></div>
+
+<h4 id="memory-management">Memory Management<a class="headerlink" href="#memory-management" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Show memory usage</span>
+nexcage<span class="w"> </span>memory<span class="w"> </span>stats
+
+<span class="c1"># Optimize memory usage</span>
+nexcage<span class="w"> </span>memory<span class="w"> </span>optimize
+
+<span class="c1"># Show memory leaks</span>
+nexcage<span class="w"> </span>memory<span class="w"> </span>check
+</code></pre></div>
+
+<h3 id="zfs-integration">ZFS Integration<a class="headerlink" href="#zfs-integration" title="Permanent link">&para;</a></h3>
+<h4 id="zfs-operations">ZFS Operations<a class="headerlink" href="#zfs-operations" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create ZFS dataset</span>
+nexcage<span class="w"> </span>zfs<span class="w"> </span>create<span class="w"> </span>tank/containers
+
+<span class="c1"># Show ZFS information</span>
+nexcage<span class="w"> </span>zfs<span class="w"> </span>info
+
+<span class="c1"># Create snapshot</span>
+nexcage<span class="w"> </span>zfs<span class="w"> </span>snapshot<span class="w"> </span>tank/containers@backup
+
+<span class="c1"># Clone dataset</span>
+nexcage<span class="w"> </span>zfs<span class="w"> </span>clone<span class="w"> </span>tank/containers@backup<span class="w"> </span>tank/containers-clone
+</code></pre></div>
+
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="common-issues">Common Issues<a class="headerlink" href="#common-issues" title="Permanent link">&para;</a></h3>
+<h4 id="container-wont-start">Container Won't Start<a class="headerlink" href="#container-wont-start" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check container status</span>
+nexcage<span class="w"> </span>info<span class="w"> </span>my-container
+
+<span class="c1"># Check logs</span>
+nexcage<span class="w"> </span>logs<span class="w"> </span>my-container
+
+<span class="c1"># Check system resources</span>
+nexcage<span class="w"> </span>system<span class="w"> </span>resources
+
+<span class="c1"># Verify image integrity</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>validate<span class="w"> </span>myapp:latest
+</code></pre></div>
+
+<h4 id="image-pull-issues">Image Pull Issues<a class="headerlink" href="#image-pull-issues" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check network connectivity</span>
+nexcage<span class="w"> </span>network<span class="w"> </span><span class="nb">test</span>
+
+<span class="c1"># Verify registry credentials</span>
+nexcage<span class="w"> </span>registry<span class="w"> </span>auth
+
+<span class="c1"># Check image cache</span>
+nexcage<span class="w"> </span>cache<span class="w"> </span>status
+
+<span class="c1"># Clear image cache</span>
+nexcage<span class="w"> </span>cache<span class="w"> </span>clear
+</code></pre></div>
+
+<h4 id="performance-issues">Performance Issues<a class="headerlink" href="#performance-issues" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check system performance</span>
+nexcage<span class="w"> </span>performance<span class="w"> </span>check
+
+<span class="c1"># Monitor resource usage</span>
+nexcage<span class="w"> </span>monitor
+
+<span class="c1"># Optimize configuration</span>
+nexcage<span class="w"> </span>optimize
+</code></pre></div>
+
+<h3 id="debug-mode">Debug Mode<a class="headerlink" href="#debug-mode" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Enable debug logging</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">NEXCAGE_LOG_LEVEL</span><span class="o">=</span><span class="s2">&quot;debug&quot;</span>
+
+<span class="c1"># Run with verbose output</span>
+nexcage<span class="w"> </span>--verbose<span class="w"> </span>create<span class="w"> </span>--name<span class="w"> </span><span class="nb">test</span><span class="w"> </span>ubuntu:22.04
+
+<span class="c1"># Show debug information</span>
+nexcage<span class="w"> </span>debug<span class="w"> </span>info
+</code></pre></div>
+
+<h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
+<h3 id="web-application-deployment">Web Application Deployment<a class="headerlink" href="#web-application-deployment" title="Permanent link">&para;</a></h3>
+<h4 id="1-create-web-application-container">1. Create Web Application Container<a class="headerlink" href="#1-create-web-application-container" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Pull web application image</span>
+nexcage<span class="w"> </span>image<span class="w"> </span>pull<span class="w"> </span>myapp:latest
+
+<span class="c1"># Create container</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>web-app<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>myapp:latest<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--memory<span class="w"> </span><span class="m">1024</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--cores<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--network<span class="w"> </span><span class="nv">bridge</span><span class="o">=</span>vmbr0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--port<span class="w"> </span><span class="m">8080</span>:80<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--env<span class="w"> </span><span class="nv">NODE_ENV</span><span class="o">=</span>production<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--mount<span class="w"> </span>/var/log:/app/logs<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--auto-start
+</code></pre></div>
+
+<h4 id="2-scale-application">2. Scale Application<a class="headerlink" href="#2-scale-application" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create multiple instances</span>
+<span class="k">for</span><span class="w"> </span>i<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">{</span><span class="m">1</span>..3<span class="o">}</span><span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span>nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--name<span class="w"> </span><span class="s2">&quot;web-app-</span><span class="nv">$i</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--image<span class="w"> </span>myapp:latest<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--memory<span class="w"> </span><span class="m">1024</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cores<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--network<span class="w"> </span><span class="nv">bridge</span><span class="o">=</span>vmbr0<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--port<span class="w"> </span><span class="s2">&quot;808</span><span class="nv">$i</span><span class="s2">:80&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--env<span class="w"> </span><span class="nv">NODE_ENV</span><span class="o">=</span>production<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--auto-start
+<span class="k">done</span>
+</code></pre></div>
+
+<h3 id="database-container">Database Container<a class="headerlink" href="#database-container" title="Permanent link">&para;</a></h3>
+<h4 id="1-create-database-container">1. Create Database Container<a class="headerlink" href="#1-create-database-container" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create PostgreSQL container</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>postgres-db<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>postgres:15<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--memory<span class="w"> </span><span class="m">2048</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--cores<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--storage-size<span class="w"> </span>20G<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--env<span class="w"> </span><span class="nv">POSTGRES_PASSWORD</span><span class="o">=</span>secret<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--env<span class="w"> </span><span class="nv">POSTGRES_DB</span><span class="o">=</span>myapp<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--port<span class="w"> </span><span class="m">5432</span>:5432<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--mount<span class="w"> </span>/var/lib/postgresql:/var/lib/postgresql/data<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--auto-start
+</code></pre></div>
+
+<h4 id="2-backup-database">2. Backup Database<a class="headerlink" href="#2-backup-database" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create backup</span>
+nexcage<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>postgres-db<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>pg_dump<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>myapp<span class="w"> </span>&gt;<span class="w"> </span>backup.sql
+
+<span class="c1"># Create ZFS snapshot</span>
+nexcage<span class="w"> </span>zfs<span class="w"> </span>snapshot<span class="w"> </span>tank/containers/postgres-db@backup-<span class="k">$(</span>date<span class="w"> </span>+%Y%m%d<span class="k">)</span>
+</code></pre></div>
+
+<h3 id="development-environment">Development Environment<a class="headerlink" href="#development-environment" title="Permanent link">&para;</a></h3>
+<h4 id="1-create-development-container">1. Create Development Container<a class="headerlink" href="#1-create-development-container" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create development container</span>
+nexcage<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>dev-env<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--image<span class="w"> </span>ubuntu:22.04<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--memory<span class="w"> </span><span class="m">4096</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--cores<span class="w"> </span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--network<span class="w"> </span><span class="nv">bridge</span><span class="o">=</span>vmbr0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--mount<span class="w"> </span>/home/user/project:/app<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--mount<span class="w"> </span>/home/user/.ssh:/root/.ssh<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--port<span class="w"> </span><span class="m">2222</span>:22<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--env<span class="w"> </span><span class="nv">DEBIAN_FRONTEND</span><span class="o">=</span>noninteractive<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--auto-start
+</code></pre></div>
+
+<h4 id="2-install-development-tools">2. Install Development Tools<a class="headerlink" href="#2-install-development-tools" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Install development packages</span>
+nexcage<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>dev-env<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>apt<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>build-essential<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>git<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>vim<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>curl<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>wget
+</code></pre></div>
+
+<h2 id="conclusion">Conclusion<a class="headerlink" href="#conclusion" title="Permanent link">&para;</a></h2>
+<p>This user guide covers the essential aspects of using Nexcage with the OCI Image System. The system provides powerful container management capabilities with advanced features like LayerFS, metadata caching, and ZFS integration.</p>
+<p>For more detailed information, refer to:
+- <a href="api.md">API Documentation</a>
+- <a href="../architecture/">Architecture Documentation</a>
+- <a href="testing.md">Testing Documentation</a>
+- <a href="../dev_guide/">Development Guide</a></p>
+<p>For support and questions:
+- Create an issue in the project repository
+- Check the troubleshooting section
+- Review the examples provided
+- Consult the API documentation</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

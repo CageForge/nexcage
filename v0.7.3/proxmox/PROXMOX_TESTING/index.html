@@ -1,0 +1,1730 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.3/proxmox/PROXMOX_TESTING/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>Proxmox Testing Guide - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#proxmox-testing-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Proxmox Testing Guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../user_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../CI_CD_SETUP/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEVELOPMENT_WORKFLOW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CI_CD_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Environment
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Environment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-server-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Server Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-proxmox-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Running Proxmox Tests
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running Proxmox Tests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick Start
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-test-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual Test Execution
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Configuration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Structure
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Structure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-only-test-suite" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Only Test Suite
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-categories" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Categories
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Categories">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build-tests-3-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build Tests (3 tests)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-tests-4-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Environment Tests (4 tests)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#remote-tests-18-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Remote Tests (18 tests)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#container-tests-15-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Tests (15 tests)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-tests-3-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Tests (3 tests)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Results
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Results">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#current-test-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      Current Test Status
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-categories-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Categories Results
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Categories Results">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#local-tests-60-success-rate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Local Tests: 60% success rate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#remote-tests-60-success-rate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Remote Tests: 60% success rate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#container-tests-50-success-rate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Tests: 50% success rate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-tests-100-success-rate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Tests: 100% success rate
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-reports" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Reports
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Reports">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#report-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Report Structure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#report-locations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Report Locations
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viewing-reports" class="md-nav__link">
+    <span class="md-ellipsis">
+      Viewing Reports
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#github-actions-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      GitHub Actions Integration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="GitHub Actions Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-test-workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Test Workflows
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Configuration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debug-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      Debug Mode
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#log-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Log Files
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      Best Practices
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Best Practices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-development" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Development
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-specific" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Specific
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reporting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reporting
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Considerations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ssh-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      SSH Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Security
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Optimization
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Optimization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Performance
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Performance
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contributing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Contributing
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Contributing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#adding-proxmox-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding Proxmox Tests
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-standards" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Standards
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resources
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#support" class="md-nav__link">
+    <span class="md-ellipsis">
+      Support
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/proxmox/PROXMOX_TESTING.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="proxmox-testing-guide">Proxmox Testing Guide<a class="headerlink" href="#proxmox-testing-guide" title="Permanent link">&para;</a></h1>
+<p>This document provides comprehensive information about testing the Proxmox LXC Runtime Interface project on Proxmox VE servers.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>The project includes specialized testing for Proxmox VE environments:</p>
+<ul>
+<li><strong>Proxmox E2E Tests</strong>: End-to-end testing on Proxmox VE server</li>
+<li><strong>Container Lifecycle Tests</strong>: LXC, OCI, and VM container testing</li>
+<li><strong>Performance Tests</strong>: Performance testing on Proxmox hardware</li>
+<li><strong>Integration Tests</strong>: Proxmox API and PCT CLI integration</li>
+<li><strong>Remote Testing</strong>: SSH-based testing on remote Proxmox servers</li>
+</ul>
+<h2 id="test-environment">Test Environment<a class="headerlink" href="#test-environment" title="Permanent link">&para;</a></h2>
+<h3 id="proxmox-server-configuration">Proxmox Server Configuration<a class="headerlink" href="#proxmox-server-configuration" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Host</strong>: <code>your-proxmox.server</code></li>
+<li><strong>User</strong>: <code>root</code></li>
+<li><strong>Binary Path</strong>: <code>/usr/local/bin</code></li>
+<li><strong>Config Path</strong>: <code>/etc/nexcage</code></li>
+<li><strong>Log Path</strong>: <code>/var/log/nexcage</code></li>
+</ul>
+<h3 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>SSH Access</strong>: Configured SSH key access to Proxmox server</li>
+<li><strong>Proxmox VE</strong>: Version 7.0 or later</li>
+<li><strong>LXC Tools</strong>: <code>pct</code>, <code>lxc-*</code> commands available</li>
+<li><strong>Storage</strong>: ZFS storage pool configured</li>
+<li><strong>Network</strong>: Bridge interfaces available</li>
+</ol>
+<h2 id="running-proxmox-tests">Running Proxmox Tests<a class="headerlink" href="#running-proxmox-tests" title="Permanent link">&para;</a></h2>
+<h3 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Run Proxmox E2E tests</span>
+make<span class="w"> </span>test-proxmox
+
+<span class="c1"># Run all tests including Proxmox</span>
+make<span class="w"> </span>test-all
+</code></pre></div>
+
+<h3 id="manual-test-execution">Manual Test Execution<a class="headerlink" href="#manual-test-execution" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Proxmox E2E tests with reporting</span>
+./scripts/proxmox_e2e_test.sh
+
+<span class="c1"># Direct execution</span>
+make<span class="w"> </span>test-proxmox
+</code></pre></div>
+
+<h3 id="test-configuration">Test Configuration<a class="headerlink" href="#test-configuration" title="Permanent link">&para;</a></h3>
+<p>Tests can be configured through environment variables:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Proxmox test configuration</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">PVE_HOST</span><span class="o">=</span><span class="s2">&quot;root@your-proxmox.server&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">PVE_PATH</span><span class="o">=</span><span class="s2">&quot;/usr/local/bin&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CONFIG_PATH</span><span class="o">=</span><span class="s2">&quot;/etc/nexcage&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">LOG_PATH</span><span class="o">=</span><span class="s2">&quot;/var/log/nexcage&quot;</span>
+
+<span class="c1"># Test reporting</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">REPORT_DIR</span><span class="o">=</span><span class="s2">&quot;./test-reports&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">VERBOSE</span><span class="o">=</span><span class="nb">true</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">DEBUG</span><span class="o">=</span><span class="nb">true</span>
+</code></pre></div>
+
+<h2 id="test-structure">Test Structure<a class="headerlink" href="#test-structure" title="Permanent link">&para;</a></h2>
+<h3 id="proxmox-only-test-suite">Proxmox Only Test Suite<a class="headerlink" href="#proxmox-only-test-suite" title="Permanent link">&para;</a></h3>
+<p>The Proxmox Only test suite includes:</p>
+<ol>
+<li><strong>Build Tests</strong>: Binary building and deployment</li>
+<li><strong>Environment Tests</strong>: Proxmox server environment validation</li>
+<li><strong>Remote Tests</strong>: Testing on Proxmox server</li>
+<li><strong>Container Tests</strong>: LXC, OCI, and VM container testing</li>
+<li><strong>Performance Tests</strong>: Performance and memory testing</li>
+<li><strong>Error Handling</strong>: Error handling and recovery testing</li>
+</ol>
+<h3 id="test-categories">Test Categories<a class="headerlink" href="#test-categories" title="Permanent link">&para;</a></h3>
+<h4 id="build-tests-3-tests"><strong>Build Tests (3 tests)</strong><a class="headerlink" href="#build-tests-3-tests" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Build binary</li>
+<li>Copy binary to PVE</li>
+<li>Copy config to PVE</li>
+</ul>
+<h4 id="environment-tests-4-tests"><strong>Environment Tests (4 tests)</strong><a class="headerlink" href="#environment-tests-4-tests" title="Permanent link">&para;</a></h4>
+<ul>
+<li>PVE environment check</li>
+<li>PVE LXC tools check</li>
+<li>PVE storage check</li>
+<li>PVE network check</li>
+</ul>
+<h4 id="remote-tests-18-tests"><strong>Remote Tests (18 tests)</strong><a class="headerlink" href="#remote-tests-18-tests" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Remote help commands</li>
+<li>Remote version command</li>
+<li>Remote create/start/stop/delete/list/run help</li>
+<li>Remote command execution</li>
+<li>Error handling tests</li>
+<li>Config loading tests</li>
+</ul>
+<h4 id="container-tests-15-tests"><strong>Container Tests (15 tests)</strong><a class="headerlink" href="#container-tests-15-tests" title="Permanent link">&para;</a></h4>
+<ul>
+<li>LXC container lifecycle (create, start, stop, delete)</li>
+<li>OCI container lifecycle (crun, runc)</li>
+<li>VM creation and management</li>
+<li>Container listing and status</li>
+</ul>
+<h4 id="performance-tests-3-tests"><strong>Performance Tests (3 tests)</strong><a class="headerlink" href="#performance-tests-3-tests" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Performance testing</li>
+<li>Memory usage testing</li>
+<li>Error handling testing</li>
+</ul>
+<h2 id="test-results">Test Results<a class="headerlink" href="#test-results" title="Permanent link">&para;</a></h2>
+<h3 id="current-test-status">Current Test Status<a class="headerlink" href="#current-test-status" title="Permanent link">&para;</a></h3>
+<p><strong>Proxmox Only Test Results:</strong>
+- <strong>Total Tests</strong>: 44
+- <strong>Passed</strong>: 28 (63%)
+- <strong>Failed</strong>: 16 (37%)
+- <strong>Skipped</strong>: 0 (0%)
+- <strong>Success Rate</strong>: 63%</p>
+<h3 id="test-categories-results">Test Categories Results<a class="headerlink" href="#test-categories-results" title="Permanent link">&para;</a></h3>
+<h4 id="local-tests-60-success-rate"><strong>Local Tests</strong>: 60% success rate<a class="headerlink" href="#local-tests-60-success-rate" title="Permanent link">&para;</a></h4>
+<ul>
+<li>✅ Build and basic commands work</li>
+<li>❌ Some help commands fail (known issue)</li>
+</ul>
+<h4 id="remote-tests-60-success-rate"><strong>Remote Tests</strong>: 60% success rate<a class="headerlink" href="#remote-tests-60-success-rate" title="Permanent link">&para;</a></h4>
+<ul>
+<li>✅ SSH connectivity works</li>
+<li>✅ Remote command execution works</li>
+<li>❌ Some help commands fail (known issue)</li>
+</ul>
+<h4 id="container-tests-50-success-rate"><strong>Container Tests</strong>: 50% success rate<a class="headerlink" href="#container-tests-50-success-rate" title="Permanent link">&para;</a></h4>
+<ul>
+<li>✅ Container creation works</li>
+<li>✅ Container listing works</li>
+<li>❌ Container start/stop/delete fail (implementation issue)</li>
+</ul>
+<h4 id="performance-tests-100-success-rate"><strong>Performance Tests</strong>: 100% success rate<a class="headerlink" href="#performance-tests-100-success-rate" title="Permanent link">&para;</a></h4>
+<ul>
+<li>✅ Performance testing works</li>
+<li>✅ Memory usage testing works</li>
+<li>✅ Error handling works</li>
+</ul>
+<h2 id="test-reports">Test Reports<a class="headerlink" href="#test-reports" title="Permanent link">&para;</a></h2>
+<h3 id="report-structure">Report Structure<a class="headerlink" href="#report-structure" title="Permanent link">&para;</a></h3>
+<p>Each Proxmox test run generates detailed reports including:</p>
+<ul>
+<li><strong>Summary</strong>: Test counts, success rates, duration</li>
+<li><strong>Individual Results</strong>: Per-test status, duration, memory usage</li>
+<li><strong>Environment Info</strong>: Proxmox server info, OS, architecture</li>
+<li><strong>Error Details</strong>: Failure reasons and stack traces</li>
+<li><strong>Performance Metrics</strong>: Memory usage, execution time</li>
+</ul>
+<h3 id="report-locations">Report Locations<a class="headerlink" href="#report-locations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Proxmox E2E Tests</strong>: <code>test-reports/proxmox_e2e_test_report_*.md</code></li>
+<li><strong>Combined Summary</strong>: <code>test-reports/proxmox_combined_summary.md</code></li>
+<li><strong>Test Logs</strong>: <code>test-reports/*.log</code></li>
+</ul>
+<h3 id="viewing-reports">Viewing Reports<a class="headerlink" href="#viewing-reports" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># View latest Proxmox report</span>
+make<span class="w"> </span>report-view
+
+<span class="c1"># Generate summary</span>
+make<span class="w"> </span>report
+
+<span class="c1"># Clean old reports</span>
+make<span class="w"> </span>report-clean
+</code></pre></div>
+
+<h2 id="github-actions-integration">GitHub Actions Integration<a class="headerlink" href="#github-actions-integration" title="Permanent link">&para;</a></h2>
+<h3 id="proxmox-test-workflows">Proxmox Test Workflows<a class="headerlink" href="#proxmox-test-workflows" title="Permanent link">&para;</a></h3>
+<p>The project includes specialized GitHub Actions workflows for Proxmox testing:</p>
+<ul>
+<li><strong><code>proxmox_tests.yml</code></strong>: Main Proxmox E2E testing</li>
+<li><strong><code>proxmox-container-tests</code></strong>: Container lifecycle testing</li>
+<li><strong><code>proxmox-performance-tests</code></strong>: Performance testing</li>
+<li><strong><code>generate-proxmox-summary</code></strong>: Combined reporting</li>
+</ul>
+<h3 id="workflow-features">Workflow Features<a class="headerlink" href="#workflow-features" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>SSH Key Management</strong>: Secure SSH access to Proxmox server</li>
+<li><strong>Automated Testing</strong>: All test suites run automatically</li>
+<li><strong>Detailed Reporting</strong>: Test results uploaded as artifacts</li>
+<li><strong>PR Comments</strong>: Test results posted to pull requests</li>
+<li><strong>Artifact Storage</strong>: Reports stored for 30 days</li>
+</ul>
+<h3 id="workflow-configuration">Workflow Configuration<a class="headerlink" href="#workflow-configuration" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># .github/workflows/proxmox_tests.yml</span>
+<span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Proxmox E2E Tests</span>
+<span class="nt">on</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">push</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="w"> </span><span class="nv">main</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">develop</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">feature/**</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">feat/**</span><span class="w"> </span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">pull_request</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="w"> </span><span class="nv">main</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">develop</span><span class="w"> </span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">workflow_dispatch</span><span class="p">:</span>
+</code></pre></div>
+
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="common-issues">Common Issues<a class="headerlink" href="#common-issues" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>SSH Connection Failures</strong>
+   ```bash
+   # Check SSH connectivity
+   ssh root@mgr.cp.if.ua "pct help"</li>
+</ol>
+<p># Verify SSH key
+   ssh-add -l
+   ```</p>
+<ol>
+<li><strong>Proxmox Environment Issues</strong>
+   ```bash
+   # Check Proxmox tools
+   ssh root@mgr.cp.if.ua "which pct lxc-ls"</li>
+</ol>
+<p># Check storage
+   ssh root@mgr.cp.if.ua "df -h | grep rpool"</p>
+<p># Check network
+   ssh root@mgr.cp.if.ua "ip link show | grep vmbr"
+   ```</p>
+<ol>
+<li><strong>Container Creation Failures</strong>
+   ```bash
+   # Check LXC tools
+   ssh root@mgr.cp.if.ua "pct list"</li>
+</ol>
+<p># Check storage space
+   ssh root@mgr.cp.if.ua "zfs list"</p>
+<p># Check network bridges
+   ssh root@mgr.cp.if.ua "ip link show"
+   ```</p>
+<h3 id="debug-mode">Debug Mode<a class="headerlink" href="#debug-mode" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Enable debug logging</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">DEBUG</span><span class="o">=</span><span class="nb">true</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">VERBOSE</span><span class="o">=</span><span class="nb">true</span>
+
+<span class="c1"># Run tests with debug output</span>
+make<span class="w"> </span>test-proxmox
+</code></pre></div>
+
+<h3 id="log-files">Log Files<a class="headerlink" href="#log-files" title="Permanent link">&para;</a></h3>
+<p>Test logs are stored in:
+- <strong>Proxmox Tests</strong>: <code>test-reports/proxmox_e2e_test_log_*.log</code>
+- <strong>Container Tests</strong>: <code>test-reports/container_test_log_*.log</code>
+- <strong>Performance Tests</strong>: <code>test-reports/performance_test_log_*.log</code></p>
+<h2 id="best-practices">Best Practices<a class="headerlink" href="#best-practices" title="Permanent link">&para;</a></h2>
+<h3 id="test-development">Test Development<a class="headerlink" href="#test-development" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Test Isolation</strong>: Each test should be independent</li>
+<li><strong>Resource Cleanup</strong>: Always clean up created containers</li>
+<li><strong>Error Handling</strong>: Test both success and failure cases</li>
+<li><strong>Performance</strong>: Consider test execution time</li>
+<li><strong>Documentation</strong>: Document test purpose and expected behavior</li>
+</ol>
+<h3 id="proxmox-specific">Proxmox Specific<a class="headerlink" href="#proxmox-specific" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>VMID Management</strong>: Use unique VMIDs for containers</li>
+<li><strong>Storage Management</strong>: Clean up created storage</li>
+<li><strong>Network Management</strong>: Use appropriate bridge interfaces</li>
+<li><strong>Resource Limits</strong>: Set appropriate resource limits</li>
+<li><strong>Security</strong>: Follow Proxmox security best practices</li>
+</ol>
+<h3 id="reporting">Reporting<a class="headerlink" href="#reporting" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Detailed Information</strong>: Include Proxmox server info</li>
+<li><strong>Clear Results</strong>: Use consistent formatting</li>
+<li><strong>Error Details</strong>: Include Proxmox-specific error messages</li>
+<li><strong>Performance Metrics</strong>: Track Proxmox resource usage</li>
+</ol>
+<h2 id="security-considerations">Security Considerations<a class="headerlink" href="#security-considerations" title="Permanent link">&para;</a></h2>
+<h3 id="ssh-security">SSH Security<a class="headerlink" href="#ssh-security" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Key Management</strong>: Use strong SSH keys</li>
+<li><strong>Access Control</strong>: Limit SSH access to necessary users</li>
+<li><strong>Audit Logging</strong>: Monitor SSH access</li>
+<li><strong>Key Rotation</strong>: Regularly rotate SSH keys</li>
+</ol>
+<h3 id="proxmox-security">Proxmox Security<a class="headerlink" href="#proxmox-security" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>User Permissions</strong>: Use appropriate user permissions</li>
+<li><strong>Resource Limits</strong>: Set resource limits for containers</li>
+<li><strong>Network Security</strong>: Use appropriate network configurations</li>
+<li><strong>Storage Security</strong>: Secure storage access</li>
+</ol>
+<h2 id="performance-optimization">Performance Optimization<a class="headerlink" href="#performance-optimization" title="Permanent link">&para;</a></h2>
+<h3 id="test-performance">Test Performance<a class="headerlink" href="#test-performance" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Parallel Execution</strong>: Run tests in parallel where possible</li>
+<li><strong>Resource Management</strong>: Monitor resource usage</li>
+<li><strong>Timeout Handling</strong>: Set appropriate timeouts</li>
+<li><strong>Cleanup</strong>: Clean up resources promptly</li>
+</ol>
+<h3 id="proxmox-performance">Proxmox Performance<a class="headerlink" href="#proxmox-performance" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Storage Performance</strong>: Use appropriate storage types</li>
+<li><strong>Network Performance</strong>: Optimize network configurations</li>
+<li><strong>CPU Performance</strong>: Monitor CPU usage</li>
+<li><strong>Memory Performance</strong>: Monitor memory usage</li>
+</ol>
+<h2 id="contributing">Contributing<a class="headerlink" href="#contributing" title="Permanent link">&para;</a></h2>
+<h3 id="adding-proxmox-tests">Adding Proxmox Tests<a class="headerlink" href="#adding-proxmox-tests" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Create Test File</strong>: Add new test file in appropriate directory</li>
+<li><strong>Update Test Runner</strong>: Add test to Proxmox test runner</li>
+<li><strong>Update Documentation</strong>: Document new test in this guide</li>
+<li><strong>Test Coverage</strong>: Ensure adequate test coverage</li>
+</ol>
+<h3 id="test-standards">Test Standards<a class="headerlink" href="#test-standards" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Code Quality</strong>: Follow project coding standards</li>
+<li><strong>Documentation</strong>: Include comprehensive comments</li>
+<li><strong>Error Handling</strong>: Proper error handling and cleanup</li>
+<li><strong>Performance</strong>: Consider performance impact of tests</li>
+</ol>
+<h2 id="resources">Resources<a class="headerlink" href="#resources" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Proxmox VE</strong>: <a href="https://pve.proxmox.com/wiki/Main_Page">Proxmox VE Documentation</a></li>
+<li><strong>LXC</strong>: <a href="https://linuxcontainers.org/lxc/">LXC Documentation</a></li>
+<li><strong>PCT</strong>: <a href="https://pve.proxmox.com/wiki/Manual:_pct">Proxmox Container Toolkit</a></li>
+<li><strong>ZFS</strong>: <a href="https://openzfs.org/wiki/Main_Page">ZFS Documentation</a></li>
+<li><strong>SSH</strong>: <a href="https://www.openssh.com/manual.html">SSH Documentation</a></li>
+</ul>
+<h2 id="support">Support<a class="headerlink" href="#support" title="Permanent link">&para;</a></h2>
+<p>For Proxmox testing-related issues:</p>
+<ol>
+<li><strong>Check Logs</strong>: Review test logs for error details</li>
+<li><strong>Run Individual Tests</strong>: Isolate failing tests</li>
+<li><strong>Check Environment</strong>: Verify Proxmox server configuration</li>
+<li><strong>Create Issue</strong>: Report bugs with test details and logs</li>
+</ol>
+<hr />
+<p><strong>Last Updated</strong>: 2025-10-04<br />
+<strong>Version</strong>: 0.5.0<br />
+<strong>Maintainer</strong>: Proxmox LXC Runtime Interface Team</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
