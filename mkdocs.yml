@@ -11,6 +11,9 @@ theme:
     - navigation.tabs
     - navigation.expand
     - content.code.copy
+    - content.action.edit
+    - content.tabs.link
+    - navigation.top
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -23,6 +26,7 @@ theme:
 
 nav:
   - Overview: index.md
+  - Versions: versions.md
   - Getting Started:
     - Install: INSTALL.md
     - Dev Quickstart: DEV_QUICKSTART.md
@@ -36,6 +40,12 @@ nav:
   - Proxmox Testing: PROXMOX_TESTING.md
 
 docs_dir: docs
+plugins:
+  - search
+  - mike
+extra:
+  version:
+    provider: mike
 markdown_extensions:
   - admonition
   - codehilite
