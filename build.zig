@@ -2,6 +2,20 @@ const std = @import("std");
 const Build = std.Build;
 const fs = std.fs;
 
+fn pkgConfigExists(b: *Build, package: []const u8) bool {
+    var child = std.process.Child.init(&[_][]const u8{ "pkg-config", "--exists", package }, b.allocator);
+    child.stdout_behavior = .Ignore;
+    child.stderr_behavior = .Ignore;
+    const term = child.spawnAndWait() catch {
+        std.debug.print("[build] warn: pkg-config unavailable while checking {s}\n", .{package});
+        return false;
+    };
+    return switch (term) {
+        .Exited => |code| code == 0,
+        else => false,
+    };
+}
+
 // Version information is sourced from VERSION file at build time
 
 pub fn build(b: *std.Build) void {
@@ -17,6 +31,12 @@ pub fn build(b: *std.Build) void {
     // Create build options (one instance shared across all modules)
     const build_options = b.addOptions();
     build_options.addOption([]const u8, "app_version", app_version);
+    const feature_options = b.addOptions();
+
+    const legacy_link_libcrun = b.option(bool, "link-libcrun", "(deprecated) Link libcrun/systemd") orelse false;
+    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI support (requires libsystemd)") orelse legacy_link_libcrun;
+    var libcrun_abi_active = false;
+    var libsystemd_available = false;
 
     // Core module
     const core_mod = b.addModule("core", .{
@@ -40,6 +60,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "utils", .module = utils_mod },
         },
     });
+    backends_mod.addOptions("feature_options", feature_options);
 
     // CLI module
     const cli_mod = b.addModule("cli", .{
@@ -67,7 +88,7 @@ pub fn build(b: *std.Build) void {
     });
     // Note: build_options are NOT added to main_mod to avoid conflicts
     // Version is accessed via core.version.getVersion() instead
-    
+
     const exe = b.addExecutable(.{
         .name = "nexcage",
         .root_module = main_mod,
@@ -75,23 +96,26 @@ pub fn build(b: *std.Build) void {
 
     // Link system libraries
     exe.linkSystemLibrary("c");
-    
+
     // Required system libraries
     exe.linkSystemLibrary("cap");
     exe.linkSystemLibrary("seccomp");
     exe.linkSystemLibrary("yajl");
-    
-    // Optional: Link libcrun and systemd only if libcrun ABI is enabled
-    // Check if libcrun ABI is enabled by checking the feature flag
-    // Note: We can't directly check the flag from build.zig, so we'll use a workaround:
-    // Try to link them, but since USE_LIBCRUN_ABI defaults to false, they won't be used at runtime
-    // The linking will only succeed if the libraries are installed, which is fine
-    // If they're not available, we'll skip linking them (requires build option)
-    const link_libcrun = b.option(bool, "link-libcrun", "Link libcrun and systemd libraries (default: false)") orelse false;
-    if (link_libcrun) {
-        exe.linkSystemLibrary("crun");
-        exe.linkSystemLibrary("systemd");
+
+    if (enable_libcrun_abi) {
+        libsystemd_available = pkgConfigExists(b, "libsystemd");
+        if (libsystemd_available) {
+            exe.linkSystemLibrary("crun");
+            exe.linkSystemLibrary("systemd");
+            libcrun_abi_active = true;
+        } else {
+            std.debug.print("[build] warn: libsystemd not detected; libcrun ABI disabled (falling back to CLI)\n", .{});
+        }
     }
+
+    feature_options.addOption(bool, "libcrun_abi_requested", enable_libcrun_abi);
+    feature_options.addOption(bool, "libcrun_abi_active", libcrun_abi_active);
+    feature_options.addOption(bool, "libsystemd_available", libsystemd_available);
 
     // No additional static Zig libraries linked to avoid duplicate start symbol
 
@@ -136,21 +160,21 @@ pub fn build(b: *std.Build) void {
     });
     // Note: build_options are NOT added to test_mod to avoid conflicts
     // Version is accessed via core.version.getVersion() instead
-    
+
     const test_exe = b.addTest(.{
         .name = "test",
         .root_module = test_mod,
     });
 
     test_exe.linkSystemLibrary("c");
-    
+
     // Required system libraries for tests
     test_exe.linkSystemLibrary("cap");
     test_exe.linkSystemLibrary("seccomp");
     test_exe.linkSystemLibrary("yajl");
-    
-    // Optional: Link libcrun and systemd only if requested (reuse link_libcrun from above)
-    if (link_libcrun) {
+
+    // Optional: Link libcrun/systemd for tests when ABI active
+    if (libcrun_abi_active) {
         test_exe.linkSystemLibrary("crun");
         test_exe.linkSystemLibrary("systemd");
     }
