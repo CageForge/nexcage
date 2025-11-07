@@ -1,4 +1,4 @@
-# Proxmox LXC Runtime Interface - Makefile
+# Nexcage Runtime Interface - Makefile
 # Enhanced with detailed test reporting
 
 .PHONY: help build docs-serve docs-build test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps

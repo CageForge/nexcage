@@ -26,10 +26,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Build with MkDocs
-        uses: docker://squidfunk/mkdocs-material:9.5.35
         with:
-          args: build --strict
+          enablement: true
+      - name: Build with MkDocs (main -> latest)
+        if: github.event_name == 'push'
+        run: |
+          docker run --rm -v "$PWD":/docs squidfunk/mkdocs-material:9.5.35 build --strict -d site/latest
+          echo '<meta http-equiv="refresh" content="0; url=latest/" />' > site/index.html
+      - name: Build with MkDocs (release -> vX.Y.Z and latest)
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          docker run --rm -v "$PWD":/docs squidfunk/mkdocs-material:9.5.35 build --strict -d site/v${TAG}
+          docker run --rm -v "$PWD":/docs squidfunk/mkdocs-material:9.5.35 build --strict -d site/latest
+          echo '<meta http-equiv="refresh" content="0; url=latest/" />' > site/index.html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -45,5 +56,44 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  build-all-versions:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Build all tagged versions and latest
+        run: |
+          set -e
+          # Ensure site root
+          mkdir -p site
+          CURRENT_REF=$(git rev-parse --abbrev-ref HEAD)
+          # Build latest from main
+          git checkout main
+          docker run --rm -v "$PWD":/docs squidfunk/mkdocs-material:9.5.35 build --strict -d site/latest
+          echo '<meta http-equiv="refresh" content="0; url=latest/" />' > site/index.html
+          # Build for each tag v*
+          for t in $(git tag --list 'v*' | sort -V); do
+            echo "Building docs for $t"
+            git checkout "$t" || continue
+            if [ -f mkdocs.yml ]; then
+              docker run --rm -v "$PWD":/docs squidfunk/mkdocs-material:9.5.35 build --strict -d "site/$t" || true
+              # copy release notes if present
+              if [ -d docs/releases ]; then
+                mkdir -p "site/$t/releases"
+                cp -r docs/releases/*.md "site/$t/releases/" || true
+              fi
+            fi
+          done
+          # Restore branch
+          git checkout "$CURRENT_REF"
+      - name: Upload artifact (all versions)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
 
 
