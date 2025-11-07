@@ -20,6 +20,7 @@ This release upgrades the OCI ingestion pipeline to fully understand the Linux a
 ### Changed
 - Hardened error handling around malformed `memoryPolicy`, `intelRdt`, and `netDevices` entries to surface actionable diagnostics.
 - Unit tests updated to cover OCI 1.3.0 fields and prevent regressions.
+- Removed the legacy crun CLI fallback; builds now require libcrun + libsystemd when targeting the crun backend.
 
 ### Testing
 - `zig build`

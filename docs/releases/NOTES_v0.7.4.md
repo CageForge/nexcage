@@ -7,7 +7,7 @@
   - `netDevices` inventory map
 - Extended Proxmox LXC bundle parser with stricter validation and safer memory management.
 - Updated developer docs to call out the new spec baseline and runtime guarantees.
-- Build tooling now detects `libsystemd` via `pkg-config`, linking libcrun ABI automatically when present and falling back to the CLI driver when not.
+- Build tooling now requires `libcrun` and `libsystemd` via `pkg-config`; builds fail if the ABI dependencies are absent, reflecting the removal of the legacy CLI fallback.
 
 ## Upgrade Notes
 - Bundles declaring `ociVersion: 1.3.0` or newer 1.x releases now load without manual downgrades.

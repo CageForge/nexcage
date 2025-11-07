@@ -24,10 +24,10 @@ zig build
 ./zig-out/bin/nexcage version
 ```
 
-### Optional: Enable libcrun ABI
-- Requires `pkg-config` and development headers for `libcrun` and `libsystemd`.
-- Build with: `zig build -Denable-libcrun-abi=true`
-- If `libsystemd` is not detected, the build prints a warning and keeps the CLI fallback.
+### libcrun ABI requirements
+- `pkg-config` must resolve both `libcrun` and `libsystemd` development packages.
+- Build command: `zig build -Denable-libcrun-abi=true` (default).
+- The build fails if those dependencies are missing; install the dev packages or use the vendored libcrun workflow.
 
 ## Local Smoke (no Proxmox)
 ```bash

@@ -33,8 +33,17 @@ pub fn build(b: *std.Build) void {
     build_options.addOption([]const u8, "app_version", app_version);
     const feature_options = b.addOptions();
 
-    const legacy_link_libcrun = b.option(bool, "link-libcrun", "(deprecated) Link libcrun/systemd") orelse false;
-    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI support (requires libsystemd)") orelse legacy_link_libcrun;
+    const legacy_link_libcrun = b.option(bool, "link-libcrun", "(deprecated) Link libcrun/systemd");
+    if (legacy_link_libcrun) |value| {
+        if (value) {
+            std.debug.print("[build] warn: -Dlink-libcrun is deprecated; libcrun ABI is always enabled.\n", .{});
+        }
+    }
+    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI support (requires libsystemd)") orelse true;
+    if (!enable_libcrun_abi) {
+        std.debug.print("[build] error: libcrun CLI backend has been removed; libcrun ABI must remain enabled.\n", .{});
+        @panic("libcrun ABI disabled");
+    }
     var libcrun_abi_active = false;
     var libsystemd_available = false;
 
@@ -103,14 +112,19 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("yajl");
 
     if (enable_libcrun_abi) {
-        libsystemd_available = pkgConfigExists(b, "libsystemd");
-        if (libsystemd_available) {
-            exe.linkSystemLibrary("crun");
-            exe.linkSystemLibrary("systemd");
-            libcrun_abi_active = true;
-        } else {
-            std.debug.print("[build] warn: libsystemd not detected; libcrun ABI disabled (falling back to CLI)\n", .{});
+        const libcrun_available = pkgConfigExists(b, "libcrun");
+        if (!libcrun_available) {
+            std.debug.print("[build] error: libcrun not detected via pkg-config. Install libcrun development files or enable vendored libcrun.\n", .{});
+            @panic("libcrun not available");
         }
+        libsystemd_available = pkgConfigExists(b, "libsystemd");
+        if (!libsystemd_available) {
+            std.debug.print("[build] error: libsystemd not detected; libcrun ABI backend requires libsystemd development files.\n", .{});
+            @panic("libsystemd not available");
+        }
+        exe.linkSystemLibrary("crun");
+        exe.linkSystemLibrary("systemd");
+        libcrun_abi_active = true;
     }
 
     feature_options.addOption(bool, "libcrun_abi_requested", enable_libcrun_abi);

@@ -120,9 +120,9 @@ This fix resolves the "Proxmox-LXC Container Kill (SIGTERM)" test failure and im
 
 ```zig
 // src/backends/crun/mod.zig
-pub const CrunDriver = if (USE_LIBCRUN_ABI) libcrun_driver.CrunDriver else driver.CrunDriver;
+pub const CrunDriver = if (USE_LIBCRUN_ABI) libcrun_driver.CrunDriver else driver.CrunDriver; // legacy snippet; CLI fallback removed in v0.7.4
 pub const CrunDriverLibcrun = libcrun_driver.CrunDriver; // ABI-based
-pub const CrunDriverCli = driver.CrunDriver; // CLI-based fallback
+pub const CrunDriverCli = driver.CrunDriver; // CLI-based fallback (removed in v0.7.4)
 ```
 
 ## Dependencies
@@ -134,7 +134,7 @@ pub const CrunDriverCli = driver.CrunDriver; // CLI-based fallback
 
 ### Compatibility
 
-- CLI driver remains available as fallback
+- CLI driver remains available as fallback *(legacy note: removed in v0.7.4)*
 - No breaking changes to existing API
 - Backward compatible with v0.7.0
 
@@ -157,7 +157,7 @@ To use CLI driver:
 
 ```zig
 const crun = @import("backends").crun;
-const driver = crun.CrunDriverCli.init(allocator, logger);
+const driver = crun.CrunDriverCli.init(allocator, logger); // Legacy CLI path (removed in v0.7.4)
 ```
 
 ## Known Issues
@@ -274,4 +274,6 @@ This release includes contributions focused on:
 ---
 
 **Upgrade Path:** Direct upgrade from v0.7.0 is supported. No migration steps required.
+
+> **Legacy Note**: The CLI fallback referenced in this document was removed in v0.7.4. The crun backend now requires the libcrun ABI.
 

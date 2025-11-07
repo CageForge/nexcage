@@ -34,7 +34,7 @@ pub const BackendRouter = struct {
             .create => |create_config| blk: {
                 const image_buf = try self.allocator.dupe(u8, create_config.image);
                 errdefer self.allocator.free(image_buf);
-                
+
                 const network_config: ?types.NetworkConfig = if (config) |cfg| cfg.network else switch (runtime_type) {
                     .lxc => blk2: {
                         const bridge_buf = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME);
@@ -52,7 +52,7 @@ pub const BackendRouter = struct {
                 errdefer if (network_config) |net| {
                     if (net.bridge) |bridge| self.allocator.free(bridge);
                 };
-                
+
                 break :blk types.SandboxConfig{
                     .allocator = self.allocator,
                     .name = name_buf,
@@ -72,7 +72,7 @@ pub const BackendRouter = struct {
             .run => |run_config| blk: {
                 const image_buf = try self.allocator.dupe(u8, run_config.image);
                 errdefer self.allocator.free(image_buf);
-                
+
                 break :blk types.SandboxConfig{
                     .allocator = self.allocator,
                     .name = name_buf,
@@ -174,9 +174,9 @@ pub const BackendRouter = struct {
             .stop => try crun_backend.stop(container_id),
             .delete => try crun_backend.delete(container_id),
             .run => {
-                if (self.logger) |log| {
-                    try log.warn("Crun run operation not implemented", .{});
-                }
+                const sandbox_config = try self.createSandboxConfig(operation, container_id, .crun, config);
+                defer self.cleanupSandboxConfig(operation, &sandbox_config);
+                try crun_backend.run(sandbox_config);
             },
         }
     }
