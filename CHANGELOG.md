@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2025-11-07
+
+### 🚀 Spec Parity Release: OCI Runtime v1.3.0 Support
+
+This release upgrades the OCI ingestion pipeline to fully understand the Linux additions introduced between v1.0.2 and v1.3.0, ensuring future bundles load without manual downgrades.
+
+### Added
+- **NUMA Memory Policy Parsing**: Support for `linux.memoryPolicy` (modes, nodes, flags) with strict validation.
+- **Intel RDT Enhancements**: Parse `closID`, `schemata`, cache and memory bandwidth schemas, plus the new `enableMonitoring` flag.
+- **Network Device Inventory**: Parse `linux.netDevices` map entries with alias/name support for future LXC bridging.
+- **Developer Guidance**: README & Dev Quickstart now highlight OCI Runtime Spec v1.3.0 as the tested baseline.
+
+### Changed
+- Hardened error handling around malformed `memoryPolicy`, `intelRdt`, and `netDevices` entries to surface actionable diagnostics.
+- Unit tests updated to cover OCI 1.3.0 fields and prevent regressions.
+
+### Testing
+- `zig build`
+- `zig build test`
+
+### Documentation
+- `docs/releases/NOTES_v0.7.4.md` — detailed notes for the release.
+- README, `docs/DEV_QUICKSTART.md` — compatibility snapshot and requirements now state OCI 1.3.0 support.
+
+---
+
 ## [0.7.3] - 2025-11-02
 
 ### 🔧 Bug Fix Release: Memory Leaks, Template Conversion, OCI Resources

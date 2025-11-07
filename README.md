@@ -2,6 +2,10 @@
 
 Next-generation container runtime for Proxmox VE using LXC and OCI backends (crun/runc).
 
+## Compatibility Snapshot
+- **OCI Runtime Specification**: fully parses Linux additions up to v1.3.0 (NUMA memoryPolicy, Intel RDT monitoring, netDevices inventory).
+- **Proxmox VE**: verified on 8.x hypervisors; upcoming work tracks 9.x updates.
+
 - Architecture: amd64 (x86_64) only
 - Environment: runs on Proxmox VE host (no containerization)
 
