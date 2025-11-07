@@ -1,18 +1,20 @@
-# Sprint 6.9: OCI Spec 1.3.0 Upgrade
+# Sprint 6.9: Release 0.7.4 Dependency Refresh
 
 **Date**: 2025-11-03  
 **Status**: 📋 PLANNING  
-**Duration**: 1 week (targeted)
+**Duration**: 1 week (targeted)  
+**Milestone**: Sprint 6.9 — Release 0.7.4 (Dependency Refresh)
 
 ## 🎯 Sprint Goal
 
-Elevate the project9s OCI runtime support to comply with the OCI Runtime Specification v1.3.0 while keeping existing backends stable.
+Ship release `v0.7.4` with refreshed vendored dependencies (crun, Proxmox integration), OCI Runtime Specification v1.3.0 compatibility, and healthy build/test coverage.
 
 ## 🚀 Primary Deliverables
 
 - Update vendored OCI specification definitions to v1.3.0.
-- Extend ABI driver structures and validation logic to cover new runtime fields.
-- Adjust documentation (README, docs/) to state OCI 1.3.0 compatibility.
+- Refresh vendored `crun` sources and resolve systemd/seccomp linking for Debug builds.
+- Track upstream Proxmox VE changes influencing dependency baselines.
+- Adjust documentation (README, docs/) to state OCI 1.3.0 compatibility and the new release version.
 - Provide migration notes for template authors referencing OCI fields.
 
 ## 🧩 Key Tasks
@@ -20,8 +22,10 @@ Elevate the project9s OCI runtime support to comply with the OCI Runtime Specif
 1. Inventory current OCI structures vs. 1.3.0 changes (hooks, annotations, process flags, platform constraints).
 2. Update Zig type definitions and validation helpers for new/changed fields.
 3. Regenerate or sync OCI JSON schemas used in tests (if applicable).
-4. Extend unit/E2E coverage to assert 1.3.0 semantics.
-5. Refresh documentation and release notes to advertise the upgraded spec level.
+4. Update vendored `crun` and align build scripts with new headers and libraries.
+5. Track Proxmox VE dependency bumps and validate compatibility.
+6. Extend unit/E2E coverage to assert 1.3.0 semantics.
+7. Refresh documentation and release notes to advertise the upgraded spec level.
 
 ## 📦 Dependencies & Risks
 
@@ -39,6 +43,7 @@ Elevate the project9s OCI runtime support to comply with the OCI Runtime Specif
 ## 🕒 Session Log
 
 - **2025-11-03** — Created sprint plan and opened GitHub Issue #145 for the OCI spec upgrade. Logged build verification via `make build`. _(30 min)_
+- **2025-11-07** — Created GitHub milestone “Sprint 6.9 — Release 0.7.4 (Dependency Refresh)” and assigned issues #145, #141, #140, #139, #136. _(20 min)_
 
 ---
 
