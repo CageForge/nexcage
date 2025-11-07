@@ -1,0 +1,1658 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.4/architecture/ADR-003-Security-Architecture/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>ADR-003: Security Architecture and Defense-in-Depth Strategy - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adr-003-security-architecture-and-defense-in-depth-strategy" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              ADR-003: Security Architecture and Defense-in-Depth Strategy
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../user_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../CI_CD_SETUP/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEVELOPMENT_WORKFLOW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CI_CD_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      Status
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      Context
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#threat-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Threat Model
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      Decision
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#security-architecture-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Architecture Layers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-security-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      Core Security Principles
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Implementation Strategy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Implementation Strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-container-isolation-and-hardening" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Container Isolation and Hardening
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-runtime-security-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Runtime Security Monitoring
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-image-and-supply-chain-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Image and Supply Chain Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-network-security-and-microsegmentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Network Security and Microsegmentation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-compliance-and-audit-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Compliance and Audit Framework
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-configuration-templates" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Configuration Templates
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security Configuration Templates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#high-security-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      High-Security Profile
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compliance-profile-pci-dss" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compliance Profile (PCI-DSS)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      Consequences
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Consequences">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#positive" class="md-nav__link">
+    <span class="md-ellipsis">
+      Positive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#negative" class="md-nav__link">
+    <span class="md-ellipsis">
+      Negative
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#risk-mitigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Risk Mitigation
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and Metrics
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring and Metrics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#security-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Metrics
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-impact-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Impact Metrics
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#review-schedule" class="md-nav__link">
+    <span class="md-ellipsis">
+      Review Schedule
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      References
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/architecture/ADR-003-Security-Architecture.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="adr-003-security-architecture-and-defense-in-depth-strategy">ADR-003: Security Architecture and Defense-in-Depth Strategy<a class="headerlink" href="#adr-003-security-architecture-and-defense-in-depth-strategy" title="Permanent link">&para;</a></h1>
+<h2 id="status">Status<a class="headerlink" href="#status" title="Permanent link">&para;</a></h2>
+<p><strong>ACCEPTED</strong> - 2024-12-01</p>
+<h2 id="context">Context<a class="headerlink" href="#context" title="Permanent link">&para;</a></h2>
+<p>As a container runtime handling potentially untrusted workloads, Proxmox LXCRI requires comprehensive security measures to protect the host system, other containers, and sensitive data. The security model must address:</p>
+<ul>
+<li>Container escape prevention</li>
+<li>Resource exhaustion attacks</li>
+<li>Privilege escalation</li>
+<li>Network-based attacks</li>
+<li>Supply chain security</li>
+<li>Compliance requirements (PCI-DSS, HIPAA, SOX)</li>
+<li>Zero-trust networking</li>
+<li>Audit and monitoring requirements</li>
+</ul>
+<h3 id="threat-model">Threat Model<a class="headerlink" href="#threat-model" title="Permanent link">&para;</a></h3>
+<p><strong>Assets to Protect:</strong>
+- Host operating system and kernel
+- Other containers and their data
+- Proxmox VE infrastructure
+- Network resources and services
+- Configuration and secrets
+- Runtime metadata and logs</p>
+<p><strong>Attack Vectors:</strong>
+- Malicious container images
+- Compromised container applications
+- Network-based attacks
+- Insider threats
+- Supply chain compromises
+- Configuration errors
+- Runtime vulnerabilities</p>
+<p><strong>Threat Actors:</strong>
+- External attackers
+- Malicious insiders
+- Compromised applications
+- Nation-state actors
+- Automated attacks/botnets</p>
+<h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">&para;</a></h2>
+<p><strong>We implement a comprehensive defense-in-depth security architecture with multiple layers of protection, zero-trust principles, and continuous monitoring.</strong></p>
+<h3 id="security-architecture-layers">Security Architecture Layers<a class="headerlink" href="#security-architecture-layers" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>┌─────────────────────────────────────────┐
+│         Application Security            │ ← Image scanning, code analysis
+├─────────────────────────────────────────┤
+│         Container Security              │ ← Isolation, capabilities, seccomp
+├─────────────────────────────────────────┤
+│         Runtime Security                │ ← LXCRI hardening, monitoring
+├─────────────────────────────────────────┤
+│         Network Security                │ ← Firewalls, segmentation, TLS
+├─────────────────────────────────────────┤
+│         Host Security                   │ ← Host hardening, kernel protection
+├─────────────────────────────────────────┤
+│         Infrastructure Security         │ ← Proxmox security, hardware
+└─────────────────────────────────────────┘
+</code></pre></div>
+
+<h3 id="core-security-principles">Core Security Principles<a class="headerlink" href="#core-security-principles" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Least Privilege</strong>: Minimal necessary permissions at all levels</li>
+<li><strong>Defense in Depth</strong>: Multiple independent security layers</li>
+<li><strong>Zero Trust</strong>: Verify everything, trust nothing</li>
+<li><strong>Fail Secure</strong>: Secure defaults and safe failure modes</li>
+<li><strong>Continuous Monitoring</strong>: Real-time threat detection</li>
+<li><strong>Compliance by Design</strong>: Built-in regulatory compliance</li>
+</ol>
+<h2 id="implementation-strategy">Implementation Strategy<a class="headerlink" href="#implementation-strategy" title="Permanent link">&para;</a></h2>
+<h3 id="1-container-isolation-and-hardening">1. Container Isolation and Hardening<a class="headerlink" href="#1-container-isolation-and-hardening" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">SecurityProfile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Container isolation</span>
+<span class="w">    </span><span class="n">use_user_namespaces</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="n">use_pid_namespaces</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="n">use_network_namespaces</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="n">use_mount_namespaces</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="n">use_ipc_namespaces</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="n">use_uts_namespaces</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="n">use_cgroup_namespaces</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+
+<span class="w">    </span><span class="c1">// Security features</span>
+<span class="w">    </span><span class="n">no_new_privileges</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="n">read_only_root_filesystem</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="n">drop_all_capabilities</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="n">allowed_capabilities</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">Capability</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="p">[</span><span class="n">_</span><span class="p">]</span><span class="n">Capability</span><span class="p">{},</span>
+
+<span class="w">    </span><span class="c1">// Syscall filtering</span>
+<span class="w">    </span><span class="n">seccomp_profile</span><span class="o">:</span><span class="w"> </span><span class="n">SeccompProfile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">default_secure</span><span class="p">,</span>
+
+<span class="w">    </span><span class="c1">// MAC (Mandatory Access Control)</span>
+<span class="w">    </span><span class="n">apparmor_profile</span><span class="o">:</span><span class="w"> </span><span class="o">?</span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;default-secure&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">selinux_context</span><span class="o">:</span><span class="w"> </span><span class="o">?</span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+
+<span class="w">    </span><span class="c1">// Resource limits</span>
+<span class="w">    </span><span class="n">memory_limit</span><span class="o">:</span><span class="w"> </span><span class="o">?</span><span class="kt">u64</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="n">cpu_limit</span><span class="o">:</span><span class="w"> </span><span class="o">?</span><span class="kt">f64</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="n">pids_limit</span><span class="o">:</span><span class="w"> </span><span class="o">?</span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1024</span><span class="p">,</span>
+<span class="w">    </span><span class="n">files_limit</span><span class="o">:</span><span class="w"> </span><span class="o">?</span><span class="kt">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">65536</span><span class="p">,</span>
+
+<span class="w">    </span><span class="c1">// Network security</span>
+<span class="w">    </span><span class="n">network_policy</span><span class="o">:</span><span class="w"> </span><span class="n">NetworkPolicy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">isolated</span><span class="p">,</span>
+<span class="w">    </span><span class="n">allowed_ports</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u16</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="p">[</span><span class="n">_</span><span class="p">]</span><span class="kt">u16</span><span class="p">{},</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">NetworkPolicy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">isolated</span><span class="p">,</span><span class="w">      </span><span class="c1">// No network access</span>
+<span class="w">        </span><span class="n">internal_only</span><span class="p">,</span><span class="w"> </span><span class="c1">// Internal network only</span>
+<span class="w">        </span><span class="n">restricted</span><span class="p">,</span><span class="w">    </span><span class="c1">// Limited external access</span>
+<span class="w">        </span><span class="n">standard</span><span class="p">,</span><span class="w">      </span><span class="c1">// Standard network access</span>
+<span class="w">    </span><span class="p">};</span>
+<span class="p">};</span>
+
+<span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">SeccompProfile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">disabled</span><span class="p">,</span>
+<span class="w">    </span><span class="n">default_secure</span><span class="p">,</span>
+<span class="w">    </span><span class="n">strict</span><span class="p">,</span>
+<span class="w">    </span><span class="n">custom</span><span class="p">,</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">getSyscallFilter</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="n">SeccompProfile</span><span class="p">)</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">SyscallRule</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="k">switch</span><span class="w"> </span><span class="p">(</span><span class="n">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="p">.</span><span class="n">disabled</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="o">&amp;</span><span class="p">[</span><span class="n">_</span><span class="p">]</span><span class="n">SyscallRule</span><span class="p">{},</span>
+<span class="w">            </span><span class="p">.</span><span class="n">default_secure</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="o">&amp;</span><span class="n">default_secure_syscalls</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">strict</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="o">&amp;</span><span class="n">strict_syscalls</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">custom</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">loadCustomProfile</span><span class="p">(),</span>
+<span class="w">        </span><span class="p">};</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<h3 id="2-runtime-security-monitoring">2. Runtime Security Monitoring<a class="headerlink" href="#2-runtime-security-monitoring" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">SecurityMonitor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">anomaly_detector</span><span class="o">:</span><span class="w"> </span><span class="n">AnomalyDetector</span><span class="p">,</span>
+<span class="w">    </span><span class="n">threat_detector</span><span class="o">:</span><span class="w"> </span><span class="n">ThreatDetector</span><span class="p">,</span>
+<span class="w">    </span><span class="n">compliance_monitor</span><span class="o">:</span><span class="w"> </span><span class="n">ComplianceMonitor</span><span class="p">,</span>
+<span class="w">    </span><span class="n">audit_logger</span><span class="o">:</span><span class="w"> </span><span class="n">AuditLogger</span><span class="p">,</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">init</span><span class="p">(</span><span class="n">allocator</span><span class="o">:</span><span class="w"> </span><span class="n">Allocator</span><span class="p">,</span><span class="w"> </span><span class="n">config</span><span class="o">:</span><span class="w"> </span><span class="n">SecurityConfig</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="n">SecurityMonitor</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">SecurityMonitor</span><span class="p">{</span>
+<span class="w">            </span><span class="p">.</span><span class="n">anomaly_detector</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">AnomalyDetector</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="n">config</span><span class="p">.</span><span class="n">anomaly_config</span><span class="p">),</span>
+<span class="w">            </span><span class="p">.</span><span class="n">threat_detector</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">ThreatDetector</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="n">config</span><span class="p">.</span><span class="n">threat_config</span><span class="p">),</span>
+<span class="w">            </span><span class="p">.</span><span class="n">compliance_monitor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">ComplianceMonitor</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="n">config</span><span class="p">.</span><span class="n">compliance_config</span><span class="p">),</span>
+<span class="w">            </span><span class="p">.</span><span class="n">audit_logger</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">AuditLogger</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="n">config</span><span class="p">.</span><span class="n">audit_config</span><span class="p">),</span>
+<span class="w">        </span><span class="p">};</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">monitorContainer</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">SecurityMonitor</span><span class="p">,</span><span class="w"> </span><span class="n">container</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">Container</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="kt">void</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Continuous monitoring</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">anomaly_detector</span><span class="p">.</span><span class="n">analyzeContainer</span><span class="p">(</span><span class="n">container</span><span class="p">);</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">threat_detector</span><span class="p">.</span><span class="n">scanContainer</span><span class="p">(</span><span class="n">container</span><span class="p">);</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">compliance_monitor</span><span class="p">.</span><span class="n">checkContainer</span><span class="p">(</span><span class="n">container</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// Log security events</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">audit_logger</span><span class="p">.</span><span class="n">logContainerActivity</span><span class="p">(</span><span class="n">container</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+
+<span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">AnomalyDetector</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">baseline_metrics</span><span class="o">:</span><span class="w"> </span><span class="n">ContainerMetrics</span><span class="p">,</span>
+<span class="w">    </span><span class="n">threshold_config</span><span class="o">:</span><span class="w"> </span><span class="n">ThresholdConfig</span><span class="p">,</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">analyzeContainer</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">AnomalyDetector</span><span class="p">,</span><span class="w"> </span><span class="n">container</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">Container</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="kt">void</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">current_metrics</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">container</span><span class="p">.</span><span class="n">getMetrics</span><span class="p">();</span>
+
+<span class="w">        </span><span class="c1">// Detect resource usage anomalies</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">current_metrics</span><span class="p">.</span><span class="n">cpu_usage</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">baseline_metrics</span><span class="p">.</span><span class="n">cpu_usage</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">3.0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">raiseSecurityAlert</span><span class="p">(.</span><span class="n">high</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Abnormal CPU usage detected&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">container</span><span class="p">.</span><span class="n">id</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// Detect network anomalies</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">current_metrics</span><span class="p">.</span><span class="n">network_connections</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">threshold_config</span><span class="p">.</span><span class="n">max_connections</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">raiseSecurityAlert</span><span class="p">(.</span><span class="n">medium</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Excessive network connections&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">container</span><span class="p">.</span><span class="n">id</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// Detect filesystem anomalies</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">current_metrics</span><span class="p">.</span><span class="n">file_operations</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">threshold_config</span><span class="p">.</span><span class="n">max_file_ops</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">raiseSecurityAlert</span><span class="p">(.</span><span class="n">medium</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Excessive file operations&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">container</span><span class="p">.</span><span class="n">id</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">raiseSecurityAlert</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">AnomalyDetector</span><span class="p">,</span><span class="w"> </span><span class="n">severity</span><span class="o">:</span><span class="w"> </span><span class="n">AlertSeverity</span><span class="p">,</span><span class="w"> </span><span class="n">message</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="n">container_id</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="kt">void</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">alert</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SecurityAlert</span><span class="p">{</span>
+<span class="w">            </span><span class="p">.</span><span class="n">severity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">severity</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">message</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">message</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">container_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">container_id</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">timestamp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">time</span><span class="p">.</span><span class="n">nanoTimestamp</span><span class="p">(),</span>
+<span class="w">            </span><span class="p">.</span><span class="n">detector</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;anomaly_detector&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="p">};</span>
+
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">sendAlert</span><span class="p">(</span><span class="n">alert</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<h3 id="3-image-and-supply-chain-security">3. Image and Supply Chain Security<a class="headerlink" href="#3-image-and-supply-chain-security" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">ImageScanner</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">vulnerability_db</span><span class="o">:</span><span class="w"> </span><span class="n">VulnerabilityDatabase</span><span class="p">,</span>
+<span class="w">    </span><span class="n">signature_verifier</span><span class="o">:</span><span class="w"> </span><span class="n">SignatureVerifier</span><span class="p">,</span>
+<span class="w">    </span><span class="n">policy_engine</span><span class="o">:</span><span class="w"> </span><span class="n">PolicyEngine</span><span class="p">,</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">scanImage</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">ImageScanner</span><span class="p">,</span><span class="w"> </span><span class="n">image_ref</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="n">ScanResult</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">var</span><span class="w"> </span><span class="n">scan_result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ScanResult</span><span class="p">.</span><span class="n">init</span><span class="p">();</span>
+
+<span class="w">        </span><span class="c1">// Download and verify image</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">image</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">downloadImage</span><span class="p">(</span><span class="n">image_ref</span><span class="p">);</span>
+<span class="w">        </span><span class="k">defer</span><span class="w"> </span><span class="n">image</span><span class="p">.</span><span class="n">deinit</span><span class="p">();</span>
+
+<span class="w">        </span><span class="c1">// Verify digital signatures</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">signature_valid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">signature_verifier</span><span class="p">.</span><span class="n">verify</span><span class="p">(</span><span class="n">image</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">signature_valid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">scan_result</span><span class="p">.</span><span class="n">addCriticalFinding</span><span class="p">(</span><span class="s">&quot;Image signature verification failed&quot;</span><span class="p">);</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">scan_result</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// Scan for vulnerabilities</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">vulnerabilities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">vulnerability_db</span><span class="p">.</span><span class="n">scan</span><span class="p">(</span><span class="n">image</span><span class="p">);</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">vulnerabilities</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">vuln</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">scan_result</span><span class="p">.</span><span class="n">addVulnerability</span><span class="p">(</span><span class="n">vuln</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// Check against security policies</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">policy_violations</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">policy_engine</span><span class="p">.</span><span class="n">check</span><span class="p">(</span><span class="n">image</span><span class="p">);</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">policy_violations</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">violation</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">scan_result</span><span class="p">.</span><span class="n">addPolicyViolation</span><span class="p">(</span><span class="n">violation</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">scan_result</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+
+<span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">ScanResult</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">critical_findings</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">ArrayList</span><span class="p">(</span><span class="n">Finding</span><span class="p">),</span>
+<span class="w">    </span><span class="n">high_findings</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">ArrayList</span><span class="p">(</span><span class="n">Finding</span><span class="p">),</span>
+<span class="w">    </span><span class="n">medium_findings</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">ArrayList</span><span class="p">(</span><span class="n">Finding</span><span class="p">),</span>
+<span class="w">    </span><span class="n">low_findings</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">ArrayList</span><span class="p">(</span><span class="n">Finding</span><span class="p">),</span>
+<span class="w">    </span><span class="n">info_findings</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">ArrayList</span><span class="p">(</span><span class="n">Finding</span><span class="p">),</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">isSecure</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="kr">const</span><span class="w"> </span><span class="n">ScanResult</span><span class="p">)</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">critical_findings</span><span class="p">.</span><span class="n">items</span><span class="p">.</span><span class="n">len</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">and</span>
+<span class="w">               </span><span class="n">self</span><span class="p">.</span><span class="n">high_findings</span><span class="p">.</span><span class="n">items</span><span class="p">.</span><span class="n">len</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">getRiskScore</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="kr">const</span><span class="w"> </span><span class="n">ScanResult</span><span class="p">)</span><span class="w"> </span><span class="kt">f32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">var</span><span class="w"> </span><span class="n">score</span><span class="o">:</span><span class="w"> </span><span class="kt">f32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.0</span><span class="p">;</span>
+<span class="w">        </span><span class="n">score</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nb">@as</span><span class="p">(</span><span class="kt">f32</span><span class="p">,</span><span class="w"> </span><span class="nb">@floatFromInt</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">critical_findings</span><span class="p">.</span><span class="n">items</span><span class="p">.</span><span class="n">len</span><span class="p">))</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">10.0</span><span class="p">;</span>
+<span class="w">        </span><span class="n">score</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nb">@as</span><span class="p">(</span><span class="kt">f32</span><span class="p">,</span><span class="w"> </span><span class="nb">@floatFromInt</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">high_findings</span><span class="p">.</span><span class="n">items</span><span class="p">.</span><span class="n">len</span><span class="p">))</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">7.0</span><span class="p">;</span>
+<span class="w">        </span><span class="n">score</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nb">@as</span><span class="p">(</span><span class="kt">f32</span><span class="p">,</span><span class="w"> </span><span class="nb">@floatFromInt</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">medium_findings</span><span class="p">.</span><span class="n">items</span><span class="p">.</span><span class="n">len</span><span class="p">))</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">4.0</span><span class="p">;</span>
+<span class="w">        </span><span class="n">score</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nb">@as</span><span class="p">(</span><span class="kt">f32</span><span class="p">,</span><span class="w"> </span><span class="nb">@floatFromInt</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">low_findings</span><span class="p">.</span><span class="n">items</span><span class="p">.</span><span class="n">len</span><span class="p">))</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1.0</span><span class="p">;</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">score</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<h3 id="4-network-security-and-microsegmentation">4. Network Security and Microsegmentation<a class="headerlink" href="#4-network-security-and-microsegmentation" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">NetworkSecurityManager</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">firewall_manager</span><span class="o">:</span><span class="w"> </span><span class="n">FirewallManager</span><span class="p">,</span>
+<span class="w">    </span><span class="n">network_policies</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">ArrayList</span><span class="p">(</span><span class="n">NetworkPolicy</span><span class="p">),</span>
+<span class="w">    </span><span class="n">traffic_analyzer</span><span class="o">:</span><span class="w"> </span><span class="n">TrafficAnalyzer</span><span class="p">,</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">NetworkPolicy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span>
+<span class="w">        </span><span class="n">selector</span><span class="o">:</span><span class="w"> </span><span class="n">ContainerSelector</span><span class="p">,</span>
+<span class="w">        </span><span class="n">ingress_rules</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">IngressRule</span><span class="p">,</span>
+<span class="w">        </span><span class="n">egress_rules</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">EgressRule</span><span class="p">,</span>
+<span class="w">        </span><span class="n">default_deny</span><span class="o">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="p">};</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">IngressRule</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">from</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">NetworkSelector</span><span class="p">,</span>
+<span class="w">        </span><span class="n">ports</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">PortSpec</span><span class="p">,</span>
+<span class="w">        </span><span class="n">protocols</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">Protocol</span><span class="p">,</span>
+<span class="w">    </span><span class="p">};</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">EgressRule</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">to</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">NetworkSelector</span><span class="p">,</span>
+<span class="w">        </span><span class="n">ports</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">PortSpec</span><span class="p">,</span>
+<span class="w">        </span><span class="n">protocols</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">Protocol</span><span class="p">,</span>
+<span class="w">    </span><span class="p">};</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">applyNetworkPolicy</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">NetworkSecurityManager</span><span class="p">,</span><span class="w"> </span><span class="n">container</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">Container</span><span class="p">,</span><span class="w"> </span><span class="n">policy</span><span class="o">:</span><span class="w"> </span><span class="n">NetworkPolicy</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="kt">void</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Configure container network namespace</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">configureNetworkNamespace</span><span class="p">(</span><span class="n">container</span><span class="p">,</span><span class="w"> </span><span class="n">policy</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// Set up firewall rules</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">firewall_manager</span><span class="p">.</span><span class="n">applyRules</span><span class="p">(</span><span class="n">container</span><span class="p">,</span><span class="w"> </span><span class="n">policy</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// Enable traffic monitoring</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">traffic_analyzer</span><span class="p">.</span><span class="n">monitorContainer</span><span class="p">(</span><span class="n">container</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">detectNetworkThreats</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">NetworkSecurityManager</span><span class="p">,</span><span class="w"> </span><span class="n">container</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">Container</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">ThreatDetection</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">traffic_analysis</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">traffic_analyzer</span><span class="p">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">container</span><span class="p">);</span>
+<span class="w">        </span><span class="kr">var</span><span class="w"> </span><span class="n">threats</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">ArrayList</span><span class="p">(</span><span class="n">ThreatDetection</span><span class="p">).</span><span class="n">init</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// Detect port scanning</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">traffic_analysis</span><span class="p">.</span><span class="n">unique_destination_ports</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">100</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">try</span><span class="w"> </span><span class="n">threats</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">ThreatDetection</span><span class="p">{</span>
+<span class="w">                </span><span class="p">.</span><span class="kt">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">port_scanning</span><span class="p">,</span>
+<span class="w">                </span><span class="p">.</span><span class="n">severity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">high</span><span class="p">,</span>
+<span class="w">                </span><span class="p">.</span><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;Potential port scanning activity detected&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="p">});</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// Detect data exfiltration</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">traffic_analysis</span><span class="p">.</span><span class="n">outbound_bytes</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1024</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1024</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="c1">// 100MB</span>
+<span class="w">            </span><span class="k">try</span><span class="w"> </span><span class="n">threats</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">ThreatDetection</span><span class="p">{</span>
+<span class="w">                </span><span class="p">.</span><span class="kt">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">data_exfiltration</span><span class="p">,</span>
+<span class="w">                </span><span class="p">.</span><span class="n">severity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">medium</span><span class="p">,</span>
+<span class="w">                </span><span class="p">.</span><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;Large outbound data transfer detected&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="p">});</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// Detect C&amp;C communication</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">traffic_analysis</span><span class="p">.</span><span class="n">suspicious_domains</span><span class="p">.</span><span class="n">len</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">try</span><span class="w"> </span><span class="n">threats</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">ThreatDetection</span><span class="p">{</span>
+<span class="w">                </span><span class="p">.</span><span class="kt">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">command_control</span><span class="p">,</span>
+<span class="w">                </span><span class="p">.</span><span class="n">severity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">.</span><span class="n">critical</span><span class="p">,</span>
+<span class="w">                </span><span class="p">.</span><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;Communication with suspicious domains detected&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="p">});</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">threats</span><span class="p">.</span><span class="n">toOwnedSlice</span><span class="p">();</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<h3 id="5-compliance-and-audit-framework">5. Compliance and Audit Framework<a class="headerlink" href="#5-compliance-and-audit-framework" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">ComplianceFramework</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">standards</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">ArrayList</span><span class="p">(</span><span class="n">ComplianceStandard</span><span class="p">),</span>
+<span class="w">    </span><span class="n">audit_logger</span><span class="o">:</span><span class="w"> </span><span class="n">AuditLogger</span><span class="p">,</span>
+<span class="w">    </span><span class="n">report_generator</span><span class="o">:</span><span class="w"> </span><span class="n">ReportGenerator</span><span class="p">,</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">ComplianceStandard</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">pci_dss</span><span class="p">,</span>
+<span class="w">        </span><span class="n">hipaa</span><span class="p">,</span>
+<span class="w">        </span><span class="n">sox</span><span class="p">,</span>
+<span class="w">        </span><span class="n">gdpr</span><span class="p">,</span>
+<span class="w">        </span><span class="n">iso27001</span><span class="p">,</span>
+<span class="w">        </span><span class="n">cis_docker</span><span class="p">,</span>
+<span class="w">        </span><span class="n">nist_800_190</span><span class="p">,</span>
+<span class="w">    </span><span class="p">};</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">checkCompliance</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">ComplianceFramework</span><span class="p">,</span><span class="w"> </span><span class="n">container</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">Container</span><span class="p">,</span><span class="w"> </span><span class="n">standard</span><span class="o">:</span><span class="w"> </span><span class="n">ComplianceStandard</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="n">ComplianceResult</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">checks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">getComplianceChecks</span><span class="p">(</span><span class="n">standard</span><span class="p">);</span>
+<span class="w">        </span><span class="kr">var</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ComplianceResult</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="n">standard</span><span class="p">);</span>
+
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">checks</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">check</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="kr">const</span><span class="w"> </span><span class="n">check_result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">check</span><span class="p">.</span><span class="n">execute</span><span class="p">(</span><span class="n">container</span><span class="p">);</span>
+<span class="w">            </span><span class="n">result</span><span class="p">.</span><span class="n">addCheckResult</span><span class="p">(</span><span class="n">check_result</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// Generate audit trail</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">audit_logger</span><span class="p">.</span><span class="n">logComplianceCheck</span><span class="p">(</span><span class="n">container</span><span class="p">,</span><span class="w"> </span><span class="n">standard</span><span class="p">,</span><span class="w"> </span><span class="n">result</span><span class="p">);</span>
+
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">result</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">generateComplianceReport</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">ComplianceFramework</span><span class="p">,</span><span class="w"> </span><span class="n">standard</span><span class="o">:</span><span class="w"> </span><span class="n">ComplianceStandard</span><span class="p">,</span><span class="w"> </span><span class="n">containers</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="n">Container</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="n">ComplianceReport</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">var</span><span class="w"> </span><span class="n">report</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ComplianceReport</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="n">standard</span><span class="p">);</span>
+
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">containers</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">container</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="kr">const</span><span class="w"> </span><span class="n">compliance_result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">checkCompliance</span><span class="p">(</span><span class="n">container</span><span class="p">,</span><span class="w"> </span><span class="n">standard</span><span class="p">);</span>
+<span class="w">            </span><span class="n">report</span><span class="p">.</span><span class="n">addContainerResult</span><span class="p">(</span><span class="n">container</span><span class="p">.</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">compliance_result</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// Calculate overall compliance score</span>
+<span class="w">        </span><span class="n">report</span><span class="p">.</span><span class="n">calculateOverallScore</span><span class="p">();</span>
+
+<span class="w">        </span><span class="c1">// Generate remediation recommendations</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">report</span><span class="p">.</span><span class="n">generateRemediation</span><span class="p">();</span>
+
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">report</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+
+<span class="kr">pub</span><span class="w"> </span><span class="kr">const</span><span class="w"> </span><span class="n">AuditLogger</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">log_file</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">fs</span><span class="p">.</span><span class="n">File</span><span class="p">,</span>
+<span class="w">    </span><span class="n">encryption_key</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="kt">u8</span><span class="p">,</span>
+<span class="w">    </span><span class="n">integrity_hasher</span><span class="o">:</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">crypto</span><span class="p">.</span><span class="n">hash</span><span class="p">.</span><span class="n">Blake3</span><span class="p">,</span>
+
+<span class="w">    </span><span class="kr">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">logSecurityEvent</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">AuditLogger</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="o">:</span><span class="w"> </span><span class="n">SecurityEvent</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="kt">void</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">audit_entry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">AuditEntry</span><span class="p">{</span>
+<span class="w">            </span><span class="p">.</span><span class="n">timestamp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">time</span><span class="p">.</span><span class="n">nanoTimestamp</span><span class="p">(),</span>
+<span class="w">            </span><span class="p">.</span><span class="n">event_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="kt">type</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">severity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="n">severity</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="n">source</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">target</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="n">target</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="n">description</span><span class="p">,</span>
+<span class="w">            </span><span class="p">.</span><span class="n">metadata</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="n">metadata</span><span class="p">,</span>
+<span class="w">        </span><span class="p">};</span>
+
+<span class="w">        </span><span class="c1">// Serialize and encrypt audit entry</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">serialized</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">json</span><span class="p">.</span><span class="n">stringifyAlloc</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="n">audit_entry</span><span class="p">,</span><span class="w"> </span><span class="p">.{});</span>
+<span class="w">        </span><span class="k">defer</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">.</span><span class="n">free</span><span class="p">(</span><span class="n">serialized</span><span class="p">);</span>
+
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">encrypted</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">encrypt</span><span class="p">(</span><span class="n">serialized</span><span class="p">);</span>
+<span class="w">        </span><span class="k">defer</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">.</span><span class="n">free</span><span class="p">(</span><span class="n">encrypted</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// Write to tamper-evident log</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">writeWithIntegrity</span><span class="p">(</span><span class="n">encrypted</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">writeWithIntegrity</span><span class="p">(</span><span class="n">self</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="n">AuditLogger</span><span class="p">,</span><span class="w"> </span><span class="n">data</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="kt">void</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Calculate integrity hash</span>
+<span class="w">        </span><span class="kr">var</span><span class="w"> </span><span class="n">hasher</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">crypto</span><span class="p">.</span><span class="n">hash</span><span class="p">.</span><span class="n">Blake3</span><span class="p">.</span><span class="n">init</span><span class="p">(.{});</span>
+<span class="w">        </span><span class="n">hasher</span><span class="p">.</span><span class="n">update</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">hash</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">hasher</span><span class="p">.</span><span class="n">final</span><span class="p">();</span>
+
+<span class="w">        </span><span class="c1">// Write data + hash</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">log_file</span><span class="p">.</span><span class="n">writeAll</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">log_file</span><span class="p">.</span><span class="n">writeAll</span><span class="p">(</span><span class="o">&amp;</span><span class="n">hash</span><span class="p">);</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">log_file</span><span class="p">.</span><span class="n">sync</span><span class="p">();</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<h2 id="security-configuration-templates">Security Configuration Templates<a class="headerlink" href="#security-configuration-templates" title="Permanent link">&para;</a></h2>
+<h3 id="high-security-profile">High-Security Profile<a class="headerlink" href="#high-security-profile" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;security_profile&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;high&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;container_isolation&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;user_namespaces&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;all_namespaces&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;no_new_privileges&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;read_only_root&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;drop_all_capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;seccomp_profile&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;strict&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;resource_limits&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;memory_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;512MB&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;cpu_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;pids_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">512</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;files_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">32768</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;network_security&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;policy&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;isolated&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;allowed_ports&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">    </span><span class="nt">&quot;default_deny&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;monitoring&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;anomaly_detection&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;threat_detection&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;compliance_monitoring&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;audit_logging&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="compliance-profile-pci-dss">Compliance Profile (PCI-DSS)<a class="headerlink" href="#compliance-profile-pci-dss" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;security_profile&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pci_dss&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;container_isolation&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;user_namespaces&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;all_namespaces&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;no_new_privileges&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;seccomp_profile&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;default_secure&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;encryption&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;data_at_rest&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;data_in_transit&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;audit_logs&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;access_control&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;rbac_enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;mfa_required&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;session_timeout&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">900</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;monitoring&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;file_integrity_monitoring&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;access_logging&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;vulnerability_scanning&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;compliance_reporting&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h2>
+<h3 id="positive">Positive<a class="headerlink" href="#positive" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Comprehensive Protection</strong>: Multiple layers of security reduce attack surface</li>
+<li><strong>Compliance Ready</strong>: Built-in support for major regulatory frameworks</li>
+<li><strong>Threat Detection</strong>: Real-time monitoring and alerting capabilities</li>
+<li><strong>Audit Trail</strong>: Complete audit logging for forensics and compliance</li>
+<li><strong>Flexibility</strong>: Configurable security profiles for different use cases</li>
+</ul>
+<h3 id="negative">Negative<a class="headerlink" href="#negative" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Performance Impact</strong>: Security features add computational overhead</li>
+<li><strong>Complexity</strong>: Multiple security layers increase system complexity</li>
+<li><strong>Configuration Burden</strong>: Proper security requires careful configuration</li>
+<li><strong>Learning Curve</strong>: Team needs security expertise and training</li>
+</ul>
+<h3 id="risk-mitigation">Risk Mitigation<a class="headerlink" href="#risk-mitigation" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Performance Testing</strong>: Regular benchmarking of security overhead</li>
+<li><strong>Automated Configuration</strong>: Templates and defaults for common scenarios</li>
+<li><strong>Documentation</strong>: Comprehensive security guides and best practices</li>
+<li><strong>Training</strong>: Security awareness and technical training programs</li>
+</ul>
+<h2 id="monitoring-and-metrics">Monitoring and Metrics<a class="headerlink" href="#monitoring-and-metrics" title="Permanent link">&para;</a></h2>
+<h3 id="security-metrics">Security Metrics<a class="headerlink" href="#security-metrics" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Container escape attempts</li>
+<li>Privilege escalation attempts</li>
+<li>Abnormal resource usage patterns</li>
+<li>Network policy violations</li>
+<li>Compliance score trends</li>
+<li>Vulnerability detection rates</li>
+<li>Incident response times</li>
+</ul>
+<h3 id="performance-impact-metrics">Performance Impact Metrics<a class="headerlink" href="#performance-impact-metrics" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Security overhead per container</li>
+<li>Monitoring CPU/memory usage</li>
+<li>Network latency impact</li>
+<li>Container startup time impact</li>
+</ul>
+<h2 id="review-schedule">Review Schedule<a class="headerlink" href="#review-schedule" title="Permanent link">&para;</a></h2>
+<p>This ADR will be reviewed:
+- <strong>Next review</strong>: 2025-03-01 (3 months - security requires frequent review)
+- <strong>Trigger events</strong>:
+  - Security incidents or breaches
+  - New vulnerability disclosures
+  - Regulatory requirement changes
+  - Major threat landscape shifts
+  - Performance impact exceeding thresholds</p>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://csrc.nist.gov/publications/detail/sp/800-190/final">NIST SP 800-190: Container Security Guide</a></li>
+<li><a href="https://www.cisecurity.org/benchmark/docker">CIS Docker Benchmark</a></li>
+<li><a href="https://owasp.org/www-project-container-security/">OWASP Container Security Top 10</a></li>
+<li><a href="https://kubernetes.io/docs/concepts/security/">Kubernetes Security Best Practices</a></li>
+<li><a href="https://www.pcisecuritystandards.org/document_library">PCI DSS Requirements</a></li>
+<li><a href="https://www.kernel.org/doc/html/latest/admin-guide/LSM/index.html">Linux Security Modules</a></li>
+</ul>
+<hr />
+<p><strong>Author</strong>: Proxmox LXCRI Security Team<br />
+<strong>Reviewers</strong>: Security Committee, Compliance Team, Architecture Committee<br />
+<strong>Last Updated</strong>: 2024-12-01</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,2313 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.4/CI_CD_SETUP/">
+      
+      
+        <link rel="prev" href="../architecture/OVERVIEW/">
+      
+      
+        <link rel="next" href="../DEPENDENCIES/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>CI/CD - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#github-cicd-setup-for-proxmox-testing" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              CI/CD
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../user_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_WORKFLOW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prerequisites">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-github-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. GitHub CLI
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-ssh-access-to-proxmox-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. SSH Access to Proxmox Server
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-github-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. GitHub Repository
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick Setup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quick Setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automated-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automated Setup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual Setup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Manual Setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-generate-ssh-key-pair" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Generate SSH Key Pair
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-copy-public-key-to-proxmox-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Copy Public Key to Proxmox Server
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-test-ssh-connection" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 3: Test SSH Connection
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-add-private-key-to-github-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 4: Add Private Key to GitHub Secrets
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-clean-up-local-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 5: Clean Up Local Files
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflow Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow File
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Environment Variables
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#secrets-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      Secrets Required
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Triggers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflow Triggers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automatic-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automatic Triggers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual Triggers
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Jobs
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflow Jobs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-proxmox-ci-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Proxmox CI Job
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-proxmox-deployment-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Proxmox Deployment Job
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-proxmox-monitoring-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Proxmox Monitoring Job
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-generate-ci-summary-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Generate CI Summary Job
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-reports" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Reports
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Reports">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#report-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Report Types
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#report-locations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Report Locations
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#report-retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      Report Retention
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-alerts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and Alerts
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring and Alerts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      GitHub Actions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Server
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-ssh-connection-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. SSH Connection Failed
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-workflow-not-triggering" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Workflow Not Triggering
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-tests-failing" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Tests Failing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-deployment-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Deployment Failed
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debug-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      Debug Mode
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Considerations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ssh-key-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      SSH Key Management
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-server-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Server Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      GitHub Security
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Optimization
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Optimization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Optimization
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-server-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Server Optimization
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Maintenance
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Maintenance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#regular-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Regular Tasks
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monthly-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monthly Tasks
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#support" class="md-nav__link">
+    <span class="md-ellipsis">
+      Support
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Support">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#getting-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      Getting Help
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reporting-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reporting Issues
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prerequisites">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-github-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. GitHub CLI
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-ssh-access-to-proxmox-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. SSH Access to Proxmox Server
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-github-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. GitHub Repository
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick Setup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quick Setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automated-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automated Setup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual Setup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Manual Setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-generate-ssh-key-pair" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Generate SSH Key Pair
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-copy-public-key-to-proxmox-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Copy Public Key to Proxmox Server
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-test-ssh-connection" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 3: Test SSH Connection
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-add-private-key-to-github-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 4: Add Private Key to GitHub Secrets
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-clean-up-local-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 5: Clean Up Local Files
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflow Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow File
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Environment Variables
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#secrets-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      Secrets Required
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Triggers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflow Triggers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automatic-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automatic Triggers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual Triggers
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Jobs
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflow Jobs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-proxmox-ci-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Proxmox CI Job
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-proxmox-deployment-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Proxmox Deployment Job
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-proxmox-monitoring-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Proxmox Monitoring Job
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-generate-ci-summary-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Generate CI Summary Job
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-reports" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test Reports
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Reports">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#report-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Report Types
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#report-locations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Report Locations
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#report-retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      Report Retention
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-alerts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and Alerts
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring and Alerts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      GitHub Actions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Server
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-ssh-connection-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. SSH Connection Failed
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-workflow-not-triggering" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Workflow Not Triggering
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-tests-failing" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Tests Failing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-deployment-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Deployment Failed
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debug-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      Debug Mode
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Considerations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ssh-key-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      SSH Key Management
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-server-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Server Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      GitHub Security
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Optimization
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Optimization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Optimization
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-server-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox Server Optimization
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Maintenance
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Maintenance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#regular-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Regular Tasks
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monthly-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monthly Tasks
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#support" class="md-nav__link">
+    <span class="md-ellipsis">
+      Support
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Support">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#getting-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      Getting Help
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reporting-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reporting Issues
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/CI_CD_SETUP.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="github-cicd-setup-for-proxmox-testing">GitHub CI/CD Setup for Proxmox Testing<a class="headerlink" href="#github-cicd-setup-for-proxmox-testing" title="Permanent link">&para;</a></h1>
+<p>This document provides step-by-step instructions for setting up automated CI/CD testing on Proxmox server <code>mgr.cp.if.ua</code>.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>The CI/CD pipeline automatically:
+- Runs tests on Proxmox server after each commit
+- Deploys the application to Proxmox server
+- Monitors server health and application status
+- Generates detailed reports and artifacts
+- Comments on pull requests with test results</p>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<h3 id="1-github-cli">1. GitHub CLI<a class="headerlink" href="#1-github-cli" title="Permanent link">&para;</a></h3>
+<p>Install GitHub CLI if not already installed:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Ubuntu/Debian</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>gh
+
+<span class="c1"># macOS</span>
+brew<span class="w"> </span>install<span class="w"> </span>gh
+
+<span class="c1"># Windows</span>
+winget<span class="w"> </span>install<span class="w"> </span>GitHub.cli
+</code></pre></div>
+
+<h3 id="2-ssh-access-to-proxmox-server">2. SSH Access to Proxmox Server<a class="headerlink" href="#2-ssh-access-to-proxmox-server" title="Permanent link">&para;</a></h3>
+<p>Ensure you have SSH access to the Proxmox server:</p>
+<div class="codehilite"><pre><span></span><code>ssh<span class="w"> </span>root@mgr.cp.if.ua
+</code></pre></div>
+
+<h3 id="3-github-repository">3. GitHub Repository<a class="headerlink" href="#3-github-repository" title="Permanent link">&para;</a></h3>
+<p>Ensure you have push access to the repository and can manage secrets.</p>
+<h2 id="quick-setup">Quick Setup<a class="headerlink" href="#quick-setup" title="Permanent link">&para;</a></h2>
+<h3 id="automated-setup">Automated Setup<a class="headerlink" href="#automated-setup" title="Permanent link">&para;</a></h3>
+<p>Run the automated setup script:</p>
+<div class="codehilite"><pre><span></span><code>chmod<span class="w"> </span>+x<span class="w"> </span>scripts/setup_github_ci.sh
+./scripts/setup_github_ci.sh
+</code></pre></div>
+
+<p>This script will:
+1. Generate SSH key pair for CI
+2. Copy public key to Proxmox server
+3. Add private key to GitHub secrets
+4. Test the connection
+5. Trigger the workflow</p>
+<h3 id="manual-setup">Manual Setup<a class="headerlink" href="#manual-setup" title="Permanent link">&para;</a></h3>
+<h4 id="step-1-generate-ssh-key-pair">Step 1: Generate SSH Key Pair<a class="headerlink" href="#step-1-generate-ssh-key-pair" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code>ssh-keygen<span class="w"> </span>-t<span class="w"> </span>ed25519<span class="w"> </span>-f<span class="w"> </span>ci_ssh_key<span class="w"> </span>-N<span class="w"> </span><span class="s2">&quot;&quot;</span><span class="w"> </span>-C<span class="w"> </span><span class="s2">&quot;nexcage-ci@github.com&quot;</span>
+</code></pre></div>
+
+<h4 id="step-2-copy-public-key-to-proxmox-server">Step 2: Copy Public Key to Proxmox Server<a class="headerlink" href="#step-2-copy-public-key-to-proxmox-server" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code>ssh-copy-id<span class="w"> </span>-i<span class="w"> </span>ci_ssh_key.pub<span class="w"> </span>root@mgr.cp.if.ua
+</code></pre></div>
+
+<h4 id="step-3-test-ssh-connection">Step 3: Test SSH Connection<a class="headerlink" href="#step-3-test-ssh-connection" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code>ssh<span class="w"> </span>-i<span class="w"> </span>ci_ssh_key<span class="w"> </span>-o<span class="w"> </span><span class="nv">StrictHostKeyChecking</span><span class="o">=</span>no<span class="w"> </span>root@mgr.cp.if.ua<span class="w"> </span><span class="s2">&quot;echo &#39;SSH connection successful&#39;&quot;</span>
+</code></pre></div>
+
+<h4 id="step-4-add-private-key-to-github-secrets">Step 4: Add Private Key to GitHub Secrets<a class="headerlink" href="#step-4-add-private-key-to-github-secrets" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code>gh<span class="w"> </span>secret<span class="w"> </span><span class="nb">set</span><span class="w"> </span>PROXMOX_SSH_KEY<span class="w"> </span>--body-file<span class="w"> </span>ci_ssh_key
+</code></pre></div>
+
+<h4 id="step-5-clean-up-local-files">Step 5: Clean Up Local Files<a class="headerlink" href="#step-5-clean-up-local-files" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code>rm<span class="w"> </span>-f<span class="w"> </span>ci_ssh_key<span class="w"> </span>ci_ssh_key.pub
+</code></pre></div>
+
+<h2 id="workflow-configuration">Workflow Configuration<a class="headerlink" href="#workflow-configuration" title="Permanent link">&para;</a></h2>
+<h3 id="workflow-file">Workflow File<a class="headerlink" href="#workflow-file" title="Permanent link">&para;</a></h3>
+<p>The workflow is defined in <code>.github/workflows/proxmox_ci.yml</code> and includes:</p>
+<ol>
+<li><strong>proxmox-ci</strong>: Runs tests on Proxmox server</li>
+<li><strong>proxmox-deployment</strong>: Deploys application to Proxmox server</li>
+<li><strong>proxmox-monitoring</strong>: Monitors server health</li>
+<li><strong>generate-ci-summary</strong>: Generates combined reports</li>
+</ol>
+<h3 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>PVE_HOST</code>: Proxmox server hostname (mgr.cp.if.ua)</li>
+<li><code>PVE_USER</code>: Proxmox server user (root)</li>
+<li><code>PVE_PATH</code>: Binary path on Proxmox server (/usr/local/bin)</li>
+<li><code>CONFIG_PATH</code>: Config path on Proxmox server (/etc/nexcage)</li>
+</ul>
+<h3 id="secrets-required">Secrets Required<a class="headerlink" href="#secrets-required" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>PROXMOX_SSH_KEY</code>: Private SSH key for Proxmox server access</li>
+</ul>
+<h2 id="workflow-triggers">Workflow Triggers<a class="headerlink" href="#workflow-triggers" title="Permanent link">&para;</a></h2>
+<h3 id="automatic-triggers">Automatic Triggers<a class="headerlink" href="#automatic-triggers" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Push to main/develop</strong>: Full CI/CD pipeline</li>
+<li><strong>Push to feature branches</strong>: CI testing only</li>
+<li><strong>Pull requests</strong>: CI testing with PR comments</li>
+</ul>
+<h3 id="manual-triggers">Manual Triggers<a class="headerlink" href="#manual-triggers" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Workflow dispatch</strong>: Manual trigger from GitHub Actions UI</li>
+</ul>
+<h2 id="workflow-jobs">Workflow Jobs<a class="headerlink" href="#workflow-jobs" title="Permanent link">&para;</a></h2>
+<h3 id="1-proxmox-ci-job">1. Proxmox CI Job<a class="headerlink" href="#1-proxmox-ci-job" title="Permanent link">&para;</a></h3>
+<p><strong>Purpose</strong>: Run tests on Proxmox server
+<strong>Triggers</strong>: All pushes and PRs
+<strong>Steps</strong>:
+- Checkout code
+- Setup Zig environment
+- Install dependencies
+- Setup SSH connection
+- Run Proxmox tests
+- Upload test reports
+- Comment on PRs</p>
+<h3 id="2-proxmox-deployment-job">2. Proxmox Deployment Job<a class="headerlink" href="#2-proxmox-deployment-job" title="Permanent link">&para;</a></h3>
+<p><strong>Purpose</strong>: Deploy application to Proxmox server
+<strong>Triggers</strong>: Push to main branch only
+<strong>Steps</strong>:
+- Build release binary
+- Setup SSH connection
+- Deploy to Proxmox server
+- Set permissions
+- Test deployment
+- Upload deployment summary</p>
+<h3 id="3-proxmox-monitoring-job">3. Proxmox Monitoring Job<a class="headerlink" href="#3-proxmox-monitoring-job" title="Permanent link">&para;</a></h3>
+<p><strong>Purpose</strong>: Monitor server health and application status
+<strong>Triggers</strong>: After CI and deployment
+<strong>Steps</strong>:
+- Check server status
+- Monitor binary status
+- Check config status
+- Generate monitoring report
+- Upload monitoring report</p>
+<h3 id="4-generate-ci-summary-job">4. Generate CI Summary Job<a class="headerlink" href="#4-generate-ci-summary-job" title="Permanent link">&para;</a></h3>
+<p><strong>Purpose</strong>: Generate combined reports
+<strong>Triggers</strong>: After all other jobs
+<strong>Steps</strong>:
+- Download all artifacts
+- Generate combined summary
+- Upload combined summary
+- Comment on PRs</p>
+<h2 id="test-reports">Test Reports<a class="headerlink" href="#test-reports" title="Permanent link">&para;</a></h2>
+<h3 id="report-types">Report Types<a class="headerlink" href="#report-types" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Test Reports</strong>: Detailed test results with timing and memory usage</li>
+<li><strong>Deployment Reports</strong>: Deployment status and verification</li>
+<li><strong>Monitoring Reports</strong>: Server health and application status</li>
+<li><strong>Combined Reports</strong>: All reports combined into single summary</li>
+</ol>
+<h3 id="report-locations">Report Locations<a class="headerlink" href="#report-locations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>GitHub Actions</strong>: Available as workflow artifacts</li>
+<li><strong>Proxmox Server</strong>: Stored in <code>/var/log/nexcage/</code></li>
+<li><strong>Local Development</strong>: Stored in <code>test-reports/</code></li>
+</ul>
+<h3 id="report-retention">Report Retention<a class="headerlink" href="#report-retention" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>GitHub Artifacts</strong>: 30 days</li>
+<li><strong>Proxmox Server</strong>: 7 days</li>
+<li><strong>Local Development</strong>: Until manually cleaned</li>
+</ul>
+<h2 id="monitoring-and-alerts">Monitoring and Alerts<a class="headerlink" href="#monitoring-and-alerts" title="Permanent link">&para;</a></h2>
+<h3 id="github-actions">GitHub Actions<a class="headerlink" href="#github-actions" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Status Badges</strong>: Display build status in README</li>
+<li><strong>Email Notifications</strong>: Configure in repository settings</li>
+<li><strong>Slack Integration</strong>: Configure webhooks for notifications</li>
+</ul>
+<h3 id="proxmox-server">Proxmox Server<a class="headerlink" href="#proxmox-server" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Log Monitoring</strong>: Check <code>/var/log/nexcage/</code></li>
+<li><strong>System Monitoring</strong>: Use Proxmox built-in monitoring</li>
+<li><strong>Application Monitoring</strong>: Check binary status and performance</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="common-issues">Common Issues<a class="headerlink" href="#common-issues" title="Permanent link">&para;</a></h3>
+<h4 id="1-ssh-connection-failed">1. SSH Connection Failed<a class="headerlink" href="#1-ssh-connection-failed" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check SSH key</span>
+ssh<span class="w"> </span>-i<span class="w"> </span>ci_ssh_key<span class="w"> </span>-o<span class="w"> </span><span class="nv">StrictHostKeyChecking</span><span class="o">=</span>no<span class="w"> </span>root@mgr.cp.if.ua
+
+<span class="c1"># Check GitHub secrets</span>
+gh<span class="w"> </span>secret<span class="w"> </span>list
+
+<span class="c1"># Regenerate SSH key</span>
+ssh-keygen<span class="w"> </span>-t<span class="w"> </span>ed25519<span class="w"> </span>-f<span class="w"> </span>ci_ssh_key<span class="w"> </span>-N<span class="w"> </span><span class="s2">&quot;&quot;</span><span class="w"> </span>-C<span class="w"> </span><span class="s2">&quot;nexcage-ci@github.com&quot;</span>
+</code></pre></div>
+
+<h4 id="2-workflow-not-triggering">2. Workflow Not Triggering<a class="headerlink" href="#2-workflow-not-triggering" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check workflow file</span>
+cat<span class="w"> </span>.github/workflows/proxmox_ci.yml
+
+<span class="c1"># Check GitHub Actions</span>
+gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--workflow<span class="o">=</span><span class="s2">&quot;Proxmox CI/CD&quot;</span>
+
+<span class="c1"># Trigger manually</span>
+gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span><span class="s2">&quot;Proxmox CI/CD&quot;</span><span class="w"> </span>--ref<span class="w"> </span>main
+</code></pre></div>
+
+<h4 id="3-tests-failing">3. Tests Failing<a class="headerlink" href="#3-tests-failing" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check test logs</span>
+gh<span class="w"> </span>run<span class="w"> </span>view<span class="w"> </span>--log
+
+<span class="c1"># Check Proxmox server</span>
+ssh<span class="w"> </span>root@mgr.cp.if.ua<span class="w"> </span><span class="s2">&quot;systemctl status nexcage&quot;</span>
+
+<span class="c1"># Check binary</span>
+ssh<span class="w"> </span>root@mgr.cp.if.ua<span class="w"> </span><span class="s2">&quot;/usr/local/bin/nexcage --help&quot;</span>
+</code></pre></div>
+
+<h4 id="4-deployment-failed">4. Deployment Failed<a class="headerlink" href="#4-deployment-failed" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check deployment logs</span>
+gh<span class="w"> </span>run<span class="w"> </span>view<span class="w"> </span>--log
+
+<span class="c1"># Check Proxmox server</span>
+ssh<span class="w"> </span>root@mgr.cp.if.ua<span class="w"> </span><span class="s2">&quot;ls -la /usr/local/bin/nexcage&quot;</span>
+
+<span class="c1"># Check permissions</span>
+ssh<span class="w"> </span>root@mgr.cp.if.ua<span class="w"> </span><span class="s2">&quot;chmod +x /usr/local/bin/nexcage&quot;</span>
+</code></pre></div>
+
+<h3 id="debug-mode">Debug Mode<a class="headerlink" href="#debug-mode" title="Permanent link">&para;</a></h3>
+<p>Enable debug mode for detailed logging:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Set debug environment variable</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">DEBUG</span><span class="o">=</span><span class="nb">true</span>
+
+<span class="c1"># Run tests with debug output</span>
+make<span class="w"> </span>test-proxmox
+</code></pre></div>
+
+<h2 id="security-considerations">Security Considerations<a class="headerlink" href="#security-considerations" title="Permanent link">&para;</a></h2>
+<h3 id="ssh-key-management">SSH Key Management<a class="headerlink" href="#ssh-key-management" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Key Rotation</strong>: Rotate SSH keys regularly</li>
+<li><strong>Key Storage</strong>: Store private keys securely in GitHub secrets</li>
+<li><strong>Access Control</strong>: Limit SSH access to necessary users only</li>
+</ul>
+<h3 id="proxmox-server-security">Proxmox Server Security<a class="headerlink" href="#proxmox-server-security" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>User Permissions</strong>: Use appropriate user permissions</li>
+<li><strong>Firewall Rules</strong>: Configure firewall to allow only necessary traffic</li>
+<li><strong>Log Monitoring</strong>: Monitor logs for suspicious activity</li>
+</ul>
+<h3 id="github-security">GitHub Security<a class="headerlink" href="#github-security" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Repository Settings</strong>: Configure appropriate repository settings</li>
+<li><strong>Secret Management</strong>: Use GitHub secrets for sensitive data</li>
+<li><strong>Access Control</strong>: Limit repository access to authorized users</li>
+</ul>
+<h2 id="performance-optimization">Performance Optimization<a class="headerlink" href="#performance-optimization" title="Permanent link">&para;</a></h2>
+<h3 id="workflow-optimization">Workflow Optimization<a class="headerlink" href="#workflow-optimization" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Parallel Jobs</strong>: Run jobs in parallel where possible</li>
+<li><strong>Caching</strong>: Cache dependencies and build artifacts</li>
+<li><strong>Resource Limits</strong>: Set appropriate resource limits</li>
+</ul>
+<h3 id="proxmox-server-optimization">Proxmox Server Optimization<a class="headerlink" href="#proxmox-server-optimization" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Resource Allocation</strong>: Allocate appropriate resources</li>
+<li><strong>Storage Optimization</strong>: Use appropriate storage types</li>
+<li><strong>Network Optimization</strong>: Optimize network configurations</li>
+</ul>
+<h2 id="maintenance">Maintenance<a class="headerlink" href="#maintenance" title="Permanent link">&para;</a></h2>
+<h3 id="regular-tasks">Regular Tasks<a class="headerlink" href="#regular-tasks" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Monitor Workflow Status</strong>: Check GitHub Actions regularly</li>
+<li><strong>Review Test Reports</strong>: Analyze test results and trends</li>
+<li><strong>Update Dependencies</strong>: Keep dependencies up to date</li>
+<li><strong>Rotate SSH Keys</strong>: Rotate SSH keys regularly</li>
+<li><strong>Clean Up Artifacts</strong>: Clean up old artifacts and logs</li>
+</ol>
+<h3 id="monthly-tasks">Monthly Tasks<a class="headerlink" href="#monthly-tasks" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Review Security</strong>: Review security settings and access</li>
+<li><strong>Performance Analysis</strong>: Analyze performance metrics</li>
+<li><strong>Documentation Updates</strong>: Update documentation as needed</li>
+<li><strong>Backup Configuration</strong>: Backup configuration files</li>
+</ol>
+<h2 id="support">Support<a class="headerlink" href="#support" title="Permanent link">&para;</a></h2>
+<h3 id="getting-help">Getting Help<a class="headerlink" href="#getting-help" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Check Logs</strong>: Review workflow and application logs</li>
+<li><strong>GitHub Issues</strong>: Create issues for bugs and feature requests</li>
+<li><strong>Documentation</strong>: Refer to this documentation and other guides</li>
+<li><strong>Community</strong>: Ask questions in project discussions</li>
+</ol>
+<h3 id="reporting-issues">Reporting Issues<a class="headerlink" href="#reporting-issues" title="Permanent link">&para;</a></h3>
+<p>When reporting issues, include:
+- <strong>Workflow Run ID</strong>: From GitHub Actions
+- <strong>Error Messages</strong>: Complete error messages
+- <strong>Logs</strong>: Relevant log files
+- <strong>Environment</strong>: Proxmox server details
+- <strong>Steps to Reproduce</strong>: Clear steps to reproduce the issue</p>
+<hr />
+<p><strong>Last Updated</strong>: 2025-10-04<br />
+<strong>Version</strong>: 0.5.0<br />
+<strong>Maintainer</strong>: Nexcage Runtime Interface Team</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

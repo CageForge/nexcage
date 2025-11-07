@@ -1,0 +1,1500 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.4/DEVELOPMENT_WORKFLOW/">
+      
+      
+        <link rel="prev" href="../DEV_QUICKSTART/">
+      
+      
+        <link rel="next" href="../DEVELOPMENT_UBUNTU/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>Development Workflow - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#development-workflow" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Development Workflow
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../user_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CI_CD_SETUP/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-task-selection-and-refinement" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Task Selection and Refinement
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Task Selection and Refinement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#selecting-a-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      Selecting a Task
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-refinement-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task Refinement Process
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Implementation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#branch-creation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Branch Creation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development Process
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-local-workflow-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Local Workflow Testing
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Local Workflow Testing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing-workflows-locally" class="md-nav__link">
+    <span class="md-ellipsis">
+      Testing Workflows Locally
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#common-issues-and-solutions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues and Solutions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-code-review-and-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Code Review and Merge
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Code Review and Merge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#before-creating-a-pull-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      Before Creating a Pull Request
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pull-request-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pull Request Process
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-post-merge-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Post-Merge Tasks
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-sprint-completion-and-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      6. Sprint Completion and Release
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Sprint Completion and Release">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#backlog-formation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Backlog Formation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#release-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Release Process
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#version-numbering" class="md-nav__link">
+    <span class="md-ellipsis">
+      Version Numbering
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools-and-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tools and Scripts
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CI_CD_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-task-selection-and-refinement" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Task Selection and Refinement
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Task Selection and Refinement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#selecting-a-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      Selecting a Task
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-refinement-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task Refinement Process
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Implementation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#branch-creation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Branch Creation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development Process
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-local-workflow-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Local Workflow Testing
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Local Workflow Testing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing-workflows-locally" class="md-nav__link">
+    <span class="md-ellipsis">
+      Testing Workflows Locally
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#common-issues-and-solutions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Issues and Solutions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-code-review-and-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Code Review and Merge
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Code Review and Merge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#before-creating-a-pull-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      Before Creating a Pull Request
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pull-request-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pull Request Process
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-post-merge-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Post-Merge Tasks
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-sprint-completion-and-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      6. Sprint Completion and Release
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Sprint Completion and Release">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#backlog-formation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Backlog Formation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#release-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Release Process
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#version-numbering" class="md-nav__link">
+    <span class="md-ellipsis">
+      Version Numbering
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools-and-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tools and Scripts
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/DEVELOPMENT_WORKFLOW.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="development-workflow">Development Workflow<a class="headerlink" href="#development-workflow" title="Permanent link">&para;</a></h1>
+<p>This document outlines the development workflow for the Nexcage runtime project.</p>
+<h2 id="1-task-selection-and-refinement">1. Task Selection and Refinement<a class="headerlink" href="#1-task-selection-and-refinement" title="Permanent link">&para;</a></h2>
+<h3 id="selecting-a-task">Selecting a Task<a class="headerlink" href="#selecting-a-task" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Tasks are selected from the <code>Roadmap</code> directory</li>
+<li>Each task is organized by sprint and has a detailed description</li>
+<li>Tasks are tracked in the main <code>Roadmap/README.md</code> file</li>
+</ul>
+<h3 id="task-refinement-process">Task Refinement Process<a class="headerlink" href="#task-refinement-process" title="Permanent link">&para;</a></h3>
+<p>If a task is not fully described or needs additional details:
+1. Review the task file in the corresponding sprint directory
+2. In interactive mode:
+   - Discuss and clarify requirements
+   - Define acceptance criteria
+   - Identify dependencies
+   - Document technical details
+   - Update the task file with new information
+3. Only proceed to implementation when the task is fully defined</p>
+<h2 id="2-implementation">2. Implementation<a class="headerlink" href="#2-implementation" title="Permanent link">&para;</a></h2>
+<h3 id="branch-creation">Branch Creation<a class="headerlink" href="#branch-creation" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p>Create a new branch from <code>main</code>:
+   <code>bash
+   git checkout -b feature/[task-name]</code>
+   or
+   <code>bash
+   git checkout -b fix/[issue-name]</code></p>
+</li>
+<li>
+<p>Branch naming convention:</p>
+</li>
+<li>Features: <code>feature/[task-name]</code></li>
+<li>Bug fixes: <code>fix/[issue-name]</code></li>
+<li>Documentation: <code>docs/[topic]</code></li>
+</ol>
+<h3 id="development-process">Development Process<a class="headerlink" href="#development-process" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Implement the task following the project's coding standards</li>
+<li>Write tests for new functionality</li>
+<li>Update documentation as needed</li>
+<li>Ensure all tests pass</li>
+<li>Run the local GitHub workflow tests if applicable</li>
+</ol>
+<h2 id="3-local-workflow-testing">3. Local Workflow Testing<a class="headerlink" href="#3-local-workflow-testing" title="Permanent link">&para;</a></h2>
+<h3 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Install Docker</li>
+<li>Install GitHub CLI (<code>gh</code>)</li>
+<li>Install act (<code>curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash</code>)</li>
+</ol>
+<h3 id="testing-workflows-locally">Testing Workflows Locally<a class="headerlink" href="#testing-workflows-locally" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p>List available workflows:
+   <code>bash
+   act -l</code></p>
+</li>
+<li>
+<p>Run a specific workflow:
+   <code>bash
+   act -W .github/workflows/[workflow-name].yml</code></p>
+</li>
+<li>
+<p>Run a specific job in a workflow:
+   <code>bash
+   act -j [job-name] -W .github/workflows/[workflow-name].yml</code></p>
+</li>
+<li>
+<p>Run with specific event:
+   <code>bash
+   act push -W .github/workflows/[workflow-name].yml</code></p>
+</li>
+</ol>
+<h3 id="common-issues-and-solutions">Common Issues and Solutions<a class="headerlink" href="#common-issues-and-solutions" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p>Docker permissions:
+   <code>bash
+   sudo usermod -aG docker $USER</code></p>
+</li>
+<li>
+<p>GitHub token:
+   <code>bash
+   gh auth login</code></p>
+</li>
+<li>
+<p>Workflow secrets:
+   Create a <code>.secrets</code> file with required secrets:
+   <code>bash
+   GITHUB_TOKEN=your_token_here</code></p>
+</li>
+<li>
+<p>Run with secrets:
+   <code>bash
+   act --secret-file .secrets</code></p>
+</li>
+</ol>
+<h2 id="4-code-review-and-merge">4. Code Review and Merge<a class="headerlink" href="#4-code-review-and-merge" title="Permanent link">&para;</a></h2>
+<h3 id="before-creating-a-pull-request">Before Creating a Pull Request<a class="headerlink" href="#before-creating-a-pull-request" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Ensure all tests pass</li>
+<li>Run workflow tests locally</li>
+<li>Update documentation</li>
+<li>Squash commits if necessary</li>
+</ol>
+<h3 id="pull-request-process">Pull Request Process<a class="headerlink" href="#pull-request-process" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Create a pull request from your branch to <code>main</code></li>
+<li>Add a descriptive title and detailed description</li>
+<li>Link related issues or tasks</li>
+<li>Request reviews from team members</li>
+<li>Address review comments</li>
+<li>Merge when approved</li>
+</ol>
+<h2 id="5-post-merge-tasks">5. Post-Merge Tasks<a class="headerlink" href="#5-post-merge-tasks" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Delete the feature branch</li>
+<li>Update local repository:
+   <code>bash
+   git checkout main
+   git pull</code></li>
+<li>Start working on the next task</li>
+</ol>
+<h2 id="6-sprint-completion-and-release">6. Sprint Completion and Release<a class="headerlink" href="#6-sprint-completion-and-release" title="Permanent link">&para;</a></h2>
+<h3 id="backlog-formation">Backlog Formation<a class="headerlink" href="#backlog-formation" title="Permanent link">&para;</a></h3>
+<p>At the end of each sprint:
+1. Review all completed tasks
+2. Document any remaining work
+3. Update the Roadmap with:
+   - Completed tasks
+   - New tasks identified
+   - Adjusted priorities</p>
+<h3 id="release-process">Release Process<a class="headerlink" href="#release-process" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p>Create a release branch from <code>main</code>:
+   <code>bash
+   git checkout -b release/vX.Y.Z</code></p>
+</li>
+<li>
+<p>Update version numbers and documentation</p>
+</li>
+<li>
+<p>Create a release tag:
+   <code>bash
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin vX.Y.Z</code></p>
+</li>
+<li>
+<p>Create a GitHub release with:</p>
+</li>
+<li>Release notes</li>
+<li>Changelog</li>
+<li>Binary artifacts</li>
+<li>Documentation updates</li>
+</ol>
+<h2 id="version-numbering">Version Numbering<a class="headerlink" href="#version-numbering" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Major version (X): Breaking changes</li>
+<li>Minor version (Y): New features</li>
+<li>Patch version (Z): Bug fixes</li>
+</ul>
+<p>Example: v1.2.3
+- 1: Major version
+- 2: Minor version
+- 3: Patch version</p>
+<h2 id="tools-and-scripts">Tools and Scripts<a class="headerlink" href="#tools-and-scripts" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Development environment setup: <code>scripts/setup-dev-env.sh</code></li>
+<li>GitHub workflow testing: <code>tests/test_workflow.zig</code></li>
+<li>Connection testing: <code>tests/test_connection.zig</code> </li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

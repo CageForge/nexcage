@@ -1,0 +1,1573 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.4/ANALYSIS_CREATE_PROXMOX_LXC/">
+      
+      
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>Analysis: Create Command Implementation for Proxmox-LXC Backend - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#analysis-create-command-implementation-for-proxmox-lxc-backend" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Analysis: Create Command Implementation for Proxmox-LXC Backend
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../user_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CI_CD_SETUP/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_WORKFLOW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CI_CD_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#executive-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Executive Summary
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-mount-configuration-implemented" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Mount Configuration ✅ IMPLEMENTED
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Mount Configuration ✅ IMPLEMENTED">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#status-fully-implemented" class="md-nav__link">
+    <span class="md-ellipsis">
+      Status: FULLY IMPLEMENTED
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#implementation-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      Implementation Details:
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Implementation Details:">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      How it works:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#code-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      Code References:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Limitations:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-resource-configuration-partially-implemented" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Resource Configuration ⚠️ PARTIALLY IMPLEMENTED
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Resource Configuration ⚠️ PARTIALLY IMPLEMENTED">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#status-partial-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Status: PARTIAL IMPLEMENTATION
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#whats-implemented" class="md-nav__link">
+    <span class="md-ellipsis">
+      What's Implemented:
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What&#39;s Implemented:">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#memory-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      ✅ Memory Limits
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#whats-not-implemented" class="md-nav__link">
+    <span class="md-ellipsis">
+      What's NOT Implemented:
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What&#39;s NOT Implemented:">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#diskstorage-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      ❌ Disk/Storage Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-bandwidth-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      ❌ Network Bandwidth Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#oci-bundle-resource-parsing" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚠️ OCI Bundle Resource Parsing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#proxmox-lxc-namespace-equivalents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proxmox LXC Namespace Equivalents:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommendations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recommendations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recommendations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#priority-1-fix-resource-parsing-from-oci-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Priority 1: Fix Resource Parsing from OCI Bundle
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#priority-2-implement-disk-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Priority 2: Implement Disk Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#priority-3-implement-network-bandwidth-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Priority 3: Implement Network Bandwidth Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#priority-4-parse-namespaces-from-oci-bundle-even-if-limited-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      Priority 4: Parse Namespaces from OCI Bundle (Even if Limited Application)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      Summary Table
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#code-quality-observations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Code Quality Observations
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next Steps
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recent-implementation-2025-11-02" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recent Implementation (2025-11-02)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recent Implementation (2025-11-02)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resource-limits-from-oci-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Limits from OCI Bundle
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#oci-namespaces-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      OCI Namespaces Support
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/ANALYSIS_CREATE_PROXMOX_LXC.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="analysis-create-command-implementation-for-proxmox-lxc-backend">Analysis: Create Command Implementation for Proxmox-LXC Backend<a class="headerlink" href="#analysis-create-command-implementation-for-proxmox-lxc-backend" title="Permanent link">&para;</a></h1>
+<p><strong>Date:</strong> 2025-11-02<br />
+<strong>Component:</strong> <code>src/backends/proxmox-lxc/driver.zig</code><br />
+<strong>Method:</strong> <code>create()</code></p>
+<h2 id="executive-summary">Executive Summary<a class="headerlink" href="#executive-summary" title="Permanent link">&para;</a></h2>
+<p>Analysis of the <code>create</code> command implementation reveals:</p>
+<ul>
+<li>✅ <strong>Mounts</strong>: Fully implemented and working</li>
+<li>⚠️ <strong>Resources</strong>: Partially implemented (memory &amp; CPU only)</li>
+<li>❌ <strong>Namespaces</strong>: Not implemented</li>
+</ul>
+<hr />
+<h2 id="1-mount-configuration-implemented">1. Mount Configuration ✅ IMPLEMENTED<a class="headerlink" href="#1-mount-configuration-implemented" title="Permanent link">&para;</a></h2>
+<h3 id="status-fully-implemented">Status: <strong>FULLY IMPLEMENTED</strong><a class="headerlink" href="#status-fully-implemented" title="Permanent link">&para;</a></h3>
+<h3 id="implementation-details">Implementation Details:<a class="headerlink" href="#implementation-details" title="Permanent link">&para;</a></h3>
+<p><strong>Location:</strong> <code>src/backends/proxmox-lxc/driver.zig:917-928, 1025-1082</code></p>
+<h4 id="how-it-works">How it works:<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h4>
+<ol>
+<li><strong>Mount Detection</strong> (Line 918-928):</li>
+<li>After container creation, if <code>oci_bundle_path</code> exists, mounts are applied</li>
+<li>
+<p>Calls <code>applyMountsToLxcConfig(vmid, bundle_path)</code></p>
+</li>
+<li>
+<p><strong>Mount Parsing</strong> (Line 1025-1082):</p>
+</li>
+<li>Parses OCI bundle <code>config.json</code> via <code>OciBundleParser</code></li>
+<li>Extracts mounts array from <code>config.mounts</code></li>
+<li>Reads existing <code>/etc/pve/lxc/&lt;vmid&gt;.conf</code> to determine next mount index</li>
+<li>
+<p>Appends mount entries using Proxmox format: <code>mp0:</code>, <code>mp1:</code>, etc.</p>
+</li>
+<li>
+<p><strong>Mount Format</strong> (Line 1098-1107):</p>
+</li>
+<li>Supports both storage references (<code>storage:path</code>) and absolute host paths</li>
+<li>Format: <code>mp&lt;idx&gt;: &lt;source&gt;,mp=&lt;destination&gt;,&lt;options&gt;</code></li>
+<li>
+<p>Options are parsed but not fully utilized (TODO comment on line 187)</p>
+</li>
+<li>
+<p><strong>Mount Validation</strong> (Line 978-1023):</p>
+</li>
+<li><code>validateBundleVolumes()</code> checks that mount sources exist</li>
+<li>Validates host paths accessibility</li>
+<li>
+<p>Validates Proxmox storage references via <code>pvesm list</code></p>
+</li>
+<li>
+<p><strong>Mount Verification</strong> (Line 1085-1095):</p>
+</li>
+<li><code>verifyMountsInConfig()</code> uses <code>pct config &lt;vmid&gt;</code> to verify mounts were added</li>
+</ol>
+<h3 id="code-references">Code References:<a class="headerlink" href="#code-references" title="Permanent link">&para;</a></h3>
+<p>```zig:917-928:src/backends/proxmox-lxc/driver.zig
+// Apply mounts from bundle into /etc/pve/lxc/<vmid>.conf and verify via pct config
+if (oci_bundle_path) |bundle_for_mounts| {
+    if (self.debug_mode) {
+        try stdout.writeAll("[DRIVER] create: Applying mounts from OCI bundle: '");
+        try stdout.writeAll(bundle_for_mounts);
+        try stdout.writeAll("'\n");
+    }
+    if (self.logger) |log| log.info("Applying mounts from OCI bundle: {s}", .{bundle_for_mounts}) catch {};
+    try self.applyMountsToLxcConfig(vmid, bundle_for_mounts);
+    try self.verifyMountsInConfig(vmid);
+    if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Mounts applied and verified\n");
+}</p>
+<div class="codehilite"><pre><span></span><code><span class="err">```</span><span class="n">zig</span><span class="p">:</span><span class="mi">1025</span><span class="o">-</span><span class="mi">1082</span><span class="p">:</span><span class="n">src</span><span class="o">/</span><span class="n">backends</span><span class="o">/</span><span class="n">proxmox</span><span class="o">-</span><span class="n">lxc</span><span class="o">/</span><span class="n">driver</span><span class="o">.</span><span class="n">zig</span>
+<span class="o">///</span><span class="w"> </span><span class="n">Append</span><span class="w"> </span><span class="n">mounts</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="n">bundle</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="o">/</span><span class="n">etc</span><span class="o">/</span><span class="n">pve</span><span class="o">/</span><span class="n">lxc</span><span class="o">/&lt;</span><span class="n">vmid</span><span class="o">&gt;.</span><span class="n">conf</span><span class="w"> </span><span class="n">using</span><span class="w"> </span><span class="n">mpX</span><span class="w"> </span><span class="n">syntax</span>
+<span class="n">fn</span><span class="w"> </span><span class="n">applyMountsToLxcConfig</span><span class="p">(</span><span class="bp">self</span><span class="p">:</span><span class="w"> </span><span class="o">*</span><span class="n">Self</span><span class="p">,</span><span class="w"> </span><span class="n">vmid</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="k">const</span><span class="w"> </span><span class="n">u8</span><span class="p">,</span><span class="w"> </span><span class="n">bundle_path</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="k">const</span><span class="w"> </span><span class="n">u8</span><span class="p">)</span><span class="w"> </span><span class="o">!</span><span class="nb nb-Type">void</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="o">//</span><span class="w"> </span><span class="o">...</span><span class="w"> </span><span class="n">parsing</span><span class="w"> </span><span class="ow">and</span><span class="w"> </span><span class="n">application</span><span class="w"> </span><span class="n">logic</span><span class="w"> </span><span class="o">...</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="limitations">Limitations:<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Mount Options Not Fully Parsed</strong>: Line 187 in <code>oci_bundle.zig</code> has TODO: "Parse mount options"</li>
+<li><strong>No Mount Type Validation</strong>: Mount types (bind, tmpfs, etc.) are not validated or converted</li>
+<li><strong>Read-only Mounts</strong>: Read-only option parsing incomplete</li>
+</ol>
+<hr />
+<h2 id="2-resource-configuration-partially-implemented">2. Resource Configuration ⚠️ PARTIALLY IMPLEMENTED<a class="headerlink" href="#2-resource-configuration-partially-implemented" title="Permanent link">&para;</a></h2>
+<h3 id="status-partial-implementation">Status: <strong>PARTIAL IMPLEMENTATION</strong><a class="headerlink" href="#status-partial-implementation" title="Permanent link">&para;</a></h3>
+<h3 id="whats-implemented">What's Implemented:<a class="headerlink" href="#whats-implemented" title="Permanent link">&para;</a></h3>
+<h4 id="memory-limits">✅ Memory Limits<a class="headerlink" href="#memory-limits" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Location:</strong> Lines 809-813, 838, 849</li>
+<li>Reads from <code>config.resources.memory</code></li>
+<li>Converts bytes to MB</li>
+<li>Passes to <code>pct create --memory &lt;MB&gt;</code></li>
+</ul>
+<p>```zig:809-813:src/backends/proxmox-lxc/driver.zig
+const mem_mb_str = blk: {
+    const mem_bytes = if (config.resources) |r| r.memory orelse (core.constants.DEFAULT_MEMORY_BYTES) else core.constants.DEFAULT_MEMORY_BYTES;
+    const mb: u64 = mem_bytes / (1024 * 1024);
+    break :blk try std.fmt.allocPrint(self.allocator, "{d}", .{mb});
+};</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">#### ✅ CPU/Cores Limits</span>
+<span class="o">-</span><span class="w"> </span><span class="o">**</span><span class="n">Location</span><span class="p">:</span><span class="o">**</span><span class="w"> </span><span class="n">Lines</span><span class="w"> </span><span class="mi">816</span><span class="o">-</span><span class="mi">820</span><span class="p">,</span><span class="w"> </span><span class="mi">839</span><span class="p">,</span><span class="w"> </span><span class="mi">850</span>
+<span class="o">-</span><span class="w"> </span><span class="n">Reads</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="err">`</span><span class="n">config</span><span class="o">.</span><span class="n">resources</span><span class="o">.</span><span class="n">cpu</span><span class="err">`</span>
+<span class="o">-</span><span class="w"> </span><span class="n">Converts</span><span class="w"> </span><span class="nb nb-Type">float</span><span class="w"> </span><span class="n">CPU</span><span class="w"> </span><span class="n">shares</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">integer</span><span class="w"> </span><span class="n">cores</span>
+<span class="o">-</span><span class="w"> </span><span class="n">Passes</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="err">`</span><span class="n">pct</span><span class="w"> </span><span class="n">create</span><span class="w"> </span><span class="o">--</span><span class="n">cores</span><span class="w"> </span><span class="o">&lt;</span><span class="n">count</span><span class="o">&gt;</span><span class="err">`</span>
+
+<span class="err">```</span><span class="n">zig</span><span class="p">:</span><span class="mi">816</span><span class="o">-</span><span class="mi">820</span><span class="p">:</span><span class="n">src</span><span class="o">/</span><span class="n">backends</span><span class="o">/</span><span class="n">proxmox</span><span class="o">-</span><span class="n">lxc</span><span class="o">/</span><span class="n">driver</span><span class="o">.</span><span class="n">zig</span>
+<span class="k">const</span><span class="w"> </span><span class="n">cores_str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">blk</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">c</span><span class="p">:</span><span class="w"> </span><span class="n">f64</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">resources</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">cpu</span><span class="w"> </span><span class="n">orelse</span><span class="w"> </span><span class="err">@</span><span class="k">as</span><span class="p">(</span><span class="n">f64</span><span class="p">,</span><span class="w"> </span><span class="n">core</span><span class="o">.</span><span class="n">constants</span><span class="o">.</span><span class="n">DEFAULT_CPU_CORES</span><span class="p">))</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="err">@</span><span class="k">as</span><span class="p">(</span><span class="n">f64</span><span class="p">,</span><span class="w"> </span><span class="n">core</span><span class="o">.</span><span class="n">constants</span><span class="o">.</span><span class="n">DEFAULT_CPU_CORES</span><span class="p">);</span>
+<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">ci</span><span class="p">:</span><span class="w"> </span><span class="n">u32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="err">@</span><span class="n">intFromFloat</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+<span class="w">    </span><span class="k">break</span><span class="w"> </span><span class="p">:</span><span class="n">blk</span><span class="w"> </span><span class="n">try</span><span class="w"> </span><span class="n">std</span><span class="o">.</span><span class="n">fmt</span><span class="o">.</span><span class="n">allocPrint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;{d}&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">.</span><span class="p">{</span><span class="n">ci</span><span class="p">});</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<h3 id="whats-not-implemented">What's NOT Implemented:<a class="headerlink" href="#whats-not-implemented" title="Permanent link">&para;</a></h3>
+<h4 id="diskstorage-limits">❌ Disk/Storage Limits<a class="headerlink" href="#diskstorage-limits" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Location:</strong> <code>ResourceLimits</code> struct has <code>disk: ?u64</code> field (line 66 in <code>types.zig</code>)</li>
+<li><strong>Status:</strong> Defined but never used in <code>create()</code> method</li>
+<li><strong>OCI Bundle:</strong> Not parsed from bundle config.json</li>
+<li><strong>Proxmox:</strong> Could be set via <code>pct set &lt;vmid&gt; --rootfs &lt;storage&gt;:&lt;size&gt;</code></li>
+</ul>
+<h4 id="network-bandwidth-limits">❌ Network Bandwidth Limits<a class="headerlink" href="#network-bandwidth-limits" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Location:</strong> <code>ResourceLimits</code> struct has <code>network_bandwidth: ?u64</code> field (line 67 in <code>types.zig</code>)</li>
+<li><strong>Status:</strong> Defined but never used in <code>create()</code> method</li>
+<li><strong>OCI Bundle:</strong> Not parsed from bundle config.json</li>
+<li><strong>Proxmox:</strong> Could be set via <code>pct set &lt;vmid&gt; --net0 &lt;spec&gt;,rate=&lt;mbps&gt;</code></li>
+</ul>
+<h4 id="oci-bundle-resource-parsing">⚠️ OCI Bundle Resource Parsing<a class="headerlink" href="#oci-bundle-resource-parsing" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Location:</strong> <code>src/backends/proxmox-lxc/oci_bundle.zig:200-228</code></li>
+<li><strong>Status:</strong> Parses <code>linux.resources.memory.limit</code> and <code>linux.resources.cpu.shares</code> from bundle</li>
+<li><strong>Issue:</strong> These parsed values are stored in <code>OciBundleConfig</code> but <strong>NOT used</strong> during container creation</li>
+<li><strong>Current Behavior:</strong> Only <code>SandboxConfig.resources</code> is used, bundle resources are ignored</li>
+</ul>
+<p>```zig:200-228:src/backends/proxmox-lxc/oci_bundle.zig
+// Parse memory limit
+if (resources_obj.get("memory")) |memory_val| {
+    if (memory_val == .object) {
+        const memory_obj = memory_val.object;
+        if (memory_obj.get("limit")) |limit_val| {
+            if (limit_val == .integer) {
+                bundle_config.memory_limit = @as(u64, @intCast(limit_val.integer));
+            }
+        }
+    }
+}</p>
+<p>// Parse CPU limit
+if (resources_obj.get("cpu")) |cpu_val| {
+    if (cpu_val == .object) {
+        const cpu_obj = cpu_val.object;
+        if (cpu_obj.get("shares")) |shares_val| {
+            if (shares_val == .integer) {
+                bundle_config.cpu_limit = @as(f64, @floatFromInt(shares_val.integer));
+            }
+        }
+    }
+}</p>
+<div class="codehilite"><pre><span></span><code><span class="o">**</span><span class="n">Problem</span><span class="p">:</span><span class="o">**</span><span class="w"> </span><span class="err">`</span><span class="n">bundle_config</span><span class="o">.</span><span class="n">memory_limit</span><span class="err">`</span><span class="w"> </span><span class="ow">and</span><span class="w"> </span><span class="err">`</span><span class="n">bundle_config</span><span class="o">.</span><span class="n">cpu_limit</span><span class="err">`</span><span class="w"> </span><span class="n">are</span><span class="w"> </span><span class="n">parsed</span><span class="w"> </span><span class="n">but</span><span class="w"> </span><span class="n">never</span><span class="w"> </span><span class="n">applied</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="err">`</span><span class="n">SandboxConfig</span><span class="o">.</span><span class="n">resources</span><span class="err">`</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="n">used</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="err">`</span><span class="n">pct</span><span class="w"> </span><span class="n">create</span><span class="err">`</span><span class="o">.</span>
+
+<span class="o">---</span>
+
+<span class="c1">## 3. Namespace Configuration ❌ NOT IMPLEMENTED</span>
+
+<span class="c1">### Status: **NOT IMPLEMENTED**</span>
+
+<span class="c1">### Current State:</span>
+
+<span class="mf">1.</span><span class="w"> </span><span class="o">**</span><span class="n">Structure</span><span class="w"> </span><span class="n">Exists</span><span class="o">**</span><span class="w"> </span><span class="p">(</span><span class="n">Line</span><span class="w"> </span><span class="mi">489</span><span class="o">-</span><span class="mi">499</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="err">`</span><span class="n">oci_bundle</span><span class="o">.</span><span class="n">zig</span><span class="err">`</span><span class="p">):</span>
+<span class="w">   </span><span class="err">```</span><span class="n">zig</span>
+<span class="w">   </span><span class="n">pub</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">NamespaceConfig</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">       </span><span class="n">allocator</span><span class="p">:</span><span class="w"> </span><span class="n">std</span><span class="o">.</span><span class="n">mem</span><span class="o">.</span><span class="n">Allocator</span><span class="p">,</span>
+<span class="w">       </span><span class="n">type</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="k">const</span><span class="w"> </span><span class="n">u8</span><span class="p">,</span><span class="w">  </span><span class="o">//</span><span class="w"> </span><span class="s2">&quot;pid&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;network&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ipc&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;uts&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;mount&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;user&quot;</span>
+<span class="w">       </span><span class="n">path</span><span class="p">:</span><span class="w"> </span><span class="err">?</span><span class="p">[]</span><span class="k">const</span><span class="w"> </span><span class="n">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb nb-Type">null</span><span class="p">,</span>
+<span class="w">   </span><span class="p">};</span>
+<span class="w">   </span><span class="err">```</span>
+
+<span class="mf">2.</span><span class="w"> </span><span class="o">**</span><span class="n">OCI</span><span class="w"> </span><span class="n">Bundle</span><span class="w"> </span><span class="n">Config</span><span class="w"> </span><span class="n">Has</span><span class="w"> </span><span class="n">Field</span><span class="o">**</span><span class="w"> </span><span class="p">(</span><span class="n">Line</span><span class="w"> </span><span class="mi">350</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="err">`</span><span class="n">oci_bundle</span><span class="o">.</span><span class="n">zig</span><span class="err">`</span><span class="p">):</span>
+<span class="w">   </span><span class="err">```</span><span class="n">zig</span>
+<span class="w">   </span><span class="n">namespaces</span><span class="p">:</span><span class="w"> </span><span class="err">?</span><span class="p">[]</span><span class="k">const</span><span class="w"> </span><span class="n">NamespaceConfig</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb nb-Type">null</span><span class="p">,</span>
+<span class="w">   </span><span class="err">```</span>
+
+<span class="mf">3.</span><span class="w"> </span><span class="o">**</span><span class="n">Deinit</span><span class="w"> </span><span class="n">Method</span><span class="w"> </span><span class="n">Exists</span><span class="o">**</span><span class="w"> </span><span class="p">(</span><span class="n">Line</span><span class="w"> </span><span class="mi">404</span><span class="o">-</span><span class="mi">409</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="err">`</span><span class="n">oci_bundle</span><span class="o">.</span><span class="n">zig</span><span class="err">`</span><span class="p">):</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">Properly</span><span class="w"> </span><span class="n">cleans</span><span class="w"> </span><span class="n">up</span><span class="w"> </span><span class="n">namespace</span><span class="w"> </span><span class="n">configs</span>
+
+<span class="c1">### What&#39;s Missing:</span>
+
+<span class="c1">#### ❌ Namespace Parsing</span>
+<span class="o">-</span><span class="w"> </span><span class="n">OCI</span><span class="w"> </span><span class="n">bundle</span><span class="w"> </span><span class="err">`</span><span class="n">config</span><span class="o">.</span><span class="n">json</span><span class="err">`</span><span class="w"> </span><span class="n">contains</span><span class="w"> </span><span class="err">`</span><span class="n">linux</span><span class="o">.</span><span class="n">namespaces</span><span class="err">`</span><span class="w"> </span><span class="n">array</span>
+<span class="o">-</span><span class="w"> </span><span class="o">**</span><span class="n">NOT</span><span class="w"> </span><span class="n">parsed</span><span class="o">**</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="err">`</span><span class="n">parseOciConfig</span><span class="p">()</span><span class="err">`</span><span class="w"> </span><span class="n">method</span>
+<span class="o">-</span><span class="w"> </span><span class="n">The</span><span class="w"> </span><span class="n">structure</span><span class="w"> </span><span class="n">exists</span><span class="w"> </span><span class="n">but</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="n">never</span><span class="w"> </span><span class="n">populated</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="n">bundle</span>
+
+<span class="c1">#### ❌ Namespace Application</span>
+<span class="o">-</span><span class="w"> </span><span class="n">Proxmox</span><span class="w"> </span><span class="n">LXC</span><span class="w"> </span><span class="n">uses</span><span class="w"> </span><span class="n">namespaces</span><span class="w"> </span><span class="n">but</span><span class="w"> </span><span class="n">configuration</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="n">via</span><span class="p">:</span>
+<span class="w">  </span><span class="o">-</span><span class="w"> </span><span class="err">`</span><span class="o">--</span><span class="n">unprivileged</span><span class="err">`</span><span class="w"> </span><span class="n">flag</span><span class="w"> </span><span class="p">(</span><span class="n">affects</span><span class="w"> </span><span class="n">user</span><span class="w"> </span><span class="n">namespace</span><span class="p">)</span>
+<span class="w">  </span><span class="o">-</span><span class="w"> </span><span class="err">`</span><span class="o">--</span><span class="n">features</span><span class="err">`</span><span class="w"> </span><span class="n">flag</span><span class="w"> </span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">g</span><span class="o">.</span><span class="p">,</span><span class="w"> </span><span class="err">`</span><span class="n">nesting</span><span class="o">=</span><span class="mi">1</span><span class="err">`</span><span class="p">,</span><span class="w"> </span><span class="err">`</span><span class="n">keyctl</span><span class="o">=</span><span class="mi">1</span><span class="err">`</span><span class="p">)</span>
+<span class="w">  </span><span class="o">-</span><span class="w"> </span><span class="n">Custom</span><span class="w"> </span><span class="n">namespace</span><span class="w"> </span><span class="n">configuration</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="err">`</span><span class="o">/</span><span class="n">etc</span><span class="o">/</span><span class="n">pve</span><span class="o">/</span><span class="n">lxc</span><span class="o">/&lt;</span><span class="n">vmid</span><span class="o">&gt;.</span><span class="n">conf</span><span class="err">`</span>
+<span class="o">-</span><span class="w"> </span><span class="o">**</span><span class="n">NO</span><span class="w"> </span><span class="n">code</span><span class="o">**</span><span class="w"> </span><span class="n">applies</span><span class="w"> </span><span class="n">namespace</span><span class="w"> </span><span class="n">configuration</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="n">OCI</span><span class="w"> </span><span class="n">bundle</span>
+<span class="o">-</span><span class="w"> </span><span class="n">Currently</span><span class="w"> </span><span class="n">only</span><span class="w"> </span><span class="err">`</span><span class="o">--</span><span class="n">unprivileged</span><span class="err">`</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="n">set</span><span class="w"> </span><span class="p">(</span><span class="n">hardcoded</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="n">config</span><span class="p">,</span><span class="w"> </span><span class="n">line</span><span class="w"> </span><span class="mi">832</span><span class="p">)</span>
+
+<span class="c1">### OCI Namespace Spec Example:</span>
+
+<span class="err">```</span><span class="n">json</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="s2">&quot;linux&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="s2">&quot;namespaces&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pid&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;network&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ipc&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uts&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mount&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="proxmox-lxc-namespace-equivalents">Proxmox LXC Namespace Equivalents:<a class="headerlink" href="#proxmox-lxc-namespace-equivalents" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>PID namespace</strong>: Default for LXC (no config needed)</li>
+<li><strong>Network namespace</strong>: Default for LXC (no config needed)</li>
+<li><strong>IPC namespace</strong>: Default for LXC (no config needed)</li>
+<li><strong>UTS namespace</strong>: Default for LXC (no config needed)</li>
+<li><strong>Mount namespace</strong>: Default for LXC (no config needed)</li>
+<li><strong>User namespace</strong>: Controlled by <code>--unprivileged</code> flag</li>
+</ul>
+<p><strong>Note:</strong> Proxmox LXC containers <strong>always</strong> use the standard namespaces. The OCI spec allows for shared namespaces via <code>path</code>, but Proxmox LXC doesn't support this directly.</p>
+<hr />
+<h2 id="recommendations">Recommendations<a class="headerlink" href="#recommendations" title="Permanent link">&para;</a></h2>
+<h3 id="priority-1-fix-resource-parsing-from-oci-bundle">Priority 1: Fix Resource Parsing from OCI Bundle<a class="headerlink" href="#priority-1-fix-resource-parsing-from-oci-bundle" title="Permanent link">&para;</a></h3>
+<p><strong>Issue:</strong> OCI bundle <code>config.json</code> resources are parsed but not used.</p>
+<p><strong>Fix:</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// In driver.zig create() method, after parsing bundle:</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">oci_bundle_path</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">bundle_path</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kr">var</span><span class="w"> </span><span class="n">parser</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oci_bundle</span><span class="p">.</span><span class="n">OciBundleParser</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">logger</span><span class="p">);</span>
+<span class="w">    </span><span class="kr">var</span><span class="w"> </span><span class="n">bundle_cfg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">parser</span><span class="p">.</span><span class="n">parseBundle</span><span class="p">(</span><span class="n">bundle_path</span><span class="p">);</span>
+<span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="n">bundle_cfg</span><span class="p">.</span><span class="n">deinit</span><span class="p">();</span>
+
+<span class="w">    </span><span class="c1">// Merge bundle resources into SandboxConfig</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">bundle_cfg</span><span class="p">.</span><span class="n">memory_limit</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">mem_limit</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">config</span><span class="p">.</span><span class="n">resources</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">config</span><span class="p">.</span><span class="n">resources</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">core</span><span class="p">.</span><span class="n">types</span><span class="p">.</span><span class="n">ResourceLimits</span><span class="p">{};</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="n">config</span><span class="p">.</span><span class="n">resources</span><span class="p">.</span><span class="o">?</span><span class="p">.</span><span class="n">memory</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mem_limit</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">bundle_cfg</span><span class="p">.</span><span class="n">cpu_limit</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">cpu_limit</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">config</span><span class="p">.</span><span class="n">resources</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">config</span><span class="p">.</span><span class="n">resources</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">core</span><span class="p">.</span><span class="n">types</span><span class="p">.</span><span class="n">ResourceLimits</span><span class="p">{};</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="n">config</span><span class="p">.</span><span class="n">resources</span><span class="p">.</span><span class="o">?</span><span class="p">.</span><span class="n">cpu</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cpu_limit</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="priority-2-implement-disk-limits">Priority 2: Implement Disk Limits<a class="headerlink" href="#priority-2-implement-disk-limits" title="Permanent link">&para;</a></h3>
+<p><strong>Location:</strong> After container creation (similar to mounts)</p>
+<p><strong>Implementation:</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// After pct create succeeds</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">config</span><span class="p">.</span><span class="n">resources</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="p">.</span><span class="n">disk</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">disk_bytes</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">disk_mb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">disk_bytes</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="p">(</span><span class="mi">1024</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1024</span><span class="p">);</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">disk_str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">fmt</span><span class="p">.</span><span class="n">allocPrint</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;{d}&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.{</span><span class="n">disk_mb</span><span class="p">});</span>
+<span class="w">        </span><span class="k">defer</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">.</span><span class="n">free</span><span class="p">(</span><span class="n">disk_str</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// Resize rootfs if ZFS dataset exists</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">zfs_dataset</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">dataset</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="kr">const</span><span class="w"> </span><span class="n">resize_args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">_</span><span class="p">][]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">{</span><span class="w"> </span><span class="s">&quot;zfs&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;set&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;quota={s}M&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">dataset</span><span class="w"> </span><span class="p">};</span>
+<span class="w">            </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">runCommand</span><span class="p">(</span><span class="o">&amp;</span><span class="n">resize_args</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="priority-3-implement-network-bandwidth-limits">Priority 3: Implement Network Bandwidth Limits<a class="headerlink" href="#priority-3-implement-network-bandwidth-limits" title="Permanent link">&para;</a></h3>
+<p><strong>Location:</strong> After container creation (similar to mounts)</p>
+<p><strong>Implementation:</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// After pct create succeeds</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">config</span><span class="p">.</span><span class="n">resources</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="p">.</span><span class="n">network_bandwidth</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">bandwidth_bps</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">bandwidth_mbps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">bandwidth_bps</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="p">(</span><span class="mi">1024</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1024</span><span class="p">);</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">rate_str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">fmt</span><span class="p">.</span><span class="n">allocPrint</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;{d}&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.{</span><span class="n">bandwidth_mbps</span><span class="p">});</span>
+<span class="w">        </span><span class="k">defer</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">.</span><span class="n">free</span><span class="p">(</span><span class="n">rate_str</span><span class="p">);</span>
+
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">set_args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">_</span><span class="p">][]</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">{</span><span class="w"> </span><span class="s">&quot;pct&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;set&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">vmid</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;--net0&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">std</span><span class="p">.</span><span class="n">fmt</span><span class="p">.</span><span class="n">allocPrint</span><span class="p">(</span>
+<span class="w">            </span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;rate={s}&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">.{</span><span class="n">rate_str</span><span class="p">}</span>
+<span class="w">        </span><span class="p">)</span><span class="w"> </span><span class="p">};</span>
+<span class="w">        </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">runCommand</span><span class="p">(</span><span class="o">&amp;</span><span class="n">set_args</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="priority-4-parse-namespaces-from-oci-bundle-even-if-limited-application">Priority 4: Parse Namespaces from OCI Bundle (Even if Limited Application)<a class="headerlink" href="#priority-4-parse-namespaces-from-oci-bundle-even-if-limited-application" title="Permanent link">&para;</a></h3>
+<p><strong>Reason:</strong> For OCI compliance, even if Proxmox LXC doesn't support all namespace configurations, we should:
+1. Parse namespaces from bundle
+2. Log unsupported configurations
+3. Apply what we can (user namespace via <code>--unprivileged</code>)</p>
+<p><strong>Implementation:</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// In oci_bundle.zig parseOciConfig():</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">linux_obj</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;namespaces&quot;</span><span class="p">))</span><span class="w"> </span><span class="o">|</span><span class="n">namespaces_val</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">namespaces_val</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="p">.</span><span class="n">array</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kr">const</span><span class="w"> </span><span class="n">ns_array</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">namespaces_val</span><span class="p">.</span><span class="n">array</span><span class="p">;</span>
+<span class="w">        </span><span class="kr">var</span><span class="w"> </span><span class="n">namespaces</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">.</span><span class="n">alloc</span><span class="p">(</span><span class="n">NamespaceConfig</span><span class="p">,</span><span class="w"> </span><span class="n">ns_array</span><span class="p">.</span><span class="n">items</span><span class="p">.</span><span class="n">len</span><span class="p">);</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">ns_array</span><span class="p">.</span><span class="n">items</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">..)</span><span class="w"> </span><span class="o">|</span><span class="n">ns_val</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ns_val</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="p">.</span><span class="n">object</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="kr">const</span><span class="w"> </span><span class="n">ns_obj</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ns_val</span><span class="p">.</span><span class="n">object</span><span class="p">;</span>
+<span class="w">                </span><span class="n">namespaces</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">NamespaceConfig</span><span class="p">{</span>
+<span class="w">                    </span><span class="p">.</span><span class="n">allocator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">,</span>
+<span class="w">                    </span><span class="p">.</span><span class="kt">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ns_obj</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;type&quot;</span><span class="p">))</span><span class="w"> </span><span class="o">|</span><span class="n">t</span><span class="o">|</span>
+<span class="w">                        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">t</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="p">.</span><span class="n">string</span><span class="p">)</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">.</span><span class="n">dupe</span><span class="p">(</span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">string</span><span class="p">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s">&quot;pid&quot;</span>
+<span class="w">                    </span><span class="k">else</span><span class="w"> </span><span class="s">&quot;pid&quot;</span><span class="p">,</span>
+<span class="w">                    </span><span class="p">.</span><span class="n">path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ns_obj</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;path&quot;</span><span class="p">))</span><span class="w"> </span><span class="o">|</span><span class="n">p</span><span class="o">|</span>
+<span class="w">                        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">p</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="p">.</span><span class="n">string</span><span class="p">)</span><span class="w"> </span><span class="k">try</span><span class="w"> </span><span class="n">self</span><span class="p">.</span><span class="n">allocator</span><span class="p">.</span><span class="n">dupe</span><span class="p">(</span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">string</span><span class="p">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="kc">null</span>
+<span class="w">                    </span><span class="k">else</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">                </span><span class="p">};</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="n">bundle_config</span><span class="p">.</span><span class="n">namespaces</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">namespaces</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<hr />
+<h2 id="summary-table">Summary Table<a class="headerlink" href="#summary-table" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Implementation Location</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Mounts</strong></td>
+<td>✅ Complete</td>
+<td><code>driver.zig:917-928, 1025-1082</code></td>
+<td>Works for OCI bundles, validates paths</td>
+</tr>
+<tr>
+<td><strong>Memory Limits</strong></td>
+<td>✅ Complete</td>
+<td><code>driver.zig:809-813, 838, 849</code></td>
+<td>From SandboxConfig, not from bundle</td>
+</tr>
+<tr>
+<td><strong>CPU Limits</strong></td>
+<td>✅ Complete</td>
+<td><code>driver.zig:816-820, 839, 850</code></td>
+<td>From SandboxConfig, not from bundle</td>
+</tr>
+<tr>
+<td><strong>Disk Limits</strong></td>
+<td>❌ Missing</td>
+<td>N/A</td>
+<td>Defined in ResourceLimits but unused</td>
+</tr>
+<tr>
+<td><strong>Network Bandwidth</strong></td>
+<td>❌ Missing</td>
+<td>N/A</td>
+<td>Defined in ResourceLimits but unused</td>
+</tr>
+<tr>
+<td><strong>Bundle Resources</strong></td>
+<td>⚠️ Partial</td>
+<td><code>oci_bundle.zig:200-228</code></td>
+<td>Parsed but not applied</td>
+</tr>
+<tr>
+<td><strong>Namespaces</strong></td>
+<td>❌ Missing</td>
+<td>N/A</td>
+<td>Structure exists but never populated/used</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="code-quality-observations">Code Quality Observations<a class="headerlink" href="#code-quality-observations" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Debug Logging:</strong> Excessive debug logging using stderr/stdout directly (should use logger)</li>
+<li><strong>Error Handling:</strong> Good use of <code>try</code> and error propagation</li>
+<li><strong>Memory Management:</strong> Proper use of <code>defer</code> for cleanup</li>
+<li><strong>Code Organization:</strong> Large <code>create()</code> method (975 lines) - could be refactored</li>
+</ol>
+<hr />
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ol>
+<li>✅ <strong>Immediate:</strong> Fix bundle resource parsing to actually use parsed values - <strong>COMPLETED</strong></li>
+<li>✅ <strong>High Priority:</strong> Implement disk and network bandwidth limits</li>
+<li>✅ <strong>Medium Priority:</strong> Parse namespaces from bundle (even if limited application) - <strong>COMPLETED</strong></li>
+<li>✅ <strong>Low Priority:</strong> Refactor large <code>create()</code> method into smaller functions</li>
+</ol>
+<h2 id="recent-implementation-2025-11-02">Recent Implementation (2025-11-02)<a class="headerlink" href="#recent-implementation-2025-11-02" title="Permanent link">&para;</a></h2>
+<h3 id="resource-limits-from-oci-bundle">Resource Limits from OCI Bundle<a class="headerlink" href="#resource-limits-from-oci-bundle" title="Permanent link">&para;</a></h3>
+<p><strong>Implementation:</strong>
+- ✅ Bundle config parsing now extracts <code>memory_limit</code> and <code>cpu_limit</code> from <code>linux.resources.memory.limit</code> and <code>linux.resources.cpu.shares</code>
+- ✅ Resources from OCI bundle take priority over SandboxConfig resources
+- ✅ Memory limit converted from bytes to MB for <code>pct create --memory</code>
+- ✅ CPU shares converted to cores approximation (shares/1024) for <code>pct create --cores</code></p>
+<p><strong>Priority Order:</strong>
+1. <code>bundle_config.memory_limit</code> / <code>bundle_config.cpu_limit</code> (OCI bundle)
+2. <code>config.resources.memory</code> / <code>config.resources.cpu</code> (SandboxConfig)
+3. Default values (<code>DEFAULT_MEMORY_BYTES</code>, <code>DEFAULT_CPU_CORES</code>)</p>
+<h3 id="oci-namespaces-support">OCI Namespaces Support<a class="headerlink" href="#oci-namespaces-support" title="Permanent link">&para;</a></h3>
+<p><strong>Implementation:</strong>
+- ✅ Parsing of <code>linux.namespaces</code> array from OCI config.json
+- ✅ Namespace types supported: <code>user</code>, <code>pid</code>, <code>network</code>, <code>ipc</code>, <code>uts</code>, <code>mount</code>, <code>cgroup</code>
+- ✅ Application of LXC features based on namespace types via <code>pct set --features</code></p>
+<p><strong>Namespace Mapping:</strong>
+- <code>user</code> namespace → enables <code>nesting=1</code> and <code>keyctl=1</code> features (required for nested containers)
+- Other namespaces (pid, network, ipc, uts, mount, cgroup) are default in LXC and don't require special configuration
+- Features are applied after container creation using <code>pct set &lt;vmid&gt; --features &lt;features&gt;</code></p>
+<p><strong>LXC Features Applied:</strong>
+- <code>nesting=1</code> - Allows nested containers (when user namespace present)
+- <code>keyctl=1</code> - Kernel key management (useful with user namespaces)</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

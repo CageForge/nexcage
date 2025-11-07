@@ -1,0 +1,1557 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Next-generation container runtime for Proxmox VE using LXC and OCI backends">
+      
+      
+      
+        <link rel="canonical" href="https://cageforge.github.io/nexcage/v0.7.4/SECURITY_SELF_HOSTED_RUNNER/">
+      
+      
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>Security Guide: Self-Hosted GitHub Runner for Public Repositories - NexCage Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#security-guide-self-hosted-github-runner-for-public-repositories" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="NexCage Docs" class="md-header__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            NexCage Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Security Guide: Self-Hosted GitHub Runner for Public Repositories
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../versions.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Versions
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../user_guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  User Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/OVERVIEW/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CI_CD_SETUP/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CI/CD
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../DEPENDENCIES/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Dependencies
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../PROXMOX_TESTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Proxmox Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="NexCage Docs" class="md-nav__button md-logo" aria-label="NexCage Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    NexCage Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/CageForge/nexcage" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    CageForge/nexcage
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../versions.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Versions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEV_QUICKSTART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dev Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_WORKFLOW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT_UBUNTU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ubuntu Dev Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/OVERVIEW/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CI_CD_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEPENDENCIES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependencies
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROXMOX_TESTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Proxmox Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚠️ Security Considerations
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      🛡️ Security Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🛡️ Security Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-runner-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Runner Isolation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Runner Isolation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-a-lxc-container-isolation-recommended-for-proxmox" class="md-nav__link">
+    <span class="md-ellipsis">
+      Option A: LXC Container Isolation (Recommended for Proxmox)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-b-systemd-nspawn-container" class="md-nav__link">
+    <span class="md-ellipsis">
+      Option B: Systemd-nspawn Container
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-c-virtual-machine-maximum-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Option C: Virtual Machine (Maximum Isolation)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-dedicated-runner-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Dedicated Runner User
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-restricted-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Restricted Permissions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-workflow-configuration-for-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Workflow Configuration for Security
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Workflow Configuration for Security">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pull-request-security-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pull Request Security Settings
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#blocking-fork-prs-from-self-hosted-runner" class="md-nav__link">
+    <span class="md-ellipsis">
+      Blocking Fork PRs from Self-Hosted Runner
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-secrets-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Secrets Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Secrets Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#github-secrets-best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      GitHub Secrets Best Practices
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-secret-storage-alternative" class="md-nav__link">
+    <span class="md-ellipsis">
+      Local Secret Storage (Alternative)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-network-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      6. Network Isolation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-resource-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      7. Resource Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-monitoring-and-logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      8. Monitoring and Logging
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-workflow-permissions-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      9. Workflow Permissions Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-pull-request-approval-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      10. Pull Request Approval Workflow
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommended-security-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔒 Recommended Security Checklist
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔒 Recommended Security Checklist">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#initial-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Initial Setup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Workflow Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ongoing-maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Ongoing Maintenance
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      📋 Implementation Example
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📋 Implementation Example">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#secure-runner-setup-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      Secure Runner Setup Script
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-incident-response" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚨 Security Incident Response
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      📚 Additional Resources
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#important-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚠️ Important Notes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      🎯 Summary
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/CageForge/nexcage/edit/master/docs/SECURITY_SELF_HOSTED_RUNNER.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="security-guide-self-hosted-github-runner-for-public-repositories">Security Guide: Self-Hosted GitHub Runner for Public Repositories<a class="headerlink" href="#security-guide-self-hosted-github-runner-for-public-repositories" title="Permanent link">&para;</a></h1>
+<p><strong>Date</strong>: 2025-10-31<br />
+<strong>Status</strong>: Best Practices Guide<br />
+<strong>Target</strong>: Public GitHub repositories with self-hosted runners</p>
+<h2 id="security-considerations">⚠️ Security Considerations<a class="headerlink" href="#security-considerations" title="Permanent link">&para;</a></h2>
+<p>When running self-hosted runners for public repositories, you must protect against:
+- <strong>Malicious code from forks</strong> in pull requests
+- <strong>Secret exfiltration</strong> attempts
+- <strong>System compromise</strong> from untrusted code execution
+- <strong>Supply chain attacks</strong> via dependencies</p>
+<h2 id="security-architecture">🛡️ Security Architecture<a class="headerlink" href="#security-architecture" title="Permanent link">&para;</a></h2>
+<h3 id="1-runner-isolation">1. Runner Isolation<a class="headerlink" href="#1-runner-isolation" title="Permanent link">&para;</a></h3>
+<h4 id="option-a-lxc-container-isolation-recommended-for-proxmox">Option A: LXC Container Isolation (Recommended for Proxmox)<a class="headerlink" href="#option-a-lxc-container-isolation-recommended-for-proxmox" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create dedicated LXC container for runner</span>
+pct<span class="w"> </span>create<span class="w"> </span><span class="m">100</span><span class="w"> </span>local:vztmpl/debian-11-standard_11.7-1_amd64.tar.zst<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--hostname<span class="w"> </span>github-runner<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--memory<span class="w"> </span><span class="m">2048</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--cores<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--storage<span class="w"> </span>local-lvm<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--net0<span class="w"> </span><span class="nv">name</span><span class="o">=</span>eth0,bridge<span class="o">=</span>vmbr0,ip<span class="o">=</span>dhcp
+
+<span class="c1"># Start container</span>
+pct<span class="w"> </span>start<span class="w"> </span><span class="m">100</span>
+
+<span class="c1"># Install runner inside container</span>
+pct<span class="w"> </span>enter<span class="w"> </span><span class="m">100</span>
+<span class="c1"># ... install GitHub Actions runner ...</span>
+</code></pre></div>
+
+<h4 id="option-b-systemd-nspawn-container">Option B: Systemd-nspawn Container<a class="headerlink" href="#option-b-systemd-nspawn-container" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create minimal root filesystem</span>
+sudo<span class="w"> </span>debootstrap<span class="w"> </span>--arch<span class="o">=</span>amd64<span class="w"> </span>bullseye<span class="w"> </span>/var/lib/machines/github-runner<span class="w"> </span>http://deb.debian.org/debian
+
+<span class="c1"># Configure container</span>
+sudo<span class="w"> </span>systemd-nspawn<span class="w"> </span>-D<span class="w"> </span>/var/lib/machines/github-runner<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--bind<span class="o">=</span>/tmp:/tmp<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--private-network<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--capability<span class="o">=</span>all
+</code></pre></div>
+
+<h4 id="option-c-virtual-machine-maximum-isolation">Option C: Virtual Machine (Maximum Isolation)<a class="headerlink" href="#option-c-virtual-machine-maximum-isolation" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Use Proxmox VM with minimal Debian/Ubuntu</li>
+<li>Snapshot before each run</li>
+<li>Revert after completion</li>
+</ul>
+<h3 id="2-dedicated-runner-user">2. Dedicated Runner User<a class="headerlink" href="#2-dedicated-runner-user" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Create dedicated user for runner</span>
+sudo<span class="w"> </span>useradd<span class="w"> </span>-r<span class="w"> </span>-m<span class="w"> </span>-s<span class="w"> </span>/bin/bash<span class="w"> </span>-d<span class="w"> </span>/opt/github-runner<span class="w"> </span>github-runner
+sudo<span class="w"> </span>usermod<span class="w"> </span>-aG<span class="w"> </span>docker<span class="w"> </span>github-runner<span class="w">  </span><span class="c1"># Only if Docker needed</span>
+
+<span class="c1"># Create runner directory with proper permissions</span>
+sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/opt/github-runner/_work
+sudo<span class="w"> </span>chown<span class="w"> </span>-R<span class="w"> </span>github-runner:github-runner<span class="w"> </span>/opt/github-runner
+sudo<span class="w"> </span>chmod<span class="w"> </span><span class="m">750</span><span class="w"> </span>/opt/github-runner/_work
+</code></pre></div>
+
+<h3 id="3-restricted-permissions">3. Restricted Permissions<a class="headerlink" href="#3-restricted-permissions" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Limit runner user capabilities</span>
+sudo<span class="w"> </span>setcap<span class="w"> </span>-r<span class="w"> </span>/opt/github-runner/run.sh<span class="w">  </span><span class="c1"># Remove all capabilities</span>
+
+<span class="c1"># Use AppArmor or SELinux profiles</span>
+sudo<span class="w"> </span>aa-genprof<span class="w"> </span>/opt/github-runner/run.sh
+
+<span class="c1"># Limit network access</span>
+sudo<span class="w"> </span>iptables<span class="w"> </span>-A<span class="w"> </span>OUTPUT<span class="w"> </span>-m<span class="w"> </span>owner<span class="w"> </span>--uid-owner<span class="w"> </span>github-runner<span class="w"> </span>-j<span class="w"> </span>REJECT
+sudo<span class="w"> </span>iptables<span class="w"> </span>-A<span class="w"> </span>OUTPUT<span class="w"> </span>-m<span class="w"> </span>owner<span class="w"> </span>--uid-owner<span class="w"> </span>github-runner<span class="w"> </span>-d<span class="w"> </span>github.com<span class="w"> </span>-j<span class="w"> </span>ACCEPT
+sudo<span class="w"> </span>iptables<span class="w"> </span>-A<span class="w"> </span>OUTPUT<span class="w"> </span>-m<span class="w"> </span>owner<span class="w"> </span>--uid-owner<span class="w"> </span>github-runner<span class="w"> </span>-d<span class="w"> </span>registry.npmjs.org<span class="w"> </span>-j<span class="w"> </span>ACCEPT
+</code></pre></div>
+
+<h3 id="4-workflow-configuration-for-security">4. Workflow Configuration for Security<a class="headerlink" href="#4-workflow-configuration-for-security" title="Permanent link">&para;</a></h3>
+<h4 id="pull-request-security-settings">Pull Request Security Settings<a class="headerlink" href="#pull-request-security-settings" title="Permanent link">&para;</a></h4>
+<p><strong>Critical</strong>: Configure workflows to prevent secret access from forks:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># .github/workflows/security.yml example</span>
+<span class="nt">on</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">pull_request</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="w"> </span><span class="nv">main</span><span class="w"> </span><span class="p p-Indicator">]</span>
+
+<span class="nt">permissions</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read</span>
+<span class="w">  </span><span class="nt">pull-requests</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span>
+<span class="w">  </span><span class="c1"># NO secrets access by default</span>
+
+<span class="nt">jobs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">self-hosted</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">proxmox</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="c1"># NEVER allow pull_request_target with secrets for public repos</span>
+<span class="w">    </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github.event.pull_request.head.repo.full_name == github.repository</span>
+
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Checkout</span>
+<span class="w">        </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+<span class="w">        </span><span class="c1"># Checkout PR code</span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">ref</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ github.event.pull_request.head.sha }}</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zig build</span>
+<span class="w">        </span><span class="c1"># Secrets are NOT available in PR workflows by default</span>
+<span class="w">        </span><span class="c1"># Only available if explicitly configured (NOT RECOMMENDED)</span>
+</code></pre></div>
+
+<h4 id="blocking-fork-prs-from-self-hosted-runner">Blocking Fork PRs from Self-Hosted Runner<a class="headerlink" href="#blocking-fork-prs-from-self-hosted-runner" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="nt">jobs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">self-hosted</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">proxmox</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="c1"># Only run on PRs from same repository</span>
+<span class="w">    </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github.event.pull_request.head.repo.full_name == github.repository || github.event_name != &#39;pull_request&#39;</span>
+
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Verify PR source</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">if [ &quot;${{ github.event_name }}&quot; == &quot;pull_request&quot; ]; then</span>
+<span class="w">            </span><span class="no">if [ &quot;${{ github.event.pull_request.head.repo.full_name }}&quot; != &quot;${{ github.repository }}&quot; ]; then</span>
+<span class="w">              </span><span class="no">echo &quot;❌ Blocking PR from fork for security&quot;</span>
+<span class="w">              </span><span class="no">exit 1</span>
+<span class="w">            </span><span class="no">fi</span>
+<span class="w">          </span><span class="no">fi</span>
+</code></pre></div>
+
+<h3 id="5-secrets-management">5. Secrets Management<a class="headerlink" href="#5-secrets-management" title="Permanent link">&para;</a></h3>
+<h4 id="github-secrets-best-practices">GitHub Secrets Best Practices<a class="headerlink" href="#github-secrets-best-practices" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># DO: Use secrets only for trusted workflows</span>
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">SECRET_VAR</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.SECRET_NAME }}</span>
+
+<span class="c1"># DON&#39;T: Expose secrets in PR workflows from forks</span>
+<span class="c1"># Secrets are automatically unavailable in pull_request workflows</span>
+<span class="c1"># UNLESS using pull_request_target (NEVER USE THIS FOR PUBLIC REPOS)</span>
+</code></pre></div>
+
+<h4 id="local-secret-storage-alternative">Local Secret Storage (Alternative)<a class="headerlink" href="#local-secret-storage-alternative" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Store secrets in runner environment (not in GitHub)</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>github-runner<span class="w"> </span>bash<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;cat &gt; ~/.github-secrets &lt;&lt; EOF</span>
+<span class="s1">GITHUB_TOKEN=$(cat /etc/github-runner/token)</span>
+<span class="s1">PROXMOX_PASSWORD=$(cat /etc/github-runner/proxmox-password)</span>
+<span class="s1">EOF&#39;</span>
+
+<span class="c1"># Restrict access</span>
+sudo<span class="w"> </span>chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span>~github-runner/.github-secrets
+sudo<span class="w"> </span>chown<span class="w"> </span>github-runner:github-runner<span class="w"> </span>~github-runner/.github-secrets
+</code></pre></div>
+
+<h3 id="6-network-isolation">6. Network Isolation<a class="headerlink" href="#6-network-isolation" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Firewall rules for runner</span>
+sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </span>from<span class="w"> </span><span class="m">140</span>.82.112.0/20<span class="w"> </span>to<span class="w"> </span>any<span class="w"> </span>port<span class="w"> </span><span class="m">443</span><span class="w">  </span><span class="c1"># GitHub Actions</span>
+sudo<span class="w"> </span>ufw<span class="w"> </span>allow<span class="w"> </span>from<span class="w"> </span><span class="m">185</span>.199.108.0/22<span class="w"> </span>to<span class="w"> </span>any<span class="w"> </span>port<span class="w"> </span><span class="m">443</span><span class="w">  </span><span class="c1"># GitHub Actions</span>
+sudo<span class="w"> </span>ufw<span class="w"> </span>deny<span class="w"> </span>from<span class="w"> </span>github-runner<span class="w"> </span>user<span class="w"> </span>out
+
+<span class="c1"># Or use iptables</span>
+sudo<span class="w"> </span>iptables<span class="w"> </span>-A<span class="w"> </span>OUTPUT<span class="w"> </span>-m<span class="w"> </span>owner<span class="w"> </span>--uid-owner<span class="w"> </span><span class="k">$(</span>id<span class="w"> </span>-u<span class="w"> </span>github-runner<span class="k">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="m">140</span>.82.112.0/20<span class="w"> </span>-j<span class="w"> </span>ACCEPT
+sudo<span class="w"> </span>iptables<span class="w"> </span>-A<span class="w"> </span>OUTPUT<span class="w"> </span>-m<span class="w"> </span>owner<span class="w"> </span>--uid-owner<span class="w"> </span><span class="k">$(</span>id<span class="w"> </span>-u<span class="w"> </span>github-runner<span class="k">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="m">185</span>.199.108.0/22<span class="w"> </span>-j<span class="w"> </span>ACCEPT
+sudo<span class="w"> </span>iptables<span class="w"> </span>-A<span class="w"> </span>OUTPUT<span class="w"> </span>-m<span class="w"> </span>owner<span class="w"> </span>--uid-owner<span class="w"> </span><span class="k">$(</span>id<span class="w"> </span>-u<span class="w"> </span>github-runner<span class="k">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-j<span class="w"> </span>DROP
+</code></pre></div>
+
+<h3 id="7-resource-limits">7. Resource Limits<a class="headerlink" href="#7-resource-limits" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Systemd service with limits</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/systemd/system/github-runner.service<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">[Unit]</span>
+<span class="s">Description=GitHub Actions Runner</span>
+<span class="s">After=network.target</span>
+
+<span class="s">[Service]</span>
+<span class="s">Type=simple</span>
+<span class="s">User=github-runner</span>
+<span class="s">Group=github-runner</span>
+<span class="s">WorkingDirectory=/opt/github-runner</span>
+<span class="s">ExecStart=/opt/github-runner/run.sh</span>
+
+<span class="s"># Resource limits</span>
+<span class="s">MemoryLimit=4G</span>
+<span class="s">CPUQuota=200%</span>
+<span class="s">TasksMax=100</span>
+<span class="s">LimitNOFILE=4096</span>
+
+<span class="s"># Security</span>
+<span class="s">NoNewPrivileges=true</span>
+<span class="s">PrivateTmp=true</span>
+<span class="s">ProtectSystem=strict</span>
+<span class="s">ProtectHome=true</span>
+<span class="s">ReadWritePaths=/opt/github-runner/_work</span>
+
+<span class="s"># Network</span>
+<span class="s">PrivateNetwork=false</span>
+<span class="s">RestrictAddressFamilies=AF_INET AF_INET6</span>
+
+<span class="s">Restart=always</span>
+<span class="s">RestartSec=10</span>
+
+<span class="s">[Install]</span>
+<span class="s">WantedBy=multi-user.target</span>
+<span class="s">EOF</span>
+</code></pre></div>
+
+<h3 id="8-monitoring-and-logging">8. Monitoring and Logging<a class="headerlink" href="#8-monitoring-and-logging" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Enable audit logging</span>
+sudo<span class="w"> </span>auditctl<span class="w"> </span>-w<span class="w"> </span>/opt/github-runner/_work<span class="w"> </span>-p<span class="w"> </span>rwxa<span class="w"> </span>-k<span class="w"> </span>github-runner
+
+<span class="c1"># Log all runner activity</span>
+sudo<span class="w"> </span>journalctl<span class="w"> </span>-u<span class="w"> </span>github-runner<span class="w"> </span>-f
+
+<span class="c1"># Monitor suspicious activity</span>
+sudo<span class="w"> </span>fail2ban-client<span class="w"> </span><span class="nb">set</span><span class="w"> </span>github-runner<span class="w"> </span>addignoreip<span class="w"> </span><span class="m">140</span>.82.112.0/20
+</code></pre></div>
+
+<h3 id="9-workflow-permissions-configuration">9. Workflow Permissions Configuration<a class="headerlink" href="#9-workflow-permissions-configuration" title="Permanent link">&para;</a></h3>
+<p>Update workflow files to use minimal permissions:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># .github/workflows/ci.yml</span>
+<span class="nt">permissions</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read</span><span class="w">      </span><span class="c1"># Read repository contents</span>
+<span class="w">  </span><span class="nt">pull-requests</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span><span class="w"> </span><span class="c1"># Comment on PRs</span>
+<span class="w">  </span><span class="nt">checks</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span><span class="w">        </span><span class="c1"># Update check status</span>
+<span class="w">  </span><span class="c1"># NO contents: write for PRs from forks</span>
+<span class="w">  </span><span class="c1"># NO secrets access</span>
+</code></pre></div>
+
+<h3 id="10-pull-request-approval-workflow">10. Pull Request Approval Workflow<a class="headerlink" href="#10-pull-request-approval-workflow" title="Permanent link">&para;</a></h3>
+<p>For maximum security, require manual approval before running workflows on self-hosted runner:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">jobs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">self-hosted</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">proxmox</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github.event_name != &#39;pull_request&#39; || github.event.pull_request.head.repo.full_name == github.repository</span>
+
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Require approval for fork PRs</span>
+<span class="w">        </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github.event_name == &#39;pull_request&#39; &amp;&amp; github.event.pull_request.head.repo.full_name != github.repository</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">echo &quot;::error::PRs from forks cannot run on self-hosted runner for security&quot;</span>
+<span class="w">          </span><span class="no">exit 1</span>
+</code></pre></div>
+
+<h2 id="recommended-security-checklist">🔒 Recommended Security Checklist<a class="headerlink" href="#recommended-security-checklist" title="Permanent link">&para;</a></h2>
+<h3 id="initial-setup">Initial Setup<a class="headerlink" href="#initial-setup" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Runner runs in isolated environment (LXC/VM/nspawn)</li>
+<li>[ ] Dedicated user with minimal permissions</li>
+<li>[ ] Network firewall rules configured</li>
+<li>[ ] Resource limits set (memory, CPU, disk)</li>
+<li>[ ] Audit logging enabled</li>
+</ul>
+<h3 id="workflow-configuration">Workflow Configuration<a class="headerlink" href="#workflow-configuration" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] PRs from forks are blocked or run on GitHub-hosted runners only</li>
+<li>[ ] Secrets are NOT accessible in PR workflows</li>
+<li>[ ] Minimal permissions in workflow files</li>
+<li>[ ] Code signing verification enabled (optional)</li>
+</ul>
+<h3 id="ongoing-maintenance">Ongoing Maintenance<a class="headerlink" href="#ongoing-maintenance" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Runner updated regularly</li>
+<li>[ ] Logs reviewed periodically</li>
+<li>[ ] Access audited</li>
+<li>[ ] Secrets rotated regularly</li>
+<li>[ ] Runner health monitored</li>
+</ul>
+<h2 id="implementation-example">📋 Implementation Example<a class="headerlink" href="#implementation-example" title="Permanent link">&para;</a></h2>
+<h3 id="secure-runner-setup-script">Secure Runner Setup Script<a class="headerlink" href="#secure-runner-setup-script" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="ch">#!/bin/bash</span>
+<span class="c1"># scripts/setup_secure_runner.sh</span>
+
+<span class="nb">set</span><span class="w"> </span>-euo<span class="w"> </span>pipefail
+
+<span class="nv">RUNNER_USER</span><span class="o">=</span><span class="s2">&quot;github-runner&quot;</span>
+<span class="nv">RUNNER_DIR</span><span class="o">=</span><span class="s2">&quot;/opt/github-runner&quot;</span>
+<span class="nv">REPO_URL</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$1</span><span class="s2">&quot;</span><span class="w">  </span><span class="c1"># Pass repository URL</span>
+
+<span class="c1"># 1. Create dedicated user</span>
+sudo<span class="w"> </span>useradd<span class="w"> </span>-r<span class="w"> </span>-m<span class="w"> </span>-s<span class="w"> </span>/bin/bash<span class="w"> </span>-d<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$RUNNER_DIR</span><span class="s2">&quot;</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$RUNNER_USER</span><span class="s2">&quot;</span>
+
+<span class="c1"># 2. Create runner directory</span>
+sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$RUNNER_DIR</span><span class="s2">&quot;</span>/_work
+sudo<span class="w"> </span>chown<span class="w"> </span>-R<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$RUNNER_USER</span><span class="s2">:</span><span class="nv">$RUNNER_USER</span><span class="s2">&quot;</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$RUNNER_DIR</span><span class="s2">&quot;</span>
+
+<span class="c1"># 3. Download and install runner</span>
+<span class="nb">cd</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$RUNNER_DIR</span><span class="s2">&quot;</span>
+sudo<span class="w"> </span>-u<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$RUNNER_USER</span><span class="s2">&quot;</span><span class="w"> </span>bash<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">curl -o actions-runner-linux-x64-2.311.0.tar.gz \</span>
+<span class="s">  -L https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz</span>
+<span class="s">tar xzf actions-runner-linux-x64-2.311.0.tar.gz</span>
+<span class="s">./config.sh --url &quot;$REPO_URL&quot; --token &quot;$2&quot; --name proxmox-runner --work _work</span>
+<span class="s">EOF</span>
+
+<span class="c1"># 4. Configure systemd service with security limits</span>
+sudo<span class="w"> </span>tee<span class="w"> </span>/etc/systemd/system/github-runner.service<span class="w"> </span>&gt;<span class="w"> </span>/dev/null<span class="w"> </span><span class="s">&lt;&lt; SERVICE_EOF</span>
+<span class="s">[Unit]</span>
+<span class="s">Description=GitHub Actions Runner</span>
+<span class="s">After=network.target</span>
+
+<span class="s">[Service]</span>
+<span class="s">Type=simple</span>
+<span class="s">User=$RUNNER_USER</span>
+<span class="s">Group=$RUNNER_USER</span>
+<span class="s">WorkingDirectory=$RUNNER_DIR</span>
+<span class="s">ExecStart=$RUNNER_DIR/run.sh</span>
+
+<span class="s"># Security</span>
+<span class="s">NoNewPrivileges=true</span>
+<span class="s">PrivateTmp=true</span>
+<span class="s">ProtectSystem=strict</span>
+<span class="s">ProtectHome=true</span>
+<span class="s">ReadWritePaths=$RUNNER_DIR/_work</span>
+
+<span class="s"># Resource limits</span>
+<span class="s">MemoryLimit=4G</span>
+<span class="s">CPUQuota=200%</span>
+<span class="s">TasksMax=100</span>
+
+<span class="s">Restart=always</span>
+<span class="s">RestartSec=10</span>
+
+<span class="s">[Install]</span>
+<span class="s">WantedBy=multi-user.target</span>
+<span class="s">SERVICE_EOF</span>
+
+<span class="c1"># 5. Enable and start service</span>
+sudo<span class="w"> </span>systemctl<span class="w"> </span>daemon-reload
+sudo<span class="w"> </span>systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>github-runner
+sudo<span class="w"> </span>systemctl<span class="w"> </span>start<span class="w"> </span>github-runner
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✅ Secure runner configured&quot;</span>
+</code></pre></div>
+
+<h2 id="security-incident-response">🚨 Security Incident Response<a class="headerlink" href="#security-incident-response" title="Permanent link">&para;</a></h2>
+<p>If you suspect a security breach:</p>
+<ol>
+<li>
+<p><strong>Immediately stop the runner</strong>:
+   <code>bash
+   sudo systemctl stop github-runner</code></p>
+</li>
+<li>
+<p><strong>Check logs for suspicious activity</strong>:
+   <code>bash
+   sudo journalctl -u github-runner --since "1 hour ago"
+   sudo auditctl -w /opt/github-runner/_work -p rwxa</code></p>
+</li>
+<li>
+<p><strong>Review workflow runs</strong>:</p>
+</li>
+<li>Check GitHub Actions runs for unexpected behavior</li>
+<li>Review artifacts uploaded</li>
+<li>
+<p>Check for secret access attempts</p>
+</li>
+<li>
+<p><strong>Rotate secrets</strong>:</p>
+</li>
+<li>Rotate all GitHub secrets</li>
+<li>Rotate runner registration token</li>
+<li>
+<p>Regenerate SSH keys if used</p>
+</li>
+<li>
+<p><strong>Rebuild runner environment</strong>:</p>
+</li>
+<li>Snapshot and rebuild container/VM</li>
+<li>Reinstall from clean state</li>
+</ol>
+<h2 id="additional-resources">📚 Additional Resources<a class="headerlink" href="#additional-resources" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions">GitHub Actions Security Best Practices</a></li>
+<li><a href="https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners#self-hosted-runner-security">Self-Hosted Runner Security</a></li>
+<li><a href="https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-secrets">Securing Workflows</a></li>
+</ul>
+<h2 id="important-notes">⚠️ Important Notes<a class="headerlink" href="#important-notes" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Never use <code>pull_request_target</code></strong> with self-hosted runners for public repos</li>
+<li><strong>Never expose secrets</strong> in PR workflows from forks</li>
+<li><strong>Always verify PR source</strong> before allowing execution</li>
+<li><strong>Consider using GitHub-hosted runners</strong> for fork PRs</li>
+<li><strong>Use ephemeral runners</strong> when possible (destroy after each run)</li>
+</ol>
+<h2 id="summary">🎯 Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
+<p>For public repositories:
+- ✅ Use isolated environments (LXC/VM)
+- ✅ Block or carefully review fork PRs
+- ✅ Minimize permissions
+- ✅ Monitor and audit
+- ✅ Use dedicated runner user
+- ✅ Set resource limits
+- ✅ Network isolation
+- ❌ Never expose secrets to PRs
+- ❌ Never use pull_request_target carelessly
+- ❌ Never run untrusted code without isolation</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © 2025 CageForge
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.expand", "content.code.copy", "content.action.edit", "content.tabs.link", "navigation.top"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
