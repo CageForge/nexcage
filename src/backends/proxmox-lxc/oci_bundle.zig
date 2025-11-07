@@ -55,14 +55,14 @@ pub const OciBundleParser = struct {
         defer parsed.deinit();
 
         var bundle_config = try self.parseOciConfig(&parsed.value, rootfs_path);
-        
+
         // Try to parse metadata.json if it exists
         const metadata_path = try std.fs.path.join(self.allocator, &[_][]const u8{ bundle_path, "metadata.json" });
         defer self.allocator.free(metadata_path);
-        
+
         if (std.fs.cwd().openFile(metadata_path, .{})) |metadata_file| {
             defer metadata_file.close();
-            
+
             const metadata_content = metadata_file.readToEndAlloc(self.allocator, 1024 * 1024) catch |err| {
                 if (self.logger) |log| {
                     try log.warn("Failed to read metadata.json: {}", .{err});
@@ -70,7 +70,7 @@ pub const OciBundleParser = struct {
                 return bundle_config;
             };
             defer self.allocator.free(metadata_content);
-            
+
             const metadata_parsed = std.json.parseFromSlice(std.json.Value, self.allocator, metadata_content, .{
                 .allocate = .alloc_always,
                 .ignore_unknown_fields = true,
@@ -81,14 +81,14 @@ pub const OciBundleParser = struct {
                 return bundle_config;
             };
             defer metadata_parsed.deinit();
-            
+
             try self.parseMetadata(&metadata_parsed.value, &bundle_config);
         } else |_| {
             if (self.logger) |log| {
                 try log.info("No metadata.json found in bundle, using config.json only", .{});
             }
         }
-        
+
         return bundle_config;
     }
 
@@ -175,15 +175,18 @@ pub const OciBundleParser = struct {
                         const mount_obj = mount_val.object;
                         mounts[i] = MountConfig{
                             .allocator = self.allocator,
-                            .source = if (mount_obj.get("source")) |s| 
+                            .source = if (mount_obj.get("source")) |s|
                                 if (s == .string) try self.allocator.dupe(u8, s.string) else null
-                            else null,
-                            .destination = if (mount_obj.get("destination")) |d| 
+                            else
+                                null,
+                            .destination = if (mount_obj.get("destination")) |d|
                                 if (d == .string) try self.allocator.dupe(u8, d.string) else null
-                            else null,
-                            .type = if (mount_obj.get("type")) |t| 
+                            else
+                                null,
+                            .type = if (mount_obj.get("type")) |t|
                                 if (t == .string) try self.allocator.dupe(u8, t.string) else null
-                            else null,
+                            else
+                                null,
                             .options = null, // TODO: Parse mount options
                         };
                     }
@@ -227,6 +230,228 @@ pub const OciBundleParser = struct {
                     }
                 }
 
+                // Parse memory policy (NUMA)
+                if (linux_obj.get("memoryPolicy")) |policy_val| {
+                    if (policy_val != .object) {
+                        if (self.logger) |log| {
+                            try log.err("Invalid linux.memoryPolicy format (expected object)", .{});
+                        }
+                        return error.InvalidConfigFormat;
+                    }
+
+                    const policy_obj = policy_val.object;
+                    var policy = MemoryPolicyConfig{ .allocator = self.allocator };
+
+                    if (policy_obj.get("mode")) |mode_val| {
+                        if (mode_val == .string) {
+                            policy.mode = try parseMemoryPolicyMode(mode_val.string);
+                        } else {
+                            if (self.logger) |log| {
+                                try log.err("Invalid linux.memoryPolicy.mode type", .{});
+                            }
+                            return error.InvalidConfigFormat;
+                        }
+                    }
+
+                    if (policy_obj.get("nodes")) |nodes_val| {
+                        if (nodes_val == .string) {
+                            policy.nodes = try self.allocator.dupe(u8, nodes_val.string);
+                        } else {
+                            if (self.logger) |log| {
+                                try log.err("Invalid linux.memoryPolicy.nodes type", .{});
+                            }
+                            return error.InvalidConfigFormat;
+                        }
+                    }
+
+                    if (policy_obj.get("flags")) |flags_val| {
+                        if (flags_val != .array) {
+                            if (self.logger) |log| {
+                                try log.err("Invalid linux.memoryPolicy.flags type", .{});
+                            }
+                            return error.InvalidConfigFormat;
+                        }
+
+                        const flags_array = flags_val.array;
+                        if (flags_array.items.len > 0) {
+                            var flags = try self.allocator.alloc(MemoryPolicyFlag, flags_array.items.len);
+                            errdefer {
+                                self.allocator.free(flags);
+                            }
+
+                            for (flags_array.items, 0..) |flag_val, i| {
+                                if (flag_val != .string) {
+                                    if (self.logger) |log| {
+                                        try log.err("Invalid linux.memoryPolicy.flags entry", .{});
+                                    }
+                                    return error.InvalidConfigFormat;
+                                }
+                                flags[i] = try parseMemoryPolicyFlag(flag_val.string);
+                            }
+
+                            policy.flags = flags;
+                        }
+                    }
+
+                    bundle_config.memory_policy = policy;
+                }
+
+                // Parse Intel RDT settings
+                if (linux_obj.get("intelRdt")) |rdt_val| {
+                    if (rdt_val != .object) {
+                        if (self.logger) |log| {
+                            try log.err("Invalid linux.intelRdt format (expected object)", .{});
+                        }
+                        return error.InvalidConfigFormat;
+                    }
+
+                    const rdt_obj = rdt_val.object;
+                    var intel = IntelRdtConfig{ .allocator = self.allocator };
+
+                    if (rdt_obj.get("closID")) |clos_val| {
+                        if (clos_val == .string) {
+                            intel.clos_id = try self.allocator.dupe(u8, clos_val.string);
+                        } else {
+                            if (self.logger) |log| {
+                                try log.err("Invalid linux.intelRdt.closID type", .{});
+                            }
+                            return error.InvalidConfigFormat;
+                        }
+                    }
+
+                    if (rdt_obj.get("schemata")) |schemata_val| {
+                        if (schemata_val != .array) {
+                            if (self.logger) |log| {
+                                try log.err("Invalid linux.intelRdt.schemata type", .{});
+                            }
+                            return error.InvalidConfigFormat;
+                        }
+
+                        const schemata_array = schemata_val.array;
+                        if (schemata_array.items.len > 0) {
+                            var schemata = try self.allocator.alloc([]const u8, schemata_array.items.len);
+                            var filled: usize = 0;
+                            errdefer {
+                                while (filled > 0) {
+                                    filled -= 1;
+                                    self.allocator.free(schemata[filled]);
+                                }
+                                self.allocator.free(schemata);
+                            }
+
+                            for (schemata_array.items, 0..) |schema_val, i| {
+                                if (schema_val != .string) {
+                                    if (self.logger) |log| {
+                                        try log.err("Invalid linux.intelRdt.schemata entry", .{});
+                                    }
+                                    return error.InvalidConfigFormat;
+                                }
+                                schemata[i] = try self.allocator.dupe(u8, schema_val.string);
+                                filled = i + 1;
+                            }
+
+                            intel.schemata = schemata;
+                        }
+                    }
+
+                    if (rdt_obj.get("l3CacheSchema")) |schema_val| {
+                        if (schema_val == .string) {
+                            intel.l3_cache_schema = try self.allocator.dupe(u8, schema_val.string);
+                        } else {
+                            if (self.logger) |log| {
+                                try log.err("Invalid linux.intelRdt.l3CacheSchema type", .{});
+                            }
+                            return error.InvalidConfigFormat;
+                        }
+                    }
+
+                    if (rdt_obj.get("memBwSchema")) |schema_val| {
+                        if (schema_val == .string) {
+                            intel.mem_bw_schema = try self.allocator.dupe(u8, schema_val.string);
+                        } else {
+                            if (self.logger) |log| {
+                                try log.err("Invalid linux.intelRdt.memBwSchema type", .{});
+                            }
+                            return error.InvalidConfigFormat;
+                        }
+                    }
+
+                    if (rdt_obj.get("enableMonitoring")) |monitor_val| {
+                        if (monitor_val == .bool) {
+                            intel.enable_monitoring = monitor_val.bool;
+                        } else {
+                            if (self.logger) |log| {
+                                try log.err("Invalid linux.intelRdt.enableMonitoring type", .{});
+                            }
+                            return error.InvalidConfigFormat;
+                        }
+                    }
+
+                    bundle_config.intel_rdt = intel;
+                }
+
+                // Parse netDevices map
+                if (linux_obj.get("netDevices")) |net_val| {
+                    if (net_val != .object) {
+                        if (self.logger) |log| {
+                            try log.err("Invalid linux.netDevices format (expected object)", .{});
+                        }
+                        return error.InvalidConfigFormat;
+                    }
+
+                    const net_obj = net_val.object;
+                    const count = net_obj.count();
+                    if (count > 0) {
+                        var net_devices = try self.allocator.alloc(NetDeviceConfig, count);
+                        var idx: usize = 0;
+                        errdefer {
+                            while (idx > 0) {
+                                idx -= 1;
+                                net_devices[idx].deinit();
+                            }
+                            self.allocator.free(net_devices);
+                        }
+
+                        var iter = net_obj.iterator();
+                        while (iter.next()) |entry| {
+                            const alias_copy = try self.allocator.dupe(u8, entry.key_ptr.*);
+                            var device = NetDeviceConfig{
+                                .allocator = self.allocator,
+                                .alias = alias_copy,
+                                .name = null,
+                            };
+
+                            const device_val = entry.value_ptr.*;
+                            if (device_val != .object) {
+                                device.deinit();
+                                if (self.logger) |log| {
+                                    try log.err("Invalid linux.netDevices entry type", .{});
+                                }
+                                return error.InvalidConfigFormat;
+                            }
+
+                            const device_obj = device_val.object;
+                            if (device_obj.get("name")) |name_val| {
+                                if (name_val == .string) {
+                                    device.name = try self.allocator.dupe(u8, name_val.string);
+                                } else {
+                                    device.deinit();
+                                    if (self.logger) |log| {
+                                        try log.err("Invalid linux.netDevices.name type", .{});
+                                    }
+                                    return error.InvalidConfigFormat;
+                                }
+                            }
+
+                            net_devices[idx] = device;
+                            idx += 1;
+                        }
+
+                        std.debug.assert(idx == count);
+                        bundle_config.net_devices = net_devices;
+                    }
+                }
+
                 // Parse seccomp profile
                 if (linux_obj.get("seccomp")) |seccomp_val| {
                     if (seccomp_val == .object) {
@@ -250,12 +475,13 @@ pub const OciBundleParser = struct {
                                 namespaces[i] = NamespaceConfig{
                                     .allocator = self.allocator,
                                     .type = if (ns_obj.get("type")) |t|
-                                        if (t == .string) try self.allocator.dupe(u8, t.string) else 
-                                            try self.allocator.dupe(u8, "pid")
-                                    else try self.allocator.dupe(u8, "pid"),
+                                        if (t == .string) try self.allocator.dupe(u8, t.string) else try self.allocator.dupe(u8, "pid")
+                                    else
+                                        try self.allocator.dupe(u8, "pid"),
                                     .path = if (ns_obj.get("path")) |p|
                                         if (p == .string) try self.allocator.dupe(u8, p.string) else null
-                                    else null,
+                                    else
+                                        null,
                                 };
                             } else {
                                 // Default to pid namespace if not an object
@@ -267,7 +493,7 @@ pub const OciBundleParser = struct {
                             }
                         }
                         bundle_config.namespaces = namespaces;
-                        
+
                         if (self.logger) |log| {
                             try log.info("Parsed {d} namespaces from OCI bundle", .{ns_array.items.len});
                         }
@@ -282,79 +508,79 @@ pub const OciBundleParser = struct {
 
         return bundle_config;
     }
-    
+
     /// Parse metadata.json and extract image information
     fn parseMetadata(self: *OciBundleParser, metadata: *const std.json.Value, config: *OciBundleConfig) !void {
         if (metadata.* != .object) {
             return;
         }
-        
+
         const obj = metadata.object;
-        
+
         // Parse image name and tag from metadata.json
         if (obj.get("image")) |image_val| {
             if (image_val == .string) {
                 const image_str = image_val.string;
-                
+
                 // Split image:tag format if colon is present
                 if (std.mem.indexOf(u8, image_str, ":")) |colon_pos| {
                     config.image_name = try self.allocator.dupe(u8, image_str[0..colon_pos]);
-                    config.image_tag = try self.allocator.dupe(u8, image_str[colon_pos + 1..]);
+                    config.image_tag = try self.allocator.dupe(u8, image_str[colon_pos + 1 ..]);
                 } else {
                     config.image_name = try self.allocator.dupe(u8, image_str);
                 }
-                
+
                 if (self.logger) |log| {
                     try log.info("Parsed image from metadata: {s}", .{image_str});
                 }
             }
         }
-        
+
         // Parse ENTRYPOINT from metadata.json
         if (obj.get("entrypoint")) |entrypoint_val| {
             if (entrypoint_val == .array) {
                 const entrypoint_array = entrypoint_val.array;
                 var entrypoint = try self.allocator.alloc([]const u8, entrypoint_array.items.len);
-                
+
                 for (entrypoint_array.items, 0..) |ep_val, i| {
                     if (ep_val == .string) {
                         entrypoint[i] = try self.allocator.dupe(u8, ep_val.string);
                     }
                 }
-                
+
                 config.entrypoint = entrypoint;
-                
+
                 if (self.logger) |log| {
                     try log.info("Parsed ENTRYPOINT from metadata: {d} args", .{entrypoint_array.items.len});
                 }
             }
         }
-        
+
         // Parse CMD from metadata.json
         if (obj.get("cmd")) |cmd_val| {
             if (cmd_val == .array) {
                 const cmd_array = cmd_val.array;
                 var cmd = try self.allocator.alloc([]const u8, cmd_array.items.len);
-                
+
                 for (cmd_array.items, 0..) |cmd_item, i| {
                     if (cmd_item == .string) {
                         cmd[i] = try self.allocator.dupe(u8, cmd_item.string);
                     }
                 }
-                
+
                 config.cmd = cmd;
-                
+
                 if (self.logger) |log| {
                     try log.info("Parsed CMD from metadata: {d} args", .{cmd_array.items.len});
                 }
             }
         }
-        
+
         // Parse working directory from metadata.json
         if (obj.get("workingDir")) |workdir_val| {
             if (workdir_val == .string) {
                 config.working_directory = try self.allocator.dupe(u8, workdir_val.string);
-                
+
                 if (self.logger) |log| {
                     try log.info("Parsed working directory from metadata: {s}", .{workdir_val.string});
                 }
@@ -375,7 +601,7 @@ pub const OciBundleConfig = struct {
     cpu_limit: ?f64 = null,
     capabilities: ?[]const u8 = null,
     seccomp_profile: ?[]const u8 = null,
-    
+
     // Extended OCI fields
     annotations: ?std.json.ObjectMap = null,
     user: ?UserConfig = null,
@@ -389,7 +615,10 @@ pub const OciBundleConfig = struct {
     no_new_privileges: ?bool = null,
     oom_score_adj: ?i32 = null,
     root_readonly: ?bool = null,
-    
+    memory_policy: ?MemoryPolicyConfig = null,
+    intel_rdt: ?IntelRdtConfig = null,
+    net_devices: ?[]NetDeviceConfig = null,
+
     // Metadata.json fields extracted from OCI image metadata
     image_name: ?[]const u8 = null,
     image_tag: ?[]const u8 = null,
@@ -417,7 +646,7 @@ pub const OciBundleConfig = struct {
         }
         if (self.capabilities) |caps| self.allocator.free(caps);
         if (self.seccomp_profile) |profile| self.allocator.free(profile);
-        
+
         // Extended fields cleanup
         if (self.annotations) |*annotations| annotations.deinit();
         if (self.user) |*user| user.deinit();
@@ -446,7 +675,13 @@ pub const OciBundleConfig = struct {
         if (self.cgroups_path) |path| self.allocator.free(path);
         if (self.apparmor_profile) |profile| self.allocator.free(profile);
         if (self.selinux_label) |label| self.allocator.free(label);
-        
+        if (self.memory_policy) |*policy| policy.deinit();
+        if (self.intel_rdt) |*intel| intel.deinit();
+        if (self.net_devices) |devices| {
+            for (devices) |*device| device.deinit();
+            self.allocator.free(devices);
+        }
+
         // Cleanup metadata.json fields
         if (self.image_name) |name| self.allocator.free(name);
         if (self.image_tag) |tag| self.allocator.free(tag);
@@ -532,3 +767,97 @@ pub const NamespaceConfig = struct {
         if (self.path) |p| self.allocator.free(p);
     }
 };
+
+pub const MemoryPolicyMode = enum {
+    mpol_default,
+    mpol_bind,
+    mpol_interleave,
+    mpol_weighted_interleave,
+    mpol_preferred,
+    mpol_preferred_many,
+    mpol_local,
+};
+
+pub const MemoryPolicyFlag = enum {
+    numa_balancing,
+    relative_nodes,
+    static_nodes,
+};
+
+pub const MemoryPolicyConfig = struct {
+    allocator: std.mem.Allocator,
+    mode: ?MemoryPolicyMode = null,
+    nodes: ?[]const u8 = null,
+    flags: ?[]MemoryPolicyFlag = null,
+
+    pub fn deinit(self: *MemoryPolicyConfig) void {
+        if (self.nodes) |nodes| self.allocator.free(nodes);
+        if (self.flags) |flags| self.allocator.free(flags);
+    }
+};
+
+pub const IntelRdtConfig = struct {
+    allocator: std.mem.Allocator,
+    clos_id: ?[]const u8 = null,
+    schemata: ?[]const []const u8 = null,
+    l3_cache_schema: ?[]const u8 = null,
+    mem_bw_schema: ?[]const u8 = null,
+    enable_monitoring: ?bool = null,
+
+    pub fn deinit(self: *IntelRdtConfig) void {
+        if (self.clos_id) |id| self.allocator.free(id);
+        if (self.l3_cache_schema) |schema| self.allocator.free(schema);
+        if (self.mem_bw_schema) |schema| self.allocator.free(schema);
+        if (self.schemata) |schemata| {
+            for (schemata) |entry| self.allocator.free(entry);
+            self.allocator.free(schemata);
+        }
+    }
+};
+
+pub const NetDeviceConfig = struct {
+    allocator: std.mem.Allocator,
+    alias: []const u8,
+    name: ?[]const u8 = null,
+
+    pub fn deinit(self: *NetDeviceConfig) void {
+        self.allocator.free(self.alias);
+        if (self.name) |value| self.allocator.free(value);
+    }
+};
+
+fn parseMemoryPolicyMode(value: []const u8) !MemoryPolicyMode {
+    const modes = [_]struct { []const u8, MemoryPolicyMode }{
+        .{ "MPOL_DEFAULT", .mpol_default },
+        .{ "MPOL_BIND", .mpol_bind },
+        .{ "MPOL_INTERLEAVE", .mpol_interleave },
+        .{ "MPOL_WEIGHTED_INTERLEAVE", .mpol_weighted_interleave },
+        .{ "MPOL_PREFERRED", .mpol_preferred },
+        .{ "MPOL_PREFERRED_MANY", .mpol_preferred_many },
+        .{ "MPOL_LOCAL", .mpol_local },
+    };
+
+    for (modes) |item| {
+        if (std.mem.eql(u8, value, item[0])) {
+            return item[1];
+        }
+    }
+
+    return error.InvalidConfigFormat;
+}
+
+fn parseMemoryPolicyFlag(value: []const u8) !MemoryPolicyFlag {
+    const flags = [_]struct { []const u8, MemoryPolicyFlag }{
+        .{ "MPOL_F_NUMA_BALANCING", .numa_balancing },
+        .{ "MPOL_F_RELATIVE_NODES", .relative_nodes },
+        .{ "MPOL_F_STATIC_NODES", .static_nodes },
+    };
+
+    for (flags) |item| {
+        if (std.mem.eql(u8, value, item[0])) {
+            return item[1];
+        }
+    }
+
+    return error.InvalidConfigFormat;
+}
