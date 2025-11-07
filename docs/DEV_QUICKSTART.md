@@ -7,6 +7,7 @@ This guide helps you set up a development environment quickly.
 - Arch: amd64 (x86_64)
 - Packages: libcap-dev, libseccomp-dev, libyajl-dev
 - Compiler: Zig 0.15.1
+- Spec baseline: OCI Runtime Specification v1.3.0 (Linux additions fully parsed)
 
 ## Setup
 ```bash
