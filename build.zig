@@ -18,6 +18,33 @@ pub fn build(b: *std.Build) void {
     const build_options = b.addOptions();
     build_options.addOption([]const u8, "app_version", app_version);
 
+    // Backend feature flags (all enabled by default)
+    const enable_backend_proxmox_lxc = b.option(bool, "enable-backend-proxmox-lxc", "Enable Proxmox LXC backend (default: true)") orelse true;
+    const enable_backend_proxmox_vm = b.option(bool, "enable-backend-proxmox-vm", "Enable Proxmox VM backend (default: true)") orelse true;
+    const enable_backend_crun = b.option(bool, "enable-backend-crun", "Enable Crun OCI backend (default: true)") orelse true;
+    const enable_backend_runc = b.option(bool, "enable-backend-runc", "Enable Runc OCI backend (default: true)") orelse true;
+
+    build_options.addOption(bool, "enable_backend_proxmox_lxc", enable_backend_proxmox_lxc);
+    build_options.addOption(bool, "enable_backend_proxmox_vm", enable_backend_proxmox_vm);
+    build_options.addOption(bool, "enable_backend_crun", enable_backend_crun);
+    build_options.addOption(bool, "enable_backend_runc", enable_backend_runc);
+
+    // Integration feature flags (all enabled by default)
+    const enable_zfs = b.option(bool, "enable-zfs", "Enable ZFS integration (default: true)") orelse true;
+    const enable_bfc = b.option(bool, "enable-bfc", "Enable BFC integration (default: true)") orelse true;
+    const enable_proxmox_api = b.option(bool, "enable-proxmox-api", "Enable Proxmox API integration (default: true)") orelse true;
+
+    build_options.addOption(bool, "enable_zfs", enable_zfs);
+    build_options.addOption(bool, "enable_bfc", enable_bfc);
+    build_options.addOption(bool, "enable_proxmox_api", enable_proxmox_api);
+
+    // Feature flags
+    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI (requires libcrun and systemd, default: false)") orelse false;
+    const enable_plugins = b.option(bool, "enable-plugins", "Enable plugin system (default: true)") orelse true;
+
+    build_options.addOption(bool, "enable_libcrun_abi", enable_libcrun_abi);
+    build_options.addOption(bool, "enable_plugins", enable_plugins);
+
     // Core module
     const core_mod = b.addModule("core", .{
         .root_source_file = b.path("src/core/mod.zig"),
@@ -40,6 +67,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "utils", .module = utils_mod },
         },
     });
+    backends_mod.addOptions("build_options", build_options);
 
     // CLI module
     const cli_mod = b.addModule("cli", .{
@@ -58,6 +86,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "core", .module = core_mod },
         },
     });
+    integrations_mod.addOptions("build_options", build_options);
 
     // Main executable
     const main_mod = b.createModule(.{
@@ -81,14 +110,10 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("seccomp");
     exe.linkSystemLibrary("yajl");
     
-    // Optional: Link libcrun and systemd only if libcrun ABI is enabled
-    // Check if libcrun ABI is enabled by checking the feature flag
-    // Note: We can't directly check the flag from build.zig, so we'll use a workaround:
-    // Try to link them, but since USE_LIBCRUN_ABI defaults to false, they won't be used at runtime
-    // The linking will only succeed if the libraries are installed, which is fine
-    // If they're not available, we'll skip linking them (requires build option)
-    const link_libcrun = b.option(bool, "link-libcrun", "Link libcrun and systemd libraries (default: false)") orelse false;
-    if (link_libcrun) {
+    // Optional: Link libcrun and systemd if libcrun ABI is enabled
+    // The link-libcrun option is deprecated in favor of enable-libcrun-abi
+    const link_libcrun = b.option(bool, "link-libcrun", "Link libcrun and systemd libraries (deprecated, use enable-libcrun-abi)") orelse enable_libcrun_abi;
+    if (link_libcrun or enable_libcrun_abi) {
         exe.linkSystemLibrary("crun");
         exe.linkSystemLibrary("systemd");
     }
@@ -148,9 +173,9 @@ pub fn build(b: *std.Build) void {
     test_exe.linkSystemLibrary("cap");
     test_exe.linkSystemLibrary("seccomp");
     test_exe.linkSystemLibrary("yajl");
-    
-    // Optional: Link libcrun and systemd only if requested (reuse link_libcrun from above)
-    if (link_libcrun) {
+
+    // Optional: Link libcrun and systemd if libcrun ABI is enabled (reuse link_libcrun from above)
+    if (link_libcrun or enable_libcrun_abi) {
         test_exe.linkSystemLibrary("crun");
         test_exe.linkSystemLibrary("systemd");
     }
