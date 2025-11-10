@@ -25,9 +25,10 @@ zig build
 ```
 
 ### libcrun ABI requirements
-- `pkg-config` must resolve both `libcrun` and `libsystemd` development packages.
+- Vendored sources live in `deps/crun` — run `make prepare-crun` to generate `config.h`/`git-version.h`.
+- Install `libsystemd-dev` (or equivalent) so that `pkg-config libsystemd --libs` succeeds.
 - Build command: `zig build -Denable-libcrun-abi=true` (default).
-- The build fails if those dependencies are missing; install the dev packages or use the vendored libcrun workflow.
+- The build fails if `libsystemd` development files are missing.
 
 ## Local Smoke (no Proxmox)
 ```bash

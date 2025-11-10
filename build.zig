@@ -16,6 +16,46 @@ fn pkgConfigExists(b: *Build, package: []const u8) bool {
     };
 }
 
+fn collectCFiles(
+    allocator: std.mem.Allocator,
+    dir_path: []const u8,
+    list: *std.ArrayListUnmanaged([]const u8),
+) !void {
+    var dir = try std.fs.cwd().openDir(dir_path, .{ .iterate = true });
+    defer dir.close();
+
+    var it = dir.iterate();
+    while (try it.next()) |entry| {
+        const entry_path = try std.fs.path.join(allocator, &[_][]const u8{ dir_path, entry.name });
+        switch (entry.kind) {
+            .file => {
+                if (std.mem.endsWith(u8, entry.name, ".c")) {
+                    if (std.mem.startsWith(u8, entry.name, "basic_test") or std.mem.eql(u8, entry.name, "validate.c")) {
+                        allocator.free(entry_path);
+                    } else {
+                        try list.append(allocator, entry_path);
+                    }
+                } else {
+                    allocator.free(entry_path);
+                }
+            },
+            .directory => {
+                try collectCFiles(allocator, entry_path, list);
+                allocator.free(entry_path);
+            },
+            else => allocator.free(entry_path),
+        }
+    }
+}
+
+fn gatherLibcrunSources(b: *Build) ![]const []const u8 {
+    var files = std.ArrayListUnmanaged([]const u8){};
+    defer files.deinit(b.allocator);
+    try collectCFiles(b.allocator, "deps/crun/src/libcrun", &files);
+    try collectCFiles(b.allocator, "deps/crun/libocispec/src", &files);
+    return files.toOwnedSlice(b.allocator);
+}
+
 // Version information is sourced from VERSION file at build time
 
 pub fn build(b: *std.Build) void {
@@ -89,6 +129,60 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    var libcrun_lib: ?*std.Build.Step.Compile = null;
+
+    if (enable_libcrun_abi) {
+        libsystemd_available = pkgConfigExists(b, "libsystemd");
+        if (!libsystemd_available) {
+            std.debug.print("[build] error: libsystemd not detected; libcrun ABI backend requires libsystemd development files.\n", .{});
+            @panic("libsystemd not available");
+        }
+        const libcrun_sources = gatherLibcrunSources(b) catch |err| {
+            std.debug.print("[build] error: failed collecting libcrun sources: {}\n", .{err});
+            @panic("libcrun sources missing");
+        };
+        const libcrun_module = b.createModule(.{
+            .root_source_file = b.path("src/backends/crun/libcrun_stub.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        libcrun_module.addCSourceFiles(.{
+            .files = libcrun_sources,
+            .flags = &[_][]const u8{
+                "-std=gnu11",
+                "-D_GNU_SOURCE",
+                "-Wno-macro-redefined",
+                "-DLIBCRUN_STATIC",
+                "-DLIBCRUN_PUBLIC=",
+            },
+        });
+        libcrun_module.addIncludePath(.{ .cwd_relative = "/usr/include" });
+        libcrun_module.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+        libcrun_module.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
+        libcrun_module.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
+        libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun" });
+        libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
+        libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
+        libcrun_module.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
+        libcrun_module.addIncludePath(.{ .cwd_relative = "src/backends/crun" });
+        const libcrun_compile = b.addLibrary(.{
+            .name = "libcrun_vendor",
+            .root_module = libcrun_module,
+            .linkage = .static,
+        });
+        libcrun_compile.linkSystemLibrary("c");
+        libcrun_compile.linkSystemLibrary("pthread");
+        libcrun_compile.linkSystemLibrary("dl");
+        libcrun_compile.linkSystemLibrary("rt");
+        libcrun_compile.root_module.linkSystemLibrary("systemd", .{ .use_pkg_config = .no, .needed = true });
+        libcrun_lib = libcrun_compile;
+        libcrun_abi_active = true;
+    }
+
+    feature_options.addOption(bool, "libcrun_abi_requested", enable_libcrun_abi);
+    feature_options.addOption(bool, "libcrun_abi_active", libcrun_abi_active);
+    feature_options.addOption(bool, "libsystemd_available", libsystemd_available);
+
     // Main executable
     const main_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -106,31 +200,6 @@ pub fn build(b: *std.Build) void {
     // Link system libraries
     exe.linkSystemLibrary("c");
 
-    // Required system libraries
-    exe.linkSystemLibrary("cap");
-    exe.linkSystemLibrary("seccomp");
-    exe.linkSystemLibrary("yajl");
-
-    if (enable_libcrun_abi) {
-        const libcrun_available = pkgConfigExists(b, "libcrun");
-        if (!libcrun_available) {
-            std.debug.print("[build] error: libcrun not detected via pkg-config. Install libcrun development files or enable vendored libcrun.\n", .{});
-            @panic("libcrun not available");
-        }
-        libsystemd_available = pkgConfigExists(b, "libsystemd");
-        if (!libsystemd_available) {
-            std.debug.print("[build] error: libsystemd not detected; libcrun ABI backend requires libsystemd development files.\n", .{});
-            @panic("libsystemd not available");
-        }
-        exe.linkSystemLibrary("crun");
-        exe.linkSystemLibrary("systemd");
-        libcrun_abi_active = true;
-    }
-
-    feature_options.addOption(bool, "libcrun_abi_requested", enable_libcrun_abi);
-    feature_options.addOption(bool, "libcrun_abi_active", libcrun_abi_active);
-    feature_options.addOption(bool, "libsystemd_available", libsystemd_available);
-
     // No additional static Zig libraries linked to avoid duplicate start symbol
 
     // Add include paths
@@ -138,11 +207,23 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
     exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
     exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
+    exe.addIncludePath(.{ .cwd_relative = "deps/crun" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
-    exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
     exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
     exe.addIncludePath(.{ .cwd_relative = "src/backends/crun" }); // For libcrun_wrapper.h
+
+    if (libcrun_lib) |lib| {
+        exe.root_module.linkLibrary(lib);
+        exe.root_module.linkSystemLibrary("systemd", .{ .use_pkg_config = .no, .needed = true });
+        exe.linkSystemLibrary("cap");
+        exe.linkSystemLibrary("seccomp");
+        exe.linkSystemLibrary("yajl");
+        exe.linkSystemLibrary("systemd");
+        exe.linkSystemLibrary("pthread");
+        exe.linkSystemLibrary("dl");
+        exe.linkSystemLibrary("rt");
+    }
 
     // Add module dependencies
     exe.root_module.addImport("core", core_mod);
@@ -182,34 +263,33 @@ pub fn build(b: *std.Build) void {
 
     test_exe.linkSystemLibrary("c");
 
-    // Required system libraries for tests
-    test_exe.linkSystemLibrary("cap");
-    test_exe.linkSystemLibrary("seccomp");
-    test_exe.linkSystemLibrary("yajl");
-
-    // Optional: Link libcrun/systemd for tests when ABI active
-    if (libcrun_abi_active) {
-        test_exe.linkSystemLibrary("crun");
+    if (libcrun_lib) |lib| {
+        test_exe.root_module.linkLibrary(lib);
+        test_exe.root_module.linkSystemLibrary("systemd", .{ .use_pkg_config = .no, .needed = true });
+        test_exe.linkSystemLibrary("cap");
+        test_exe.linkSystemLibrary("seccomp");
+        test_exe.linkSystemLibrary("yajl");
         test_exe.linkSystemLibrary("systemd");
+        test_exe.linkSystemLibrary("pthread");
+        test_exe.linkSystemLibrary("dl");
+        test_exe.linkSystemLibrary("rt");
     }
-    // No additional static Zig libraries linked into tests
 
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
     test_exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
     test_exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
+    test_exe.addIncludePath(.{ .cwd_relative = "deps/crun" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
-    test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
-    test_exe.addIncludePath(.{ .cwd_relative = "src/backends/crun" }); // For libcrun_wrapper.h
+    test_exe.addIncludePath(.{ .cwd_relative = "src/backends/crun" });
 
     test_exe.root_module.addImport("core", core_mod);
     test_exe.root_module.addImport("cli", cli_mod);
     test_exe.root_module.addImport("backends", backends_mod);
     test_exe.root_module.addImport("integrations", integrations_mod);
     test_exe.root_module.addImport("utils", utils_mod);
-    // zig-json import removed for Zig 0.15.1 compatibility
 
     const run_test = b.addRunArtifact(test_exe);
 
