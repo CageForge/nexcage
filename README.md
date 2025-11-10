@@ -4,8 +4,9 @@ Next-generation container runtime for Proxmox VE using LXC and OCI backends (cru
 
 ## Compatibility Snapshot
 - **OCI Runtime Specification**: fully parses Linux additions up to v1.3.0 (NUMA memoryPolicy, Intel RDT monitoring, netDevices inventory).
+- **Network integration**: `linux.netDevices` aliases are applied to pct `--netX` arguments and `/etc/network/interfaces` with automatic bridge fallback.
 - **Proxmox VE**: verified on 8.x hypervisors; upcoming work tracks 9.x updates.
-- **libcrun ABI (required for crun)**: build with `zig build -Denable-libcrun-abi=true` (default). Requires `pkg-config` access to `libcrun` and `libsystemd`; the build fails if those development files are missing.
+- **libcrun ABI (required for crun)**: build compiles vendored sources from `deps/crun`; run `make prepare-crun` to refresh headers. Requires `pkg-config` access to `libsystemd`; the build fails if those development files are missing.
 
 - Architecture: amd64 (x86_64) only
 - Environment: runs on Proxmox VE host (no containerization)

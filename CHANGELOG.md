@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Apply OCI `linux.netDevices` aliases when provisioning Proxmox LXC containers, generating pct `--netX` arguments and matching `/etc/network/interfaces` entries.
+- Persist parsed `linux.intelRdt` profiles alongside container state for downstream QoS automation.
+
+### Changed
+- Template metadata now captures Intel RDT and network device information for visibility in the cache API.
+
+### Documentation
+- Clarified v0.7.4 upgrade notes with the new runtime metadata and networking behaviour.
+
 ## [0.7.4] - 2025-11-07
 
 ### 🚀 Spec Parity Release: OCI Runtime v1.3.0 Support
@@ -20,7 +32,7 @@ This release upgrades the OCI ingestion pipeline to fully understand the Linux a
 ### Changed
 - Hardened error handling around malformed `memoryPolicy`, `intelRdt`, and `netDevices` entries to surface actionable diagnostics.
 - Unit tests updated to cover OCI 1.3.0 fields and prevent regressions.
-- Removed the legacy crun CLI fallback; builds now require libcrun + libsystemd when targeting the crun backend.
+- Removed the legacy crun CLI fallback; builds now compile vendored `deps/crun` sources and require only libsystemd when targeting the crun backend.
 
 ### Testing
 - `zig build`
