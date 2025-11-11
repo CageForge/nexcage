@@ -93,6 +93,12 @@ pub fn build(b: *std.Build) void {
     });
     core_mod.addOptions("build_options", build_options);
 
+    const oci_spec_dep = b.dependency("oci_spec_zig", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const oci_spec_mod = oci_spec_dep.module("oci_spec");
+
     // Utils module
     const utils_mod = b.addModule("utils", .{
         .root_source_file = b.path("src/utils/mod.zig"),
@@ -107,6 +113,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "core", .module = core_mod },
             .{ .name = "utils", .module = utils_mod },
+            .{ .name = "oci_spec", .module = oci_spec_mod },
         },
     });
     backends_mod.addOptions("feature_options", feature_options);

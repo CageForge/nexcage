@@ -7,15 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- _No changes yet._
+
+## [0.7.5] - 2025-11-11
+
+### 🚀 ABI-First Release: oci-specs-zig Integration
+
+This release finalises the libcrun ABI migration by consuming OCI Runtime Specification v1.3.0 types from the new `oci-specs-zig` package and promoting the metadata fields through Proxmox LXC tooling.
+
 ### Added
+- Pin the external `oci-specs-zig` package (vendored via `build.zig.zon`) to provide generated runtime/image/distribution schemas.
 - Apply OCI `linux.netDevices` aliases when provisioning Proxmox LXC containers, generating pct `--netX` arguments and matching `/etc/network/interfaces` entries.
 - Persist parsed `linux.intelRdt` profiles alongside container state for downstream QoS automation.
 
 ### Changed
 - Template metadata now captures Intel RDT and network device information for visibility in the cache API.
+- `oci_bundle.zig` now relies on shared runtime structs from `oci-specs-zig`, ensuring parity with upstream schema updates.
+- Build pipeline links the new package and ensures `zig build`/`zig build test` exercise vendored libcrun plus schema-based parsing.
 
 ### Documentation
-- Clarified v0.7.4 upgrade notes with the new runtime metadata and networking behaviour.
+- README and `docs/DEV_QUICKSTART.md` updated with instructions for managing the `oci-specs-zig` dependency and ABI-only architecture.
+- `docs/releases/NOTES_v0.7.5.md` captures detailed upgrade guidance for the ABI-based release.
 
 ## [0.7.4] - 2025-11-07
 
