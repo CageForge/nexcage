@@ -24,6 +24,17 @@ zig build
 ./zig-out/bin/nexcage version
 ```
 
+### libcrun ABI requirements
+- Vendored sources live in `deps/crun` — run `make prepare-crun` to generate `config.h`/`git-version.h`.
+- Install `libsystemd-dev` (or equivalent) so that `pkg-config libsystemd --libs` succeeds.
+- Build command: `zig build -Denable-libcrun-abi=true` (default).
+- The build fails if `libsystemd` development files are missing.
+
+### OCI specification package
+- OCI schemas are consumed via the `oci-specs-zig` package referenced in `build.zig.zon`.
+- To refresh the pinned version run `zig fetch --save https://github.com/CageForge/oci-specs-zig/archive/<commit>.tar.gz`.
+- Generated types provide memory policy, Intel RDT, and netDevices parsing for Proxmox translation layers.
+
 ## Local Smoke (no Proxmox)
 ```bash
 ./zig-out/bin/nexcage create --help

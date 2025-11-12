@@ -1,5 +1,13 @@
 const std = @import("std");
 const core = @import("core");
+const oci_spec = @import("oci_spec");
+const runtime = oci_spec.runtime;
+
+pub const MemoryPolicyMode = runtime.MemoryPolicyMode;
+pub const MemoryPolicyFlag = runtime.MemoryPolicyFlag;
+pub const MemoryPolicyConfig = runtime.MemoryPolicy;
+pub const IntelRdtConfig = runtime.IntelRdt;
+pub const NetDeviceConfig = runtime.NetDevice;
 
 /// OCI Bundle parser for Proxmox LXC backend
 /// Parses OCI bundle (config.json + rootfs) and converts to LXC configuration
@@ -765,64 +773,6 @@ pub const NamespaceConfig = struct {
     pub fn deinit(self: *NamespaceConfig) void {
         self.allocator.free(self.type);
         if (self.path) |p| self.allocator.free(p);
-    }
-};
-
-pub const MemoryPolicyMode = enum {
-    mpol_default,
-    mpol_bind,
-    mpol_interleave,
-    mpol_weighted_interleave,
-    mpol_preferred,
-    mpol_preferred_many,
-    mpol_local,
-};
-
-pub const MemoryPolicyFlag = enum {
-    numa_balancing,
-    relative_nodes,
-    static_nodes,
-};
-
-pub const MemoryPolicyConfig = struct {
-    allocator: std.mem.Allocator,
-    mode: ?MemoryPolicyMode = null,
-    nodes: ?[]const u8 = null,
-    flags: ?[]MemoryPolicyFlag = null,
-
-    pub fn deinit(self: *MemoryPolicyConfig) void {
-        if (self.nodes) |nodes| self.allocator.free(nodes);
-        if (self.flags) |flags| self.allocator.free(flags);
-    }
-};
-
-pub const IntelRdtConfig = struct {
-    allocator: std.mem.Allocator,
-    clos_id: ?[]const u8 = null,
-    schemata: ?[]const []const u8 = null,
-    l3_cache_schema: ?[]const u8 = null,
-    mem_bw_schema: ?[]const u8 = null,
-    enable_monitoring: ?bool = null,
-
-    pub fn deinit(self: *IntelRdtConfig) void {
-        if (self.clos_id) |id| self.allocator.free(id);
-        if (self.l3_cache_schema) |schema| self.allocator.free(schema);
-        if (self.mem_bw_schema) |schema| self.allocator.free(schema);
-        if (self.schemata) |schemata| {
-            for (schemata) |entry| self.allocator.free(entry);
-            self.allocator.free(schemata);
-        }
-    }
-};
-
-pub const NetDeviceConfig = struct {
-    allocator: std.mem.Allocator,
-    alias: []const u8,
-    name: ?[]const u8 = null,
-
-    pub fn deinit(self: *NetDeviceConfig) void {
-        self.allocator.free(self.alias);
-        if (self.name) |value| self.allocator.free(value);
     }
 };
 

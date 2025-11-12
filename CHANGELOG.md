@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+- _No changes yet._
+
+## [0.7.5] - 2025-11-11
+
+### 🚀 ABI-First Release: oci-specs-zig Integration
+
+This release finalises the libcrun ABI migration by consuming OCI Runtime Specification v1.3.0 types from the new `oci-specs-zig` package and promoting the metadata fields through Proxmox LXC tooling.
+
+### Added
+- Pin the external `oci-specs-zig` package (vendored via `build.zig.zon`) to provide generated runtime/image/distribution schemas.
+- Apply OCI `linux.netDevices` aliases when provisioning Proxmox LXC containers, generating pct `--netX` arguments and matching `/etc/network/interfaces` entries.
+- Persist parsed `linux.intelRdt` profiles alongside container state for downstream QoS automation.
+
+### Changed
+- Template metadata now captures Intel RDT and network device information for visibility in the cache API.
+- `oci_bundle.zig` now relies on shared runtime structs from `oci-specs-zig`, ensuring parity with upstream schema updates.
+- Build pipeline links the new package and ensures `zig build`/`zig build test` exercise vendored libcrun plus schema-based parsing.
+
+### Documentation
+- README and `docs/DEV_QUICKSTART.md` updated with instructions for managing the `oci-specs-zig` dependency and ABI-only architecture.
+- `docs/releases/NOTES_v0.7.5.md` captures detailed upgrade guidance for the ABI-based release.
+
 ## [0.7.4] - 2025-11-07
 
 ### 🚀 Spec Parity Release: OCI Runtime v1.3.0 Support
@@ -20,6 +44,7 @@ This release upgrades the OCI ingestion pipeline to fully understand the Linux a
 ### Changed
 - Hardened error handling around malformed `memoryPolicy`, `intelRdt`, and `netDevices` entries to surface actionable diagnostics.
 - Unit tests updated to cover OCI 1.3.0 fields and prevent regressions.
+- Removed the legacy crun CLI fallback; builds now compile vendored `deps/crun` sources and require only libsystemd when targeting the crun backend.
 
 ### Testing
 - `zig build`
