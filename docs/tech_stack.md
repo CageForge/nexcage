@@ -58,19 +58,6 @@ This document describes the technical stack used in the Nexcage project, includi
   - Enterprise features
   - Linux integration
 
-### 2. OverlayFS
-- **Version**: Linux kernel 5.15+
-- **Features**:
-  - Union filesystem
-  - Copy-on-write
-  - Performance
-  - Simplicity
-- **Why OverlayFS?**
-  - Kernel support
-  - Performance
-  - Simplicity
-  - Wide adoption
-
 ## Networking
 
 ### 1. Linux Network Stack
@@ -166,7 +153,7 @@ This document describes the technical stack used in the Nexcage project, includi
 
 ### 1. Metrics Collection
 - **Components**:
-  - Prometheus
+  - VictoriaMetrics
   - Grafana
   - Node Exporter
   - Custom exporters
@@ -179,8 +166,7 @@ This document describes the technical stack used in the Nexcage project, includi
 ### 2. Logging
 - **Components**:
   - Journald
-  - Fluentd
-  - Loki
+  - VictoriaLogs
   - Grafana
 - **Why these tools?**
   - Performance
@@ -214,4 +200,4 @@ This document describes the technical stack used in the Nexcage project, includi
   - Industry standard
   - Performance
   - Features
-  - Community 
+  - Community

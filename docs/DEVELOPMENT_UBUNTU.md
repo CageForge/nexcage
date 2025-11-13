@@ -1,8 +1,8 @@
 # Development Environment Setup on Ubuntu
 
-## 🚀 Development Environment for Proxmox LXCRI
+## 🚀 Development Environment for Nexcage
 
-While Proxmox LXCRI is designed exclusively for **Debian Linux** and **Proxmox VE** in production, developers can use **Ubuntu** as a development environment for code editing, compilation, and unit testing.
+While Nexcage is designed exclusively for **Debian Linux** and **Proxmox VE** in production, developers can use **Ubuntu** as a development environment for code editing, compilation, and unit testing.
 
 > **⚠️ Important**: Full integration testing requires a real Proxmox VE server. Ubuntu is only for development convenience.
 
