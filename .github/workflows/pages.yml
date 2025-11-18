@@ -26,10 +26,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Build with MkDocs
-        uses: docker://squidfunk/mkdocs-material:9.5.35
         with:
-          args: build --strict
+          enablement: true
+      - name: Build with MkDocs
+        run: |
+          docker run --rm -v "$PWD":/docs --entrypoint sh squidfunk/mkdocs-material:9.5.35 -c "pip install --no-cache-dir mike && mkdocs build --strict"
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

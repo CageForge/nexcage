@@ -8,7 +8,7 @@ pub const TemplateManager = struct {
     logger: ?*core.LogContext,
     cache_dir: []const u8,
     templates: std.HashMap([]const u8, TemplateInfo, StringContext, std.hash_map.default_max_load_percentage),
-    
+
     const Self = @This();
     const StringContext = struct {
         pub fn hash(self: @This(), s: []const u8) u64 {
@@ -44,15 +44,15 @@ pub const TemplateManager = struct {
     pub fn addTemplate(self: *Self, template_name: []const u8, template_info: TemplateInfo) !void {
         const name_copy = try self.allocator.dupe(u8, template_name);
         const info_copy = try template_info.clone(self.allocator);
-        
+
         // Remove existing entry if present
         if (self.templates.getPtr(template_name)) |existing| {
             self.allocator.free(existing.name);
             existing.deinit(self.allocator);
         }
-        
+
         try self.templates.put(name_copy, info_copy);
-        
+
         if (self.logger) |log| {
             try log.info("Added template to cache: {s}", .{template_name});
         }
@@ -67,13 +67,13 @@ pub const TemplateManager = struct {
     pub fn listTemplates(self: *Self) ![][]const u8 {
         var template_names = std.ArrayList([]const u8).init(self.allocator);
         defer template_names.deinit();
-        
+
         var iterator = self.templates.iterator();
         while (iterator.next()) |entry| {
             const name_copy = try self.allocator.dupe(u8, entry.key_ptr.*);
             try template_names.append(name_copy);
         }
-        
+
         return template_names.toOwnedSlice();
     }
 
@@ -95,9 +95,9 @@ pub const TemplateManager = struct {
         // Check template file integrity
         const template_path = try self.getTemplatePath(template_name);
         defer self.allocator.free(template_path);
-        
+
         const integrity_ok = try self.checkFileIntegrity(template_path);
-        
+
         if (self.logger) |log| {
             if (integrity_ok) {
                 try log.info("Template integrity verified: {s}", .{template_name});
@@ -105,7 +105,7 @@ pub const TemplateManager = struct {
                 try log.err("Template integrity check failed: {s}", .{template_name});
             }
         }
-        
+
         return integrity_ok;
     }
 
@@ -117,26 +117,26 @@ pub const TemplateManager = struct {
 
         const current_time = std.time.timestamp();
         const max_age_seconds = @as(i64, @intCast(max_age_days)) * 24 * 60 * 60;
-        
+
         var templates_to_remove = std.ArrayList([]const u8).init(self.allocator);
         defer templates_to_remove.deinit();
-        
+
         var iterator = self.templates.iterator();
         while (iterator.next()) |entry| {
             const template_name = entry.key_ptr.*;
             const template_info = entry.value_ptr.*;
-            
+
             // Check if template is older than max_age_days
             if (current_time - template_info.created_at > max_age_seconds) {
                 try templates_to_remove.append(template_name);
             }
         }
-        
+
         // Remove old templates
         for (templates_to_remove.items) |template_name| {
             try self.removeTemplate(template_name);
         }
-        
+
         if (self.logger) |log| {
             try log.info("Pruned {d} old templates", .{templates_to_remove.items.len});
         }
@@ -147,7 +147,7 @@ pub const TemplateManager = struct {
         if (self.templates.getPtr(template_name)) |template_info| {
             template_info.deinit(self.allocator);
             _ = self.templates.remove(template_name);
-            
+
             if (self.logger) |log| {
                 try log.info("Removed template from cache: {s}", .{template_name});
             }
@@ -160,7 +160,7 @@ pub const TemplateManager = struct {
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
-        
+
         return result.exit_code == 0 and std.mem.indexOf(u8, result.stdout, template_name) != null;
     }
 
@@ -174,7 +174,7 @@ pub const TemplateManager = struct {
         _ = self; // Avoid unused parameter warning
         const file = std.fs.cwd().openFile(file_path, .{}) catch return false;
         defer file.close();
-        
+
         // Simple integrity check - verify file is readable and has content
         const stat = file.stat() catch return false;
         return stat.size > 0;
@@ -185,14 +185,14 @@ pub const TemplateManager = struct {
         var child = std.process.Child.init(args, self.allocator);
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = .Pipe;
-        
+
         try child.spawn();
-        
+
         const stdout = try child.stdout.?.readToEndAlloc(self.allocator, 1024 * 1024);
         const stderr = try child.stderr.?.readToEndAlloc(self.allocator, 1024 * 1024);
-        
+
         const term = try child.wait();
-        
+
         return CommandResult{
             .stdout = stdout,
             .stderr = stderr,
@@ -239,11 +239,11 @@ pub const TemplateInfo = struct {
             .source_type = self.source_type,
             .metadata = null,
         };
-        
+
         if (self.metadata) |metadata| {
             cloned.metadata = try metadata.clone(allocator);
         }
-        
+
         return cloned;
     }
 };
@@ -264,6 +264,8 @@ pub const TemplateMetadata = struct {
     cmd: ?[]const []const u8 = null,
     working_directory: ?[]const u8 = null,
     labels: ?std.StringHashMap([]const u8) = null,
+    intel_rdt: ?IntelRdtMetadata = null,
+    net_devices: ?[]NetDeviceMetadata = null,
 
     pub fn init(allocator: std.mem.Allocator) TemplateMetadata {
         return TemplateMetadata{
@@ -291,11 +293,18 @@ pub const TemplateMetadata = struct {
             }
             labels.deinit();
         }
+        if (self.intel_rdt) |*intel| {
+            intel.deinit(allocator);
+        }
+        if (self.net_devices) |devices| {
+            for (devices) |*device| device.deinit(allocator);
+            allocator.free(devices);
+        }
     }
 
     pub fn clone(self: *const TemplateMetadata, allocator: std.mem.Allocator) !TemplateMetadata {
         var cloned = TemplateMetadata{};
-        
+
         if (self.image_name) |name| {
             cloned.image_name = try allocator.dupe(u8, name);
         }
@@ -304,6 +313,7 @@ pub const TemplateMetadata = struct {
         }
         if (self.entrypoint) |ep| {
             var entrypoint_array = try allocator.alloc([]const u8, ep.len);
+            errdefer allocator.free(entrypoint_array);
             for (ep, 0..) |arg, i| {
                 entrypoint_array[i] = try allocator.dupe(u8, arg);
             }
@@ -311,6 +321,7 @@ pub const TemplateMetadata = struct {
         }
         if (self.cmd) |cmd| {
             var cmd_array = try allocator.alloc([]const u8, cmd.len);
+            errdefer allocator.free(cmd_array);
             for (cmd, 0..) |arg, i| {
                 cmd_array[i] = try allocator.dupe(u8, arg);
             }
@@ -328,9 +339,78 @@ pub const TemplateMetadata = struct {
                 try cloned.labels.?.put(key, value);
             }
         }
-        
+        if (self.intel_rdt) |intel| {
+            var intel_clone = IntelRdtMetadata{};
+            if (intel.clos_id) |clos| intel_clone.clos_id = try allocator.dupe(u8, clos);
+            if (intel.l3_cache_schema) |schema| intel_clone.l3_cache_schema = try allocator.dupe(u8, schema);
+            if (intel.mem_bw_schema) |schema| intel_clone.mem_bw_schema = try allocator.dupe(u8, schema);
+            intel_clone.enable_monitoring = intel.enable_monitoring;
+            if (intel.schemata) |schemata| {
+                var schemata_array = try allocator.alloc([]const u8, schemata.len);
+                errdefer {
+                    for (schemata_array) |entry| if (entry.len > 0) allocator.free(entry);
+                    allocator.free(schemata_array);
+                }
+                for (schemata, 0..) |entry, i| {
+                    schemata_array[i] = try allocator.dupe(u8, entry);
+                }
+                intel_clone.schemata = schemata_array;
+            }
+            cloned.intel_rdt = intel_clone;
+        }
+        if (self.net_devices) |devices| {
+            var device_array = try allocator.alloc(NetDeviceMetadata, devices.len);
+            errdefer {
+                for (device_array) |device| {
+                    if (device.alias.len > 0) allocator.free(device.alias);
+                    if (device.bridge.len > 0) allocator.free(device.bridge);
+                    if (device.host_name) |name| if (name.len > 0) allocator.free(name);
+                }
+                allocator.free(device_array);
+            }
+            for (devices, 0..) |device, i| {
+                device_array[i] = .{};
+                device_array[i].alias = try allocator.dupe(u8, device.alias);
+                device_array[i].bridge = try allocator.dupe(u8, device.bridge);
+                if (device.host_name) |name| {
+                    device_array[i].host_name = try allocator.dupe(u8, name);
+                }
+            }
+            cloned.net_devices = device_array;
+        }
+
         return cloned;
     }
+
+    pub const IntelRdtMetadata = struct {
+        clos_id: ?[]const u8 = null,
+        schemata: ?[]const []const u8 = null,
+        l3_cache_schema: ?[]const u8 = null,
+        mem_bw_schema: ?[]const u8 = null,
+        enable_monitoring: ?bool = null,
+
+        pub fn deinit(self: *IntelRdtMetadata, allocator: std.mem.Allocator) void {
+            if (self.clos_id) |clos| if (clos.len > 0) allocator.free(clos);
+            if (self.l3_cache_schema) |schema| if (schema.len > 0) allocator.free(schema);
+            if (self.mem_bw_schema) |schema| if (schema.len > 0) allocator.free(schema);
+            if (self.schemata) |schemata| {
+                for (schemata) |entry| if (entry.len > 0) allocator.free(entry);
+                if (schemata.len > 0) allocator.free(schemata);
+            }
+        }
+    };
+
+    pub const NetDeviceMetadata = struct {
+        alias: []const u8 = "",
+        bridge: []const u8 = "",
+        host_name: ?[]const u8 = null,
+
+        pub fn deinit(self: *NetDeviceMetadata, allocator: std.mem.Allocator) void {
+            if (self.alias.len > 0) allocator.free(self.alias);
+            if (self.bridge.len > 0) allocator.free(self.bridge);
+            if (self.host_name) |name| if (name.len > 0) allocator.free(name);
+        }
+    };
 };
 
 /// Command execution result

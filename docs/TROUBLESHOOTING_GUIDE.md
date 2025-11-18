@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document contains detailed instructions for diagnosing and resolving common problems that occur when working with nexcage. Use debug logging for detailed problem analysis.
+This document contains detailed instructions for diagnosing and resolving common problems that occur when working with Nexcage. Use debug logging for detailed problem analysis.
 
 ## Quick Diagnostics
 

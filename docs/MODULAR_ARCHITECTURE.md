@@ -375,4 +375,4 @@ The modular architecture makes it easy to add:
 
 ## Conclusion
 
-The modular architecture provides a solid foundation for Proxmox LXCRI, enabling clean code organization, easy extensibility, and maintainability. By following SOLID principles, the system remains flexible and robust while providing powerful container and VM management capabilities.
+The modular architecture provides a solid foundation for Nexcage, enabling clean code organization, easy extensibility, and maintainability. By following SOLID principles, the system remains flexible and robust while providing powerful container and VM management capabilities.

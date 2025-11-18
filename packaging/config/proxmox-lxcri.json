@@ -25,12 +25,6 @@
       "auto_cleanup": true
     }
   },
-  "checkpoint": {
-    "default_mode": "zfs",
-    "fallback_to_criu": true,
-    "criu_path": "/usr/sbin/criu",
-    "image_path": "/var/lib/nexcage/checkpoints"
-  },
   "networking": {
     "bridge": "vmbr0",
     "vlan_aware": true,

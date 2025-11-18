@@ -38,6 +38,10 @@ nav:
   - CI/CD: CI_CD_SETUP.md
   - Dependencies: DEPENDENCIES.md
   - Proxmox Testing: PROXMOX_TESTING.md
+  - Releases:
+    - v0.7.4 (OCI 1.3.0): releases/NOTES_v0.7.4.md
+    - v0.7.3: releases/NOTES_v0.7.3.md
+    - v0.7.2: releases/NOTES_v0.7.2.md
 
 docs_dir: docs
 plugins:

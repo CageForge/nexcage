@@ -1,8 +1,8 @@
 # CODEOWNERS
 # Order matters; last match wins.
 
-* @kubebsd @moriarti
+* @CageForge
 
-/docs/ @kubebsd
-/src/** @kubebsd @moriarti
+/docs/ @CageForge
+/src/** @CageForge
 /.github/workflows/** @moriarti
