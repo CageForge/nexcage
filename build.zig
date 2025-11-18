@@ -68,9 +68,15 @@ pub fn build(b: *std.Build) void {
     const version_bytes = std.fs.cwd().readFileAlloc(b.allocator, "VERSION", 64) catch @panic("Failed to read VERSION file");
     const app_version = std.mem.trim(u8, version_bytes, " \n\r\t");
 
-    // Create build options (one instance shared across all modules)
+    // Create separate build options to avoid module conflicts
+    // core_build_options: for core module (version info)
+    const core_build_options = b.addOptions();
+    core_build_options.addOption([]const u8, "app_version", app_version);
+
+    // build_options: for backends and integrations (feature flags)
     const build_options = b.addOptions();
-    build_options.addOption([]const u8, "app_version", app_version);
+
+    // feature_options: for crun backend (libcrun ABI flags)
     const feature_options = b.addOptions();
 
     // Feature flags
@@ -106,7 +112,7 @@ pub fn build(b: *std.Build) void {
     const core_mod = b.addModule("core", .{
         .root_source_file = b.path("src/core/mod.zig"),
     });
-    core_mod.addOptions("build_options", build_options);
+    core_mod.addOptions("build_options", core_build_options);
 
     const oci_spec_dep = b.dependency("oci_spec_zig", .{
         .target = target,
