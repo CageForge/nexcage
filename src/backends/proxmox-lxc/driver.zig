@@ -203,6 +203,120 @@ pub const ProxmoxLxcDriver = struct {
         return false;
     }
 
+    /// Get Proxmox VE version using pveversion command
+    /// Returns version string like "9.1" or null on error
+    pub fn getProxmoxVeVersion(self: *Self) !?[]const u8 {
+        const args = [_][]const u8{ "pveversion", "-v" };
+        const res = self.runCommand(&args) catch return null;
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) return null;
+
+        // Parse version from output like "pve-manager/9.1-1/..."
+        // Extract major.minor version
+        var lines = std.mem.splitScalar(u8, res.stdout, '\n');
+        while (lines.next()) |line| {
+            if (std.mem.indexOf(u8, line, "pve-manager/") != null) {
+                if (std.mem.indexOfScalar(u8, line, '/')) |slash_idx| {
+                    const version_part = line[slash_idx + 1 ..];
+                    // Find next dash or end to get version like "9.1-1"
+                    const dash_idx = std.mem.indexOfScalar(u8, version_part, '-') orelse version_part.len;
+                    const version_str = version_part[0..dash_idx];
+                    // Extract major.minor
+                    const dot_idx = std.mem.indexOfScalar(u8, version_str, '.') orelse return null;
+                    const major = version_str[0..dot_idx];
+                    const minor_start = dot_idx + 1;
+                    const minor_end = std.mem.indexOfScalar(u8, version_str[minor_start..], '-') orelse version_str.len;
+                    const minor = version_str[minor_start..minor_end];
+                    
+                    // Return formatted version "major.minor"
+                    return try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ major, minor });
+                }
+            }
+        }
+        return null;
+    }
+
+    /// Check if Proxmox VE version is >= 9.1 (supports OCI Registry pull)
+    pub fn supportsOciRegistryPull(self: *Self) !bool {
+        const version_str = try self.getProxmoxVeVersion();
+        if (version_str) |ver| {
+            defer self.allocator.free(ver);
+            
+            // Parse version "major.minor"
+            const dot_idx = std.mem.indexOfScalar(u8, ver, '.') orelse return false;
+            const major_str = ver[0..dot_idx];
+            const minor_str = ver[dot_idx + 1 ..];
+            
+            const major = std.fmt.parseInt(u32, major_str, 10) catch return false;
+            const minor = std.fmt.parseInt(u32, minor_str, 10) catch return false;
+            
+            // Version >= 9.1 supports OCI Registry pull
+            return major > 9 or (major == 9 and minor >= 1);
+        }
+        return false;
+    }
+
+    /// Pull OCI image from registry using pveam command
+    /// image_ref: OCI image reference like "docker.io/library/redis:latest"
+    /// storage: Proxmox storage name (default: "local")
+    /// Returns template name on success
+    pub fn pullOciImage(self: *Self, image_ref: []const u8, storage: []const u8) ![]const u8 {
+        if (self.logger) |log| {
+            try log.info("Pulling OCI image from registry: {s}", .{image_ref});
+        }
+
+        // Use pveam pull command: pveam pull <storage> <image_ref>
+        var args = std.ArrayListUnmanaged([]const u8){};
+        defer args.deinit(self.allocator);
+        
+        try args.append(self.allocator, "pveam");
+        try args.append(self.allocator, "pull");
+        try args.append(self.allocator, storage);
+        try args.append(self.allocator, image_ref);
+
+        const res = try self.runCommand(args.items);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+
+        if (res.exit_code != 0) {
+            if (self.logger) |log| {
+                try log.err("Failed to pull OCI image {s}: {s}", .{ image_ref, res.stderr });
+            }
+            return error.OciPullFailed;
+        }
+
+        // Extract template name from output or construct it from image_ref
+        // Template name format: <storage>:vztmpl/<image_name>-<tag>.tar.zst
+        // For "docker.io/library/redis:latest" -> "redis-latest"
+        var template_name = std.ArrayListUnmanaged(u8){};
+        defer template_name.deinit(self.allocator);
+
+        // Extract image name and tag from image_ref
+        // Format: registry/path/image:tag or image:tag
+        const colon_idx = std.mem.lastIndexOfScalar(u8, image_ref, ':') orelse image_ref.len;
+        const image_part = image_ref[0..colon_idx];
+        const tag_part = if (colon_idx < image_ref.len) image_ref[colon_idx + 1 ..] else "latest";
+
+        // Extract image name (last part after /)
+        const slash_idx = std.mem.lastIndexOfScalar(u8, image_part, '/');
+        const image_name = if (slash_idx) |idx| image_part[idx + 1 ..] else image_part;
+
+        // Construct template name: storage:vztmpl/image_name-tag.tar.zst
+        // Remove any special characters from image_name and tag_part
+        try template_name.writer(self.allocator).print("{s}:vztmpl/{s}-{s}.tar.zst", .{ storage, image_name, tag_part });
+
+        if (self.logger) |log| {
+            try log.info("Successfully pulled OCI image, template: {s}", .{template_name.items});
+        }
+
+        return template_name.toOwnedSlice(self.allocator);
+    }
+
     /// Set ZFS pool for containers
     pub fn setZFSPool(self: *Self, pool: []const u8) !void {
         if (self.zfs_pool) |old_pool| {
@@ -650,19 +764,63 @@ pub const ProxmoxLxcDriver = struct {
                 try stdout.writeAll(image_path);
                 try stdout.writeAll("'\n");
             }
-            // Classify image type:
-            // - Proxmox template if:
-            //   a) ends with .tar.zst
-            //   b) contains ":vztmpl/" (storage template path)
-            // - Otherwise:
-            //   c) treat as OCI bundle path if directory exists
-            //   d) strings like "ubuntu:20.04" are NOT proxmox templates
-            stderr.writeAll("[DRIVER] create: Checking image type\n") catch {};
-            const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
-            const has_vztmpl = std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
-            const has_colon = std.mem.indexOf(u8, image_path, ":") != null;
-            const has_slash = std.mem.indexOf(u8, image_path, "/") != null;
-            const is_proxmox_template = is_tar or has_vztmpl;
+
+            // Check if Proxmox VE version supports OCI Registry pull (9.1+)
+            const supports_oci = self.supportsOciRegistryPull() catch false;
+            if (supports_oci) {
+                if (self.logger) |log| {
+                    log.info("Proxmox VE 9.1+ detected, OCI Registry pull supported", .{}) catch {};
+                }
+                
+                // Check if image_path looks like an OCI image reference
+                // Format: registry/path/image:tag or image:tag
+                // Examples: docker.io/library/redis:latest, redis:latest
+                const has_colon = std.mem.indexOf(u8, image_path, ":") != null;
+                const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
+                const has_vztmpl = std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
+                const is_proxmox_template = is_tar or has_vztmpl;
+                
+                // If it looks like an OCI image reference (has colon, not a Proxmox template, not a local path)
+                if (has_colon and !is_proxmox_template and !std.fs.path.isAbsolute(image_path)) {
+                    if (self.logger) |log| {
+                        log.info("Detected OCI image reference, pulling from registry: {s}", .{image_path}) catch {};
+                    }
+                    
+                    // Pull OCI image from registry
+                    const storage = "local"; // Default storage, could be configurable
+                    const pulled_template = try self.pullOciImage(image_path, storage);
+                    defer self.allocator.free(pulled_template);
+                    
+                    // Use pulled template
+                    template_name = try self.allocator.dupe(u8, pulled_template);
+                    
+                    if (self.logger) |log| {
+                        log.info("Using pulled OCI template: {s}", .{pulled_template}) catch {};
+                    }
+                    
+                    // Skip further image processing
+                    stderr.writeAll("[DRIVER] create: OCI image pulled, skipping further processing\n") catch {};
+                } else {
+                    // Not an OCI image reference, continue with normal processing
+                    stderr.writeAll("[DRIVER] create: Not an OCI image reference, continuing normal processing\n") catch {};
+                }
+            }
+
+            // Classify image type (only if not already processed as OCI image):
+            // Skip if template_name is already set (from OCI pull)
+            if (template_name == null) {
+                // - Proxmox template if:
+                //   a) ends with .tar.zst
+                //   b) contains ":vztmpl/" (storage template path)
+                // - Otherwise:
+                //   c) treat as OCI bundle path if directory exists
+                //   d) strings like "ubuntu:20.04" are NOT proxmox templates
+                stderr.writeAll("[DRIVER] create: Checking image type\n") catch {};
+                const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
+                const has_vztmpl = std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
+                const has_colon = std.mem.indexOf(u8, image_path, ":") != null;
+                const has_slash = std.mem.indexOf(u8, image_path, "/") != null;
+                const is_proxmox_template = is_tar or has_vztmpl;
             stderr.writeAll("[DRIVER] create: is_tar = ") catch {};
             if (is_tar) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
             stderr.writeAll("[DRIVER] create: has_vztmpl = ") catch {};
@@ -739,6 +897,7 @@ pub const ProxmoxLxcDriver = struct {
                     try stdout.writeAll("[DRIVER] create: OCI bundle processed, template_name set\n");
                 }
             }
+            } // End of if (template_name == null)
         } else {
             stderr.writeAll("[DRIVER] create: No image provided\n") catch {};
             if (self.debug_mode) try stdout.writeAll("[DRIVER] create: No image provided\n");
