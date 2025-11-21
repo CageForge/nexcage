@@ -86,9 +86,9 @@ pub fn build(b: *std.Build) void {
     var libcrun_abi_active = false;
     var libsystemd_available = false;
 
-    // Backend feature flags (all enabled by default)
+    // Backend feature flags (most enabled by default)
     const enable_backend_proxmox_lxc = b.option(bool, "enable-backend-proxmox-lxc", "Enable Proxmox LXC backend (default: true)") orelse true;
-    const enable_backend_proxmox_vm = b.option(bool, "enable-backend-proxmox-vm", "Enable Proxmox VM backend (default: true)") orelse true;
+    const enable_backend_proxmox_vm = b.option(bool, "enable-backend-proxmox-vm", "Enable Proxmox VM backend (default: false)") orelse false;
     const enable_backend_crun = b.option(bool, "enable-backend-crun", "Enable Crun OCI backend (default: true)") orelse true;
     const enable_backend_runc = b.option(bool, "enable-backend-runc", "Enable Runc OCI backend (default: true)") orelse true;
 
@@ -97,10 +97,10 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(bool, "enable_backend_crun", enable_backend_crun);
     build_options.addOption(bool, "enable_backend_runc", enable_backend_runc);
 
-    // Integration feature flags (all enabled by default)
+    // Integration feature flags (selective defaults)
     const enable_zfs = b.option(bool, "enable-zfs", "Enable ZFS integration (default: true)") orelse true;
-    const enable_bfc = b.option(bool, "enable-bfc", "Enable BFC integration (default: true)") orelse true;
-    const enable_proxmox_api = b.option(bool, "enable-proxmox-api", "Enable Proxmox API integration (default: true)") orelse true;
+    const enable_bfc = b.option(bool, "enable-bfc", "Enable BFC integration (default: false)") orelse false;
+    const enable_proxmox_api = b.option(bool, "enable-proxmox-api", "Enable Proxmox API integration (default: false)") orelse false;
 
     build_options.addOption(bool, "enable_zfs", enable_zfs);
     build_options.addOption(bool, "enable_bfc", enable_bfc);

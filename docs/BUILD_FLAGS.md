@@ -23,7 +23,7 @@ Control which container/VM backends are compiled into the binary.
 - **Features:** Full Proxmox VE integration, ZFS support, image conversion, VMID management
 
 ### `-Denable-backend-proxmox-vm=<bool>`
-- **Default:** `true`
+- **Default:** `false`
 - **Description:** Enable Proxmox VM (QEMU) backend
 - **Dependencies:** None
 - **Features:** QEMU virtual machine management via Proxmox VE
@@ -51,13 +51,13 @@ Control which external system integrations are compiled into the binary.
 - **Features:** ZFS snapshot and volume management for containers
 
 ### `-Denable-bfc=<bool>`
-- **Default:** `true`
+- **Default:** `false`
 - **Description:** Enable BFC (Binary Format Converter) integration
 - **Dependencies:** BFC library
 - **Features:** Container image format conversion and manipulation
 
 ### `-Denable-proxmox-api=<bool>`
-- **Default:** `true`
+- **Default:** `false`
 - **Description:** Enable Proxmox API client integration
 - **Dependencies:** None
 - **Features:** Direct interaction with Proxmox VE API
@@ -138,11 +138,15 @@ zig build -Denable-libcrun-abi=true
 ```
 
 ### Lightweight Container Build
-Build with only Crun and Runc, minimal integrations:
+Build with only Crun and Runc backends, minimal integrations:
 ```bash
 zig build \
+  -Denable-backend-crun=true \
+  -Denable-backend-runc=true \
   -Denable-backend-proxmox-lxc=false \
   -Denable-backend-proxmox-vm=false \
+  -Denable-zfs=false \
+  -Denable-bfc=false \
   -Denable-proxmox-api=false \
   -Denable-plugins=false
 ```

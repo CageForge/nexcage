@@ -84,8 +84,8 @@ docker build -t nexcage:latest .
 ```
 
 This builds with:
-- All backends enabled (Proxmox LXC, Proxmox VM, Crun, Runc)
-- All integrations enabled (ZFS, BFC, Proxmox API)
+- Core backends enabled (Proxmox LXC, Crun, Runc)
+- ZFS integration enabled
 - Plugin system enabled
 - CLI-based Crun driver (libcrun ABI disabled)
 
@@ -149,7 +149,7 @@ Configure via `.env` file or export:
 ```bash
 # .env file
 LOG_LEVEL=debug
-BUILD_VERSION=1.0.0
+BUILD_VERSION=0.7.4  # or 'latest'
 ```
 
 Or export:

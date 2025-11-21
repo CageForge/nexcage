@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y \
     libsystemd-dev \
     # Additional build dependencies for crun
     go-md2man \
-    libprotobuf-c-dev \
+    libprotobuf-c-dev \  # Required by crun for OCI runtime spec serialization
     libyajl-dev \
     && rm -rf /var/lib/apt/lists/*
 
