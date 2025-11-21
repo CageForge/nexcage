@@ -214,10 +214,29 @@ pub const ProxmoxLxcDriver = struct {
         }
         if (res.exit_code != 0) return null;
 
-        // Parse version from output like "pve-manager/9.1-1/..."
-        // Extract major.minor version
+        // Parse version from output like:
+        // proxmox-ve: 9.1.0 (running kernel: 6.14.8-2-pve)
+        // pve-manager: 9.1.1 (running version: 9.1.1/42db4a6cf33dac83)
         var lines = std.mem.splitScalar(u8, res.stdout, '\n');
         while (lines.next()) |line| {
+            // Try proxmox-ve: first (more reliable)
+            if (std.mem.startsWith(u8, line, "proxmox-ve:")) {
+                var version_part = std.mem.trimLeft(u8, line["proxmox-ve:".len..], " \t");
+                // Find space or end to get version like "9.1.0"
+                const space_idx = std.mem.indexOfScalar(u8, version_part, ' ') orelse version_part.len;
+                const version_str = version_part[0..space_idx];
+                // Extract major.minor (ignore patch version)
+                const dot_idx = std.mem.indexOfScalar(u8, version_str, '.') orelse return null;
+                const major = version_str[0..dot_idx];
+                const minor_start = dot_idx + 1;
+                const next_dot_idx = std.mem.indexOfScalar(u8, version_str[minor_start..], '.');
+                const minor_end = if (next_dot_idx) |idx| minor_start + idx else version_str.len;
+                const minor = version_str[minor_start..minor_end];
+                
+                // Return formatted version "major.minor"
+                return try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ major, minor });
+            }
+            // Fallback to pve-manager if proxmox-ve not found
             if (std.mem.indexOf(u8, line, "pve-manager/") != null) {
                 if (std.mem.indexOfScalar(u8, line, '/')) |slash_idx| {
                     const version_part = line[slash_idx + 1 ..];
@@ -308,11 +327,20 @@ pub const ProxmoxLxcDriver = struct {
             self.allocator.free(res.stderr);
         }
 
-        if (res.exit_code != 0) {
+        // Check if template already exists (exit code 25 means file exists)
+        const template_exists = res.exit_code == 25 and std.mem.indexOf(u8, res.stderr, "refusing to override existing file") != null;
+        
+        if (res.exit_code != 0 and !template_exists) {
             if (self.logger) |log| {
                 try log.err("Failed to pull OCI image {s}: {s}", .{ image_ref, res.stderr });
             }
-            return error.OciPullFailed;
+            return core.Error.OperationFailed;
+        }
+        
+        if (template_exists) {
+            if (self.logger) |log| {
+                log.info("OCI template already exists, using existing template", .{}) catch {};
+            }
         }
 
         // Extract template name from output or construct it from image_ref
@@ -792,8 +820,21 @@ pub const ProxmoxLxcDriver = struct {
             }
 
             // Check if Proxmox VE version supports OCI Registry pull (9.1+)
-            const supports_oci = self.supportsOciRegistryPull() catch false;
+            stderr.writeAll("[DRIVER] create: Checking Proxmox VE version for OCI Registry support\n") catch {};
+            const supports_oci = blk: {
+                const result = self.supportsOciRegistryPull() catch {
+                    stderr.writeAll("[DRIVER] create: Error checking Proxmox VE version\n") catch {};
+                    if (self.debug_mode) {
+                        try stdout.writeAll("[DRIVER] create: Error checking Proxmox VE version\n");
+                    }
+                    // Continue with normal processing if version check fails
+                    break :blk false;
+                };
+                break :blk result;
+            };
+            
             if (supports_oci) {
+                stderr.writeAll("[DRIVER] create: Proxmox VE 9.1+ detected, OCI Registry pull supported\n") catch {};
                 if (self.logger) |log| {
                     log.info("Proxmox VE 9.1+ detected, OCI Registry pull supported", .{}) catch {};
                 }
@@ -805,17 +846,35 @@ pub const ProxmoxLxcDriver = struct {
                 const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
                 const has_vztmpl = std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
                 const is_proxmox_template = is_tar or has_vztmpl;
+                const is_absolute_path = std.fs.path.isAbsolute(image_path);
+                
+                stderr.writeAll("[DRIVER] create: OCI check - has_colon=") catch {};
+                if (has_colon) stderr.writeAll("true") catch {} else stderr.writeAll("false") catch {};
+                stderr.writeAll(", is_proxmox_template=") catch {};
+                if (is_proxmox_template) stderr.writeAll("true") catch {} else stderr.writeAll("false") catch {};
+                stderr.writeAll(", is_absolute_path=") catch {};
+                if (is_absolute_path) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
                 
                 // If it looks like an OCI image reference (has colon, not a Proxmox template, not a local path)
-                if (has_colon and !is_proxmox_template and !std.fs.path.isAbsolute(image_path)) {
+                if (has_colon and !is_proxmox_template and !is_absolute_path) {
+                    stderr.writeAll("[DRIVER] create: Detected OCI image reference, pulling from registry\n") catch {};
                     if (self.logger) |log| {
                         log.info("Detected OCI image reference, pulling from registry: {s}", .{image_path}) catch {};
                     }
                     
                     // Pull OCI image from registry
                     const storage = "local"; // Default storage, could be configurable
-                    const pulled_template = try self.pullOciImage(image_path, storage);
+                    stderr.writeAll("[DRIVER] create: Calling pullOciImage\n") catch {};
+                    const pulled_template = self.pullOciImage(image_path, storage) catch |pull_err| {
+                        stderr.writeAll("[DRIVER] create: Failed to pull OCI image\n") catch {};
+                        if (self.logger) |log| {
+                            log.err("Failed to pull OCI image: {}", .{pull_err}) catch {};
+                        }
+                        return pull_err;
+                    };
                     defer self.allocator.free(pulled_template);
+                    
+                    stderr.writeAll("[DRIVER] create: OCI image pulled successfully\n") catch {};
                     
                     // Use pulled template
                     template_name = try self.allocator.dupe(u8, pulled_template);
@@ -830,6 +889,8 @@ pub const ProxmoxLxcDriver = struct {
                     // Not an OCI image reference, continue with normal processing
                     stderr.writeAll("[DRIVER] create: Not an OCI image reference, continuing normal processing\n") catch {};
                 }
+            } else {
+                stderr.writeAll("[DRIVER] create: Proxmox VE < 9.1 or version check failed, OCI Registry pull not supported\n") catch {};
             }
 
             // Classify image type (only if not already processed as OCI image):
@@ -1173,9 +1234,25 @@ pub const ProxmoxLxcDriver = struct {
             try net_runtime.append(NetDeviceRuntimeInfo{ .alias = "eth0", .bridge = fallback_bridge, .host_name = null });
         }
 
-        const ostype = self.config.default_ostype orelse "ubuntu";
-        const unprivileged_str = if (self.config.default_unprivileged) |u| if (u) "1" else "0" else "0";
-        try args_builder.appendSlice(&[_][]const u8{ "--ostype", ostype, "--unprivileged", unprivileged_str });
+        // For OCI templates (format: storage:vztmpl/image_tag.tar), don't specify --ostype or --unprivileged 0
+        // Proxmox automatically detects the OS type from OCI archive
+        // OCI containers must be unprivileged (cannot use --unprivileged 0)
+        const is_oci_template = std.mem.endsWith(u8, template, ".tar") and !std.mem.endsWith(u8, template, ".tar.zst");
+        if (!is_oci_template) {
+            const ostype = self.config.default_ostype orelse "ubuntu";
+            const unprivileged_str = if (self.config.default_unprivileged) |u| if (u) "1" else "0" else "0";
+            try args_builder.appendSlice(&[_][]const u8{ "--ostype", ostype, "--unprivileged", unprivileged_str });
+        } else {
+            // For OCI templates, don't specify --ostype or --unprivileged
+            // Proxmox will auto-detect OS type and OCI containers are always unprivileged
+            // Only set --unprivileged if explicitly requested as unprivileged=1
+            if (self.config.default_unprivileged) |u| {
+                if (u) {
+                    try args_builder.appendSlice(&[_][]const u8{ "--unprivileged", "1" });
+                }
+                // If unprivileged=false, don't set the flag (OCI containers are always unprivileged)
+            }
+        }
 
         if (zfs_dataset) |dataset| {
             try args_builder.appendSlice(&[_][]const u8{ "--rootfs", dataset });
