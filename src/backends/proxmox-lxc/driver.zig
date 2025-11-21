@@ -259,7 +259,25 @@ pub const ProxmoxLxcDriver = struct {
         return false;
     }
 
-    /// Pull OCI image from registry using pveam command
+    /// Get Proxmox node name (hostname)
+    fn getNodeName(self: *Self) ![]const u8 {
+        const args = [_][]const u8{ "hostname" };
+        const res = try self.runCommand(&args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+
+        if (res.exit_code != 0) {
+            return error.NodeNameDetectionFailed;
+        }
+
+        // Remove trailing newline
+        const node_name = std.mem.trim(u8, res.stdout, " \t\r\n");
+        return try self.allocator.dupe(u8, node_name);
+    }
+
+    /// Pull OCI image from registry using pvesh command
     /// image_ref: OCI image reference like "docker.io/library/redis:latest"
     /// storage: Proxmox storage name (default: "local")
     /// Returns template name on success
@@ -268,13 +286,20 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Pulling OCI image from registry: {s}", .{image_ref});
         }
 
-        // Use pveam pull command: pveam pull <storage> <image_ref>
+        // Get node name
+        const node_name = try self.getNodeName();
+        defer self.allocator.free(node_name);
+
+        // Use pvesh create command: pvesh create /nodes/{node}/storage/{storage}/oci-registry-pull --reference {image_ref}
         var args = std.ArrayListUnmanaged([]const u8){};
         defer args.deinit(self.allocator);
         
-        try args.append(self.allocator, "pveam");
-        try args.append(self.allocator, "pull");
-        try args.append(self.allocator, storage);
+        try args.append(self.allocator, "pvesh");
+        try args.append(self.allocator, "create");
+        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/oci-registry-pull", .{ node_name, storage });
+        defer self.allocator.free(path);
+        try args.append(self.allocator, path);
+        try args.append(self.allocator, "--reference");
         try args.append(self.allocator, image_ref);
 
         const res = try self.runCommand(args.items);
@@ -291,8 +316,9 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // Extract template name from output or construct it from image_ref
-        // Template name format: <storage>:vztmpl/<image_name>-<tag>.tar.zst
-        // For "docker.io/library/redis:latest" -> "redis-latest"
+        // Template name format: <storage>:vztmpl/<image_name>_<tag>.tar
+        // For "docker.io/library/redis:latest" -> "redis_latest.tar"
+        // Proxmox uses underscore instead of dash and .tar instead of .tar.zst
         var template_name = std.ArrayListUnmanaged(u8){};
         defer template_name.deinit(self.allocator);
 
@@ -306,9 +332,9 @@ pub const ProxmoxLxcDriver = struct {
         const slash_idx = std.mem.lastIndexOfScalar(u8, image_part, '/');
         const image_name = if (slash_idx) |idx| image_part[idx + 1 ..] else image_part;
 
-        // Construct template name: storage:vztmpl/image_name-tag.tar.zst
-        // Remove any special characters from image_name and tag_part
-        try template_name.writer(self.allocator).print("{s}:vztmpl/{s}-{s}.tar.zst", .{ storage, image_name, tag_part });
+        // Construct template name: storage:vztmpl/image_name_tag.tar
+        // Proxmox uses underscore to separate image name and tag
+        try template_name.writer(self.allocator).print("{s}:vztmpl/{s}_{s}.tar", .{ storage, image_name, tag_part });
 
         if (self.logger) |log| {
             try log.info("Successfully pulled OCI image, template: {s}", .{template_name.items});
