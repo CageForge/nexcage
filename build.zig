@@ -68,30 +68,51 @@ pub fn build(b: *std.Build) void {
     const version_bytes = std.fs.cwd().readFileAlloc(b.allocator, "VERSION", 64) catch @panic("Failed to read VERSION file");
     const app_version = std.mem.trim(u8, version_bytes, " \n\r\t");
 
-    // Create build options (one instance shared across all modules)
+    // Create separate build options to avoid module conflicts
+    // core_build_options: for core module (version info)
+    const core_build_options = b.addOptions();
+    core_build_options.addOption([]const u8, "app_version", app_version);
+
+    // build_options: for backends and integrations (feature flags)
     const build_options = b.addOptions();
-    build_options.addOption([]const u8, "app_version", app_version);
+
+    // feature_options: for crun backend (libcrun ABI flags)
     const feature_options = b.addOptions();
 
-    const legacy_link_libcrun = b.option(bool, "link-libcrun", "(deprecated) Link libcrun/systemd");
-    if (legacy_link_libcrun) |value| {
-        if (value) {
-            std.debug.print("[build] warn: -Dlink-libcrun is deprecated; libcrun ABI is always enabled.\n", .{});
-        }
-    }
-    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI support (requires libsystemd)") orelse true;
-    if (!enable_libcrun_abi) {
-        std.debug.print("[build] error: libcrun CLI backend has been removed; libcrun ABI must remain enabled.\n", .{});
-        @panic("libcrun ABI disabled");
-    }
+    // Feature flags
+    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI (requires libcrun and systemd, default: false)") orelse false;
+    const enable_plugins = b.option(bool, "enable-plugins", "Enable plugin system (default: true)") orelse true;
+
     var libcrun_abi_active = false;
     var libsystemd_available = false;
+
+    // Backend feature flags (most enabled by default)
+    const enable_backend_proxmox_lxc = b.option(bool, "enable-backend-proxmox-lxc", "Enable Proxmox LXC backend (default: true)") orelse true;
+    const enable_backend_proxmox_vm = b.option(bool, "enable-backend-proxmox-vm", "Enable Proxmox VM backend (default: false)") orelse false;
+    const enable_backend_crun = b.option(bool, "enable-backend-crun", "Enable Crun OCI backend (default: true)") orelse true;
+    const enable_backend_runc = b.option(bool, "enable-backend-runc", "Enable Runc OCI backend (default: true)") orelse true;
+
+    build_options.addOption(bool, "enable_backend_proxmox_lxc", enable_backend_proxmox_lxc);
+    build_options.addOption(bool, "enable_backend_proxmox_vm", enable_backend_proxmox_vm);
+    build_options.addOption(bool, "enable_backend_crun", enable_backend_crun);
+    build_options.addOption(bool, "enable_backend_runc", enable_backend_runc);
+
+    // Integration feature flags (selective defaults)
+    const enable_zfs = b.option(bool, "enable-zfs", "Enable ZFS integration (default: true)") orelse true;
+    const enable_bfc = b.option(bool, "enable-bfc", "Enable BFC integration (default: false)") orelse false;
+    const enable_proxmox_api = b.option(bool, "enable-proxmox-api", "Enable Proxmox API integration (default: false)") orelse false;
+
+    build_options.addOption(bool, "enable_zfs", enable_zfs);
+    build_options.addOption(bool, "enable_bfc", enable_bfc);
+    build_options.addOption(bool, "enable_proxmox_api", enable_proxmox_api);
+    build_options.addOption(bool, "enable_libcrun_abi", enable_libcrun_abi);
+    build_options.addOption(bool, "enable_plugins", enable_plugins);
 
     // Core module
     const core_mod = b.addModule("core", .{
         .root_source_file = b.path("src/core/mod.zig"),
     });
-    core_mod.addOptions("build_options", build_options);
+    core_mod.addOptions("build_options", core_build_options);
 
     const oci_spec_dep = b.dependency("oci_spec_zig", .{
         .target = target,
@@ -116,6 +137,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "oci_spec", .module = oci_spec_mod },
         },
     });
+    backends_mod.addOptions("build_options", build_options);
     backends_mod.addOptions("feature_options", feature_options);
 
     // CLI module
@@ -135,6 +157,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "core", .module = core_mod },
         },
     });
+    integrations_mod.addOptions("build_options", build_options);
 
     var libcrun_lib: ?*std.Build.Step.Compile = null;
 

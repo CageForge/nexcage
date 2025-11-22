@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # Main nexcage service
+  nexcage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_VERSION=${BUILD_VERSION:-dev}
+    image: nexcage:latest
+    container_name: nexcage
+    privileged: true  # Required for container management
+    volumes:
+      # Configuration
+      - ./config.json:/etc/nexcage/config.json:ro
+      # State and runtime data
+      - nexcage-data:/var/lib/nexcage
+      # Container storage
+      - /var/lib/containers:/var/lib/containers
+      # Docker socket (if needed for integration)
+      # - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - NEXCAGE_CONFIG=/etc/nexcage/config.json
+    networks:
+      - nexcage-network
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+      - seccomp:unconfined
+    command: ["--help"]
+
+  # Development build service with all dependencies
+  nexcage-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    image: nexcage:dev
+    container_name: nexcage-dev
+    volumes:
+      - .:/app
+      - nexcage-cache:/app/.zig-cache
+    working_dir: /app
+    command: ["zig", "build", "-Doptimize=Debug"]
+
+  # Build with libcrun ABI enabled
+  nexcage-libcrun:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_FLAGS=-Denable-libcrun-abi=true
+    image: nexcage:libcrun
+    container_name: nexcage-libcrun
+    privileged: true
+    volumes:
+      - ./config.json:/etc/nexcage/config.json:ro
+      - nexcage-data:/var/lib/nexcage
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    networks:
+      - nexcage-network
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    command: ["--help"]
+
+volumes:
+  nexcage-data:
+    driver: local
+  nexcage-cache:
+    driver: local
+
+networks:
+  nexcage-network:
+    driver: bridge

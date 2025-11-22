@@ -1,0 +1,80 @@
+# Git files
+.git
+.gitignore
+.gitmodules
+.github
+
+# Build artifacts
+zig-out
+.zig-cache
+zig-cache
+test_zig
+*.o
+*.a
+*.so
+*.dylib
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (not needed for build)
+docs
+Roadmap
+*.md
+!VERSION
+
+# Test files
+tests
+
+# CI/CD files
+.github
+
+# Development files
+.env
+.env.example
+*.example
+
+# Temporary files
+tmp
+temp
+*.log
+
+# macOS specific
+.DS_Store
+._*
+
+# Package/distribution files
+dist
+packaging
+
+# Scripts (only needed for development)
+scripts
+
+# Docker files (avoid recursion)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Linting and validation configs
+.markdownlint*
+.mlc.config.json
+.cspell.json
+.gitleaks.toml
+
+# Other development tools
+gitleaks
+CODEOWNERS
+CODE_OF_CONDUCT.md
+GOVERNANCE.md
+MAINTAINERS.md
+SECURITY.md
+CONTRIBUTING.md
+TESTING.md
+MERGE_INSTRUCTIONS.md
+CHANGELOG.md
+NOTICE
