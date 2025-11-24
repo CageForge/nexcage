@@ -34,6 +34,11 @@ jobs:
           echo "User: $(whoami)"
           echo "Zig version: $(zig version 2>/dev/null || echo 'Zig will be installed')"
 
+      - name: Cleanup work directory
+        run: |
+          rm -rf /opt/github-runner/_work/nexcage/nexcage/.cache || true
+          rm -rf /opt/github-runner/_work/nexcage/nexcage || true
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
