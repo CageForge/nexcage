@@ -39,6 +39,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.version || github.ref }}
           fetch-depth: 0
+          clean: false
 
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
@@ -203,6 +204,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.version || github.ref }}
           fetch-depth: 0
+          clean: false
 
       - name: Install build dependencies
         run: |
