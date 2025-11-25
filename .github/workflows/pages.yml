@@ -28,9 +28,16 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
-      - name: Build with MkDocs
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
         run: |
-          docker run --rm -v "$PWD":/docs --entrypoint sh squidfunk/mkdocs-material:9.5.35 -c "pip install --no-cache-dir mike && mkdocs build --strict"
+          python -m pip install --upgrade pip
+          pip install mkdocs-material mike
+      - name: Build with MkDocs
+        run: mkdocs build --strict
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
