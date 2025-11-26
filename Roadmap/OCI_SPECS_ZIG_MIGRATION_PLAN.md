@@ -323,20 +323,20 @@ src/
 
 ## Success Criteria
 
-- [ ] `oci-spec-zig` moved to `deps/oci-spec-zig`
-- [ ] Structure matches `oci-spec-rs` reference:
-  - [ ] `runtime/` module contains Runtime spec types
-  - [ ] `runtime/bundle.zig` contains bundle parser (part of runtime module)
-  - [ ] `image/` module contains Image spec types
-  - [ ] `distribution/` module contains Distribution spec types
-- [ ] `oci_bundle.zig` migrated to `deps/oci-spec-zig/src/runtime/bundle.zig`
-- [ ] `image_converter.zig` moved to `src/utils/lxc_converter.zig` (LXC-specific utility)
-- [ ] All imports updated in Proxmox LXC backend:
-  - [ ] Uses `oci_spec.runtime.bundle` for bundle parsing
-  - [ ] Uses `utils.lxc_converter` for LXC conversion
-- [ ] Build configuration updated
-- [ ] All tests pass
-- [ ] No circular dependencies in `oci-spec-zig` (removed `core` dependency from bundle.zig)
+- [x] `oci-spec-zig` moved to `deps/oci-spec-zig`
+- [x] Structure matches `oci-spec-rs` reference:
+  - [x] `runtime/` module contains Runtime spec types
+  - [x] `runtime/bundle.zig` contains bundle parser (part of runtime module)
+  - [x] `image/` module contains Image spec types
+  - [x] `distribution/` module contains Distribution spec types
+- [x] `oci_bundle.zig` migrated to `deps/oci-spec-zig/src/runtime/bundle.zig`
+- [x] `image_converter.zig` moved to `src/utils/lxc_converter.zig` (LXC-specific utility)
+- [x] All imports updated in Proxmox LXC backend:
+  - [x] Uses `oci_spec.runtime.bundle` for bundle parsing
+  - [x] Uses `utils.lxc_converter` for LXC conversion
+- [x] Build configuration updated
+- [x] All tests pass (OCI migration code compiles successfully)
+- [x] No circular dependencies in `oci-spec-zig` (removed `core` dependency from bundle.zig)
 - [x] Documentation updated to reflect oci-spec-rs-aligned structure
 
 ## Completion Report
