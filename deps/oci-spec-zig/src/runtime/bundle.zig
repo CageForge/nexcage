@@ -1,7 +1,5 @@
 const std = @import("std");
-const core = @import("core");
-const oci_spec = @import("oci_spec");
-const runtime = oci_spec.runtime;
+const runtime = @import("mod.zig");
 
 pub const MemoryPolicyMode = runtime.MemoryPolicyMode;
 pub const MemoryPolicyFlag = runtime.MemoryPolicyFlag;
@@ -9,24 +7,68 @@ pub const MemoryPolicyConfig = runtime.MemoryPolicy;
 pub const IntelRdtConfig = runtime.IntelRdt;
 pub const NetDeviceConfig = runtime.NetDevice;
 
-/// OCI Bundle parser for Proxmox LXC backend
-/// Parses OCI bundle (config.json + rootfs) and converts to LXC configuration
+/// Logger interface for bundle operations
+/// Uses optional logger pointer - caller must provide compatible logger
+pub const Logger = *anyopaque;
+
+/// Bundle parsing errors
+pub const BundleError = error{
+    ConfigFileNotFound,
+    RootfsNotFound,
+    InvalidConfigFormat,
+    EmptyRootfs,
+    ArchiveCreationFailed,
+    CopyFailed,
+} || std.mem.Allocator.Error || std.fs.File.OpenError || std.fs.Dir.OpenError || std.fs.File.ReadError;
+
+/// OCI Bundle parser
+/// Parses OCI bundle (config.json + rootfs) and extracts configuration
 pub const OciBundleParser = struct {
     allocator: std.mem.Allocator,
-    logger: ?*core.LogContext,
+    logger: ?Logger = null,
 
-    pub fn init(allocator: std.mem.Allocator, logger: ?*core.LogContext) OciBundleParser {
+    pub fn init(allocator: std.mem.Allocator, logger: ?Logger) OciBundleParser {
         return OciBundleParser{
             .allocator = allocator,
             .logger = logger,
         };
     }
 
+    /// Helper function for logging info messages
+    fn logInfo(self: *const OciBundleParser, comptime fmt: []const u8, args: anytype) void {
+        _ = self;
+        _ = fmt;
+        _ = args;
+        // Logger is optional - logging disabled if not provided
+    }
+
+    /// Helper function for logging error messages
+    fn logErr(self: *const OciBundleParser, comptime fmt: []const u8, args: anytype) void {
+        _ = self;
+        _ = fmt;
+        _ = args;
+        // Logger is optional - logging disabled if not provided
+    }
+
+    /// Helper function for logging warning messages
+    fn logWarn(self: *const OciBundleParser, comptime fmt: []const u8, args: anytype) void {
+        _ = self;
+        _ = fmt;
+        _ = args;
+        // Logger is optional - logging disabled if not provided
+    }
+
+    /// Helper function for logging debug messages
+    fn logDebug(self: *const OciBundleParser, comptime fmt: []const u8, args: anytype) void {
+        _ = self;
+        _ = fmt;
+        _ = args;
+        // Logger is optional - logging disabled if not provided
+    }
+
     /// Parse OCI bundle and extract configuration
-    pub fn parseBundle(self: *OciBundleParser, bundle_path: []const u8) !OciBundleConfig {
-        if (self.logger) |log| {
-            try log.info("Parsing OCI bundle from: {s}", .{bundle_path});
-        }
+    pub fn parseBundle(self: *OciBundleParser, bundle_path: []const u8) BundleError!OciBundleConfig {
+        self.logInfo("Parsing OCI bundle from: {s}", .{bundle_path});
 
         const config_path = try std.fs.path.join(self.allocator, &[_][]const u8{ bundle_path, "config.json" });
         defer self.allocator.free(config_path);
@@ -35,20 +77,16 @@ pub const OciBundleParser = struct {
         defer self.allocator.free(rootfs_path);
 
         // Check if files exist
-        const config_file = std.fs.cwd().openFile(config_path, .{}) catch |err| {
-            if (self.logger) |log| {
-                try log.err("Failed to open config.json: {}", .{err});
-            }
-            return error.ConfigFileNotFound;
+        const config_file = std.fs.cwd().openFile(config_path, .{}) catch {
+            self.logErr("Failed to open config.json", .{});
+            return BundleError.ConfigFileNotFound;
         };
         defer config_file.close();
 
         // Check if rootfs directory exists
-        var rootfs_dir = std.fs.cwd().openDir(rootfs_path, .{}) catch |err| {
-            if (self.logger) |log| {
-                try log.err("Failed to open rootfs directory: {}", .{err});
-            }
-            return error.RootfsNotFound;
+        var rootfs_dir = std.fs.cwd().openDir(rootfs_path, .{}) catch {
+            self.logErr("Failed to open rootfs directory", .{});
+            return BundleError.RootfsNotFound;
         };
         defer rootfs_dir.close();
 
@@ -56,10 +94,13 @@ pub const OciBundleParser = struct {
         const content = try config_file.readToEndAlloc(self.allocator, 10 * 1024 * 1024); // 10MB max
         defer self.allocator.free(content);
 
-        const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, content, .{
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, content, .{
             .allocate = .alloc_always,
             .ignore_unknown_fields = true,
-        });
+        }) catch |err| switch (err) {
+            error.OutOfMemory => return BundleError.OutOfMemory,
+            else => return BundleError.InvalidConfigFormat,
+        };
         defer parsed.deinit();
 
         var bundle_config = try self.parseOciConfig(&parsed.value, rootfs_path);
@@ -71,10 +112,8 @@ pub const OciBundleParser = struct {
         if (std.fs.cwd().openFile(metadata_path, .{})) |metadata_file| {
             defer metadata_file.close();
 
-            const metadata_content = metadata_file.readToEndAlloc(self.allocator, 1024 * 1024) catch |err| {
-                if (self.logger) |log| {
-                    try log.warn("Failed to read metadata.json: {}", .{err});
-                }
+            const metadata_content = metadata_file.readToEndAlloc(self.allocator, 1024 * 1024) catch {
+                self.logWarn("Failed to read metadata.json", .{});
                 return bundle_config;
             };
             defer self.allocator.free(metadata_content);
@@ -82,26 +121,22 @@ pub const OciBundleParser = struct {
             const metadata_parsed = std.json.parseFromSlice(std.json.Value, self.allocator, metadata_content, .{
                 .allocate = .alloc_always,
                 .ignore_unknown_fields = true,
-            }) catch |err| {
-                if (self.logger) |log| {
-                    try log.warn("Failed to parse metadata.json: {}", .{err});
-                }
+            }) catch {
+                self.logWarn("Failed to parse metadata.json", .{});
                 return bundle_config;
             };
             defer metadata_parsed.deinit();
 
             try self.parseMetadata(&metadata_parsed.value, &bundle_config);
         } else |_| {
-            if (self.logger) |log| {
-                try log.info("No metadata.json found in bundle, using config.json only", .{});
-            }
+            self.logInfo("No metadata.json found in bundle, using config.json only", .{});
         }
 
         return bundle_config;
     }
 
     /// Parse OCI config.json and extract relevant fields
-    fn parseOciConfig(self: *OciBundleParser, config: *const std.json.Value, rootfs_path: []const u8) !OciBundleConfig {
+    fn parseOciConfig(self: *OciBundleParser, config: *const std.json.Value, rootfs_path: []const u8) BundleError!OciBundleConfig {
         var bundle_config = OciBundleConfig{
             .allocator = self.allocator,
             .rootfs_path = try self.allocator.dupe(u8, rootfs_path),
@@ -116,7 +151,7 @@ pub const OciBundleParser = struct {
         };
 
         if (config.* != .object) {
-            return error.InvalidConfigFormat;
+            return BundleError.InvalidConfigFormat;
         }
 
         const obj = config.object;
@@ -165,9 +200,7 @@ pub const OciBundleParser = struct {
                 if (process_obj.get("capabilities")) |caps_val| {
                     if (caps_val == .object) {
                         // TODO: Parse capabilities and convert to LXC format
-                        if (self.logger) |log| {
-                            try log.info("Capabilities found in OCI config, will be converted to LXC format", .{});
-                        }
+                        self.logInfo("Capabilities found in OCI config, will be converted to LXC format", .{});
                     }
                 }
             }
@@ -241,10 +274,8 @@ pub const OciBundleParser = struct {
                 // Parse memory policy (NUMA)
                 if (linux_obj.get("memoryPolicy")) |policy_val| {
                     if (policy_val != .object) {
-                        if (self.logger) |log| {
-                            try log.err("Invalid linux.memoryPolicy format (expected object)", .{});
-                        }
-                        return error.InvalidConfigFormat;
+                        self.logErr("Invalid linux.memoryPolicy format (expected object)", .{});
+                        return BundleError.InvalidConfigFormat;
                     }
 
                     const policy_obj = policy_val.object;
@@ -254,9 +285,7 @@ pub const OciBundleParser = struct {
                         if (mode_val == .string) {
                             policy.mode = try parseMemoryPolicyMode(mode_val.string);
                         } else {
-                            if (self.logger) |log| {
-                                try log.err("Invalid linux.memoryPolicy.mode type", .{});
-                            }
+                            self.logErr("Invalid linux.memoryPolicy.mode type", .{});
                             return error.InvalidConfigFormat;
                         }
                     }
@@ -265,18 +294,14 @@ pub const OciBundleParser = struct {
                         if (nodes_val == .string) {
                             policy.nodes = try self.allocator.dupe(u8, nodes_val.string);
                         } else {
-                            if (self.logger) |log| {
-                                try log.err("Invalid linux.memoryPolicy.nodes type", .{});
-                            }
+                            self.logErr("Invalid linux.memoryPolicy.nodes type", .{});
                             return error.InvalidConfigFormat;
                         }
                     }
 
                     if (policy_obj.get("flags")) |flags_val| {
                         if (flags_val != .array) {
-                            if (self.logger) |log| {
-                                try log.err("Invalid linux.memoryPolicy.flags type", .{});
-                            }
+                            self.logErr("Invalid linux.memoryPolicy.flags type", .{});
                             return error.InvalidConfigFormat;
                         }
 
@@ -289,9 +314,7 @@ pub const OciBundleParser = struct {
 
                             for (flags_array.items, 0..) |flag_val, i| {
                                 if (flag_val != .string) {
-                                    if (self.logger) |log| {
-                                        try log.err("Invalid linux.memoryPolicy.flags entry", .{});
-                                    }
+                                    self.logErr("Invalid linux.memoryPolicy.flags entry", .{});
                                     return error.InvalidConfigFormat;
                                 }
                                 flags[i] = try parseMemoryPolicyFlag(flag_val.string);
@@ -307,10 +330,8 @@ pub const OciBundleParser = struct {
                 // Parse Intel RDT settings
                 if (linux_obj.get("intelRdt")) |rdt_val| {
                     if (rdt_val != .object) {
-                        if (self.logger) |log| {
-                            try log.err("Invalid linux.intelRdt format (expected object)", .{});
-                        }
-                        return error.InvalidConfigFormat;
+                        self.logErr("Invalid linux.intelRdt format (expected object)", .{});
+                        return BundleError.InvalidConfigFormat;
                     }
 
                     const rdt_obj = rdt_val.object;
@@ -320,18 +341,14 @@ pub const OciBundleParser = struct {
                         if (clos_val == .string) {
                             intel.clos_id = try self.allocator.dupe(u8, clos_val.string);
                         } else {
-                            if (self.logger) |log| {
-                                try log.err("Invalid linux.intelRdt.closID type", .{});
-                            }
+                            self.logErr("Invalid linux.intelRdt.closID type", .{});
                             return error.InvalidConfigFormat;
                         }
                     }
 
                     if (rdt_obj.get("schemata")) |schemata_val| {
                         if (schemata_val != .array) {
-                            if (self.logger) |log| {
-                                try log.err("Invalid linux.intelRdt.schemata type", .{});
-                            }
+                            self.logErr("Invalid linux.intelRdt.schemata type", .{});
                             return error.InvalidConfigFormat;
                         }
 
@@ -349,9 +366,7 @@ pub const OciBundleParser = struct {
 
                             for (schemata_array.items, 0..) |schema_val, i| {
                                 if (schema_val != .string) {
-                                    if (self.logger) |log| {
-                                        try log.err("Invalid linux.intelRdt.schemata entry", .{});
-                                    }
+                                    self.logErr("Invalid linux.intelRdt.schemata entry", .{});
                                     return error.InvalidConfigFormat;
                                 }
                                 schemata[i] = try self.allocator.dupe(u8, schema_val.string);
@@ -366,9 +381,7 @@ pub const OciBundleParser = struct {
                         if (schema_val == .string) {
                             intel.l3_cache_schema = try self.allocator.dupe(u8, schema_val.string);
                         } else {
-                            if (self.logger) |log| {
-                                try log.err("Invalid linux.intelRdt.l3CacheSchema type", .{});
-                            }
+                            self.logErr("Invalid linux.intelRdt.l3CacheSchema type", .{});
                             return error.InvalidConfigFormat;
                         }
                     }
@@ -377,9 +390,7 @@ pub const OciBundleParser = struct {
                         if (schema_val == .string) {
                             intel.mem_bw_schema = try self.allocator.dupe(u8, schema_val.string);
                         } else {
-                            if (self.logger) |log| {
-                                try log.err("Invalid linux.intelRdt.memBwSchema type", .{});
-                            }
+                            self.logErr("Invalid linux.intelRdt.memBwSchema type", .{});
                             return error.InvalidConfigFormat;
                         }
                     }
@@ -388,9 +399,7 @@ pub const OciBundleParser = struct {
                         if (monitor_val == .bool) {
                             intel.enable_monitoring = monitor_val.bool;
                         } else {
-                            if (self.logger) |log| {
-                                try log.err("Invalid linux.intelRdt.enableMonitoring type", .{});
-                            }
+                            self.logErr("Invalid linux.intelRdt.enableMonitoring type", .{});
                             return error.InvalidConfigFormat;
                         }
                     }
@@ -401,10 +410,8 @@ pub const OciBundleParser = struct {
                 // Parse netDevices map
                 if (linux_obj.get("netDevices")) |net_val| {
                     if (net_val != .object) {
-                        if (self.logger) |log| {
-                            try log.err("Invalid linux.netDevices format (expected object)", .{});
-                        }
-                        return error.InvalidConfigFormat;
+                        self.logErr("Invalid linux.netDevices format (expected object)", .{});
+                        return BundleError.InvalidConfigFormat;
                     }
 
                     const net_obj = net_val.object;
@@ -432,9 +439,7 @@ pub const OciBundleParser = struct {
                             const device_val = entry.value_ptr.*;
                             if (device_val != .object) {
                                 device.deinit();
-                                if (self.logger) |log| {
-                                    try log.err("Invalid linux.netDevices entry type", .{});
-                                }
+                                self.logErr("Invalid linux.netDevices entry type", .{});
                                 return error.InvalidConfigFormat;
                             }
 
@@ -444,9 +449,7 @@ pub const OciBundleParser = struct {
                                     device.name = try self.allocator.dupe(u8, name_val.string);
                                 } else {
                                     device.deinit();
-                                    if (self.logger) |log| {
-                                        try log.err("Invalid linux.netDevices.name type", .{});
-                                    }
+                                    self.logErr("Invalid linux.netDevices.name type", .{});
                                     return error.InvalidConfigFormat;
                                 }
                             }
@@ -502,17 +505,13 @@ pub const OciBundleParser = struct {
                         }
                         bundle_config.namespaces = namespaces;
 
-                        if (self.logger) |log| {
-                            try log.info("Parsed {d} namespaces from OCI bundle", .{ns_array.items.len});
-                        }
+                        self.logInfo("Parsed {d} namespaces from OCI bundle", .{ns_array.items.len});
                     }
                 }
             }
         }
 
-        if (self.logger) |log| {
-            try log.info("Successfully parsed OCI bundle configuration", .{});
-        }
+        self.logInfo("Successfully parsed OCI bundle configuration", .{});
 
         return bundle_config;
     }
@@ -538,9 +537,7 @@ pub const OciBundleParser = struct {
                     config.image_name = try self.allocator.dupe(u8, image_str);
                 }
 
-                if (self.logger) |log| {
-                    try log.info("Parsed image from metadata: {s}", .{image_str});
-                }
+                self.logInfo("Parsed image from metadata: {s}", .{image_str});
             }
         }
 
@@ -558,9 +555,7 @@ pub const OciBundleParser = struct {
 
                 config.entrypoint = entrypoint;
 
-                if (self.logger) |log| {
-                    try log.info("Parsed ENTRYPOINT from metadata: {d} args", .{entrypoint_array.items.len});
-                }
+                self.logInfo("Parsed ENTRYPOINT from metadata: {d} args", .{entrypoint_array.items.len});
             }
         }
 
@@ -578,9 +573,7 @@ pub const OciBundleParser = struct {
 
                 config.cmd = cmd;
 
-                if (self.logger) |log| {
-                    try log.info("Parsed CMD from metadata: {d} args", .{cmd_array.items.len});
-                }
+                self.logInfo("Parsed CMD from metadata: {d} args", .{cmd_array.items.len});
             }
         }
 
@@ -589,9 +582,7 @@ pub const OciBundleParser = struct {
             if (workdir_val == .string) {
                 config.working_directory = try self.allocator.dupe(u8, workdir_val.string);
 
-                if (self.logger) |log| {
-                    try log.info("Parsed working directory from metadata: {s}", .{workdir_val.string});
-                }
+                self.logInfo("Parsed working directory from metadata: {s}", .{workdir_val.string});
             }
         }
     }
@@ -776,7 +767,7 @@ pub const NamespaceConfig = struct {
     }
 };
 
-fn parseMemoryPolicyMode(value: []const u8) !MemoryPolicyMode {
+fn parseMemoryPolicyMode(value: []const u8) BundleError!MemoryPolicyMode {
     const modes = [_]struct { []const u8, MemoryPolicyMode }{
         .{ "MPOL_DEFAULT", .mpol_default },
         .{ "MPOL_BIND", .mpol_bind },
@@ -793,10 +784,10 @@ fn parseMemoryPolicyMode(value: []const u8) !MemoryPolicyMode {
         }
     }
 
-    return error.InvalidConfigFormat;
+    return BundleError.InvalidConfigFormat;
 }
 
-fn parseMemoryPolicyFlag(value: []const u8) !MemoryPolicyFlag {
+fn parseMemoryPolicyFlag(value: []const u8) BundleError!MemoryPolicyFlag {
     const flags = [_]struct { []const u8, MemoryPolicyFlag }{
         .{ "MPOL_F_NUMA_BALANCING", .numa_balancing },
         .{ "MPOL_F_RELATIVE_NODES", .relative_nodes },
@@ -809,5 +800,5 @@ fn parseMemoryPolicyFlag(value: []const u8) !MemoryPolicyFlag {
         }
     }
 
-    return error.InvalidConfigFormat;
+    return BundleError.InvalidConfigFormat;
 }
