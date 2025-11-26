@@ -129,4 +129,4 @@ If you have questions about contributing, please contact us through:
 
 - GitHub Issues
 - moriarti@cp.if.ua
-- [INSERT CHAT CHANNEL] 
+- [https://join.slack.com/t/cageforge/shared_invite/zt-3fn25qnq8-XFK2Wxiw7jhpeTrzkJUixA] Slack
