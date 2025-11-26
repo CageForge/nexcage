@@ -1,18 +1,36 @@
+# Build artifacts
 .zig-cache/*
 zig-out/*
+zig-out/**/*
 .github/workflows/.zig-cache/
-.env
-.env.*
-!.env.example
-test-*/*
-config.json
-zig-linux-x86_64-0.13.0/*
-.cursor/*
-crun-*/*
-crun-*.tar.gz
 
-# Ignore everything in zig directory except download.sh and .gitkeep
+# Zig compiler binaries (should not be in repo)
 /zig/*
 !/zig/download.sh
 !/zig/.gitkeep
+zig-linux-x86_64-0.13.0/*
+
+# Test reports
+test-*/*
+test-reports/*
+!test-reports/.gitkeep
+
+# Configuration files (user-specific)
+.env
+.env.*
+!.env.example
+config.json
+
+# Build artifacts and temp files
+crun-*/*
+crun-*.tar.gz
 .backup/*
+.cursor/*
+
+# IDE and editor files
+.vscode/*
+!.vscode/settings.json.example
+.idea/*
+*.swp
+*.swo
+*~

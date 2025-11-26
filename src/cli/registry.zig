@@ -12,6 +12,9 @@ const stop = @import("stop.zig");
 const delete = @import("delete.zig");
 const list = @import("list.zig");
 const health = @import("health_check.zig");
+const state = @import("state.zig");
+const kill = @import("kill.zig");
+// const template = @import("template.zig");
 
 /// CLI command registry using StaticStringMap
 /// Command registry
@@ -60,13 +63,13 @@ pub const CommandRegistry = struct {
     /// Get help for a specific command
     pub fn getHelp(self: *CommandRegistry, name: []const u8, allocator: std.mem.Allocator) ![]const u8 {
         const command = self.get(name) orelse return errors.CliError.CommandNotFound;
-        return command.help(allocator);
+        return command.help(command, allocator);
     }
 
     /// Execute a command
     pub fn execute(self: *CommandRegistry, name: []const u8, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         const command = self.get(name) orelse return errors.CliError.CommandNotFound;
-        try command.execute(options, allocator);
+        try command.execute(command, options, allocator);
     }
 };
 
@@ -101,6 +104,9 @@ var stop_cmd = stop.StopCommand{};
 var delete_cmd = delete.DeleteCommand{};
 var list_cmd = list.ListCommand{};
 var health_cmd = health.HealthCommand{};
+var state_cmd = state.StateCommand{};
+var kill_cmd = kill.KillCommand{};
+// var template_cmd = template.TemplateCommand{};
 
 /// Generic command registration helper
 fn registerCommand(
@@ -109,13 +115,42 @@ fn registerCommand(
     comptime CommandType: type,
 ) !void {
     const iface = try registry.allocator.create(interfaces.CommandInterface);
+    
+    // Wrapper to extract ctx from iface and pass as self to concrete command
+    const execute_wrapper = struct {
+        fn wrap(self_iface: *interfaces.CommandInterface, options: types.RuntimeOptions, allocator: std.mem.Allocator) interfaces.Error!void {
+            const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
+            CommandType.execute(ctx_ptr, options, allocator) catch |err| {
+                return @as(interfaces.Error, @errorCast(err));
+            };
+        }
+    }.wrap;
+    
+    const help_wrapper = struct {
+        fn wrap(self_iface: *interfaces.CommandInterface, allocator: std.mem.Allocator) interfaces.Error![]const u8 {
+            const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
+            return CommandType.help(ctx_ptr, allocator) catch |err| {
+                return @as(interfaces.Error, @errorCast(err));
+            };
+        }
+    }.wrap;
+    
+    const validate_wrapper = struct {
+        fn wrap(self_iface: *interfaces.CommandInterface, args: []const []const u8) interfaces.Error!void {
+            const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
+            CommandType.validate(ctx_ptr, args) catch |err| {
+                return @as(interfaces.Error, @errorCast(err));
+            };
+        }
+    }.wrap;
+    
     iface.* = .{
         .name = cmd.name,
         .description = cmd.description,
         .ctx = cmd,
-        .execute = @ptrCast(&CommandType.execute),
-        .help = @ptrCast(&CommandType.help),
-        .validate = @ptrCast(&CommandType.validate),
+        .execute = execute_wrapper,
+        .help = help_wrapper,
+        .validate = validate_wrapper,
     };
     try registry.register(iface);
 }
@@ -127,19 +162,48 @@ fn registerCommandWithLogger(
     logger: *const core.LogContext,
 ) !void {
     const iface = try registry.allocator.create(interfaces.CommandInterface);
-    iface.* = .{
-        .name = cmd.name,
-        .description = cmd.description,
-        .ctx = cmd,
-        .execute = @ptrCast(&CommandType.execute),
-        .help = @ptrCast(&CommandType.help),
-        .validate = @ptrCast(&CommandType.validate),
-    };
     
     // Set logger for the command
     if (@hasDecl(CommandType, "setLogger")) {
         cmd.setLogger(@constCast(logger));
     }
+    
+    // Wrapper to extract ctx from iface and pass as self to concrete command
+    const execute_wrapper = struct {
+        fn wrap(self_iface: *interfaces.CommandInterface, options: types.RuntimeOptions, allocator: std.mem.Allocator) interfaces.Error!void {
+            const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
+            CommandType.execute(ctx_ptr, options, allocator) catch |err| {
+                return @as(interfaces.Error, @errorCast(err));
+            };
+        }
+    }.wrap;
+    
+    const help_wrapper = struct {
+        fn wrap(self_iface: *interfaces.CommandInterface, allocator: std.mem.Allocator) interfaces.Error![]const u8 {
+            const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
+            return CommandType.help(ctx_ptr, allocator) catch |err| {
+                return @as(interfaces.Error, @errorCast(err));
+            };
+        }
+    }.wrap;
+    
+    const validate_wrapper = struct {
+        fn wrap(self_iface: *interfaces.CommandInterface, args: []const []const u8) interfaces.Error!void {
+            const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
+            CommandType.validate(ctx_ptr, args) catch |err| {
+                return @as(interfaces.Error, @errorCast(err));
+            };
+        }
+    }.wrap;
+    
+    iface.* = .{
+        .name = cmd.name,
+        .description = cmd.description,
+        .ctx = cmd,
+        .execute = execute_wrapper,
+        .help = help_wrapper,
+        .validate = validate_wrapper,
+    };
     
     try registry.register(iface);
 }
@@ -155,6 +219,8 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
     try registerCommand(registry, &delete_cmd, delete.DeleteCommand);
     try registerCommand(registry, &list_cmd, list.ListCommand);
     try registerCommand(registry, &health_cmd, health.HealthCommand);
+    try registerCommand(registry, &state_cmd, state.StateCommand);
+    try registerCommand(registry, &kill_cmd, kill.KillCommand);
 }
 
 /// Register all built-in commands with logger
@@ -168,4 +234,6 @@ pub fn registerBuiltinCommandsWithLogger(registry: *CommandRegistry, logger: *co
     try registerCommandWithLogger(registry, &delete_cmd, delete.DeleteCommand, logger);
     try registerCommandWithLogger(registry, &list_cmd, list.ListCommand, logger);
     try registerCommandWithLogger(registry, &health_cmd, health.HealthCommand, logger);
+    try registerCommandWithLogger(registry, &state_cmd, state.StateCommand, logger);
+    try registerCommandWithLogger(registry, &kill_cmd, kill.KillCommand, logger);
 }

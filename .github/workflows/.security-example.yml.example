@@ -1,0 +1,80 @@
+# Example: Secure workflow configuration for self-hosted runners
+# This is an EXAMPLE - copy and adapt for your workflows
+# DO NOT use pull_request_target with self-hosted runners for public repos
+
+name: Secure Self-Hosted Runner Example
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Minimal permissions
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  # NO contents: write for PRs
+  # NO secrets access by default
+
+jobs:
+  secure-build:
+    name: Secure Build on Self-Hosted Runner
+    runs-on: [self-hosted, proxmox]
+    
+    # CRITICAL: Block PRs from forks
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    
+    steps:
+      - name: Verify PR source (additional check)
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "::error::Security: PRs from forks are blocked from running on self-hosted runner"
+            echo "::error::Please use GitHub-hosted runners for fork PRs"
+            exit 1
+          fi
+          echo "✅ PR is from trusted source: ${{ github.event.pull_request.head.repo.full_name }}"
+      
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Only checkout PR code, never use pull_request_target
+      
+      - name: Build
+        run: |
+          echo "Building on self-hosted runner..."
+          zig build
+          # Secrets are NOT available in PR workflows by default
+          # This is a security feature
+      
+      - name: Test
+        run: |
+          zig build test
+          # No secrets access, safe to run
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: zig-out/bin/nexcage
+
+  # Alternative: Use GitHub-hosted runner for fork PRs
+  fork-pr-build:
+    name: Build on GitHub Runner (Fork PRs)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      
+      - name: Build
+        run: |
+          echo "Building fork PR on GitHub-hosted runner (secure)"
+          # Fork PRs run here, not on self-hosted runner
+

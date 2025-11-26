@@ -28,27 +28,26 @@ pub const VersionCommand = struct {
     }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        _ = self;
         _ = options;
 
-        // Read version from VERSION file
-        const version_file = std.fs.cwd().openFile("VERSION", .{}) catch {
-            std.debug.print("nexcage version 0.0.0-dev (VERSION file not found)\n", .{});
-            return;
-        };
-        defer version_file.close();
-        
-        const version_bytes = version_file.readToEndAlloc(allocator, 64) catch {
-            std.debug.print("nexcage version 0.0.0-dev (failed to read VERSION)\n", .{});
-            return;
-        };
-        defer allocator.free(version_bytes);
-        
-        const version_str = std.mem.trim(u8, version_bytes, " \n\r\t");
-        const version = getVersionInfo(version_str);
-        const version_text = try self.formatVersion(version, allocator);
-        defer allocator.free(version_text);
+        const stdout = std.fs.File.stdout();
 
-        std.debug.print("{s}\n", .{version_text});
+        // Use version from core module (embedded at build time)
+        // This is more reliable than reading from file at runtime
+        const version_str = core.version.getVersion();
+        
+        // Parse version string (can be "0.7.2" or "0.7.2-suffix")
+        const version = getVersionInfo(version_str);
+        
+        // Format version output
+        const version_output = if (version.build) |build| 
+            try std.fmt.allocPrint(allocator, "nexcage version {d}.{d}.{d}-{s}\n", .{ version.major, version.minor, version.patch, build })
+        else 
+            try std.fmt.allocPrint(allocator, "nexcage version {d}.{d}.{d}\n", .{ version.major, version.minor, version.patch });
+        defer allocator.free(version_output);
+        
+        try stdout.writeAll(version_output);
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
@@ -66,41 +65,18 @@ pub const VersionCommand = struct {
         _ = args;
         // Version command doesn't require any arguments
     }
-
-    fn formatVersion(self: *Self, version: VersionInfo, allocator: std.mem.Allocator) ![]u8 {
-        _ = self;
-
-        var version_text = std.array_list.Managed(u8).init(allocator);
-        defer version_text.deinit();
-
-        try version_text.writer().print("nexcage version {d}.{d}.{d}", .{
-            version.major,
-            version.minor,
-            version.patch,
-        });
-
-        if (version.build) |build| {
-            try version_text.writer().print("-{s}", .{build});
-        }
-
-        if (version.commit) |commit| {
-            try version_text.writer().print(" (commit: {s})", .{commit});
-        }
-
-        if (version.date) |date| {
-            try version_text.writer().print(" (built: {s})", .{date});
-        }
-
-        try version_text.appendSlice("\n");
-
-        return version_text.toOwnedSlice();
-    }
 };
 
 /// Get version information
 pub fn getVersionInfo(version_str: []const u8) VersionInfo {
-    // Parse version string (e.g., "0.5.0")
-    var parts = std.mem.splitSequence(u8, version_str, ".");
+    // Parse version string (e.g., "0.7.2" or "0.7.2-beta")
+    // Split by "-" to separate version from build suffix
+    var version_parts = std.mem.splitSequence(u8, version_str, "-");
+    const base_version = version_parts.next() orelse "0.0.0";
+    const build_suffix = version_parts.next();
+    
+    // Parse major.minor.patch from base version
+    var parts = std.mem.splitSequence(u8, base_version, ".");
     
     const major_str = parts.next() orelse "0";
     const minor_str = parts.next() orelse "0";
@@ -114,8 +90,8 @@ pub fn getVersionInfo(version_str: []const u8) VersionInfo {
         .major = major,
         .minor = minor,
         .patch = patch,
-        .build = "release",
-        .commit = "unknown",
-        .date = "unknown",
+        .build = build_suffix, // Only set if build suffix exists (e.g., "-beta", "-rc1")
+        .commit = null,
+        .date = null,
     };
 }

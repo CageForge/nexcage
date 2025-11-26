@@ -214,13 +214,13 @@ pub const CommandInterface = struct {
     ctx: *anyopaque,
 
     /// Execute command
-    execute: *const fn (options: types.RuntimeOptions, allocator: std.mem.Allocator) Error!void,
+    execute: *const fn (self: *CommandInterface, options: types.RuntimeOptions, allocator: std.mem.Allocator) Error!void,
 
     /// Get command help
-    help: *const fn (allocator: std.mem.Allocator) Error![]const u8,
+    help: *const fn (self: *CommandInterface, allocator: std.mem.Allocator) Error![]const u8,
 
     /// Validate command arguments
-    validate: *const fn (args: []const []const u8) Error!void,
+    validate: *const fn (self: *CommandInterface, args: []const []const u8) Error!void,
 };
 
 /// Error type for interfaces

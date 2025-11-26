@@ -1,0 +1,41 @@
+name: DCO (Developer Certificate of Origin)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dco:
+    name: DCO Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for DCO check
+
+      - name: DCO Check
+        uses: chef-cookbooks/community_cookbook_dco_check@v1.0.7
+        with:
+          failure-msg: |
+            ❌ DCO (Developer Certificate of Origin) check failed.
+            
+            All commits must be signed off. Please add DCO signoff to your commits:
+            
+            ```bash
+            git commit --amend --signoff
+            git push --force-with-lease
+            ```
+            
+            Or for multiple commits:
+            ```bash
+            git rebase --signoff HEAD~<number-of-commits>
+            ```
+            
+            See CONTRIBUTING.md for more information.
+

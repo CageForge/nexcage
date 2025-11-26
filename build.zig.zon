@@ -8,5 +8,10 @@
         "build.zig",
         "build.zig.zon",
     },
-    .dependencies = .{},
+    .dependencies = .{
+        .oci_spec_zig = .{
+            .url = "https://github.com/CageForge/oci-specs-zig/archive/8b5c19c493b7d75e4e7f95ab59e3bc64a0323e09.tar.gz",
+            .hash = "oci_spec_zig-0.1.0-XREPcU0aAAC5bXifwotqtjDuJXcFjMvgepRe8RVD0uYt",
+        },
+    },
 }

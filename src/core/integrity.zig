@@ -196,8 +196,10 @@ pub const IntegrityChecker = struct {
     }
     
     /// Check if Proxmox API is accessible
+    /// Note: Currently not implemented as we use pct CLI instead of direct API
     fn checkProxmoxApi(_: *IntegrityChecker) bool {
-        // TODO: Implement Proxmox API connectivity check
+        // Proxmox API check not implemented - using pct CLI for operations
+        // To implement: add HTTP client to query /api2/json/access/ticket
         return false;
     }
     

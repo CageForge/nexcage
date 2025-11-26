@@ -34,8 +34,18 @@ pub const ImageConverter = struct {
         defer self.allocator.free(rootfs_source);
         try self.extractRootfs(rootfs_source, output_dir);
 
-        // Apply LXC-specific configurations
+        // Validate rootfs was copied correctly (before applying LXC configs)
+        // Note: This validates after copy but before applying configs
+        std.debug.print("[IMAGE_CONVERTER] Validating rootfs after copy (before LXC configs)\n", .{});
+        try self.validateRootfsDirectory(output_dir);
+
+        // Apply LXC-specific configurations (adds directories, configs, but doesn't remove files)
+        std.debug.print("[IMAGE_CONVERTER] Applying LXC configurations\n", .{});
         try self.applyLxcConfigurations(output_dir, &config);
+
+        // Validate again after applying configs to ensure files are still there
+        std.debug.print("[IMAGE_CONVERTER] Validating rootfs after LXC configs\n", .{});
+        try self.validateRootfsDirectory(output_dir);
 
         if (self.logger) |log| try log.info("Successfully converted OCI bundle to LXC rootfs", .{});
     }
@@ -128,7 +138,7 @@ pub const ImageConverter = struct {
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
-        
+
         if (result.exit_code != 0) {
             if (self.logger) |log| try log.err("Failed to extract tar.zst: {s}", .{result.stderr});
             return error.ExtractionFailed;
@@ -141,7 +151,7 @@ pub const ImageConverter = struct {
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
-        
+
         if (result.exit_code != 0) {
             if (self.logger) |log| try log.err("Failed to extract tar.gz: {s}", .{result.stderr});
             return error.ExtractionFailed;
@@ -154,41 +164,164 @@ pub const ImageConverter = struct {
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
-        
+
         if (result.exit_code != 0) {
             if (self.logger) |log| try log.err("Failed to extract tar: {s}", .{result.stderr});
             return error.ExtractionFailed;
         }
     }
 
-    /// Copy directory recursively
+    /// Copy directory recursively with detailed logging and error handling
     fn copyDirectoryRecursive(self: *Self, source_dir: std.fs.Dir, dest_path: []const u8) !void {
+        var file_count: usize = 0;
+        var dir_count: usize = 0;
+        var symlink_count: usize = 0;
+        var error_count: usize = 0;
+
+        // Always output to stderr for debugging even if logger fails
+        std.debug.print("[IMAGE_CONVERTER] Starting recursive copy to: {s}\n", .{dest_path});
+
+        if (self.logger) |log| {
+            log.info("Starting recursive copy to: {s}", .{dest_path}) catch |err| {
+                std.debug.print("[IMAGE_CONVERTER] Logger failed: {}\n", .{err});
+            };
+        }
+
         var iterator = source_dir.iterate();
         while (try iterator.next()) |entry| {
-            const source_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ dest_path, entry.name });
-            defer self.allocator.free(source_path);
+            const dest_file_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ dest_path, entry.name });
+            defer self.allocator.free(dest_file_path);
 
             switch (entry.kind) {
                 .directory => {
-                    try std.fs.cwd().makePath(source_path);
-                    var subdir = try source_dir.openDir(entry.name, .{ .iterate = true });
+                    if (self.logger) |log| {
+                        try log.debug("Copying directory: {s} -> {s}", .{ entry.name, dest_file_path });
+                    }
+                    dir_count += 1;
+                    std.fs.cwd().makePath(dest_file_path) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to create directory {s}: {}", .{ dest_file_path, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
+
+                    var subdir = source_dir.openDir(entry.name, .{ .iterate = true }) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to open subdirectory {s}: {}", .{ entry.name, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
                     defer subdir.close();
-                    try self.copyDirectoryRecursive(subdir, source_path);
+
+                    try self.copyDirectoryRecursive(subdir, dest_file_path);
                 },
                 .file => {
-                    const source_file = try source_dir.openFile(entry.name, .{});
+                    std.debug.print("[IMAGE_CONVERTER] Copying file: {s} -> {s}\n", .{ entry.name, dest_file_path });
+
+                    if (self.logger) |log| {
+                        log.debug("Copying file: {s} -> {s}", .{ entry.name, dest_file_path }) catch {};
+                    }
+                    file_count += 1;
+
+                    const source_file = source_dir.openFile(entry.name, .{}) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to open source file {s}: {}", .{ entry.name, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
                     defer source_file.close();
-                    const dest_file = try std.fs.cwd().createFile(source_path, .{});
+
+                    // Ensure parent directory exists
+                    const parent_dir = std.fs.path.dirname(dest_file_path) orelse dest_path;
+                    std.fs.cwd().makePath(parent_dir) catch |err| switch (err) {
+                        error.PathAlreadyExists => {},
+                        else => {
+                            if (self.logger) |log| {
+                                try log.err("Failed to create parent directory {s}: {}", .{ parent_dir, err });
+                            }
+                            error_count += 1;
+                            return err;
+                        },
+                    };
+
+                    const dest_file = std.fs.cwd().createFile(dest_file_path, .{}) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to create destination file {s}: {}", .{ dest_file_path, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
                     defer dest_file.close();
+
                     _ = try source_file.copyRangeAll(0, dest_file, 0, std.math.maxInt(u64));
+
+                    if (self.logger) |log| {
+                        try log.debug("Successfully copied file: {s}", .{entry.name});
+                    }
                 },
                 .sym_link => {
-                    const link_target = try source_dir.readLink(entry.name, &[_]u8{});
-                    try std.fs.cwd().symLink(link_target, source_path, .{});
+                    if (self.logger) |log| {
+                        try log.debug("Copying symlink: {s} -> {s}", .{ entry.name, dest_file_path });
+                    }
+                    symlink_count += 1;
+
+                    // Ensure parent directory exists
+                    const parent_dir = std.fs.path.dirname(dest_file_path) orelse dest_path;
+                    std.fs.cwd().makePath(parent_dir) catch |err| switch (err) {
+                        error.PathAlreadyExists => {},
+                        else => {
+                            if (self.logger) |log| {
+                                try log.err("Failed to create parent directory for symlink {s}: {}", .{ parent_dir, err });
+                            }
+                            error_count += 1;
+                            return err;
+                        },
+                    };
+
+                    const link_target = source_dir.readLink(entry.name, &[_]u8{}) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to read symlink target {s}: {}", .{ entry.name, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
+
+                    std.fs.cwd().symLink(link_target, dest_file_path, .{}) catch |err| {
+                        if (self.logger) |log| {
+                            try log.err("Failed to create symlink {s} -> {s}: {}", .{ dest_file_path, link_target, err });
+                        }
+                        error_count += 1;
+                        return err;
+                    };
                 },
                 else => {
-                    if (self.logger) |log| try log.warn("Skipping unsupported entry type: {s}", .{entry.name});
+                    if (self.logger) |log| {
+                        try log.warn("Skipping unsupported entry type {s}: {s}", .{ @tagName(entry.kind), entry.name });
+                    }
                 },
+            }
+        }
+
+        // Always output to stderr for debugging
+        std.debug.print("[IMAGE_CONVERTER] Copy completed: {d} files, {d} directories, {d} symlinks, {d} errors in {s}\n", .{ file_count, dir_count, symlink_count, error_count, dest_path });
+
+        if (self.logger) |log| {
+            log.info("Copy completed: {d} files, {d} directories, {d} symlinks, {d} errors in {s}", .{ file_count, dir_count, symlink_count, error_count, dest_path }) catch {};
+        }
+
+        if (error_count > 0) {
+            if (self.logger) |log| {
+                try log.err("Copy operation had {d} errors", .{error_count});
+            }
+            return core.Error.CopyFailed;
+        }
+
+        if (file_count == 0 and dir_count == 0) {
+            if (self.logger) |log| {
+                try log.warn("No files or directories copied to {s}", .{dest_path});
             }
         }
     }
@@ -214,11 +347,7 @@ pub const ImageConverter = struct {
 
     /// Create essential LXC directories
     fn createLxcDirectories(self: *Self, rootfs_path: []const u8) !void {
-        const dirs = [_][]const u8{
-            "dev", "proc", "sys", "tmp", "var/tmp", "var/log", "var/cache", "var/lib", "var/run",
-            "etc", "etc/init.d", "etc/rc.d", "etc/systemd", "etc/systemd/system",
-            "root", "home", "opt", "usr/local", "mnt", "media"
-        };
+        const dirs = [_][]const u8{ "dev", "proc", "sys", "tmp", "var/tmp", "var/log", "var/cache", "var/lib", "var/run", "etc", "etc/init.d", "etc/rc.d", "etc/systemd", "etc/systemd/system", "root", "home", "opt", "usr/local", "mnt", "media" };
 
         for (dirs) |dir| {
             const full_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ rootfs_path, dir });
@@ -234,7 +363,7 @@ pub const ImageConverter = struct {
     fn setHostname(self: *Self, rootfs_path: []const u8, hostname: []const u8) !void {
         const etc_dir = try std.fmt.allocPrint(self.allocator, "{s}/etc", .{rootfs_path});
         defer self.allocator.free(etc_dir);
-        
+
         const hostname_path = try std.fmt.allocPrint(self.allocator, "{s}/hostname", .{etc_dir});
         defer self.allocator.free(hostname_path);
 
@@ -252,11 +381,10 @@ pub const ImageConverter = struct {
 
     /// Configure network interfaces
     fn configureNetwork(self: *Self, rootfs_path: []const u8, config: *const oci_bundle.OciBundleConfig) !void {
-        _ = config;
-        // Create basic network configuration
+        // Create basic network configuration derived from OCI linux.netDevices aliases
         const network_dir = try std.fmt.allocPrint(self.allocator, "{s}/etc/network", .{rootfs_path});
         defer self.allocator.free(network_dir);
-        
+
         const network_path = try std.fmt.allocPrint(self.allocator, "{s}/interfaces", .{network_dir});
         defer self.allocator.free(network_path);
 
@@ -268,25 +396,46 @@ pub const ImageConverter = struct {
 
         const file = try std.fs.cwd().createFile(network_path, .{});
         defer file.close();
-        
-        const network_config = 
+
+        var contents = std.array_list.Managed(u8).init(self.allocator);
+        defer contents.deinit();
+        var writer = contents.writer();
+
+        try writer.writeAll(
             \\auto lo
             \\iface lo inet loopback
             \\
-            \\auto eth0
-            \\iface eth0 inet dhcp
-            \\
-        ;
-        try file.writeAll(network_config);
+        );
+
+        if (config.net_devices) |devices| {
+            if (devices.len > 0) {
+                for (devices) |device| {
+                    try writer.print("auto {s}\niface {s} inet dhcp\n\n", .{ device.alias, device.alias });
+                }
+            } else {
+                try writer.writeAll(
+                    \\auto eth0
+                    \\iface eth0 inet dhcp
+                    \\
+                );
+            }
+        } else {
+            try writer.writeAll(
+                \\auto eth0
+                \\iface eth0 inet dhcp
+                \\
+            );
+        }
+
+        try file.writeAll(contents.items);
     }
 
     /// Set up init system
     fn setupInitSystem(self: *Self, rootfs_path: []const u8, config: *const oci_bundle.OciBundleConfig) !void {
-        _ = config;
         // Create basic init script for LXC
         const sbin_dir = try std.fmt.allocPrint(self.allocator, "{s}/sbin", .{rootfs_path});
         defer self.allocator.free(sbin_dir);
-        
+
         const init_path = try std.fmt.allocPrint(self.allocator, "{s}/init", .{sbin_dir});
         defer self.allocator.free(init_path);
 
@@ -298,8 +447,12 @@ pub const ImageConverter = struct {
 
         const file = try std.fs.cwd().createFile(init_path, .{});
         defer file.close();
-        
-        const init_script = 
+
+        // Determine the main process command from OCI config
+        const main_command = try self.determineMainCommand(config);
+        defer self.allocator.free(main_command);
+
+        const init_script = try std.fmt.allocPrint(self.allocator,
             \\#!/bin/sh
             \\# LXC init script
             \\
@@ -326,39 +479,217 @@ pub const ImageConverter = struct {
             \\    /etc/init.d/rcS
             \\fi
             \\
-            \\# Start main process
-            \\if [ -x /bin/sh ]; then
-            \\    exec /bin/sh
-            \\else
-            \\    # Keep container running
-            \\    while true; do
-            \\        echo "Container is running..."
-            \\        sleep 30
-            \\    done
-            \\fi
+            \\# Start main process: {s}
+            \\{s}
             \\
-        ;
+        , .{ main_command, main_command });
+        defer self.allocator.free(init_script);
+
         try file.writeAll(init_script);
-        
+
+        if (self.logger) |log| {
+            try log.info("Created LXC init script with command: {s}", .{main_command});
+        }
+
         // Note: chmod would be needed here in a real implementation
+    }
+
+    /// Determine the main command to run based on OCI config
+    fn determineMainCommand(self: *Self, config: *const oci_bundle.OciBundleConfig) ![]const u8 {
+        // Priority: ENTRYPOINT + CMD > process.args > fallback to /bin/sh
+
+        // Check if we have ENTRYPOINT from metadata.json
+        if (config.entrypoint) |entrypoint| {
+            if (entrypoint.len > 0) {
+                // Calculate total length needed for command string
+                var total_len: usize = 0;
+                var first_arg = true;
+                for (entrypoint) |arg| {
+                    if (!first_arg) total_len += 1; // +1 for space separator
+                    total_len += arg.len;
+                    first_arg = false;
+                }
+                if (config.cmd) |cmd| {
+                    for (cmd) |arg| {
+                        if (!first_arg) total_len += 1; // +1 for space separator
+                        total_len += arg.len;
+                        first_arg = false;
+                    }
+                }
+
+                // Build command string by concatenating ENTRYPOINT + CMD
+                var cmd_str = try self.allocator.alloc(u8, total_len);
+                var pos: usize = 0;
+                first_arg = true;
+
+                // Add ENTRYPOINT arguments
+                for (entrypoint) |arg| {
+                    if (!first_arg) {
+                        cmd_str[pos] = ' ';
+                        pos += 1;
+                    }
+                    @memcpy(cmd_str[pos .. pos + arg.len], arg);
+                    pos += arg.len;
+                    first_arg = false;
+                }
+
+                // Add CMD arguments if present
+                if (config.cmd) |cmd| {
+                    for (cmd) |arg| {
+                        if (!first_arg) {
+                            cmd_str[pos] = ' ';
+                            pos += 1;
+                        }
+                        @memcpy(cmd_str[pos .. pos + arg.len], arg);
+                        pos += arg.len;
+                        first_arg = false;
+                    }
+                }
+
+                const full_command = cmd_str[0..pos];
+
+                if (self.logger) |log| {
+                    try log.info("Using ENTRYPOINT + CMD: {s}", .{full_command});
+                }
+
+                return full_command;
+            }
+        }
+
+        // Fallback to process.args from config.json
+        if (config.process_args) |args| {
+            if (args.len > 0) {
+                const full_command = try std.mem.join(self.allocator, " ", args);
+
+                if (self.logger) |log| {
+                    try log.info("Using process.args: {s}", .{full_command});
+                }
+
+                return full_command;
+            }
+        }
+
+        // Final fallback to /bin/sh
+        if (self.logger) |log| {
+            try log.info("No specific command found, using fallback: /bin/sh", .{});
+        }
+
+        return try self.allocator.dupe(u8, "/bin/sh");
+    }
+
+    /// Validate rootfs directory before creating archive
+    fn validateRootfsDirectory(self: *Self, rootfs_dir: []const u8) !void {
+        std.debug.print("[IMAGE_CONVERTER] Validating rootfs directory: {s}\n", .{rootfs_dir});
+
+        if (self.logger) |log| {
+            log.info("Validating rootfs directory: {s}", .{rootfs_dir}) catch {};
+        }
+
+        // Check if directory exists
+        var rootfs_handle = std.fs.cwd().openDir(rootfs_dir, .{ .iterate = true }) catch |err| {
+            if (self.logger) |log| {
+                try log.err("Rootfs directory does not exist: {s} ({})", .{ rootfs_dir, err });
+            }
+            return core.Error.RootfsNotFound;
+        };
+        defer rootfs_handle.close();
+
+        // Count files and directories recursively
+        var file_count: usize = 0;
+        var dir_count: usize = 0;
+
+        // Helper function to count recursively
+        const countRecursive = struct {
+            fn count(dir: std.fs.Dir, path: []const u8, allocator: std.mem.Allocator, files: *usize, dirs: *usize) !void {
+                var iterator = dir.iterate();
+                while (try iterator.next()) |entry| {
+                    switch (entry.kind) {
+                        .file => {
+                            files.* += 1;
+                        },
+                        .directory => {
+                            dirs.* += 1;
+                            // Recursively count in subdirectory
+                            const subdir_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ path, entry.name });
+                            defer allocator.free(subdir_path);
+                            var subdir = try dir.openDir(entry.name, .{ .iterate = true });
+                            defer subdir.close();
+                            try count(subdir, subdir_path, allocator, files, dirs);
+                        },
+                        else => {},
+                    }
+                }
+            }
+        }.count;
+
+        try countRecursive(rootfs_handle, rootfs_dir, self.allocator, &file_count, &dir_count);
+
+        std.debug.print("[IMAGE_CONVERTER] Rootfs validation: {d} files, {d} directories found\n", .{ file_count, dir_count });
+
+        if (self.logger) |log| {
+            log.info("Rootfs validation: {d} files, {d} directories found", .{ file_count, dir_count }) catch {};
+        }
+
+        // Require at least some content
+        if (file_count == 0 and dir_count == 0) {
+            if (self.logger) |log| {
+                try log.err("Rootfs directory is empty: {s}", .{rootfs_dir});
+            }
+            return core.Error.EmptyRootfs;
+        }
+
+        // Warn if very minimal
+        if (file_count < 3) {
+            if (self.logger) |log| {
+                try log.warn("Rootfs directory has very few files ({d}), archive may be minimal", .{file_count});
+            }
+        }
     }
 
     /// Create template archive from rootfs
     fn createTemplateArchive(self: *Self, rootfs_dir: []const u8, template_name: []const u8) ![]const u8 {
+        // Validate rootfs before creating archive
+        try self.validateRootfsDirectory(rootfs_dir);
+
         const archive_name = try std.fmt.allocPrint(self.allocator, "{s}.tar.zst", .{template_name});
         const archive_path = try std.fmt.allocPrint(self.allocator, "/tmp/{s}", .{archive_name});
         defer self.allocator.free(archive_name);
 
-        if (self.logger) |log| try log.info("Creating template archive: {s}", .{archive_path});
+        if (self.logger) |log| {
+            try log.info("Creating template archive: {s} from {s}", .{ archive_path, rootfs_dir });
+        }
 
         const args = [_][]const u8{ "tar", "--zstd", "-cf", archive_path, "-C", rootfs_dir, "." };
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
-        
+
         if (result.exit_code != 0) {
-            if (self.logger) |log| try log.err("Failed to create template archive: {s}", .{result.stderr});
-            return error.ArchiveCreationFailed;
+            if (self.logger) |log| {
+                try log.err("Failed to create template archive (exit code {d}): {s}", .{ result.exit_code, result.stderr });
+            }
+            return core.Error.ArchiveCreationFailed;
+        }
+
+        // Verify archive was created and has reasonable size
+        var archive_file = std.fs.cwd().openFile(archive_path, .{}) catch |err| {
+            if (self.logger) |log| {
+                try log.err("Failed to verify archive file: {s} ({})", .{ archive_path, err });
+            }
+            return core.Error.ArchiveCreationFailed;
+        };
+        defer archive_file.close();
+
+        const archive_stat = try archive_file.stat();
+        if (self.logger) |log| {
+            try log.info("Template archive created: {s} ({d} bytes)", .{ archive_path, archive_stat.size });
+        }
+
+        // Warn if archive is suspiciously small (< 500 bytes typically indicates only metadata)
+        if (archive_stat.size < 500) {
+            if (self.logger) |log| {
+                try log.warn("Archive is very small ({d} bytes), may not contain rootfs content", .{archive_stat.size});
+            }
         }
 
         return archive_path;
@@ -377,7 +708,7 @@ pub const ImageConverter = struct {
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
-        
+
         if (result.exit_code != 0) {
             if (self.logger) |log| try log.err("Failed to upload template: {s}", .{result.stderr});
             return error.UploadFailed;
@@ -393,7 +724,7 @@ pub const ImageConverter = struct {
     /// Cleanup directory
     fn cleanupDirectory(self: *Self, dir_path: []const u8) !void {
         if (self.logger) |log| try log.info("Cleaning up directory: {s}", .{dir_path});
-        
+
         const args = [_][]const u8{ "rm", "-rf", dir_path };
         const result = try self.runCommand(&args);
         defer self.allocator.free(result.stdout);
@@ -405,14 +736,14 @@ pub const ImageConverter = struct {
         var child = std.process.Child.init(args, self.allocator);
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = .Pipe;
-        
+
         try child.spawn();
-        
+
         const stdout = try child.stdout.?.readToEndAlloc(self.allocator, 1024 * 1024);
         const stderr = try child.stderr.?.readToEndAlloc(self.allocator, 1024 * 1024);
-        
+
         const term = try child.wait();
-        
+
         return CommandResult{
             .stdout = stdout,
             .stderr = stderr,

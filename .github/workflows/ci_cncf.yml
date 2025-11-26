@@ -51,13 +51,17 @@ jobs:
 
     - name: Run unit tests
       run: zig build test
+      # Make tests mandatory (fail-fast) for CI gates
+      continue-on-error: false
 
     - name: Smoke tests
       run: |
-        ./zig-out/bin/nexcage --help || true
-        ./zig-out/bin/nexcage version || true
-        ./zig-out/bin/nexcage create --help || true
-        ./zig-out/bin/nexcage list --runtime lxc || true
+        ./zig-out/bin/nexcage --help || exit 1
+        ./zig-out/bin/nexcage version || exit 1
+        ./zig-out/bin/nexcage create --help || exit 1
+        ./zig-out/bin/nexcage list --runtime proxmox-lxc || exit 1
+      # Make smoke tests mandatory
+      continue-on-error: false
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -119,6 +123,8 @@ jobs:
     name: Integration Tests
     runs-on: [self-hosted, proxmox]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Make integration tests mandatory when conditions are met
+    continue-on-error: false
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -134,12 +140,21 @@ jobs:
     - name: Integration tests
       run: |
         echo "Running integration tests on Proxmox..."
-        ./zig-out/bin/nexcage --help || true
-        ./zig-out/bin/nexcage version || true
+        ./zig-out/bin/nexcage --help || exit 1
+        ./zig-out/bin/nexcage version || exit 1
         
         # Test with actual Proxmox tools
-        command -v pct && pct version || echo "pct not available"
-        command -v pveversion && pveversion -v || echo "pveversion not available"
+        if ! command -v pct; then
+          echo "ERROR: pct not available"
+          exit 1
+        fi
+        pct version || exit 1
+        
+        if ! command -v pveversion; then
+          echo "ERROR: pveversion not available"
+          exit 1
+        fi
+        pveversion -v || exit 1
 
     - name: Upload integration artifacts
       uses: actions/upload-artifact@v4

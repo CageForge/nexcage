@@ -51,4 +51,78 @@ pub const ValidationUtils = struct {
             return errors.CliError.InvalidInput;
         }
     }
+    
+    /// Validate hostname per common constraints (RFC-1123-like):
+    /// - 1..253 chars, labels 1..63, [a-z0-9-], no leading/trailing '-'
+    pub fn validateHostname(hostname: []const u8) bool {
+        if (hostname.len == 0 or hostname.len > 253) return false;
+        var it = std.mem.splitScalar(u8, hostname, '.');
+        while (it.next()) |label| {
+            if (label.len == 0 or label.len > 63) return false;
+            if (label[0] == '-' or label[label.len - 1] == '-') return false;
+            var i: usize = 0;
+            while (i < label.len) : (i += 1) {
+                const c = label[i];
+                const is_alpha = (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z');
+                const is_digit = (c >= '0' and c <= '9');
+                const is_dash = (c == '-');
+                if (!(is_alpha or is_digit or is_dash)) return false;
+            }
+        }
+        return true;
+    }
+
+    /// Basic VMID validation: numeric string 1..6 digits
+    pub fn validateVmidString(vmid: []const u8) bool {
+        if (vmid.len == 0 or vmid.len > 6) return false;
+        var i: usize = 0;
+        while (i < vmid.len) : (i += 1) {
+            const c = vmid[i];
+            if (c < '0' or c > '9') return false;
+        }
+        return true;
+    }
+
+    /// Storage name (Proxmox): [A-Za-z0-9_-]+
+    pub fn validateStorageName(name: []const u8) bool {
+        if (name.len == 0) return false;
+        var i: usize = 0;
+        while (i < name.len) : (i += 1) {
+            const c = name[i];
+            const ok = (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_' or c == '-';
+            if (!ok) return false;
+        }
+        return true;
+    }
+
+    /// Safe path: forbids '\\0', disallows '..' segments; optional absolute requirement
+    pub fn validateSafePath(path: []const u8, require_absolute: bool) bool {
+        if (path.len == 0) return false;
+        if (require_absolute and path[0] != '/') return false;
+        if (std.mem.indexOfScalar(u8, path, 0)) |_| return false;
+        var it = std.mem.splitScalar(u8, path, '/');
+        while (it.next()) |seg| {
+            if (std.mem.eql(u8, seg, ".")) continue;
+            if (std.mem.eql(u8, seg, "..")) return false;
+        }
+        return true;
+    }
+
+    /// Env var: KEY=VALUE, KEY matches [A-Z_][A-Z0-9_]*
+    pub fn validateEnvKV(kv: []const u8) bool {
+        const eq_idx_opt = std.mem.indexOfScalar(u8, kv, '=');
+        if (eq_idx_opt == null) return false;
+        const eq_idx = eq_idx_opt.?;
+        const key = kv[0..eq_idx];
+        if (key.len == 0) return false;
+        if (!((key[0] >= 'A' and key[0] <= 'Z') or key[0] == '_')) return false;
+        var i: usize = 1;
+        while (i < key.len) : (i += 1) {
+            const c = key[i];
+            const ok = (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_';
+            if (!ok) return false;
+        }
+        const value = kv[eq_idx+1..];
+        return std.mem.indexOfScalar(u8, value, 0) == null;
+    }
 };

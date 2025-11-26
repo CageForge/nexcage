@@ -1,32 +1,32 @@
-Source: proxmox-lxcri
+Source: nexcage
 Section: utils
 Priority: optional
-Maintainer: Proxmox LXCRI Team <maintainers@proxmox-lxcri.io>
-Build-Depends: debhelper-compat (= 13)
+Maintainer: CageForge Team <contact@cageforge.com>
+Build-Depends: debhelper-compat (= 13), zig (>= 0.15.1), libcap-dev, libseccomp-dev, libyajl-dev
 Standards-Version: 4.6.2
-Homepage: https://github.com/kubebsd/proxmox-lxcri
-Vcs-Git: https://github.com/kubebsd/proxmox-lxcri.git
-Vcs-Browser: https://github.com/kubebsd/proxmox-lxcri
+Homepage: https://github.com/CageForge/nexcage
+Vcs-Git: https://github.com/CageForge/nexcage.git
+Vcs-Browser: https://github.com/CageForge/nexcage
 
-Package: proxmox-lxcri
+Package: nexcage
 Architecture: amd64 arm64
-Depends: ${shlibs:Depends}, ${misc:Depends}, zfsutils-linux (>= 2.1), criu (>= 3.15)
-Recommends: proxmox-ve (>= 7.0), containerd (>= 1.6)
-Suggests: kubernetes-cni, docker.io
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: proxmox-ve (>= 7.0), zfsutils-linux (>= 2.1)
+Suggests: containerd (>= 1.6), kubernetes-cni
 Description: OCI-compatible container runtime for Proxmox VE
- Proxmox LXCRI is a high-performance OCI-compatible runtime implementation
- that transforms Proxmox VE into a container and VM orchestration worker.
+ NexCage (formerly Proxmox-LXCri) is a high-performance OCI-compatible
+ runtime implementation that transforms Proxmox VE into a container and
+ VM orchestration worker.
  .
  Key features:
-  * Revolutionary ZFS checkpoint/restore functionality
-  * Lightning-fast filesystem-level snapshots (seconds vs minutes)
-  * Hybrid architecture: ZFS snapshots + CRIU fallback
-  * Seamless integration with Proxmox VE infrastructure
-  * Full OCI Runtime Specification v1.0 compliance
-  * Enterprise-grade security and isolation
-  * Native ZFS storage management with deduplication
-  * Advanced networking with VLAN and SDN support
+  * Full OCI Runtime Specification 1.0.2 compliance
+  * Proxmox VE LXC backend integration
+  * OCI bundle support with config.json parsing
+  * Container lifecycle management (create, start, stop, delete, kill)
+  * State management with OCI-compliant state.json
+  * ZFS dataset support for container storage
+  * Security hardening with input validation
+  * Multiple runtime backends (proxmox-lxc, crun, runc, vm)
  .
- This package provides the proxmox-lxcri binary and configuration files
- for running OCI-compliant containers on Proxmox VE using LXC backend
- with revolutionary ZFS checkpoint/restore capabilities.
+ This package provides the nexcage binary and configuration files
+ for running OCI-compliant containers on Proxmox VE using LXC backend.

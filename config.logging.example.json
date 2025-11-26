@@ -1,13 +1,13 @@
 {
   "runtime_type": "proxmox-lxc",
   "default_runtime": "proxmox-lxc",
-  "log_level": "debug",
+  "log_level": "info",
   "log_file": "/var/log/nexcage/nexcage.log",
   "data_dir": "/var/lib/nexcage",
   "cache_dir": "/var/cache/nexcage",
   "temp_dir": "/tmp/nexcage",
   "runtime": {
-    "log_level": "debug",
+    "log_level": "info",
     "log_path": "/var/log/nexcage/runtime.log",
     "root_path": "/var/lib/nexcage",
     "routing": [

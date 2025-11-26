@@ -121,6 +121,21 @@ pub const RuncDriver = struct {
         }
     }
 
+    /// Kill an OCI container using runc
+    pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
+        if (self.logger) |log| {
+            try log.info("Killing OCI container with runc: {s} signal {s}", .{container_id, signal});
+        }
+        const args = [_][]const u8{ "runc", "kill", container_id, signal };
+        const result = try self.runCommand(&args);
+        defer self.allocator.free(result.stdout);
+        defer self.allocator.free(result.stderr);
+        if (result.exit_code != 0) {
+            if (self.logger) |log| try log.err("Failed to kill OCI container with runc: {s}", .{result.stderr});
+            return error.RuncStopFailed;
+        }
+    }
+
     /// Delete an OCI container using runc
     pub fn delete(self: *Self, container_id: []const u8) !void {
         if (self.logger) |log| {

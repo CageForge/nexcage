@@ -1,6 +1,6 @@
-# Proxmox LXCRI Technical Stack
+# Nexcage Technical Stack
 
-This document describes the technical stack used in the Proxmox LXCRI project, including versions, features, and reasons for technology selection.
+This document describes the technical stack used in the Nexcage project, including versions, features, and reasons for technology selection.
 
 ## Core Technologies
 
@@ -57,19 +57,6 @@ This document describes the technical stack used in the Proxmox LXCRI project, i
   - Performance
   - Enterprise features
   - Linux integration
-
-### 2. OverlayFS
-- **Version**: Linux kernel 5.15+
-- **Features**:
-  - Union filesystem
-  - Copy-on-write
-  - Performance
-  - Simplicity
-- **Why OverlayFS?**
-  - Kernel support
-  - Performance
-  - Simplicity
-  - Wide adoption
 
 ## Networking
 
@@ -166,7 +153,7 @@ This document describes the technical stack used in the Proxmox LXCRI project, i
 
 ### 1. Metrics Collection
 - **Components**:
-  - Prometheus
+  - VictoriaMetrics
   - Grafana
   - Node Exporter
   - Custom exporters
@@ -179,8 +166,7 @@ This document describes the technical stack used in the Proxmox LXCRI project, i
 ### 2. Logging
 - **Components**:
   - Journald
-  - Fluentd
-  - Loki
+  - VictoriaLogs
   - Grafana
 - **Why these tools?**
   - Performance
@@ -214,4 +200,4 @@ This document describes the technical stack used in the Proxmox LXCRI project, i
   - Industry standard
   - Performance
   - Features
-  - Community 
+  - Community

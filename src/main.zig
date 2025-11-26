@@ -1,6 +1,5 @@
 const std = @import("std");
 const core = @import("core");
-const build_options = @import("build_options");
 const cli = @import("cli");
 const backends = @import("backends");
 const integrations = @import("integrations");
@@ -14,12 +13,7 @@ pub const AppContext = struct {
     logger: core.LogContext,
     advanced_logger: ?core.simple_advanced_logging.SimpleAdvancedLogging = null,
     logging_config: core.logging_config.LoggingConfig,
-    // error_handler: core.DefaultErrorHandler, // TODO: Implement error handler
     command_registry: cli.CommandRegistry,
-    // backend: ?*core.BackendInterface = null, // TODO: Implement backend interface
-    // network_provider: ?*core.NetworkProvider = null, // TODO: Implement network provider
-    // storage_provider: ?*core.StorageProvider = null, // TODO: Implement storage provider
-    // image_provider: ?*core.ImageProvider = null, // TODO: Implement image provider
 
     pub fn init(allocator: std.mem.Allocator, args: []const []const u8) !AppContext {
         // Load main configuration first
@@ -30,9 +24,10 @@ pub const AppContext = struct {
         const logging_cfg = try core.logging_config.LoggingConfig.loadWithPriority(allocator, args, &config);
 
         // Initialize basic logger
+        // Use stdout writer with empty buffer (Zig 0.15.1 requires buffer parameter)
         const stdout = std.fs.File.stdout();
-        var buffer: [1024]u8 = undefined;
-        const logger = core.LogContext.init(allocator, stdout.writer(&buffer), config.log_level, "nexcage");
+        var empty_buffer: [0]u8 = undefined;
+        const logger = core.LogContext.init(allocator, stdout.writer(&empty_buffer), config.log_level, "nexcage");
 
         // Initialize advanced logger if debug mode or file logging is enabled
         var advanced_logger: ?core.simple_advanced_logging.SimpleAdvancedLogging = null;
@@ -40,9 +35,8 @@ pub const AppContext = struct {
             advanced_logger = try core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, logging_cfg.debug_mode, logging_cfg.log_file_path);
         }
 
-        // Initialize error handler
-        // TODO: Implement DefaultErrorHandler
-        // const error_handler = core.DefaultErrorHandler.init(allocator, &logger.writer);
+        // Error handling is done through core.errors.ErrorHandler interface
+        // DefaultErrorHandler is available in core.errors module
 
         // Initialize global command registry
         try cli.initGlobalRegistry(allocator);
@@ -59,7 +53,6 @@ pub const AppContext = struct {
             .logger = logger,
             .advanced_logger = advanced_logger,
             .logging_config = logging_cfg,
-            // .error_handler = error_handler, // TODO: Implement error handler
             .command_registry = command_registry,
         };
     }
@@ -76,82 +69,15 @@ pub const AppContext = struct {
         // Cleanup main configuration
         self.config.deinit();
 
-        // TODO: Implement backend cleanup
-        // if (self.backend) |backend| {
-        //     backend.deinit();
-        // }
-        // if (self.network_provider) |net| {
-        //     net.deinit();
-        // }
-        // if (self.storage_provider) |stor| {
-        //     stor.deinit();
-        // }
-        // if (self.image_provider) |img| {
-        //     img.deinit();
-        // }
-
         self.command_registry.deinit();
         cli.deinitGlobalRegistry();
         self.logger.deinit();
         // config.deinit() already called above
     }
 
-    /// Initialize backend based on configuration
-    pub fn initBackend(self: *AppContext) !void {
-        const name = try self.allocator.dupe(u8, "default");
-        defer self.allocator.free(name);
-        
-        const sandbox_config = core.SandboxConfig{
-            .allocator = self.allocator,
-            .name = name,
-            .runtime_type = self.config.runtime_type,
-        };
-        _ = sandbox_config; // TODO: Use when backend selection is implemented
-
-        // TODO: Implement backend selection
-        // switch (self.config.runtime_type) {
-        //     .lxc => {
-        //         const lxc_backend = try backends.lxc.LxcBackend.init(self.allocator, sandbox_config);
-        //         self.backend = lxc_backend;
-        //     },
-        //     .qemu => {
-        //         // TODO: Implement QEMU backend
-        //         return core.Error.UnsupportedOperation;
-        //     },
-        //     .crun, .runc => {
-        //         // TODO: Implement crun/runc backend
-        //         return core.Error.UnsupportedOperation;
-        //     },
-        //     .vm => {
-        //         // TODO: Implement VM backend
-        //         return core.Error.UnsupportedOperation;
-        //     },
-        // }
-    }
-
-    /// Initialize network provider
-    pub fn initNetworkProvider(self: *AppContext) !void {
-        // TODO: Implement network provider initialization
-        // For now, use NFS as network provider
-        // In a real implementation, you would choose based on configuration
-        // const nfs_provider = try integrations.nfs.NfsNetworkProvider.init(self.allocator, self.config.network);
-        // self.network_provider = nfs_provider;
-        _ = self;
-    }
-
-    /// Initialize storage provider
-    pub fn initStorageProvider(self: *AppContext) !void {
-        // TODO: Implement storage provider initialization
-        // For now, we don't have a sandbox config with storage
-        // In a real implementation, you would get storage config from sandbox
-        _ = self;
-    }
-
-    /// Initialize image provider
-    pub fn initImageProvider(self: *AppContext) !void {
-        _ = self;
-        // TODO: Implement image provider initialization
-    }
+    // Backend routing is now handled by BackendRouter in core/router.zig
+    // Network, storage, and image providers are integrated via backends
+    // Legacy provider initialization methods removed - functionality moved to modular backend system
 };
 
 /// Main function
@@ -170,7 +96,7 @@ pub fn main() !void {
 
     // Log application startup
     if (app.advanced_logger) |*logger| {
-        try logger.info("Starting nexcage v{s}", .{build_options.app_version});
+        try logger.info("Starting nexcage v{s}", .{core.version.getVersion()});
         try logger.logSystemInfo();
     }
 
@@ -204,14 +130,14 @@ pub fn main() !void {
         break;
     }
     
-    // Log command execution start
+    // Log command execution start - safely handle logger errors
     if (app.advanced_logger) |*logger| {
-        try logger.logCommandStart(command_name, command_args);
+        logger.logCommandStart(command_name, command_args) catch {};
     }
     
     // Handle help command
     if (std.mem.eql(u8, command_name, "--help") or std.mem.eql(u8, command_name, "-h")) {
-        try app.logger.info("Proxmox LXC Runtime Interface v{s}", .{build_options.app_version});
+        try app.logger.info("Proxmox LXC Runtime Interface v{s}", .{core.version.getVersion()});
         try app.logger.info("", .{});
         try app.logger.info("Available commands:", .{});
         try app.logger.info("  create    Create a new container", .{});
@@ -219,6 +145,7 @@ pub fn main() !void {
         try app.logger.info("  stop      Stop a container", .{});
         try app.logger.info("  delete    Delete a container", .{});
         try app.logger.info("  list      List containers", .{});
+        try app.logger.info("  kill      Send a signal to a container", .{});
         try app.logger.info("  run       Run a command in a container", .{});
         try app.logger.info("  help      Show this help message", .{});
         try app.logger.info("  version   Show version information", .{});
@@ -234,34 +161,25 @@ pub fn main() !void {
     // Check if help was requested
     if (options.help) {
         // Help is handled by individual commands
-        // Initialize providers
-        try app.initBackend();
-        try app.initNetworkProvider();
-        try app.initStorageProvider();
-        try app.initImageProvider();
+        // Backend and provider initialization handled by BackendRouter in core/router.zig
 
         // Execute command (which will handle help)
         try app.command_registry.execute(command_name, options, allocator);
         
-        // Log command completion
+        // Log command completion - safely handle logger errors
         if (app.advanced_logger) |*logger| {
-            try logger.logCommandComplete(command_name, true);
+            logger.logCommandComplete(command_name, true) catch {};
         }
         return;
     }
 
-    // Initialize providers
-    try app.initBackend();
-    try app.initNetworkProvider();
-    try app.initStorageProvider();
-    try app.initImageProvider();
-
+    // Backend and provider initialization handled by BackendRouter in core/router.zig
     // Execute command
     try app.command_registry.execute(command_name, options, allocator);
     
-    // Log command completion
+    // Log command completion - safely handle logger errors
     if (app.advanced_logger) |*logger| {
-        try logger.logCommandComplete(command_name, true);
+        logger.logCommandComplete(command_name, true) catch {};
     }
 }
 
@@ -326,8 +244,8 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             i += 2;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             // This is likely the image name, container ID, or command
-            if (options.command == .start or options.command == .stop or options.command == .delete) {
-                // For start/stop/delete, first argument is container ID
+            if (options.command == .start or options.command == .stop or options.command == .delete or options.command == .state or options.command == .kill) {
+                // For start/stop/delete/state, first argument is container ID
                 if (options.container_id == null) {
                     options.container_id = try allocator.dupe(u8, arg);
                 } else {
@@ -367,6 +285,8 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "run")) return .run;
     if (std.mem.eql(u8, command_str, "help")) return .help;
     if (std.mem.eql(u8, command_str, "version")) return .version;
+    if (std.mem.eql(u8, command_str, "state")) return .state;
+    if (std.mem.eql(u8, command_str, "kill")) return .kill;
     return .help; // Default to help
 }
 

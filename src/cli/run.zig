@@ -34,12 +34,28 @@ pub const RunCommand = struct {
     }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        const stdout = std.fs.File.stdout();
+
+        // Check for help flag first
+        if (options.help) {
+            const help_text = try self.help(allocator);
+            defer allocator.free(help_text);
+            try stdout.writeAll(help_text);
+            return;
+        }
+
         try self.logCommandStart("run");
 
         // Validate required options using validation utility
         const validated = try validation.ValidationUtils.requireContainerIdAndImage(options, self.base.logger, "run");
         const container_id = validated.container_id;
         const image = validated.image;
+
+        // Additional input hardening: hostname-like container_id
+        core.validation.SecurityValidation.validateHostname(container_id) catch {
+            const errh = @import("errors.zig").createErrorHandler(self.base.logger);
+            return errh.invalidInput("Invalid container name/hostname: {s}", .{container_id});
+        };
 
         // Use router for backend selection and execution
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);

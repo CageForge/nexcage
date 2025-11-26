@@ -1,7 +1,7 @@
 # Proxmox LXC Runtime Interface - Makefile
 # Enhanced with detailed test reporting
 
-.PHONY: help build test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps
+.PHONY: help build docs-serve docs-build test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps
 
 # Default target
 help:
@@ -26,6 +26,8 @@ help:
 	@echo "  lint           Run linter checks"
 	@echo "  check          Run all checks (format, lint, test)"
 	@echo "  deps           Install dependencies"
+	@echo "  docs-serve     Serve docs locally (Docker mkdocs)"
+	@echo "  docs-build     Build docs static site (Docker mkdocs)"
 	@echo ""
 	@echo "Report Commands:"
 	@echo "  report         Generate test report summary"
@@ -108,6 +110,14 @@ deps:
 	sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
 	@echo "✅ Dependencies installed successfully"
 
+docs-serve:
+	@echo "📚 Serving docs at http://localhost:8000 ..."
+	bash scripts/mkdocs_serve.sh
+
+docs-build:
+	@echo "🏗️  Building docs into site/ ..."
+	bash scripts/mkdocs_build.sh
+
 # Report commands
 report:
 	@echo "📊 Generating test report summary..."
@@ -161,7 +171,7 @@ report-view:
 	fi
 
 # Special targets
-.PHONY: help build test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps report report-clean report-view
+.PHONY: help build docs-serve docs-build test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps report report-clean report-view
 
 # Default target
 .DEFAULT_GOAL := help

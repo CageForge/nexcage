@@ -31,13 +31,18 @@ pub const StartCommand = struct {
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        // Start logging (safe)
         try self.logCommandStart("start");
+
+        const stdout = std.fs.File.stdout();
+        if (options.debug) {
+            try stdout.writeAll("DEBUG: Start command started\n");
+        }
 
         // Check for help flag
         if (options.help) {
             const help_text = try self.help(allocator);
             defer allocator.free(help_text);
-            const stdout = std.fs.File.stdout();
             try stdout.writeAll(help_text);
             return;
         }
@@ -48,10 +53,28 @@ pub const StartCommand = struct {
         try self.logOperation("Starting container", container_id);
 
         // Use router for backend selection and execution
+        if (options.debug) {
+            try stdout.writeAll("DEBUG: Initializing BackendRouter with debug=on\n");
+        }
         var backend_router = router.BackendRouter.initWithDebug(allocator, self.base.logger, options.debug);
 
         const operation = router.Operation{ .start = {} };
-        try backend_router.routeAndExecute(operation, container_id, null);
+        if (options.debug) {
+            try stdout.writeAll("DEBUG: Calling routeAndExecute(start)\n");
+        }
+        backend_router.routeAndExecute(operation, container_id, null) catch |err| {
+            if (options.debug) {
+                try stdout.writeAll("DEBUG: routeAndExecute(start) error: ");
+                const err_str = try std.fmt.allocPrint(allocator, "{}\n", .{err});
+                defer allocator.free(err_str);
+                try stdout.writeAll(err_str);
+            }
+            return err;
+        };
+
+        if (options.debug) {
+            try stdout.writeAll("DEBUG: Start command finished successfully\n");
+        }
 
         try self.logCommandComplete("start");
     }

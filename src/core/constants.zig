@@ -9,7 +9,7 @@ pub const DEFAULT_MEMORY_BYTES: u64 = DEFAULT_MEMORY_MB * 1024 * 1024;
 pub const DEFAULT_CPU_CORES: f32 = 1.0;
 
 // Network constants
-pub const DEFAULT_BRIDGE_NAME: []const u8 = "lxcbr0";
+pub const DEFAULT_BRIDGE_NAME: []const u8 = "vmbr50";
 
 // VM constants
 pub const DEFAULT_VM_ID: u32 = 100;
@@ -33,7 +33,7 @@ test "CPU constants" {
 }
 
 test "network constants" {
-    try std.testing.expectEqualStrings(DEFAULT_BRIDGE_NAME, "lxcbr0");
+    try std.testing.expectEqualStrings(DEFAULT_BRIDGE_NAME, "vmbr50");
 }
 
 test "VM constants" {
