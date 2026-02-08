@@ -66,6 +66,9 @@ pub const Linux = struct {
     net_devices: ?[]NetDevice = null,
 };
 
+// Export bundle parser
+pub const bundle = @import("bundle.zig");
+
 test "runtime module loads" {
     var allocator = std.testing.allocator;
     var policy = MemoryPolicy{ .allocator = allocator };

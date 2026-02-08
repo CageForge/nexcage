@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("core");
-const oci_bundle = @import("oci_bundle.zig");
+const oci_spec = @import("oci_spec");
+const bundle = oci_spec.runtime.bundle;
 
 /// Image converter for transforming OCI bundles into LXC rootfs and Proxmox templates
 pub const ImageConverter = struct {
@@ -22,7 +23,9 @@ pub const ImageConverter = struct {
         if (self.logger) |log| try log.info("Logger is working in convertOciToLxcRootfs", .{});
 
         // Parse OCI bundle configuration
-        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        // Convert core.LogContext to bundle.Logger
+        const bundle_logger = if (self.logger) |log| @as(?bundle.Logger, @ptrCast(log)) else null;
+        var parser = bundle.OciBundleParser.init(self.allocator, bundle_logger);
         var config = try parser.parseBundle(oci_bundle_path);
         defer config.deinit();
 
@@ -80,7 +83,7 @@ pub const ImageConverter = struct {
     }
 
     /// Get rootfs path from OCI bundle
-    fn getRootfsPath(self: *Self, bundle_path: []const u8, config: *const oci_bundle.OciBundleConfig) ![]const u8 {
+    fn getRootfsPath(self: *Self, bundle_path: []const u8, config: *const bundle.OciBundleConfig) ![]const u8 {
         _ = bundle_path; // Avoid unused parameter warning
         // Use rootfs_path from config (already contains full path)
         return try self.allocator.dupe(u8, config.rootfs_path);
@@ -327,7 +330,7 @@ pub const ImageConverter = struct {
     }
 
     /// Apply LXC-specific configurations to rootfs
-    fn applyLxcConfigurations(self: *Self, rootfs_path: []const u8, config: *const oci_bundle.OciBundleConfig) !void {
+    fn applyLxcConfigurations(self: *Self, rootfs_path: []const u8, config: *const bundle.OciBundleConfig) !void {
         if (self.logger) |log| try log.info("Applying LXC configurations to rootfs: {s}", .{rootfs_path});
 
         // Create essential LXC directories
@@ -380,7 +383,7 @@ pub const ImageConverter = struct {
     }
 
     /// Configure network interfaces
-    fn configureNetwork(self: *Self, rootfs_path: []const u8, config: *const oci_bundle.OciBundleConfig) !void {
+    fn configureNetwork(self: *Self, rootfs_path: []const u8, config: *const bundle.OciBundleConfig) !void {
         // Create basic network configuration derived from OCI linux.netDevices aliases
         const network_dir = try std.fmt.allocPrint(self.allocator, "{s}/etc/network", .{rootfs_path});
         defer self.allocator.free(network_dir);
@@ -431,7 +434,7 @@ pub const ImageConverter = struct {
     }
 
     /// Set up init system
-    fn setupInitSystem(self: *Self, rootfs_path: []const u8, config: *const oci_bundle.OciBundleConfig) !void {
+    fn setupInitSystem(self: *Self, rootfs_path: []const u8, config: *const bundle.OciBundleConfig) !void {
         // Create basic init script for LXC
         const sbin_dir = try std.fmt.allocPrint(self.allocator, "{s}/sbin", .{rootfs_path});
         defer self.allocator.free(sbin_dir);
@@ -495,7 +498,7 @@ pub const ImageConverter = struct {
     }
 
     /// Determine the main command to run based on OCI config
-    fn determineMainCommand(self: *Self, config: *const oci_bundle.OciBundleConfig) ![]const u8 {
+    fn determineMainCommand(self: *Self, config: *const bundle.OciBundleConfig) ![]const u8 {
         // Priority: ENTRYPOINT + CMD > process.args > fallback to /bin/sh
 
         // Check if we have ENTRYPOINT from metadata.json
