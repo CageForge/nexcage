@@ -1,0 +1,59 @@
+name: Docs (mike versions)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to deploy (e.g., v0.7.3)
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install mkdocs + mike
+        run: |
+          python -m pip install --upgrade pip
+          pip install mkdocs-material mike
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "value=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "value=${{ github.event.inputs.version || 'latest' }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy docs with mike
+        env:
+          VER: ${{ steps.ver.outputs.value }}
+        run: |
+          if [ "$VER" = "latest" ]; then
+            mike deploy --push latest
+          else
+            mike deploy --push --update-aliases "$VER" latest
+          fi
+          mike set-default --push latest
+
+

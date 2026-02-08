@@ -1,14 +1,14 @@
-# Proxmox LXCRI Architecture
+# Nexcage Architecture
 
 ## Overview
 
-Proxmox LXCRI (LXC Runtime Interface) is a container runtime interface that enables running OCI-compliant containers on Proxmox VE using LXC. The system is designed to work with Kubernetes through containerd and provides a complete solution for container management, storage, networking, and security.
+Nexcage Runtime is a OCI-compliant containers on with backend Proxmox VE using LXC and others. The system is designed to work with Kubernetes through containerd and provides a complete solution for container management, storage, networking, and security.
 
 ## System Context
 
 The system interacts with several external actors:
 
-1. **Kubernetes**: Manages container lifecycle through CRI
+1. **Kubernetes**: Manages container lifecycle through OCI
 2. **System Administrator**: Configures and manages the runtime
 3. **Developer**: Develops and maintains the system
 
@@ -22,10 +22,9 @@ The system also interacts with Proxmox VE for:
 The system consists of several main containers:
 
 1. **containerd**:
-   - CRI Plugin: Implements Kubernetes Container Runtime Interface
    - OCI Runtime: Manages OCI-compliant containers
 
-2. **Proxmox LXCRI**:
+2. **Nexcage**:
    - Runtime Service: Manages container lifecycle
    - Storage Service: Handles container storage
    - Network Service: Manages container networking
@@ -188,7 +187,7 @@ The system consists of several main containers:
 ## System Architecture
 
 ```
-containerd -> nexcage -> Proxmox API -> LXC/QEMU
+containerd -> nexcage -> Proxmox VE CLI -> LXC/QEMU
      |              |              |
      |              |              v
      |              v          ZFS Storage
@@ -210,7 +209,7 @@ OCI Bundle
 - Layer management
 - **ZFS Checkpoint/Restore System**
   - Lightning-fast container state snapshots
-  - Automatic ZFS detection and CRIU fallback
+  - Automatic ZFS detection and CRIU fallback (not implemented yet)
   - Timestamp-based snapshot organization
   - Latest checkpoint auto-selection
 - Image storage
@@ -388,71 +387,6 @@ Each operation implements comprehensive error handling:
    - Resource allocation
    - Hook execution
 
-3. **Recovery Procedures**
-   - Resource cleanup
-   - State restoration
-   - Partial completion handling
-
-## ZFS Checkpoint/Restore Architecture
-
-### Overview
-The ZFS Checkpoint/Restore system provides enterprise-grade container state management through a hybrid approach that prioritizes ZFS snapshots while maintaining CRIU compatibility.
-
-### Architecture Components
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    ZFS Checkpoint/Restore                    │
-├─────────────────────────────────────────────────────────────┤
-│  ┌───────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │  ZFS Manager  │───▶│ Snapshot Mgr │───▶│   Dataset    │  │
-│  │   Detection   │    │   Creation   │    │  Management  │  │
-│  └───────────────┘    └──────────────┘    └──────────────┘  │
-│           │                     │                    │      │
-│           ▼                     ▼                    ▼      │
-│  ┌───────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │ CRIU Fallback │    │  Timestamp   │    │    Latest    │  │
-│  │   Detection   │    │   Naming     │    │  Selection   │  │
-│  └───────────────┘    └──────────────┘    └──────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Core Components
-
-1. **ZFS Manager (`src/zfs/mod.zig`)**:
-   - Automatic ZFS availability detection
-   - Dataset existence validation
-   - Snapshot creation and management
-   - Error handling and logging
-
-2. **Checkpoint Controller**:
-   - Container state analysis
-   - Consistency checking
-   - Hybrid routing (ZFS/CRIU)
-   - Performance optimization
-
-3. **Restore Engine**:
-   - Latest checkpoint detection
-   - Timestamp parsing and filtering
-   - ZFS rollback operations
-   - State verification
-
-### Dataset Organization
-
-**Structure Pattern:**
-```
-tank/containers/<container_id>
-├── @checkpoint-1691234567
-├── @checkpoint-1691234890
-└── @checkpoint-1691235123
-```
-
-**Performance Characteristics:**
-- ZFS Creation: ~1-3 seconds
-- ZFS Restore: ~2-5 seconds  
-- CRIU Fallback: ~10-60 seconds
-- Storage Overhead: ~0-5% (ZFS COW)
-
 ## Monitoring and Metrics
 
 1. **Container Metrics**
@@ -463,7 +397,7 @@ tank/containers/<container_id>
 2. **Runtime Metrics**
    - Operation latency
    - Error rates
-   - API response times
+   - API response time
 
 3. **Health Monitoring**
    - Container health checks
@@ -471,7 +405,5 @@ tank/containers/<container_id>
    - Resource availability
 
 4. **ZFS Metrics**
-   - Snapshot creation time
    - Storage usage patterns
    - Dataset health status
-   - Checkpoint success rates 

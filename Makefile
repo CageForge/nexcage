@@ -1,7 +1,7 @@
-# Proxmox LXC Runtime Interface - Makefile
+# NexCage Runtime - Makefile
 # Enhanced with detailed test reporting
 
-.PHONY: help build build-vendored prepare-crun headers-docker test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps
+.PHONY: help build build-vendored docs-serve docs-build prepare-crun headers-docker test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps
 
 # Default target
 help:
@@ -29,6 +29,8 @@ help:
 	@echo "  deps           Install build dependencies via apt"
 	@echo "  prepare-crun   Generate vendored crun headers & verify deps (zig build step)"
 	@echo "  headers-docker Generate headers in Docker container"
+	@echo "  docs-serve     Serve docs locally (Docker mkdocs)"
+	@echo "  docs-build     Build docs static site (Docker mkdocs)"
 	@echo ""
 	@echo "Report Commands:"
 	@echo "  report         Generate test report summary"
@@ -129,6 +131,13 @@ headers-docker:
 	@echo "🐳 Generating headers via Docker..."
 	bash scripts/gen_crun_headers_docker.sh
 	@echo "✅ Docker header generation completed"
+docs-serve:
+	@echo "📚 Serving docs at http://localhost:8000 ..."
+	bash scripts/mkdocs_serve.sh
+
+docs-build:
+	@echo "🏗️  Building docs into site/ ..."
+	bash scripts/mkdocs_build.sh
 
 # Report commands
 report:
@@ -183,7 +192,7 @@ report-view:
 	fi
 
 # Special targets
-.PHONY: help build test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps report report-clean report-view
+.PHONY: help build docs-serve docs-build test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps report report-clean report-view
 
 # Default target
 .DEFAULT_GOAL := help

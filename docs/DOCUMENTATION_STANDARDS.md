@@ -86,7 +86,6 @@
 
 ### 5.2 Document Types
 - `ARCHITECTURE.md` - architecture documentation
-- `API.md` - API documentation
 - `DEVELOPMENT.md` - developer instructions
 - `DEPLOYMENT.md` - deployment instructions
 - `TROUBLESHOOTING.md` - troubleshooting guide

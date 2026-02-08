@@ -1,6 +1,6 @@
 # Proxmox Testing Guide
 
-This document provides comprehensive information about testing the Proxmox LXC Runtime Interface project on Proxmox VE servers.
+This document provides comprehensive information about testing the Nexcage runtime project on Proxmox VE servers.
 
 ## Overview
 

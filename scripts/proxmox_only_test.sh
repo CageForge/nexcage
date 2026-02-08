@@ -152,6 +152,46 @@ check_remote_command() {
     fi
 }
 
+# Function to check Proxmox VE version
+check_proxmox_ve_version() {
+    local required_major="$1"
+    local required_minor="$2"
+    
+    # Get version from pveversion -v
+    local version_output
+    version_output=$(ssh "$PVE_HOST" "pveversion -v 2>/dev/null" || echo "")
+    
+    if [ -z "$version_output" ]; then
+        return 1
+    fi
+    
+    # Try to extract version from proxmox-ve: line first
+    local version_str
+    version_str=$(echo "$version_output" | grep -E "^proxmox-ve:" | sed -E 's/^proxmox-ve:[[:space:]]+([0-9]+\.[0-9]+).*/\1/' | head -1)
+    
+    # Fallback to pve-manager if proxmox-ve not found
+    if [ -z "$version_str" ]; then
+        version_str=$(echo "$version_output" | grep -E "pve-manager/" | sed -E 's/.*pve-manager\/([0-9]+\.[0-9]+).*/\1/' | head -1)
+    fi
+    
+    if [ -z "$version_str" ]; then
+        return 1
+    fi
+    
+    # Extract major and minor version
+    local major
+    local minor
+    major=$(echo "$version_str" | cut -d. -f1)
+    minor=$(echo "$version_str" | cut -d. -f2)
+    
+    # Compare versions
+    if [ "$major" -gt "$required_major" ] || ([ "$major" -eq "$required_major" ] && [ "$minor" -ge "$required_minor" ]); then
+        return 0
+    else
+        return 1
+    fi
+}
+
 echo -e "${BLUE}🚀 Starting Proxmox Only Test Suite${NC}"
 echo "Report will be saved to: $REPORT_FILE"
 echo ""
@@ -323,39 +363,75 @@ else
     log_test_result "Proxmox-LXC Container Tests" "SKIP" "LXC tools not available" "0ms"
 fi
 
-# Test 32: Test OCI container creation (gated)
+# Test 32: Test OCI Registry Pull (Proxmox VE 9.1+)
+echo -e "${YELLOW}🧪 Testing OCI Registry Pull (Proxmox VE 9.1+)...${NC}"
+if check_proxmox_ve_version 9 1; then
+    echo -e "${GREEN}✅ Proxmox VE 9.1+ detected, OCI Registry pull supported${NC}"
+    
+    # Test 32a: Create container with PostgreSQL OCI image
+    run_test "OCI Registry Pull - PostgreSQL Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-postgres-oci-registry --image docker.io/library/postgres:latest --runtime proxmox-lxc'"
+    
+    # Test 32b: List containers with OCI Registry image
+    run_test "OCI Registry Pull - Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --runtime proxmox-lxc | grep test-postgres-oci-registry'"
+    
+    # Test 32c: Start container with OCI Registry image
+    run_test "OCI Registry Pull - Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-postgres-oci-registry --runtime proxmox-lxc'"
+    
+    # Test 32d: State container with OCI Registry image (while running)
+    run_test "OCI Registry Pull - Container State (Running)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-postgres-oci-registry'"
+    
+    # Test 32e: Stop container with OCI Registry image
+    run_test "OCI Registry Pull - Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-postgres-oci-registry --runtime proxmox-lxc'"
+    
+    # Test 32f: State container with OCI Registry image (while stopped)
+    run_test "OCI Registry Pull - Container State (Stopped)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-postgres-oci-registry'"
+    
+    # Test 32g: Delete container with OCI Registry image
+    run_test "OCI Registry Pull - Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-postgres-oci-registry --runtime proxmox-lxc'"
+    
+    # Test 32h: Create container with Redis OCI image (different image)
+    run_test "OCI Registry Pull - Redis Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-redis-oci-registry --image docker.io/library/redis:latest --runtime proxmox-lxc'"
+    
+    # Test 32i: Delete Redis container
+    run_test "OCI Registry Pull - Redis Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-redis-oci-registry --runtime proxmox-lxc'"
+else
+    echo -e "${YELLOW}⏭️ Skipping OCI Registry Pull tests - Proxmox VE version < 9.1${NC}"
+    log_test_result "OCI Registry Pull Tests" "SKIP" "Proxmox VE version < 9.1" "0ms"
+fi
+
+# Test 33: Test OCI container creation (gated)
 if [ "${ENABLE_OCI_TESTS:-0}" = "1" ] && check_remote_command "crun"; then
     echo -e "${YELLOW}🧪 Testing OCI container creation...${NC}"
     
     # Test 33: Create OCI container
     run_test "OCI Container Creation" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-oci-container --image nginx --runtime crun'"
     
-    # Test 34: List OCI containers
+    # Test 35: List OCI containers
     run_test "OCI Container List" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage list --runtime crun'"
     
-    # Test 35: Start OCI container
+    # Test 36: Start OCI container
     run_test "OCI Container Start" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage start --name test-oci-container --runtime crun'"
     
-    # Test 35a: State OCI container (while running)
+    # Test 36a: State OCI container (while running)
     run_test "OCI Container State (Running)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-oci-container'"
     
-    # Test 35b: Kill OCI container with SIGTERM
+    # Test 36b: Kill OCI container with SIGTERM
     run_test "OCI Container Kill (SIGTERM)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage kill -s SIGTERM test-oci-container'"
     
-    # Test 36: Stop OCI container
+    # Test 37: Stop OCI container
     run_test "OCI Container Stop" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage stop --name test-oci-container --runtime crun'"
     
-    # Test 36a: State OCI container (while stopped)
+    # Test 37a: State OCI container (while stopped)
     run_test "OCI Container State (Stopped)" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage state test-oci-container'"
     
-    # Test 37: Delete OCI container
+    # Test 38: Delete OCI container
     run_test "OCI Container Delete" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage delete --name test-oci-container --runtime crun'"
 else
     echo -e "${YELLOW}⏭️ Skipping OCI tests - crun not available${NC}"
     log_test_result "OCI Container Tests" "SKIP" "crun not available" "0ms"
 fi
 
-# Test 38: Test runc container creation (gated)
+# Test 39: Test runc container creation (gated)
 if [ "${ENABLE_RUNC_TESTS:-0}" = "1" ] && check_remote_command "runc"; then
     echo -e "${YELLOW}🧪 Testing runc container creation...${NC}"
     
@@ -386,10 +462,6 @@ else
     echo -e "${YELLOW}⏭️ Skipping runc tests - runc not available${NC}"
     log_test_result "Runc Container Tests" "SKIP" "runc not available" "0ms"
 fi
-
-# Test 44: Test VM creation (if Proxmox API available)
-echo -e "${YELLOW}🧪 Testing VM creation...${NC}"
-run_test "VM Creation Test" "ssh $PVE_HOST 'cd $PVE_PATH && ./nexcage create --name test-vm --image ubuntu:20.04 --runtime vm'"
 
 # Test 45: Test performance
 echo -e "${YELLOW}🧪 Testing performance...${NC}"

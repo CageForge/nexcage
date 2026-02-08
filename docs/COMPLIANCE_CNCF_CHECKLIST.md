@@ -13,7 +13,7 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 - [x] CODEOWNERS
 - [x] README.md (project overview, build, usage)
 - [x] CHANGELOG.md (Keep a Changelog format)
-- [x] Release notes (docs/releases/NOTES_v0.7.1.md)
+- [x] Release notes (docs/releases/NOTES_vX.Y.Z.md)
 - [x] Roadmap (Roadmap/*)
 - [x] Issue templates (docs/ISSUE_TEMPLATE/*)
 - [x] Pull request template (docs/pull_request_template.md)

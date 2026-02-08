@@ -1,6 +1,6 @@
-# Contributing to Proxmox-LXCri
+# Contributing to Nexcage
 
-Thank you for your interest in contributing to Proxmox-LXCri! This document provides information on how you can help the project.
+Thank you for your interest in contributing to Nexcage! This document provides information on how you can help the project.
 
 ## How to Contribute
 
@@ -129,4 +129,4 @@ If you have questions about contributing, please contact us through:
 
 - GitHub Issues
 - moriarti@cp.if.ua
-- [INSERT CHAT CHANNEL] 
+- [https://join.slack.com/t/cageforge/shared_invite/zt-3fn25qnq8-XFK2Wxiw7jhpeTrzkJUixA] Slack

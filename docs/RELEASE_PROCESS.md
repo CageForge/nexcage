@@ -1,6 +1,6 @@
-# Proxmox LXCRI Release Process Guide
+# Nexcage Release Process Guide
 
-This document outlines the complete step-by-step process for creating and publishing releases of Proxmox LXCRI with automated DEB package generation.
+This document outlines the complete step-by-step process for creating and publishing releases of Nexcage with automated DEB package generation.
 
 ## 📋 Prerequisites
 
@@ -329,9 +329,9 @@ git tag --sort=-version:refname | head -5
 ```bash
 # Create announcement template
 cat > RELEASE_ANNOUNCEMENT.md << EOF
-# 🚀 Proxmox LXCRI v${NEXT_VERSION} Released!
+# 🚀 Nexcage v${NEXT_VERSION} Released!
 
-We're excited to announce the release of Proxmox LXCRI v${NEXT_VERSION}!
+We're excited to announce the release of Nexcage v${NEXT_VERSION}!
 
 ## 🌟 Key Features
 - [Highlight major features from CHANGELOG]

@@ -1,8 +1,10 @@
 const std = @import("std");
 const core = @import("core");
 const types = @import("types.zig");
-const oci_bundle = @import("oci_bundle.zig");
-const image_converter = @import("image_converter.zig");
+const oci_spec = @import("oci_spec");
+const bundle = oci_spec.runtime.bundle;
+const utils = @import("utils");
+const lxc_converter = utils.lxc_converter;
 const template_manager = @import("template_manager.zig");
 
 /// Result of running a command
@@ -12,6 +14,38 @@ const CommandResult = struct {
     exit_code: u8,
 };
 
+const NetDeviceRuntimeInfo = struct {
+    alias: []const u8,
+    bridge: []const u8,
+    host_name: ?[]const u8 = null,
+};
+
+fn writeJsonString(writer: anytype, value: []const u8) !void {
+    try writer.writeByte('"');
+    for (value) |c| {
+        switch (c) {
+            '"' => try writer.writeAll("\\\""),
+            '\\' => try writer.writeAll("\\\\"),
+            0x08 => try writer.writeAll("\\b"),
+            0x0C => try writer.writeAll("\\f"),
+            '\n' => try writer.writeAll("\\n"),
+            '\r' => try writer.writeAll("\\r"),
+            '\t' => try writer.writeAll("\\t"),
+            else => {
+                if (c < 0x20) {
+                    var buf: [6]u8 = .{ '\\', 'u', '0', '0', 0, 0 };
+                    const hex = "0123456789abcdef";
+                    buf[4] = hex[(c >> 4) & 0xF];
+                    buf[5] = hex[c & 0xF];
+                    try writer.writeAll(buf[0..]);
+                } else {
+                    try writer.writeByte(c);
+                }
+            },
+        }
+    }
+    try writer.writeByte('"');
+}
 
 /// Proxmox LXC backend driver
 pub const ProxmoxLxcDriver = struct {
@@ -26,11 +60,11 @@ pub const ProxmoxLxcDriver = struct {
 
     pub fn init(allocator: std.mem.Allocator, config: core.types.ProxmoxLxcBackendConfig) !*Self {
         const driver = try allocator.alloc(Self, 1);
-        
+
         // Initialize template manager with cache directory
         const cache_dir = "/tmp/nexcage-template-cache";
         const template_mgr = template_manager.TemplateManager.init(allocator, null, cache_dir);
-        
+
         driver[0] = Self{
             .allocator = allocator,
             .config = config,
@@ -60,6 +94,14 @@ pub const ProxmoxLxcDriver = struct {
     /// Set debug mode
     pub fn setDebugMode(self: *Self, debug_mode: bool) void {
         self.debug_mode = debug_mode;
+    }
+
+    /// Convert core.LogContext to bundle.Logger
+    fn getBundleLogger(self: *const Self) ?bundle.Logger {
+        if (self.logger) |log| {
+            return @as(?bundle.Logger, @ptrCast(log));
+        }
+        return null;
     }
 
     /// No-op: direct ZFS CLI integration (no wrapper/client)
@@ -107,7 +149,7 @@ pub const ProxmoxLxcDriver = struct {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        
+
         // Check if pool name appears in output (should be exact match on a line)
         if (res.exit_code != 0) return false;
         var lines = std.mem.splitScalar(u8, res.stdout, '\n');
@@ -128,7 +170,7 @@ pub const ProxmoxLxcDriver = struct {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        
+
         // Check if dataset name appears in output
         return res.exit_code == 0 and std.mem.indexOf(u8, res.stdout, dataset_name) != null;
     }
@@ -156,8 +198,8 @@ pub const ProxmoxLxcDriver = struct {
         var it = std.mem.splitScalar(u8, res.stdout, '\n');
         while (it.next()) |line| {
             if (std.mem.indexOf(u8, line, "zfs-") != null) {
-                if (std.mem.indexOfScalar(u8, line, '-') ) |dash_idx| {
-                    const v = line[dash_idx+1..];
+                if (std.mem.indexOfScalar(u8, line, '-')) |dash_idx| {
+                    const v = line[dash_idx + 1 ..];
                     // take major.minor
                     var dot = std.mem.splitScalar(u8, v, '.');
                     const maj_s = dot.next() orelse continue;
@@ -169,6 +211,174 @@ pub const ProxmoxLxcDriver = struct {
             }
         }
         return false;
+    }
+
+    /// Get Proxmox VE version using pveversion command
+    /// Returns version string like "9.1" or null on error
+    pub fn getProxmoxVeVersion(self: *Self) !?[]const u8 {
+        const args = [_][]const u8{ "pveversion", "-v" };
+        const res = self.runCommand(&args) catch return null;
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) return null;
+
+        // Parse version from output like:
+        // proxmox-ve: 9.1.0 (running kernel: 6.14.8-2-pve)
+        // pve-manager: 9.1.1 (running version: 9.1.1/42db4a6cf33dac83)
+        var lines = std.mem.splitScalar(u8, res.stdout, '\n');
+        while (lines.next()) |line| {
+            // Try proxmox-ve: first (more reliable)
+            if (std.mem.startsWith(u8, line, "proxmox-ve:")) {
+                var version_part = std.mem.trimLeft(u8, line["proxmox-ve:".len..], " \t");
+                // Find space or end to get version like "9.1.0"
+                const space_idx = std.mem.indexOfScalar(u8, version_part, ' ') orelse version_part.len;
+                const version_str = version_part[0..space_idx];
+                // Extract major.minor (ignore patch version)
+                const dot_idx = std.mem.indexOfScalar(u8, version_str, '.') orelse return null;
+                const major = version_str[0..dot_idx];
+                const minor_start = dot_idx + 1;
+                const next_dot_idx = std.mem.indexOfScalar(u8, version_str[minor_start..], '.');
+                const minor_end = if (next_dot_idx) |idx| minor_start + idx else version_str.len;
+                const minor = version_str[minor_start..minor_end];
+                
+                // Return formatted version "major.minor"
+                return try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ major, minor });
+            }
+            // Fallback to pve-manager if proxmox-ve not found
+            if (std.mem.indexOf(u8, line, "pve-manager/") != null) {
+                if (std.mem.indexOfScalar(u8, line, '/')) |slash_idx| {
+                    const version_part = line[slash_idx + 1 ..];
+                    // Find next dash or end to get version like "9.1-1"
+                    const dash_idx = std.mem.indexOfScalar(u8, version_part, '-') orelse version_part.len;
+                    const version_str = version_part[0..dash_idx];
+                    // Extract major.minor
+                    const dot_idx = std.mem.indexOfScalar(u8, version_str, '.') orelse return null;
+                    const major = version_str[0..dot_idx];
+                    const minor_start = dot_idx + 1;
+                    const minor_end = std.mem.indexOfScalar(u8, version_str[minor_start..], '-') orelse version_str.len;
+                    const minor = version_str[minor_start..minor_end];
+                    
+                    // Return formatted version "major.minor"
+                    return try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ major, minor });
+                }
+            }
+        }
+        return null;
+    }
+
+    /// Check if Proxmox VE version is >= 9.1 (supports OCI Registry pull)
+    pub fn supportsOciRegistryPull(self: *Self) !bool {
+        const version_str = try self.getProxmoxVeVersion();
+        if (version_str) |ver| {
+            defer self.allocator.free(ver);
+            
+            // Parse version "major.minor"
+            const dot_idx = std.mem.indexOfScalar(u8, ver, '.') orelse return false;
+            const major_str = ver[0..dot_idx];
+            const minor_str = ver[dot_idx + 1 ..];
+            
+            const major = std.fmt.parseInt(u32, major_str, 10) catch return false;
+            const minor = std.fmt.parseInt(u32, minor_str, 10) catch return false;
+            
+            // Version >= 9.1 supports OCI Registry pull
+            return major > 9 or (major == 9 and minor >= 1);
+        }
+        return false;
+    }
+
+    /// Get Proxmox node name (hostname)
+    fn getNodeName(self: *Self) ![]const u8 {
+        const args = [_][]const u8{ "hostname" };
+        const res = try self.runCommand(&args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+
+        if (res.exit_code != 0) {
+            return error.NodeNameDetectionFailed;
+        }
+
+        // Remove trailing newline
+        const node_name = std.mem.trim(u8, res.stdout, " \t\r\n");
+        return try self.allocator.dupe(u8, node_name);
+    }
+
+    /// Pull OCI image from registry using pvesh command
+    /// image_ref: OCI image reference like "docker.io/library/redis:latest"
+    /// storage: Proxmox storage name (default: "local")
+    /// Returns template name on success
+    pub fn pullOciImage(self: *Self, image_ref: []const u8, storage: []const u8) ![]const u8 {
+        if (self.logger) |log| {
+            try log.info("Pulling OCI image from registry: {s}", .{image_ref});
+        }
+
+        // Get node name
+        const node_name = try self.getNodeName();
+        defer self.allocator.free(node_name);
+
+        // Use pvesh create command: pvesh create /nodes/{node}/storage/{storage}/oci-registry-pull --reference {image_ref}
+        var args = std.ArrayListUnmanaged([]const u8){};
+        defer args.deinit(self.allocator);
+        
+        try args.append(self.allocator, "pvesh");
+        try args.append(self.allocator, "create");
+        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/oci-registry-pull", .{ node_name, storage });
+        defer self.allocator.free(path);
+        try args.append(self.allocator, path);
+        try args.append(self.allocator, "--reference");
+        try args.append(self.allocator, image_ref);
+
+        const res = try self.runCommand(args.items);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+
+        // Check if template already exists (exit code 25 means file exists)
+        const template_exists = res.exit_code == 25 and std.mem.indexOf(u8, res.stderr, "refusing to override existing file") != null;
+        
+        if (res.exit_code != 0 and !template_exists) {
+            if (self.logger) |log| {
+                try log.err("Failed to pull OCI image {s}: {s}", .{ image_ref, res.stderr });
+            }
+            return core.Error.OperationFailed;
+        }
+        
+        if (template_exists) {
+            if (self.logger) |log| {
+                log.info("OCI template already exists, using existing template", .{}) catch {};
+            }
+        }
+
+        // Extract template name from output or construct it from image_ref
+        // Template name format: <storage>:vztmpl/<image_name>_<tag>.tar
+        // For "docker.io/library/redis:latest" -> "redis_latest.tar"
+        // Proxmox uses underscore instead of dash and .tar instead of .tar.zst
+        var template_name = std.ArrayListUnmanaged(u8){};
+        defer template_name.deinit(self.allocator);
+
+        // Extract image name and tag from image_ref
+        // Format: registry/path/image:tag or image:tag
+        const colon_idx = std.mem.lastIndexOfScalar(u8, image_ref, ':') orelse image_ref.len;
+        const image_part = image_ref[0..colon_idx];
+        const tag_part = if (colon_idx < image_ref.len) image_ref[colon_idx + 1 ..] else "latest";
+
+        // Extract image name (last part after /)
+        const slash_idx = std.mem.lastIndexOfScalar(u8, image_part, '/');
+        const image_name = if (slash_idx) |idx| image_part[idx + 1 ..] else image_part;
+
+        // Construct template name: storage:vztmpl/image_name_tag.tar
+        // Proxmox uses underscore to separate image name and tag
+        try template_name.writer(self.allocator).print("{s}:vztmpl/{s}_{s}.tar", .{ storage, image_name, tag_part });
+
+        if (self.logger) |log| {
+            try log.info("Successfully pulled OCI image, template: {s}", .{template_name.items});
+        }
+
+        return template_name.toOwnedSlice(self.allocator);
     }
 
     /// Set ZFS pool for containers
@@ -188,7 +398,7 @@ pub const ProxmoxLxcDriver = struct {
         stderr.writeAll("', vmid = '") catch {};
         stderr.writeAll(vmid) catch {};
         stderr.writeAll("'\n") catch {};
-        
+
         stderr.writeAll("[DRIVER] createContainerDataset: Checking ZFS availability and pool\n") catch {};
         const zfs_avail = self.isZFSAvailable();
         const pool_set = self.zfs_pool != null;
@@ -204,7 +414,7 @@ pub const ProxmoxLxcDriver = struct {
         } else {
             stderr.writeAll("false\n") catch {};
         }
-        
+
         if (!zfs_avail or !pool_set) {
             stderr.writeAll("[DRIVER] createContainerDataset: ZFS not available or pool not set, returning null\n") catch {};
             // Skip logger to avoid segfault
@@ -217,13 +427,13 @@ pub const ProxmoxLxcDriver = struct {
         stderr.writeAll("[DRIVER] createContainerDataset: pool_config = '") catch {};
         stderr.writeAll(pool_config) catch {};
         stderr.writeAll("'\n") catch {};
-        
+
         // Extract pool name from config (e.g., "tank" from "tank/containers" or just "tank")
         const pool_name: []const u8 = if (std.mem.indexOf(u8, pool_config, "/")) |idx| pool_config[0..idx] else pool_config;
         stderr.writeAll("[DRIVER] createContainerDataset: Extracted pool_name = '") catch {};
         stderr.writeAll(pool_name) catch {};
         stderr.writeAll("'\n") catch {};
-        
+
         // Verify pool exists
         stderr.writeAll("[DRIVER] createContainerDataset: Checking if pool exists\n") catch {};
         if (!self.poolExists(pool_name)) {
@@ -231,16 +441,16 @@ pub const ProxmoxLxcDriver = struct {
             return null;
         }
         stderr.writeAll("[DRIVER] createContainerDataset: Pool exists\n") catch {};
-        
+
         // Create dataset name: use pool_config as base if it contains path, otherwise use pool_name/containers
         // If pool_config is "tank/containers", use it directly, otherwise use "pool_name/containers"
         const base_path: []const u8 = if (std.mem.indexOf(u8, pool_config, "/")) |_| pool_config else try std.fmt.allocPrint(self.allocator, "{s}/containers", .{pool_name});
         defer if (base_path.ptr != pool_config.ptr) self.allocator.free(base_path);
-        
+
         stderr.writeAll("[DRIVER] createContainerDataset: base_path = '") catch {};
         stderr.writeAll(base_path) catch {};
         stderr.writeAll("'\n") catch {};
-        
+
         // Create dataset name: base_path/container_name-vmid
         stderr.writeAll("[DRIVER] createContainerDataset: Creating dataset name\n") catch {};
         const dataset_name = try std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ base_path, container_name, vmid });
@@ -248,7 +458,7 @@ pub const ProxmoxLxcDriver = struct {
         stderr.writeAll("[DRIVER] createContainerDataset: dataset_name = '") catch {};
         stderr.writeAll(dataset_name) catch {};
         stderr.writeAll("'\n") catch {};
-        
+
         // Check if dataset already exists
         stderr.writeAll("[DRIVER] createContainerDataset: Checking if dataset already exists\n") catch {};
         if (self.datasetExists(dataset_name)) {
@@ -257,13 +467,13 @@ pub const ProxmoxLxcDriver = struct {
             return try self.allocator.dupe(u8, dataset_name);
         }
         stderr.writeAll("[DRIVER] createContainerDataset: Dataset does not exist, will create\n") catch {};
-        
+
         // Check if parent dataset exists, create if missing
         if (self.getParentDataset(dataset_name)) |parent_dataset| {
             stderr.writeAll("[DRIVER] createContainerDataset: Checking parent dataset: '") catch {};
             stderr.writeAll(parent_dataset) catch {};
             stderr.writeAll("'\n") catch {};
-            
+
             if (!self.datasetExists(parent_dataset)) {
                 stderr.writeAll("[DRIVER] createContainerDataset: Parent dataset does not exist, creating\n") catch {};
                 const parent_args = [_][]const u8{ "zfs", "create", "-p", parent_dataset };
@@ -275,7 +485,7 @@ pub const ProxmoxLxcDriver = struct {
                     self.allocator.free(parent_res.stdout);
                     self.allocator.free(parent_res.stderr);
                 }
-                
+
                 if (parent_res.exit_code != 0) {
                     stderr.writeAll("[DRIVER] createContainerDataset: Parent dataset creation failed, stderr = '") catch {};
                     stderr.writeAll(parent_res.stderr) catch {};
@@ -308,13 +518,13 @@ pub const ProxmoxLxcDriver = struct {
             defer self.allocator.free(stderr_len_str);
             stderr.writeAll(stderr_len_str) catch {};
             stderr.writeAll("\n") catch {};
-            
+
             if (res.stderr.len > 0) {
                 stderr.writeAll("[DRIVER] createContainerDataset: zfs stderr = '") catch {};
                 stderr.writeAll(res.stderr) catch {};
                 stderr.writeAll("'\n") catch {};
             }
-            
+
             stderr.writeAll("[DRIVER] createContainerDataset: res.exit_code = ") catch {};
             const exit_str = try std.fmt.allocPrint(self.allocator, "{d}", .{res.exit_code});
             defer self.allocator.free(exit_str);
@@ -354,7 +564,7 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         if (self.logger) |log| log.info("Successfully created ZFS dataset: {s}", .{dataset_name}) catch {};
-        
+
         // Return the dataset name (caller should free it)
         return try self.allocator.dupe(u8, dataset_name);
     }
@@ -367,13 +577,13 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         if (self.logger) |log| log.info("Destroying ZFS dataset: {s}", .{dataset_name}) catch {};
-        
+
         const args = [_][]const u8{ "zfs", "destroy", "-r", dataset_name };
         const res = try self.runCommand(&args);
         defer self.allocator.free(res.stdout);
         defer self.allocator.free(res.stderr);
         if (res.exit_code != 0) return core.Error.OperationFailed;
-        
+
         if (self.logger) |log| log.info("Successfully destroyed ZFS dataset: {s}", .{dataset_name}) catch {};
     }
 
@@ -399,7 +609,7 @@ pub const ProxmoxLxcDriver = struct {
         if (self.logger) |log| log.info("Logger is working in processOciBundle", .{}) catch {};
 
         // Parse bundle to check if it's a standard OCI bundle
-        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
         var cfg = try parser.parseBundle(bundle_path);
         defer cfg.deinit();
 
@@ -407,7 +617,7 @@ pub const ProxmoxLxcDriver = struct {
         const maybe_image = try self.parseBundleImageFromConfig(&cfg);
         if (maybe_image) |image_ref| {
             defer self.allocator.free(image_ref);
-            
+
             // Check if template already exists
             if (try self.templateExists(image_ref)) {
                 if (self.logger) |log| log.info("Using existing template: {s}", .{image_ref}) catch {};
@@ -418,25 +628,21 @@ pub const ProxmoxLxcDriver = struct {
         // If no existing template found, convert OCI bundle to template
         const template_name = try std.fmt.allocPrint(self.allocator, "{s}-{d}", .{ container_name, std.time.timestamp() });
         defer self.allocator.free(template_name);
-        
+
         if (self.logger) |log| log.info("Converting OCI bundle to template: {s}", .{template_name}) catch {};
-        
-        var converter = image_converter.ImageConverter.init(self.allocator, self.logger);
+
+        var converter = lxc_converter.ImageConverter.init(self.allocator, self.logger);
         try converter.convertOciToProxmoxTemplate(bundle_path, template_name, "local");
 
         if (self.logger) |log| log.info("Successfully converted OCI bundle to template: {s}", .{template_name}) catch {};
-        
+
         // Add template to cache with metadata
-        var template_info = try template_manager.TemplateInfo.init(
-            self.allocator, 
-            template_name, 
-            0, // Size will be updated later
-            .oci_bundle
-        );
+        var template_info = try template_manager.TemplateInfo.init(self.allocator, template_name, 0, // Size will be updated later
+            .oci_bundle);
         errdefer template_info.deinit(self.allocator); // Cleanup on error
-        
+
         // Extract metadata from OCI bundle if available
-        var metadata_parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var metadata_parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
         var metadata_cfg = metadata_parser.parseBundle(bundle_path) catch |err| {
             if (self.logger) |log| log.warn("Failed to parse bundle for metadata: {}", .{err}) catch {};
             // Add template without metadata
@@ -444,11 +650,11 @@ pub const ProxmoxLxcDriver = struct {
             return try self.allocator.dupe(u8, template_name);
         };
         defer metadata_cfg.deinit();
-        
+
         // Create metadata from OCI bundle
         var metadata = template_manager.TemplateMetadata.init(self.allocator);
         errdefer metadata.deinit(self.allocator); // Cleanup metadata on error
-        
+
         if (metadata_cfg.image_name) |name| metadata.image_name = try self.allocator.dupe(u8, name);
         if (metadata_cfg.image_tag) |tag| metadata.image_tag = try self.allocator.dupe(u8, tag);
         if (metadata_cfg.entrypoint) |ep| {
@@ -474,22 +680,65 @@ pub const ProxmoxLxcDriver = struct {
             metadata.cmd = cmd_array;
         }
         if (metadata_cfg.working_directory) |wd| metadata.working_directory = try self.allocator.dupe(u8, wd);
-        
+
+        if (metadata_cfg.intel_rdt) |intel| {
+            var intel_meta = template_manager.TemplateMetadata.IntelRdtMetadata{};
+            if (intel.clos_id) |clos| intel_meta.clos_id = try self.allocator.dupe(u8, clos);
+            if (intel.l3_cache_schema) |schema| intel_meta.l3_cache_schema = try self.allocator.dupe(u8, schema);
+            if (intel.mem_bw_schema) |schema| intel_meta.mem_bw_schema = try self.allocator.dupe(u8, schema);
+            intel_meta.enable_monitoring = intel.enable_monitoring;
+            if (intel.schemata) |schemata| {
+                var schemata_array = try self.allocator.alloc([]const u8, schemata.len);
+                errdefer {
+                    for (schemata_array) |entry| if (entry.len > 0) self.allocator.free(entry);
+                    self.allocator.free(schemata_array);
+                }
+                for (schemata, 0..) |entry, i| {
+                    schemata_array[i] = try self.allocator.dupe(u8, entry);
+                }
+                intel_meta.schemata = schemata_array;
+            }
+            metadata.intel_rdt = intel_meta;
+        }
+
+        if (metadata_cfg.net_devices) |devices| {
+            var device_meta = try self.allocator.alloc(template_manager.TemplateMetadata.NetDeviceMetadata, devices.len);
+            errdefer {
+                for (device_meta) |dev| {
+                    if (dev.alias.len > 0) self.allocator.free(dev.alias);
+                    if (dev.bridge.len > 0) self.allocator.free(dev.bridge);
+                    if (dev.host_name) |name| if (name.len > 0) self.allocator.free(name);
+                }
+                self.allocator.free(device_meta);
+            }
+            for (devices, 0..) |device, i| {
+                device_meta[i] = .{};
+                device_meta[i].alias = try self.allocator.dupe(u8, device.alias);
+                // Interpret device.name as preferred host link; fallback to default bridge will happen during pct create
+                const bridge_ref = device.name orelse (self.config.default_bridge orelse core.constants.DEFAULT_BRIDGE_NAME);
+                device_meta[i].bridge = try self.allocator.dupe(u8, bridge_ref);
+                if (device.name) |name| {
+                    device_meta[i].host_name = try self.allocator.dupe(u8, name);
+                }
+            }
+            metadata.net_devices = device_meta;
+        }
+
         // Transfer ownership to template_info (metadata will be cleaned up via template_info.deinit)
         template_info.metadata = metadata;
-        
+
         // addTemplate clones template_info, so we need to deinit the original
         // Note: addTemplate makes its own copies via clone(), so original must be cleaned up
         defer template_info.deinit(self.allocator);
-        
+
         try self.template_manager.addTemplate(template_name, template_info);
-        
+
         // Return a copy since we're freeing the original
         return try self.allocator.dupe(u8, template_name);
     }
 
     /// Parse image reference from OCI bundle config
-    fn parseBundleImageFromConfig(self: *Self, config: *const oci_bundle.OciBundleConfig) !?[]const u8 {
+    fn parseBundleImageFromConfig(self: *Self, config: *const bundle.OciBundleConfig) !?[]const u8 {
         if (config.annotations) |annotations| {
             if (annotations.get("org.opencontainers.image.ref.name")) |image_ref| {
                 return try self.allocator.dupe(u8, image_ref.string);
@@ -502,7 +751,7 @@ pub const ProxmoxLxcDriver = struct {
     pub fn create(self: *Self, config: core.types.SandboxConfig) !void {
         const stderr = std.fs.File.stderr();
         const stdout = std.fs.File.stdout();
-        
+
         // Use stderr for immediate output (unbuffered)
         stderr.writeAll("[DRIVER] create: ENTRY\n") catch {};
         stderr.writeAll("[DRIVER] create: container name = '") catch {};
@@ -514,33 +763,33 @@ pub const ProxmoxLxcDriver = struct {
         } else {
             stderr.writeAll("false\n") catch {};
         }
-        
+
         if (self.debug_mode) {
             try stdout.writeAll("[DRIVER] create: Starting (detailed debug)\n");
             try stdout.writeAll("[DRIVER] create: container name = '");
             try stdout.writeAll(config.name);
             try stdout.writeAll("'\n");
         }
-        
+
         stderr.writeAll("[DRIVER] create: Before logger check\n") catch {};
-        
+
         // Use logger if available - with additional safety checks
         if (self.logger) |log| {
             const name = config.name;
             if (name.len > 0) {
                 stderr.writeAll("[DRIVER] create: Checking logger validity\n") catch {};
-                
+
                 // Additional safety checks before calling logger
                 // Check if allocator pointer is valid by trying to access it
                 _ = log.allocator;
                 stderr.writeAll("[DRIVER] create: Logger allocator check passed\n") catch {};
-                
+
                 // Check if file is valid
                 _ = log.file;
                 stderr.writeAll("[DRIVER] create: Logger file check passed\n") catch {};
-                
+
                 stderr.writeAll("[DRIVER] create: Calling logger.info\n") catch {};
-                
+
                 // Try to use logger with explicit error handling
                 log.info("Creating Proxmox LXC container: {s}", .{name}) catch {
                     stderr.writeAll("[DRIVER] create: Logger.info failed with error\n") catch {};
@@ -551,47 +800,124 @@ pub const ProxmoxLxcDriver = struct {
         } else {
             stderr.writeAll("[DRIVER] create: No logger available\n") catch {};
         }
-        
+
         stderr.writeAll("[DRIVER] create: Processing image\n") catch {};
-        
+
         if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Processing image (detailed)\n");
-        
+
         // Process bundle image if provided (bundle path with config.json)
         stderr.writeAll("[DRIVER] create: Initializing template_name variable\n") catch {};
         var template_name: ?[]const u8 = null;
         defer if (template_name) |tname| self.allocator.free(tname);
-        
+
         // Keep track of original OCI bundle path for mounts and resources
         stderr.writeAll("[DRIVER] create: Initializing oci_bundle_path variable\n") catch {};
         var oci_bundle_path: ?[]const u8 = null;
         // Store parsed bundle config for resources and namespaces
-        var bundle_config: ?oci_bundle.OciBundleConfig = null;
+        var bundle_config: ?bundle.OciBundleConfig = null;
         defer if (bundle_config) |*bc| bc.deinit();
-        
+
         stderr.writeAll("[DRIVER] create: Checking if config.image exists\n") catch {};
         if (config.image) |image_path| {
             stderr.writeAll("[DRIVER] create: Image provided: '") catch {};
             stderr.writeAll(image_path) catch {};
             stderr.writeAll("'\n") catch {};
-            
+
             if (self.debug_mode) {
                 try stdout.writeAll("[DRIVER] create: Image provided: '");
                 try stdout.writeAll(image_path);
                 try stdout.writeAll("'\n");
             }
-            // Classify image type:
-            // - Proxmox template if:
-            //   a) ends with .tar.zst
-            //   b) contains ":vztmpl/" (storage template path)
-            // - Otherwise:
-            //   c) treat as OCI bundle path if directory exists
-            //   d) strings like "ubuntu:20.04" are NOT proxmox templates
-            stderr.writeAll("[DRIVER] create: Checking image type\n") catch {};
-            const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
-            const has_vztmpl = std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
-            const has_colon = std.mem.indexOf(u8, image_path, ":") != null;
-            const has_slash = std.mem.indexOf(u8, image_path, "/") != null;
-            const is_proxmox_template = is_tar or has_vztmpl;
+
+            // Check if Proxmox VE version supports OCI Registry pull (9.1+)
+            stderr.writeAll("[DRIVER] create: Checking Proxmox VE version for OCI Registry support\n") catch {};
+            const supports_oci = blk: {
+                const result = self.supportsOciRegistryPull() catch {
+                    stderr.writeAll("[DRIVER] create: Error checking Proxmox VE version\n") catch {};
+                    if (self.debug_mode) {
+                        try stdout.writeAll("[DRIVER] create: Error checking Proxmox VE version\n");
+                    }
+                    // Continue with normal processing if version check fails
+                    break :blk false;
+                };
+                break :blk result;
+            };
+            
+            if (supports_oci) {
+                stderr.writeAll("[DRIVER] create: Proxmox VE 9.1+ detected, OCI Registry pull supported\n") catch {};
+                if (self.logger) |log| {
+                    log.info("Proxmox VE 9.1+ detected, OCI Registry pull supported", .{}) catch {};
+                }
+                
+                // Check if image_path looks like an OCI image reference
+                // Format: registry/path/image:tag or image:tag
+                // Examples: docker.io/library/redis:latest, redis:latest
+                const has_colon = std.mem.indexOf(u8, image_path, ":") != null;
+                const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
+                const has_vztmpl = std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
+                const is_proxmox_template = is_tar or has_vztmpl;
+                const is_absolute_path = std.fs.path.isAbsolute(image_path);
+                
+                stderr.writeAll("[DRIVER] create: OCI check - has_colon=") catch {};
+                if (has_colon) stderr.writeAll("true") catch {} else stderr.writeAll("false") catch {};
+                stderr.writeAll(", is_proxmox_template=") catch {};
+                if (is_proxmox_template) stderr.writeAll("true") catch {} else stderr.writeAll("false") catch {};
+                stderr.writeAll(", is_absolute_path=") catch {};
+                if (is_absolute_path) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
+                
+                // If it looks like an OCI image reference (has colon, not a Proxmox template, not a local path)
+                if (has_colon and !is_proxmox_template and !is_absolute_path) {
+                    stderr.writeAll("[DRIVER] create: Detected OCI image reference, pulling from registry\n") catch {};
+                    if (self.logger) |log| {
+                        log.info("Detected OCI image reference, pulling from registry: {s}", .{image_path}) catch {};
+                    }
+                    
+                    // Pull OCI image from registry
+                    const storage = "local"; // Default storage, could be configurable
+                    stderr.writeAll("[DRIVER] create: Calling pullOciImage\n") catch {};
+                    const pulled_template = self.pullOciImage(image_path, storage) catch |pull_err| {
+                        stderr.writeAll("[DRIVER] create: Failed to pull OCI image\n") catch {};
+                        if (self.logger) |log| {
+                            log.err("Failed to pull OCI image: {}", .{pull_err}) catch {};
+                        }
+                        return pull_err;
+                    };
+                    defer self.allocator.free(pulled_template);
+                    
+                    stderr.writeAll("[DRIVER] create: OCI image pulled successfully\n") catch {};
+                    
+                    // Use pulled template
+                    template_name = try self.allocator.dupe(u8, pulled_template);
+                    
+                    if (self.logger) |log| {
+                        log.info("Using pulled OCI template: {s}", .{pulled_template}) catch {};
+                    }
+                    
+                    // Skip further image processing
+                    stderr.writeAll("[DRIVER] create: OCI image pulled, skipping further processing\n") catch {};
+                } else {
+                    // Not an OCI image reference, continue with normal processing
+                    stderr.writeAll("[DRIVER] create: Not an OCI image reference, continuing normal processing\n") catch {};
+                }
+            } else {
+                stderr.writeAll("[DRIVER] create: Proxmox VE < 9.1 or version check failed, OCI Registry pull not supported\n") catch {};
+            }
+
+            // Classify image type (only if not already processed as OCI image):
+            // Skip if template_name is already set (from OCI pull)
+            if (template_name == null) {
+                // - Proxmox template if:
+                //   a) ends with .tar.zst
+                //   b) contains ":vztmpl/" (storage template path)
+                // - Otherwise:
+                //   c) treat as OCI bundle path if directory exists
+                //   d) strings like "ubuntu:20.04" are NOT proxmox templates
+                stderr.writeAll("[DRIVER] create: Checking image type\n") catch {};
+                const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
+                const has_vztmpl = std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
+                const has_colon = std.mem.indexOf(u8, image_path, ":") != null;
+                const has_slash = std.mem.indexOf(u8, image_path, "/") != null;
+                const is_proxmox_template = is_tar or has_vztmpl;
             stderr.writeAll("[DRIVER] create: is_tar = ") catch {};
             if (is_tar) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
             stderr.writeAll("[DRIVER] create: has_vztmpl = ") catch {};
@@ -600,7 +926,7 @@ pub const ProxmoxLxcDriver = struct {
             if (has_colon) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
             stderr.writeAll("[DRIVER] create: has_slash = ") catch {};
             if (has_slash) stderr.writeAll("true\n") catch {} else stderr.writeAll("false\n") catch {};
-            
+
             if (is_proxmox_template) {
                 stderr.writeAll("[DRIVER] create: Image classified as Proxmox template\n") catch {};
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Image classified as Proxmox template\n");
@@ -608,7 +934,7 @@ pub const ProxmoxLxcDriver = struct {
                 stderr.writeAll("[DRIVER] create: Duplicating template name\n") catch {};
                 template_name = try self.allocator.dupe(u8, image_path);
                 stderr.writeAll("[DRIVER] create: Template name duplicated successfully\n") catch {};
-                
+
                 stderr.writeAll("[DRIVER] create: After template_name assignment, checking next step\n") catch {};
                 stderr.writeAll("[DRIVER] create: template_name is set: ") catch {};
                 if (template_name) |_| {
@@ -629,7 +955,7 @@ pub const ProxmoxLxcDriver = struct {
                     // If path is not a directory and looks like docker image ref (e.g., ubuntu:20.04),
                     // do NOT treat it as Proxmox template; return a clear error for now.
                     if (!is_proxmox_template and has_colon and !has_slash) {
-                        if (self.logger) |log| log.err("Unsupported image reference: {s}. Use Proxmox template (.tar.zst or storage:vztmpl/...) or local OCI bundle directory.", .{ image_path }) catch {};
+                        if (self.logger) |log| log.err("Unsupported image reference: {s}. Use Proxmox template (.tar.zst or storage:vztmpl/...) or local OCI bundle directory.", .{image_path}) catch {};
                         return core.Error.InvalidConfig;
                     }
                     if (self.logger) |log| log.err("Bundle path not found: {s} ({})", .{ safe_bundle_path, err }) catch {};
@@ -653,14 +979,15 @@ pub const ProxmoxLxcDriver = struct {
 
                 // Save OCI bundle path for mounts processing
                 oci_bundle_path = safe_bundle_path;
-                
+
                 // Parse bundle config for resources and namespaces (before processing template)
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Parsing bundle config for resources\n");
-                var bundle_parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+                const bundle_logger = self.getBundleLogger();
+                var bundle_parser = bundle.OciBundleParser.init(self.allocator, bundle_logger);
                 const parsed_bundle_cfg = try bundle_parser.parseBundle(safe_bundle_path);
                 // Note: We'll defer deinit after using it for resources/namespaces
                 bundle_config = parsed_bundle_cfg;
-                
+
                 // Process OCI bundle - convert to template if needed
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Processing OCI bundle\n");
                 template_name = try self.processOciBundle(safe_bundle_path, config.name);
@@ -668,6 +995,7 @@ pub const ProxmoxLxcDriver = struct {
                     try stdout.writeAll("[DRIVER] create: OCI bundle processed, template_name set\n");
                 }
             }
+            } // End of if (template_name == null)
         } else {
             stderr.writeAll("[DRIVER] create: No image provided\n") catch {};
             if (self.debug_mode) try stdout.writeAll("[DRIVER] create: No image provided\n");
@@ -676,7 +1004,7 @@ pub const ProxmoxLxcDriver = struct {
         stderr.writeAll("[DRIVER] create: After image processing, before VMID generation\n") catch {};
         stderr.writeAll("[DRIVER] create: Generating VMID from name\n") catch {};
         if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Generating VMID from name\n");
-        
+
         // Generate VMID from name (Proxmox requires numeric vmid)
         stderr.writeAll("[DRIVER] create: Initializing hash\n") catch {};
         var hasher = std.hash.Wyhash.init(0);
@@ -695,17 +1023,17 @@ pub const ProxmoxLxcDriver = struct {
         stderr.writeAll("[DRIVER] create: VMID allocated: ") catch {};
         stderr.writeAll(vmid) catch {};
         stderr.writeAll("\n") catch {};
-        
+
         if (self.debug_mode) {
             try stdout.writeAll("[DRIVER] create: VMID calculated: ");
             try stdout.writeAll(vmid);
             try stdout.writeAll("\n");
         }
-        
+
         // Validate VMID uniqueness - check if container with this VMID already exists
         stderr.writeAll("[DRIVER] create: Checking VMID uniqueness\n") catch {};
         if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Checking VMID uniqueness\n");
-        
+
         stderr.writeAll("[DRIVER] create: Before vmidExists call\n") catch {};
         const vmid_exists = try self.vmidExists(vmid);
         stderr.writeAll("[DRIVER] create: After vmidExists call, result = ") catch {};
@@ -714,7 +1042,7 @@ pub const ProxmoxLxcDriver = struct {
         } else {
             stderr.writeAll("false\n") catch {};
         }
-        
+
         if (vmid_exists) {
             if (self.logger) |log| {
                 log.err("Container with VMID {s} already exists. Try a different container name.", .{vmid}) catch {};
@@ -730,7 +1058,7 @@ pub const ProxmoxLxcDriver = struct {
 
         stderr.writeAll("[DRIVER] create: Resolving template\n") catch {};
         if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Resolving template\n");
-        
+
         // Resolve template to use: prefer converted template or find available one
         stderr.writeAll("[DRIVER] create: Before template resolution\n") catch {};
         var template: []u8 = undefined;
@@ -773,7 +1101,7 @@ pub const ProxmoxLxcDriver = struct {
             stderr.writeAll("[DRIVER] create: Template duplicated and free'd\n") catch {};
         }
         defer self.allocator.free(template);
-        
+
         stderr.writeAll("[DRIVER] create: Final template: '") catch {};
         stderr.writeAll(template) catch {};
         stderr.writeAll("'\n") catch {};
@@ -785,13 +1113,13 @@ pub const ProxmoxLxcDriver = struct {
 
         stderr.writeAll("[DRIVER] create: Checking ZFS availability\n") catch {};
         if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Checking ZFS availability\n");
-        
+
         // Create ZFS dataset for container if ZFS is available
         stderr.writeAll("[DRIVER] create: Before ZFS dataset variable initialization\n") catch {};
         var zfs_dataset: ?[]const u8 = null;
         defer if (zfs_dataset) |dataset| self.allocator.free(dataset);
         stderr.writeAll("[DRIVER] create: ZFS dataset variable initialized\n") catch {};
-        
+
         stderr.writeAll("[DRIVER] create: Before isZFSAvailable call\n") catch {};
         const zfs_available = self.isZFSAvailable();
         stderr.writeAll("[DRIVER] create: After isZFSAvailable call, result = ") catch {};
@@ -800,7 +1128,7 @@ pub const ProxmoxLxcDriver = struct {
         } else {
             stderr.writeAll("false\n") catch {};
         }
-        
+
         if (zfs_available) {
             stderr.writeAll("[DRIVER] create: ZFS available, creating dataset\n") catch {};
             if (self.debug_mode) try stdout.writeAll("[DRIVER] create: ZFS available, creating dataset\n");
@@ -828,10 +1156,20 @@ pub const ProxmoxLxcDriver = struct {
 
         stderr.writeAll("[DRIVER] create: Building pct create command arguments\n") catch {};
         if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Building pct create command arguments\n");
-        
-        // Use pct create command
-        var args: []const []const u8 = undefined;
-        
+
+        var args_builder = std.array_list.Managed([]const u8).init(self.allocator);
+        defer args_builder.deinit();
+
+        var allocated_args = std.array_list.Managed([]const u8).init(self.allocator);
+        defer {
+            for (allocated_args.items) |item| {
+                if (item.len > 0) self.allocator.free(item);
+            }
+            allocated_args.deinit();
+        }
+
+        try args_builder.appendSlice(&[_][]const u8{ "pct", "create", vmid, template, "--hostname", config.name });
+
         // Build dynamic args from config, bundle config (priority), and defaults
         // Priority: bundle_config.resources > config.resources > defaults
         const mem_mb_str = blk: {
@@ -844,6 +1182,7 @@ pub const ProxmoxLxcDriver = struct {
             break :blk try std.fmt.allocPrint(self.allocator, "{d}", .{mb});
         };
         defer self.allocator.free(mem_mb_str);
+        try args_builder.appendSlice(&[_][]const u8{ "--memory", mem_mb_str });
 
         const cores_str = blk: {
             const c: f64 = if (bundle_config) |bc| blk2: {
@@ -862,46 +1201,80 @@ pub const ProxmoxLxcDriver = struct {
             break :blk try std.fmt.allocPrint(self.allocator, "{d}", .{ci});
         };
         defer self.allocator.free(cores_str);
+        try args_builder.appendSlice(&[_][]const u8{ "--cores", cores_str });
 
-        const bridge = blk: {
-            if (config.network) |net| {
-                if (net.bridge) |b| break :blk b;
+        const default_bridge = self.config.default_bridge orelse core.constants.DEFAULT_BRIDGE_NAME;
+        const config_bridge = if (config.network) |net| net.bridge else null;
+        const fallback_bridge = config_bridge orelse default_bridge;
+
+        var net_runtime = std.array_list.Managed(NetDeviceRuntimeInfo).init(self.allocator);
+        defer net_runtime.deinit();
+
+        const bundle_net_devices = if (bundle_config) |*bc| bc.net_devices else null;
+        if (bundle_net_devices) |devices| {
+            if (devices.len > 0) {
+                for (devices, 0..) |device, idx| {
+                    const alias = device.alias;
+                    const host_link = device.name;
+                    const resolved_bridge = host_link orelse fallback_bridge;
+
+                    const net_flag = try std.fmt.allocPrint(self.allocator, "--net{d}", .{idx});
+                    try allocated_args.append(net_flag);
+                    try args_builder.append(net_flag);
+
+                    const net_value = try std.fmt.allocPrint(self.allocator, "name={s},bridge={s},ip=dhcp", .{ alias, resolved_bridge });
+                    try allocated_args.append(net_value);
+                    try args_builder.append(net_value);
+
+                    try net_runtime.append(NetDeviceRuntimeInfo{
+                        .alias = alias,
+                        .bridge = resolved_bridge,
+                        .host_name = host_link,
+                    });
+                }
+            } else {
+                const net_value = try std.fmt.allocPrint(self.allocator, "name=eth0,bridge={s},ip=dhcp", .{fallback_bridge});
+                try allocated_args.append(net_value);
+                try args_builder.appendSlice(&[_][]const u8{ "--net0", net_value });
+                try net_runtime.append(NetDeviceRuntimeInfo{ .alias = "eth0", .bridge = fallback_bridge, .host_name = null });
             }
-            break :blk core.constants.DEFAULT_BRIDGE_NAME;
-        };
-        const net0 = try std.fmt.allocPrint(self.allocator, "name=eth0,bridge={s},ip=dhcp", .{bridge});
-        defer self.allocator.free(net0);
+        } else {
+            const net_value = try std.fmt.allocPrint(self.allocator, "name=eth0,bridge={s},ip=dhcp", .{fallback_bridge});
+            try allocated_args.append(net_value);
+            try args_builder.appendSlice(&[_][]const u8{ "--net0", net_value });
+            try net_runtime.append(NetDeviceRuntimeInfo{ .alias = "eth0", .bridge = fallback_bridge, .host_name = null });
+        }
 
-        const ostype = self.config.default_ostype orelse "ubuntu";
-        const unprivileged_str = if (self.config.default_unprivileged) |u| if (u) "1" else "0" else "0";
+        // For OCI templates (format: storage:vztmpl/image_tag.tar), don't specify --ostype or --unprivileged 0
+        // Proxmox automatically detects the OS type from OCI archive
+        // OCI containers must be unprivileged (cannot use --unprivileged 0)
+        const is_oci_template = std.mem.endsWith(u8, template, ".tar") and !std.mem.endsWith(u8, template, ".tar.zst");
+        if (!is_oci_template) {
+            const ostype = self.config.default_ostype orelse "ubuntu";
+            const unprivileged_str = if (self.config.default_unprivileged) |u| if (u) "1" else "0" else "0";
+            try args_builder.appendSlice(&[_][]const u8{ "--ostype", ostype, "--unprivileged", unprivileged_str });
+        } else {
+            // For OCI templates, don't specify --ostype or --unprivileged
+            // Proxmox will auto-detect OS type and OCI containers are always unprivileged
+            // Only set --unprivileged if explicitly requested as unprivileged=1
+            if (self.config.default_unprivileged) |u| {
+                if (u) {
+                    try args_builder.appendSlice(&[_][]const u8{ "--unprivileged", "1" });
+                }
+                // If unprivileged=false, don't set the flag (OCI containers are always unprivileged)
+            }
+        }
 
         if (zfs_dataset) |dataset| {
-            args = &[_][]const u8{
-                "pct", "create", vmid, template,
-                "--hostname", config.name,
-                "--memory", mem_mb_str,
-                "--cores", cores_str,
-                "--net0", net0,
-                "--ostype", ostype,
-                "--unprivileged", unprivileged_str,
-                "--rootfs", dataset,
-            };
-        } else {
-            args = &[_][]const u8{
-                "pct", "create", vmid, template,
-                "--hostname", config.name,
-                "--memory", mem_mb_str,
-                "--cores", cores_str,
-                "--net0", net0,
-                "--ostype", ostype,
-                "--unprivileged", unprivileged_str,
-            };
+            try args_builder.appendSlice(&[_][]const u8{ "--rootfs", dataset });
         }
+
+        const args = args_builder.items;
 
         if (self.logger) |log| {
             log.debug("Proxmox LXC create: Creating container with pct create", .{}) catch {};
         }
-        
+
         // Debug: print all arguments (only in debug mode)
         if (self.debug_mode) {
             try stdout.writeAll("[DRIVER] create: pct create arguments:\n");
@@ -920,9 +1293,9 @@ pub const ProxmoxLxcDriver = struct {
         const result = try self.runCommand(args);
         defer self.allocator.free(result.stdout);
         defer self.allocator.free(result.stderr);
-        
+
         if (self.debug_mode) try stdout.writeAll("[DRIVER] create: pct create command completed\n");
-        
+
         // Debug output (only in debug mode)
         if (self.debug_mode) {
             try stdout.writeAll("[DRIVER] create: pct create result:\n");
@@ -936,7 +1309,7 @@ pub const ProxmoxLxcDriver = struct {
             try stdout.writeAll(result.stderr);
             try stdout.writeAll("\n");
         }
-        
+
         if (result.exit_code != 0) {
             if (self.debug_mode) {
                 try stdout.writeAll("[DRIVER] create: ERROR: pct create failed\n");
@@ -952,7 +1325,7 @@ pub const ProxmoxLxcDriver = struct {
                 try stdout.writeAll(result.stdout);
                 try stdout.writeAll("\n");
             }
-            
+
             // On failure, do not delete dataset; rename with -failed suffix
             if (zfs_dataset) |dataset| {
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Renaming ZFS dataset with -failed suffix\n");
@@ -961,12 +1334,15 @@ pub const ProxmoxLxcDriver = struct {
                     defer self.allocator.free(new_name);
                     const rn = [_][]const u8{ "zfs", "rename", "-r", dataset, new_name };
                     const rn_res = self.runCommand(&rn) catch null;
-                    if (rn_res) |resx| { self.allocator.free(resx.stdout); self.allocator.free(resx.stderr); }
+                    if (rn_res) |resx| {
+                        self.allocator.free(resx.stdout);
+                        self.allocator.free(resx.stderr);
+                    }
                 }
             }
-            
+
             if (self.logger) |log| log.err("Failed to create Proxmox LXC via pct: {s}", .{result.stderr}) catch {};
-            
+
             // Check if container was actually created despite non-zero exit code
             // Some pct warnings still result in successful creation
             if (std.mem.indexOf(u8, result.stderr, "already exists") != null) {
@@ -1001,6 +1377,9 @@ pub const ProxmoxLxcDriver = struct {
             }
         }
 
+        const bundle_ptr: ?*const bundle.OciBundleConfig = if (bundle_config) |*bc| bc else null;
+        try self.persistRuntimeMetadata(config.name, vmid, bundle_ptr, net_runtime.items);
+
         // Cleanup bundle config after use (moved to defer at declaration)
 
         if (self.debug_mode) {
@@ -1011,7 +1390,7 @@ pub const ProxmoxLxcDriver = struct {
             try stdout.writeAll(config.name);
             try stdout.writeAll("\n");
         }
-        
+
         if (self.logger) |log| log.info("Proxmox LXC container created via pct: {s} (vmid {s})", .{ config.name, vmid }) catch {};
         // Persist OCI-compatible state file: /run/nexcage/<container_id>/state.json
         {
@@ -1021,7 +1400,7 @@ pub const ProxmoxLxcDriver = struct {
             if (container_dir) |cdir| {
                 defer self.allocator.free(cdir);
                 std.fs.cwd().makePath(cdir) catch {};
-                const state_path = std.fmt.allocPrint(self.allocator, "{s}/state.json", .{ cdir }) catch null;
+                const state_path = std.fmt.allocPrint(self.allocator, "{s}/state.json", .{cdir}) catch null;
                 if (state_path) |spath| {
                     defer self.allocator.free(spath);
                     const file = std.fs.cwd().createFile(spath, .{ .truncate = true, .read = false }) catch null;
@@ -1031,29 +1410,149 @@ pub const ProxmoxLxcDriver = struct {
                         const bundle_json = if (oci_bundle_path) |bp| std.fmt.allocPrint(self.allocator, "\"{s}\"", .{bp}) catch null else null;
                         if (bundle_json) |bj| {
                             defer self.allocator.free(bj);
-                            const content = std.fmt.allocPrint(self.allocator,
+                            const content = std.fmt.allocPrint(
+                                self.allocator,
                                 "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"created\",\n  \"pid\": {d},\n  \"bundle\": {s},\n  \"annotations\": {{}}\n}}\n",
                                 .{ config.name, 0, bj },
                             ) catch null;
-                            if (content) |json| { defer self.allocator.free(json); _ = f.writeAll(json) catch {}; }
+                            if (content) |json| {
+                                defer self.allocator.free(json);
+                                _ = f.writeAll(json) catch {};
+                            }
                         } else {
-                            const content = std.fmt.allocPrint(self.allocator,
+                            const content = std.fmt.allocPrint(
+                                self.allocator,
                                 "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"created\",\n  \"pid\": {d},\n  \"bundle\": null,\n  \"annotations\": {{}}\n}}\n",
                                 .{ config.name, 0 },
                             ) catch null;
-                            if (content) |json| { defer self.allocator.free(json); _ = f.writeAll(json) catch {}; }
+                            if (content) |json| {
+                                defer self.allocator.free(json);
+                                _ = f.writeAll(json) catch {};
+                            }
                         }
                     }
                 }
             }
         }
-        
+
         if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Finished\n");
+    }
+
+    fn persistRuntimeMetadata(
+        self: *Self,
+        container_name: []const u8,
+        vmid: []const u8,
+        bundle_config: ?*const bundle.OciBundleConfig,
+        net_devices: []const NetDeviceRuntimeInfo,
+    ) !void {
+        const intel_cfg = if (bundle_config) |bc| bc.intel_rdt else null;
+        const intel_has_data = if (intel_cfg) |intel| blk: {
+            if (intel.clos_id) |_| break :blk true;
+            if (intel.schemata) |schemata| if (schemata.len > 0) break :blk true;
+            if (intel.l3_cache_schema) |schema| if (schema.len > 0) break :blk true;
+            if (intel.mem_bw_schema) |schema| if (schema.len > 0) break :blk true;
+            if (intel.enable_monitoring) |_| break :blk true;
+            break :blk false;
+        } else false;
+
+        if (!intel_has_data and net_devices.len == 0) {
+            return;
+        }
+
+        const state_dir = "/run/nexcage";
+        std.fs.cwd().makePath(state_dir) catch {};
+
+        const container_dir = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ state_dir, container_name });
+        defer self.allocator.free(container_dir);
+        std.fs.cwd().makePath(container_dir) catch {};
+
+        const metadata_path = try std.fmt.allocPrint(self.allocator, "{s}/runtime-metadata.json", .{container_dir});
+        defer self.allocator.free(metadata_path);
+
+        const file = try std.fs.cwd().createFile(metadata_path, .{ .truncate = true });
+        defer file.close();
+
+        var buffer = std.array_list.Managed(u8).init(self.allocator);
+        defer buffer.deinit();
+        var writer = buffer.writer();
+
+        try writer.writeAll("{\n  \"vmid\": ");
+        try writeJsonString(&writer, vmid);
+
+        if (intel_has_data) {
+            const intel = intel_cfg.?;
+            try writer.writeAll(",\n  \"intelRdt\": {\n");
+            var field_written = false;
+            if (intel.clos_id) |clos| {
+                try writer.writeAll("    \"closID\": ");
+                try writeJsonString(&writer, clos);
+                field_written = true;
+            }
+            if (intel.schemata) |schemata| if (schemata.len > 0) {
+                if (field_written) try writer.writeAll(",\n");
+                try writer.writeAll("    \"schemata\": [");
+                for (schemata, 0..) |entry, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try writeJsonString(&writer, entry);
+                }
+                try writer.writeAll("]");
+                field_written = true;
+            };
+            if (intel.l3_cache_schema) |schema| if (schema.len > 0) {
+                if (field_written) try writer.writeAll(",\n");
+                try writer.writeAll("    \"l3CacheSchema\": ");
+                try writeJsonString(&writer, schema);
+                field_written = true;
+            };
+            if (intel.mem_bw_schema) |schema| if (schema.len > 0) {
+                if (field_written) try writer.writeAll(",\n");
+                try writer.writeAll("    \"memBwSchema\": ");
+                try writeJsonString(&writer, schema);
+                field_written = true;
+            };
+            if (intel.enable_monitoring) |flag| {
+                if (field_written) try writer.writeAll(",\n");
+                try writer.writeAll("    \"enableMonitoring\": ");
+                try writer.writeAll(if (flag) "true" else "false");
+                field_written = true;
+            }
+            if (field_written) {
+                try writer.writeAll("\n  }");
+            } else {
+                try writer.writeAll("  }");
+            }
+        }
+
+        if (net_devices.len > 0) {
+            try writer.writeAll(",\n  \"netDevices\": [\n");
+            for (net_devices, 0..) |device, idx| {
+                try writer.writeAll("    {\n      \"alias\": ");
+                try writeJsonString(&writer, device.alias);
+                try writer.writeAll(",\n      \"bridge\": ");
+                try writeJsonString(&writer, device.bridge);
+                if (device.host_name) |host| {
+                    try writer.writeAll(",\n      \"hostName\": ");
+                    try writeJsonString(&writer, host);
+                }
+                try writer.writeAll("\n    }");
+                if (idx + 1 < net_devices.len) {
+                    try writer.writeAll(",\n");
+                } else {
+                    try writer.writeAll("\n");
+                }
+            }
+            try writer.writeAll("  ]");
+        }
+
+        try writer.writeAll("\n}\n");
+        try file.writeAll(buffer.items);
+
+        if (self.logger) |log| log.debug("Persisted runtime metadata for {s} at {s}", .{ container_name, metadata_path }) catch {};
     }
 
     /// Validate that mounts in bundle config point to existing host paths or valid Proxmox storage refs
     fn validateBundleVolumes(self: *Self, bundle_path: []const u8) !void {
-        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
         var cfg = try parser.parseBundle(bundle_path);
         defer cfg.deinit();
 
@@ -1064,18 +1563,18 @@ pub const ProxmoxLxcDriver = struct {
                 if (src_opt == null) continue;
                 const src = src_opt.?;
 
-            // If looks like storage reference: <storage>:<path>
-            if (std.mem.indexOfScalar(u8, src, ':')) |colon_idx| {
-                const storage = src[0..colon_idx];
-                const rest = std.mem.trim(u8, src[colon_idx+1..], " \t\r\n");
-                if (storage.len > 0 and rest.len > 0 and storage[0] != '/') {
-                    if (!(try self.storageHasPath(storage, rest))) {
-                        if (self.logger) |log| log.err("Storage volume not found: {s}:{s}", .{ storage, rest }) catch {};
-                        return core.Error.NotFound;
+                // If looks like storage reference: <storage>:<path>
+                if (std.mem.indexOfScalar(u8, src, ':')) |colon_idx| {
+                    const storage = src[0..colon_idx];
+                    const rest = std.mem.trim(u8, src[colon_idx + 1 ..], " \t\r\n");
+                    if (storage.len > 0 and rest.len > 0 and storage[0] != '/') {
+                        if (!(try self.storageHasPath(storage, rest))) {
+                            if (self.logger) |log| log.err("Storage volume not found: {s}:{s}", .{ storage, rest }) catch {};
+                            return core.Error.NotFound;
+                        }
+                        continue;
                     }
-                    continue;
                 }
-            }
 
                 // Otherwise treat as host path (absolute)
                 if (std.fs.cwd().access(src, .{})) |_| {
@@ -1101,8 +1600,8 @@ pub const ProxmoxLxcDriver = struct {
     /// Append mounts from bundle config to /etc/pve/lxc/<vmid>.conf using mpX syntax
     fn applyMountsToLxcConfig(self: *Self, vmid: []const u8, bundle_path: []const u8) !void {
         if (self.logger) |log| log.info("Parsing bundle for mounts: {s}", .{bundle_path}) catch {};
-        
-        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+
+        var parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
         var cfg = try parser.parseBundle(bundle_path);
         defer cfg.deinit();
 
@@ -1111,7 +1610,7 @@ pub const ProxmoxLxcDriver = struct {
             return;
         }
         const mounts = cfg.mounts.?;
-        
+
         if (self.logger) |log| log.info("Found {d} mounts in bundle", .{mounts.len}) catch {};
 
         const conf_path = try std.fmt.allocPrint(self.allocator, "/etc/pve/lxc/{s}.conf", .{vmid});
@@ -1149,7 +1648,7 @@ pub const ProxmoxLxcDriver = struct {
             // Build mp line
             const mp_line = try self.buildMpLine(next_idx, src, dest, m.options);
             defer self.allocator.free(mp_line);
-            
+
             if (self.logger) |log| log.info("Adding mp{d}: {s}", .{ next_idx, mp_line }) catch {};
             try file.writeAll(mp_line);
             try file.writeAll("\n");
@@ -1159,7 +1658,7 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Apply namespaces from OCI bundle to LXC container via pct set --features
     /// Maps OCI namespace types to LXC features where applicable
-    fn applyNamespacesToLxcConfig(self: *Self, vmid: []const u8, namespaces: []const oci_bundle.NamespaceConfig) !void {
+    fn applyNamespacesToLxcConfig(self: *Self, vmid: []const u8, namespaces: []const bundle.NamespaceConfig) !void {
         if (self.logger) |log| log.info("Applying {d} namespaces to LXC container {s}", .{ namespaces.len, vmid }) catch {};
 
         // Build features list based on namespaces
@@ -1201,7 +1700,7 @@ pub const ProxmoxLxcDriver = struct {
         // Build features string: "nesting=1,keyctl=1"
         var features_str = std.ArrayListUnmanaged(u8){};
         defer features_str.deinit(self.allocator);
-        
+
         for (features.items, 0..) |feat, i| {
             if (i > 0) try features_str.append(self.allocator, ',');
             try features_str.appendSlice(self.allocator, feat);
@@ -1213,9 +1712,9 @@ pub const ProxmoxLxcDriver = struct {
 
         const features_str_owned = try features_str.toOwnedSlice(self.allocator);
         defer self.allocator.free(features_str_owned);
-        
+
         const args = [_][]const u8{ "pct", "set", vmid_str, "--features", features_str_owned };
-        
+
         if (self.debug_mode) {
             const stdout = std.fs.File.stdout();
             try stdout.writeAll("[DRIVER] applyNamespacesToLxcConfig: Running: pct set ");
@@ -1402,7 +1901,10 @@ pub const ProxmoxLxcDriver = struct {
                     defer self.allocator.free(nn);
                     const rn = [_][]const u8{ "zfs", "rename", "-r", ds, nn };
                     const rn_res = self.runCommand(&rn) catch null;
-                    if (rn_res) |resx| { self.allocator.free(resx.stdout); self.allocator.free(resx.stderr); }
+                    if (rn_res) |resx| {
+                        self.allocator.free(resx.stdout);
+                        self.allocator.free(resx.stderr);
+                    }
                 }
             }
         }
@@ -1419,11 +1921,12 @@ pub const ProxmoxLxcDriver = struct {
         const container_dir = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ state_dir, container_id });
         defer self.allocator.free(container_dir);
         try std.fs.cwd().makePath(container_dir);
-        const state_path = try std.fmt.allocPrint(self.allocator, "{s}/state.json", .{ container_dir });
+        const state_path = try std.fmt.allocPrint(self.allocator, "{s}/state.json", .{container_dir});
         defer self.allocator.free(state_path);
         const file = try std.fs.cwd().createFile(state_path, .{ .truncate = true, .read = false });
         defer file.close();
-        const json = try std.fmt.allocPrint(self.allocator,
+        const json = try std.fmt.allocPrint(
+            self.allocator,
             "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": null,\n  \"annotations\": {{}}\n}}\n",
             .{ container_id, status, pid },
         );
@@ -1568,7 +2071,10 @@ pub const ProxmoxLxcDriver = struct {
                             _ = std.fs.File.stdout().writeAll(trimmed) catch {};
                             _ = std.fs.File.stdout().writeAll("\n") catch {};
                         }
-                        if (std.mem.indexOf(u8, trimmed, "stopped") != null) { success = true; break; }
+                        if (std.mem.indexOf(u8, trimmed, "stopped") != null) {
+                            success = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -1654,15 +2160,15 @@ pub const ProxmoxLxcDriver = struct {
         const data = buf[0..n];
 
         // Try to find annotation like: "org.opencontainers.image.ref.name": "ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
-        if (std.mem.indexOf(u8, data, "org.opencontainers.image.ref.name") ) |idx| {
+        if (std.mem.indexOf(u8, data, "org.opencontainers.image.ref.name")) |idx| {
             // naive extract value between quotes after colon
             const slice = data[idx..];
-            if (std.mem.indexOf(u8, slice, ":") ) |colon| {
-                const after = std.mem.trim(u8, slice[colon+1..], " \t\r\n");
+            if (std.mem.indexOf(u8, slice, ":")) |colon| {
+                const after = std.mem.trim(u8, slice[colon + 1 ..], " \t\r\n");
                 if (after.len >= 2) {
                     // find first quote
                     if (std.mem.indexOfScalar(u8, after, '"')) |q1| {
-                        const rest = after[q1+1..];
+                        const rest = after[q1 + 1 ..];
                         if (std.mem.indexOfScalar(u8, rest, '"')) |q2| {
                             const val = rest[0..q2];
                             return try self.allocator.dupe(u8, val);
@@ -1673,13 +2179,13 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // Fallback: try to find "image": "..."
-        if (std.mem.indexOf(u8, data, "\"image\"") ) |idx2| {
+        if (std.mem.indexOf(u8, data, "\"image\"")) |idx2| {
             const slice2 = data[idx2..];
-            if (std.mem.indexOf(u8, slice2, ":") ) |colon2| {
-                const after2 = std.mem.trim(u8, slice2[colon2+1..], " \t\r\n");
+            if (std.mem.indexOf(u8, slice2, ":")) |colon2| {
+                const after2 = std.mem.trim(u8, slice2[colon2 + 1 ..], " \t\r\n");
                 if (after2.len >= 2) {
                     if (std.mem.indexOfScalar(u8, after2, '"')) |q1b| {
-                        const rest2 = after2[q1b+1..];
+                        const rest2 = after2[q1b + 1 ..];
                         if (std.mem.indexOfScalar(u8, rest2, '"')) |q2b| {
                             const val2 = rest2[0..q2b];
                             return try self.allocator.dupe(u8, val2);
@@ -1716,9 +2222,9 @@ pub const ProxmoxLxcDriver = struct {
         const pct_res = self.runCommand(&pct_args) catch return false;
         defer self.allocator.free(pct_res.stdout);
         defer self.allocator.free(pct_res.stderr);
-        
+
         if (pct_res.exit_code != 0) return false;
-        
+
         // Parse pct list output to find VMID
         var lines = std.mem.splitScalar(u8, pct_res.stdout, '\n');
         var first = true;
@@ -1729,26 +2235,26 @@ pub const ProxmoxLxcDriver = struct {
             }
             const trimmed = std.mem.trim(u8, line, " \t\r");
             if (trimmed.len < 20) continue; // Skip short lines
-            
+
             // Extract VMID (first 10 characters)
             const vmid_str = std.mem.trim(u8, trimmed[0..10], " \t");
-            
+
             if (std.mem.eql(u8, vmid_str, vmid)) {
                 return true;
             }
         }
-        
+
         return false;
     }
-    
+
     /// Get VMID by container name
     fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
         if (self.debug_mode) std.debug.print("DEBUG: getVmidByName() called with name: {s}\n", .{name});
-        
+
         const pct_args = [_][]const u8{ "pct", "list" };
         if (self.logger) |log| log.info("Running pct list command", .{}) catch {};
         if (self.debug_mode) std.debug.print("DEBUG: About to run pct list\n", .{});
-        
+
         const pct_res = try self.runCommand(&pct_args);
         defer self.allocator.free(pct_res.stdout);
         defer self.allocator.free(pct_res.stderr);
@@ -1777,11 +2283,11 @@ pub const ProxmoxLxcDriver = struct {
             // Example: "101        stopped                 container-1"
             if (self.debug_mode) std.debug.print("DEBUG: Processing line: '{s}' (len={d})\n", .{ trimmed, trimmed.len });
             if (trimmed.len < 20) continue; // Skip short lines
-            
+
             // Extract VMID (first 10 characters)
             const vmid_str = std.mem.trim(u8, trimmed[0..10], " \t");
             if (vmid_str.len == 0) continue;
-            
+
             // Extract Name (last column, starting from position 33)
             // Name column starts around position 33 in pct list output
             const name_start = @min(33, trimmed.len);
@@ -1827,12 +2333,12 @@ pub const ProxmoxLxcDriver = struct {
     fn mapPctError(self: *Self, exit_code: u8, stderr: []const u8) core.Error {
         _ = exit_code;
         const s = stderr;
-        
+
         // Extract and log detailed error information
         if (self.logger) |log| {
             log.err("pct command failed: {s}", .{stderr}) catch {};
         }
-        
+
         // Comprehensive error mapping with detailed messages
         if (std.mem.indexOf(u8, s, "already exists") != null) {
             if (self.logger) |log| {
@@ -1840,42 +2346,42 @@ pub const ProxmoxLxcDriver = struct {
             }
             return core.Error.OperationFailed; // Already exists
         }
-        
+
         if (std.mem.indexOf(u8, s, "No such file or directory") != null or
             std.mem.indexOf(u8, s, "does not exist") != null or
             std.mem.indexOf(u8, s, "not found") != null)
         {
             return core.Error.NotFound;
         }
-        
+
         if (std.mem.indexOf(u8, s, "Permission denied") != null or
             std.mem.indexOf(u8, s, "permission denied") != null)
         {
             return core.Error.PermissionDenied;
         }
-        
+
         if (std.mem.indexOf(u8, s, "timeout") != null or
             std.mem.indexOf(u8, s, "Timed out") != null)
         {
             return core.Error.Timeout;
         }
-        
+
         if (std.mem.indexOf(u8, s, "Resource temporarily unavailable") != null) {
             return core.Error.OperationFailed;
         }
-        
+
         if (std.mem.indexOf(u8, s, "Invalid argument") != null or
             std.mem.indexOf(u8, s, "invalid") != null)
         {
             return core.Error.InvalidInput;
         }
-        
+
         if (std.mem.indexOf(u8, s, "cannot connect") != null or
             std.mem.indexOf(u8, s, "Connection refused") != null)
         {
             return core.Error.NetworkError;
         }
-        
+
         // Default to OperationFailed for all other errors
         return core.Error.OperationFailed;
     }

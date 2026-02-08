@@ -6,7 +6,7 @@
 - Zig 0.15.1 or newer
 - ZFS utilities
 - Linux kernel 5.0 or newer
-- CRI-O
+- containerd
 - Kubelet
 - CNI plugins
 
@@ -112,20 +112,12 @@ mkdir -p /etc/kubernetes
 cp kubelet.conf /etc/kubernetes/
 ```
 
-### 4. Install Proxmox LXCRI
+### 4. Install Nexcage runtime
 
 1. Copy binary:
 ```bash
 cp zig-out/bin/nexcage /usr/local/bin/
 chmod +x /usr/local/bin/nexcage
-```
-
-2. Install system service:
-```bash
-cp nexcage.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable nexcage
-systemctl start nexcage
 ```
 
 ### 5. Configure CNI
@@ -168,7 +160,7 @@ EOF
 ### 7. Restart Services
 
 ```bash
-systemctl restart crio kubelet nexcage
+systemctl restart containerd kubelet nexcage
 ```
 
 ## Verify Installation
@@ -176,7 +168,7 @@ systemctl restart crio kubelet nexcage
 1. Check service status:
 ```bash
 systemctl status nexcage
-systemctl status crio
+systemctl status containerd
 systemctl status kubelet
 ```
 
@@ -192,11 +184,11 @@ nexcage info
 
 ## Troubleshooting
 
-### 1. CRI-O Issues
+### 1. containerd Issues
 
 Check logs:
 ```bash
-journalctl -u crio -f
+journalctl -u containerd -f
 ```
 
 ### 2. Kubelet Issues
@@ -206,7 +198,7 @@ Check logs:
 journalctl -u kubelet -f
 ```
 
-### 3. Proxmox LXCRI Issues
+### 3. Nexcage Issues
 
 Check logs:
 ```bash

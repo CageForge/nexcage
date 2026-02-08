@@ -1,6 +1,6 @@
 # Testing Guide
 
-This document provides comprehensive information about testing the Proxmox LXC Runtime Interface project.
+This document provides comprehensive information about testing the Nexcage Runtime project.
 
 ## Overview
 
@@ -406,6 +406,6 @@ For testing-related issues:
 
 ---
 
-**Last Updated**: 2025-10-04  
-**Version**: 0.5.0  
-**Maintainer**: Proxmox LXC Runtime Interface Team
+**Last Updated**: 2025-11-13
+**Version**: 0.7.5
+**Maintainer**: CageForge Team

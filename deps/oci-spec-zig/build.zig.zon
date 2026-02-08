@@ -1,0 +1,14 @@
+.{
+    .name = .oci_spec_zig,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.15.1",
+    .fingerprint = 0x8dc16779710f115d,
+    .paths = .{
+        "src",
+        "build.zig",
+        "README.md",
+        "schemas",
+        "tools",
+    },
+    .dependencies = .{},
+}

@@ -34,11 +34,17 @@ jobs:
           echo "User: $(whoami)"
           echo "Zig version: $(zig version 2>/dev/null || echo 'Zig will be installed')"
 
+      - name: Cleanup work directory
+        run: |
+          rm -rf /opt/github-runner/_work/nexcage/nexcage/.cache || true
+          rm -rf /opt/github-runner/_work/nexcage/nexcage || true
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.version || github.ref }}
           fetch-depth: 0
+          clean: false
 
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
@@ -198,11 +204,17 @@ jobs:
           command -v pct && pct version || echo "pct not found"
           command -v pveversion && pveversion -v || echo "pveversion not found"
 
+      - name: Cleanup work directory
+        run: |
+          rm -rf /opt/github-runner/_work/nexcage/nexcage/.cache || true
+          rm -rf /opt/github-runner/_work/nexcage/nexcage || true
+      
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.version || github.ref }}
           fetch-depth: 0
+          clean: false
 
       - name: Install build dependencies
         run: |
