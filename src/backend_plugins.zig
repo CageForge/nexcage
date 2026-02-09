@@ -219,15 +219,15 @@ pub const BackendPluginRegistry = struct {
     
     /// List all registered backends
     pub fn listBackends(self: *Self, allocator: std.mem.Allocator) ![][]const u8 {
-        var list = std.ArrayList([]const u8).empty;
-        defer list.deinit(allocator);
+        var list = std.ArrayList([]const u8).init(allocator);
+        defer list.deinit();
         
         var iterator = self.plugins.iterator();
         while (iterator.next()) |entry| {
-            try list.append(allocator, try allocator.dupe(u8, entry.key_ptr.*));
+            try list.append(try allocator.dupe(u8, entry.key_ptr.*));
         }
         
-        return list.toOwnedSlice(allocator);
+        return list.toOwnedSlice();
     }
 };
 

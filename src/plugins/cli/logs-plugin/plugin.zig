@@ -3,8 +3,8 @@
 /// This plugin provides advanced logging and debugging commands.
 
 const std = @import("std");
-const plugin = @import("../../../plugin/mod.zig");
-const cli_extension = @import("../../../plugin/cli_extension.zig");
+const plugin = @import("plugin");
+const cli_extension = plugin.cli_extension;
 
 /// Logs command implementation
 fn logsCommand(context: *cli_extension.CliContext) !cli_extension.CliResult {

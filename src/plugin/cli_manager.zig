@@ -6,7 +6,7 @@
 const std = @import("std");
 const plugin = @import("mod.zig");
 const cli_extension = @import("cli_extension.zig");
-const core = @import("../core/mod.zig");
+const core = @import("core");
 
 /// Registered CLI plugin information
 pub const RegisteredCliPlugin = struct {
@@ -128,23 +128,23 @@ pub const CliPluginManager = struct {
     
     /// Get all available commands from all plugins
     pub fn getAllCommands(self: *Self, allocator: std.mem.Allocator) ![][]const u8 {
-        var commands = std.ArrayList([]const u8).empty;
-        defer commands.deinit(allocator);
+        var commands = std.ArrayList([]const u8).init(allocator);
+        defer commands.deinit();
         
         var iterator = self.plugins.iterator();
         while (iterator.next()) |entry| {
             for (entry.value_ptr.commands) |command| {
-                try commands.append(allocator, try allocator.dupe(u8, command.name));
+                try commands.append(try allocator.dupe(u8, command.name));
                 
                 // Add subcommands
                 for (command.subcommands) |subcmd| {
                     const full_name = try std.fmt.allocPrint(allocator, "{s} {s}", .{ command.name, subcmd.name });
-                    try commands.append(allocator, full_name);
+                    try commands.append(full_name);
                 }
             }
         }
         
-        return commands.toOwnedSlice(allocator);
+        return commands.toOwnedSlice();
     }
     
     /// Get commands from a specific plugin
@@ -272,15 +272,15 @@ pub const CliPluginManager = struct {
     
     /// List all registered plugins
     pub fn listPlugins(self: *Self, allocator: std.mem.Allocator) ![][]const u8 {
-        var plugin_names = std.ArrayList([]const u8).empty;
-        defer plugin_names.deinit(allocator);
+        var plugin_names = std.ArrayList([]const u8).init(allocator);
+        defer plugin_names.deinit();
         
         var iterator = self.plugins.iterator();
         while (iterator.next()) |entry| {
-            try plugin_names.append(allocator, try allocator.dupe(u8, entry.key_ptr.*));
+            try plugin_names.append(try allocator.dupe(u8, entry.key_ptr.*));
         }
         
-        return plugin_names.toOwnedSlice(allocator);
+        return plugin_names.toOwnedSlice();
     }
     
     /// Get plugin information

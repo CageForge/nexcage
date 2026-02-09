@@ -26,7 +26,7 @@ pub const BackendPluginRegistry = struct {
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
             .allocator = allocator,
-            .plugins = std.ArrayList(BackendPluginEntry).empty,
+            .plugins = std.ArrayList(BackendPluginEntry).init(allocator),
         };
     }
     
@@ -37,7 +37,7 @@ pub const BackendPluginRegistry = struct {
             self.allocator.free(entry.plugin_path);
             self.allocator.free(entry.capabilities);
         }
-        self.plugins.deinit(self.allocator);
+        self.plugins.deinit();
     }
     
     /// Register a backend plugin
@@ -58,7 +58,7 @@ pub const BackendPluginRegistry = struct {
             .enabled = true,
         };
         
-        try self.plugins.append(self.allocator, entry);
+        try self.plugins.append(entry);
         
         // Sort by priority (lower numbers first)
         std.sort.pdq(BackendPluginEntry, self.plugins.items, {}, comparePriority);
@@ -66,16 +66,16 @@ pub const BackendPluginRegistry = struct {
     
     /// Get list of enabled backend plugins
     pub fn getEnabledPlugins(self: *Self, allocator: std.mem.Allocator) ![]BackendPluginEntry {
-        var enabled = std.ArrayList(BackendPluginEntry).empty;
-        defer enabled.deinit(allocator);
+        var enabled = std.ArrayList(BackendPluginEntry).init(allocator);
+        defer enabled.deinit();
         
         for (self.plugins.items) |entry| {
             if (entry.enabled) {
-                try enabled.append(allocator, entry);
+                try enabled.append(entry);
             }
         }
         
-        return enabled.toOwnedSlice(allocator);
+        return enabled.toOwnedSlice();
     }
     
     /// Find plugin by name
@@ -218,14 +218,14 @@ pub const BackendPluginLoader = struct {
         const enabled_plugins = try self.registry.getEnabledPlugins(self.allocator);
         defer self.allocator.free(enabled_plugins);
         
-        var backends = std.ArrayList([]const u8).empty;
-        defer backends.deinit(allocator);
+        var backends = std.ArrayList([]const u8).init(allocator);
+        defer backends.deinit();
         
         for (enabled_plugins) |entry| {
-            try backends.append(allocator, try allocator.dupe(u8, entry.name));
+            try backends.append(try allocator.dupe(u8, entry.name));
         }
         
-        return backends.toOwnedSlice(allocator);
+        return backends.toOwnedSlice();
     }
 };
 

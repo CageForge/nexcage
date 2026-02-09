@@ -6,7 +6,7 @@
 const std = @import("std");
 const plugin = @import("mod.zig");
 const config_extension = @import("config_extension.zig");
-const core = @import("../core/mod.zig");
+const core = @import("core");
 
 /// Registered configuration plugin information
 pub const RegisteredConfigPlugin = struct {
@@ -317,8 +317,8 @@ pub const ConfigPluginManager = struct {
     
     /// Validate all plugin configurations
     pub fn validateConfiguration(self: *Self, enhanced_config: *EnhancedConfig) !ConfigValidationResult {
-        var all_errors = std.ArrayList(config_extension.ConfigValidationError).empty;
-        defer all_errors.deinit(self.allocator);
+        var all_errors = std.ArrayList(config_extension.ConfigValidationError).init(self.allocator);
+        defer all_errors.deinit();
         
         var plugin_iter = self.plugins.iterator();
         while (plugin_iter.next()) |entry| {
@@ -337,7 +337,7 @@ pub const ConfigPluginManager = struct {
             
             if (!result.success) {
                 for (result.errors) |error_item| {
-                    try all_errors.append(self.allocator, config_extension.ConfigValidationError{
+                    try all_errors.append(config_extension.ConfigValidationError{
                         .field_name = try std.fmt.allocPrint(
                             self.allocator,
                             "{s}.{s}",
@@ -359,7 +359,7 @@ pub const ConfigPluginManager = struct {
             }
             
             for (context_errors) |error_item| {
-                try all_errors.append(self.allocator, config_extension.ConfigValidationError{
+                try all_errors.append(config_extension.ConfigValidationError{
                     .field_name = try std.fmt.allocPrint(
                         self.allocator,
                         "{s}.{s}",
@@ -372,7 +372,7 @@ pub const ConfigPluginManager = struct {
         }
         
         // Update enhanced config validation status
-        enhanced_config.validation_errors = try all_errors.toOwnedSlice(self.allocator);
+        enhanced_config.validation_errors = try all_errors.toOwnedSlice();
         enhanced_config.is_valid = enhanced_config.validation_errors.len == 0;
         
         return ConfigValidationResult{
@@ -426,15 +426,15 @@ pub const ConfigPluginManager = struct {
     
     /// List registered configuration plugins
     pub fn listPlugins(self: *Self, allocator: std.mem.Allocator) ![][]const u8 {
-        var plugin_names = std.ArrayList([]const u8).empty;
-        defer plugin_names.deinit(allocator);
+        var plugin_names = std.ArrayList([]const u8).init(allocator);
+        defer plugin_names.deinit();
         
         var iterator = self.plugins.iterator();
         while (iterator.next()) |entry| {
-            try plugin_names.append(allocator, try allocator.dupe(u8, entry.key_ptr.*));
+            try plugin_names.append(try allocator.dupe(u8, entry.key_ptr.*));
         }
         
-        return plugin_names.toOwnedSlice(allocator);
+        return plugin_names.toOwnedSlice();
     }
     
     /// Get plugin information

@@ -5,7 +5,7 @@
 
 const std = @import("std");
 const plugin = @import("mod.zig");
-const core = @import("../core/mod.zig");
+const core = @import("core");
 
 /// CLI command argument definition
 pub const CliArgument = struct {
@@ -156,28 +156,28 @@ pub const CliCommand = struct {
     
     /// Generate help text for this command
     pub fn generateHelp(self: *const CliCommand, allocator: std.mem.Allocator) ![]const u8 {
-        var help_text = std.ArrayList(u8).empty;
-        defer help_text.deinit(allocator);
+        var help_text = std.ArrayList(u8).init(allocator);
+        defer help_text.deinit();
         
         // Command name and description
-        try help_text.writer(allocator).print("{s} - {s}\n\n", .{ self.name, self.description });
+        try help_text.writer().print("{s} - {s}\n\n", .{ self.name, self.description });
         
         // Usage
-        try help_text.writer(allocator).print("Usage: {s}\n\n", .{self.usage});
+        try help_text.writer().print("Usage: {s}\n\n", .{self.usage});
         
         // Arguments
         if (self.arguments.len > 0) {
-            try help_text.writer(allocator).print("Arguments:\n");
+            try help_text.writer().print("Arguments:\n");
             for (self.arguments) |arg| {
                 const required_marker = if (arg.required) "*" else " ";
-                try help_text.writer(allocator).print("  {s}{s}  {s}\n", .{ required_marker, arg.name, arg.description });
+                try help_text.writer().print("  {s}{s}  {s}\n", .{ required_marker, arg.name, arg.description });
             }
-            try help_text.writer(allocator).print("\n");
+            try help_text.writer().print("\n");
         }
         
         // Options
         if (self.options.len > 0) {
-            try help_text.writer(allocator).print("Options:\n");
+            try help_text.writer().print("Options:\n");
             for (self.options) |opt| {
                 const short_opt = if (opt.short) |s| 
                     try std.fmt.allocPrint(allocator, "-{c}, ", .{s})
@@ -186,21 +186,21 @@ pub const CliCommand = struct {
                 defer allocator.free(short_opt);
                 
                 const required_marker = if (opt.required) "*" else " ";
-                try help_text.writer(allocator).print("  {s}{s}--{s}  {s}\n", .{ required_marker, short_opt, opt.name, opt.description });
+                try help_text.writer().print("  {s}{s}--{s}  {s}\n", .{ required_marker, short_opt, opt.name, opt.description });
             }
-            try help_text.writer(allocator).print("\n");
+            try help_text.writer().print("\n");
         }
         
         // Subcommands
         if (self.subcommands.len > 0) {
-            try help_text.writer(allocator).print("Subcommands:\n");
+            try help_text.writer().print("Subcommands:\n");
             for (self.subcommands) |subcmd| {
-                try help_text.writer(allocator).print("  {s}  {s}\n", .{ subcmd.name, subcmd.description });
+                try help_text.writer().print("  {s}  {s}\n", .{ subcmd.name, subcmd.description });
             }
-            try help_text.writer(allocator).print("\n");
+            try help_text.writer().print("\n");
         }
         
-        return help_text.toOwnedSlice(allocator);
+        return help_text.toOwnedSlice();
     }
     
     /// Find subcommand by name

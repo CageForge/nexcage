@@ -3,8 +3,8 @@
 /// This plugin provides advanced network management and troubleshooting commands.
 
 const std = @import("std");
-const plugin = @import("../../../plugin/mod.zig");
-const cli_extension = @import("../../../plugin/cli_extension.zig");
+const plugin = @import("plugin");
+const cli_extension = plugin.cli_extension;
 
 /// Network inspect command implementation
 fn inspectCommand(context: *cli_extension.CliContext) !cli_extension.CliResult {

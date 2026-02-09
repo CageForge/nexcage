@@ -8,8 +8,8 @@ const std = @import("std");
 const core = @import("core");
 const types = core.types;
 const interfaces = core.interfaces;
-const plugin = @import("../plugin/mod.zig");
-const cli_plugins = @import("../plugins/cli/mod.zig");
+const plugin = @import("plugin");
+const cli_plugins = @import("cli_plugins");
 const registry = @import("registry.zig");
 
 /// Plugin command wrapper that implements CommandInterface
@@ -41,25 +41,43 @@ pub const PluginCommandWrapper = struct {
         self.allocator.destroy(self);
     }
     
-    /// Execute command - implements CommandInterface.execute
-    pub fn execute(options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        // This is a placeholder implementation since we need access to self
-        // In practice, we'd need to restructure this to pass the wrapper instance
-        _ = options;
+    /// Convert to CommandInterface
+    pub fn toInterface(self: *Self) interfaces.CommandInterface {
+        return interfaces.CommandInterface{
+            .name = self.command_name,
+            .description = self.plugin_command.description,
+            .ctx = self,
+            .execute = wrapperExecute,
+            .help = wrapperHelp,
+            .validate = wrapperValidate,
+        };
+    }
+
+    fn wrapperExecute(iface: *interfaces.CommandInterface, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        const self = @as(*Self, @ptrCast(@alignCast(iface.ctx)));
+        
+        // Reconstruct args from options
+        var args = std.ArrayList([]const u8).init(allocator);
+        defer args.deinit();
+        
+        // If container_id is set and not default, pass it as an argument
+        if (options.container_id.len > 0 and !std.mem.eql(u8, options.container_id, "default")) {
+            try args.append(options.container_id);
+        }
+        
+        _ = try self.executeWithContext(args.items);
+    }
+
+    fn wrapperHelp(iface: *interfaces.CommandInterface, allocator: std.mem.Allocator) ![]const u8 {
         _ = allocator;
-        std.log.info("Plugin command execution not fully implemented in legacy interface", .{});
+        const self = @as(*Self, @ptrCast(@alignCast(iface.ctx)));
+        return self.helpWithContext();
     }
-    
-    /// Get help - implements CommandInterface.help  
-    pub fn help(allocator: std.mem.Allocator) ![]const u8 {
-        // This is a placeholder - same issue as execute
-        return std.fmt.allocPrint(allocator, "Help for plugin command", .{});
-    }
-    
-    /// Validate arguments - implements CommandInterface.validate
-    pub fn validate(args: []const []const u8) !void {
+
+    fn wrapperValidate(iface: *interfaces.CommandInterface, args: []const []const u8) !void {
+        _ = iface;
         _ = args;
-        // Validation would be handled by the plugin system
+        // Validation delegated to plugin execution
     }
     
     /// Execute command with access to self
@@ -94,7 +112,7 @@ pub const EnhancedCommandRegistry = struct {
             .legacy_registry = registry.CommandRegistry.init(allocator),
             .cli_plugin_manager = cli_plugin_manager,
             .cli_plugin_registry = cli_plugin_registry,
-            .plugin_wrappers = std.ArrayList(*PluginCommandWrapper).empty,
+            .plugin_wrappers = std.ArrayList(*PluginCommandWrapper).init(allocator),
         };
     }
     
@@ -103,7 +121,7 @@ pub const EnhancedCommandRegistry = struct {
         for (self.plugin_wrappers.items) |wrapper| {
             wrapper.deinit();
         }
-        self.plugin_wrappers.deinit(self.allocator);
+        self.plugin_wrappers.deinit();
         
         // Clean up legacy registry
         self.legacy_registry.deinit();
@@ -217,8 +235,8 @@ pub const EnhancedCommandRegistry = struct {
     
     /// List all available commands
     pub fn listAllCommands(self: *Self) ![]const []const u8 {
-        var commands = std.ArrayList([]const u8).empty;
-        defer commands.deinit(self.allocator);
+        var commands = std.ArrayList([]const u8).init(self.allocator);
+        defer commands.deinit();
         
         // Add legacy commands
         const legacy_commands = try self.legacy_registry.list(self.allocator);

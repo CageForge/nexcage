@@ -5,7 +5,7 @@
 
 const std = @import("std");
 const plugin = @import("mod.zig");
-const core = @import("../core/mod.zig");
+const core = @import("core");
 
 /// Configuration field definition
 pub const ConfigField = struct {
@@ -159,8 +159,8 @@ pub const ConfigContext = struct {
     
     /// Validate configuration against registered sections
     pub fn validate(self: *ConfigContext) ![]ConfigValidationError {
-        var errors = std.ArrayList(ConfigValidationError).empty;
-        defer errors.deinit(self.allocator);
+        var errors = std.ArrayList(ConfigValidationError).init(self.allocator);
+        defer errors.deinit();
         
         var section_iter = self.sections.iterator();
         while (section_iter.next()) |entry| {
@@ -168,7 +168,7 @@ pub const ConfigContext = struct {
             try self.validateSection(section, &errors);
         }
         
-        return errors.toOwnedSlice(self.allocator);
+        return errors.toOwnedSlice();
     }
     
     /// Validate a specific section
@@ -188,7 +188,7 @@ pub const ConfigContext = struct {
             if (self.getValue(field_key)) |value| {
                 try self.validateField(field, value, field_key, errors);
             } else if (field.required) {
-                try errors.append(self.allocator, ConfigValidationError{
+                try errors.append(ConfigValidationError{
                     .field_name = try self.allocator.dupe(u8, field_key),
                     .error_type = .missing_required_field,
                     .message = try std.fmt.allocPrint(
@@ -220,7 +220,7 @@ pub const ConfigContext = struct {
         };
         
         if (!type_valid) {
-            try errors.append(self.allocator, ConfigValidationError{
+            try errors.append(ConfigValidationError{
                 .field_name = try self.allocator.dupe(u8, field_key),
                 .error_type = .invalid_type,
                 .message = try std.fmt.allocPrint(
@@ -254,7 +254,7 @@ pub const ConfigContext = struct {
                 if (value.asString()) |str| {
                     const min_len = std.fmt.parseInt(usize, rule.value, 10) catch return;
                     if (str.len < min_len) {
-                        try errors.append(self.allocator, ConfigValidationError{
+                        try errors.append(ConfigValidationError{
                             .field_name = try self.allocator.dupe(u8, field_key),
                             .error_type = .validation_failed,
                             .message = try std.fmt.allocPrint(
@@ -270,7 +270,7 @@ pub const ConfigContext = struct {
                 if (value.asString()) |str| {
                     const max_len = std.fmt.parseInt(usize, rule.value, 10) catch return;
                     if (str.len > max_len) {
-                        try errors.append(self.allocator, ConfigValidationError{
+                        try errors.append(ConfigValidationError{
                             .field_name = try self.allocator.dupe(u8, field_key),
                             .error_type = .validation_failed,
                             .message = try std.fmt.allocPrint(
@@ -286,7 +286,7 @@ pub const ConfigContext = struct {
                 if (value.asNumber()) |num| {
                     const min_val = std.fmt.parseFloat(f64, rule.value) catch return;
                     if (num < min_val) {
-                        try errors.append(self.allocator, ConfigValidationError{
+                        try errors.append(ConfigValidationError{
                             .field_name = try self.allocator.dupe(u8, field_key),
                             .error_type = .validation_failed,
                             .message = try std.fmt.allocPrint(
@@ -302,7 +302,7 @@ pub const ConfigContext = struct {
                 if (value.asNumber()) |num| {
                     const max_val = std.fmt.parseFloat(f64, rule.value) catch return;
                     if (num > max_val) {
-                        try errors.append(self.allocator, ConfigValidationError{
+                        try errors.append(ConfigValidationError{
                             .field_name = try self.allocator.dupe(u8, field_key),
                             .error_type = .validation_failed,
                             .message = try std.fmt.allocPrint(
@@ -318,7 +318,7 @@ pub const ConfigContext = struct {
                 // Simple pattern matching - could be enhanced with real regex
                 if (value.asString()) |str| {
                     if (!std.mem.containsAtLeast(u8, str, 1, rule.value)) {
-                        try errors.append(self.allocator, ConfigValidationError{
+                        try errors.append(ConfigValidationError{
                             .field_name = try self.allocator.dupe(u8, field_key),
                             .error_type = .validation_failed,
                             .message = try std.fmt.allocPrint(
@@ -341,7 +341,7 @@ pub const ConfigContext = struct {
                         }
                     }
                     if (!is_valid) {
-                        try errors.append(self.allocator, ConfigValidationError{
+                        try errors.append(ConfigValidationError{
                             .field_name = try self.allocator.dupe(u8, field_key),
                             .error_type = .validation_failed,
                             .message = try std.fmt.allocPrint(

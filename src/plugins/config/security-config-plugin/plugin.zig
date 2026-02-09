@@ -4,8 +4,8 @@
 /// for NexCage, including container security policies and restrictions.
 
 const std = @import("std");
-const plugin = @import("../../../plugin/mod.zig");
-const config_extension = @import("../../../plugin/config_extension.zig");
+const plugin = @import("plugin");
+const config_extension = plugin.config_extension;
 
 /// Register security configuration sections
 fn registerSections(

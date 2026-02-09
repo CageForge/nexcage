@@ -4,9 +4,9 @@
 /// configuration plugins that extend NexCage's configuration system.
 
 const std = @import("std");
-const plugin = @import("../../plugin/mod.zig");
-const config_extension = @import("../../plugin/config_extension.zig");
-const config_manager = @import("../../plugin/config_manager.zig");
+const plugin = @import("plugin");
+const config_extension = plugin.config_extension;
+const config_manager = plugin.config_manager;
 
 // Import all configuration plugins
 pub const backend_config_plugin = @import("backend-config-plugin/plugin.zig");
@@ -29,7 +29,7 @@ pub const ConfigPluginRegistry = struct {
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
             .allocator = allocator,
-            .registered_plugins = std.ArrayList(ConfigPluginEntry).empty,
+            .registered_plugins = std.ArrayList(ConfigPluginEntry).init(allocator),
         };
     }
     
@@ -38,7 +38,7 @@ pub const ConfigPluginRegistry = struct {
             self.allocator.free(entry.name);
             self.allocator.free(entry.description);
         }
-        self.registered_plugins.deinit(self.allocator);
+        self.registered_plugins.deinit();
     }
     
     /// Register a configuration plugin
@@ -55,7 +55,7 @@ pub const ConfigPluginRegistry = struct {
             .enabled = true,
         };
         
-        try self.registered_plugins.append(self.allocator, entry);
+        try self.registered_plugins.append(entry);
     }
     
     /// Get all registered plugins
@@ -180,7 +180,7 @@ pub const EnhancedConfigSystem = struct {
     config_plugin_manager: *config_manager.ConfigPluginManager,
     config_plugin_registry: *ConfigPluginRegistry,
     loader: ConfigPluginLoader,
-    logger: ?*@import("../../core/mod.zig").LogContext = null,
+    logger: ?*@import("core").LogContext = null,
     
     pub fn init(
         allocator: std.mem.Allocator,
@@ -238,7 +238,7 @@ pub const EnhancedConfigSystem = struct {
         self.allocator.destroy(self.config_plugin_registry);
     }
     
-    pub fn setLogger(self: *Self, logger: *@import("../../core/mod.zig").LogContext) void {
+    pub fn setLogger(self: *Self, logger: *@import("core").LogContext) void {
         self.logger = logger;
         self.config_plugin_manager.setLogger(logger);
     }

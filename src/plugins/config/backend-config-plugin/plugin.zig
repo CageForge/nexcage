@@ -4,8 +4,8 @@
 /// allowing users to configure backend-specific settings.
 
 const std = @import("std");
-const plugin = @import("../../../plugin/mod.zig");
-const config_extension = @import("../../../plugin/config_extension.zig");
+const plugin = @import("plugin");
+const config_extension = plugin.config_extension;
 
 /// Register configuration sections for backend plugins
 fn registerSections(

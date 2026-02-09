@@ -143,13 +143,13 @@ fn showGeneralHelp(
     }
     
     // Group commands by type (heuristic based on name)
-    var container_commands = std.ArrayList([]const u8).empty;
-    var plugin_commands = std.ArrayList([]const u8).empty;
-    var system_commands = std.ArrayList([]const u8).empty;
+    var container_commands = std.ArrayList([]const u8).init(allocator);
+    var plugin_commands = std.ArrayList([]const u8).init(allocator);
+    var system_commands = std.ArrayList([]const u8).init(allocator);
     
-    defer container_commands.deinit(allocator);
-    defer plugin_commands.deinit(allocator);
-    defer system_commands.deinit(allocator);
+    defer container_commands.deinit();
+    defer plugin_commands.deinit();
+    defer system_commands.deinit();
     
     for (all_commands) |cmd| {
         if (std.mem.indexOf(u8, cmd, " ") != null or 
@@ -261,14 +261,14 @@ fn suggestSimilarCommands(
         allocator.free(all_commands);
     }
     
-    var suggestions = std.ArrayList([]const u8).empty;
-    defer suggestions.deinit(allocator);
+    var suggestions = std.ArrayList([]const u8).init(allocator);
+    defer suggestions.deinit();
     
     // Simple similarity check - commands that start with the same letter(s)
     for (all_commands) |cmd| {
         if (cmd.len > 0 and command_name.len > 0) {
             if (cmd[0] == command_name[0]) {
-                try suggestions.append(allocator, cmd);
+                try suggestions.append(cmd);
             }
         }
     }

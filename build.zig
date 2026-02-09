@@ -107,12 +107,15 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(bool, "enable_proxmox_api", enable_proxmox_api);
     build_options.addOption(bool, "enable_libcrun_abi", enable_libcrun_abi);
     build_options.addOption(bool, "enable_plugins", enable_plugins);
+    
+    // Create shared build options module
+    const build_options_mod = build_options.createModule();
 
     // Core module
     const core_mod = b.addModule("core", .{
         .root_source_file = b.path("src/core/mod.zig"),
     });
-    core_mod.addOptions("build_options", core_build_options);
+    core_mod.addOptions("core_build_options", core_build_options);
 
     const oci_spec_dep = b.dependency("oci_spec_zig", .{
         .target = target,
@@ -137,8 +140,45 @@ pub fn build(b: *std.Build) void {
             .{ .name = "oci_spec", .module = oci_spec_mod },
         },
     });
-    backends_mod.addOptions("build_options", build_options);
+    backends_mod.addImport("build_options", build_options_mod);
     backends_mod.addOptions("feature_options", feature_options);
+
+    // Plugin module
+    const plugin_mod = b.addModule("plugin", .{
+        .root_source_file = b.path("src/plugin/mod.zig"),
+        .imports = &.{
+            .{ .name = "core", .module = core_mod },
+        },
+    });
+
+    // Config plugins module
+    const config_plugins_mod = b.addModule("config_plugins", .{
+        .root_source_file = b.path("src/plugins/config/mod.zig"),
+        .imports = &.{
+            .{ .name = "core", .module = core_mod },
+            .{ .name = "plugin", .module = plugin_mod },
+        },
+    });
+    // Add config_plugins logger dependency on core indirectly via import
+
+    // CLI plugins module
+    const cli_plugins_mod = b.addModule("cli_plugins", .{
+        .root_source_file = b.path("src/plugins/cli/mod.zig"),
+        .imports = &.{
+            .{ .name = "core", .module = core_mod },
+            .{ .name = "plugin", .module = plugin_mod },
+        },
+    });
+
+    // Config integration module
+    const config_integration_mod = b.addModule("config_integration", .{
+        .root_source_file = b.path("src/core/enhanced_config.zig"),
+        .imports = &.{
+            .{ .name = "core", .module = core_mod },
+            .{ .name = "plugin", .module = plugin_mod },
+            .{ .name = "config_plugins", .module = config_plugins_mod },
+        },
+    });
 
     // CLI module
     const cli_mod = b.addModule("cli", .{
@@ -147,6 +187,9 @@ pub fn build(b: *std.Build) void {
             .{ .name = "core", .module = core_mod },
             .{ .name = "backends", .module = backends_mod },
             .{ .name = "utils", .module = utils_mod },
+            .{ .name = "plugin", .module = plugin_mod },
+            .{ .name = "cli_plugins", .module = cli_plugins_mod },
+            .{ .name = "config_integration", .module = config_integration_mod },
         },
     });
 
@@ -157,7 +200,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "core", .module = core_mod },
         },
     });
-    integrations_mod.addOptions("build_options", build_options);
+    integrations_mod.addImport("build_options", build_options_mod);
 
     var libcrun_lib: ?*std.Build.Step.Compile = null;
 

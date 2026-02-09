@@ -4,9 +4,9 @@
 /// the existing NexCage core configuration, providing a unified interface.
 
 const std = @import("std");
-const core = @import("mod.zig");
-const plugin = @import("../plugin/mod.zig");
-const config_plugins = @import("../plugins/config/mod.zig");
+const core = @import("core");
+const plugin = @import("plugin");
+const config_plugins = @import("config_plugins");
 
 /// Enhanced configuration loader that supports both core and plugin configurations
 pub const EnhancedConfigLoader = struct {

@@ -3,9 +3,9 @@
 /// This module provides registration and management for all built-in CLI plugins.
 
 const std = @import("std");
-const plugin = @import("../../plugin/mod.zig");
-const cli_extension = @import("../../plugin/cli_extension.zig");
-const cli_manager = @import("../../plugin/cli_manager.zig");
+const plugin = @import("plugin");
+const cli_extension = plugin.cli_extension;
+const cli_manager = plugin.cli_manager;
 
 // Import all CLI plugins
 pub const stats_plugin = @import("stats-plugin/plugin.zig");
@@ -29,7 +29,7 @@ pub const CliPluginRegistry = struct {
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
             .allocator = allocator,
-            .registered_plugins = std.ArrayList(CliPluginEntry).empty,
+            .registered_plugins = std.ArrayList(CliPluginEntry).init(allocator),
         };
     }
     
@@ -38,7 +38,7 @@ pub const CliPluginRegistry = struct {
             self.allocator.free(entry.name);
             self.allocator.free(entry.description);
         }
-        self.registered_plugins.deinit(self.allocator);
+        self.registered_plugins.deinit();
     }
     
     /// Register a CLI plugin
@@ -55,7 +55,7 @@ pub const CliPluginRegistry = struct {
             .enabled = true,
         };
         
-        try self.registered_plugins.append(self.allocator, entry);
+        try self.registered_plugins.append(entry);
     }
     
     /// Get all registered plugins

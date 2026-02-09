@@ -3,8 +3,8 @@
 /// This plugin provides container statistics and monitoring commands.
 
 const std = @import("std");
-const plugin = @import("../../../plugin/mod.zig");
-const cli_extension = @import("../../../plugin/cli_extension.zig");
+const plugin = @import("plugin");
+const cli_extension = plugin.cli_extension;
 
 /// Stats command implementation
 fn statsCommand(context: *cli_extension.CliContext) !cli_extension.CliResult {
