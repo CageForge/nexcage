@@ -80,7 +80,9 @@ pub fn build(b: *std.Build) void {
     const feature_options = b.addOptions();
 
     // Feature flags
-    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI (requires libcrun and systemd, default: false)") orelse false;
+    // Check for systemd availability to set default
+    const systemd_exists = pkgConfigExists(b, "libsystemd");
+    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI (requires libcrun and systemd, default: auto-detected)") orelse systemd_exists;
     const enable_plugins = b.option(bool, "enable-plugins", "Enable plugin system (default: true)") orelse true;
 
     var libcrun_abi_active = false;
@@ -107,7 +109,7 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(bool, "enable_proxmox_api", enable_proxmox_api);
     build_options.addOption(bool, "enable_libcrun_abi", enable_libcrun_abi);
     build_options.addOption(bool, "enable_plugins", enable_plugins);
-    
+
     // Create shared build options module
     const build_options_mod = build_options.createModule();
 
