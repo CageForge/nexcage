@@ -1,0 +1,115 @@
+{
+  "name": "proxmox-lxc-backend",
+  "version": "1.0.0",
+  "description": "Proxmox LXC container backend plugin for NexCage",
+  "author": "NexCage Team",
+  "homepage": "https://github.com/cageforge/nexcage",
+  "license": "Apache-2.0",
+  "api_version": 1,
+  "nexcage_version": "0.7.0",
+  "dependencies": [],
+  "capabilities": [
+    "container_create",
+    "container_start",
+    "container_stop",
+    "container_delete",
+    "container_exec",
+    "container_list",
+    "container_info",
+    "host_command",
+    "filesystem_read",
+    "filesystem_write",
+    "network_client",
+    "network_server",
+    "system_info",
+    "logging"
+  ],
+  "resource_requirements": {
+    "max_memory_mb": 256,
+    "max_cpu_percent": 15,
+    "max_file_descriptors": 300,
+    "max_threads": 8,
+    "timeout_seconds": 120,
+    "max_network_connections": 50,
+    "max_disk_usage_mb": 200
+  },
+  "provides_backend": true,
+  "provides_cli_commands": false,
+  "provides_integrations": false,
+  "provides_monitoring": false,
+  "binary_dependencies": [
+    {
+      "name": "pct",
+      "version": ">=6.0.0",
+      "description": "Proxmox container toolkit",
+      "check_command": "pct --version"
+    },
+    {
+      "name": "curl",
+      "version": ">=7.0.0",
+      "description": "HTTP client for Proxmox API",
+      "check_command": "curl --version"
+    }
+  ],
+  "system_requirements": {
+    "os": ["linux"],
+    "architecture": ["x86_64"],
+    "kernel_version": ">=4.15"
+  },
+  "configuration": {
+    "proxmox_host": {
+      "type": "string",
+      "required": true,
+      "description": "Proxmox VE host address",
+      "default": "localhost"
+    },
+    "proxmox_port": {
+      "type": "number",
+      "required": false,
+      "description": "Proxmox VE API port",
+      "default": 8006
+    },
+    "proxmox_node": {
+      "type": "string",
+      "required": true,
+      "description": "Proxmox VE node name",
+      "default": "pve"
+    },
+    "proxmox_token": {
+      "type": "string",
+      "required": true,
+      "description": "Proxmox VE API token",
+      "sensitive": true
+    },
+    "template_storage": {
+      "type": "string",
+      "required": false,
+      "description": "Storage for LXC templates",
+      "default": "local"
+    },
+    "container_storage": {
+      "type": "string",
+      "required": false,
+      "description": "Storage for LXC containers",
+      "default": "local-lvm"
+    },
+    "verify_ssl": {
+      "type": "boolean",
+      "required": false,
+      "description": "Verify SSL certificates",
+      "default": false
+    },
+    "default_template": {
+      "type": "string",
+      "required": false,
+      "description": "Default LXC template",
+      "default": "ubuntu-20.04-standard"
+    },
+    "network_bridge": {
+      "type": "string",
+      "required": false,
+      "description": "Default network bridge",
+      "default": "vmbr0"
+    }
+  }
+}

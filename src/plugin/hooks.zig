@@ -234,7 +234,7 @@ pub const HookSystem = struct {
             .hooks = std.StringHashMap(std.ArrayList(HookRegistration)).init(allocator),
             .hook_stats = std.StringHashMap(std.StringHashMap(HookStats)).init(allocator),
             .currently_executing = std.StringHashMap(bool).init(allocator),
-            .execution_queue = std.ArrayList(QueuedExecution).empty,
+            .execution_queue = std.ArrayList(QueuedExecution).init(allocator),
         };
 
         std.log.info("Hook system initialized", .{});
@@ -249,7 +249,7 @@ pub const HookSystem = struct {
             for (hook_list.items) |*registration| {
                 registration.deinit(self.allocator);
             }
-            hook_list.deinit(self.allocator);
+            hook_list.deinit();
             self.allocator.free(entry.key_ptr.*);
         }
         self.hooks.deinit();
@@ -268,7 +268,7 @@ pub const HookSystem = struct {
         self.hook_stats.deinit();
 
         self.currently_executing.deinit();
-        self.execution_queue.deinit(self.allocator);
+        self.execution_queue.deinit();
         self.allocator.destroy(self);
     }
 
@@ -291,12 +291,12 @@ pub const HookSystem = struct {
         // Get or create hook list
         const hook_list = self.hooks.getPtr(hook_name) orelse blk: {
             const hook_key = try self.allocator.dupe(u8, hook_name);
-            const new_list: std.ArrayList(HookRegistration) = .empty;
+            const new_list = std.ArrayList(HookRegistration).init(self.allocator);
             try self.hooks.put(hook_key, new_list);
             break :blk self.hooks.getPtr(hook_key).?;
         };
 
-        try hook_list.append(self.allocator, registration);
+        try hook_list.append(registration);
 
         // Sort by priority (critical hooks execute first)
         std.sort.pdq(HookRegistration, hook_list.items, {}, compareHookPriority);
@@ -440,7 +440,7 @@ pub const HookSystem = struct {
         }
 
         // Queue for async execution
-        try self.execution_queue.append(self.allocator, QueuedExecution{
+        try self.execution_queue.append(QueuedExecution{
             .hook_name = try self.allocator.dupe(u8, hook_name),
             .context = context,
             .timestamp = std.time.timestamp(),
@@ -464,8 +464,8 @@ pub const HookSystem = struct {
 
     /// List all registered hooks
     pub fn listHooks(self: *Self, allocator: Allocator) ![]HookInfo {
-        var hook_list: std.ArrayList(HookInfo) = .empty;
-        defer hook_list.deinit(allocator);
+        var hook_list = std.ArrayList(HookInfo).init(allocator);
+        defer hook_list.deinit();
 
         var hook_iterator = self.hooks.iterator();
         while (hook_iterator.next()) |entry| {
@@ -475,7 +475,7 @@ pub const HookSystem = struct {
             for (registrations.items) |reg| {
                 const stats = self.getHookStats(hook_name, reg.plugin_name) orelse HookStats{};
                 
-                try hook_list.append(allocator, HookInfo{
+                try hook_list.append(HookInfo{
                     .hook_name = try allocator.dupe(u8, hook_name),
                     .plugin_name = try allocator.dupe(u8, reg.plugin_name),
                     .priority = reg.priority,
@@ -486,7 +486,7 @@ pub const HookSystem = struct {
             }
         }
 
-        return hook_list.toOwnedSlice(allocator);
+        return hook_list.toOwnedSlice();
     }
 
     /// Enable or disable a specific hook
@@ -666,8 +666,8 @@ test "Hook priority ordering" {
     const hook_system = try HookSystem.init(allocator);
     defer hook_system.deinit();
 
-    var execution_order = std.ArrayList([]const u8).empty;
-    defer execution_order.deinit(allocator);
+    var execution_order = std.ArrayList([]const u8).init(allocator);
+    defer execution_order.deinit();
 
     const TestCallbacks = struct {
         var order: *std.ArrayList([]const u8) = undefined;
@@ -675,17 +675,17 @@ test "Hook priority ordering" {
         
         fn criticalCallback(context: *HookContext) !void {
             _ = context;
-            try order.append(test_allocator, "critical");
+            try order.append("critical");
         }
         
         fn normalCallback(context: *HookContext) !void {
             _ = context;
-            try order.append(test_allocator, "normal");
+            try order.append("normal");
         }
         
         fn lowCallback(context: *HookContext) !void {
             _ = context;
-            try order.append(test_allocator, "low");
+            try order.append("low");
         }
     };
     

@@ -5,7 +5,7 @@
 /// Get application version from build options
 pub fn getVersion() []const u8 {
     // Import build_options at function scope to avoid module-level conflicts
-    const build_options = @import("build_options");
+    const build_options = @import("core_build_options");
     return build_options.app_version;
 }
 

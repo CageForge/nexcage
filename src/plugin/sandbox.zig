@@ -142,7 +142,7 @@ pub const SecuritySandbox = struct {
             .config = config,
             .enabled = true,
             .active_sandboxes = std.StringHashMap(*PluginSandbox).init(allocator),
-            .security_violations = ArrayList(SecurityViolation).empty,
+            .security_violations = ArrayList(SecurityViolation).init(allocator),
         };
 
         // Initialize sandbox environment
@@ -164,7 +164,7 @@ pub const SecuritySandbox = struct {
         for (self.security_violations.items) |*violation| {
             violation.deinit(self.allocator);
         }
-        self.security_violations.deinit(self.allocator);
+        self.security_violations.deinit();
 
         self.allocator.destroy(self);
     }
@@ -257,11 +257,11 @@ pub const SecuritySandbox = struct {
 
     /// Get security violations
     pub fn getSecurityViolations(self: *Self, allocator: Allocator) ![]SecurityViolation {
-        var violations = ArrayList(SecurityViolation).empty;
-        errdefer violations.deinit(allocator);
+        var violations = ArrayList(SecurityViolation).init(allocator);
+        errdefer violations.deinit();
 
         for (self.security_violations.items) |violation| {
-            try violations.append(allocator, SecurityViolation{
+            try violations.append(SecurityViolation{
                 .timestamp = violation.timestamp,
                 .plugin_name = try allocator.dupe(u8, violation.plugin_name),
                 .violation_type = violation.violation_type,
@@ -270,7 +270,7 @@ pub const SecuritySandbox = struct {
             });
         }
 
-        return violations.toOwnedSlice(allocator);
+        return violations.toOwnedSlice();
     }
 
     /// Clear security violations
@@ -316,14 +316,13 @@ pub const SecuritySandbox = struct {
     }
 
     fn recordSecurityViolation(self: *Self, violation: SecurityViolation) !void {
-        try self.security_violations.append(self.allocator, violation);
+        try self.security_violations.append(violation);
         
         std.log.warn("Security violation recorded: {s} - {} - {s}",
             .{ violation.plugin_name, violation.violation_type, violation.description }
         );
 
-        // Note: Security violation response (alerts, plugin suspension) not yet implemented
-        // Future: Add plugin suspension, alert notifications, and policy enforcement
+        // TODO: Implement security violation response (alerts, plugin suspension, etc.)
     }
 };
 
@@ -377,7 +376,7 @@ pub const PluginSandbox = struct {
             .config = config,
             .sandbox_dir = sandbox_dir,
             .is_noop = false,
-            .process_ids = ArrayList(std.posix.pid_t).empty,
+            .process_ids = ArrayList(std.posix.pid_t).init(allocator),
             .start_time = std.time.timestamp(),
         };
 
@@ -398,7 +397,7 @@ pub const PluginSandbox = struct {
             .config = SandboxConfig{},
             .sandbox_dir = "",
             .is_noop = true,
-            .process_ids = ArrayList(std.posix.pid_t).empty,
+            .process_ids = ArrayList(std.posix.pid_t).init(allocator),
             .start_time = std.time.timestamp(),
         };
         return self;
@@ -421,7 +420,7 @@ pub const PluginSandbox = struct {
             }
         }
         
-        self.process_ids.deinit(self.allocator);
+        self.process_ids.deinit();
         self.allocator.free(self.plugin_name);
         self.allocator.destroy(self);
     }
@@ -620,9 +619,8 @@ pub const PluginSandbox = struct {
     }
 
     fn setupNamespaces(self: *Self) !void {
-        // Note: Linux namespace setup using unshare() not yet implemented
-        // This would create PID, NET, MNT, USER namespaces for plugin isolation
-        // Future enhancement for stronger plugin isolation
+        // TODO: Implement Linux namespace setup using unshare()
+        // This would create PID, NET, MNT, USER namespaces as needed
         _ = self;
         std.log.debug("Namespace isolation setup (not implemented)", .{});
     }

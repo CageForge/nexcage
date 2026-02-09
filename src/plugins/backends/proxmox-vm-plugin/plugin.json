@@ -1,0 +1,135 @@
+{
+  "name": "proxmox-vm-backend",
+  "version": "1.0.0",
+  "description": "Proxmox VM container backend plugin for NexCage",
+  "author": "NexCage Team",
+  "homepage": "https://github.com/cageforge/nexcage",
+  "license": "Apache-2.0",
+  "api_version": 1,
+  "nexcage_version": "0.7.0",
+  "dependencies": [],
+  "capabilities": [
+    "container_create",
+    "container_start",
+    "container_stop",
+    "container_delete",
+    "container_exec",
+    "container_list",
+    "container_info",
+    "host_command",
+    "filesystem_read",
+    "filesystem_write",
+    "network_client",
+    "network_server",
+    "system_info",
+    "system_metrics",
+    "logging"
+  ],
+  "resource_requirements": {
+    "max_memory_mb": 512,
+    "max_cpu_percent": 25,
+    "max_file_descriptors": 400,
+    "max_threads": 10,
+    "timeout_seconds": 180,
+    "max_network_connections": 100,
+    "max_disk_usage_mb": 500
+  },
+  "provides_backend": true,
+  "provides_cli_commands": false,
+  "provides_integrations": false,
+  "provides_monitoring": false,
+  "binary_dependencies": [
+    {
+      "name": "qm",
+      "version": ">=6.0.0",
+      "description": "QEMU/KVM Virtual Machine manager",
+      "check_command": "qm help"
+    },
+    {
+      "name": "curl",
+      "version": ">=7.0.0",
+      "description": "HTTP client for Proxmox API",
+      "check_command": "curl --version"
+    }
+  ],
+  "system_requirements": {
+    "os": ["linux"],
+    "architecture": ["x86_64"],
+    "kernel_version": ">=4.15",
+    "virtualization": ["kvm", "qemu"]
+  },
+  "configuration": {
+    "proxmox_host": {
+      "type": "string",
+      "required": true,
+      "description": "Proxmox VE host address",
+      "default": "localhost"
+    },
+    "proxmox_port": {
+      "type": "number",
+      "required": false,
+      "description": "Proxmox VE API port",
+      "default": 8006
+    },
+    "proxmox_node": {
+      "type": "string",
+      "required": true,
+      "description": "Proxmox VE node name",
+      "default": "pve"
+    },
+    "proxmox_token": {
+      "type": "string",
+      "required": true,
+      "description": "Proxmox VE API token",
+      "sensitive": true
+    },
+    "verify_ssl": {
+      "type": "boolean",
+      "required": false,
+      "description": "Verify SSL certificates",
+      "default": false
+    },
+    "vm_cores": {
+      "type": "number",
+      "required": false,
+      "description": "Default VM CPU cores",
+      "default": 2
+    },
+    "vm_memory": {
+      "type": "number",
+      "required": false,
+      "description": "Default VM memory in MB",
+      "default": 2048
+    },
+    "vm_disk": {
+      "type": "number",
+      "required": false,
+      "description": "Default VM disk size in GB",
+      "default": 20
+    },
+    "vm_os_type": {
+      "type": "string",
+      "required": false,
+      "description": "Default VM OS type",
+      "default": "l26"
+    },
+    "vm_network_model": {
+      "type": "string",
+      "required": false,
+      "description": "VM network adapter model",
+      "default": "virtio"
+    },
+    "vm_storage": {
+      "type": "string",
+      "required": false,
+      "description": "Storage for VM disks",
+      "default": "local-lvm"
+    },
+    "iso_storage": {
+      "type": "string",
+      "required": false,
+      "description": "Storage for ISO images",
+      "default": "local"
+    }
+  }
+}

@@ -100,7 +100,7 @@ pub const PluginManager = struct {
             .config = config,
             .plugins = std.StringHashMap(*plugin.Plugin).init(allocator),
             .plugin_metadata = std.StringHashMap(plugin.PluginMetadata).init(allocator),
-            .plugin_load_order = ArrayList(PluginLoadOrder).empty,
+            .plugin_load_order = ArrayList(PluginLoadOrder).init(allocator),
         };
 
         // Initialize subsystems
@@ -154,7 +154,7 @@ pub const PluginManager = struct {
         }
         self.plugin_metadata.deinit();
         
-        self.plugin_load_order.deinit(self.allocator);
+        self.plugin_load_order.deinit();
 
         self.allocator.destroy(self);
     }
@@ -312,17 +312,17 @@ pub const PluginManager = struct {
 
     /// List all loaded plugins
     pub fn listPlugins(self: *Self, allocator: Allocator) ![]plugin.PluginInfo {
-        var plugin_list: ArrayList(plugin.PluginInfo) = .empty;
-        defer plugin_list.deinit(allocator);
+        var plugin_list = ArrayList(plugin.PluginInfo).init(allocator);
+        defer plugin_list.deinit();
 
         var iterator = self.plugins.iterator();
         while (iterator.next()) |entry| {
             const p = entry.value_ptr.*;
             const info = try p.getInfo(allocator);
-            try plugin_list.append(allocator, info);
+            try plugin_list.append(info);
         }
 
-        return plugin_list.toOwnedSlice(allocator);
+        return plugin_list.toOwnedSlice();
     }
 
     /// Get plugin statistics
@@ -361,12 +361,12 @@ pub const PluginManager = struct {
         }
 
         // Unload plugins in reverse dependency order
-        var plugin_names: ArrayList([]const u8) = .empty;
-        defer plugin_names.deinit(self.allocator);
+        var plugin_names = ArrayList([]const u8).init(self.allocator);
+        defer plugin_names.deinit();
 
         iterator = self.plugins.iterator();
         while (iterator.next()) |entry| {
-            plugin_names.append(self.allocator, entry.key_ptr.*) catch continue;
+            plugin_names.append(entry.key_ptr.*) catch continue;
         }
 
         // Reverse order for safe unloading
@@ -477,8 +477,8 @@ pub const PluginManager = struct {
         while (metadata_iterator.next()) |entry| {
             const metadata = entry.value_ptr.*;
             
-            var dependencies: ArrayList(PluginDependency) = .empty;
-            defer dependencies.deinit(self.allocator);
+            var dependencies = ArrayList(PluginDependency).init(self.allocator);
+            defer dependencies.deinit();
 
             for (metadata.dependencies) |dep_name| {
                 // For now, assume all dependencies require exact version match
@@ -488,15 +488,15 @@ pub const PluginManager = struct {
                     return PluginManagerError.DependencyMissing;
                 };
 
-                try dependencies.append(self.allocator, PluginDependency{
+                try dependencies.append(PluginDependency{
                     .name = try self.allocator.dupe(u8, dep_name),
                     .version_requirement = dep_metadata.version,
                 });
             }
 
-            try self.plugin_load_order.append(self.allocator, PluginLoadOrder{
+            try self.plugin_load_order.append(PluginLoadOrder{
                 .plugin_name = try self.allocator.dupe(u8, metadata.name),
-                .dependencies = try dependencies.toOwnedSlice(self.allocator),
+                .dependencies = try dependencies.toOwnedSlice(),
             });
         }
 
