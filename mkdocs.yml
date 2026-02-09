@@ -32,8 +32,22 @@ nav:
     - Development Workflow: DEVELOPMENT_WORKFLOW.md
     - Ubuntu Dev Setup: DEVELOPMENT_UBUNTU.md
   - User Guide: user_guide.md
+  - CLI Reference:
+    - Command Reference: CLI_REFERENCE.md
+    - CLI Cookbook: CLI_COOKBOOK.md
   - Architecture:
     - Overview: architecture/OVERVIEW.md
+    - System Context: diagrams/SYSTEM_CONTEXT.md
+    - ADRs:
+      - Runtime Selection: architecture/ADR-001-Container-Runtime-Selection.md
+      - Memory Management: architecture/ADR-002-Memory-Management-Strategy.md
+      - Security Architecture: architecture/ADR-003-Security-Architecture.md
+  - Integration:
+    - containerd Integration: integration/CONTAINERD_INTEGRATION.md
+    - Monitoring & Observability: integration/MONITORING.md
+  - Operations:
+    - Migration Guide: MIGRATION_GUIDE.md
+    - Performance Tuning: PERFORMANCE_TUNING.md
   - CI/CD: CI_CD_SETUP.md
   - Dependencies: DEPENDENCIES.md
   - Proxmox Testing: proxmox/PROXMOX_TESTING.md

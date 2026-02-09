@@ -34,3 +34,4 @@ crun-*.tar.gz
 *.swp
 *.swo
 *~
+libdriver.a

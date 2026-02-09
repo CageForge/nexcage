@@ -1,8 +1,10 @@
 const std = @import("std");
 const core = @import("core");
 const types = @import("types.zig");
-const oci_bundle = @import("oci_bundle.zig");
-const image_converter = @import("image_converter.zig");
+const oci_spec = @import("oci_spec");
+const bundle = oci_spec.runtime.bundle;
+const utils = @import("utils");
+const lxc_converter = utils.lxc_converter;
 const template_manager = @import("template_manager.zig");
 
 /// Result of running a command
@@ -92,6 +94,14 @@ pub const ProxmoxLxcDriver = struct {
     /// Set debug mode
     pub fn setDebugMode(self: *Self, debug_mode: bool) void {
         self.debug_mode = debug_mode;
+    }
+
+    /// Convert core.LogContext to bundle.Logger
+    fn getBundleLogger(self: *const Self) ?bundle.Logger {
+        if (self.logger) |log| {
+            return @as(?bundle.Logger, @ptrCast(log));
+        }
+        return null;
     }
 
     /// No-op: direct ZFS CLI integration (no wrapper/client)
@@ -599,7 +609,7 @@ pub const ProxmoxLxcDriver = struct {
         if (self.logger) |log| log.info("Logger is working in processOciBundle", .{}) catch {};
 
         // Parse bundle to check if it's a standard OCI bundle
-        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
         var cfg = try parser.parseBundle(bundle_path);
         defer cfg.deinit();
 
@@ -621,7 +631,7 @@ pub const ProxmoxLxcDriver = struct {
 
         if (self.logger) |log| log.info("Converting OCI bundle to template: {s}", .{template_name}) catch {};
 
-        var converter = image_converter.ImageConverter.init(self.allocator, self.logger);
+        var converter = lxc_converter.ImageConverter.init(self.allocator, self.logger);
         try converter.convertOciToProxmoxTemplate(bundle_path, template_name, "local");
 
         if (self.logger) |log| log.info("Successfully converted OCI bundle to template: {s}", .{template_name}) catch {};
@@ -632,7 +642,7 @@ pub const ProxmoxLxcDriver = struct {
         errdefer template_info.deinit(self.allocator); // Cleanup on error
 
         // Extract metadata from OCI bundle if available
-        var metadata_parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var metadata_parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
         var metadata_cfg = metadata_parser.parseBundle(bundle_path) catch |err| {
             if (self.logger) |log| log.warn("Failed to parse bundle for metadata: {}", .{err}) catch {};
             // Add template without metadata
@@ -728,7 +738,7 @@ pub const ProxmoxLxcDriver = struct {
     }
 
     /// Parse image reference from OCI bundle config
-    fn parseBundleImageFromConfig(self: *Self, config: *const oci_bundle.OciBundleConfig) !?[]const u8 {
+    fn parseBundleImageFromConfig(self: *Self, config: *const bundle.OciBundleConfig) !?[]const u8 {
         if (config.annotations) |annotations| {
             if (annotations.get("org.opencontainers.image.ref.name")) |image_ref| {
                 return try self.allocator.dupe(u8, image_ref.string);
@@ -804,7 +814,7 @@ pub const ProxmoxLxcDriver = struct {
         stderr.writeAll("[DRIVER] create: Initializing oci_bundle_path variable\n") catch {};
         var oci_bundle_path: ?[]const u8 = null;
         // Store parsed bundle config for resources and namespaces
-        var bundle_config: ?oci_bundle.OciBundleConfig = null;
+        var bundle_config: ?bundle.OciBundleConfig = null;
         defer if (bundle_config) |*bc| bc.deinit();
 
         stderr.writeAll("[DRIVER] create: Checking if config.image exists\n") catch {};
@@ -972,7 +982,8 @@ pub const ProxmoxLxcDriver = struct {
 
                 // Parse bundle config for resources and namespaces (before processing template)
                 if (self.debug_mode) try stdout.writeAll("[DRIVER] create: Parsing bundle config for resources\n");
-                var bundle_parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+                const bundle_logger = self.getBundleLogger();
+                var bundle_parser = bundle.OciBundleParser.init(self.allocator, bundle_logger);
                 const parsed_bundle_cfg = try bundle_parser.parseBundle(safe_bundle_path);
                 // Note: We'll defer deinit after using it for resources/namespaces
                 bundle_config = parsed_bundle_cfg;
@@ -1366,7 +1377,7 @@ pub const ProxmoxLxcDriver = struct {
             }
         }
 
-        const bundle_ptr: ?*const oci_bundle.OciBundleConfig = if (bundle_config) |*bc| bc else null;
+        const bundle_ptr: ?*const bundle.OciBundleConfig = if (bundle_config) |*bc| bc else null;
         try self.persistRuntimeMetadata(config.name, vmid, bundle_ptr, net_runtime.items);
 
         // Cleanup bundle config after use (moved to defer at declaration)
@@ -1431,7 +1442,7 @@ pub const ProxmoxLxcDriver = struct {
         self: *Self,
         container_name: []const u8,
         vmid: []const u8,
-        bundle_config: ?*const oci_bundle.OciBundleConfig,
+        bundle_config: ?*const bundle.OciBundleConfig,
         net_devices: []const NetDeviceRuntimeInfo,
     ) !void {
         const intel_cfg = if (bundle_config) |bc| bc.intel_rdt else null;
@@ -1541,7 +1552,7 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Validate that mounts in bundle config point to existing host paths or valid Proxmox storage refs
     fn validateBundleVolumes(self: *Self, bundle_path: []const u8) !void {
-        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
         var cfg = try parser.parseBundle(bundle_path);
         defer cfg.deinit();
 
@@ -1590,7 +1601,7 @@ pub const ProxmoxLxcDriver = struct {
     fn applyMountsToLxcConfig(self: *Self, vmid: []const u8, bundle_path: []const u8) !void {
         if (self.logger) |log| log.info("Parsing bundle for mounts: {s}", .{bundle_path}) catch {};
 
-        var parser = oci_bundle.OciBundleParser.init(self.allocator, self.logger);
+        var parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
         var cfg = try parser.parseBundle(bundle_path);
         defer cfg.deinit();
 
@@ -1647,7 +1658,7 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Apply namespaces from OCI bundle to LXC container via pct set --features
     /// Maps OCI namespace types to LXC features where applicable
-    fn applyNamespacesToLxcConfig(self: *Self, vmid: []const u8, namespaces: []const oci_bundle.NamespaceConfig) !void {
+    fn applyNamespacesToLxcConfig(self: *Self, vmid: []const u8, namespaces: []const bundle.NamespaceConfig) !void {
         if (self.logger) |log| log.info("Applying {d} namespaces to LXC container {s}", .{ namespaces.len, vmid }) catch {};
 
         // Build features list based on namespaces

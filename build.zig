@@ -117,17 +117,19 @@ pub fn build(b: *std.Build) void {
     });
     core_mod.addOptions("core_build_options", core_build_options);
 
-    const oci_spec_dep = b.dependency("oci_spec_zig", .{
+    // Use local oci-spec-zig from deps/
+    const oci_spec_mod = b.addModule("oci_spec", .{
+        .root_source_file = b.path("deps/oci-spec-zig/src/lib.zig"),
         .target = target,
         .optimize = optimize,
     });
-    const oci_spec_mod = oci_spec_dep.module("oci_spec");
 
     // Utils module
     const utils_mod = b.addModule("utils", .{
         .root_source_file = b.path("src/utils/mod.zig"),
         .imports = &.{
             .{ .name = "core", .module = core_mod },
+            .{ .name = "oci_spec", .module = oci_spec_mod },
         },
     });
 
@@ -194,10 +196,12 @@ pub fn build(b: *std.Build) void {
     });
 
     // Integrations module
+    // Note: integrations_mod uses build_options through backends_mod to avoid module conflicts
     const integrations_mod = b.addModule("integrations", .{
         .root_source_file = b.path("src/integrations/mod.zig"),
         .imports = &.{
             .{ .name = "core", .module = core_mod },
+            .{ .name = "backends", .module = backends_mod },
         },
     });
     integrations_mod.addImport("build_options", build_options_mod);
