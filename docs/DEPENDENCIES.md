@@ -95,16 +95,21 @@
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-    build-essential \
+    build-essential autoconf automake libtool pkg-config \
     git \
     zfsutils-linux \
     lxc \
     curl \
     wget \
     xz-utils \
+    libyajl-dev \
     libseccomp-dev \
-    libcgroup-dev \
-    libcap-dev
+    libcap-dev \
+    libsystemd-dev \
+    libbpf-dev \
+    libapparmor-dev \
+    libselinux1-dev \
+    libcriu-dev
 
 # runc
 sudo apt-get install -y runc
@@ -116,16 +121,20 @@ sudo apt-get install -y crun
 ### CentOS/RHEL
 ```bash
 sudo yum install -y \
-    gcc \
+    gcc autoconf automake libtool pkg-config \
     git \
     zfs \
     lxc \
     curl \
     wget \
     xz \
+    yajl-devel \
     libseccomp-devel \
-    libcgroup-devel \
-    libcap-devel
+    libcap-devel \
+    systemd-devel \
+    libbpf-devel \
+    libselinux-devel \
+    criu-devel
 
 # runc
 sudo yum install -y runc

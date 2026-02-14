@@ -19,8 +19,11 @@ Next-generation container runtime for Proxmox VE using LXC and OCI backends (cru
 
 1) Install dependencies
 ```bash
-sudo apt-get update
-sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+sudo apt-get update -y
+sudo apt-get install -y \
+  build-essential autoconf automake libtool pkg-config \
+  libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
+  libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
 ```
 
 2) Install Zig 0.15.1 (or use CI setup) — dependencies are resolved through `build.zig.zon`, including `oci-specs-zig`.
@@ -29,11 +32,17 @@ sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
 zig version  # should print 0.15.1
 ```
 
-3) Build and run
+3) Build and run (default)
 ```bash
 zig build
 ./zig-out/bin/nexcage --help
 ./zig-out/bin/nexcage version
+```
+
+4) Build with vendored libcrun (project policy)
+```bash
+make prepare-crun        # generates vendored headers and checks deps
+make build-vendored      # builds with -Duse-vendored-libcrun=true
 ```
 
 ## CLI Examples

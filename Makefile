@@ -1,7 +1,7 @@
-# Proxmox LXC Runtime Interface - Makefile
+# NexCage Runtime - Makefile
 # Enhanced with detailed test reporting
 
-.PHONY: help build docs-serve docs-build test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps
+.PHONY: help build build-vendored docs-serve docs-build prepare-crun headers-docker test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps
 
 # Default target
 help:
@@ -9,6 +9,7 @@ help:
 	@echo ""
 	@echo "Build Commands:"
 	@echo "  build          Build the project"
+	@echo "  build-vendored Build with vendored libcrun (-Duse-vendored-libcrun=true)"
 	@echo "  install        Install the binary"
 	@echo "  uninstall      Uninstall the binary"
 	@echo "  clean          Clean build artifacts"
@@ -25,7 +26,9 @@ help:
 	@echo "  format         Format source code"
 	@echo "  lint           Run linter checks"
 	@echo "  check          Run all checks (format, lint, test)"
-	@echo "  deps           Install dependencies"
+	@echo "  deps           Install build dependencies via apt"
+	@echo "  prepare-crun   Generate vendored crun headers & verify deps (zig build step)"
+	@echo "  headers-docker Generate headers in Docker container"
 	@echo "  docs-serve     Serve docs locally (Docker mkdocs)"
 	@echo "  docs-build     Build docs static site (Docker mkdocs)"
 	@echo ""
@@ -39,6 +42,12 @@ build:
 	@echo "🔨 Building project..."
 	zig build
 	@echo "✅ Build completed successfully"
+
+build-vendored:
+	@echo "🔨 Building project with vendored libcrun..."
+	zig build prepare-crun
+	zig build -Duse-vendored-libcrun=true
+	@echo "✅ Vendored build completed successfully"
 
 install: build
 	@echo "📦 Installing binary..."
@@ -106,10 +115,22 @@ check: format lint test
 deps:
 	@echo "📦 Installing dependencies..."
 	@echo "Installing system dependencies..."
-	sudo apt-get update
-	sudo apt-get install -y libcap-dev libseccomp-dev libyajl-dev
+	sudo apt-get update -y
+	sudo apt-get install -y \
+	  build-essential autoconf automake libtool pkg-config \
+	  libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
+	  libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
 	@echo "✅ Dependencies installed successfully"
 
+prepare-crun:
+	@echo "🧩 Preparing vendored crun headers & checking deps..."
+	zig build prepare-crun
+	@echo "✅ Preparation completed"
+
+headers-docker:
+	@echo "🐳 Generating headers via Docker..."
+	bash scripts/gen_crun_headers_docker.sh
+	@echo "✅ Docker header generation completed"
 docs-serve:
 	@echo "📚 Serving docs at http://localhost:8000 ..."
 	bash scripts/mkdocs_serve.sh

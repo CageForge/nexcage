@@ -1,0 +1,30 @@
+name: crun ABI E2E
+
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: [self-hosted, crun]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+      - name: Install deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential autoconf automake libtool pkg-config \
+            libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
+            libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
+      - name: Prepare vendored
+        run: zig build prepare-crun
+      - name: Build
+        run: zig build -Duse-vendored-libcrun=true --summary all
+      - name: Run E2E
+        env:
+          NAME: e2e-crun-abi
+          BUNDLE_DIR: /var/lib/nexcage/bundles/e2e-crun-abi
+        run: bash scripts/e2e_crun_abi.sh
+

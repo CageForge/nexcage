@@ -21,6 +21,28 @@ env:
   XDG_CACHE_HOME: ${{ github.workspace }}/.cache
 
 jobs:
+  vendored-build:
+    name: Vendored Build (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential autoconf automake libtool pkg-config \
+            libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
+            libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
+      - name: Prepare vendored headers
+        run: zig build prepare-crun
+      - name: Build vendored
+        run: zig build -Duse-vendored-libcrun=true --summary all
+
   # Build and test on multiple runners (same arch: amd64)
   build-test:
     name: Build and Test (${{ matrix.name }})

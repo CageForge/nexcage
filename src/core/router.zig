@@ -163,6 +163,7 @@ pub const BackendRouter = struct {
 
     fn executeCrun(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
         var crun_backend = backends.crun.CrunDriver.init(self.allocator, self.logger);
+        defer crun_backend.deinit();
 
         switch (operation) {
             .create => {
