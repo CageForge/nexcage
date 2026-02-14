@@ -283,7 +283,7 @@ pub const CrunDriver = struct {
         while (i < argv.len) : (i += 1) {
             const s_z = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{argv[i]});
             try tmp.append(self.allocator, s_z);
-            try c_argv.append(self.allocator, s_z[0..s_z.len - 1 :0].ptr);
+            try c_argv.append(self.allocator, s_z[0 .. s_z.len - 1 :0].ptr);
         }
         try c_argv.append(self.allocator, null);
 
@@ -291,12 +291,6 @@ pub const CrunDriver = struct {
         _ = ctx; // avoid unused if exec FFI not present
         if (self.logger) |log| try log.warn("libcrun exec not wired; skipping (no-op)", .{});
         return core.Error.OperationNotSupported;
-    }
-
-    /// Run: create then start a container from provided config
-    pub fn run(self: *Self, config: core.types.SandboxConfig) !void {
-        try self.create(config);
-        try self.start(config.name);
     }
 
     /// Generate basic OCI config.json

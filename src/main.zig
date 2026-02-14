@@ -19,7 +19,7 @@ pub const AppContext = struct {
         // Load main configuration first
         var config_loader = core.ConfigLoader.init(allocator);
         var config = try config_loader.loadDefault();
-        
+
         // Load logging configuration with priority: command line args > config file > environment > defaults
         const logging_cfg = try core.logging_config.LoggingConfig.loadWithPriority(allocator, args, &config);
 
@@ -37,9 +37,6 @@ pub const AppContext = struct {
 
         // Error handling is done through core.errors.ErrorHandler interface
         // DefaultErrorHandler is available in core.errors module
-
-        // Initialize global command registry
-        try cli.initGlobalRegistry(allocator);
 
         // Initialize command registry
         var command_registry = cli.CommandRegistry.init(allocator);
@@ -70,7 +67,6 @@ pub const AppContext = struct {
         self.config.deinit();
 
         self.command_registry.deinit();
-        cli.deinitGlobalRegistry();
         self.logger.deinit();
         // config.deinit() already called above
     }
@@ -108,7 +104,7 @@ pub fn main() !void {
     // Find the actual command (skip flags)
     var command_name = args[1];
     var command_args = args[2..];
-    
+
     // Skip debug/verbose flags to find the actual command
     var i: usize = 1;
     while (i < args.len) {
@@ -126,15 +122,15 @@ pub fn main() !void {
         }
         // Found the actual command
         command_name = args[i];
-        command_args = args[i + 1..];
+        command_args = args[i + 1 ..];
         break;
     }
-    
+
     // Log command execution start - safely handle logger errors
     if (app.advanced_logger) |*logger| {
         logger.logCommandStart(command_name, command_args) catch {};
     }
-    
+
     // Handle help command
     if (std.mem.eql(u8, command_name, "--help") or std.mem.eql(u8, command_name, "-h")) {
         try app.logger.info("Proxmox LXC Runtime Interface v{s}", .{core.version.getVersion()});
@@ -160,12 +156,9 @@ pub fn main() !void {
 
     // Check if help was requested
     if (options.help) {
-        // Help is handled by individual commands
-        // Backend and provider initialization handled by BackendRouter in core/router.zig
-
         // Execute command (which will handle help)
         try app.command_registry.execute(command_name, options, allocator);
-        
+
         // Log command completion - safely handle logger errors
         if (app.advanced_logger) |*logger| {
             logger.logCommandComplete(command_name, true) catch {};
@@ -173,10 +166,9 @@ pub fn main() !void {
         return;
     }
 
-    // Backend and provider initialization handled by BackendRouter in core/router.zig
     // Execute command
     try app.command_registry.execute(command_name, options, allocator);
-    
+
     // Log command completion - safely handle logger errors
     if (app.advanced_logger) |*logger| {
         logger.logCommandComplete(command_name, true) catch {};

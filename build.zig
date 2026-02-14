@@ -2,24 +2,6 @@ const std = @import("std");
 const Build = std.Build;
 const fs = std.fs;
 
-// Helper to collect .c files recursively with simple filters
-fn collectC(dir_path: []const u8, list: *std.ArrayListUnmanaged([]const u8), allocator: std.mem.Allocator) !void {
-    var dir = try std.fs.cwd().openDir(dir_path, .{ .iterate = true });
-    defer dir.close();
-    var it = dir.iterate();
-    while (try it.next()) |e| {
-        const child_path = try std.fs.path.join(allocator, &[_][]const u8{ dir_path, e.name });
-        defer allocator.free(child_path);
-        if (e.kind == .file) {
-            if (std.mem.endsWith(u8, e.name, ".c") and std.mem.indexOf(u8, e.name, "test") == null) {
-                try list.append(allocator, try allocator.dupe(u8, child_path));
-            }
-        } else if (e.kind == .directory) {
-            try collectC(child_path, list, allocator);
-        }
-    }
-}
-
 fn pkgConfigExists(b: *Build, package: []const u8) bool {
     var child = std.process.Child.init(&[_][]const u8{ "pkg-config", "--exists", package }, b.allocator);
     child.stdout_behavior = .Ignore;
@@ -80,8 +62,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // zig-json dependency removed for Zig 0.15.1 compatibility
-
     // Read VERSION file early for build options
     const version_bytes = std.fs.cwd().readFileAlloc(b.allocator, "VERSION", 64) catch @panic("Failed to read VERSION file");
     const app_version = std.mem.trim(u8, version_bytes, " \n\r\t");
@@ -101,7 +81,6 @@ pub fn build(b: *std.Build) void {
     // Check for systemd availability to set default
     const systemd_exists = pkgConfigExists(b, "libsystemd");
     const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI (requires libcrun and systemd, default: auto-detected)") orelse systemd_exists;
-    const enable_plugins = b.option(bool, "enable-plugins", "Enable plugin system (default: true)") orelse true;
 
     var libcrun_abi_active = false;
     var libsystemd_available = false;
@@ -126,7 +105,6 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(bool, "enable_bfc", enable_bfc);
     build_options.addOption(bool, "enable_proxmox_api", enable_proxmox_api);
     build_options.addOption(bool, "enable_libcrun_abi", enable_libcrun_abi);
-    build_options.addOption(bool, "enable_plugins", enable_plugins);
 
     // Create shared build options module
     const build_options_mod = build_options.createModule();
@@ -165,40 +143,11 @@ pub fn build(b: *std.Build) void {
     backends_mod.addImport("build_options", build_options_mod);
     backends_mod.addOptions("feature_options", feature_options);
 
-    // Plugin module
-    const plugin_mod = b.addModule("plugin", .{
-        .root_source_file = b.path("src/plugin/mod.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-        },
-    });
-
-    // Config plugins module
-    const config_plugins_mod = b.addModule("config_plugins", .{
-        .root_source_file = b.path("src/plugins/config/mod.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-            .{ .name = "plugin", .module = plugin_mod },
-        },
-    });
-    // Add config_plugins logger dependency on core indirectly via import
-
-    // CLI plugins module
-    const cli_plugins_mod = b.addModule("cli_plugins", .{
-        .root_source_file = b.path("src/plugins/cli/mod.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-            .{ .name = "plugin", .module = plugin_mod },
-        },
-    });
-
     // Config integration module
     const config_integration_mod = b.addModule("config_integration", .{
         .root_source_file = b.path("src/core/enhanced_config.zig"),
         .imports = &.{
             .{ .name = "core", .module = core_mod },
-            .{ .name = "plugin", .module = plugin_mod },
-            .{ .name = "config_plugins", .module = config_plugins_mod },
         },
     });
 
@@ -209,8 +158,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "core", .module = core_mod },
             .{ .name = "backends", .module = backends_mod },
             .{ .name = "utils", .module = utils_mod },
-            .{ .name = "plugin", .module = plugin_mod },
-            .{ .name = "cli_plugins", .module = cli_plugins_mod },
             .{ .name = "config_integration", .module = config_integration_mod },
         },
     });
@@ -296,60 +243,6 @@ pub fn build(b: *std.Build) void {
 
     // Link system libraries
     exe.linkSystemLibrary("c");
-    
-    // Required system libraries
-    exe.linkSystemLibrary("cap");
-    exe.linkSystemLibrary("seccomp");
-    exe.linkSystemLibrary("yajl");
-    
-    // Vendored libcrun build (system libcrun linking removed)
-    const use_vendored_libcrun = b.option(bool, "use-vendored-libcrun", "Build and link vendored libcrun from deps/crun (default: false)") orelse false;
-
-    var vendored_enabled = false;
-    if (use_vendored_libcrun) {
-        // Check system deps (pkg-config) and generate headers if missing
-        const deps_check = b.addSystemCommand(&.{ "bash", "-lc", "pkg-config --exists libseccomp yajl libcap libsystemd" });
-        exe.step.dependOn(&deps_check.step);
-        var need_gen: bool = false;
-        if (std.fs.cwd().access("deps/crun/config.h", .{})) |_| { } else |_| { need_gen = true; }
-        if (std.fs.cwd().access("deps/crun/git-version.h", .{})) |_| { } else |_| { need_gen = true; }
-        const gen_headers = b.addSystemCommand(&.{ "bash", "scripts/gen_crun_headers_local.sh" });
-        if (need_gen) exe.step.dependOn(&gen_headers.step);
-
-        // Build static library from deps/crun sources
-        var c_files: std.ArrayListUnmanaged([]const u8) = .{};
-        defer {
-            // free duplicated paths
-            if (c_files.items.len > 0) {
-                for (c_files.items) |p| b.allocator.free(p);
-                b.allocator.free(c_files.items);
-            }
-        }
-
-        // Collect libcrun core and libocispec sources (exclude tests via name filter)
-        collectC("deps/crun/src/libcrun", &c_files, b.allocator) catch |err| {
-            std.debug.print("[build] warn: failed collecting libcrun sources: {s}\n", .{@errorName(err)});
-        };
-        collectC("deps/crun/libocispec/src", &c_files, b.allocator) catch |err| {
-            std.debug.print("[build] warn: failed collecting libocispec sources: {s}\n", .{@errorName(err)});
-        };
-
-        const c_files_slice = c_files.toOwnedSlice(b.allocator) catch @panic("alloc failed");
-        defer b.allocator.free(c_files_slice);
-        exe.addIncludePath(.{ .cwd_relative = "deps/crun" }); // for generated config.h
-        exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
-        exe.addIncludePath(.{ .cwd_relative = "deps/crun/src/libcrun" });
-        exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
-        exe.addCSourceFiles(.{ .files = c_files_slice, .flags = &[_][]const u8{ "-std=gnu11", "-D_GNU_SOURCE", "-Wno-macro-redefined", "-DLIBCRUN_PUBLIC=", "-include", "seccomp.h", "-include", "sys/syscall.h" } });
-        exe.linkSystemLibrary("yajl");
-        exe.linkSystemLibrary("cap");
-        exe.linkSystemLibrary("seccomp");
-        exe.linkLibC();
-        vendored_enabled = true;
-    }
-    // System libcrun linking removed by project policy
-
-    // No additional static Zig libraries linked to avoid duplicate start symbol
 
     // Add include paths
     exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
@@ -380,7 +273,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("backends", backends_mod);
     exe.root_module.addImport("integrations", integrations_mod);
     exe.root_module.addImport("utils", utils_mod);
-    // zig-json import removed for Zig 0.15.1 compatibility
 
     // Install the executable
     b.installArtifact(exe);
@@ -395,13 +287,6 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the application");
     run_step.dependOn(&run_cmd.step);
-
-    // Prepare vendored crun headers and check system deps explicitly
-    const deps_check_step = b.addSystemCommand(&.{ "bash", "-lc", "pkg-config --exists libseccomp yajl libcap libsystemd" });
-    const gen_headers_step = b.addSystemCommand(&.{ "bash", "scripts/gen_crun_headers_local.sh" });
-    const prepare_step = b.step("prepare-crun", "Generate crun headers and verify system dependencies");
-    prepare_step.dependOn(&deps_check_step.step);
-    prepare_step.dependOn(&gen_headers_step.step);
 
     // Add test step
     const test_mod = b.createModule(.{
@@ -418,15 +303,6 @@ pub fn build(b: *std.Build) void {
     });
 
     test_exe.linkSystemLibrary("c");
-    
-    // Required system libraries for tests
-    test_exe.linkSystemLibrary("cap");
-    test_exe.linkSystemLibrary("seccomp");
-    test_exe.linkSystemLibrary("yajl");
-    
-    // Optional: Link libcrun and systemd only if requested (reuse link_libcrun from above)
-    if (vendored_enabled) {
-        // tests use Zig-only path; ABI exercised in integration tests
 
     if (libcrun_lib) |lib| {
         test_exe.root_module.linkLibrary(lib);

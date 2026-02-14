@@ -1,0 +1,23 @@
+install
++- install nexcage
+   +- compile exe nexcage Debug native 1 errors
+src/backends/proxmox-lxc/driver.zig:560:41: error: struct 'array_list.Aligned(u8,null)' has no member named 'init'
+        var json_buf = std.ArrayList(u8).init(self.allocator);
+                       ~~~~~~~~~~~~~~~~~^~~~~
+/opt/zig/lib/std/array_list.zig:606:12: note: struct declared here
+    return struct {
+           ^~~~~~
+referenced by:
+    create: src/backends/proxmox-lxc/driver.zig:341:31
+    executeProxmoxLxc: src/cli/router.zig:290:43
+    11 reference(s) hidden; use '-freference-trace=13' to see all references
+error: the following command failed with 1 compilation errors:
+/opt/zig/zig build-exe .zig-cache/o/bb021e3aca54506eea5a8b7dc6b3699e/liblibcrun_vendor.a -needed-lsystemd -L/usr/lib64 -lcap -lseccomp -I/usr/include/yajl -lyajl -ODebug -I /usr/include -I /usr/local/include -I ./crun-1.23.1/src -I ./crun-1.23.1/src/libcrun -I deps/crun -I deps/crun/src -I deps/crun/libocispec/src -I deps/bfc/include -I src/backends/crun -I .zig-cache/o/60d458a4c931254c1a0aeafdc99fc02c --dep core --dep cli --dep backends --dep integrations --dep utils -Mroot=/home/moriarti/repo/proxmox-lxcri/src/main.zig --dep core_build_options -Mcore=/home/moriarti/repo/proxmox-lxcri/src/core/mod.zig --dep core --dep backends --dep utils --dep config_integration -Mcli=/home/moriarti/repo/proxmox-lxcri/src/cli/mod.zig --dep core --dep utils --dep oci_spec --dep build_options --dep feature_options -Mbackends=/home/moriarti/repo/proxmox-lxcri/src/backends/mod.zig --dep core --dep backends --dep build_options -Mintegrations=/home/moriarti/repo/proxmox-lxcri/src/integrations/mod.zig --dep core --dep oci_spec -Mutils=/home/moriarti/repo/proxmox-lxcri/src/utils/mod.zig -Mcore_build_options=.zig-cache/c/5775d1c6cfeba82094e846fd823a79d4/options.zig --dep core -Mconfig_integration=/home/moriarti/repo/proxmox-lxcri/src/core/enhanced_config.zig -ODebug -Moci_spec=/home/moriarti/repo/proxmox-lxcri/deps/oci-spec-zig/src/lib.zig -Mbuild_options=.zig-cache/c/a2e5771dd71f6a6ea894d8d39680fa0b/options.zig -Mfeature_options=.zig-cache/c/74e1cb762bb7b015ce94dc22ad1fc99d/options.zig -lc --cache-dir .zig-cache --global-cache-dir /home/moriarti/.cache/zig --name nexcage --zig-lib-dir /opt/zig/lib/ --listen=-
+
+Build Summary: 5/8 steps succeeded; 1 failed
+install transitive failure
++- install nexcage transitive failure
+   +- compile exe nexcage Debug native 1 errors
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/c5f301b193ce433a143ccd6a6a8a204d/build /opt/zig/zig /opt/zig/lib /home/moriarti/repo/proxmox-lxcri .zig-cache /home/moriarti/.cache/zig --seed 0xc8032f5a -Z87c96d725bf634e5
