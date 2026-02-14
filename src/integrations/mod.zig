@@ -1,6 +1,6 @@
 /// Integrations module exports
 // Use build_options from backends module to avoid module conflicts
-const backends = @import("backends");
+
 const build_options = @import("build_options");
 
 // Conditionally export integrations based on build flags
