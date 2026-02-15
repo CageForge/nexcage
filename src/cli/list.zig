@@ -1,9 +1,7 @@
 const std = @import("std");
 const core = @import("core");
 const backends = @import("backends");
-const router = @import("router.zig");
 const constants = core.constants;
-const errors = @import("errors.zig");
 const base_command = @import("base_command.zig");
 
 /// List command implementation for modular architecture
@@ -11,7 +9,7 @@ pub const ListCommand = struct {
     const Self = @This();
 
     name: []const u8 = "list",
-    description: []const u8 = "List containers and virtual machines from all backends",
+    description: []const u8 = "List containers from Proxmox LXC backend",
     base: base_command.BaseCommand = .{},
 
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
@@ -31,32 +29,21 @@ pub const ListCommand = struct {
     }
 
     pub fn showHelp(self: *const Self) !void {
-        _ = self; // Avoid unused parameter warning
+        _ = self;
         const stdout = std.fs.File.stdout();
         try stdout.writeAll("Usage: nexcage list [OPTIONS]\n\n");
-        try stdout.writeAll("List containers and virtual machines from all backends\n\n");
+        try stdout.writeAll("List containers from Proxmox LXC backend\n\n");
         try stdout.writeAll("OPTIONS:\n");
         try stdout.writeAll("  --help, -h    Show this help message\n");
         try stdout.writeAll("  --debug       Enable debug logging\n");
-        try stdout.writeAll("  --log-file    Specify log file path\n");
-        try stdout.writeAll("  --log-level   Set logging level (trace, debug, info, warn, error, fatal)\n\n");
-        try stdout.writeAll("EXAMPLES:\n");
-        try stdout.writeAll("  nexcage list                    # List all containers\n");
-        try stdout.writeAll("  nexcage list --debug            # List with debug logging\n");
-        try stdout.writeAll("  nexcage list --log-file /tmp/log # List with custom log file\n\n");
-        try stdout.writeAll("OUTPUT FORMAT:\n");
-        try stdout.writeAll("  ID      IMAGE   COMMAND  CREATED  STATUS  BACKEND  NAMES\n");
-        try stdout.writeAll("  <id>    <img>   <cmd>    <time>   <state> <type>   <name>\n");
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        // Check for help flag first
         if (options.help) {
             try self.showHelp();
             return;
         }
 
-        // Collect containers from all backends
         var all_containers = std.ArrayListUnmanaged(core.ContainerInfo){};
         defer {
             for (all_containers.items) |*container| {
@@ -65,134 +52,42 @@ pub const ListCommand = struct {
             all_containers.deinit(allocator);
         }
 
-        // List from each backend type
-        try self.listFromBackend(allocator, .proxmox_lxc, &all_containers);
-        try self.listFromBackend(allocator, .crun, &all_containers);
-        try self.listFromBackend(allocator, .runc, &all_containers);
-        try self.listFromBackend(allocator, .vm, &all_containers);
+        try self.listFromBackend(allocator, &all_containers);
 
-        // Print aggregated results (similar to runc list format)
         const stdout = std.fs.File.stdout();
-        try stdout.writeAll("ID\tIMAGE\tCOMMAND\tCREATED\tSTATUS\tBACKEND\tNAMES\n");
-        
+        try stdout.writeAll("ID\tIMAGE\tSTATUS\tBACKEND\tNAMES\n");
+
         for (all_containers.items) |*container| {
-            const id = container.id;
-            const image = container.image orelse "unknown";
-            const command = container.runtime orelse "unknown";
-            const created = container.created orelse "unknown";
-            const status = container.status;
-            const backend = container.backend_type;
-            const names = container.name;
-            
-            // Simple output without allocPrint to avoid allocator issues
-            _ = try stdout.writeAll(id);
+            _ = try stdout.writeAll(container.id);
             _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(image);
+            _ = try stdout.writeAll(container.image orelse "unknown");
             _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(command);
+            _ = try stdout.writeAll(container.status);
             _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(created);
+            _ = try stdout.writeAll(container.backend_type);
             _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(status);
-            _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(backend);
-            _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(names);
+            _ = try stdout.writeAll(container.name);
             _ = try stdout.writeAll("\n");
         }
-
-        // Command completed
     }
 
-    fn listFromBackend(self: *Self, allocator: std.mem.Allocator, backend_type: core.types.RuntimeType, containers: *std.ArrayListUnmanaged(core.ContainerInfo)) !void {
-        _ = self; // Avoid unused warnings
-        switch (backend_type) {
-            .lxc => {
-                // List LXC containers using backend
-                const sandbox_config = core.types.SandboxConfig{
-                    .allocator = allocator,
-                    .name = try allocator.dupe(u8, "default"),
-                    .runtime_type = .lxc,
-                    .resources = core.types.ResourceLimits{
-                        .memory = constants.DEFAULT_MEMORY_BYTES,
-                        .cpu = constants.DEFAULT_CPU_CORES,
-                        .disk = null,
-                        .network_bandwidth = null,
-                    },
-                    .security = null,
-                    .network = core.types.NetworkConfig{
-                        .bridge = try allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
-                        .ip = null,
-                        .gateway = null,
-                        .dns = null,
-                        .port_mappings = null,
-                    },
-                    .storage = null,
-                };
-                defer {
-                    allocator.free(sandbox_config.name);
-                    if (sandbox_config.network) |net| {
-                        if (net.bridge) |b| allocator.free(b);
-                    }
-                }
+    fn listFromBackend(self: *Self, allocator: std.mem.Allocator, containers: *std.ArrayListUnmanaged(core.ContainerInfo)) !void {
+        _ = self;
+        const proxmox_config = core.types.ProxmoxLxcBackendConfig{ .allocator = allocator };
+        const proxmox_backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config);
+        defer proxmox_backend.deinit();
 
-                const proxmox_config = core.types.ProxmoxLxcBackendConfig{ .allocator = allocator };
+        const proxmox_containers = try proxmox_backend.list(allocator);
+        defer allocator.free(proxmox_containers);
 
-                const lxc_backend = backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config) catch {
-                    return; // Skip if LXC backend not available
-                };
-                defer lxc_backend.deinit();
-
-                const lxc_containers = lxc_backend.list(allocator) catch return;
-                defer allocator.free(lxc_containers);
-                
-                for (lxc_containers) |*c| {
-                    try containers.append(allocator, c.*);
-                }
-            },
-            .proxmox_lxc => {
-                // List Proxmox LXC containers via driver
-                const proxmox_config = core.types.ProxmoxLxcBackendConfig{ .allocator = allocator };
-
-                const proxmox_backend = backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config) catch return;
-                defer proxmox_backend.deinit();
-
-                const proxmox_containers = proxmox_backend.list(allocator) catch return;
-                defer allocator.free(proxmox_containers);
-                
-                for (proxmox_containers) |*c| {
-                    try containers.append(allocator, c.*);
-                }
-            },
-            .crun, .runc => {
-                // Note: CRUN/RUNC listing not yet implemented
-                // Backend drivers exist but list() method needs implementation
-            },
-            .vm => {
-                // Note: VM listing not yet implemented
-                // Proxmox VM backend is functional but list() method pending
-            },
-            else => {},
+        for (proxmox_containers) |*c| {
+            try containers.append(allocator, c.*);
         }
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        return allocator.dupe(u8, "Usage: nexcage list\n\n" ++
-            "Description:\n" ++
-            "  List containers from all available backends (LXC, Proxmox LXC, CRUN, RUNC, VM)\n" ++
-            "  Output format similar to 'docker ps' or 'runc list'\n\n" ++
-            "Output columns:\n" ++
-            "  ID       - Container identifier\n" ++
-            "  IMAGE    - Container image or template\n" ++
-            "  COMMAND  - Runtime command\n" ++
-            "  CREATED  - Creation timestamp\n" ++
-            "  STATUS   - Container status\n" ++
-            "  BACKEND  - Backend type (lxc, proxmox-lxc, crun, runc, vm)\n" ++
-            "  NAMES    - Container names\n\n" ++
-            "Notes:\n" ++
-            "  Automatically detects available backends and skips unavailable ones.\n" ++
-            "  Proxmox LXC containers are listed via 'pct list' command.\n");
+        return allocator.dupe(u8, "Usage: nexcage list\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

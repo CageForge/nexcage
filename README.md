@@ -1,74 +1,52 @@
 # NexCage
 
-Next-generation container runtime for Proxmox VE using LXC and OCI backends (crun/runc).
+NexCage is a lightweight container runtime for Proxmox VE, implementing OCI-compatible orchestration for LXC and Proxmox VMs.
 
-## Compatibility Snapshot
-- **OCI Runtime Specification**: fully parses Linux additions up to v1.3.0 (NUMA memoryPolicy, Intel RDT monitoring, netDevices inventory) using the external [`oci-specs-zig`](https://github.com/CageForge/oci-specs-zig) package.
-- **Network integration**: `linux.netDevices` aliases are applied to pct `--netX` arguments and `/etc/network/interfaces` with automatic bridge fallback.
-- **Proxmox VE**: verified on 8.x hypervisors; upcoming work tracks 9.x updates.
-- **libcrun ABI (required for crun)**: build compiles vendored sources from `deps/crun`; run `make prepare-crun` to refresh headers. Requires `pkg-config` access to `libsystemd`; the build fails if those development files are missing.
+## Key Features
+- **OCI Compliance**: Parses OCI Runtime v1.3.0 specs (NUMA, Intel RDT, netDevices).
+- **Proxmox Integration**: Direct mapping of OCI bundles to Proxmox LXC (`pct`) configurations.
+- **ZFS Optimized**: Automatic ZFS dataset creation and management for container rootfs.
+- **Modular Architecture**: Specialized managers for ZFS, PVE API, and OCI processing.
 
-- Architecture: amd64 (x86_64) only
-- Environment: runs on Proxmox VE host (no containerization)
+## Quick Start
 
-## Archival Policy
-- Deprecated documentation and code are moved to `archive/`
-- Legacy code is kept under `archive/legacy/` and may be removed in future
+### 1. Requirements
+- **OS**: Proxmox VE 8.x/9.x host (amd64).
+- **Dependencies**:
+  ```bash
+  sudo apt-get update && sudo apt-get install -y \
+    build-essential autoconf automake libtool pkg-config \
+    libyajl-dev libcap-dev libseccomp-dev libsystemd-dev
+  ```
 
-## Quick Start (Ubuntu 22.04/24.04)
-
-1) Install dependencies
-```bash
-sudo apt-get update -y
-sudo apt-get install -y \
-  build-essential autoconf automake libtool pkg-config \
-  libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
-  libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
-```
-
-2) Install Zig 0.15.1 (or use CI setup) — dependencies are resolved through `build.zig.zon`, including `oci-specs-zig`.
-```bash
-# See https://ziglang.org/download/ for binary tarball
-zig version  # should print 0.15.1
-```
-
-3) Build and run (default)
+### 2. Build
+Requires Zig 0.15.1.
 ```bash
 zig build
+```
+
+### 3. Usage
+```bash
+# General help
 ./zig-out/bin/nexcage --help
-./zig-out/bin/nexcage version
-```
 
-4) Build with vendored libcrun (project policy)
-```bash
-make prepare-crun        # generates vendored headers and checks deps
-make build-vendored      # builds with -Duse-vendored-libcrun=true
-```
+# Create a container from an OCI bundle
+./zig-out/bin/nexcage create --bundle /path/to/bundle <container-id>
 
-## CLI Examples
-```bash
-# Show command-specific help
-./zig-out/bin/nexcage create --help
-
-# List containers (LXC)
-./zig-out/bin/nexcage list --runtime lxc
+# List containers
+./zig-out/bin/nexcage list
 ```
 
 ## Development
-- Dev quickstart: see docs/DEV_QUICKSTART.md
-- CLI reference: see docs/CLI_REFERENCE.md
-- Architecture overview: see docs/architecture/OVERVIEW.md
-- ADRs: see docs/architecture/
+To add features or fix bugs:
+1. Ensure Zig 0.15.1 is in your PATH.
+2. The core logic resides in `src/backends/proxmox-lxc/`.
+3. Build and test using standard Zig commands: `zig build` and `zig build test`.
 
-## Testing
-- CI smoke/unit run on GitHub Actions
-- E2E tests run on self-hosted Proxmox runner
-- **Debug Logging**: See [DEBUG_LOGGING_GUIDE.md](docs/DEBUG_LOGGING_GUIDE.md)
-- **Troubleshooting**: See [TROUBLESHOOTING_GUIDE.md](docs/TROUBLESHOOTING_GUIDE.md)
-- **Test Results**: See [TESTING_RESULTS.md](docs/TESTING_RESULTS.md)
-- Details: TESTING.md and PROXMOX_TESTING.md
+## Components
+- **ZfsManager**: Handles ZFS datasets and properties.
+- **PveClient**: Orchestrates `pct` and `pvesh` commands.
+- **OciProcessor**: Translates OCI configs to LXC.
 
-## Security & Policies
-- Security policy: SECURITY.md
-- Maintainers/Governance: MAINTAINERS.md, GOVERNANCE.md
-- Reproducible builds: REPRODUCIBLE_BUILDS.md
+## License
+MIT License. See [LICENSE](LICENSE).
