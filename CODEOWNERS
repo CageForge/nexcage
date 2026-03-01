@@ -1,8 +1,0 @@
-# CODEOWNERS
-# Order matters; last match wins.
-
-* @CageForge
-
-/docs/ @CageForge
-/src/** @CageForge
-/.github/workflows/** @moriarti

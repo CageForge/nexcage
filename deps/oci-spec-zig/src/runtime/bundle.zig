@@ -196,11 +196,30 @@ pub const OciBundleParser = struct {
                     }
                 }
 
-                // Parse capabilities
+                // Parse capabilities (OCI format: bounding, effective, etc. arrays of cap names)
                 if (process_obj.get("capabilities")) |caps_val| {
                     if (caps_val == .object) {
-                        // TODO: Parse capabilities and convert to LXC format
-                        self.logInfo("Capabilities found in OCI config, will be converted to LXC format", .{});
+                        var cap_set = std.StringHashMap(void).init(self.allocator);
+                        defer cap_set.deinit();
+                        var it = caps_val.object.iterator();
+                        while (it.next()) |entry| {
+                            if (entry.value_ptr.* == .array) {
+                                for (entry.value_ptr.*.array.items) |cap_item| {
+                                    if (cap_item == .string) {
+                                        _ = try cap_set.put(try self.allocator.dupe(u8, cap_item.string), {});
+                                    }
+                                }
+                            }
+                        }
+                        if (cap_set.count() > 0) {
+                            var parts = std.ArrayListUnmanaged([]const u8){};
+                            defer parts.deinit(self.allocator);
+                            var cap_it = cap_set.keyIterator();
+                            while (cap_it.next()) |cap_name| {
+                                try parts.append(self.allocator, cap_name.*);
+                            }
+                            bundle_config.capabilities = try std.mem.join(self.allocator, ",", parts.items);
+                        }
                     }
                 }
             }
@@ -214,6 +233,24 @@ pub const OciBundleParser = struct {
                 for (mounts_array.items, 0..) |mount_val, i| {
                     if (mount_val == .object) {
                         const mount_obj = mount_val.object;
+                        var options_str: ?[]const u8 = null;
+                        if (mount_obj.get("options")) |opt_val| {
+                            if (opt_val == .array) {
+                                const opt_array = opt_val.array;
+                                if (opt_array.items.len > 0) {
+                                    var parts = std.ArrayListUnmanaged([]const u8){};
+                                    defer parts.deinit(self.allocator);
+                                    for (opt_array.items) |opt_item| {
+                                        if (opt_item == .string) {
+                                            try parts.append(self.allocator, opt_item.string);
+                                        }
+                                    }
+                                    if (parts.items.len > 0) {
+                                        options_str = try std.mem.join(self.allocator, ",", parts.items);
+                                    }
+                                }
+                            }
+                        }
                         mounts[i] = MountConfig{
                             .allocator = self.allocator,
                             .source = if (mount_obj.get("source")) |s|
@@ -228,7 +265,7 @@ pub const OciBundleParser = struct {
                                 if (t == .string) try self.allocator.dupe(u8, t.string) else null
                             else
                                 null,
-                            .options = null, // TODO: Parse mount options
+                            .options = options_str,
                         };
                     }
                 }

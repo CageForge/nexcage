@@ -141,8 +141,6 @@ pub fn main() !void {
         try app.logger.info("  stop      Stop a container", .{});
         try app.logger.info("  delete    Delete a container", .{});
         try app.logger.info("  list      List containers", .{});
-        try app.logger.info("  kill      Send a signal to a container", .{});
-        try app.logger.info("  run       Run a command in a container", .{});
         try app.logger.info("  help      Show this help message", .{});
         try app.logger.info("  version   Show version information", .{});
         try app.logger.info("", .{});
@@ -151,7 +149,7 @@ pub fn main() !void {
     }
 
     // Parse runtime options
-    var options = try parseRuntimeOptions(allocator, command_name, command_args, &app.config);
+    var options = try parseRuntimeOptions(allocator, command_name, command_args);
     defer options.deinit();
 
     // Check if help was requested
@@ -176,13 +174,13 @@ pub fn main() !void {
 }
 
 /// Parse runtime options from command line arguments
-fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, args: []const []const u8, config: *core.Config) !core.RuntimeOptions {
+fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, args: []const []const u8) !core.RuntimeOptions {
     var options = core.RuntimeOptions{
         .allocator = allocator,
         .command = parseCommand(command_name),
         .container_id = null,
         .image = null,
-        .runtime_type = config.runtime_type,
+        .runtime_type = .lxc,
         .config_file = null,
         .verbose = false,
         .debug = false,
@@ -206,9 +204,6 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         } else if (std.mem.eql(u8, arg, "--name") and i + 1 < args.len) {
             options.container_id = try allocator.dupe(u8, args[i + 1]);
             i += 2;
-        } else if (std.mem.eql(u8, arg, "--runtime") and i + 1 < args.len) {
-            const runtime_str = args[i + 1];
-            options.runtime_type = parseRuntimeType(runtime_str);
             i += 2;
         } else if (std.mem.eql(u8, arg, "--config") and i + 1 < args.len) {
             options.config_file = try allocator.dupe(u8, args[i + 1]);
@@ -282,10 +277,8 @@ fn parseCommand(command_str: []const u8) core.Command {
     return .help; // Default to help
 }
 
-/// Parse runtime type from string
+/// Default to LXC
 fn parseRuntimeType(runtime_str: []const u8) core.RuntimeType {
-    if (std.mem.eql(u8, runtime_str, "lxc") or std.mem.eql(u8, runtime_str, "proxmox-lxc")) return .lxc;
-    if (std.mem.eql(u8, runtime_str, "qemu") or std.mem.eql(u8, runtime_str, "vm")) return .qemu;
-    if (std.mem.eql(u8, runtime_str, "crun") or std.mem.eql(u8, runtime_str, "runc")) return .crun;
-    return .lxc; // Default to LXC
+    _ = runtime_str;
+    return .lxc;
 }
