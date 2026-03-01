@@ -3,7 +3,6 @@ const core = @import("core");
 const backends = @import("backends");
 const constants = core.constants;
 const types = core.types;
-const config_module = core.config;
 
 pub const BackendRouter = struct {
     const Self = @This();
