@@ -206,7 +206,7 @@ pub const OciBundleParser = struct {
                             if (entry.value_ptr.* == .array) {
                                 for (entry.value_ptr.*.array.items) |cap_item| {
                                     if (cap_item == .string) {
-                                        _ = try cap_set.put(try self.allocator.dupe(u8, cap_item.string), {});
+                                        _ = try cap_set.put(cap_item.string, {});
                                     }
                                 }
                             }
