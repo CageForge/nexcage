@@ -336,4 +336,50 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_test.step);
+
+    // `zig build test` reported success in 1ms for 304 tests, because the
+    // test module's root is src/main.zig and main.zig declares no tests.
+    // Zig only compiles what the root file reaches, and nothing in that
+    // graph leads to the test files — so the suite had never run at all.
+    //
+    // One addTest per file rather than one aggregate root: a file that fails
+    // to compile then takes only itself down, and the failure names the file.
+    // With a single root, the first broken import hides every other result.
+    const walker_dirs = [_][]const u8{ "tests", "src" };
+    for (walker_dirs) |dir_name| {
+        var dir = b.build_root.handle.openDir(dir_name, .{ .iterate = true }) catch continue;
+        defer dir.close();
+        var walker = dir.walk(b.allocator) catch continue;
+        defer walker.deinit();
+        while (walker.next() catch null) |entry| {
+            if (entry.kind != .file) continue;
+            if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+
+            const rel = b.pathJoin(&.{ dir_name, entry.path });
+            const source = b.build_root.handle.readFileAlloc(b.allocator, rel, 4 * 1024 * 1024) catch continue;
+            // only files that actually declare tests; compiling the rest
+            // would add build time and no signal
+            if (std.mem.indexOf(u8, source, "\ntest \"") == null and
+                !std.mem.startsWith(u8, source, "test \"")) continue;
+
+            const file_mod = b.createModule(.{
+                .root_source_file = b.path(rel),
+                .target = target,
+                .optimize = optimize,
+            });
+            file_mod.addImport("core", core_mod);
+            file_mod.addImport("cli", cli_mod);
+            file_mod.addImport("backends", backends_mod);
+            file_mod.addImport("integrations", integrations_mod);
+            file_mod.addImport("utils", utils_mod);
+
+            const file_test = b.addTest(.{ .name = entry.basename, .root_module = file_mod });
+            file_test.linkSystemLibrary("c");
+            file_test.addIncludePath(.{ .cwd_relative = "/usr/include" });
+            file_test.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+            file_test.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
+
+            test_step.dependOn(&b.addRunArtifact(file_test).step);
+        }
+    }
 }
