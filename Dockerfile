@@ -1,7 +1,7 @@
 # ============================================================================
 # Builder Stage - Build nexcage with all dependencies
 # ============================================================================
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:26.04 AS builder
 
 # Set Timezone
 ENV TZ=UTC
@@ -88,7 +88,7 @@ RUN zig build -Doptimize=ReleaseSafe ${BUILD_FLAGS}
 # ============================================================================
 # Runtime Stage - Minimal runtime image
 # ============================================================================
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 # Set Timezone
 ENV TZ=UTC
