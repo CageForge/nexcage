@@ -29,7 +29,8 @@ RUN apt-get update && apt-get install -y \
     libsystemd-dev \
     # Additional build dependencies for crun
     go-md2man \
-    libprotobuf-c-dev \  # Required by crun for OCI runtime spec serialization
+    # libprotobuf-c-dev: required by crun
+    libprotobuf-c-dev \
     libyajl-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -70,8 +71,16 @@ WORKDIR /app
 COPY . .
 
 # Initialize git submodules (bfc and crun)
-RUN git init || true && \
-    git submodule update --init --recursive || true
+# .dockerignore excludes .git and .gitmodules, so submodule commands can
+# never work inside this image — the previous `git init || true && git
+# submodule update` was a no-op that `|| true` made look harmless. Clone the
+# dependencies explicitly at their pinned commits instead.
+RUN git clone https://github.com/themoriarti/bfc.git deps/bfc && \
+    git -C deps/bfc checkout -q 717ec880a0c5a4860e47ee9b2037450642e8f241 && \
+    git clone https://github.com/kubebsd/crun.git deps/crun && \
+    git -C deps/crun checkout -q c1ef7a1ee256236c6d8f41a6c7cda228f8b7bb79 && \
+    git -C deps/crun submodule update --init libocispec && \
+    git -C deps/crun/libocispec submodule update --init runtime-spec image-spec yajl
 
 # Build arguments for customizing build
 ARG BUILD_FLAGS=""
@@ -83,6 +92,18 @@ RUN rm -rf .zig-cache /root/.cache/zig
 
 # Build project with default configuration (all features enabled)
 # Note: libcrun ABI mode is disabled by default, use -Denable-libcrun-abi=true to enable
+# Vendored crun needs two generated header sets, and neither is produced by
+# `zig build`. The Makefile prescribes `zig build prepare-crun`, a step that
+# does not exist in build.zig — this is what actually works.
+RUN bash scripts/gen_crun_headers_local.sh
+
+# ocispec/*.h come from JSON schemas. generate.py is called directly rather
+# than through autogen.sh, which would require libtool for no benefit here.
+RUN mkdir -p deps/crun/libocispec/src/ocispec && \
+    cd deps/crun/libocispec && \
+    python3 src/ocispec/generate.py --gen-ref --root=. --out=src/ocispec runtime-spec/schema && \
+    python3 src/ocispec/generate.py --gen-ref --root=. --out=src/ocispec image-spec/schema
+
 RUN zig build -Doptimize=ReleaseSafe ${BUILD_FLAGS}
 
 # ============================================================================
