@@ -78,3 +78,7 @@ TESTING.md
 MERGE_INSTRUCTIONS.md
 CHANGELOG.md
 NOTICE
+
+# gen_crun_headers_local.sh is the only working crun header generator;
+# excluding scripts/ made the vendored build impossible inside the image.
+!scripts/gen_crun_headers_local.sh

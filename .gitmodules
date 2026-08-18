@@ -1,6 +1,6 @@
 [submodule "deps/bfc"]
 	path = deps/bfc
-	url = git@github.com:themoriarti/bfc.git
+	url = https://github.com/themoriarti/bfc.git
 [submodule "deps/crun"]
 	path = deps/crun
 	url = https://github.com/kubebsd/crun.git
