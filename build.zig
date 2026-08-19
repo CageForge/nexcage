@@ -357,6 +357,12 @@ pub fn build(b: *std.Build) void {
 
             const rel = b.pathJoin(&.{ dir_name, entry.path });
             const source = b.build_root.handle.readFileAlloc(b.allocator, rel, 4 * 1024 * 1024) catch continue;
+
+            // Files that import source by relative path (@import("../src/..."))
+            // escape their own module and cannot be rooted where they live.
+            // They are compiled together from test_root_relative.zig instead;
+            // see the comment there for why they are not all merged.
+            if (std.mem.indexOf(u8, source, "@import(\"../") != null) continue;
             // only files that actually declare tests; compiling the rest
             // would add build time and no signal
             if (std.mem.indexOf(u8, source, "\ntest \"") == null and
@@ -382,4 +388,25 @@ pub fn build(b: *std.Build) void {
             test_step.dependOn(&b.addRunArtifact(file_test).step);
         }
     }
+
+    // The twelve relative-path importers, rooted at the repository root so
+    // tests/ and src/ are inside one module.
+    const rel_mod = b.createModule(.{
+        .root_source_file = b.path("test_root_relative.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    // Deliberately no named module imports here. These tests reach into src/
+    // by relative path, so the same file would belong to both this module and
+    // `backends` — which Zig rejects outright: "file exists in modules 'root'
+    // and 'backends'". A test that wants the named modules should import
+    // through them instead of relative paths, and then it no longer belongs
+    // in this aggregate at all.
+
+    const rel_test = b.addTest(.{ .name = "relative-imports", .root_module = rel_mod });
+    rel_test.linkSystemLibrary("c");
+    rel_test.addIncludePath(.{ .cwd_relative = "/usr/include" });
+    rel_test.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+    rel_test.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
+    test_step.dependOn(&b.addRunArtifact(rel_test).step);
 }
