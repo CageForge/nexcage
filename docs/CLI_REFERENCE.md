@@ -1,7 +1,7 @@
 # CLI Reference
 
 ```
-nexcage [--debug] [--log-level <level>] [--log-file <path>] <command> [options]
+nexcage [--debug] [--log-level <level>] [--log-file <path>] [--config <path>] <command> [options]
 ```
 
 Every command accepts `--help`. nexcage must run as root on the Proxmox VE
@@ -17,13 +17,14 @@ These work before or after the command.
 | `--debug` | Log level `debug`, plus startup and system information |
 | `--log-level <level>` | `trace`, `debug`, `info` (default), `warn`, `error`, `fatal` |
 | `--log-file <path>` | Also write log lines to `<path>` |
+| `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1) |
 
 Logs go to stderr. stdout carries only command output (`list`, `state`,
 help text).
 
-`--config <path>` is accepted but not honoured yet. Configuration comes from
-the first of `./config.json`, `/etc/nexcage/config.json`,
-`/etc/nexcage/nexcage.json` that exists; see the README for the keys.
+Without `--config`, configuration comes from the first of `./config.json`,
+`/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json` that exists; see the
+README for the keys.
 
 ## Backend selection
 
@@ -71,7 +72,9 @@ unique on the node. The VMID comes from `pvesh get /cluster/nextid`. `--image
 
 The container gets `eth0` on `network.bridge` with DHCP, 512 MiB of memory and
 one core unless the OCI bundle sets limits. Its root filesystem goes to
-`proxmox.storage` (`<storage>:<rootfs_size_gb>`) when that is configured.
+`proxmox.storage` (`<storage>:<rootfs_size_gb>`) when that is configured. It is
+unprivileged unless `proxmox.unprivileged` is `false`; images from a registry
+always run unprivileged.
 
 For an OCI bundle, nexcage packs `rootfs/` with tar into
 `local:vztmpl/nexcage-<name>-<time>.tar.zst`, creates the container from that
@@ -118,8 +121,17 @@ nexcage kill <name> [SIGNAL]
 nexcage kill [-s|--signal SIGNAL] <name>
 ```
 
-Sends `SIGNAL` (default `SIGTERM`; a name like `SIGKILL` or a number) to PID 1
-inside the container through `pct exec`.
+Sends `SIGNAL` to the container's init process from the host, as an OCI runtime
+does: nexcage reads the init's host PID from `pct status <vmid> --verbose` and
+calls `kill(2)`. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
+`SIGKILL`, `usr1`), or a number from 1 to 64; the default is `SIGTERM`. An
+unknown signal is a usage error (exit 2); a container that is not running is an
+error (exit 1).
+
+The kernel delivers a signal from the host to a container's init only if init
+handles it, except `SIGKILL` and `SIGSTOP`. `SIGKILL` always stops the
+container; what `SIGTERM` does depends on the init system. Use `stop` for a
+clean shutdown.
 
 ### list
 
@@ -144,14 +156,16 @@ Prints OCI runtime state JSON:
   "ociVersion": "1.0.0",
   "id": "web-1",
   "status": "running",
-  "pid": 0,
+  "pid": 48213,
   "bundle": null,
   "annotations": {}
 }
 ```
 
-`status` is `created`, `running`, `stopped`, `paused` or `unknown`. `pid` is
-not reported yet. A container that does not exist is an error (exit 1).
+`status` is `created` for a container not yet started through nexcage, or
+`running`, `stopped` or `paused` as pct reports it. `pid` is the host PID of the
+container's init while it runs, and 0 otherwise. A container that does not
+exist is an error (exit 1).
 
 ### version, help
 

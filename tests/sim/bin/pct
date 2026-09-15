@@ -1,7 +1,10 @@
 #!/bin/bash
 # Fake pct: keeps containers in $SIM/db as "vmid status name" and logs argv to
-# $SIM/calls. Files named fail_*, no_kill and lock.<vmid> in $SIM inject errors.
+# $SIM/calls. Files named fail_* and lock.<vmid> in $SIM inject errors.
+# `start` runs ../fake_init.py as the container's init and keeps its PID in
+# $SIM/pid.<vmid>; the signals that init catches land in $SIM/sig.<vmid>.
 SIM=${SIM:?}
+HERE=$(cd "$(dirname "$0")" && pwd)
 DB=$SIM/db
 touch "$DB"
 echo "pct $*" >> "$SIM/calls"
@@ -10,6 +13,21 @@ exists() { awk -v v="$1" '$1==v {f=1} END {exit !f}' "$DB"; }
 status_of() { awk -v v="$1" '$1==v {print $2}' "$DB"; }
 set_status() { awk -v v="$1" -v s="$2" '$1==v {$2=s} {print}' "$DB" > "$DB.tmp" && mv "$DB.tmp" "$DB"; }
 missing() { echo "Configuration file 'nodes/pve/lxc/$1.conf' does not exist" >&2; exit 2; }
+# A zombie counts as gone: its new parent may not have reaped it yet
+alive() { local st; st=$(awk '{print $3}' "/proc/$1/stat" 2>/dev/null) && [ -n "$st" ] && [ "$st" != Z ]; }
+stop_init() {
+  [ -e "$SIM/pid.$1" ] || return 0
+  kill -9 "$(cat "$SIM/pid.$1")" 2>/dev/null
+  rm -f "$SIM/pid.$1"
+}
+
+# As with LXC, a container whose init has exited is stopped
+for pidfile in "$SIM"/pid.*; do
+  [ -e "$pidfile" ] || continue
+  alive "$(cat "$pidfile")" && continue
+  rm -f "$pidfile"
+  set_status "${pidfile##*.}" stopped
+done
 
 [ -e "$SIM/fail_all" ] && { cat "$SIM/fail_all" >&2; exit 13; }
 
@@ -47,10 +65,18 @@ case "$cmd" in
     exists "$1" || missing "$1"
     [ "$(status_of "$1")" = running ] && { echo "CT $1 already running" >&2; exit 255; }
     set_status "$1" running
+    : > "$SIM/sig.$1"
+    python3 "$HERE/../fake_init.py" "$SIM/sig.$1" </dev/null >/dev/null 2>&1 &
+    echo $! > "$SIM/pid.$1"
+    for _ in $(seq 1 50); do
+      grep -qx READY "$SIM/sig.$1" 2>/dev/null && break
+      sleep 0.1
+    done
     ;;
   shutdown|stop)
     exists "$1" || missing "$1"
     [ "$(status_of "$1")" = running ] || { echo "CT $1 not running" >&2; exit 255; }
+    stop_init "$1"
     set_status "$1" stopped
     ;;
   destroy)
@@ -58,15 +84,26 @@ case "$cmd" in
     [ "$(status_of "$1")" = running ] && { echo "CT $1 is running - destroy failed" >&2; exit 255; }
     awk -v v="$1" '$1!=v' "$DB" > "$DB.tmp" && mv "$DB.tmp" "$DB"
     ;;
+  status)
+    exists "$1" || missing "$1"
+    st=$(status_of "$1")
+    if [ "${2:-}" = --verbose ]; then
+      # pct prints the keys sorted; pid is there only while the container runs
+      echo "cpus: 1"
+      echo "maxmem: 536870912"
+      echo "name: $(awk -v v="$1" '$1==v {print $3}' "$DB")"
+      [ "$st" = running ] && [ -e "$SIM/pid.$1" ] && echo "pid: $(cat "$SIM/pid.$1")"
+      echo "status: $st"
+      echo "type: lxc"
+      echo "vmid: $1"
+    else
+      echo "status: $st"
+    fi
+    ;;
   exec)
     vmid=$1; shift; [ "$1" = "--" ] && shift
     exists "$vmid" || missing "$vmid"
     [ "$(status_of "$vmid")" = running ] || { echo "CT $vmid not running" >&2; exit 255; }
-    case "$1" in
-      cat) echo "1 (init) S 0 1 1 0 -1 4194560" ;;
-      kill) [ -e "$SIM/no_kill" ] && { echo "exec: kill: not found" >&2; exit 127; } ;;
-      *) ;;
-    esac
     ;;
   config)
     exists "$1" || missing "$1"

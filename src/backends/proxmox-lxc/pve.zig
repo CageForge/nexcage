@@ -50,6 +50,33 @@ pub fn findVmidByName(output: []const u8, name: []const u8) ?[]const u8 {
     return null;
 }
 
+/// The fields nexcage reads from `pct status <vmid> --verbose`, which prints
+/// one "key: value" line per field. `pid` is the host PID of the container's
+/// init, which pct takes from `lxc-info -p`; it is present only while the
+/// container runs. Slices borrow from the command output.
+pub const PctStatus = struct {
+    status: ?[]const u8 = null,
+    pid: ?std.posix.pid_t = null,
+};
+
+pub fn parsePctStatus(output: []const u8) PctStatus {
+    var result = PctStatus{};
+    var lines = std.mem.splitScalar(u8, output, '\n');
+    while (lines.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+        const key = line[0..colon];
+        const value = std.mem.trim(u8, line[colon + 1 ..], " \t");
+        if (std.mem.eql(u8, key, "status")) {
+            result.status = value;
+        } else if (std.mem.eql(u8, key, "pid")) {
+            const pid = std.fmt.parseInt(std.posix.pid_t, value, 10) catch continue;
+            if (pid > 0) result.pid = pid;
+        }
+    }
+    return result;
+}
+
 pub const PveVersion = struct {
     major: u32,
     minor: u32,
@@ -310,40 +337,46 @@ pub const PveClient = struct {
         if (res.exit_code != 0) return self.mapPctError(res.stderr);
     }
 
-    /// Get PID 1 inside container
-    pub fn getInitPid(self: *const Self, vmid: []const u8) ?i32 {
-        const args = [_][]const u8{ "pct", "exec", vmid, "--", "cat", "/proc/1/stat" };
-        const res = common.runCommand(self.allocator, self.logger, &args) catch return null;
+    /// Host PID of the container's init, or null when it is not running.
+    ///
+    /// This used to run `cat /proc/1/stat` inside the container with
+    /// `pct exec`, which reads back the PID in the container's own namespace
+    /// (always 1) and fails wherever lxc-attach cannot run.
+    pub fn initPid(self: *const Self, vmid: []const u8) !?std.posix.pid_t {
+        const args = [_][]const u8{ "pct", "status", vmid, "--verbose" };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        if (res.exit_code != 0) return null;
-        const trimmed = std.mem.trim(u8, res.stdout, " \t\r\n");
-        var it = std.mem.splitScalar(u8, trimmed, ' ');
-        if (it.next()) |first| {
-            return std.fmt.parseInt(i32, first, 10) catch return null;
-        }
-        return null;
+        if (res.exit_code != 0) return self.mapPctError(res.stderr);
+        return parsePctStatus(res.stdout).pid;
     }
 
-    /// Send signal to container
+    /// Send a signal to the container's init from the host, as an OCI runtime
+    /// does.
+    ///
+    /// This used to run `kill -s SIGNAL 1` inside the container through
+    /// `pct exec`. The kernel drops a signal sent to a PID namespace's init
+    /// from inside that namespace unless init handles it, SIGKILL included, so
+    /// `kill SIGKILL` did nothing; it also needed a kill binary in the image.
+    /// From the host, SIGKILL and SIGSTOP are always delivered.
     pub fn kill(self: *const Self, vmid: []const u8, signal: []const u8) !void {
-        // Try multiple ways to send SIG to PID 1 inside container
-        const kill_cmds = [_][]const u8{ "kill", "/bin/kill", "/usr/bin/kill" };
-        for (kill_cmds) |cmd| {
-            const args = [_][]const u8{ "pct", "exec", vmid, "--", cmd, "-s", signal, "1" };
-            const res = try common.runCommand(self.allocator, self.logger, &args);
-            defer {
-                self.allocator.free(res.stdout);
-                self.allocator.free(res.stderr);
-            }
-            if (res.exit_code == 0) return;
-            // Failed attempts were dropped without a word, so all a user saw
-            // was "kill: operation failed"
-            if (self.logger) |log| log.err("pct exec {s} -- {s} -s {s} 1 exited {d}: {s}", .{ vmid, cmd, signal, res.exit_code, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
-        }
-        return core.Error.OperationFailed;
+        const signo = core.signals.parse(signal) orelse {
+            if (self.logger) |log| log.err("unknown signal '{s}'", .{signal}) catch {};
+            return core.Error.InvalidInput;
+        };
+        const pid = (try self.initPid(vmid)) orelse {
+            if (self.logger) |log| log.err("CT {s} is not running", .{vmid}) catch {};
+            return core.Error.OperationFailed;
+        };
+        std.posix.kill(pid, signo) catch |err| {
+            if (self.logger) |log| log.err("sending signal {d} to PID {d} (init of CT {s}) failed: {s}", .{ signo, pid, vmid, @errorName(err) }) catch {};
+            return switch (err) {
+                error.PermissionDenied => core.Error.PermissionDenied,
+                else => core.Error.OperationFailed,
+            };
+        };
     }
 
     /// Find an available template in Proxmox
@@ -422,6 +455,33 @@ test "findVmidByName matches whole names only" {
     try std.testing.expectEqualStrings("1000", findVmidByName(output, "db").?);
     try std.testing.expect(findVmidByName(output, "web") == null);
     try std.testing.expect(findVmidByName(output, "backup") == null);
+}
+
+test "parsePctStatus reads the init's host PID of a running container" {
+    // `pct status 100 --verbose` prints the keys sorted, one per line
+    const status = parsePctStatus(
+        \\cpus: 1
+        \\disk: 0
+        \\maxmem: 536870912
+        \\name: web-1
+        \\pid: 48213
+        \\status: running
+        \\type: lxc
+        \\uptime: 42
+        \\vmid: 100
+    );
+    try std.testing.expectEqual(@as(?std.posix.pid_t, 48213), status.pid);
+    try std.testing.expectEqualStrings("running", status.status.?);
+}
+
+test "parsePctStatus has no PID for a stopped container or a bad value" {
+    const stopped = parsePctStatus("maxmem: 536870912\nname: web-1\nstatus: stopped\nvmid: 100\n");
+    try std.testing.expect(stopped.pid == null);
+    try std.testing.expectEqualStrings("stopped", stopped.status.?);
+
+    try std.testing.expect(parsePctStatus("pid: abc\nstatus: running").pid == null);
+    try std.testing.expect(parsePctStatus("pid: 0\nstatus: running").pid == null);
+    try std.testing.expect(parsePctStatus("").status == null);
 }
 
 test "parsePveVersion reads the proxmox-ve line of pveversion -v" {

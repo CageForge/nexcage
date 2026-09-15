@@ -6,6 +6,7 @@ nexcage \- manage LXC containers on a Proxmox VE host
 [\fB\-\-debug\fR]
 [\fB\-\-log\-level\fR \fIlevel\fR]
 [\fB\-\-log\-file\fR \fIpath\fR]
+[\fB\-\-config\fR \fIpath\fR]
 \fIcommand\fR [\fIoptions\fR]
 .SH DESCRIPTION
 .B nexcage
@@ -47,13 +48,18 @@ Shut a container down cleanly; it is stopped forcibly after 60 seconds.
 Destroy a stopped container and remove its state under /run/nexcage.
 .TP
 \fBkill\fR \fIname\fR [\fIsignal\fR], \fBkill \-s\fR \fIsignal\fR \fIname\fR
-Send a signal (default SIGTERM) to PID 1 inside the container.
+Send a signal (default SIGTERM) to the container's init process from the host.
+The signal is a name in any case, with or without SIG, or a number from 1 to 64.
+Init receives it only if it handles that signal, except SIGKILL and SIGSTOP;
+SIGKILL always stops the container.
 .TP
 \fBlist\fR
 List containers, tab-separated: ID, IMAGE, COMMAND, CREATED, STATUS, BACKEND, NAMES.
 .TP
 \fBstate\fR \fIname\fR|\fIvmid\fR
-Print OCI runtime state as JSON. Fails if the container does not exist.
+Print OCI runtime state as JSON: status created until the container is first
+started through nexcage, and the host PID of its init while it runs. Fails if
+the container does not exist.
 .TP
 \fBversion\fR, \fBhelp\fR
 Print the version or the list of commands.
@@ -71,11 +77,16 @@ One of trace, debug, info (default), warn, error, fatal.
 \fB\-\-log\-file\fR \fIpath\fR
 Also write log lines to
 .IR path .
+.TP
+\fB\-\-config\fR \fIpath\fR
+Read configuration from
+.I path
+only. A missing or invalid file is an error.
 .PP
 Log lines go to standard error; standard output carries only command output.
 .SH CONFIGURATION
-The first of these files that exists is read; a file that does not parse is
-an error:
+Without \fB\-\-config\fR, the first of these files that exists is read; a file
+that does not parse is an error:
 .IR ./config.json ,
 .IR /etc/nexcage/config.json ,
 .IR /etc/nexcage/nexcage.json .
@@ -93,7 +104,8 @@ Root filesystem size in GiB when
 is set. Default 8.
 .TP
 .B proxmox.unprivileged
-Create unprivileged containers. Default: privileged.
+Create unprivileged containers. Default: true. Images from a registry always
+run unprivileged.
 .TP
 .B proxmox.ostype
 OS type passed to pct. Default: detected from the template.

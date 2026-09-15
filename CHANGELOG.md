@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `tests/sim/run.sh` (`make sim`) runs every command against fake `pct`, `pvesh`, `pvesm`, `pveversion` and `pveam`, with nexcage as uid 0 in a user namespace. It checks the arguments passed, exit codes, output and state files, and fails on any allocator leak or panic. CI runs it on every pull request.
+- `--config <path>`, before or after the command, reads configuration from that file instead of the default locations; a missing or unparsable file is an error. It used to be parsed and ignored.
 
 ### Removed
 - Source that nothing used: `src/integrations/` (bfc, proxmox-api, zfs) with the `enable-zfs`, `enable-bfc` and `enable-proxmox-api` build options; `core/router.zig`, `advanced_logging.zig`, `metrics.zig`, `json_logging.zig`, `comptime_validation.zig`; `proxmox-lxc/pct.zig`, `performance.zig`, `simple_performance.zig`, `state_manager.zig`, `vmid_manager.zig`; `crun/types.zig`. Checked by building the default, runc and VM configurations and running the tests without them.
@@ -23,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue templates moved from `docs/ISSUE_TEMPLATE` to `.github/ISSUE_TEMPLATE`, where GitHub uses them.
 - The documentation site navigation lists only current documents.
 - `--runtime <lxc|crun|runc|vm>` overrides the config file's routing for `create`, `run`, `start`, `stop`, `delete`, `kill` and `state`. It used to be parsed and ignored. An unknown value is a usage error (exit 2), and `runc` no longer selects crun.
+- New containers are unprivileged unless `proxmox.unprivileged` is `false`, as in the Proxmox VE web UI. They used to be privileged by default.
+- `kill` sends the signal to the container's init from the host with `kill(2)`, using the host PID from `pct status --verbose`, as an OCI runtime does. It used to run `kill -s SIGNAL 1` inside the container through `pct exec`: the kernel drops a signal sent from inside a PID namespace to its init unless init handles it, so even `SIGKILL` did nothing, and it failed wherever lxc-attach cannot run. Signal names are accepted in any case, with or without `SIG`; an unknown signal is a usage error (exit 2).
+- `state` reports the host PID of the container's init while it runs (it was always 0) and `created` for a container not yet started through nexcage (it said `stopped`).
 
 ### Fixed
 - `list` printed an empty table and exited 0 when `pct list` failed, for example without root or on a host without pct. It now fails with pct's message.
@@ -32,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The VM backend, `run` on crun and runc, and `state` for crun, runc and VM logged a warning or printed a made-up `unknown` state and exited 0. They now fail with "not implemented".
 - `health --help` ran every check, and `version --help` printed the version. Both print help.
 - Memory leaks: the bundle path on every create from a bundle, and the output of `pct version` on every `health` run.
-- `kill` said only "operation failed" when `pct exec` failed. It now logs each attempt's exit code and pct's message.
+- Creating a container from an OCI bundle without mounts logged "No mp entries visible in pct config after update".
 
 ## [0.8.0] - 2026-09-15
 

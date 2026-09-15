@@ -330,14 +330,20 @@ pub const ProxmoxLxcDriver = struct {
         try net_runtime.append(self.allocator, .{ .alias = "eth0", .bridge = bridge, .host_name = null });
 
         // OS Type & Unprivileged
+        // Unprivileged unless the config says otherwise, as in the Proxmox VE
+        // web UI. This used to default to privileged.
+        const unprivileged = self.config.default_unprivileged orelse true;
         const is_oci = std.mem.endsWith(u8, final_template, ".tar") and !std.mem.endsWith(u8, final_template, ".tar.zst");
         if (!is_oci) {
             // pct detects the OS type from the template, so only pass one that
             // was configured; "ubuntu" was forced here for every template.
             if (self.config.default_ostype) |ostype| try args_builder.appendSlice(&[_][]const u8{ "--ostype", ostype });
-            try args_builder.appendSlice(&[_][]const u8{ "--unprivileged", if (self.config.default_unprivileged orelse false) "1" else "0" });
-        } else if (self.config.default_unprivileged) |u| {
-            if (u) try args_builder.appendSlice(&[_][]const u8{ "--unprivileged", "1" });
+            try args_builder.appendSlice(&[_][]const u8{ "--unprivileged", if (unprivileged) "1" else "0" });
+        } else if (unprivileged) {
+            try args_builder.appendSlice(&[_][]const u8{ "--unprivileged", "1" });
+        } else {
+            // pct rejects --unprivileged 0 for OCI images
+            if (self.logger) |log| log.warn("OCI images always run unprivileged; ignoring proxmox.unprivileged=false", .{}) catch {};
         }
 
         if (zfs_dataset) |ds| {
@@ -371,7 +377,10 @@ pub const ProxmoxLxcDriver = struct {
         // 7. Post-creation setup
         if (oci_bundle_path) |bp| {
             try self.applyMountsToLxcConfig(vmid, bp);
-            try self.verifyMountsInConfig(vmid);
+            // Only a bundle with mounts can have mp entries to look for; every
+            // other bundle logged "No mp entries visible" on create.
+            const has_mounts = if (bundle_config) |bc| (if (bc.mounts) |m| m.len > 0 else false) else false;
+            if (has_mounts) try self.verifyMountsInConfig(vmid);
             if (bundle_config) |bc| {
                 if (bc.namespaces) |ns| try self.applyNamespacesToLxcConfig(vmid, ns);
             }
@@ -537,7 +546,7 @@ pub const ProxmoxLxcDriver = struct {
 
         try self.pve_client.start(vmid);
 
-        const init_pid: i32 = self.pve_client.getInitPid(vmid) orelse 0;
+        const init_pid = (self.pve_client.initPid(vmid) catch null) orelse 0;
         self.writeOciState(container_id, "running", init_pid) catch {};
     }
 
@@ -585,11 +594,16 @@ pub const ProxmoxLxcDriver = struct {
         }
     }
 
-    /// Send signal to container using pct exec kill
+    /// Send a signal to the container's init process from the host
     pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
         const vmid = try self.resolveVmid(container_id);
         defer self.allocator.free(vmid);
         try self.pve_client.kill(vmid, signal);
+    }
+
+    /// Host PID of the container's init, or null when it is not running
+    pub fn initPid(self: *Self, vmid: []const u8) !?std.posix.pid_t {
+        return self.pve_client.initPid(vmid);
     }
 
     /// List LXC containers using pct command

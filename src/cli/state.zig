@@ -54,26 +54,33 @@ pub const StateCommand = struct {
         // The OCI runtime spec makes querying a container that does not exist
         // an error. This used to print "status": "unknown" and exit 0, which a
         // caller cannot tell apart from a real container in an odd state.
-        var info = self.getContainerInfo(allocator, runtime_type, container_id) catch |err| {
+        var found = self.findContainer(allocator, runtime_type, container_id) catch |err| {
             if (err == types.Error.NotFound) {
                 if (self.base.logger) |log| log.err("Container '{s}' not found", .{container_id}) catch {};
             }
             return err;
         };
-        defer info.deinit();
+        defer found.info.deinit();
 
-        const oci_status = try mapStatusToOCI(info.status, allocator);
-        defer allocator.free(oci_status);
+        var status = ociStatus(found.info.status);
+        // pct calls a container that has never run "stopped"
+        if (std.mem.eql(u8, status, "stopped") and neverStarted(allocator, found.info.name)) status = "created";
 
         const json = try std.fmt.allocPrint(allocator,
             "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": null,\n  \"annotations\": {{}}\n}}\n",
-            .{ container_id, oci_status, 0 },
+            .{ container_id, status, found.pid },
         );
         defer allocator.free(json);
         try stdout.writeAll(json);
     }
 
-    fn getContainerInfo(self: *Self, allocator: std.mem.Allocator, runtime_type: types.RuntimeType, container_id: []const u8) !core.ContainerInfo {
+    const Found = struct {
+        info: core.ContainerInfo,
+        /// Host PID of the container's init while it runs, 0 otherwise
+        pid: std.posix.pid_t = 0,
+    };
+
+    fn findContainer(self: *Self, allocator: std.mem.Allocator, runtime_type: types.RuntimeType, container_id: []const u8) !Found {
         switch (runtime_type) {
             .proxmox_lxc, .lxc => {
                 const proxmox_config = types.ProxmoxLxcBackendConfig{ .allocator = allocator };
@@ -96,15 +103,24 @@ pub const StateCommand = struct {
                 // the name first; a bare VMID is accepted as well.
                 for (containers) |*c| {
                     if (std.mem.eql(u8, c.name, container_id) or std.mem.eql(u8, c.id, container_id)) {
-                        return core.ContainerInfo{
-                            .allocator = allocator,
-                            .id = try allocator.dupe(u8, c.id),
-                            .name = try allocator.dupe(u8, c.name),
-                            .status = try allocator.dupe(u8, c.status),
-                            .backend_type = try allocator.dupe(u8, c.backend_type),
-                            .created = if (c.created) |created| try allocator.dupe(u8, created) else null,
-                            .image = if (c.image) |img| try allocator.dupe(u8, img) else null,
-                            .runtime = if (c.runtime) |rt| try allocator.dupe(u8, rt) else null,
+                        // OCI state requires the PID while the container
+                        // runs; it used to be 0 always.
+                        const pid = if (std.mem.eql(u8, c.status, "running"))
+                            (backend.initPid(c.id) catch null) orelse 0
+                        else
+                            0;
+                        return .{
+                            .info = core.ContainerInfo{
+                                .allocator = allocator,
+                                .id = try allocator.dupe(u8, c.id),
+                                .name = try allocator.dupe(u8, c.name),
+                                .status = try allocator.dupe(u8, c.status),
+                                .backend_type = try allocator.dupe(u8, c.backend_type),
+                                .created = if (c.created) |created| try allocator.dupe(u8, created) else null,
+                                .image = if (c.image) |img| try allocator.dupe(u8, img) else null,
+                                .runtime = if (c.runtime) |rt| try allocator.dupe(u8, rt) else null,
+                            },
+                            .pid = pid,
                         };
                     }
                 }
@@ -131,8 +147,8 @@ pub const StateCommand = struct {
             "Exits with an error if the container does not exist.\n\n" ++
             "The output follows OCI runtime state specification:\n" ++
             "  - id: Container identifier\n" ++
-            "  - status: OCI status (created|running|stopped|paused)\n" ++
-            "  - pid: Process ID (0 if unknown)\n" ++
+            "  - status: created (not started through nexcage yet), running, stopped or paused\n" ++
+            "  - pid: host PID of the container's init while it runs, 0 otherwise\n" ++
             "  - bundle: Bundle path (null if unknown)\n" ++
             "  - annotations: OCI annotations (empty object)\n\n" ++
             "Examples:\n" ++
@@ -146,13 +162,30 @@ pub const StateCommand = struct {
     }
 };
 
-fn mapStatusToOCI(status: []const u8, allocator: std.mem.Allocator) ![]u8 {
-    // Basic mapping from backend status strings to OCI { created | running | stopped | paused }
-    if (std.mem.eql(u8, status, "running")) return try allocator.dupe(u8, "running");
-    if (std.mem.eql(u8, status, "stopped") or std.mem.eql(u8, status, "exited") or std.mem.eql(u8, status, "shutdown"))
-        return try allocator.dupe(u8, "stopped");
-    if (std.mem.eql(u8, status, "paused")) return try allocator.dupe(u8, "paused");
-    if (std.mem.eql(u8, status, "created")) return try allocator.dupe(u8, "created");
-    // Fallback
-    return try allocator.dupe(u8, "unknown");
+/// Maps a pct status to an OCI status
+fn ociStatus(status: []const u8) []const u8 {
+    if (std.mem.eql(u8, status, "running")) return "running";
+    if (std.mem.eql(u8, status, "stopped") or std.mem.eql(u8, status, "exited") or std.mem.eql(u8, status, "shutdown")) return "stopped";
+    if (std.mem.eql(u8, status, "paused")) return "paused";
+    if (std.mem.eql(u8, status, "created")) return "created";
+    return "unknown";
+}
+
+/// Whether nexcage's own record still says "created". create writes that to
+/// /run/nexcage/<name>/state.json, and start replaces it, so a stopped
+/// container with this record has not been started through nexcage.
+fn neverStarted(allocator: std.mem.Allocator, name: []const u8) bool {
+    if (name.len == 0 or std.mem.indexOfScalar(u8, name, '/') != null or
+        std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return false;
+
+    const path = std.fmt.allocPrint(allocator, "/run/nexcage/{s}/state.json", .{name}) catch return false;
+    defer allocator.free(path);
+    const data = std.fs.cwd().readFileAlloc(allocator, path, 64 * 1024) catch return false;
+    defer allocator.free(data);
+
+    const parsed = std.json.parseFromSlice(std.json.Value, allocator, data, .{}) catch return false;
+    defer parsed.deinit();
+    if (parsed.value != .object) return false;
+    const status = parsed.value.object.get("status") orelse return false;
+    return status == .string and std.mem.eql(u8, status.string, "created");
 }

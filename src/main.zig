@@ -110,6 +110,17 @@ fn run() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
+    // --config, before or after the command, has to be known before anything
+    // loads the configuration. It used to be parsed and never read.
+    if (try configPathFromArgs(args)) |path| {
+        std.fs.cwd().access(path, .{}) catch |err| {
+            printError("cannot read config file '{s}': {s}", .{ path, @errorName(err) });
+            failure_reported = true;
+            return error.InvalidConfig;
+        };
+        core.config.setExplicitPath(path);
+    }
+
     // Initialize application context in place: commands hold &app.logger
     var app: AppContext = undefined;
     try app.init(allocator, args);
@@ -143,6 +154,10 @@ fn run() !void {
         }
         if (std.mem.eql(u8, args[i], "--log-level") and i + 1 < args.len) {
             i += 2; // Skip --log-level and its value
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
+            i += 2; // Skip --config and its value, applied above
             continue;
         }
         // Found the actual command
@@ -241,7 +256,7 @@ fn printUsage() !void {
     try out.print(
         \\nexcage v{s} - container runtime for Proxmox VE (LXC)
         \\
-        \\Usage: nexcage [--debug] [--log-level <level>] [--log-file <path>] <command> [options]
+        \\Usage: nexcage [--debug] [--log-level <level>] [--log-file <path>] [--config <path>] <command> [options]
         \\
         \\Commands:
         \\  create    Create a new container
@@ -311,7 +326,8 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             // the container name: "start --log-level debug web" started "debug".
             i += 2;
         } else if (std.mem.eql(u8, arg, "--config") and i + 1 < args.len) {
-            options.config_file = try allocator.dupe(u8, args[i + 1]);
+            // Applied in run() before the configuration was loaded; skipped
+            // here so its value is not taken as a name or an image
             i += 2;
         } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--verbose")) {
             options.verbose = true;
@@ -369,6 +385,22 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
     }
 
     return options;
+}
+
+/// The value of --config anywhere on the command line, or null. A --config
+/// with nothing after it is a usage error.
+fn configPathFromArgs(args: []const []const u8) !?[]const u8 {
+    var i: usize = 1;
+    while (i < args.len) : (i += 1) {
+        if (!std.mem.eql(u8, args[i], "--config")) continue;
+        if (i + 1 >= args.len) {
+            printError("--config needs a path", .{});
+            failure_reported = true;
+            return error.InvalidInput;
+        }
+        return args[i + 1];
+    }
+    return null;
 }
 
 /// Parse command from string

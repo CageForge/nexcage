@@ -166,13 +166,14 @@ jobs:
 
         echo "[E2E] create"
         nx create --name "$NAME" "$TPL"
-        expect_status "$NAME" stopped
+        expect_status "$NAME" created
         ID=$(vmid_of "$NAME")
 
-        echo "[E2E] the config file reached the container (pct config $ID)"
+        echo "[E2E] the config file reached the container (pct config $ID), unprivileged by default"
         conf_has "$ID" "^hostname: $NAME\$"
         conf_has "$ID" "^net0: .*bridge=$BRIDGE(,|\$)"
         conf_has "$ID" "^rootfs: $ROOTFS:.*size=2G"
+        conf_has "$ID" "^unprivileged: 1\$"
 
         echo "[E2E] exit codes: a duplicate name fails, bad usage is 2"
         expect_exit 1 nx create --name "$NAME" "$TPL"
@@ -197,17 +198,20 @@ jobs:
           exit 1
         fi
 
-        echo "[E2E] kill sends a signal to PID 1 through pct exec"
-        # pct exec itself is tried first. Where the runner service's sandbox
-        # stops lxc-attach ("Failed to rexec as memfd"), every pct exec fails,
-        # and that says something about the host, not about nexcage.
-        if exec_err=$($SUDO pct exec "$ID" -- true 2>&1); then
-          nx kill "$NAME" SIGCONT
-          expect_status "$NAME" running
-        else
-          echo "::warning::pct exec does not work on this runner, so signal delivery is not tested: $exec_err"
+        echo "[E2E] state reports the host PID of the container's init"
+        pid=$(nx state "$NAME" | sed -n 's/.*"pid": \([0-9]*\).*/\1/p')
+        want=$($SUDO pct status "$ID" --verbose | awk '$1=="pid:" {print $2}')
+        if [ -z "$pid" ] || [ "$pid" = 0 ] || [ "$pid" != "$want" ]; then
+          echo "::error::state reported pid '$pid'; pct status --verbose says '$want'"
+          exit 1
         fi
+        echo "[E2E] init of $NAME is host PID $pid"
+
+        echo "[E2E] kill signals the init from the host, without pct exec"
+        nx kill "$NAME" SIGCONT
+        expect_status "$NAME" running
         expect_exit 2 nx kill "$NAME" 'TERM;id'
+        expect_exit 2 nx kill "$NAME" NOSUCHSIGNAL
 
         echo "[E2E] stop"
         nx stop "$NAME"
@@ -225,10 +229,20 @@ jobs:
         expect_exit 1 nx state "$NAME"
         expect_exit 1 nx start "$NAME"
 
-        echo "[E2E] run creates and starts"
-        nx run --name "$RUN_NAME" "$TPL"
+        echo "[E2E] run with --config: the named file wins over ./config.json"
+        ALT="$PWD/e2e-alt-config.json"
+        cat > "$ALT" <<EOF
+        {
+          "network": { "bridge": "$BRIDGE" },
+          "proxmox": { "storage": "$ROOTFS", "rootfs_size_gb": 3 }
+        }
+        EOF
+        nx run --config "$ALT" --name "$RUN_NAME" "$TPL"
         expect_status "$RUN_NAME" running
-        nx stop "$RUN_NAME"
+        conf_has "$(vmid_of "$RUN_NAME")" "^rootfs: $ROOTFS:.*size=3G"
+
+        echo "[E2E] kill SIGKILL ends the init, and the container stops"
+        nx kill "$RUN_NAME" SIGKILL
         expect_status "$RUN_NAME" stopped
         nx delete "$RUN_NAME"
 
@@ -238,7 +252,7 @@ jobs:
         echo '{"ociVersion":"1.0.2","process":{"args":["/sbin/init"],"cwd":"/"},"root":{"path":"rootfs"}}' \
           | $SUDO tee "$BUNDLE/config.json" >/dev/null
         nx create --name "$OCI_NAME" "$BUNDLE"
-        expect_status "$OCI_NAME" stopped
+        expect_status "$OCI_NAME" created
         if $SUDO pvesm list local --content vztmpl | grep -q "vztmpl/nexcage-$OCI_NAME-"; then
           echo "::error::the template packed from the bundle is still on storage local"
           exit 1

@@ -39,11 +39,23 @@ if ! unshare -rm bash -c 'mount -t tmpfs tmpfs /tmp' 2>/dev/null; then
 fi
 mkdir -p "$SIM/run" "$SIM/work" "$SIM/bundles" "$SIM/cache"
 
+# Fake pct start leaves a fake init running per started container
+stop_inits() {
+  local f
+  for f in "$S"/pid.*; do
+    [ -e "$f" ] || continue
+    kill -9 "$(cat "$f")" 2>/dev/null
+    rm -f "$f"
+  done
+}
+trap stop_inits EXIT
+
 reset_sim() {
+  stop_inits
   rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/*
   mkdir -p "$S/cache"
   : > "$S/db"; : > "$S/calls"
-  rm -f "$S"/fail_* "$S/no_kill" "$S/pvever" "$S"/lock.* "$S"/conf.* "$S"/tarlist.*
+  rm -f "$S"/fail_* "$S/pvever" "$S"/lock.* "$S"/conf.* "$S"/tarlist.* "$S"/sig.*
   printf "%s\n" "$TPL" local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz local:vztmpl/debian-12.tar.zst > "$S/templates"
 }
 cfg() { printf '%s\n' "$1" > "$S/work/config.json"; }
@@ -86,6 +98,10 @@ json_ok()   { python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$1" 2>
 json_get()  { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2" 2>/dev/null; }
 listed()    { awk -F'\t' -v n="$1" 'NR>1 && $7==n {f=1} END {exit !f}' "$S/out"; }
 status_is() { nx state "$1"; [ "$RC" = 0 ] && [ "$(json_get "$S/out" status)" = "$2" ]; }
+init_pid()  { cat "$S/pid.$1" 2>/dev/null; }
+# Signal handlers and process exit are asynchronous: allow them 3 seconds
+got_signal() { local i; for i in $(seq 1 30); do grep -qx "$2" "$S/sig.$1" 2>/dev/null && return 0; sleep 0.1; done; return 1; }
+eventually() { local i; for i in $(seq 1 30); do eval "$1" && return 0; sleep 0.1; done; return 1; }
 
 echo "=== global ==="
 reset_sim
@@ -110,7 +126,7 @@ check "create from template exits 0" rc 0
 check "create checks the name first (pct list), then asks pvesh for a VMID" \
   all 'called "pct list"' 'called "pvesh get /cluster/nextid"'
 check "pct create argv: vmid, template, hostname, bridge, rootfs from config" \
-  called_re "^pct create 100 $TPL --hostname web-1 --memory [0-9]+ --cores [0-9]+ --net0 name=eth0,bridge=vmbr50,ip=dhcp --unprivileged 0 --rootfs local-lvm:2$"
+  called_re "^pct create 100 $TPL --hostname web-1 --memory [0-9]+ --cores [0-9]+ --net0 name=eth0,bridge=vmbr50,ip=dhcp --unprivileged 1 --rootfs local-lvm:2$"
 check "no --ostype unless configured" not_called_re "--ostype"
 check "state.json written, valid, status created" \
   all 'json_ok "$S/run/nexcage/web-1/state.json"' '[ "$(json_get "$S/run/nexcage/web-1/state.json" status)" = created ]'
@@ -141,9 +157,14 @@ check "registry image on PVE 8.4 -> exit 1 with a version message, nothing pulle
   all 'rc 1' 'err_has "9.1"' 'not_called_re "^pvesh create"' 'not_called_re "^pct create"'
 echo 9.1.0 > "$S/pvever"
 nx create --name nginx-1 docker.io/library/nginx:latest
-check "registry image on PVE 9.1 -> pvesh oci-registry-pull, then pct create with the .tar" \
+check "registry image on PVE 9.1 -> pvesh oci-registry-pull, then an unprivileged pct create with the .tar" \
   all 'rc 0' "called 'pvesh create /nodes/$(hostname)/storage/local/oci-registry-pull --reference docker.io/library/nginx:latest'" \
-      'called_re "^pct create [0-9]+ local:vztmpl/nginx_latest.tar --hostname nginx-1 "' 'not_called_re "--ostype|--unprivileged"'
+      'called_re "^pct create [0-9]+ local:vztmpl/nginx_latest.tar --hostname nginx-1 .*--unprivileged 1( |$)"' 'not_called_re "--ostype"'
+cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_size_gb":2,"unprivileged":false}}'
+nx create --name redis-1 docker.io/library/redis:7
+check "registry image with unprivileged=false: no --unprivileged 0, which pct rejects, and a warning" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/redis_7.tar --hostname redis-1 "' 'not_called_re "--unprivileged"' 'err_has "always run unprivileged"'
+cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_size_gb":2}}'
 touch "$S/fail_pull"
 nx create --name nginx-2 docker.io/library/nginx:1.27
 check "registry pull failing -> exit 1, no pct create" all 'rc 1' 'not_called_re "^pct create"'
@@ -152,9 +173,12 @@ rm -f "$S/fail_pull" "$S/pvever"
 cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","ostype":"debian","unprivileged":true}}'
 nx create --name web-6 "$TPL"
 check "ostype/unprivileged from config reach pct" all 'rc 0' 'called_re "--ostype debian --unprivileged 1 --rootfs local-lvm:[0-9]+$"'
+cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","unprivileged":false}}'
+nx create --name web-6b "$TPL"
+check "unprivileged=false in config -> --unprivileged 0" all 'rc 0' 'called_re "--hostname web-6b .*--unprivileged 0 --rootfs local-lvm:[0-9]+$"'
 rm -f "$S/work/config.json"
 nx create --name web-7 "$TPL"
-check "no config file -> default bridge, no --rootfs" all 'rc 0' 'called_re "bridge=vmbr0,ip=dhcp --unprivileged 0$"'
+check "no config file -> default bridge, unprivileged, no --rootfs" all 'rc 0' 'called_re "bridge=vmbr0,ip=dhcp --unprivileged 1$"'
 
 echo "pct list: Permission denied" > "$S/fail_all"
 nx create --name web-8 "$TPL"
@@ -164,8 +188,9 @@ rm -f "$S/fail_all"
 echo "=== state ==="
 nx state web-1
 check "state of created container: exit 0, stdout is pure JSON" all 'rc 0' 'json_ok "$S/out"'
-check "state id/status/ociVersion" all '[ "$(json_get "$S/out" id)" = web-1 ]' '[ "$(json_get "$S/out" status)" = stopped ]' '[ "$(json_get "$S/out" ociVersion)" = 1.0.0 ]'
-nx state 100;  check "state by VMID works" all 'rc 0' '[ "$(json_get "$S/out" status)" = stopped ]'
+check "state of a container never started: id, status created, pid 0, ociVersion" \
+  all '[ "$(json_get "$S/out" id)" = web-1 ]' '[ "$(json_get "$S/out" status)" = created ]' '[ "$(json_get "$S/out" pid)" = 0 ]' '[ "$(json_get "$S/out" ociVersion)" = 1.0.0 ]'
+nx state 100;  check "state by VMID works" all 'rc 0' '[ "$(json_get "$S/out" status)" = created ]'
 nx state nope; check "state of missing container -> exit 1, not found" all 'rc 1' 'err_has "not found"'
 nx state;      check "state without name -> exit 2" rc 2
 echo "backup" > "$S/lock.100"
@@ -189,32 +214,41 @@ rm -f "$S/fail_all"
 echo "=== start ==="
 nx start web-1
 check "start exits 0, runs pct start 100" all 'rc 0' 'called "pct start 100"'
-check "state.json -> running" all '[ "$(json_get "$S/run/nexcage/web-1/state.json" status)" = running ]'
-status_is web-1 running; check "state reports running" true
+check "state.json -> running, with the init's host PID" \
+  all '[ "$(json_get "$S/run/nexcage/web-1/state.json" status)" = running ]' '[ "$(json_get "$S/run/nexcage/web-1/state.json" pid)" = "$(init_pid 100)" ]'
+status_is web-1 running
+check "state reports running with the init's host PID from pct status --verbose" \
+  all 'rc 0' '[ "$(json_get "$S/out" status)" = running ]' '[ "$(json_get "$S/out" pid)" = "$(init_pid 100)" ]' 'called "pct status 100 --verbose"'
 nx start web-1;  check "start an already running container -> exit 1" rc 1
 nx start nope;   check "start missing -> exit 1, not found" all 'rc 1' 'err_has "not found"'
 nx start;        check "start without name -> exit 2" rc 2
 nx start --name web-2; check "start --name <id> (form in 'start --help')" all 'rc 0' 'called "pct start 101"'
 
 echo "=== kill ==="
-nx kill web-1;                 check "kill default SIGTERM"          all 'rc 0' 'called "pct exec 100 -- kill -s SIGTERM 1"'
-nx kill -s SIGKILL web-1;      check "kill -s SIGKILL <name>"         all 'rc 0' 'called "pct exec 100 -- kill -s SIGKILL 1"'
-nx kill --signal HUP web-1;    check "kill --signal HUP <name>"       all 'rc 0' 'called "pct exec 100 -- kill -s HUP 1"'
-nx kill web-1 9;               check "kill <name> 9 (runc form)"      all 'rc 0' 'called "pct exec 100 -- kill -s 9 1"'
-nx kill web-1 --signal USR1;   check "kill <name> --signal USR1"      all 'rc 0' 'called "pct exec 100 -- kill -s USR1 1"'
-nx kill web-1 'TERM;id';       check "kill rejects a bad signal -> exit 2, no exec" all 'rc 2' 'not_called_re "^pct exec"'
-touch "$S/no_kill"
-nx kill web-1;                 check "kill falls back to /bin/kill"   all 'rc 0' 'called "pct exec 100 -- /bin/kill -s SIGTERM 1"'
-rm -f "$S/no_kill"
+# The fake init records every signal it catches, so these check delivery
+nx kill web-1;                 check "kill: default SIGTERM reaches the init, PID from pct status --verbose" \
+                                 all 'rc 0' 'got_signal 100 SIGTERM' 'called "pct status 100 --verbose"'
+nx kill -s hup web-1;          check "kill -s hup <name> (any case, SIG prefix optional)" all 'rc 0' 'got_signal 100 SIGHUP'
+nx kill --signal SIGINT web-1; check "kill --signal SIGINT <name>"    all 'rc 0' 'got_signal 100 SIGINT'
+nx kill web-1 10;              check "kill <name> 10 (runc form, a number)" all 'rc 0' 'got_signal 100 SIGUSR1'
+nx kill web-1 --signal USR2;   check "kill <name> --signal USR2"      all 'rc 0' 'got_signal 100 SIGUSR2'
+check "kill never runs pct exec" all '! grep -q "^pct exec" "$S/calls"'
+check "the init survives the signals it handles" status_is web-1 running
+nx kill web-1 'TERM;id';       check "kill: bad signal -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
+nx kill web-1 0;               check "kill: signal 0 -> exit 2"       all 'rc 2' 'not_called_re "^pct"'
+nx kill web-1 65;              check "kill: signal 65 -> exit 2"      all 'rc 2' 'not_called_re "^pct"'
 nx kill nope;                  check "kill missing -> exit 1"         rc 1
 nx kill;                       check "kill without name -> exit 2"    rc 2
-nx kill web-3;                 check "kill a stopped container -> exit 1, pct's reason logged" all 'rc 1' 'err_has "CT 102 not running"'
+nx kill web-3;                 check "kill a stopped container -> exit 1, says it is not running" all 'rc 1' 'err_has "not running"'
+nx run --name kill-1 "$TPL"
+nx kill kill-1 KILL
+check "kill KILL: the init dies and the container stops" all 'rc 0' "eventually 'status_is kill-1 stopped'"
 
 echo "=== stop ==="
 nx stop web-1
 check "stop: pct shutdown 100 --timeout 60 --forceStop 1" all 'rc 0' 'called "pct shutdown 100 --timeout 60 --forceStop 1"'
-check "state.json -> stopped" all '[ "$(json_get "$S/run/nexcage/web-1/state.json" status)" = stopped ]'
-status_is web-1 stopped; check "state reports stopped" true
+check "state.json -> stopped, fake init gone" all '[ "$(json_get "$S/run/nexcage/web-1/state.json" status)" = stopped ]' '[ ! -e "$S/pid.100" ]'
+check "state reports stopped, pid 0" all 'status_is web-1 stopped' '[ "$(json_get "$S/out" pid)" = 0 ]'
 nx stop web-1;  check "stop an already stopped container -> exit 1" rc 1
 nx stop nope;   check "stop missing -> exit 1" rc 1
 nx stop;        check "stop without name -> exit 2" rc 2
@@ -237,7 +271,7 @@ nx run --name app-1 "$TPL"
 check "run: create then start the same VMID" all 'rc 0' 'called_re "^pct create ([0-9]+) .*--hostname app-1 "' \
   "grep -q \"^pct start \$(awk '\$3==\"app-1\" {print \$1}' \$S/db)\$\" \"\$S/calls.last\""
 check "run: rootfs/bridge from config" called_re "bridge=vmbr50,ip=dhcp .*--rootfs local-lvm:2$"
-status_is app-1 running; check "run: state reports running" true
+check "run: state reports running" status_is app-1 running
 nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start" all 'rc 1' 'not_called_re "^pct start"'
 nx run --name app-2;        check "run without image -> exit 2" rc 2
 
@@ -261,6 +295,21 @@ check "unknown --runtime -> exit 2, nothing run" all 'rc 2' 'err_has "unknown ru
 nx state --runtime crun rt-0
 check "state --runtime crun -> exit 1, no made-up state" all 'rc 1' '[ ! -s "$S/out" ]'
 
+echo "=== --config ==="
+printf '%s\n' '{"network":{"bridge":"vmbr77"},"proxmox":{"storage":"alt-store","rootfs_size_gb":3}}' > "$S/work/alt.json"
+nx create --config alt.json --name cf-1 "$TPL"
+check "--config <file> after the command wins over ./config.json" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname cf-1 .*bridge=vmbr77,ip=dhcp .*--rootfs alt-store:3$"'
+nx --config "$S/work/alt.json" create --name cf-2 "$TPL"
+check "--config before the command, absolute path" all 'rc 0' 'called_re "--hostname cf-2 .*bridge=vmbr77,ip=dhcp"'
+nx --config missing.json list
+check "--config with a missing file -> exit 1, names the file, runs nothing" all 'rc 1' 'err_has "missing.json"' 'not_called_re "^pct"'
+printf '{"network":' > "$S/work/bad.json"
+nx list --config bad.json
+check "--config with invalid JSON -> exit 1" all 'rc 1' 'err_has "invalid configuration"' 'not_called_re "^pct"'
+nx list --config
+check "--config without a path -> exit 2" all 'rc 2' 'err_has "--config needs a path"'
+
 echo "=== create from an OCI bundle ==="
 mkdir -p "$S/bundles/b1/rootfs/bin" "$S/bundles/nocfg/rootfs"
 printf '#!/bin/sh\n' > "$S/bundles/b1/rootfs/bin/busybox"; chmod 755 "$S/bundles/b1/rootfs/bin/busybox"
@@ -276,7 +325,8 @@ check "bundle without config.json -> exit 2, no crash" all 'rc 2' 'err_has "conf
 nx create --name bundle-1 /tmp/nexcage-bundles/b1
 check "bundle: rootfs packed on storage local, pct create uses that volume" \
   all 'rc 0' 'called_re "^pvesm path local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst$"' \
-      'called_re "^pct create [0-9]+ local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst --hostname bundle-1 "'
+      'called_re "^pct create [0-9]+ local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst --hostname bundle-1 "' \
+      '! err_has "No mp entries"'
 check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
 check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'

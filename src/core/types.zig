@@ -298,7 +298,8 @@ pub const ProxmoxSettings = struct {
     rootfs_size_gb: ?u32 = null,
     /// Passed as --ostype; when unset pct detects it from the template
     ostype: ?[]const u8 = null,
-    /// Passed as --unprivileged; pct's own default is privileged (0)
+    /// Passed as --unprivileged. When unset nexcage creates unprivileged
+    /// containers, as the Proxmox VE web UI does (pct's own default is 0).
     unprivileged: ?bool = null,
 
     pub fn deinit(self: *ProxmoxSettings, allocator: std.mem.Allocator) void {
