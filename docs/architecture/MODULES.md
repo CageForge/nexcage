@@ -9,7 +9,7 @@ flowchart TB
   cli["cli<br/>src/cli: commands, router"]
   core["core<br/>src/core: types, config, logging, validation"]
   backends["backends<br/>src/backends"]
-  utils["utils<br/>src/utils: fs, net, lxc_converter"]
+  utils["utils<br/>src/utils: fs, net"]
   cfg["config_integration<br/>src/core/enhanced_config.zig"]
   oci["oci_spec<br/>deps/oci-spec-zig: OCI types, bundle parser"]
 

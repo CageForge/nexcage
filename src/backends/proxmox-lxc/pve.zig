@@ -339,6 +339,9 @@ pub const PveClient = struct {
                 self.allocator.free(res.stderr);
             }
             if (res.exit_code == 0) return;
+            // Failed attempts were dropped without a word, so all a user saw
+            // was "kill: operation failed"
+            if (self.logger) |log| log.err("pct exec {s} -- {s} -s {s} 1 exited {d}: {s}", .{ vmid, cmd, signal, res.exit_code, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
         }
         return core.Error.OperationFailed;
     }

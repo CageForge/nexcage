@@ -40,9 +40,11 @@ pub const StateCommand = struct {
 
         const container_id = try validation.ValidationUtils.requireContainerId(options, self.base.logger, "state");
 
-        // Try to determine runtime type from config or default to proxmox_lxc
+        // --runtime wins; otherwise the routing rules in the config file
         var runtime_type: types.RuntimeType = .proxmox_lxc;
-        {
+        if (options.runtime_type) |rt| {
+            runtime_type = rt;
+        } else {
             var config_loader = config_module.ConfigLoader.init(allocator);
             var cfg = try config_loader.loadDefault();
             defer cfg.deinit();
@@ -72,7 +74,6 @@ pub const StateCommand = struct {
     }
 
     fn getContainerInfo(self: *Self, allocator: std.mem.Allocator, runtime_type: types.RuntimeType, container_id: []const u8) !core.ContainerInfo {
-        _ = self;
         switch (runtime_type) {
             .proxmox_lxc, .lxc => {
                 const proxmox_config = types.ProxmoxLxcBackendConfig{ .allocator = allocator };
@@ -80,6 +81,7 @@ pub const StateCommand = struct {
                     return types.Error.NotFound;
                 };
                 defer backend.deinit();
+                if (self.base.logger) |log| backend.setLogger(log);
 
                 const containers = try backend.list(allocator);
                 defer {
@@ -110,19 +112,11 @@ pub const StateCommand = struct {
                 return types.Error.NotFound;
             },
             .crun, .runc, .vm => {
-                // Note: info() for crun/runc/vm backends not yet fully implemented
-                // These backends are functional but state info needs enhancement
-                // For now, return a minimal ContainerInfo with unknown status
-                return core.ContainerInfo{
-                    .allocator = allocator,
-                    .id = try allocator.dupe(u8, container_id),
-                    .name = try allocator.dupe(u8, container_id),
-                    .status = try allocator.dupe(u8, "unknown"),
-                    .backend_type = try allocator.dupe(u8, @tagName(runtime_type)),
-                    .created = null,
-                    .image = null,
-                    .runtime = null,
-                };
+                // These backends cannot report state yet. This used to print
+                // a made-up "unknown" state and exit 0, which looks like a
+                // real container.
+                if (self.base.logger) |log| log.err("state is not implemented for the {s} backend", .{@tagName(runtime_type)}) catch {};
+                return types.Error.UnsupportedOperation;
             },
             else => {
                 return types.Error.UnsupportedOperation;

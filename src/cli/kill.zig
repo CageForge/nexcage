@@ -52,7 +52,7 @@ pub const KillCommand = struct {
 
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
         const op = router.Operation{ .kill = router.KillConfig{ .signal = signal } };
-        try backend_router.routeAndExecute(op, container_id, null);
+        try backend_router.routeAndExecute(op, container_id, options.runtime_type, null);
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {

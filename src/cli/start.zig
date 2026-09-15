@@ -62,7 +62,7 @@ pub const StartCommand = struct {
         if (options.debug) {
             try stdout.writeAll("DEBUG: Calling routeAndExecute(start)\n");
         }
-        backend_router.routeAndExecute(operation, container_id, null) catch |err| {
+        backend_router.routeAndExecute(operation, container_id, options.runtime_type, null) catch |err| {
             if (options.debug) {
                 try stdout.writeAll("DEBUG: routeAndExecute(start) error: ");
                 const err_str = try std.fmt.allocPrint(allocator, "{}\n", .{err});
@@ -84,7 +84,7 @@ pub const StartCommand = struct {
         return allocator.dupe(u8, "Usage: nexcage start --name <id> [--runtime <type>]\n\n" ++
             "Options:\n" ++
             "  --name <id>        Container/VM identifier\n" ++
-            "  --runtime <type>   Runtime: lxc|vm|crun (default: lxc)\n\n" ++
+            "  --runtime <type>   lxc|crun|runc|vm; overrides routing from the config file\n\n" ++
             "Notes:\n" ++
             "  If LXC tools are missing, command fails with UnsupportedOperation.\n");
     }
