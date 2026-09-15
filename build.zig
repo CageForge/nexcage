@@ -71,7 +71,7 @@ pub fn build(b: *std.Build) void {
     const core_build_options = b.addOptions();
     core_build_options.addOption([]const u8, "app_version", app_version);
 
-    // build_options: for backends and integrations (feature flags)
+    // build_options: backend feature flags
     const build_options = b.addOptions();
 
     // feature_options: for crun backend (libcrun ABI flags)
@@ -102,14 +102,6 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(bool, "enable_backend_crun", enable_backend_crun);
     build_options.addOption(bool, "enable_backend_runc", enable_backend_runc);
 
-    // Integration feature flags (selective defaults)
-    const enable_zfs = b.option(bool, "enable-zfs", "Enable ZFS integration (default: true)") orelse true;
-    const enable_bfc = b.option(bool, "enable-bfc", "Enable BFC integration (default: false)") orelse false;
-    const enable_proxmox_api = b.option(bool, "enable-proxmox-api", "Enable Proxmox API integration (default: false)") orelse false;
-
-    build_options.addOption(bool, "enable_zfs", enable_zfs);
-    build_options.addOption(bool, "enable_bfc", enable_bfc);
-    build_options.addOption(bool, "enable_proxmox_api", enable_proxmox_api);
     build_options.addOption(bool, "enable_libcrun_abi", enable_libcrun_abi);
 
     // Create shared build options module
@@ -168,17 +160,6 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Integrations module
-    // Note: integrations_mod uses build_options through backends_mod to avoid module conflicts
-    const integrations_mod = b.addModule("integrations", .{
-        .root_source_file = b.path("src/integrations/mod.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-            .{ .name = "backends", .module = backends_mod },
-        },
-    });
-    integrations_mod.addImport("build_options", build_options_mod);
-
     var libcrun_lib: ?*std.Build.Step.Compile = null;
 
     if (enable_libcrun_abi) {
@@ -213,7 +194,6 @@ pub fn build(b: *std.Build) void {
         libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
-        libcrun_module.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "src/backends/crun" });
         const libcrun_compile = b.addLibrary(.{
             .name = "libcrun_vendor",
@@ -258,7 +238,6 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(.{ .cwd_relative = "deps/crun" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
-    exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
     exe.addIncludePath(.{ .cwd_relative = "src/backends/crun" }); // For libcrun_wrapper.h
 
     if (libcrun_lib) |lib| {
@@ -277,7 +256,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("core", core_mod);
     exe.root_module.addImport("cli", cli_mod);
     exe.root_module.addImport("backends", backends_mod);
-    exe.root_module.addImport("integrations", integrations_mod);
     exe.root_module.addImport("utils", utils_mod);
 
     // Install the executable
@@ -329,13 +307,11 @@ pub fn build(b: *std.Build) void {
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
-    test_exe.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
     test_exe.addIncludePath(.{ .cwd_relative = "src/backends/crun" });
 
     test_exe.root_module.addImport("core", core_mod);
     test_exe.root_module.addImport("cli", cli_mod);
     test_exe.root_module.addImport("backends", backends_mod);
-    test_exe.root_module.addImport("integrations", integrations_mod);
     test_exe.root_module.addImport("utils", utils_mod);
 
     const run_test = b.addRunArtifact(test_exe);
@@ -367,7 +343,7 @@ pub fn build(b: *std.Build) void {
             // A file that imports source by relative path (@import("../src/..."))
             // escapes its module and fails here, by name. That is deliberate:
             // skipping such files is how a test could go unnoticed. The ones
-            // that did it tested code that no longer exists (archive/tests).
+            // that did it tested code that no longer exists.
             // only files that actually declare tests; compiling the rest
             // would add build time and no signal
             if (std.mem.indexOf(u8, source, "\ntest \"") == null and
@@ -381,14 +357,12 @@ pub fn build(b: *std.Build) void {
             file_mod.addImport("core", core_mod);
             file_mod.addImport("cli", cli_mod);
             file_mod.addImport("backends", backends_mod);
-            file_mod.addImport("integrations", integrations_mod);
             file_mod.addImport("utils", utils_mod);
 
             const file_test = b.addTest(.{ .name = entry.basename, .root_module = file_mod });
             file_test.linkSystemLibrary("c");
             file_test.addIncludePath(.{ .cwd_relative = "/usr/include" });
             file_test.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-            file_test.addIncludePath(.{ .cwd_relative = "deps/bfc/include" });
 
             test_step.dependOn(&b.addRunArtifact(file_test).step);
         }

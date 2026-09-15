@@ -5,20 +5,11 @@ This document outlines the development workflow for the Nexcage runtime project.
 ## 1. Task Selection and Refinement
 
 ### Selecting a Task
-- Tasks are selected from the `Roadmap` directory
-- Each task is organized by sprint and has a detailed description
-- Tasks are tracked in the main `Roadmap/README.md` file
+- Tasks are tracked as GitHub issues
 
 ### Task Refinement Process
-If a task is not fully described or needs additional details:
-1. Review the task file in the corresponding sprint directory
-2. In interactive mode:
-   - Discuss and clarify requirements
-   - Define acceptance criteria
-   - Identify dependencies
-   - Document technical details
-   - Update the task file with new information
-3. Only proceed to implementation when the task is fully defined
+If a task is not fully described, write its acceptance criteria, dependencies
+and technical details into the issue before starting implementation.
 
 ## 2. Implementation
 
@@ -119,36 +110,11 @@ If a task is not fully described or needs additional details:
    ```
 3. Start working on the next task
 
-## 6. Sprint Completion and Release
+## 6. Release
 
-### Backlog Formation
-At the end of each sprint:
-1. Review all completed tasks
-2. Document any remaining work
-3. Update the Roadmap with:
-   - Completed tasks
-   - New tasks identified
-   - Adjusted priorities
-
-### Release Process
-1. Create a release branch from `main`:
-   ```bash
-   git checkout -b release/vX.Y.Z
-   ```
-
-2. Update version numbers and documentation
-
-3. Create a release tag:
-   ```bash
-   git tag -a vX.Y.Z -m "Release vX.Y.Z"
-   git push origin vX.Y.Z
-   ```
-
-4. Create a GitHub release with:
-   - Release notes
-   - Changelog
-   - Binary artifacts
-   - Documentation updates
+See [CI/CD — Releasing](CI_CD_SETUP.md#releasing): update `VERSION`,
+`CHANGELOG.md` and `docs/releases/NOTES_v<version>.md`, then push a
+`v<version>` tag. `release.yml` tests, builds and publishes the release.
 
 ## Build Notes: crun backend (optional)
 
@@ -189,6 +155,6 @@ Example: v1.2.3
 - 3: Patch version
 
 ## Tools and Scripts
-- Development environment setup: `scripts/setup-dev-env.sh`
-- GitHub workflow testing: `tests/test_workflow.zig`
-- Connection testing: `tests/test_connection.zig` 
+- `make help` lists the build, test, packaging and documentation targets
+- [scripts/README.md](../scripts/README.md) describes the scripts
+- Workflows can be tried locally with `act` (section 3)

@@ -20,9 +20,6 @@ Tests that exercise real code live next to it:
 | `src/core/constants.zig` | Defaults (bridge, memory, rootfs size) |
 | `tests/oci/*_simple_test.zig`, `tests/simple_*.zig` | Self-contained checks of OCI types and validation |
 
-Tests for code that no longer exists are in `archive/tests/`; see
-[archive/README.md](archive/README.md) for why and how to bring one back.
-
 ## Running against fake Proxmox tools
 
 Most of nexcage's behaviour is the command lines it gives `pct` and `pvesh`

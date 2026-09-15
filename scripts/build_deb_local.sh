@@ -2,8 +2,8 @@
 # Builds dist/nexcage-<VERSION>-amd64.deb with dpkg-deb. release.yml uses it.
 #
 # The package is assembled directly rather than through debhelper: the old
-# dh packaging (archive/packaging/debian) described the proxmox-lxcri service
-# and could not build. This script used to copy the whole tree to
+# dh packaging described the proxmox-lxcri service and could not build. This
+# script used to copy the whole tree to
 # ../build-deb and then compute the repository root from there, which put the
 # result in the parent directory instead of dist/.
 set -euo pipefail

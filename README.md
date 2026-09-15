@@ -105,7 +105,6 @@ zig build test --summary all
 - CI (`.github/workflows/ci.yml`) builds, tests and smoke-tests on
   GitHub-hosted runners. The Proxmox E2E job runs the container lifecycle
   through nexcage on a self-hosted Proxmox VE runner.
-- Code and tests that no longer build are kept in [archive/](archive/README.md).
 
 Guides: [docs/DEV_QUICKSTART.md](docs/DEV_QUICKSTART.md),
 [TESTING.md](TESTING.md), [docs/CI_CD_SETUP.md](docs/CI_CD_SETUP.md),

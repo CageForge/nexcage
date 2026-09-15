@@ -70,14 +70,12 @@ WORKDIR /app
 # Copy project files
 COPY . .
 
-# Initialize git submodules (bfc and crun)
+# Initialize the crun submodule
 # .dockerignore excludes .git and .gitmodules, so submodule commands can
 # never work inside this image — the previous `git init || true && git
 # submodule update` was a no-op that `|| true` made look harmless. Clone the
-# dependencies explicitly at their pinned commits instead.
-RUN git clone https://github.com/themoriarti/bfc.git deps/bfc && \
-    git -C deps/bfc checkout -q 717ec880a0c5a4860e47ee9b2037450642e8f241 && \
-    git clone https://github.com/kubebsd/crun.git deps/crun && \
+# dependency explicitly at its pinned commit instead.
+RUN git clone https://github.com/kubebsd/crun.git deps/crun && \
     git -C deps/crun checkout -q c1ef7a1ee256236c6d8f41a6c7cda228f8b7bb79 && \
     git -C deps/crun submodule update --init libocispec && \
     git -C deps/crun/libocispec submodule update --init runtime-spec image-spec yajl

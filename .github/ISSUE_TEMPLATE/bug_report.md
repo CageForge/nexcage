@@ -11,18 +11,15 @@ assignees: ''
 A clear and concise description of what the bug is.
 
 ## Environment
-- Proxmox VE Version: 7.4+
-- Zig Version: 0.15.1+
-- Proxmox LXCRI Version: [e.g. 0.2.0]
-- containerd Version: 1.7+
-- ZFS Version: 2.1+
-- Linux Kernel Version: 5.15+
+- nexcage version (`nexcage version`): [e.g. 0.8.0]
+- Proxmox VE version (`pveversion`): [e.g. 9.1]
+- Installed from: [release binary / .deb / source]
+- Relevant config (`/etc/nexcage/config.json`, secrets removed):
 
 ## Steps to Reproduce
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+1. Command run, e.g. `nexcage create --name web-1 local:vztmpl/...`
+2. Exit code (`echo $?`)
+3. ...
 
 ## Expected Behavior
 A clear and concise description of what you expected to happen.

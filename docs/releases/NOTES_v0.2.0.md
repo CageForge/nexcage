@@ -260,4 +260,4 @@ The performance improvements, comprehensive testing, and complete documentation 
 
 ---
 
-*For detailed information, see the [User Guide](user_guide.md), [API Documentation](api.md), and [Performance Guide](performance.md).* 
+*For detailed information, see the User Guide, API Documentation and Performance Guide of the v0.2.0 release.*

@@ -205,7 +205,6 @@
     "виконує"
   ],
   "ignorePaths": [
-    "archive/**",
     "legacy/**",
     "zig-out/**",
     ".zig-cache/**",

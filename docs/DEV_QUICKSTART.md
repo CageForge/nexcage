@@ -66,7 +66,6 @@ Locally, mirror the Dockerfile: `git submodule update --init --recursive`,
 | `src/backends/proxmox-lxc/` | pct/pvesh driver (`driver.zig`, `pve.zig`) |
 | `src/core/` | Config, logging, shared types |
 | `deps/oci-spec-zig/` | OCI runtime/image types and the bundle parser |
-| `archive/` | Code and tests that no longer build, kept for reference |
 
 ## Proxmox E2E
 
