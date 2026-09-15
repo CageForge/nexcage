@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.8.0] - Unreleased
+## [0.8.0] - 2026-09-15
 
 MVP: a working command-line lifecycle for LXC containers on a Proxmox VE host.
 Release notes with upgrade guidance: `docs/releases/NOTES_v0.8.0.md`.
