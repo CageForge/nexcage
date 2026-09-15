@@ -20,8 +20,16 @@
 Proxmox VE host, and on that host:
 
 - **sudo without a password** for the runner user to run the checked-out
-  `zig-out/bin/nexcage`, `pct` and `pvesm`. nexcage needs root; the job stops
-  with an explicit error when `sudo -n` is refused.
+  `zig-out/bin/nexcage`, `pct` and `pvesm`, plus `mkdir`, `tar`, `tee`, `rm`
+  and `find` for the OCI bundle test. nexcage needs root; the job stops with an
+  explicit error when `sudo -n` is refused for nexcage.
+- **`pct exec` working under the runner service**, for the `kill` test. On the
+  current runner it fails with `Permission denied - Failed to rexec as memfd`:
+  `lxc-attach` re-executes itself from a sealed memfd, and the service's
+  sandbox refuses that. The likely cause is the hardening in
+  `scripts/setup_secure_runner.sh` (`MemoryDenyWriteExecute=true`,
+  `SystemCallFilter=@system-service`, `RestrictNamespaces=true`). Until
+  `pct exec` works, the job skips signal delivery with a warning.
 - **A container template** in storage `local` (`pveam download local …`), or
   `TPL` set in the runner environment.
 - **The bridge** `vmbr50`, or `BRIDGE` set in the runner environment.

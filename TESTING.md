@@ -43,7 +43,8 @@ write `/run/nexcage`; the arguments it passed are what matter.
    exit 2; `list` shows the container, and `list` without root exits 1
 5. `start` → `running`; `state --log-level warn <name>` (an option after the
    command) reports the right container; `kill <name> SIGCONT` succeeds and the
-   container keeps running; a malformed signal exits 2
+   container keeps running (skipped with a warning when `pct exec` itself fails
+   on the runner); a malformed signal exits 2
 6. `stop` → `stopped`; `kill` on it exits 1; `delete` → pct no longer lists it;
    `state` and `start` on it exit 1
 7. `run` → `running` → `stop` → `delete`
