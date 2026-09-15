@@ -65,9 +65,9 @@ jobs:
         path: zig-out/bin/nexcage
         retention-days: 7
 
-    # Drives the container lifecycle through nexcage itself. This job used to
-    # call pct directly, so it passed without nexcage ever creating anything.
-    - name: E2E lifecycle through nexcage (create/state/start/stop/delete)
+    # Drives containers through nexcage itself. This job used to call pct
+    # directly, so it passed without nexcage ever creating anything.
+    - name: E2E through nexcage (lifecycle, config, kill, run, OCI bundle)
       run: |
         set -euo pipefail
         LOG=e2e_lxc.log
@@ -119,51 +119,100 @@ jobs:
         EOF
 
         NAME="gh-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        RUN_NAME="$NAME-run"
+        OCI_NAME="$NAME-oci"
+        BUNDLE="/var/lib/nexcage/bundles/$OCI_NAME"
 
         vmid_of() { $SUDO pct list 2>/dev/null | awk -v n="$1" 'NR>1 && $NF==n {print $1}'; }
         cleanup() {
           set +e
-          id=$(vmid_of "$NAME")
-          [ -z "$id" ] && return 0
-          echo "[E2E] Cleanup vmid=$id"
-          $SUDO pct shutdown "$id" --timeout 30 --forceStop 1 >/dev/null 2>&1
-          $SUDO pct destroy "$id" --purge 1 >/dev/null 2>&1
+          for n in "$NAME" "$RUN_NAME" "$OCI_NAME"; do
+            id=$(vmid_of "$n")
+            [ -z "$id" ] && continue
+            echo "[E2E] Cleanup $n vmid=$id"
+            $SUDO pct shutdown "$id" --timeout 30 --forceStop 1 >/dev/null 2>&1
+            $SUDO pct destroy "$id" --purge 1 >/dev/null 2>&1
+          done
+          $SUDO rm -rf "$BUNDLE"
         }
         trap cleanup EXIT
 
         status_of() { nx state "$1" | sed -n 's/.*"status": "\([a-z]*\)".*/\1/p'; }
         expect_status() {
-          local want=$1 got=
+          local name=$1 want=$2 got=
           for _ in $(seq 1 30); do
-            got=$(status_of "$NAME" || true)
-            if [ "$got" = "$want" ]; then echo "[E2E] state: $got"; return 0; fi
+            got=$(status_of "$name" || true)
+            if [ "$got" = "$want" ]; then echo "[E2E] state of $name: $got"; return 0; fi
             sleep 2
           done
-          echo "::error::expected state '$want', last saw '$got'"
+          echo "::error::expected state '$want' for $name, last saw '$got'"
           return 1
         }
-        expect_failure() {
-          if "$@"; then echo "::error::expected failure: $*"; return 1; fi
-          echo "[E2E] failed as expected: $*"
+        # exit status 1 is a failed operation, 2 a usage error
+        expect_exit() {
+          local want=$1 rc=0
+          shift
+          "$@" || rc=$?
+          if [ "$rc" -ne "$want" ]; then echo "::error::expected exit $want, got $rc: $*"; return 1; fi
+          echo "[E2E] exit $rc as expected: $*"
+        }
+        conf_has() {
+          if ! $SUDO pct config "$1" | grep -qE "$2"; then
+            echo "::error::no line matching '$2' in pct config $1:"
+            $SUDO pct config "$1"
+            return 1
+          fi
         }
 
         echo "[E2E] create"
         nx create --name "$NAME" "$TPL"
-        expect_status stopped
+        expect_status "$NAME" stopped
+        ID=$(vmid_of "$NAME")
 
-        echo "[E2E] a duplicate name is refused"
-        expect_failure nx create --name "$NAME" "$TPL"
+        echo "[E2E] the config file reached the container (pct config $ID)"
+        conf_has "$ID" "^hostname: $NAME\$"
+        conf_has "$ID" "^net0: .*bridge=$BRIDGE(,|\$)"
+        conf_has "$ID" "^rootfs: $ROOTFS:.*size=2G"
+
+        echo "[E2E] exit codes: a duplicate name fails, bad usage is 2"
+        expect_exit 1 nx create --name "$NAME" "$TPL"
+        expect_exit 2 nx create --name bad_name "$TPL"
+        expect_exit 2 nx start --runtime bogus "$NAME"
 
         echo "[E2E] list shows the container"
         nx list | awk -F'\t' -v n="$NAME" '$7==n {found=1} END {exit !found}'
+        if [ -n "$SUDO" ]; then
+          echo "[E2E] list without root fails instead of printing an empty table"
+          expect_exit 1 "$NEXCAGE" list
+        fi
 
         echo "[E2E] start"
         nx start "$NAME"
-        expect_status running
+        expect_status "$NAME" running
+
+        echo "[E2E] a global option after the command"
+        got=$(nx state --log-level warn "$NAME" | sed -n 's/.*"id": "\(.*\)".*/\1/p')
+        if [ "$got" != "$NAME" ]; then
+          echo "::error::'state --log-level warn $NAME' reported id '$got'"
+          exit 1
+        fi
+
+        echo "[E2E] kill sends a signal to PID 1 through pct exec"
+        # pct exec itself is tried first. Where the runner service's sandbox
+        # stops lxc-attach ("Failed to rexec as memfd"), every pct exec fails,
+        # and that says something about the host, not about nexcage.
+        if exec_err=$($SUDO pct exec "$ID" -- true 2>&1); then
+          nx kill "$NAME" SIGCONT
+          expect_status "$NAME" running
+        else
+          echo "::warning::pct exec does not work on this runner, so signal delivery is not tested: $exec_err"
+        fi
+        expect_exit 2 nx kill "$NAME" 'TERM;id'
 
         echo "[E2E] stop"
         nx stop "$NAME"
-        expect_status stopped
+        expect_status "$NAME" stopped
+        expect_exit 1 nx kill "$NAME" SIGCONT
 
         echo "[E2E] delete"
         nx delete "$NAME"
@@ -173,11 +222,36 @@ jobs:
         fi
 
         echo "[E2E] commands on a missing container fail"
-        expect_failure nx state "$NAME"
-        expect_failure nx start "$NAME"
+        expect_exit 1 nx state "$NAME"
+        expect_exit 1 nx start "$NAME"
+
+        echo "[E2E] run creates and starts"
+        nx run --name "$RUN_NAME" "$TPL"
+        expect_status "$RUN_NAME" running
+        nx stop "$RUN_NAME"
+        expect_status "$RUN_NAME" stopped
+        nx delete "$RUN_NAME"
+
+        echo "[E2E] create from an OCI bundle whose rootfs is the extracted template"
+        $SUDO mkdir -p "$BUNDLE/rootfs"
+        $SUDO tar -xpf "$($SUDO pvesm path "$TPL")" -C "$BUNDLE/rootfs"
+        echo '{"ociVersion":"1.0.2","process":{"args":["/sbin/init"],"cwd":"/"},"root":{"path":"rootfs"}}' \
+          | $SUDO tee "$BUNDLE/config.json" >/dev/null
+        nx create --name "$OCI_NAME" "$BUNDLE"
+        expect_status "$OCI_NAME" stopped
+        if $SUDO pvesm list local --content vztmpl | grep -q "vztmpl/nexcage-$OCI_NAME-"; then
+          echo "::error::the template packed from the bundle is still on storage local"
+          exit 1
+        fi
+        nx start "$OCI_NAME"
+        expect_status "$OCI_NAME" running
+        nx stop "$OCI_NAME"
+        expect_status "$OCI_NAME" stopped
+        nx delete "$OCI_NAME"
+        $SUDO rm -rf "$BUNDLE"
 
         trap - EXIT
-        echo "[E2E] lifecycle passed"
+        echo "[E2E] all passed"
 
     - name: Upload E2E logs
       if: always()
@@ -207,4 +281,10 @@ jobs:
             done
             $SUDO pct destroy "$id" --purge 1 || true
           fi
+        done
+        # Bundles and packed templates a failed run can leave behind
+        $SUDO find /var/lib/nexcage/bundles -maxdepth 1 -name 'gh-e2e-*' -exec rm -rf {} + 2>/dev/null || true
+        for volid in $($SUDO pvesm list local --content vztmpl 2>/dev/null | awk '$1 ~ /:vztmpl\/nexcage-gh-e2e-/ {print $1}'); do
+          echo "[E2E] Final cleanup template $volid"
+          $SUDO rm -f "$($SUDO pvesm path "$volid")" || true
         done

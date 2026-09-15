@@ -37,13 +37,24 @@ write `/run/nexcage`; the arguments it passed are what matter.
 
 1. builds nexcage and runs `--help` / `version`
 2. writes `./config.json` with the runner's bridge and storage
-3. `create` from a template → `state` is `stopped` → a duplicate `create` fails
-4. `list` shows the container → `start` → `state` is `running`
-5. `stop` → `state` is `stopped` → `delete` → pct no longer lists it
-6. `state` and `start` on the deleted container fail
+3. `create` from a template → `state` is `stopped` → `pct config` shows the
+   hostname, the bridge and a 2 GB rootfs on the configured storage
+4. a duplicate `create` exits 1; an invalid name and an unknown `--runtime`
+   exit 2; `list` shows the container, and `list` without root exits 1
+5. `start` → `running`; `state --log-level warn <name>` (an option after the
+   command) reports the right container; `kill <name> SIGCONT` succeeds and the
+   container keeps running (skipped with a warning when `pct exec` itself fails
+   on the runner); a malformed signal exits 2
+6. `stop` → `stopped`; `kill` on it exits 1; `delete` → pct no longer lists it;
+   `state` and `start` on it exit 1
+7. `run` → `running` → `stop` → `delete`
+8. an OCI bundle under `/var/lib/nexcage/bundles/` whose `rootfs/` is the
+   extracted template: `create` → `stopped`, and the template packed from it is
+   gone from storage `local` → `start` → `running` → `stop` → `delete`
 
-A cleanup trap destroys the container if any step fails. Runner requirements
-are in [docs/CI_CD_SETUP.md](docs/CI_CD_SETUP.md).
+A cleanup trap destroys the containers and the bundle if any step fails, and a
+final step removes anything named `gh-e2e-*` a cancelled run left behind.
+Runner requirements are in [docs/CI_CD_SETUP.md](docs/CI_CD_SETUP.md).
 
 To run the same sequence by hand on a Proxmox VE host, as root:
 
