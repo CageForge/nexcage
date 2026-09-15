@@ -1,0 +1,10 @@
+{
+  "network": {
+    "bridge": "vmbr0"
+  },
+  "proxmox": {
+    "storage": "local-lvm",
+    "rootfs_size_gb": 8,
+    "unprivileged": true
+  }
+}

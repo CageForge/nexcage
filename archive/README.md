@@ -46,3 +46,12 @@ reached outside its module with relative imports and did not compile.
 
 The crun backend is built in CI by `.github/workflows/crun_build.yml`, through
 the Dockerfile.
+
+## packaging/
+
+`packaging/debian` is the debhelper packaging of the former proxmox-lxcri
+package, and `packaging/config/proxmox-lxcri.json` its configuration. They
+could not build a package for nexcage: there was no `debian/` directory at the
+repository root, `Build-Depends` named a `zig` package that does not exist,
+and `postinst` enabled a `proxmox-lxcri.service` that nexcage does not ship,
+under `set -e`. The `.deb` is now assembled by `scripts/build_deb_local.sh`.

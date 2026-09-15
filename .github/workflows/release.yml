@@ -7,44 +7,33 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to build (e.g., v0.7.2)'
+        description: 'Version tag to build (e.g., v0.8.0)'
         required: true
         type: string
-        default: 'v0.7.2'
 
 permissions:
   contents: write
 
+# Both builds run on GitHub-hosted runners: neither needs a Proxmox host, and
+# the self-hosted runner's workspace held a root-owned .cache that made every
+# checkout there fail. The .deb is assembled by scripts/build_deb_local.sh; the
+# dh-based packaging it replaces could not build (no debian/ at the root, a
+# Build-Depends on a zig package that does not exist, dh-systemd, which Ubuntu
+# no longer ships).
+
 jobs:
   build:
-    name: Build Release Binaries
-    runs-on: [proxmox]
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-linux
-            arch: amd64
-            artifact_name: nexcage-linux-x86_64
+    name: Build Release Binary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
 
     steps:
-      - name: Print environment info
-        run: |
-          echo "Runner: $(hostname)"
-          echo "Kernel: $(uname -a)"
-          echo "User: $(whoami)"
-          echo "Zig version: $(zig version 2>/dev/null || echo 'Zig will be installed')"
-
-      - name: Cleanup work directory
-        run: |
-          rm -rf /opt/github-runner/_work/nexcage/nexcage/.cache || true
-          rm -rf /opt/github-runner/_work/nexcage/nexcage || true
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.version || github.ref }}
-          fetch-depth: 0
-          clean: false
 
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
@@ -54,68 +43,55 @@ jobs:
       - name: Extract version from tag
         id: get_version
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.version }}
-            VERSION=${VERSION#v}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION=${GITHUB_REF#refs/tags/v}
+            VERSION="${GITHUB_REF#refs/tags/}"
           fi
-          echo "Extracted version: $VERSION"
-          echo "GITHUB_REF: ${{ github.ref }}"
-          echo "Event name: ${{ github.event_name }}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          VERSION="${VERSION#v}"
+          FILE_VERSION=$(tr -d '\n\r' < VERSION)
+          if [ "$VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::tag v$VERSION does not match the VERSION file ($FILE_VERSION)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: zig build test --summary all
 
       - name: Build
-        run: |
-          zig build -Doptimize=ReleaseFast
+        run: zig build -Doptimize=ReleaseSafe
 
       - name: Create artifact
         id: build
         run: |
           mkdir -p dist
-          BIN_NAME=nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
+          BIN_NAME=nexcage-${{ steps.get_version.outputs.version }}-amd64
           cp zig-out/bin/nexcage "dist/${BIN_NAME}"
           chmod +x "dist/${BIN_NAME}"
-          
-          # Generate SHA256 hash for SLSA provenance
+          "dist/${BIN_NAME}" version
+
           SHA256=$(sha256sum "dist/${BIN_NAME}" | cut -d' ' -f1)
-          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
-          echo "artifact_path=dist/${BIN_NAME}" >> $GITHUB_OUTPUT
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+          echo "artifact_path=dist/${BIN_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Generate SBOM (SPDX JSON)
         uses: anchore/sbom-action@v0
         with:
           path: dist
-          artifact-name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom
-          output-file: dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
+          artifact-name: nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom
+          output-file: dist/nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom.spdx.json
           format: spdx-json
 
       - name: Generate SBOM (CycloneDX JSON)
-        continue-on-error: true
         run: |
-          # Generate CycloneDX SBOM using cyclonedx-cli or alternative method
-          # Install cyclonedx-cli if available
-          if command -v cyclonedx >/dev/null 2>&1; then
-            cyclonedx --version || echo "cyclonedx-cli available"
-            cyclonedx dir -o json -o dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.cdx.json . || \
-            echo "CycloneDX generation failed, skipping"
-          elif command -v npm >/dev/null 2>&1; then
-            # Try via npm if cyclonedx-cli is available as npm package
-            npx -y @cyclonedx/cyclonedx-cli dir -o json -o dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.cdx.json . || \
-            echo "CycloneDX via npm failed, skipping"
-          else
-            # Create minimal CycloneDX JSON manually
-            cat > dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.cdx.json << EOF
+          cat > dist/nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom.cdx.json << EOF
           {
             "bomFormat": "CycloneDX",
             "specVersion": "1.4",
             "version": 1,
             "metadata": {
               "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-              "tools": [{
-                "name": "nexcage",
-                "version": "${{ steps.get_version.outputs.version }}"
-              }],
               "component": {
                 "type": "application",
                 "name": "nexcage",
@@ -125,44 +101,30 @@ jobs:
             "components": []
           }
           EOF
-            echo "Created minimal CycloneDX SBOM"
-          fi
 
-      - name: Upload artifact
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
-          path: dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
+          name: nexcage-${{ steps.get_version.outputs.version }}-amd64
+          path: dist/nexcage-${{ steps.get_version.outputs.version }}-amd64
 
-      - name: Upload SBOM artifacts
+      - name: Upload SBOMs
         uses: actions/upload-artifact@v4
         with:
-          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom
+          name: nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom
           path: |
-            dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.spdx.json
-            dist/nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.sbom.cdx.json
+            dist/nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom.spdx.json
+            dist/nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom.cdx.json
 
-      - name: Generate SLSA Provenance
-        id: slsa
-        continue-on-error: true  # SLSA requires additional setup
+      - name: Generate SLSA provenance (basic)
         run: |
-          # Generate minimal SLSA provenance (will be enhanced later)
-          ARTIFACT_PATH="${{ steps.build.outputs.artifact_path }}"
-          SHA256="${{ steps.build.outputs.sha256 }}"
-          
-          # Create provenance directory
-          mkdir -p dist
-          
-          # Generate basic provenance JSON
           cat > dist/provenance.json << EOF
           {
             "_type": "https://in-toto.io/Statement/v1",
             "subject": [
               {
                 "name": "${{ steps.build.outputs.artifact_path }}",
-                "digest": {
-                  "sha256": "${SHA256}"
-                }
+                "digest": { "sha256": "${{ steps.build.outputs.sha256 }}" }
               }
             ],
             "predicateType": "https://slsa.dev/provenance/v1",
@@ -176,158 +138,58 @@ jobs:
             }
           }
           EOF
-          
-          echo "SLSA provenance generated"
 
-      - name: Upload SLSA Provenance
+      - name: Upload provenance
         uses: actions/upload-artifact@v4
-        if: steps.slsa.outcome == 'success'
         with:
-          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.provenance
+          name: nexcage-${{ steps.get_version.outputs.version }}-amd64.provenance
           path: dist/provenance.json
 
   build-deb:
-    name: Build DEB Packages
-    runs-on: [proxmox]
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-            target: x86_64-linux
+    name: Build .deb (amd64)
+    runs-on: ubuntu-24.04
+    needs: build
+    timeout-minutes: 30
 
     steps:
-      - name: Print environment info
-        run: |
-          echo "Runner: $(hostname)"
-          echo "Kernel: $(uname -a)"
-          echo "User: $(whoami)"
-          command -v pct && pct version || echo "pct not found"
-          command -v pveversion && pveversion -v || echo "pveversion not found"
-
-      - name: Cleanup work directory
-        run: |
-          rm -rf /opt/github-runner/_work/nexcage/nexcage/.cache || true
-          rm -rf /opt/github-runner/_work/nexcage/nexcage || true
-      
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.version || github.ref }}
-          fetch-depth: 0
-          clean: false
-
-      - name: Install build dependencies
-        run: |
-          # On Proxmox runner, some dependencies may be pre-installed
-          sudo apt-get update
-          sudo apt-get install -y \
-            debhelper \
-            devscripts \
-            build-essential \
-            fakeroot \
-            lintian \
-            dh-systemd || echo "Some packages may already be installed"
 
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
           version: 0.15.1
 
-      # Single-arch (amd64) only per product constraints
+      - name: Build package
+        run: bash scripts/build_deb_local.sh
 
-      - name: Extract version from tag
-        id: get_version
+      - name: Install and run it
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.version }}
-            VERSION=${VERSION#v}
-          else
-            VERSION=${GITHUB_REF#refs/tags/v}
-          fi
-          echo "Extracted version: $VERSION"
-          echo "GITHUB_REF: ${{ github.ref }}"
-          echo "Event name: ${{ github.event_name }}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "debian_version=${VERSION}-1" >> $GITHUB_OUTPUT
+          DEB=dist/nexcage-${{ needs.build.outputs.version }}-amd64.deb
+          dpkg-deb --info "$DEB"
+          sudo apt-get install -y "./$DEB"
+          nexcage version
+          nexcage --help > /dev/null
+          man -w nexcage
 
-      - name: Prepare changelog
-        run: |
-          # Ensure changelog exists and update version
-          VERSION=${{ steps.get_version.outputs.version }}
-          DEB_VERSION="${VERSION}-1"
-          
-          # Update changelog if it exists, or create it
-          if [ -f packaging/debian/changelog ]; then
-            sed -i "1s/.*/nexcage (${DEB_VERSION}) stable; urgency=medium/" packaging/debian/changelog || true
-          fi
-
-      - name: Build DEB package (amd64)
-        run: |
-          # Create source tarball
-          VERSION=${{ steps.get_version.outputs.version }}
-          mkdir -p ../dist
-          
-          # Copy source to build directory (exclude .git for permissions)
-          mkdir -p ../build-deb
-          # Use rsync or cp with exclusion, or create tarball and extract
-          rsync -a --exclude='.git' --exclude='.github/workflows/*.disabled' --exclude='zig-out' --exclude='zig-cache' --exclude='dist' --exclude='test-reports' --exclude='*.deb' . ../build-deb/nexcage-${VERSION}/ || \
-          (mkdir -p ../build-deb/nexcage-${VERSION} && \
-           find . -maxdepth 1 ! -name '.' ! -name '.git' ! -name 'zig-out' ! -name 'zig-cache' ! -name 'dist' ! -name 'test-reports' ! -name '*.deb' -exec cp -r {} ../build-deb/nexcage-${VERSION}/ \;)
-          cd ../build-deb/nexcage-${VERSION}
-          
-          # Update changelog with current version
-          dch --newversion "${VERSION}-1" --distribution stable "Release v${VERSION}" || \
-          sed -i "1s/.*/nexcage (${VERSION}-1) stable; urgency=medium\n\n  * Release v${VERSION}\n\n -- NexCage Team <maintainers@nexcage.io>  $(date -R)/" packaging/debian/changelog
-          
-          # Build package (non-interactive, no signing)
-          DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -us -uc -b
-          
-          # Move packages to dist
-          cd ..
-          mv *.deb ../dist/
-          mv *.dsc ../dist/ 2>/dev/null || true
-          mv *.tar.* ../dist/ 2>/dev/null || true
-          mv *.changes ../dist/ 2>/dev/null || true
-          
-          # Rename with version
-          cd ../dist
-          for f in nexcage*.deb; do
-            mv "$f" "nexcage-${VERSION}-amd64.deb" 2>/dev/null || true
-          done
-
-      - name: Test DEB package
-        if: matrix.arch == 'amd64'
-        run: |
-          # Install dependencies
-          sudo apt-get update
-          
-          # Install the package (allow conflicts for testing)
-          sudo dpkg -i dist/nexcage-*.deb || sudo apt-get install -f -y
-          
-          # Basic functionality test
-          nexcage version || echo "Version check failed (non-fatal)"
-          nexcage --help || echo "Help check failed (non-fatal)"
-          
-          # Verify binary location
-          which nexcage || echo "Binary not in PATH (non-fatal)"
-
-      - name: Run lintian checks
-        run: |
-          lintian dist/*.deb || echo "Lintian warnings found (non-fatal)"
-
-      - name: Upload DEB artifacts
+      - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
-          name: nexcage-${{ steps.get_version.outputs.version }}-${{ matrix.arch }}.deb
+          name: nexcage-${{ needs.build.outputs.version }}-amd64.deb
           path: dist/*.deb
 
   release:
     name: Create Release
     runs-on: ubuntu-latest
     needs: [build, build-deb]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -337,12 +199,7 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release
-          # Binaries
-          find artifacts -name "nexcage-*" -type f ! -name "*.sbom*" ! -name "*.provenance*" -exec cp {} release/ \;
-          # SBOMs (SPDX JSON and CycloneDX JSON)
-          find artifacts -name "*.sbom*" -type f -exec cp {} release/ \;
-          # SLSA Provenance
-          find artifacts -name "*.provenance*" -type f -exec cp {} release/ \; || true
+          find artifacts -type f -exec cp {} release/ \;
           ls -la release/
 
       - name: Create checksums
@@ -351,39 +208,19 @@ jobs:
           sha256sum * > checksums.txt
           cat checksums.txt
 
-      - name: Extract release notes
-        id: extract_notes
+      - name: Check release notes exist
         run: |
-          # Extract release notes from CHANGELOG.md for current version
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.version }}
-            VERSION=${VERSION#v}
-          else
-            VERSION=${GITHUB_REF#refs/tags/v}
-          fi
-          echo "Extracting notes for version $VERSION"
-          
-          # Create release notes
-          if [ -f "docs/releases/NOTES_v${VERSION}.md" ]; then
-            echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
-            cat docs/releases/NOTES_v${VERSION}.md >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
-            echo "Release v${VERSION}" >> $GITHUB_OUTPUT
-            echo "" >> $GITHUB_OUTPUT
-            echo "See CHANGELOG.md for details." >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+          NOTES=docs/releases/NOTES_v${{ needs.build.outputs.version }}.md
+          if [ ! -f "$NOTES" ]; then
+            echo "::error::$NOTES is missing"
+            exit 1
           fi
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release/*
-          body: ${{ steps.extract_notes.outputs.RELEASE_NOTES }}
+          tag_name: v${{ needs.build.outputs.version }}
+          files: release/*
+          body_path: docs/releases/NOTES_v${{ needs.build.outputs.version }}.md
           draft: false
           prerelease: false
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

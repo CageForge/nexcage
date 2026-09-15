@@ -1,198 +1,70 @@
-# NexCage Runtime - Makefile
-# Enhanced with detailed test reporting
+# nexcage - Makefile
+#
+# Thin wrappers around zig build. The default build is Proxmox LXC only.
 
-.PHONY: help build build-vendored docs-serve docs-build prepare-crun headers-docker test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps
+PREFIX ?= /usr/local
+ZIG ?= zig
 
-# Default target
+.PHONY: help build release test install uninstall clean format lint check deb crun-docker crun-headers docs-serve docs-build
+.DEFAULT_GOAL := help
+
 help:
-	@echo "Nexcage OCI runetime - Available Commands:"
+	@echo "nexcage - available targets:"
 	@echo ""
-	@echo "Build Commands:"
-	@echo "  build          Build the project"
-	@echo "  build-vendored Build with vendored libcrun (-Duse-vendored-libcrun=true)"
-	@echo "  install        Install the binary"
-	@echo "  uninstall      Uninstall the binary"
-	@echo "  clean          Clean build artifacts"
-	@echo ""
-	@echo "Test Commands:"
-	@echo "  test           Run all tests with detailed reporting"
-	@echo "  test-unit      Run unit tests with detailed reporting"
-	@echo "  test-e2e       Run E2E tests with detailed reporting"
-	@echo "  test-proxmox   Run Proxmox only tests with detailed reporting"
-	@echo "  test-ci        Run CI tests with detailed reporting"
-	@echo "  test-all       Run all test suites with detailed reporting"
-	@echo ""
-	@echo "Development Commands:"
-	@echo "  format         Format source code"
-	@echo "  lint           Run linter checks"
-	@echo "  check          Run all checks (format, lint, test)"
-	@echo "  deps           Install build dependencies via apt"
-	@echo "  prepare-crun   Generate vendored crun headers & verify deps (zig build step)"
-	@echo "  headers-docker Generate headers in Docker container"
-	@echo "  docs-serve     Serve docs locally (Docker mkdocs)"
-	@echo "  docs-build     Build docs static site (Docker mkdocs)"
-	@echo ""
-	@echo "Report Commands:"
-	@echo "  report         Generate test report summary"
-	@echo "  report-clean   Clean old test reports"
-	@echo "  report-view    View latest test report"
+	@echo "  build         Debug build (zig-out/bin/nexcage)"
+	@echo "  release       ReleaseSafe build"
+	@echo "  test          Run the unit tests (zig build test)"
+	@echo "  install       Install to \$$(PREFIX)/bin (default /usr/local/bin)"
+	@echo "  uninstall     Remove the installed binary"
+	@echo "  clean         Remove build outputs"
+	@echo "  format        zig fmt src/ tests/"
+	@echo "  lint          zig fmt --check src/ tests/"
+	@echo "  check         lint + test"
+	@echo "  deb           Build dist/nexcage-<version>-amd64.deb"
+	@echo "  crun-docker   Build the opt-in crun backend in Docker"
+	@echo "  crun-headers  Generate vendored crun headers in Docker"
+	@echo "  docs-serve    Serve the docs locally (Docker mkdocs)"
+	@echo "  docs-build    Build the docs site (Docker mkdocs)"
 
-# Build commands
 build:
-	@echo "🔨 Building project..."
-	zig build
-	@echo "✅ Build completed successfully"
+	$(ZIG) build
 
-build-vendored:
-	@echo "🔨 Building project with vendored libcrun..."
-	zig build prepare-crun
-	zig build -Duse-vendored-libcrun=true
-	@echo "✅ Vendored build completed successfully"
+release:
+	$(ZIG) build -Doptimize=ReleaseSafe
 
-install: build
-	@echo "📦 Installing binary..."
-	zig build install
-	@echo "✅ Installation completed successfully"
+test:
+	$(ZIG) build test --summary all
+
+install: release
+	install -D -m 0755 zig-out/bin/nexcage $(DESTDIR)$(PREFIX)/bin/nexcage
 
 uninstall:
-	@echo "🗑️ Uninstalling binary..."
-	rm -f /usr/local/bin/nexcage
-	@echo "✅ Uninstallation completed successfully"
+	rm -f $(DESTDIR)$(PREFIX)/bin/nexcage
 
 clean:
-	@echo "🧹 Cleaning build artifacts..."
-	rm -rf zig-out/
-	rm -rf test-reports/
-	@echo "✅ Cleanup completed successfully"
+	rm -rf zig-out/ .zig-cache/ dist/
 
-# Test commands
-test: test-unit
-	@echo "🧪 Running all tests with detailed reporting..."
-
-test-unit:
-	@echo "🧪 Running unit tests with detailed reporting..."
-	@mkdir -p test-reports
-	@chmod +x scripts/run_tests_with_report.sh
-	@./scripts/run_tests_with_report.sh
-
-test-e2e:
-	@echo "🧪 Running E2E tests with detailed reporting..."
-	@mkdir -p test-reports
-	@chmod +x scripts/e2e_test_with_report.sh
-	@./scripts/e2e_test_with_report.sh
-
-test-proxmox:
-	@echo "🧪 Running Proxmox only tests with detailed reporting..."
-	@mkdir -p test-reports
-	@chmod +x scripts/proxmox_only_test.sh
-	@./scripts/proxmox_only_test.sh
-
-test-ci:
-	@echo "🧪 Running CI tests with detailed reporting..."
-	@mkdir -p test-reports
-	@chmod +x scripts/ci_test_with_report.sh
-	@./scripts/ci_test_with_report.sh
-
-test-all: test-unit test-e2e test-proxmox test-ci
-	@echo "🧪 Running all test suites with detailed reporting..."
-
-# Development commands
 format:
-	@echo "🎨 Formatting source code..."
-	zig fmt src/
-	zig fmt tests/
-	@echo "✅ Formatting completed successfully"
+	$(ZIG) fmt src/ tests/
 
 lint:
-	@echo "🔍 Running linter checks..."
-	zig fmt --check src/
-	zig fmt --check tests/
-	@echo "✅ Linting completed successfully"
+	$(ZIG) fmt --check src/ tests/
 
-check: format lint test
-	@echo "✅ All checks completed successfully"
+check: lint test
 
-deps:
-	@echo "📦 Installing dependencies..."
-	@echo "Installing system dependencies..."
-	sudo apt-get update -y
-	sudo apt-get install -y \
-	  build-essential autoconf automake libtool pkg-config \
-	  libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
-	  libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
-	@echo "✅ Dependencies installed successfully"
+deb:
+	bash scripts/build_deb_local.sh
 
-prepare-crun:
-	@echo "🧩 Preparing vendored crun headers & checking deps..."
-	zig build prepare-crun
-	@echo "✅ Preparation completed"
+# The crun backend needs the deps/crun submodules plus generated headers;
+# the Dockerfile does all of it from a clean clone.
+crun-docker:
+	docker build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t nexcage:crun .
 
-headers-docker:
-	@echo "🐳 Generating headers via Docker..."
+crun-headers:
 	bash scripts/gen_crun_headers_docker.sh
-	@echo "✅ Docker header generation completed"
+
 docs-serve:
-	@echo "📚 Serving docs at http://localhost:8000 ..."
 	bash scripts/mkdocs_serve.sh
 
 docs-build:
-	@echo "🏗️  Building docs into site/ ..."
 	bash scripts/mkdocs_build.sh
-
-# Report commands
-report:
-	@echo "📊 Generating test report summary..."
-	@mkdir -p test-reports
-	@if [ -d "test-reports" ] && [ "$(ls -A test-reports)" ]; then \
-		echo "## Test Report Summary - $(date)" > test-reports/summary.md; \
-		echo "" >> test-reports/summary.md; \
-		echo "### Available Reports:" >> test-reports/summary.md; \
-		echo "" >> test-reports/summary.md; \
-		ls -la test-reports/*.md | while read line; do \
-			file=$$(echo $$line | awk '{print $$9}'); \
-			size=$$(echo $$line | awk '{print $$5}'); \
-			date=$$(echo $$line | awk '{print $$6, $$7, $$8}'); \
-			echo "- **$$(basename $$file)**: $$size bytes ($$date)" >> test-reports/summary.md; \
-		done; \
-		echo "" >> test-reports/summary.md; \
-		echo "### Latest Reports:" >> test-reports/summary.md; \
-		echo "" >> test-reports/summary.md; \
-		ls -t test-reports/*.md | head -5 | while read file; do \
-			echo "#### $$(basename $$file)" >> test-reports/summary.md; \
-			echo "" >> test-reports/summary.md; \
-			head -20 "$$file" >> test-reports/summary.md; \
-			echo "" >> test-reports/summary.md; \
-			echo "---" >> test-reports/summary.md; \
-			echo "" >> test-reports/summary.md; \
-		done; \
-		echo "📊 Report summary generated: test-reports/summary.md"; \
-	else \
-		echo "❌ No test reports found. Run 'make test' first."; \
-	fi
-
-report-clean:
-	@echo "🧹 Cleaning old test reports..."
-	@if [ -d "test-reports" ]; then \
-		find test-reports -name "*.md" -mtime +7 -delete; \
-		find test-reports -name "*.log" -mtime +7 -delete; \
-		echo "✅ Old test reports cleaned successfully"; \
-	else \
-		echo "ℹ️ No test reports directory found"; \
-	fi
-
-report-view:
-	@echo "📖 Viewing latest test report..."
-	@if [ -d "test-reports" ] && [ "$(ls -A test-reports)" ]; then \
-		latest_report=$$(ls -t test-reports/*.md | head -1); \
-		echo "📄 Latest report: $$latest_report"; \
-		echo ""; \
-		cat "$$latest_report"; \
-	else \
-		echo "❌ No test reports found. Run 'make test' first."; \
-	fi
-
-# Special targets
-.PHONY: help build docs-serve docs-build test test-unit test-e2e test-ci test-all clean install uninstall format lint check deps report report-clean report-view
-
-# Default target
-.DEFAULT_GOAL := help

@@ -93,8 +93,8 @@ ARG BUILD_VERSION="dev"
 RUN rm -rf .zig-cache /root/.cache/zig
 
 # Vendored crun needs two generated header sets, and neither is produced by
-# `zig build`. The Makefile prescribes `zig build prepare-crun`, a step that
-# does not exist in build.zig — this is what actually works.
+# `zig build`; build.zig has no step for them. This is what actually works
+# (docs/DEVELOPMENT_WORKFLOW.md lists the same steps for a local build).
 RUN bash scripts/gen_crun_headers_local.sh
 
 # ocispec/*.h come from JSON schemas. generate.py is called directly rather

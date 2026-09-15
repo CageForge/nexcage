@@ -1,213 +1,85 @@
-# Installing Proxmox LXCRI
+# Installing nexcage
 
-## Requirements
+nexcage runs on the Proxmox VE host (8.x or 9.x, amd64) as root. It needs
+`pct`, `pvesh` and `pveversion`, which Proxmox VE provides.
 
-- Proxmox VE 7.0 or newer
-- Zig 0.15.1 or newer
-- ZFS utilities
-- Linux kernel 5.0 or newer
-- containerd
-- Kubelet
-- CNI plugins
+## From a release
 
-## Automatic Installation
+Each GitHub release carries the binary `nexcage-<version>-amd64`, the package
+`nexcage-<version>-amd64.deb`, SBOMs and `checksums.txt`.
 
-### Option 1: Download Pre-built Binary
+### .deb
 
-1. Download latest release:
 ```bash
-# Get latest version
-VERSION=$(curl -s https://api.github.com/repos/CageForge/nexcage/releases/latest | grep tag_name | cut -d'"' -f4 | sed 's/v//')
-
-# Download binary and checksum
-wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-linux-x86_64-v$VERSION.tar.gz
-wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-linux-x86_64-v$VERSION.tar.gz.sha256
-
-# Verify checksum
-sha256sum -c nexcage-linux-x86_64-v$VERSION.tar.gz.sha256
-
-# Extract and install
-tar -xzf nexcage-linux-x86_64-v$VERSION.tar.gz
-sudo mv nexcage /usr/local/bin/
+VERSION=0.8.0
+wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
+wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+apt install ./nexcage-$VERSION-amd64.deb
 ```
 
-2. Verify installation:
+The package installs `/usr/bin/nexcage`, a man page, bash completion and an
+example configuration at `/usr/share/doc/nexcage/examples/config.json`.
+
+### Binary
+
 ```bash
-nexcage --help
-nexcage version
+VERSION=0.8.0
+wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64
+wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+install -m 0755 nexcage-$VERSION-amd64 /usr/local/bin/nexcage
 ```
 
-### Option 2: Build from Source
+## From source
 
-1. Clone the repository:
 ```bash
 git clone https://github.com/CageForge/nexcage.git
 cd nexcage
+zig build -Doptimize=ReleaseSafe          # Zig 0.15.1
+install -m 0755 zig-out/bin/nexcage /usr/local/bin/nexcage
 ```
 
-2. Install dependencies:
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-  build-essential autoconf automake libtool pkg-config \
-  libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
-  libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
-```
+To build a `.deb` yourself: `bash scripts/build_deb_local.sh` (needs
+`dpkg-deb`), which writes `dist/nexcage-<version>-amd64.deb`.
 
-3. Install Zig 0.15.1:
-```bash
-# See https://ziglang.org/download/ for binary tarball
-zig version  # should print 0.15.1
-```
-
-4. Build the project:
-```bash
-zig build -Doptimize=ReleaseFast
-```
-
-5. Run the installation script:
-```bash
-sudo ./scripts/install.sh
-```
-
-## Manual Installation
-
-### 1. Install Dependencies
+## Configure
 
 ```bash
-# Install system packages
-apt-get update
-apt-get install -y \
-    containerd \
-    cri-o \
-    kubelet \
-    kubeadm \
-    kubectl \
-    kubernetes-cni \
-    zfsutils-linux \
-    fuse-overlayfs
+mkdir -p /etc/nexcage
+cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json   # .deb install
+# or: cp packaging/config/config.json /etc/nexcage/config.json            # source tree
 ```
 
-### 2. Configure CRI-O
+Set at least `proxmox.storage` to a storage that holds container volumes
+(`pvesm status` lists them) and `network.bridge` to your bridge. The keys are
+described in the README.
 
-1. Create configuration directory:
-```bash
-mkdir -p /etc/crio/crio.conf.d
-```
-
-2. Copy configuration:
-```bash
-cp crio.conf.d/10-nexcage.conf /etc/crio/crio.conf.d/
-```
-
-### 3. Configure Kubelet
-
-1. Create configuration directory:
-```bash
-mkdir -p /etc/kubernetes
-```
-
-2. Copy configuration:
-```bash
-cp kubelet.conf /etc/kubernetes/
-```
-
-### 4. Install Nexcage runtime
-
-1. Copy binary:
-```bash
-cp zig-out/bin/nexcage /usr/local/bin/
-chmod +x /usr/local/bin/nexcage
-```
-
-### 5. Configure CNI
-
-1. Install CNI plugins:
-```bash
-mkdir -p /opt/cni/bin
-curl -L https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz | tar -C /opt/cni/bin -xz
-```
-
-2. Install Cilium:
-```bash
-curl -L https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz | tar -xz
-mv cilium /usr/local/bin/
-```
-
-### 6. Configure Logging
-
-1. Create directories:
-```bash
-mkdir -p /run/nexcage
-mkdir -p /var/log/nexcage
-```
-
-2. Configure log rotation:
-```bash
-cat > /etc/logrotate.d/nexcage << EOF
-/var/log/nexcage/*.log {
-    daily
-    rotate 5
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0640 root root
-}
-EOF
-```
-
-### 7. Restart Services
+You also need a container template, for example:
 
 ```bash
-systemctl restart containerd kubelet nexcage
+pveam update
+pveam available --section system
+pveam download local debian-12-standard_12.7-1_amd64.tar.zst
 ```
 
-## Verify Installation
+## Verify
 
-1. Check service status:
 ```bash
-systemctl status nexcage
-systemctl status containerd
-systemctl status kubelet
+nexcage version
+nexcage list
+nexcage create --name smoke-1 local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst
+nexcage start smoke-1 && nexcage state smoke-1
+nexcage stop smoke-1 && nexcage delete smoke-1
 ```
 
-2. Check version:
+## Remove
+
 ```bash
-nexcage --version
+apt remove nexcage              # .deb install
+rm /usr/local/bin/nexcage       # binary install
+rm -rf /etc/nexcage /run/nexcage
 ```
 
-3. Check Proxmox connection:
-```bash
-nexcage info
-```
-
-## Troubleshooting
-
-### 1. containerd Issues
-
-Check logs:
-```bash
-journalctl -u containerd -f
-```
-
-### 2. Kubelet Issues
-
-Check logs:
-```bash
-journalctl -u kubelet -f
-```
-
-### 3. Nexcage Issues
-
-Check logs:
-```bash
-journalctl -u nexcage -f
-```
-
-## Additional Information
-
-- [Architecture](architecture.md)
-- [Configuration](configuration.md)
-- [Security](security.md)
-- [Monitoring](monitoring.md) 
+Containers created with nexcage are ordinary Proxmox VE containers and are not
+touched when nexcage is removed.
