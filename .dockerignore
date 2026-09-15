@@ -24,7 +24,6 @@ test_zig
 
 # Documentation (not needed for build)
 docs
-Roadmap
 *.md
 !VERSION
 
@@ -67,7 +66,6 @@ docker-compose*.yml
 .gitleaks.toml
 
 # Other development tools
-gitleaks
 CODEOWNERS
 CODE_OF_CONDUCT.md
 GOVERNANCE.md
@@ -75,7 +73,6 @@ MAINTAINERS.md
 SECURITY.md
 CONTRIBUTING.md
 TESTING.md
-MERGE_INSTRUCTIONS.md
 CHANGELOG.md
 NOTICE
 
