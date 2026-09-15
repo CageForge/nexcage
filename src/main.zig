@@ -33,7 +33,21 @@ pub const AppContext = struct {
 
         var advanced_logger: ?core.simple_advanced_logging.SimpleAdvancedLogging = null;
         if (logging_cfg.debug_mode or logging_cfg.enable_file_logging) {
-            advanced_logger = try core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, logging_cfg.debug_mode, logging_cfg.log_file_path);
+            // Open a file only when one was asked for. log_file_path always
+            // holds a default (/tmp/nexcage-<timestamp>.log), and --debug on
+            // its own used to create a new one on every run.
+            const log_path = if (logging_cfg.enable_file_logging) logging_cfg.log_file_path else null;
+            advanced_logger = core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, logging_cfg.debug_mode, log_path) catch |err| blk: {
+                // A log file that cannot be opened must not stop the command.
+                // A config or NEXCAGE_LOG_FILE pointing into a missing or
+                // unwritable directory made every invocation, --help included,
+                // fail with "nexcage: FileNotFound".
+                printError("warning: cannot open log file '{s}' ({s}); logging to stderr only", .{ log_path orelse "", @errorName(err) });
+                break :blk if (logging_cfg.debug_mode)
+                    core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, true, null) catch null
+                else
+                    null;
+            };
         }
         errdefer if (advanced_logger) |*logger| logger.deinit();
 
