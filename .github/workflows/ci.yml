@@ -45,6 +45,8 @@ jobs:
         run: zig build test --summary all
 
       - name: Smoke tests
+        # Actions runs this with bash -e, so a command expected to fail must
+        # be written "cmd || rc=$?"; "cmd; rc=$?" ends the step at cmd.
         run: |
           set -uo pipefail
           nx=./zig-out/bin/nexcage
@@ -55,12 +57,12 @@ jobs:
           $nx create --help >/dev/null || fail "create --help failed"
 
           # No Proxmox here: operations must fail with a clear message and exit 1
-          $nx start ci-smoke 2> err.txt; rc=$?
+          rc=0; $nx start ci-smoke 2> err.txt || rc=$?
           cat err.txt
           [ "$rc" -eq 1 ] || fail "start without pct: expected exit 1, got $rc"
           grep -q "not found in PATH" err.txt || fail "start without pct: no explanation on stderr"
 
-          $nx no-such-command 2> /dev/null; rc=$?
+          rc=0; $nx no-such-command 2> /dev/null || rc=$?
           [ "$rc" -eq 2 ] || fail "unknown command: expected exit 2, got $rc"
 
       - name: Upload binary (ReleaseSafe)
