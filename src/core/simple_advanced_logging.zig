@@ -18,7 +18,15 @@ pub const SimpleAdvancedLogging = struct {
 
         var file_logger: ?LogContext = null;
         if (log_file_path) |path| {
-            const file = try std.fs.cwd().createFile(path, .{});
+            // Every run shares the log file, so append to it; createFile's
+            // default truncated it on each invocation. Create the last
+            // directory if it is missing (e.g. /var/log/nexcage when running
+            // as root). One makeDir, not makePath: makePath retries while
+            // mkdir reports a missing parent, and on procfs it never stops.
+            if (std.fs.path.dirname(path)) |dir| std.fs.cwd().makeDir(dir) catch {};
+            const file = try std.fs.cwd().createFile(path, .{ .truncate = false });
+            errdefer file.close();
+            try file.seekFromEnd(0);
             file_logger = LogContext.init(allocator, file, .debug, "nexcage");
         }
 
