@@ -3,9 +3,6 @@ const types = @import("types.zig");
 const logging = @import("logging.zig");
 const constants = @import("constants.zig");
 const ArrayList = std.ArrayList;
-// Comptime validation available but not auto-validated due to Zig 0.15.1 type checking limitations
-// Use manually: comptime_validation.validateSandboxConfig() etc.
-// const comptime_validation = @import("comptime_validation.zig");
 
 /// Configuration loader and manager
 pub const ConfigLoader = struct {

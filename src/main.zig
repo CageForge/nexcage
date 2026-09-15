@@ -2,7 +2,6 @@ const std = @import("std");
 const core = @import("core");
 const cli = @import("cli");
 const backends = @import("backends");
-const integrations = @import("integrations");
 const utils = @import("utils");
 
 /// Main entry point for the modular architecture
