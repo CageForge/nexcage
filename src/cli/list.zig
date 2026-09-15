@@ -105,59 +105,19 @@ pub const ListCommand = struct {
     }
 
     fn listFromBackend(self: *Self, allocator: std.mem.Allocator, backend_type: core.types.RuntimeType, containers: *std.ArrayListUnmanaged(core.ContainerInfo)) !void {
-        _ = self; // Avoid unused warnings
         switch (backend_type) {
-            .lxc => {
-                // List LXC containers using backend
-                const sandbox_config = core.types.SandboxConfig{
-                    .allocator = allocator,
-                    .name = try allocator.dupe(u8, "default"),
-                    .runtime_type = .lxc,
-                    .resources = core.types.ResourceLimits{
-                        .memory = constants.DEFAULT_MEMORY_BYTES,
-                        .cpu = constants.DEFAULT_CPU_CORES,
-                        .disk = null,
-                        .network_bandwidth = null,
-                    },
-                    .security = null,
-                    .network = core.types.NetworkConfig{
-                        .bridge = try allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
-                        .ip = null,
-                        .gateway = null,
-                        .dns = null,
-                        .port_mappings = null,
-                    },
-                    .storage = null,
-                };
-                defer {
-                    allocator.free(sandbox_config.name);
-                    if (sandbox_config.network) |net| {
-                        if (net.bridge) |b| allocator.free(b);
-                    }
-                }
-
-                const proxmox_config = core.types.ProxmoxLxcBackendConfig{ .allocator = allocator };
-
-                const lxc_backend = backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config) catch {
-                    return; // Skip if LXC backend not available
-                };
-                defer lxc_backend.deinit();
-
-                const lxc_containers = lxc_backend.list(allocator) catch return;
-                defer allocator.free(lxc_containers);
-                
-                for (lxc_containers) |*c| {
-                    try containers.append(allocator, c.*);
-                }
-            },
             .proxmox_lxc => {
                 // List Proxmox LXC containers via driver
                 const proxmox_config = core.types.ProxmoxLxcBackendConfig{ .allocator = allocator };
 
-                const proxmox_backend = backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config) catch return;
+                const proxmox_backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config);
                 defer proxmox_backend.deinit();
+                if (self.base.logger) |log| proxmox_backend.setLogger(log);
 
-                const proxmox_containers = proxmox_backend.list(allocator) catch return;
+                // A failing `pct list` is an error, not an empty list. It was
+                // dropped here, so without pct or without root `list` printed
+                // only the header and exited 0.
+                const proxmox_containers = try proxmox_backend.list(allocator);
                 defer allocator.free(proxmox_containers);
                 
                 for (proxmox_containers) |*c| {
@@ -191,8 +151,7 @@ pub const ListCommand = struct {
             "  BACKEND  - Backend type (lxc, proxmox-lxc, crun, runc, vm)\n" ++
             "  NAMES    - Container names\n\n" ++
             "Notes:\n" ++
-            "  Automatically detects available backends and skips unavailable ones.\n" ++
-            "  Proxmox LXC containers are listed via 'pct list' command.\n");
+            "  Proxmox LXC containers are listed via 'pct list'; list fails when it does.\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

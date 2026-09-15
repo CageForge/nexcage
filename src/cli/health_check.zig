@@ -5,23 +5,23 @@ const base_command = @import("base_command.zig");
 /// Health check command for system integrity
 pub const HealthCommand = struct {
     const Self = @This();
-    
+
     name: []const u8 = "health",
     description: []const u8 = "Check system integrity and health",
     base: base_command.BaseCommand = .{},
-    
+
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
         self.base.setLogger(logger);
-        }
-        
+    }
+
     pub fn validate(_: *Self, _: []const []const u8) !void {
         // No validation needed for health check
     }
-    
+
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        _ = allocator;
-        return 
+        // Allocated like the other commands' help, so callers can free it
+        return allocator.dupe(u8,
             \\Health Check Command
             \\
             \\Usage: nexcage health [options]
@@ -44,27 +44,33 @@ pub const HealthCommand = struct {
             \\  - Process integrity (nexcage process, system resources)
             \\
             \\Exit codes:
-            \\  0  - All checks passed
-            \\  1  - Warnings detected
-            \\  2  - Failures detected
+            \\  0  - No check failed (warnings are reported but do not fail)
+            \\  1  - At least one check failed
             \\
-        ;
+        );
     }
-    
-    pub fn execute(self: *HealthCommand, _: core.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        _ = self;
+
+    pub fn execute(self: *HealthCommand, options: core.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        // --help used to run the whole check
+        if (options.help) {
+            const help_text = try self.help(allocator);
+            defer allocator.free(help_text);
+            try std.fs.File.stdout().writeAll(help_text);
+            return;
+        }
+
         std.debug.print("Starting system integrity check...\n", .{});
-        
+
         // Initialize integrity checker
         var checker = core.IntegrityChecker.init(allocator, null);
-        
+
         // Run integrity checks
         var report = try checker.checkSystemIntegrity();
         defer report.deinit();
-        
+
         // Print report
         try report.printReport(null);
-        
+
         // Determine exit code based on results
         const summary = report.getSummary();
         if (summary.failed > 0) {

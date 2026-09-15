@@ -28,10 +28,15 @@ pub const VersionCommand = struct {
     }
 
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
-        _ = self;
-        _ = options;
-
         const stdout = std.fs.File.stdout();
+
+        // --help used to print the version
+        if (options.help) {
+            const help_text = try self.help(allocator);
+            defer allocator.free(help_text);
+            try stdout.writeAll(help_text);
+            return;
+        }
 
         // Use version from core module (embedded at build time)
         // This is more reliable than reading from file at runtime
@@ -52,12 +57,11 @@ pub const VersionCommand = struct {
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        _ = allocator;
-
-        return "Usage: nexcage version\n\n" ++
+        // Allocated like the other commands' help, so callers can free it
+        return allocator.dupe(u8, "Usage: nexcage version\n\n" ++
             "Show version information for nexcage\n\n" ++
             "Options:\n" ++
-            "  -h, --help    Show this help message\n";
+            "  -h, --help    Show this help message\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

@@ -74,7 +74,7 @@ pub const CreateCommand = struct {
         // Use router for backend selection and execution
         var backend_router = router.BackendRouter.initWithDebug(allocator, self.base.logger, options.debug);
         const operation = router.Operation{ .create = router.CreateConfig{ .image = image } };
-        try backend_router.routeAndExecute(operation, container_id, null);
+        try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 
         try self.logCommandComplete("create");
     }

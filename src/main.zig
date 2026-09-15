@@ -163,7 +163,7 @@ fn run() !void {
     }
 
     // Parse runtime options
-    var options = try parseRuntimeOptions(allocator, command_name, command_args, &app.config);
+    var options = try parseRuntimeOptions(allocator, command_name, command_args);
     defer options.deinit();
 
     // Check if help was requested
@@ -262,13 +262,16 @@ fn printUsage() !void {
 }
 
 /// Parse runtime options from command line arguments
-fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, args: []const []const u8, config: *core.Config) !core.RuntimeOptions {
+fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, args: []const []const u8) !core.RuntimeOptions {
     var options = core.RuntimeOptions{
         .allocator = allocator,
         .command = parseCommand(command_name),
         .container_id = null,
         .image = null,
-        .runtime_type = config.runtime_type,
+        // Set only by an explicit --runtime; without one the routing rules in
+        // the config file choose. The config's runtime_type used to be copied
+        // here, and neither it nor --runtime was ever read.
+        .runtime_type = null,
         .config_file = null,
         .verbose = false,
         .debug = false,
@@ -280,6 +283,7 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         .env = null,
         .args = null,
     };
+    errdefer options.deinit();
 
     // Parse arguments
     var i: usize = 0;
@@ -294,7 +298,17 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             i += 2;
         } else if (std.mem.eql(u8, arg, "--runtime") and i + 1 < args.len) {
             const runtime_str = args[i + 1];
-            options.runtime_type = parseRuntimeType(runtime_str);
+            options.runtime_type = parseRuntimeType(runtime_str) orelse {
+                printError("unknown runtime '{s}'; expected lxc, crun, runc or vm", .{runtime_str});
+                failure_reported = true;
+                return error.InvalidInput;
+            };
+            i += 2;
+        } else if ((std.mem.eql(u8, arg, "--log-level") or std.mem.eql(u8, arg, "--log-file")) and i + 1 < args.len) {
+            // Global options, which LoggingConfig reads wherever they appear.
+            // After the command name they used to reach the generic "-..."
+            // branch below, which skipped only the flag, so its value became
+            // the container name: "start --log-level debug web" started "debug".
             i += 2;
         } else if (std.mem.eql(u8, arg, "--config") and i + 1 < args.len) {
             options.config_file = try allocator.dupe(u8, args[i + 1]);
@@ -374,10 +388,13 @@ fn parseCommand(command_str: []const u8) core.Command {
     return .help; // Default to help
 }
 
-/// Parse runtime type from string
-fn parseRuntimeType(runtime_str: []const u8) core.RuntimeType {
+/// Parse a --runtime value; null for one nexcage does not know
+fn parseRuntimeType(runtime_str: []const u8) ?core.RuntimeType {
     if (std.mem.eql(u8, runtime_str, "lxc") or std.mem.eql(u8, runtime_str, "proxmox-lxc")) return .lxc;
-    if (std.mem.eql(u8, runtime_str, "qemu") or std.mem.eql(u8, runtime_str, "vm")) return .qemu;
-    if (std.mem.eql(u8, runtime_str, "crun") or std.mem.eql(u8, runtime_str, "runc")) return .crun;
-    return .lxc; // Default to LXC
+    // The router sends only .vm to the VM backend; .qemu went to LXC
+    if (std.mem.eql(u8, runtime_str, "vm") or std.mem.eql(u8, runtime_str, "qemu")) return .vm;
+    if (std.mem.eql(u8, runtime_str, "crun")) return .crun;
+    // "runc" used to select crun
+    if (std.mem.eql(u8, runtime_str, "runc")) return .runc;
+    return null;
 }

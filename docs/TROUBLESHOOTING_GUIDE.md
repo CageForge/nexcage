@@ -208,12 +208,14 @@ cat /path/to/bundle/config.json | jq .
 
 **Solutions:**
 ```bash
-# 1. Check structure
-mkdir -p /tmp/test-bundle/rootfs
-echo '{"ociVersion":"1.0.0","process":{"args":["/bin/sh"]},"root":{"path":"rootfs"}}' > /tmp/test-bundle/config.json
+# 1. Bundles must live under /var/lib/nexcage/bundles/ or /tmp/nexcage-bundles/
+mkdir -p /var/lib/nexcage/bundles/test/rootfs
+echo '{"ociVersion":"1.0.0","process":{"args":["/sbin/init"]},"root":{"path":"rootfs"}}' > /var/lib/nexcage/bundles/test/config.json
+# rootfs/ has to boot as a system container, e.g. an extracted template
+tar --zstd -xpf /var/lib/vz/template/cache/debian-12-standard_12.7-1_amd64.tar.zst -C /var/lib/nexcage/bundles/test/rootfs
 
-# 2. Test with valid bundle
-./nexcage --debug create --name test --image /tmp/test-bundle
+# 2. Test with the bundle
+./nexcage --debug create --name test /var/lib/nexcage/bundles/test
 ```
 
 #### Problem: "Rootfs not found"

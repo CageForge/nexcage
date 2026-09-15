@@ -51,7 +51,7 @@ pub const StopCommand = struct {
         var backend_router = router.BackendRouter.initWithDebug(allocator, self.base.logger, options.debug);
 
         const operation = router.Operation{ .stop = {} };
-        try backend_router.routeAndExecute(operation, container_id, null);
+        try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 
         try self.logCommandComplete("stop");
     }
@@ -61,7 +61,7 @@ pub const StopCommand = struct {
         return allocator.dupe(u8, "Usage: nexcage stop --name <id> [--runtime <type>]\n\n" ++
             "Options:\n" ++
             "  --name <id>        Container/VM identifier\n" ++
-            "  --runtime <type>   Runtime: lxc|vm|crun (default: lxc)\n\n" ++
+            "  --runtime <type>   lxc|crun|runc|vm; overrides routing from the config file\n\n" ++
             "Notes:\n" ++
             "  If LXC tools are missing, command fails with UnsupportedOperation.\n");
     }

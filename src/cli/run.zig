@@ -61,7 +61,7 @@ pub const RunCommand = struct {
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
         const operation = router.Operation{ .run = router.RunConfig{ .image = image } };
-        try backend_router.routeAndExecute(operation, container_id, null);
+        try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 
         try self.logOperation("Running container", container_id);
         try self.logCommandComplete("run");

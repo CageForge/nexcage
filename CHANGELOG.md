@@ -14,10 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The CodeQL (C/C++) job in `security.yml` and `.github/codeql/codeql-config.yml`. Every run failed with "No source files found": CodeQL does not analyse Zig, and outside the ignored `deps/` there is a single header. `security.yml` now asks only for `contents: read`.
 - The DCO check (`dco.yml`) and the sign-off requirement in CONTRIBUTING.md. The action it used had been deleted upstream, so the check failed on every pull request; contributions no longer need a `Signed-off-by` trailer.
 - `archive/`, `Roadmap/`, scripts for the old SSH-based test and release process, the dependency-update scripts, `bump_version.sh` (it rewrote every version string in the docs, release notes included), committed test reports, files in `tests/` without tests, and 30 documents that described features nexcage does not have or were superseded by the current guides.
+- `src/utils/lxc_converter.zig`. Nothing called it, and it could not have produced a working template: it copied rootfs files without their executable bits, failed on the first symlink and wrote a non-executable `/sbin/init` over the real one.
 
 ### Changed
 - Issue templates moved from `docs/ISSUE_TEMPLATE` to `.github/ISSUE_TEMPLATE`, where GitHub uses them.
 - The documentation site navigation lists only current documents.
+- `--runtime <lxc|crun|runc|vm>` overrides the config file's routing for `create`, `run`, `start`, `stop`, `delete`, `kill` and `state`. It used to be parsed and ignored. An unknown value is a usage error (exit 2), and `runc` no longer selects crun.
+
+### Fixed
+- `list` printed an empty table and exited 0 when `pct list` failed, for example without root or on a host without pct. It now fails with pct's message.
+- `--log-level` and `--log-file` after the command name made their value the container name: `nexcage start --log-level debug web` started `debug`.
+- Creating a container from an OCI bundle gave `pct create` a template name that nothing had written, so it failed with "not found". The bundle's `rootfs/` is now packed with tar into `local:vztmpl/nexcage-<name>-<time>.tar.zst`, used for `pct create` and deleted afterwards.
+- A bundle without `config.json` or `rootfs/` crashed nexcage with `panic: invalid error code`. It is now a usage error that names what is missing, and a bundle outside `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/` says where bundles must be.
+- The VM backend, `run` on crun and runc, and `state` for crun, runc and VM logged a warning or printed a made-up `unknown` state and exited 0. They now fail with "not implemented".
+- `health --help` ran every check, and `version --help` printed the version. Both print help.
+- Memory leaks: the bundle path on every create from a bundle, and the output of `pct version` on every `health` run.
 
 ## [0.8.0] - 2026-09-15
 

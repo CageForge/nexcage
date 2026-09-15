@@ -182,10 +182,6 @@ pub const ProxmoxLxcDriver = struct {
         return self.zfs_mgr.getContainerDatasetMountpoint(dataset_name);
     }
 
-    fn processOciBundle(self: *Self, bundle_path: []const u8, container_name: []const u8) !?[]const u8 {
-        return self.oci_processor.processOciBundle(bundle_path, container_name, &self.template_manager);
-    }
-
     fn parseBundleImageFromConfig(self: *Self, config: *const bundle.OciBundleConfig) !?[]const u8 {
         return self.oci_processor.parseBundleImageFromConfig(config);
     }
@@ -211,8 +207,12 @@ pub const ProxmoxLxcDriver = struct {
         defer if (template_name) |tname| self.allocator.free(tname);
 
         var oci_bundle_path: ?[]const u8 = null;
+        defer if (oci_bundle_path) |bp| self.allocator.free(bp);
         var bundle_config: ?bundle.OciBundleConfig = null;
         defer if (bundle_config) |*bc| bc.deinit();
+        // The archive packed from a bundle's rootfs is needed only by pct create
+        var bundle_template: ?oci.BundleTemplate = null;
+        defer if (bundle_template) |*bt| bt.remove(self.allocator);
 
         if (config.image) |image_path| {
             const is_proxmox_template = std.mem.endsWith(u8, image_path, ".tar.zst") or
@@ -242,13 +242,29 @@ pub const ProxmoxLxcDriver = struct {
                     template_name = try self.allocator.dupe(u8, image_path);
                 } else {
                     // OCI Bundle processing
-                    const safe_path = try core.validation.PathSecurity.validateBundlePath(image_path, self.allocator);
+                    const safe_path = core.validation.PathSecurity.validateBundlePath(image_path, self.allocator) catch |err| {
+                        if (err == core.Error.ValidationError) {
+                            if (self.logger) |log| log.err("OCI bundle '{s}' must be under /var/lib/nexcage/bundles/ or /tmp/nexcage-bundles/", .{image_path}) catch {};
+                        }
+                        return err;
+                    };
                     oci_bundle_path = safe_path;
 
                     var bundle_parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
-                    bundle_config = try bundle_parser.parseBundle(safe_path);
+                    // BundleError is not part of core.Error, the set the
+                    // command registry casts every error into: a bundle
+                    // without config.json crashed nexcage with "panic:
+                    // invalid error code".
+                    bundle_config = bundle_parser.parseBundle(safe_path) catch |err| {
+                        if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+                        if (self.logger) |log| log.err("'{s}' is not a usable OCI bundle ({s}); it needs config.json and rootfs/", .{ safe_path, @errorName(err) }) catch {};
+                        return core.Error.InvalidInput;
+                    };
 
-                    template_name = try self.oci_processor.processOciBundle(safe_path, config.name, &self.template_manager);
+                    // pct creates containers only from templates. This used to
+                    // hand pct a template name that nothing had written.
+                    bundle_template = try self.oci_processor.createTemplateFromBundle(bundle_config.?.rootfs_path, config.name);
+                    template_name = try self.allocator.dupe(u8, bundle_template.?.volid);
                 }
             }
         }

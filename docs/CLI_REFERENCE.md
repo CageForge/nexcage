@@ -5,12 +5,12 @@ nexcage [--debug] [--log-level <level>] [--log-file <path>] <command> [options]
 ```
 
 Every command accepts `--help`. nexcage must run as root on the Proxmox VE
-host: it calls `pct`, `pvesh` and `pveversion`, and writes state under
+host: it calls `pct`, `pvesh`, `pvesm` and `pveversion`, and writes state under
 `/run/nexcage`.
 
 ## Global options
 
-These go before the command.
+These work before or after the command.
 
 | Option | Effect |
 |---|---|
@@ -25,13 +25,25 @@ help text).
 the first of `./config.json`, `/etc/nexcage/config.json`,
 `/etc/nexcage/nexcage.json` that exists; see the README for the keys.
 
+## Backend selection
+
+`create`, `run`, `start`, `stop`, `delete`, `kill` and `state` go to the
+backend chosen by the routing rules in the config file, Proxmox LXC by default.
+`--runtime <lxc|crun|runc|vm>` overrides that for one command.
+
+- `crun` and `runc` work only in a binary built with
+  `-Denable-backend-crun=true` or `-Denable-backend-runc=true`; otherwise the
+  command fails with exit 1. They have no `run` or `state`.
+- `vm` is not integrated yet: every command fails with "not implemented".
+- Any other value is a usage error (exit 2).
+
 ## Exit status
 
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | The operation failed: container not found, pct error, not a Proxmox VE host, invalid configuration file |
-| `2` | Invalid usage: unknown command, missing name or image |
+| `1` | The operation failed: container not found, pct error, not a Proxmox VE host, invalid configuration file, backend not built or not implemented |
+| `2` | Invalid usage: unknown command, missing name or image, unknown `--runtime`, unusable OCI bundle |
 
 A failure prints one line such as `nexcage: start: not found` after the log
 line that explains it.
@@ -55,13 +67,17 @@ unique on the node. The VMID comes from `pvesh get /cluster/nextid`. `--image
 | Proxmox template | `local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst` | Any `<storage>:vztmpl/…` volume |
 | Template file name | `debian-12-standard_12.7-1_amd64.tar.zst` | Looked up as `local:vztmpl/<file>` |
 | OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only; pulled to storage `local` |
-| OCI bundle directory | `/srv/bundles/web` | Absolute path containing `config.json` and `rootfs/` |
+| OCI bundle directory | `/var/lib/nexcage/bundles/web` | Under `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/`, containing `config.json` and `rootfs/` |
 
 The container gets `eth0` on `network.bridge` with DHCP, 512 MiB of memory and
 one core unless the OCI bundle sets limits. Its root filesystem goes to
 `proxmox.storage` (`<storage>:<rootfs_size_gb>`) when that is configured.
-For OCI bundles, mounts are added as `mpX` entries and the user namespace maps
-to `nesting=1,keyctl=1`.
+
+For an OCI bundle, nexcage packs `rootfs/` with tar into
+`local:vztmpl/nexcage-<name>-<time>.tar.zst`, creates the container from that
+template and deletes the archive. The rootfs is used as it is, so it must boot
+as a system container: an image without an init will not start. Mounts are
+added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
 
 ### run
 
@@ -112,7 +128,8 @@ nexcage list
 ```
 
 Tab-separated columns `ID IMAGE COMMAND CREATED STATUS BACKEND NAMES`, from
-`pct list`. `ID` is the VMID and `NAMES` the container name.
+`pct list`. `ID` is the VMID and `NAMES` the container name. When `pct list`
+fails, `list` fails too (exit 1) instead of printing an empty table.
 
 ### state
 

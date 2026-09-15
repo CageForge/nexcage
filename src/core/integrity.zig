@@ -36,6 +36,11 @@ pub const IntegrityChecker = struct {
         // Check if pct command is available
         const pct_check = self.runCommand(&[_][]const u8{"pct", "version"});
         if (pct_check) |result| {
+            // runCommand hands over both buffers; these were never freed
+            defer {
+                self.allocator.free(result.stdout);
+                self.allocator.free(result.stderr);
+            }
             if (result.exit_code == 0) {
                 try report.addCheck("proxmox_pct_available", .pass, "pct command available", .{});
             } else {

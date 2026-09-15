@@ -91,13 +91,14 @@ pub const BackendRouter = struct {
         self.allocator.free(sandbox_config.name);
     }
 
-    pub fn routeAndExecute(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
+    /// `runtime` is an explicit --runtime. Without one, the routing rules in
+    /// the config file (which support regex patterns) pick the backend.
+    pub fn routeAndExecute(self: *Self, operation: Operation, container_id: []const u8, runtime: ?types.RuntimeType, config: ?Config) !void {
         var config_loader = config_module.ConfigLoader.init(self.allocator);
         var cfg = try config_loader.loadDefault();
         defer cfg.deinit();
 
-        // Routing supports regex patterns from the config file
-        const runtime_type = cfg.getRoutedRuntime(container_id);
+        const runtime_type = runtime orelse cfg.getRoutedRuntime(container_id);
         if (self.logger) |log| {
             log.debug("Routing container '{s}' to runtime: {s}", .{ container_id, @tagName(runtime_type) }) catch {};
         }
@@ -167,11 +168,7 @@ pub const BackendRouter = struct {
             .stop => try crun_backend.stop(container_id),
             .delete => try crun_backend.delete(container_id),
             .kill => |kill_cfg| try crun_backend.kill(container_id, kill_cfg.signal),
-            .run => {
-                if (self.logger) |log| {
-                    try log.warn("Crun run operation not implemented", .{});
-                }
-            },
+            .run => return self.notImplemented("run", "crun"),
             .state => {
                 // State operation handled by command
             },
@@ -194,11 +191,7 @@ pub const BackendRouter = struct {
             .stop => try runc_backend.stop(container_id),
             .delete => try runc_backend.delete(container_id),
             .kill => |kill_cfg| try runc_backend.kill(container_id, kill_cfg.signal),
-            .run => {
-                if (self.logger) |log| {
-                    try log.warn("Runc run operation not implemented", .{});
-                }
-            },
+            .run => return self.notImplemented("run", "runc"),
             .state => {
                 // State operation handled by command
             },
@@ -208,19 +201,9 @@ pub const BackendRouter = struct {
     fn executeVm(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
         _ = config;
         _ = container_id;
-
-        switch (operation) {
-            .create => |create_config| {
-                if (self.logger) |log| {
-                    try log.warn("Proxmox VM backend not fully integrated yet. VM creation for image {s} skipped.", .{create_config.image});
-                }
-            },
-            .start, .stop, .delete, .run, .state, .kill => {
-                if (self.logger) |log| {
-                    try log.warn("Proxmox VM backend not fully integrated yet. VM operation skipped.", .{});
-                }
-            },
-        }
+        // This logged a warning and returned success, so `create` reported a
+        // VM that was never created and exited 0.
+        return self.notImplemented(@tagName(operation), "Proxmox VM");
     }
 
     /// The error must belong to core.types.Error: the command registry
@@ -228,6 +211,14 @@ pub const BackendRouter = struct {
     fn backendNotBuilt(self: *Self, name: []const u8) types.Error {
         if (self.logger) |log| {
             log.err("The {s} backend is not built into this binary; rebuild with -Denable-backend-{s}=true", .{ name, name }) catch {};
+        }
+        return types.Error.UnsupportedOperation;
+    }
+
+    /// For operations a backend does not have. Same error-set rule as above.
+    fn notImplemented(self: *Self, operation: []const u8, backend: []const u8) types.Error {
+        if (self.logger) |log| {
+            log.err("{s} is not implemented for the {s} backend", .{ operation, backend }) catch {};
         }
         return types.Error.UnsupportedOperation;
     }

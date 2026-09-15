@@ -3,9 +3,21 @@ const core = @import("core");
 const common = @import("common.zig");
 const oci_spec = @import("oci_spec");
 const bundle = oci_spec.runtime.bundle;
-const template_manager = @import("template_manager.zig");
-const utils = @import("utils");
-const lxc_converter = utils.lxc_converter;
+/// A template archive packed from an OCI bundle's rootfs.
+pub const BundleTemplate = struct {
+    /// Volume ID for pct create: local:vztmpl/nexcage-<name>-<timestamp>.tar.zst
+    volid: []u8,
+    /// The archive on the host
+    path: []u8,
+
+    /// Deletes the archive. pct create has unpacked it by then, and names
+    /// with a timestamp would otherwise pile up in the template list.
+    pub fn remove(self: *BundleTemplate, allocator: std.mem.Allocator) void {
+        std.fs.deleteFileAbsolute(self.path) catch {};
+        allocator.free(self.volid);
+        allocator.free(self.path);
+    }
+};
 
 pub const OciProcessor = struct {
     const Self = @This();
@@ -27,87 +39,46 @@ pub const OciProcessor = struct {
         return null;
     }
 
-    pub fn processOciBundle(self: *Self, bundle_path: []const u8, container_name: []const u8, template_mgr: *template_manager.TemplateManager) !?[]const u8 {
-        if (self.logger) |log| try log.info("Processing OCI bundle: {s}", .{bundle_path});
+    /// Packs a bundle's rootfs into a template archive on storage `local` for
+    /// pct create. The rootfs is used as it is, so it has to boot as a system
+    /// container, init included.
+    ///
+    /// Before this, create logged "Successfully converted OCI bundle to
+    /// template" and gave pct a template name that nothing had written.
+    pub fn createTemplateFromBundle(self: *Self, rootfs_path: []const u8, container_name: []const u8) !BundleTemplate {
+        const volid = try std.fmt.allocPrint(self.allocator, "local:vztmpl/nexcage-{s}-{d}.tar.zst", .{ container_name, std.time.timestamp() });
+        errdefer self.allocator.free(volid);
 
-        var parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
-        var cfg = try parser.parseBundle(bundle_path);
-        defer cfg.deinit();
+        // The storage decides where its templates live. `pvesm path` only
+        // computes the path, so the file does not have to exist yet.
+        const path_res = try common.runCommand(self.allocator, self.logger, &.{ "pvesm", "path", volid });
+        defer {
+            self.allocator.free(path_res.stdout);
+            self.allocator.free(path_res.stderr);
+        }
+        const path = std.mem.trim(u8, path_res.stdout, " \t\r\n");
+        if (path_res.exit_code != 0 or !std.fs.path.isAbsolute(path)) {
+            if (self.logger) |log| log.err("Cannot place a template on storage 'local' (pvesm path {s}): {s}", .{ volid, std.mem.trim(u8, path_res.stderr, " \t\r\n") }) catch {};
+            return core.Error.OperationFailed;
+        }
+        const owned_path = try self.allocator.dupe(u8, path);
+        errdefer self.allocator.free(owned_path);
 
-        const maybe_image = try self.parseBundleImageFromConfig(&cfg);
-        if (maybe_image) |image_ref| {
-            defer self.allocator.free(image_ref);
-            if (template_mgr.getTemplate(image_ref) != null) return image_ref;
+        if (self.logger) |log| log.info("Packing OCI bundle rootfs {s} into {s}", .{ rootfs_path, volid }) catch {};
+
+        // tar keeps modes, ownership, symlinks and device nodes
+        const tar_res = try common.runCommand(self.allocator, self.logger, &.{ "tar", "--zstd", "--numeric-owner", "-cpf", owned_path, "-C", rootfs_path, "." });
+        defer {
+            self.allocator.free(tar_res.stdout);
+            self.allocator.free(tar_res.stderr);
+        }
+        if (tar_res.exit_code != 0) {
+            std.fs.deleteFileAbsolute(owned_path) catch {};
+            if (self.logger) |log| log.err("Packing {s} failed: {s}", .{ rootfs_path, std.mem.trim(u8, tar_res.stderr, " \t\r\n") }) catch {};
+            return core.Error.OperationFailed;
         }
 
-        const template_name = try std.fmt.allocPrint(self.allocator, "{s}-{d}", .{ container_name, std.time.timestamp() });
-        defer self.allocator.free(template_name);
-
-        if (self.logger) |log| try log.info("Successfully converted OCI bundle to template: {s}", .{template_name});
-
-        var template_info = try template_manager.TemplateInfo.init(self.allocator, template_name, 0, .oci_bundle);
-        errdefer template_info.deinit(self.allocator);
-
-        var metadata_parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
-        var metadata_cfg = metadata_parser.parseBundle(bundle_path) catch |err| {
-            if (self.logger) |log| log.warn("Failed to parse bundle for metadata: {}", .{err}) catch {};
-            try template_mgr.addTemplate(template_name, template_info);
-            return try self.allocator.dupe(u8, template_name);
-        };
-        defer metadata_cfg.deinit();
-
-        var metadata = template_manager.TemplateMetadata.init(self.allocator);
-        errdefer metadata.deinit(self.allocator);
-
-        if (metadata_cfg.image_name) |name| metadata.image_name = try self.allocator.dupe(u8, name);
-        if (metadata_cfg.image_tag) |tag| metadata.image_tag = try self.allocator.dupe(u8, tag);
-
-        if (metadata_cfg.entrypoint) |ep| {
-            var entrypoint_array = try self.allocator.alloc([]const u8, ep.len);
-            errdefer {
-                for (0..ep.len) |idx| self.allocator.free(entrypoint_array[idx]);
-                self.allocator.free(entrypoint_array);
-            }
-            for (ep, 0..) |arg, i| entrypoint_array[i] = try self.allocator.dupe(u8, arg);
-            metadata.entrypoint = entrypoint_array;
-        }
-
-        if (metadata_cfg.cmd) |cmd| {
-            var cmd_array = try self.allocator.alloc([]const u8, cmd.len);
-            errdefer {
-                for (0..cmd.len) |idx| self.allocator.free(cmd_array[idx]);
-                self.allocator.free(cmd_array);
-            }
-            for (cmd, 0..) |arg, i| cmd_array[i] = try self.allocator.dupe(u8, arg);
-            metadata.cmd = cmd_array;
-        }
-
-        if (metadata_cfg.working_directory) |wd| metadata.working_directory = try self.allocator.dupe(u8, wd);
-
-        if (metadata_cfg.net_devices) |devices| {
-            var device_meta = try self.allocator.alloc(template_manager.TemplateMetadata.NetDeviceMetadata, devices.len);
-            errdefer {
-                for (device_meta) |dev| {
-                    self.allocator.free(dev.alias);
-                    self.allocator.free(dev.bridge);
-                    if (dev.host_name) |hn| self.allocator.free(hn);
-                }
-                self.allocator.free(device_meta);
-            }
-            for (devices, 0..) |device, i| {
-                device_meta[i] = .{};
-                device_meta[i].alias = try self.allocator.dupe(u8, device.alias);
-                const bridge_ref = device.name orelse (self.config.default_bridge orelse core.constants.DEFAULT_BRIDGE_NAME);
-                device_meta[i].bridge = try self.allocator.dupe(u8, bridge_ref);
-                if (device.name) |name| device_meta[i].host_name = try self.allocator.dupe(u8, name);
-            }
-            metadata.net_devices = device_meta;
-        }
-
-        template_info.metadata = metadata;
-        try template_mgr.addTemplate(template_name, template_info);
-
-        return try self.allocator.dupe(u8, template_name);
+        return .{ .volid = volid, .path = owned_path };
     }
 
     pub fn validateBundleVolumes(self: *Self, bundle_path: []const u8, pve_client: *const common.PveClient) !void {
