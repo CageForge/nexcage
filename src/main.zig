@@ -33,7 +33,21 @@ pub const AppContext = struct {
 
         var advanced_logger: ?core.simple_advanced_logging.SimpleAdvancedLogging = null;
         if (logging_cfg.debug_mode or logging_cfg.enable_file_logging) {
-            advanced_logger = try core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, logging_cfg.debug_mode, logging_cfg.log_file_path);
+            // Open a file only when one was asked for. log_file_path always
+            // holds a default (/tmp/nexcage-<timestamp>.log), and --debug on
+            // its own used to create a new one on every run.
+            const log_path = if (logging_cfg.enable_file_logging) logging_cfg.log_file_path else null;
+            advanced_logger = core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, logging_cfg.debug_mode, log_path) catch |err| blk: {
+                // A log file that cannot be opened must not stop the command.
+                // A config or NEXCAGE_LOG_FILE pointing into a missing or
+                // unwritable directory made every invocation, --help included,
+                // fail with "nexcage: FileNotFound".
+                printError("warning: cannot open log file '{s}' ({s}); logging to stderr only", .{ log_path orelse "", @errorName(err) });
+                break :blk if (logging_cfg.debug_mode)
+                    core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, true, null) catch null
+                else
+                    null;
+            };
         }
         errdefer if (advanced_logger) |*logger| logger.deinit();
 
@@ -73,8 +87,22 @@ pub const AppContext = struct {
     // Legacy provider initialization methods removed - functionality moved to modular backend system
 };
 
-/// Main function
-pub fn main() !void {
+/// Set once a failure has been reported to the user, so main() does not add a
+/// second, less specific line for the same error.
+var failure_reported = false;
+
+/// Exit status: 0 on success, 1 when an operation failed, 2 for usage errors.
+/// Returning the error from main instead would print Zig's error return trace,
+/// which tells a user nothing about their container.
+pub fn main() u8 {
+    run() catch |err| {
+        if (!failure_reported) printError("{s}", .{describeError(err)});
+        return exitCodeFor(err);
+    };
+    return 0;
+}
+
+fn run() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -142,7 +170,7 @@ pub fn main() !void {
     // Check if help was requested
     if (options.help) {
         // Execute command (which will handle help)
-        try app.command_registry.execute(command_name, options, allocator);
+        try executeCommand(&app, command_name, options, allocator);
 
         // Log command completion - safely handle logger errors
         if (app.advanced_logger) |*logger| {
@@ -152,12 +180,57 @@ pub fn main() !void {
     }
 
     // Execute command
-    try app.command_registry.execute(command_name, options, allocator);
+    try executeCommand(&app, command_name, options, allocator);
 
     // Log command completion - safely handle logger errors
     if (app.advanced_logger) |*logger| {
         logger.logCommandComplete(command_name, true) catch {};
     }
+}
+
+/// Runs a command and reports a failure as one line on stderr. The detail —
+/// which pct call failed and what it printed — was already logged by the layer
+/// that saw it; this line names the command and the outcome.
+fn executeCommand(app: *AppContext, command_name: []const u8, options: core.RuntimeOptions, allocator: std.mem.Allocator) !void {
+    app.command_registry.execute(command_name, options, allocator) catch |err| {
+        const any_err: anyerror = err;
+        switch (any_err) {
+            error.CommandNotFound => printError("unknown command '{s}'; run 'nexcage --help' for the list of commands", .{command_name}),
+            error.InvalidInput => printError("{s}: invalid arguments; run 'nexcage {s} --help'", .{ command_name, command_name }),
+            else => printError("{s}: {s}", .{ command_name, describeError(any_err) }),
+        }
+        failure_reported = true;
+        return err;
+    };
+}
+
+fn describeError(err: anyerror) []const u8 {
+    return switch (err) {
+        error.NotFound => "not found",
+        error.PermissionDenied => "permission denied; nexcage needs root on the Proxmox host",
+        error.UnsupportedOperation => "not supported on this host or by this build",
+        error.Timeout => "timed out",
+        error.InvalidInput, error.ValidationError => "invalid input",
+        error.InvalidConfig => "invalid configuration file",
+        error.OperationFailed => "operation failed",
+        error.OutOfMemory => "out of memory",
+        else => @errorName(err),
+    };
+}
+
+fn exitCodeFor(err: anyerror) u8 {
+    return switch (err) {
+        error.CommandNotFound, error.InvalidInput, error.ValidationError => 2,
+        else => 1,
+    };
+}
+
+fn printError(comptime format: []const u8, args: anytype) void {
+    var buffer: [512]u8 = undefined;
+    var stderr_writer = std.fs.File.stderr().writerStreaming(&buffer);
+    const out = &stderr_writer.interface;
+    out.print("nexcage: " ++ format ++ "\n", args) catch return;
+    out.flush() catch return;
 }
 
 /// Top-level usage. This is command output, not a log message: it goes to

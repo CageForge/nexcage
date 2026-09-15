@@ -9,7 +9,15 @@ pub const DEFAULT_MEMORY_BYTES: u64 = DEFAULT_MEMORY_MB * 1024 * 1024;
 pub const DEFAULT_CPU_CORES: f32 = 1.0;
 
 // Network constants
-pub const DEFAULT_BRIDGE_NAME: []const u8 = "vmbr50";
+// vmbr0 is the bridge a Proxmox VE install creates. This used to be vmbr50,
+// which exists only on the CI runner; set "network.bridge" in the config file
+// for anything else.
+pub const DEFAULT_BRIDGE_NAME: []const u8 = "vmbr0";
+
+// Storage constants
+// Root filesystem size used when "proxmox.storage" is set without
+// "proxmox.rootfs_size_gb"; matches the Proxmox VE web UI default.
+pub const DEFAULT_ROOTFS_SIZE_GB: u32 = 8;
 
 // VM constants
 pub const DEFAULT_VM_ID: u32 = 100;
@@ -33,7 +41,11 @@ test "CPU constants" {
 }
 
 test "network constants" {
-    try std.testing.expectEqualStrings(DEFAULT_BRIDGE_NAME, "vmbr50");
+    try std.testing.expectEqualStrings(DEFAULT_BRIDGE_NAME, "vmbr0");
+}
+
+test "storage constants" {
+    try std.testing.expect(DEFAULT_ROOTFS_SIZE_GB == 8);
 }
 
 test "VM constants" {

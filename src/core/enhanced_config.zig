@@ -116,7 +116,7 @@ pub const EnhancedConfigLoader = struct {
         try writer.print("  \"log_file\": \"/var/log/nexcage.log\",\n", .{});
         try writer.print("  \"data_dir\": \"/var/lib/nexcage\",\n", .{});
         try writer.print("  \"network\": {{\n", .{});
-        try writer.print("    \"bridge\": \"lxcbr0\"\n", .{});
+        try writer.print("    \"bridge\": \"vmbr0\"\n", .{});
         try writer.print("  }}\n", .{});
         try writer.print("}}\n", .{});
         try writer.print("```\n\n", .{});

@@ -1,5 +1,8 @@
 {
     "proxmox": {
+    "storage": "local-lvm",
+    "rootfs_size_gb": 8,
+    "unprivileged": true,
     "pct_path": "/usr/bin/pct",
     "node": "mgr",
     "timeout": 30,
@@ -35,7 +38,7 @@
         "image_path": "/var/lib/nexcage/images"
     },
     "network": {
-        "bridge": "vmbr50",
+        "bridge": "vmbr0",
         "dns_servers": ["8.8.8.8", "8.8.4.4"]
     }
-} 
+}

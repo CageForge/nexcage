@@ -196,6 +196,16 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Creating Proxmox LXC container: {s}", .{config.name});
         }
 
+        // Every other command finds a container by name, so names must be
+        // unique. Checked before any image is pulled.
+        if (self.pve_client.getVmidByName(config.name)) |existing_vmid| {
+            defer self.allocator.free(existing_vmid);
+            if (self.logger) |log| log.err("Container '{s}' already exists (vmid {s})", .{ config.name, existing_vmid }) catch {};
+            return core.Error.OperationFailed;
+        } else |err| {
+            if (err != core.Error.NotFound) return err;
+        }
+
         // 1. Process image / template
         var template_name: ?[]const u8 = null;
         defer if (template_name) |tname| self.allocator.free(tname);
@@ -238,14 +248,9 @@ pub const ProxmoxLxcDriver = struct {
             }
         }
 
-        // 2. Generate and validate VMID
-        const vmid = try self.pve_client.generateVmid(config.name);
+        // 2. Take the next free VMID from the cluster
+        const vmid = try self.pve_client.nextVmid();
         defer self.allocator.free(vmid);
-
-        if (try self.pve_client.vmidExists(vmid)) {
-            if (self.logger) |log| log.err("Container with VMID {s} already exists.", .{vmid}) catch {};
-            return core.Error.OperationFailed;
-        }
 
         // 3. Resolve final template string
         var final_template: []const u8 = undefined;
@@ -302,12 +307,22 @@ pub const ProxmoxLxcDriver = struct {
         // OS Type & Unprivileged
         const is_oci = std.mem.endsWith(u8, final_template, ".tar") and !std.mem.endsWith(u8, final_template, ".tar.zst");
         if (!is_oci) {
-            try args_builder.appendSlice(&[_][]const u8{ "--ostype", self.config.default_ostype orelse "ubuntu", "--unprivileged", if (self.config.default_unprivileged) |u| if (u) "1" else "0" else "0" });
+            // pct detects the OS type from the template, so only pass one that
+            // was configured; "ubuntu" was forced here for every template.
+            if (self.config.default_ostype) |ostype| try args_builder.appendSlice(&[_][]const u8{ "--ostype", ostype });
+            try args_builder.appendSlice(&[_][]const u8{ "--unprivileged", if (self.config.default_unprivileged orelse false) "1" else "0" });
         } else if (self.config.default_unprivileged) |u| {
             if (u) try args_builder.appendSlice(&[_][]const u8{ "--unprivileged", "1" });
         }
 
-        if (zfs_dataset) |ds| try args_builder.appendSlice(&[_][]const u8{ "--rootfs", ds });
+        if (zfs_dataset) |ds| {
+            try args_builder.appendSlice(&[_][]const u8{ "--rootfs", ds });
+        } else if (self.config.default_storage) |storage| {
+            // A new volume on a Proxmox storage is "<storage>:<size in GiB>"
+            const rootfs = try std.fmt.allocPrint(self.allocator, "{s}:{d}", .{ storage, self.config.rootfs_size_gb orelse core.constants.DEFAULT_ROOTFS_SIZE_GB });
+            try allocated_args.append(rootfs);
+            try args_builder.appendSlice(&[_][]const u8{ "--rootfs", rootfs });
+        }
 
         // 6. Execute create
         const result = try common.runCommand(self.allocator, self.logger, args_builder.items);
@@ -316,15 +331,16 @@ pub const ProxmoxLxcDriver = struct {
             self.allocator.free(result.stderr);
         }
 
+        // Any non-zero exit is a failure. Output containing "already exists"
+        // used to be let through, reporting success for a container that was
+        // never created.
         if (result.exit_code != 0) {
-            if (std.mem.indexOf(u8, result.stderr, "already exists") == null) {
-                if (zfs_dataset) |ds| {
-                    const failed = try std.mem.concat(self.allocator, u8, &.{ ds, "-failed" });
-                    defer self.allocator.free(failed);
-                    _ = common.runCommand(self.allocator, self.logger, &.{ "zfs", "rename", "-r", ds, failed }) catch {};
-                }
-                return self.pve_client.mapPctError(result.stderr);
+            if (zfs_dataset) |ds| {
+                const failed = try std.mem.concat(self.allocator, u8, &.{ ds, "-failed" });
+                defer self.allocator.free(failed);
+                _ = common.runCommand(self.allocator, self.logger, &.{ "zfs", "rename", "-r", ds, failed }) catch {};
             }
+            return self.pve_client.mapPctError(result.stderr);
         }
 
         // 7. Post-creation setup
@@ -491,7 +507,7 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Starting Proxmox LXC container: {s}", .{container_id});
         }
 
-        const vmid = try self.pve_client.getVmidByName(container_id);
+        const vmid = try self.resolveVmid(container_id);
         defer self.allocator.free(vmid);
 
         try self.pve_client.start(vmid);
@@ -506,7 +522,7 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Stopping Proxmox LXC container: {s}", .{container_id});
         }
 
-        const vmid = try self.pve_client.getVmidByName(container_id);
+        const vmid = try self.resolveVmid(container_id);
         defer self.allocator.free(vmid);
 
         try self.pve_client.stop(vmid);
@@ -519,10 +535,20 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Deleting Proxmox LXC container: {s}", .{container_id});
         }
 
-        const vmid = try self.pve_client.getVmidByName(container_id);
+        const vmid = try self.resolveVmid(container_id);
         defer self.allocator.free(vmid);
 
         try self.pve_client.delete(vmid);
+
+        // Drop the state nexcage persisted for this container. The name matched
+        // a pct hostname, but never let it address anything above /run/nexcage.
+        if (std.mem.indexOfScalar(u8, container_id, '/') == null and
+            !std.mem.eql(u8, container_id, ".") and !std.mem.eql(u8, container_id, ".."))
+        {
+            const state_path = try std.fmt.allocPrint(self.allocator, "/run/nexcage/{s}", .{container_id});
+            defer self.allocator.free(state_path);
+            std.fs.cwd().deleteTree(state_path) catch {};
+        }
 
         // ZFS cleanup if needed (renaming with -delete suffix was a specific feature)
         if (self.config.zfs_pool) |pool| {
@@ -536,7 +562,7 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Send signal to container using pct exec kill
     pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
-        const vmid = try self.pve_client.getVmidByName(container_id);
+        const vmid = try self.resolveVmid(container_id);
         defer self.allocator.free(vmid);
         try self.pve_client.kill(vmid, signal);
     }
@@ -570,6 +596,17 @@ pub const ProxmoxLxcDriver = struct {
 
     pub fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
         return self.pve_client.getVmidByName(name);
+    }
+
+    /// Name → VMID for commands that act on an existing container, with the
+    /// not-found case logged under the name the user typed.
+    fn resolveVmid(self: *Self, container_id: []const u8) ![]u8 {
+        return self.pve_client.getVmidByName(container_id) catch |err| {
+            if (err == core.Error.NotFound) {
+                if (self.logger) |log| log.err("Container '{s}' not found", .{container_id}) catch {};
+            }
+            return err;
+        };
     }
 
     pub fn vmidExists(self: *Self, vmid: []const u8) !bool {
