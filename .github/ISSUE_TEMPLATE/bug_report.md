@@ -11,7 +11,7 @@ assignees: ''
 A clear and concise description of what the bug is.
 
 ## Environment
-- nexcage version (`nexcage version`): [e.g. 0.8.0]
+- nexcage version (`nexcage version`): [e.g. 0.9.0]
 - Proxmox VE version (`pveversion`): [e.g. 9.1]
 - Installed from: [release binary / .deb / source]
 - Relevant config (`/etc/nexcage/config.json`, secrets removed):

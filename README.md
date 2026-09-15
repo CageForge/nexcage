@@ -7,7 +7,7 @@ creates, starts, stops, deletes and inspects containers through `pct` and
 
 ## Status
 
-Version 0.8.0 is the MVP scope:
+Status as of version 0.9.0:
 
 | | |
 |---|---|

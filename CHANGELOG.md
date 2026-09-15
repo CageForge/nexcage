@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-15
+
+Release notes with upgrade guidance: `docs/releases/NOTES_v0.9.0.md`.
+
 ### Added
 - `tests/sim/run.sh` (`make sim`) runs every command against fake `pct`, `pvesh`, `pvesm`, `pveversion` and `pveam`, with nexcage as uid 0 in a user namespace. It checks the arguments passed, exit codes, output and state files, and fails on any allocator leak or panic. CI runs it on every pull request.
 - `--config <path>`, before or after the command, reads configuration from that file instead of the default locations; a missing or unparsable file is an error. It used to be parsed and ignored.

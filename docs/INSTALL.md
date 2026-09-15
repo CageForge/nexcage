@@ -11,7 +11,7 @@ Each GitHub release carries the binary `nexcage-<version>-amd64`, the package
 ### .deb
 
 ```bash
-VERSION=0.8.0
+VERSION=0.9.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
@@ -24,7 +24,7 @@ example configuration at `/usr/share/doc/nexcage/examples/config.json`.
 ### Binary
 
 ```bash
-VERSION=0.8.0
+VERSION=0.9.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
