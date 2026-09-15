@@ -6,7 +6,7 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 
 - [x] LICENSE (Apache-2.0 or compatible)
 - [x] CODE_OF_CONDUCT.md
-- [x] CONTRIBUTING.md (includes DCO information)
+- [x] CONTRIBUTING.md
 - [x] SECURITY.md (vuln reporting)
 - [x] GOVERNANCE.md
 - [x] MAINTAINERS.md
@@ -39,12 +39,11 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
   - OpenSSF Scorecards (`.github/workflows/scorecards.yml` - new)
   - Weekly scheduled runs for continuous monitoring
 
-- [~] **DCO/CLA**
-  - DCO check workflow (`.github/workflows/dco.yml`) exists but is broken: the
-    action it uses (`chef-cookbooks/community_cookbook_dco_check`) was deleted
-    upstream, so it fails on every PR. Commits in the history carry no
-    `Signed-off-by` trailer. Needs a policy decision before it is replaced.
-  - DCO documentation in CONTRIBUTING.md
+- [ ] **DCO/CLA** — not used
+  - The DCO check was removed on 2026-09-15: its action had been deleted
+    upstream, so it failed on every PR, and no commit carried a
+    `Signed-off-by` trailer. Contributions are accepted under the Apache
+    License 2.0 without a sign-off.
 
 - [x] Release artifacts (GitHub Releases with binaries, SBOMs, provenance)
 
@@ -69,10 +68,6 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 - **Trivy**: Filesystem scanning in `security.yml`
 - **Gitleaks**: Secret scanning in `security.yml`
 
-### DCO Check (`.github/workflows/dco.yml`)
-- Intended to check every PR commit for a `Signed-off-by:` trailer
-- Currently fails before running: its action no longer exists upstream
-
 ## Compliance Status
 
 **Overall Status**: [~] **Partial**
@@ -82,7 +77,7 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 - ✅ SBOM (SPDX + CycloneDX) generation
 - ✅ SLSA Provenance (basic)
 - ✅ Code scanning (CodeQL + Scorecards)
-- ❌ DCO enforcement: the check is broken and sign-off is not practised yet
+- ➖ DCO / CLA: not used; contributions need no sign-off
 
 ## Optional Enhancements
 
@@ -98,4 +93,3 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 - [CNCF Project Requirements](https://www.cncf.io/about/charter/)
 - [OpenSSF Best Practices](https://openssf.org/best-practices/)
 - [SLSA Framework](https://slsa.dev/)
-- [DCO](https://developercertificate.org/)

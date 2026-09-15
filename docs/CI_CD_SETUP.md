@@ -13,7 +13,6 @@
 | `release.yml` | ubuntu-24.04 | tag `v*` | Tests, ReleaseSafe binary, `.deb`, SBOMs, GitHub release |
 | `dependency_check.yml` | ubuntu-latest | weekly | New OCI spec / crun releases; at most one open issue per dependency |
 | `scorecards.yml`, `pages.yml`, `docs_mike.yml` | ubuntu-latest | various | OpenSSF Scorecards, documentation site |
-| `dco.yml` | ubuntu-latest | PR | **Broken:** the action it uses was deleted upstream. Pending a decision on sign-off policy |
 
 ## Self-hosted Proxmox runner
 
