@@ -1,0 +1,13 @@
+#!/bin/bash
+# Fake pvesm: `path` maps local:vztmpl/<file> into $SIM/cache, like a dir storage.
+SIM=${SIM:?}
+echo "pvesm $*" >> "$SIM/calls"
+case "$1" in
+  path)
+    case "$2" in
+      local:vztmpl/*) mkdir -p "$SIM/cache"; echo "$SIM/cache/${2#local:vztmpl/}" ;;
+      *) echo "fake pvesm: unsupported volume $2" >&2; exit 2 ;;
+    esac
+    ;;
+  *) echo "fake pvesm: unsupported $*" >&2; exit 99 ;;
+esac

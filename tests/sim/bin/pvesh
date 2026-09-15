@@ -1,0 +1,16 @@
+#!/bin/bash
+# Fake pvesh: next free VMID, and oci-registry-pull adds the pulled .tar to $SIM/templates.
+SIM=${SIM:?}
+echo "pvesh $*" >> "$SIM/calls"
+case "$1 $2" in
+  "get /cluster/nextid")
+    max=$(awk 'BEGIN{m=99} $1>m {m=$1} END {print m}' "$SIM/db" 2>/dev/null || echo 99)
+    echo "$((max + 1))"
+    ;;
+  "create /nodes/"*)
+    [ -e "$SIM/fail_pull" ] && { echo "pull failed" >&2; exit 1; }
+    ref=$4; tag=${ref##*:}; img=${ref%:*}; img=${img##*/}
+    echo "local:vztmpl/${img}_${tag}.tar" >> "$SIM/templates"
+    ;;
+  *) echo "fake pvesh: unsupported $*" >&2; exit 99 ;;
+esac

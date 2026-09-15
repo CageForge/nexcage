@@ -1,0 +1,4 @@
+#!/bin/bash
+# Fake zfs: not available, so nexcage never reaches a real pool.
+echo "zfs $*" >> "${SIM:?}/calls"
+exit 1

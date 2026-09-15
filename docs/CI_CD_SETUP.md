@@ -4,8 +4,8 @@
 
 | Workflow | Runs on | Trigger | What it checks |
 |---|---|---|---|
-| `ci.yml` | ubuntu-24.04 | push/PR to `main` | Debug and ReleaseSafe builds, `zig build test`, smoke tests of exit codes. **The required check.** |
-| `proxmox_e2e.yml` | self-hosted, `proxmox` | push/PR to `main`/`develop` | create → state → start → stop → delete through the built binary on Proxmox VE |
+| `ci.yml` | ubuntu-24.04 | push/PR to `main` | Debug and ReleaseSafe builds, `zig build test`, smoke tests of exit codes; every command against fake Proxmox tools (`tests/sim/run.sh`). **The required check.** |
+| `proxmox_e2e.yml` | self-hosted, `proxmox` | push/PR to `main`/`develop` | Through the built binary on Proxmox VE: create → state → start → stop → delete, `pct config` against the config file, exit codes, `kill`, `run`, create from an OCI bundle |
 | `crun_build.yml` | ubuntu-24.04 | push to `main`; PRs touching build, Dockerfile or crun | Docker build with `-Denable-backend-crun=true` |
 | `memory_leak_check.yml` | ubuntu-22.04 | push/PR | Valgrind over basic commands |
 | `security.yml` | ubuntu-latest | push/PR to `main`, weekly | Semgrep, Trivy, Gitleaks (non-blocking) |

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `tests/sim/run.sh` (`make sim`) runs every command against fake `pct`, `pvesh`, `pvesm`, `pveversion` and `pveam`, with nexcage as uid 0 in a user namespace. It checks the arguments passed, exit codes, output and state files, and fails on any allocator leak or panic. CI runs it on every pull request.
+
 ### Removed
 - Source that nothing used: `src/integrations/` (bfc, proxmox-api, zfs) with the `enable-zfs`, `enable-bfc` and `enable-proxmox-api` build options; `core/router.zig`, `advanced_logging.zig`, `metrics.zig`, `json_logging.zig`, `comptime_validation.zig`; `proxmox-lxc/pct.zig`, `performance.zig`, `simple_performance.zig`, `state_manager.zig`, `vmid_manager.zig`; `crun/types.zig`. Checked by building the default, runc and VM configurations and running the tests without them.
 - The `deps/bfc` submodule, used only by the integrations module.

@@ -5,7 +5,7 @@
 PREFIX ?= /usr/local
 ZIG ?= zig
 
-.PHONY: help build release test install uninstall clean format lint check deb crun-docker crun-headers docs-serve docs-build
+.PHONY: help build release test sim install uninstall clean format lint check deb crun-docker crun-headers docs-serve docs-build
 .DEFAULT_GOAL := help
 
 help:
@@ -14,6 +14,7 @@ help:
 	@echo "  build         Debug build (zig-out/bin/nexcage)"
 	@echo "  release       ReleaseSafe build"
 	@echo "  test          Run the unit tests (zig build test)"
+	@echo "  sim           Run every command against fake Proxmox tools (tests/sim)"
 	@echo "  install       Install to \$$(PREFIX)/bin (default /usr/local/bin)"
 	@echo "  uninstall     Remove the installed binary"
 	@echo "  clean         Remove build outputs"
@@ -34,6 +35,9 @@ release:
 
 test:
 	$(ZIG) build test --summary all
+
+sim: build
+	bash tests/sim/run.sh
 
 install: release
 	install -D -m 0755 zig-out/bin/nexcage $(DESTDIR)$(PREFIX)/bin/nexcage

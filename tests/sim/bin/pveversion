@@ -1,0 +1,5 @@
+#!/bin/bash
+# Fake pveversion: reports 8.4.1 unless $SIM/pvever holds another version.
+echo "pveversion $*" >> "${SIM:?}/calls"
+echo "proxmox-ve: $(cat "$SIM/pvever" 2>/dev/null || echo 8.4.1) (running kernel: 6.8.12-9-pve)"
+echo "pve-manager: 8.4.1 (running version: 8.4.1/2a5fa54a)"
