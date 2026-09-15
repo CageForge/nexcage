@@ -47,8 +47,11 @@ pub const KillCommand = struct {
             }
         }
 
-        // Minimal validation of signal token (letters, numbers, SIG prefix or number)
-        try validateSignal(signal);
+        // A usage error before any backend is touched
+        if (core.signals.parse(signal) == null) {
+            if (self.base.logger) |log| log.err("unknown signal '{s}'; use a name such as TERM or SIGKILL, or a number from 1 to {d}", .{ signal, core.signals.max }) catch {};
+            return types.Error.InvalidInput;
+        }
 
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
         const op = router.Operation{ .kill = router.KillConfig{ .signal = signal } };
@@ -60,9 +63,12 @@ pub const KillCommand = struct {
         return allocator.dupe(u8,
             "Usage: nexcage kill [--signal|-s SIGNAL] <name>\n" ++
             "       nexcage kill <name> [SIGNAL]\n\n" ++
-            "Send a signal to PID 1 of a running container. Default is SIGTERM.\n\n" ++
+            "Send a signal to the container's init process from the host. Default is SIGTERM.\n" ++
+            "The kernel delivers it only if init handles that signal, except SIGKILL and\n" ++
+            "SIGSTOP; SIGKILL always stops the container. Use 'stop' for a clean shutdown.\n\n" ++
             "Options:\n" ++
-            "  -s, --signal STRING   Signal name (e.g. SIGTERM, SIGKILL) or number\n" ++
+            "  -s, --signal STRING   Name in any case, with or without SIG (TERM, SIGKILL),\n" ++
+            "                        or a number from 1 to 64\n" ++
             "  -h, --help            Show this help\n"
         );
     }
@@ -72,14 +78,3 @@ pub const KillCommand = struct {
         try validation.ValidationUtils.requireNonEmptyArgs(args);
     }
 };
-
-fn validateSignal(sig: []const u8) !void {
-    // Accept alnum and underscore, and digits for numeric signals
-    if (sig.len == 0 or sig.len > 32) return types.Error.InvalidInput;
-    for (sig) |c| {
-        const ok = (c >= 'A' and c <= 'Z') or (c >= 'a' and c <= 'z') or (c >= '0' and c <= '9') or (c == '_');
-        if (!ok) return types.Error.InvalidInput;
-    }
-}
-
-

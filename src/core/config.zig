@@ -4,6 +4,34 @@ const logging = @import("logging.zig");
 const constants = @import("constants.zig");
 const ArrayList = std.ArrayList;
 
+/// Set from --config
+var explicit_path: ?[]const u8 = null;
+
+/// Makes loadDefault read `path` instead of searching the default locations,
+/// or restores the search with null. `path` must outlive every later load;
+/// main passes its argv.
+pub fn setExplicitPath(path: ?[]const u8) void {
+    explicit_path = path;
+}
+
+test "an explicit path replaces the default search, and must exist" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(.{ .sub_path = "alt.json", .data = "{\"network\":{\"bridge\":\"vmbr42\"}}" });
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, "alt.json");
+    defer std.testing.allocator.free(path);
+
+    setExplicitPath(path);
+    defer setExplicitPath(null);
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadDefault();
+    defer cfg.deinit();
+    try std.testing.expectEqualStrings("vmbr42", cfg.network.bridge.?);
+
+    setExplicitPath("/nonexistent/nexcage-config.json");
+    try std.testing.expectError(types.Error.FileNotFound, loader.loadDefault());
+}
+
 /// Configuration loader and manager
 pub const ConfigLoader = struct {
     const Self = @This();
@@ -18,6 +46,10 @@ pub const ConfigLoader = struct {
 
     /// Load configuration from default locations
     pub fn loadDefault(self: *Self) !Config {
+        // --config replaces the search: a missing file is an error there, not
+        // a reason to fall back to the defaults
+        if (explicit_path) |path| return self.loadFromFile(path);
+
         // Try to load from default locations in order
         const default_paths = [_][]const u8{
             "./config.json",

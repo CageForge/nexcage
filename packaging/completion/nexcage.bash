@@ -8,19 +8,19 @@ _nexcage() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     local commands="create start stop delete list state kill run help version"
-    local global_opts="--debug --log-level --log-file --help"
+    local global_opts="--debug --log-level --log-file --config --help"
 
     case "$prev" in
         --log-level)
             COMPREPLY=( $(compgen -W "trace debug info warn error fatal" -- "$cur") )
             return 0
             ;;
-        --log-file)
+        --log-file|--config)
             COMPREPLY=( $(compgen -f -- "$cur") )
             return 0
             ;;
         -s|--signal)
-            COMPREPLY=( $(compgen -W "SIGTERM SIGKILL SIGINT SIGHUP SIGUSR1 SIGUSR2" -- "$cur") )
+            COMPREPLY=( $(compgen -W "SIGTERM SIGKILL SIGINT SIGHUP SIGUSR1 SIGUSR2 SIGCONT SIGSTOP" -- "$cur") )
             return 0
             ;;
     esac
@@ -29,7 +29,7 @@ _nexcage() {
     local i cmd=""
     for ((i = 1; i < COMP_CWORD; i++)); do
         case "${COMP_WORDS[i]}" in
-            --log-level|--log-file) ((i++)) ;;
+            --log-level|--log-file|--config) ((i++)) ;;
             -*) ;;
             *) cmd="${COMP_WORDS[i]}"; break ;;
         esac
