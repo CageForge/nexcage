@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The VM backend, `run` on crun and runc, and `state` for crun, runc and VM logged a warning or printed a made-up `unknown` state and exited 0. They now fail with "not implemented".
 - `health --help` ran every check, and `version --help` printed the version. Both print help.
 - Memory leaks: the bundle path on every create from a bundle, and the output of `pct version` on every `health` run.
+- `kill` said only "operation failed" when `pct exec` failed. It now logs each attempt's exit code and pct's message.
 
 ## [0.8.0] - 2026-09-15
 
