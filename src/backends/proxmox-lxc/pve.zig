@@ -2,6 +2,54 @@ const std = @import("std");
 const core = @import("core");
 const common = @import("common.zig");
 
+/// One data row of `pct list`. Slices borrow from the command output.
+pub const PctListEntry = struct {
+    vmid: []const u8,
+    status: []const u8,
+    lock: []const u8,
+    name: []const u8,
+};
+
+/// Parses one line of `pct list`; returns null for the header and blank lines.
+///
+/// pct prints `"%-10s %-10s %-12s %-20s\n"` for VMID, Status, Lock and Name,
+/// and Lock is an empty string unless the container is locked. Splitting on
+/// whitespace gives three fields normally and four while a lock is held. The
+/// fixed column offsets used before broke as soon as a value outgrew its
+/// column (the "snapshot-delete" lock is 15 characters), and whitespace
+/// tokenising without that rule read the lock as the name. Hostnames cannot
+/// contain whitespace, so the name is always the last field.
+pub fn parsePctListLine(line: []const u8) ?PctListEntry {
+    var fields: [4][]const u8 = undefined;
+    var count: usize = 0;
+    var it = std.mem.tokenizeAny(u8, line, " \t\r");
+    while (it.next()) |field| {
+        if (count == fields.len) return null;
+        fields[count] = field;
+        count += 1;
+    }
+    if (count < 2) return null;
+    // The header ("VMID Status Lock Name") and anything else without a numeric id
+    _ = std.fmt.parseInt(u32, fields[0], 10) catch return null;
+
+    return switch (count) {
+        2 => .{ .vmid = fields[0], .status = fields[1], .lock = "", .name = "" },
+        3 => .{ .vmid = fields[0], .status = fields[1], .lock = "", .name = fields[2] },
+        else => .{ .vmid = fields[0], .status = fields[1], .lock = fields[2], .name = fields[3] },
+    };
+}
+
+/// Returns the VMID of the container named `name` in `pct list` output,
+/// borrowing from `output`.
+pub fn findVmidByName(output: []const u8, name: []const u8) ?[]const u8 {
+    var lines = std.mem.splitScalar(u8, output, '\n');
+    while (lines.next()) |line| {
+        const entry = parsePctListLine(line) orelse continue;
+        if (std.mem.eql(u8, entry.name, name)) return entry.vmid;
+    }
+    return null;
+}
+
 pub const PveClient = struct {
     const Self = @This();
 
@@ -120,13 +168,30 @@ pub const PveClient = struct {
         return try std.fmt.allocPrint(self.allocator, "{s}:vztmpl/{s}_{s}.tar", .{ storage, image_name, tag_part });
     }
 
-    /// Generate numeric VMID from container name
-    pub fn generateVmid(self: *const Self, name: []const u8) ![]u8 {
-        var hasher = std.hash.Wyhash.init(0);
-        hasher.update(name);
-        const vmid_num: u32 = @truncate(hasher.final());
-        const vmid_calc: u32 = (vmid_num % 900000) + 100; // 100..900099
-        return try std.fmt.allocPrint(self.allocator, "{d}", .{vmid_calc});
+    /// Ask the cluster for the next free VMID.
+    ///
+    /// This replaces a hash of the container name, which could land on a VMID
+    /// already used by a VM (only `pct list` was checked) or by a container on
+    /// another node. Names still resolve through `pct list`, so nothing relied
+    /// on the VMID being derivable from the name.
+    pub fn nextVmid(self: *const Self) ![]u8 {
+        const args = [_][]const u8{ "pvesh", "get", "/cluster/nextid" };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) {
+            if (self.logger) |log| log.err("pvesh get /cluster/nextid failed: {s}", .{std.mem.trim(u8, res.stderr, " \t\r\n")}) catch {};
+            return core.Error.OperationFailed;
+        }
+
+        const vmid = std.mem.trim(u8, res.stdout, " \t\r\n\"");
+        _ = std.fmt.parseInt(u32, vmid, 10) catch {
+            if (self.logger) |log| log.err("Unexpected VMID from pvesh: '{s}'", .{vmid}) catch {};
+            return core.Error.OperationFailed;
+        };
+        return try self.allocator.dupe(u8, vmid);
     }
 
     /// Check if VMID already exists in Proxmox
@@ -140,12 +205,9 @@ pub const PveClient = struct {
         if (res.exit_code != 0) return false;
 
         var lines = std.mem.splitScalar(u8, res.stdout, '\n');
-        _ = lines.next(); // Skip header
         while (lines.next()) |line| {
-            const trimmed = std.mem.trim(u8, line, " \t\r");
-            if (trimmed.len < 10) continue;
-            const vmid_str = std.mem.trim(u8, trimmed[0..10], " \t");
-            if (std.mem.eql(u8, vmid_str, vmid)) return true;
+            const entry = parsePctListLine(line) orelse continue;
+            if (std.mem.eql(u8, entry.vmid, vmid)) return true;
         }
         return false;
     }
@@ -158,24 +220,18 @@ pub const PveClient = struct {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        if (res.exit_code != 0) return core.Error.NotFound;
+        // A failing `pct list` is not "no such container": create would read
+        // that as the name being free.
+        if (res.exit_code != 0) return self.mapPctError(res.stderr);
 
-        var lines = std.mem.splitScalar(u8, res.stdout, '\n');
-        _ = lines.next(); // Skip header
-        while (lines.next()) |line| {
-            const trimmed = std.mem.trim(u8, line, " \t\r");
-            if (trimmed.len < 34) continue;
-            const vmid_str = std.mem.trim(u8, trimmed[0..10], " \t");
-            const name_str = std.mem.trim(u8, trimmed[33..], " \t");
-            if (std.mem.eql(u8, name_str, name)) return try self.allocator.dupe(u8, vmid_str);
-        }
-        return core.Error.NotFound;
+        const vmid = findVmidByName(res.stdout, name) orelse return core.Error.NotFound;
+        return try self.allocator.dupe(u8, vmid);
     }
 
     /// Map pct command errors to core errors
     pub fn mapPctError(self: *const Self, stderr: []const u8) core.Error {
         const s = stderr;
-        if (self.logger) |log| log.err("pct command failed: {s}", .{stderr}) catch {};
+        if (self.logger) |log| log.err("pct command failed: {s}", .{std.mem.trim(u8, stderr, " \t\r\n")}) catch {};
 
         if (std.mem.indexOf(u8, s, "already exists") != null) return core.Error.OperationFailed;
         if (std.mem.indexOf(u8, s, "No such file or directory") != null or
@@ -195,7 +251,7 @@ pub const PveClient = struct {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        if (res.exit_code != 0) return core.Error.OperationFailed;
+        if (res.exit_code != 0) return self.mapPctError(res.stderr);
 
         var lines = std.mem.splitScalar(u8, res.stdout, '\n');
         var containers = std.ArrayListUnmanaged(core.ContainerInfo){};
@@ -204,20 +260,13 @@ pub const PveClient = struct {
             containers.deinit(self.allocator);
         }
 
-        _ = lines.next(); // Skip header
         while (lines.next()) |line| {
-            const trimmed = std.mem.trim(u8, line, " \t\r");
-            if (trimmed.len == 0) continue;
-            var it = std.mem.tokenizeScalar(u8, trimmed, ' ');
-            const vmid_str = it.next() orelse continue;
-            const status_str = it.next() orelse "unknown";
-            const name_str = it.next() orelse "unknown";
-
+            const entry = parsePctListLine(line) orelse continue;
             try containers.append(self.allocator, core.ContainerInfo{
                 .allocator = allocator,
-                .id = try allocator.dupe(u8, vmid_str),
-                .name = try allocator.dupe(u8, name_str),
-                .status = try allocator.dupe(u8, status_str),
+                .id = try allocator.dupe(u8, entry.vmid),
+                .name = try allocator.dupe(u8, entry.name),
+                .status = try allocator.dupe(u8, entry.status),
                 .backend_type = try allocator.dupe(u8, "proxmox-lxc"),
                 .runtime = try allocator.dupe(u8, "pct"),
             });
@@ -236,9 +285,10 @@ pub const PveClient = struct {
         if (res.exit_code != 0) return self.mapPctError(res.stderr);
     }
 
-    /// Stop container
+    /// Stop container: a clean shutdown, forced once the timeout expires.
+    /// `pct stop` kills every process at once, which is what `kill` is for.
     pub fn stop(self: *const Self, vmid: []const u8) !void {
-        const args = [_][]const u8{ "pct", "stop", vmid };
+        const args = [_][]const u8{ "pct", "shutdown", vmid, "--timeout", "60", "--forceStop", "1" };
         const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
             self.allocator.free(res.stdout);
@@ -317,3 +367,54 @@ pub const PveClient = struct {
         return core.Error.NotFound;
     }
 };
+
+/// Formats a row exactly as pct does: printf "%-10s %-10s %-12s %-20s\n".
+fn pctRow(buf: []u8, vmid: []const u8, status: []const u8, lock: []const u8, name: []const u8) ![]const u8 {
+    return std.fmt.bufPrint(buf, "{s: <10} {s: <10} {s: <12} {s: <20}", .{ vmid, status, lock, name });
+}
+
+test "parsePctListLine reads an unlocked container" {
+    var buf: [128]u8 = undefined;
+    const entry = parsePctListLine(try pctRow(&buf, "101", "running", "", "web-1")).?;
+    try std.testing.expectEqualStrings("101", entry.vmid);
+    try std.testing.expectEqualStrings("running", entry.status);
+    try std.testing.expectEqualStrings("", entry.lock);
+    try std.testing.expectEqualStrings("web-1", entry.name);
+}
+
+test "parsePctListLine does not read a lock as the name" {
+    var buf: [128]u8 = undefined;
+    const entry = parsePctListLine(try pctRow(&buf, "102", "stopped", "backup", "db-1")).?;
+    try std.testing.expectEqualStrings("backup", entry.lock);
+    try std.testing.expectEqualStrings("db-1", entry.name);
+}
+
+test "parsePctListLine survives a lock wider than its column" {
+    var buf: [128]u8 = undefined;
+    const entry = parsePctListLine(try pctRow(&buf, "103", "stopped", "snapshot-delete", "cache-1")).?;
+    try std.testing.expectEqualStrings("103", entry.vmid);
+    try std.testing.expectEqualStrings("snapshot-delete", entry.lock);
+    try std.testing.expectEqualStrings("cache-1", entry.name);
+}
+
+test "parsePctListLine skips the header and blank lines" {
+    var buf: [128]u8 = undefined;
+    try std.testing.expect(parsePctListLine(try pctRow(&buf, "VMID", "Status", "Lock", "Name")) == null);
+    try std.testing.expect(parsePctListLine("") == null);
+    try std.testing.expect(parsePctListLine("   \r") == null);
+}
+
+test "findVmidByName matches whole names only" {
+    const output =
+        \\VMID       Status     Lock         Name
+        \\101        running                 web-1
+        \\102        stopped    backup       web-10
+        \\1000       stopped                 db
+        \\
+    ;
+    try std.testing.expectEqualStrings("101", findVmidByName(output, "web-1").?);
+    try std.testing.expectEqualStrings("102", findVmidByName(output, "web-10").?);
+    try std.testing.expectEqualStrings("1000", findVmidByName(output, "db").?);
+    try std.testing.expect(findVmidByName(output, "web") == null);
+    try std.testing.expect(findVmidByName(output, "backup") == null);
+}

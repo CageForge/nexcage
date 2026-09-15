@@ -288,6 +288,25 @@ pub const SIGINT = 2;
 pub const SIGTERM = 15;
 pub const SIGHUP = 1;
 
+/// The "proxmox" section of the config file
+pub const ProxmoxSettings = struct {
+    /// Storage for new container root filesystems, e.g. "local-lvm". When
+    /// unset, pct uses its own default storage "local", which a stock LVM
+    /// install does not allow for container volumes.
+    storage: ?[]const u8 = null,
+    /// Root filesystem size in GiB for new containers on `storage`
+    rootfs_size_gb: ?u32 = null,
+    /// Passed as --ostype; when unset pct detects it from the template
+    ostype: ?[]const u8 = null,
+    /// Passed as --unprivileged; pct's own default is privileged (0)
+    unprivileged: ?bool = null,
+
+    pub fn deinit(self: *ProxmoxSettings, allocator: std.mem.Allocator) void {
+        if (self.storage) |s| allocator.free(s);
+        if (self.ostype) |o| allocator.free(o);
+    }
+};
+
 /// Proxmox LXC backend configuration
 pub const ProxmoxLxcBackendConfig = struct {
     allocator: std.mem.Allocator,
@@ -298,10 +317,13 @@ pub const ProxmoxLxcBackendConfig = struct {
     default_bridge: ?[]const u8 = null,
     default_ostype: ?[]const u8 = null,
     default_unprivileged: ?bool = null,
+    default_storage: ?[]const u8 = null,
+    rootfs_size_gb: ?u32 = null,
 
     pub fn deinit(self: *ProxmoxLxcBackendConfig) void {
         if (self.zfs_pool) |p| self.allocator.free(p);
         if (self.default_bridge) |b| self.allocator.free(b);
         if (self.default_ostype) |o| self.allocator.free(o);
+        if (self.default_storage) |s| self.allocator.free(s);
     }
 };

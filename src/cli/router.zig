@@ -51,16 +51,10 @@ pub const BackendRouter = struct {
                     .network_bandwidth = null,
                 },
                 .security = null,
-                .network = if (config) |cfg| cfg.network else switch (runtime_type) {
-                    .lxc, .proxmox_lxc => types.NetworkConfig{
-                        .bridge = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
-                        .ip = null,
-                        .gateway = null,
-                        .dns = null,
-                        .port_mappings = null,
-                    },
-                    else => null,
-                },
+                // Only an explicit override sets the network here. The Proxmox
+                // backend falls back to the bridge from the config file, and a
+                // default filled in at this point would shadow it.
+                .network = if (config) |c| c.network else null,
                 .storage = null,
             },
             .run => |run_config| types.SandboxConfig{
@@ -89,10 +83,8 @@ pub const BackendRouter = struct {
     fn cleanupSandboxConfig(self: *Self, operation: Operation, sandbox_config: *const types.SandboxConfig) void {
         switch (operation) {
             .create, .run => {
+                // network is borrowed from the caller's override, never allocated here
                 if (sandbox_config.image) |img| self.allocator.free(img);
-                if (sandbox_config.network) |net| {
-                    if (net.bridge) |bridge| self.allocator.free(bridge);
-                }
             },
             else => {},
         }
@@ -111,21 +103,28 @@ pub const BackendRouter = struct {
         }
 
         switch (runtime_type) {
-            .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config),
+            .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
             .crun => try self.executeCrun(operation, container_id, config),
             .runc => try self.executeRunc(operation, container_id, config),
             .vm => try self.executeVm(operation, container_id, config),
-            else => try self.executeProxmoxLxc(operation, container_id, config),
+            else => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
         }
     }
 
-    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
+    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config, cfg: *const config_module.Config) !void {
         const sandbox_config = try self.createSandboxConfig(operation, container_id, .proxmox_lxc, config);
         defer self.cleanupSandboxConfig(operation, &sandbox_config);
 
+        // Strings are borrowed from cfg, which routeAndExecute keeps alive
+        // until the backend is gone. Before this, nothing from the config file
+        // reached the backend: the bridge was always the compiled-in default.
         const proxmox_config = types.ProxmoxLxcBackendConfig{
             .allocator = self.allocator,
-            .default_bridge = if (config) |cfg| if (cfg.network) |net| net.bridge else null else null,
+            .default_bridge = if (config) |c| (if (c.network) |net| net.bridge else null) else cfg.network.bridge,
+            .default_storage = cfg.proxmox.storage,
+            .rootfs_size_gb = cfg.proxmox.rootfs_size_gb,
+            .default_ostype = cfg.proxmox.ostype,
+            .default_unprivileged = cfg.proxmox.unprivileged,
         };
 
         const proxmox_backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(self.allocator, proxmox_config);

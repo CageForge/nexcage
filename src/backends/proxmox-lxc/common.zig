@@ -13,7 +13,13 @@ pub fn runCommand(allocator: std.mem.Allocator, logger: ?*core.LogContext, args:
         .argv = args,
         .max_output_bytes = 1024 * 1024, // 1MB
     }) catch |err| {
-        if (logger) |log| log.err("Failed to run command: {}", .{err}) catch {};
+        // A missing pct/pvesh means this is not a Proxmox host; say so rather
+        // than "Failed to run command: error.FileNotFound".
+        if (err == error.FileNotFound) {
+            if (logger) |log| log.err("'{s}' not found in PATH; nexcage must run on a Proxmox VE host", .{args[0]}) catch {};
+            return core.Error.UnsupportedOperation;
+        }
+        if (logger) |log| log.err("Failed to run '{s}': {s}", .{ args[0], @errorName(err) }) catch {};
         return core.Error.OperationFailed;
     };
 

@@ -1,6 +1,7 @@
 const std = @import("std");
 const types = @import("types.zig");
 const logging = @import("logging.zig");
+const constants = @import("constants.zig");
 const ArrayList = std.ArrayList;
 // Comptime validation available but not auto-validated due to Zig 0.15.1 type checking limitations
 // Use manually: comptime_validation.validateSandboxConfig() etc.
@@ -299,6 +300,53 @@ pub const ConfigLoader = struct {
             config.network = net;
         }
 
+        // proxmox: settings for the Proxmox LXC backend. Other keys in this
+        // section (pct_path, node, legacy_api) are not read.
+        if (value.object.get("proxmox")) |proxmox_value| {
+            switch (proxmox_value) {
+                .object => |obj| {
+                    if (obj.get("storage")) |v| {
+                        switch (v) {
+                            .string => |s| {
+                                if (config.proxmox.storage) |old| self.allocator.free(old);
+                                config.proxmox.storage = try self.allocator.dupe(u8, s);
+                            },
+                            else => {},
+                        }
+                    }
+                    if (obj.get("rootfs_size_gb")) |v| {
+                        switch (v) {
+                            .integer => |n| {
+                                // Zero or negative would reach pct as "<storage>:0"
+                                config.proxmox.rootfs_size_gb = if (n >= 1) std.math.cast(u32, n) else null;
+                                if (config.proxmox.rootfs_size_gb == null) {
+                                    config.deinit();
+                                    return types.Error.InvalidConfig;
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                    if (obj.get("ostype")) |v| {
+                        switch (v) {
+                            .string => |s| {
+                                if (config.proxmox.ostype) |old| self.allocator.free(old);
+                                config.proxmox.ostype = try self.allocator.dupe(u8, s);
+                            },
+                            else => {},
+                        }
+                    }
+                    if (obj.get("unprivileged")) |v| {
+                        switch (v) {
+                            .bool => |b| config.proxmox.unprivileged = b,
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+
         // security
         if (value.object.get("security")) |sec_value| {
             const obj = sec_value.object;
@@ -528,7 +576,7 @@ pub const ConfigLoader = struct {
 
     pub fn parseNetworkConfig(self: *Self, value: std.json.Value) !types.NetworkConfig {
         var config = types.NetworkConfig{
-            .bridge = try self.allocator.dupe(u8, "lxcbr0"),
+            .bridge = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
             .ip = null,
             .gateway = null,
         };
@@ -603,6 +651,7 @@ pub const Config = struct {
     security: types.SecurityConfig,
     resources: types.ResourceLimits,
     container_config: types.ContainerConfig,
+    proxmox: types.ProxmoxSettings = .{},
 
     pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) !Config {
         return Config{
@@ -615,7 +664,8 @@ pub const Config = struct {
             .cache_dir = try allocator.dupe(u8, "/var/cache/nexcage"),
             .temp_dir = try allocator.dupe(u8, "/tmp/nexcage"),
             .network = types.NetworkConfig{
-                .bridge = try allocator.dupe(u8, "lxcbr0"),
+                // Proxmox's own bridge; lxcbr0 belongs to plain LXC and does not exist on PVE
+                .bridge = try allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
                 .ip = null,
                 .gateway = null,
             },
@@ -744,6 +794,7 @@ pub const Config = struct {
         self.security.deinit();
         self.resources.deinit();
         self.container_config.deinit(self.allocator);
+        self.proxmox.deinit(self.allocator);
     }
 };
 
