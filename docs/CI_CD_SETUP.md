@@ -15,8 +15,6 @@
 | `scorecards.yml`, `pages.yml`, `docs_mike.yml` | ubuntu-latest | various | OpenSSF Scorecards, documentation site |
 | `dco.yml` | ubuntu-latest | PR | **Broken:** the action it uses was deleted upstream. Pending a decision on sign-off policy |
 
-Archived workflows and why they were removed: [archive/README.md](../archive/README.md).
-
 ## Self-hosted Proxmox runner
 
 `proxmox_e2e.yml` needs a GitHub Actions runner with the `proxmox` label on a

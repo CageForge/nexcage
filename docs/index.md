@@ -1,11 +1,11 @@
 # NexCage Documentation
 
-Welcome to NexCage — next-generation container runtime for Proxmox VE using LXC and OCI backends (crun/runc).
+nexcage is a command-line lifecycle for LXC containers on a Proxmox VE host:
+it creates, starts, stops, deletes and inspects containers from Proxmox
+templates, OCI bundles or, on Proxmox VE 9.1 and later, OCI registry images.
 
-- Start with Install and Dev Quickstart
-- Explore User Guide and Architecture
-- See CI/CD and Dependencies for environment setup
-- OCI Runtime Spec support: Linux additions up to v1.3.0 (NUMA memoryPolicy, Intel RDT monitoring, netDevices mapping).
-
-> Tip: Use the left navigation to browse all documents.
-
+- [Install](INSTALL.md) and configure it on a Proxmox VE host
+- [CLI Reference](CLI_REFERENCE.md) for every command, option and exit code
+- [Dev Quickstart](DEV_QUICKSTART.md) to build and test from source
+- [CI/CD](CI_CD_SETUP.md) for the workflows and the self-hosted Proxmox runner
+- [Release notes for 0.8.0](releases/NOTES_v0.8.0.md)

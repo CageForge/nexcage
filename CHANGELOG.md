@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Source that nothing used: `src/integrations/` (bfc, proxmox-api, zfs) with the `enable-zfs`, `enable-bfc` and `enable-proxmox-api` build options; `core/router.zig`, `advanced_logging.zig`, `metrics.zig`, `json_logging.zig`, `comptime_validation.zig`; `proxmox-lxc/pct.zig`, `performance.zig`, `simple_performance.zig`, `state_manager.zig`, `vmid_manager.zig`; `crun/types.zig`. Checked by building the default, runc and VM configurations and running the tests without them.
+- The `deps/bfc` submodule, used only by the integrations module.
+- The remote `oci_spec_zig` entry in `build.zig.zon`. The build uses the vendored `deps/oci-spec-zig`; the entry only made the first build download a copy.
+- `archive/`, `Roadmap/`, scripts for the old SSH-based test and release process, the dependency-update scripts, `bump_version.sh` (it rewrote every version string in the docs, release notes included), committed test reports, files in `tests/` without tests, and 30 documents that described features nexcage does not have or were superseded by the current guides.
+
+### Changed
+- Issue templates moved from `docs/ISSUE_TEMPLATE` to `.github/ISSUE_TEMPLATE`, where GitHub uses them.
+- The documentation site navigation lists only current documents.
+
 ## [0.8.0] - 2026-09-15
 
 MVP: a working command-line lifecycle for LXC containers on a Proxmox VE host.
@@ -572,4 +582,4 @@ This release introduces a complete modular architecture following SOLID principl
 - **From v0.2.x to v0.4.0**: Major upgrade required, see migration guide
 - **From v0.1.x to v0.4.0**: Major upgrade required, see migration guide
 
-For detailed migration instructions, see [MODULAR_ARCHITECTURE.md](docs/MODULAR_ARCHITECTURE.md).
+For detailed migration instructions, see `docs/MODULAR_ARCHITECTURE.md` as of the v0.4.0 tag.

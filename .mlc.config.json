@@ -4,11 +4,9 @@
     { "pattern": "https://github.com/cageforge/nexcage/issues/72#issuecomment-" },
     { "pattern": "https://pve.proxmox.com/wiki/Manual:_pct" },
     { "pattern": "https://github.com/cageforge/nexcage/compare/" },
-    { "pattern": "^\.\./examples/" },
-    { "pattern": "^\.\./LEGACY_DEPRECATION.md$" },
-    { "pattern": "/Roadmap/CONTRIBUTING.md$" },
-    { "pattern": "/Roadmap/LICENSE$" },
-    { "pattern": "/docs/(configuration|security|monitoring)\.md$" }
+    { "pattern": "^\\.\\./examples/" },
+    { "pattern": "^\\.\\./LEGACY_DEPRECATION.md$" },
+    { "pattern": "/docs/(configuration|security|monitoring)\\.md$" }
   ],
   "httpHeaders": [
     { "urls": ["https://github.com/*"], "headers": { "User-Agent": "Mozilla/5.0" } }

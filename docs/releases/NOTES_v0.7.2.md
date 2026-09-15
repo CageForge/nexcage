@@ -289,7 +289,7 @@ This release includes improvements from Sprint 6.6: Codebase Quality Improvement
 
 ## Full Changelog
 
-See [CHANGELOG.md](../CHANGELOG.md) for complete list of changes.
+See [CHANGELOG.md](../../CHANGELOG.md) for complete list of changes.
 
 ## Download
 
