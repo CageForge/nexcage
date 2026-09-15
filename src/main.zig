@@ -307,6 +307,12 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         } else if (std.mem.eql(u8, arg, "--workdir") and i + 1 < args.len) {
             options.workdir = try allocator.dupe(u8, args[i + 1]);
             i += 2;
+        } else if ((std.mem.eql(u8, arg, "--signal") or std.mem.eql(u8, arg, "-s")) and i + 1 < args.len) {
+            // kill reads the signal from options.args. This flag used to fall
+            // into the generic "-..." branch below, which dropped it and left
+            // its value to be taken as the container name.
+            if (options.args == null) options.args = args[i .. i + 2];
+            i += 2;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             // This is likely the image name, container ID, or command
             if (options.command == .start or options.command == .stop or options.command == .delete or options.command == .state or options.command == .kill) {

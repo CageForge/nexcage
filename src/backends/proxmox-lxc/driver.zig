@@ -262,6 +262,10 @@ pub const ProxmoxLxcDriver = struct {
         if (template_name) |tname| {
             if (std.mem.indexOf(u8, tname, ":") != null) {
                 final_template = try self.allocator.dupe(u8, tname);
+            } else if (std.mem.endsWith(u8, tname, ".tar.zst")) {
+                // A bare template file name or a path into the template cache.
+                // The extension used to be appended again: "x.tar.zst.tar.zst".
+                final_template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}", .{std.fs.path.basename(tname)});
             } else {
                 final_template = try std.fmt.allocPrint(self.allocator, "local:vztmpl/{s}.tar.zst", .{tname});
             }
