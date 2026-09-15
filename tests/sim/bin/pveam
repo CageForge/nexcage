@@ -1,0 +1,5 @@
+#!/bin/bash
+# Fake pveam: one template on storage local.
+echo "pveam $*" >> "${SIM:?}/calls"
+echo "NAME                                                         SIZE"
+echo "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst         120.29MB"

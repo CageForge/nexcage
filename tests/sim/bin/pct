@@ -1,0 +1,80 @@
+#!/bin/bash
+# Fake pct: keeps containers in $SIM/db as "vmid status name" and logs argv to
+# $SIM/calls. Files named fail_*, no_kill and lock.<vmid> in $SIM inject errors.
+SIM=${SIM:?}
+DB=$SIM/db
+touch "$DB"
+echo "pct $*" >> "$SIM/calls"
+
+exists() { awk -v v="$1" '$1==v {f=1} END {exit !f}' "$DB"; }
+status_of() { awk -v v="$1" '$1==v {print $2}' "$DB"; }
+set_status() { awk -v v="$1" -v s="$2" '$1==v {$2=s} {print}' "$DB" > "$DB.tmp" && mv "$DB.tmp" "$DB"; }
+missing() { echo "Configuration file 'nodes/pve/lxc/$1.conf' does not exist" >&2; exit 2; }
+
+[ -e "$SIM/fail_all" ] && { cat "$SIM/fail_all" >&2; exit 13; }
+
+cmd=$1; shift
+case "$cmd" in
+  list)
+    printf "%-10s %-10s %-12s %-20s\n" VMID Status Lock Name
+    sort -n "$DB" | while read -r v s n; do
+      lock=""; [ -e "$SIM/lock.$v" ] && lock=$(cat "$SIM/lock.$v")
+      printf "%-10s %-10s %-12s %-20s\n" "$v" "$s" "$lock" "$n"
+    done
+    ;;
+  create)
+    vmid=$1; tpl=$2; shift 2
+    [ -e "$SIM/fail_create" ] && { cat "$SIM/fail_create" >&2; exit 255; }
+    exists "$vmid" && { echo "CT $vmid already exists on node 'pve'" >&2; exit 255; }
+    # Like the real pct: the template volume has to exist on the storage.
+    # Archives nexcage packs itself land in $SIM/cache (see fake pvesm path).
+    cached="$SIM/cache/${tpl#local:vztmpl/}"
+    if [ "${tpl#local:vztmpl/}" != "$tpl" ] && [ -f "$cached" ]; then
+      tar --zstd -tvf "$cached" > "$SIM/tarlist.$vmid" 2>&1 \
+        || { echo "unable to create CT $vmid - broken archive '$tpl'" >&2; exit 255; }
+    elif ! grep -qxF -- "$tpl" "$SIM/templates" 2>/dev/null; then
+      echo "unable to create CT $vmid - volume '$tpl' does not exist" >&2; exit 255
+    fi
+    name=""
+    while [ $# -gt 0 ]; do
+      [ "$1" = "--hostname" ] && name=$2
+      shift
+    done
+    echo "$vmid stopped $name" >> "$DB"
+    echo "ostemplate: $tpl" > "$SIM/conf.$vmid"
+    ;;
+  start)
+    exists "$1" || missing "$1"
+    [ "$(status_of "$1")" = running ] && { echo "CT $1 already running" >&2; exit 255; }
+    set_status "$1" running
+    ;;
+  shutdown|stop)
+    exists "$1" || missing "$1"
+    [ "$(status_of "$1")" = running ] || { echo "CT $1 not running" >&2; exit 255; }
+    set_status "$1" stopped
+    ;;
+  destroy)
+    exists "$1" || missing "$1"
+    [ "$(status_of "$1")" = running ] && { echo "CT $1 is running - destroy failed" >&2; exit 255; }
+    awk -v v="$1" '$1!=v' "$DB" > "$DB.tmp" && mv "$DB.tmp" "$DB"
+    ;;
+  exec)
+    vmid=$1; shift; [ "$1" = "--" ] && shift
+    exists "$vmid" || missing "$vmid"
+    [ "$(status_of "$vmid")" = running ] || { echo "CT $vmid not running" >&2; exit 255; }
+    case "$1" in
+      cat) echo "1 (init) S 0 1 1 0 -1 4194560" ;;
+      kill) [ -e "$SIM/no_kill" ] && { echo "exec: kill: not found" >&2; exit 127; } ;;
+      *) ;;
+    esac
+    ;;
+  config)
+    exists "$1" || missing "$1"
+    cat "$SIM/conf.$1"
+    ;;
+  set)
+    exists "$1" || missing "$1"
+    echo "set: $*" >> "$SIM/conf.$1"
+    ;;
+  *) echo "fake pct: unsupported $cmd" >&2; exit 99 ;;
+esac

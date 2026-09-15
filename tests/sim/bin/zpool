@@ -1,0 +1,4 @@
+#!/bin/bash
+# Fake zpool: not available, so nexcage never reaches a real pool.
+echo "zpool $*" >> "${SIM:?}/calls"
+exit 1

@@ -71,3 +71,30 @@ jobs:
           name: nexcage-linux-amd64
           path: zig-out-release/bin/nexcage
           retention-days: 7
+
+  simulation:
+    name: Commands against fake Proxmox tools
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build (Debug)
+        # Debug, so the allocator reports the leaks the run fails on
+        run: zig build
+
+      - name: Allow mounts in unprivileged user namespaces
+        # run.sh runs nexcage as uid 0 in a user namespace, so it writes
+        # /run/nexcage without touching the runner. Ubuntu 24.04's AppArmor
+        # default lets such a namespace be created but not mount anything.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Run tests/sim/run.sh
+        run: tests/sim/run.sh

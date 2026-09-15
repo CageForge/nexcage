@@ -22,14 +22,33 @@ Tests that exercise real code live next to it:
 
 ## Running against fake Proxmox tools
 
-Most of nexcage's behaviour is the command lines it gives `pct` and `pvesh`
-and how it reads their output. That can be checked without a Proxmox host by
-putting small scripts named `pct`, `pvesh` and `pveversion` first in `PATH`
-that log their arguments and print what the real tools print — `pct list`
-uses `printf "%-10s %-10s %-12s %-20s\n"` for VMID, Status, Lock and Name.
+Most of nexcage's behaviour is the command lines it gives `pct`, `pvesh` and
+`pvesm` and how it reads their output. `tests/sim/run.sh` checks that for every
+command without a Proxmox host:
 
-Run as a normal user, `create` stops after `pct create` because it cannot
-write `/run/nexcage`; the arguments it passed are what matter.
+```bash
+zig build && tests/sim/run.sh     # or: make sim
+```
+
+`tests/sim/bin` holds scripts named `pct`, `pvesh`, `pvesm`, `pveversion`,
+`pveam`, `zfs` and `zpool`. They keep a small container database, log their
+arguments and print what the real tools print (`pct list` uses
+`printf "%-10s %-10s %-12s %-20s\n"` for VMID, Status, Lock and Name). Like the
+real pct, the fake refuses a template volume that does not exist, and it lists
+the archive nexcage packs from an OCI bundle so the run can check what went
+into it. Files named `fail_*`, `no_kill` and `lock.<vmid>` in the scratch
+directory make the tools fail or report a lock.
+
+nexcage runs as uid 0 in a user and mount namespace, with `/run` and
+`/tmp/nexcage-bundles` bound to `zig-out/sim` and a tmpfs over `/tmp`, so it
+writes `/run/nexcage` without root and without touching the host. The run
+checks the arguments passed, exit codes, stdout, state files, option parsing,
+`--runtime`, OCI bundles and failures such as `pct list` refusing to run. An
+allocator leak report, panic or invalid free in any command fails it.
+
+CI runs it in `ci.yml`. Ubuntu 24.04 does not allow mounts in an unprivileged
+user namespace by default; there, run
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` first.
 
 ## Proxmox E2E
 
