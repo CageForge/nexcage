@@ -79,9 +79,13 @@ jobs:
         uses: anchore/sbom-action@v0
         with:
           path: dist
-          artifact-name: nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom
           output-file: dist/nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom.spdx.json
           format: spdx-json
+          # "Upload SBOMs" below uploads both SBOMs under one artifact name.
+          # Letting this action upload as well made the v0.8.0 run fail with
+          # 409 "an artifact with this name already exists".
+          upload-artifact: false
+          upload-release-assets: false
 
       - name: Generate SBOM (CycloneDX JSON)
         run: |
@@ -172,7 +176,9 @@ jobs:
           sudo apt-get install -y "./$DEB"
           nexcage version
           nexcage --help > /dev/null
-          man -w nexcage
+          # Check the package list, not `man`: the runner image need not ship man-db
+          dpkg -L nexcage | grep -qx '/usr/share/man/man1/nexcage.1.gz'
+          dpkg -L nexcage | grep -qx '/usr/share/bash-completion/completions/nexcage'
 
       - name: Upload .deb
         uses: actions/upload-artifact@v4
