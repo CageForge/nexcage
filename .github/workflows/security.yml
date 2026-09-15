@@ -78,7 +78,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy (filesystem)
-        uses: aquasecurity/trivy-action@0.20.0
+        # Pinned to the v0.36.0 commit, not a tag. On 2026-03-19 76 of 77
+        # trivy-action tags, 0.20.0 among them, were force-pushed to
+        # credential-stealing code (CVE-2026-33634 / GHSA-69fq-xp46-6x23);
+        # versions before 0.35.0 are affected. A tag can be moved; a SHA cannot.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
