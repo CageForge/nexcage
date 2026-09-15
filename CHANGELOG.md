@@ -7,7 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- _No changes yet._
+## [0.8.0] - Unreleased
+
+MVP: a working command-line lifecycle for LXC containers on a Proxmox VE host.
+Release notes with upgrade guidance: `docs/releases/NOTES_v0.8.0.md`.
+
+### Changed
+- A plain `zig build` produces a working Proxmox LXC binary. The crun and runc backends are opt-in (`-Denable-backend-crun=true`, `-Denable-backend-runc=true`); the libcrun ABI follows the crun backend instead of whether libsystemd happens to be installed.
+- The default bridge is `vmbr0` (was `vmbr50`), and `network.bridge` from the config file now reaches the backend.
+- New config keys: `proxmox.storage`, `proxmox.rootfs_size_gb`, `proxmox.ostype`, `proxmox.unprivileged`.
+- VMIDs come from `pvesh get /cluster/nextid` instead of a hash of the container name.
+- `stop` runs `pct shutdown --timeout 60 --forceStop 1` instead of `pct stop`.
+- Logs go to stderr; stdout carries only command output. `--debug` and `--log-level` set the level.
+- A failure prints one line, `nexcage: <command>: <outcome>`. Exit status is 1 for failed operations and 2 for usage errors.
+- `create` refuses a name that already exists.
+- `state` looks a container up by name (or VMID) and fails when it does not exist.
+
+### Fixed
+- Every command held a pointer to a logger in a dead stack frame. Logging from commands could crash, which the CLI had worked around by not logging.
+- `--log-file` never wrote to its file.
+- `pct list` parsing read the Lock column as the name, and broke on long lock names.
+- `create` forced `--ostype ubuntu` on every template, and reported success when pct failed with "already exists".
+- `kill -s SIGNAL` lost the signal and took its value as the container name.
+- `run --help` aborted with "Invalid free".
+- A bare `*.tar.zst` template name became `local:vztmpl/<name>.tar.zst.tar.zst`.
+- A registry image on Proxmox VE older than 9.1 fails with an explanation instead of a usage error.
+- The Proxmox VE version is read correctly from the `pve-manager/X.Y.Z/…` form.
+
+### Removed
+- Tests for code that no longer exists, plus `src/backend_plugins.zig` and `src/cli/example_usage.zig`, moved to `archive/`. None of those tests had ever run.
+- CI workflows that could not pass: `ci_cncf.yml`, `build_vendored.yml`, `dependencies.yml`, `test_runner0.yml`. `crun_e2e.yml` and `crun_abi_e2e.yml` are archived.
+- Build logs, a committed gitleaks binary and a 0.7.1 `.deb` from the repository root; the old dh-based packaging (archived).
+
+### CI and release
+- `ci.yml` builds, tests and smoke-tests on GitHub-hosted runners; `crun_build.yml` builds the crun backend through the Dockerfile.
+- The Proxmox E2E job drives create, state, start, stop and delete through nexcage instead of calling pct directly.
+- Releases build the binary and the `.deb` on GitHub-hosted runners.
+- The dependency check files at most one open issue per dependency.
 
 ## [0.7.5] - 2025-11-11
 

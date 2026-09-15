@@ -28,16 +28,21 @@ pub const KillCommand = struct {
 
         const container_id = options.container_id orelse return types.Error.InvalidInput;
 
-        // Parse signal from args: default SIGTERM
+        // Signal: "-s/--signal SIGNAL", or positional as runc takes it
+        // ("kill <id> SIGNAL"). Default SIGTERM.
         var signal: []const u8 = "SIGTERM";
         if (options.args) |args| {
-            var i: usize = 0;
-            while (i < args.len) : (i += 1) {
-                const arg = args[i];
-                if (std.mem.eql(u8, arg, "--signal") or std.mem.eql(u8, arg, "-s")) {
-                    if (i + 1 >= args.len) return types.Error.InvalidInput;
-                    signal = args[i + 1];
-                    break;
+            if (args.len > 0 and !std.mem.startsWith(u8, args[0], "-")) {
+                signal = args[0];
+            } else {
+                var i: usize = 0;
+                while (i < args.len) : (i += 1) {
+                    const arg = args[i];
+                    if (std.mem.eql(u8, arg, "--signal") or std.mem.eql(u8, arg, "-s")) {
+                        if (i + 1 >= args.len) return types.Error.InvalidInput;
+                        signal = args[i + 1];
+                        break;
+                    }
                 }
             }
         }
@@ -53,8 +58,9 @@ pub const KillCommand = struct {
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
         return allocator.dupe(u8,
-            "Usage: nexcage kill [--signal|-s SIGNAL] <container-id>\n\n" ++
-            "Send a signal to a running container (OCI). Default is SIGTERM.\n\n" ++
+            "Usage: nexcage kill [--signal|-s SIGNAL] <name>\n" ++
+            "       nexcage kill <name> [SIGNAL]\n\n" ++
+            "Send a signal to PID 1 of a running container. Default is SIGTERM.\n\n" ++
             "Options:\n" ++
             "  -s, --signal STRING   Signal name (e.g. SIGTERM, SIGKILL) or number\n" ++
             "  -h, --help            Show this help\n"

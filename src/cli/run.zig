@@ -69,20 +69,14 @@ pub const RunCommand = struct {
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        _ = allocator;
-
-        return "Usage: nexcage run [OPTIONS] IMAGE [COMMAND] [ARG...]\n\n" ++
-            "Run a container from an image\n\n" ++
+        // Allocated because execute() frees it: returning the literal made
+        // `nexcage run --help` abort with "Invalid free".
+        return allocator.dupe(u8, "Usage: nexcage run --name <name> <image>\n\n" ++
+            "Create a container and start it; the same as create followed by start.\n" ++
+            "<image> takes the same forms as for create (see 'nexcage create --help').\n\n" ++
             "Options:\n" ++
-            "  -i, --interactive    Keep STDIN open even if not attached\n" ++
-            "  -t, --tty           Allocate a pseudo-TTY\n" ++
-            "  -d, --detach         Run container in background and print container ID\n" ++
-            "  --name string        Assign a name to the container\n" ++
-            "  --runtime string     Runtime to use for this container\n" ++
-            "  --config string      Path to configuration file\n" ++
-            "  -v, --verbose        Verbose output\n" ++
-            "  --debug              Debug output\n" ++
-            "  -h, --help           Show this help message\n";
+            "  --name <name>   Container name, used as its hostname (required)\n" ++
+            "  -h, --help      Show this help message\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

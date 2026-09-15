@@ -1,5 +1,11 @@
 # Containerd Integration Guide
 
+> **Status: not supported in 0.8.0.** containerd's runc shim drives a runtime
+> through a runc-compatible CLI: `create --bundle <dir> <id>`, `start <id>`,
+> `state <id>`, `kill <id> <signal>`, `delete <id>`, and global flags such as
+> `--root` and `--log`. nexcage does not implement that interface yet, so the
+> steps below do not work. They are kept as a design reference.
+
 This guide explains how to integrate NexCage with containerd as an OCI runtime.
 
 ## Overview

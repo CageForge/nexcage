@@ -19,7 +19,17 @@ test-reports/*
 .env
 .env.*
 !.env.example
-config.json
+# Anchored: only the local config at the root. Unanchored, this also hid
+# packaging/config/config.json, the example the .deb ships.
+/config.json
+
+# Build outputs written by release.yml and scripts/build_deb_local.sh
+/dist/
+
+# Tool binaries and logs dropped at the repository root
+/gitleaks
+/*.log
+/build_errors.txt
 
 # Build artifacts and temp files
 crun-*/*

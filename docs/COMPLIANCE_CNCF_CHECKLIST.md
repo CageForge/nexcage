@@ -25,9 +25,8 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 ## CI/CD & Quality
 
 - [x] **Automated CI gates** for unit/integration/e2e
-  - Mandatory unit tests (`.github/workflows/ci_cncf.yml`)
-  - Mandatory smoke tests with proper exit codes
-  - Mandatory integration tests when conditions are met
+  - Mandatory build, unit tests and exit-code smoke tests (`.github/workflows/ci.yml`)
+  - Lifecycle E2E on a self-hosted Proxmox VE runner (`.github/workflows/proxmox_e2e.yml`)
   - Tests must pass for CI to succeed
 
 - [x] **SBOM/Provenance**
@@ -41,21 +40,22 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
   - OpenSSF Scorecards (`.github/workflows/scorecards.yml` - new)
   - Weekly scheduled runs for continuous monitoring
 
-- [x] **DCO/CLA**
-  - DCO check workflow (`.github/workflows/dco.yml` - new)
-  - Automatic PR checking for DCO signoff
+- [~] **DCO/CLA**
+  - DCO check workflow (`.github/workflows/dco.yml`) exists but is broken: the
+    action it uses (`chef-cookbooks/community_cookbook_dco_check`) was deleted
+    upstream, so it fails on every PR. Commits in the history carry no
+    `Signed-off-by` trailer. Needs a policy decision before it is replaced.
   - DCO documentation in CONTRIBUTING.md
-  - Clear failure messages with instructions
 
 - [x] Release artifacts (GitHub Releases with binaries, SBOMs, provenance)
 
 ## Implementation Details
 
-### CI Gates (`.github/workflows/ci_cncf.yml`)
-- Unit tests: `continue-on-error: false` - mandatory
-- Smoke tests: Proper exit code checking - mandatory
-- Integration tests: Mandatory when Proxmox available
-- All tests must pass for CI to succeed
+### CI Gates (`.github/workflows/ci.yml`)
+- Debug and ReleaseSafe builds on GitHub-hosted runners
+- `zig build test`: every test file is its own step
+- Smoke tests check exit codes (1 without Proxmox tools, 2 for an unknown command)
+- Proxmox E2E (`proxmox_e2e.yml`) runs the container lifecycle through nexcage
 
 ### SBOM & Provenance (`.github/workflows/release.yml`)
 - **SPDX JSON**: Generated via `anchore/sbom-action@v0`
@@ -71,22 +71,19 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 - **Gitleaks**: Secret scanning in `security.yml`
 
 ### DCO Check (`.github/workflows/dco.yml`)
-- Runs on PR open/update/ready_for_review
-- Checks all commits for `Signed-off-by:` trailer
-- Provides clear instructions for fixing failed checks
-- Fully documented in CONTRIBUTING.md
+- Intended to check every PR commit for a `Signed-off-by:` trailer
+- Currently fails before running: its action no longer exists upstream
 
 ## Compliance Status
 
-**Overall Status**: ✅ **CNCF Compliant**
+**Overall Status**: [~] **Partial**
 
-All required CNCF compliance items are implemented:
 - ✅ Required documentation files
-- ✅ Automated CI/CD with mandatory gates
+- ✅ Automated CI with mandatory gates
 - ✅ SBOM (SPDX + CycloneDX) generation
 - ✅ SLSA Provenance (basic)
 - ✅ Code scanning (CodeQL + Scorecards)
-- ✅ DCO enforcement for contributions
+- ❌ DCO enforcement: the check is broken and sign-off is not practised yet
 
 ## Optional Enhancements
 

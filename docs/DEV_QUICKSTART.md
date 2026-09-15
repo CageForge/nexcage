@@ -1,66 +1,81 @@
 # Developer Quickstart
 
-This guide helps you set up a development environment quickly.
-
 ## Requirements
-- OS: Ubuntu 22.04/24.04 (Proxmox VE host recommended)
-- Arch: amd64 (x86_64)
-- Packages: build-essential, autoconf, automake, libtool, pkg-config, libyajl-dev, libcap-dev, libseccomp-dev, libsystemd-dev, libbpf-dev, libapparmor-dev, libselinux1-dev, libcriu-dev
-- Compiler: Zig 0.15.1
-- Spec baseline: OCI Runtime Specification v1.3.0 (Linux additions fully parsed)
 
-## Setup
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-  build-essential autoconf automake libtool pkg-config \
-  libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
-  libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
-# install Zig 0.15.1 and ensure zig is on PATH
-zig version
-```
+- Linux, amd64
+- Zig 0.15.1
+- A Proxmox VE 8.x/9.x host to run containers; building and unit tests work
+  anywhere
 
-## Build & Run
+The default build links only libc. The first build may download the pinned
+`oci-specs-zig` package from `build.zig.zon`.
+
+## Build, test, run
+
 ```bash
-zig build
+zig build                      # Debug binary in zig-out/bin/nexcage
+zig build test --summary all   # every test step and its result
+zig build -Doptimize=ReleaseSafe
+
 ./zig-out/bin/nexcage --help
 ./zig-out/bin/nexcage version
 ```
 
-### libcrun ABI requirements
-- Vendored sources live in `deps/crun` — run `make prepare-crun` to generate `config.h`/`git-version.h`.
-- Install `libsystemd-dev` (or equivalent) so that `pkg-config libsystemd --libs` succeeds.
-- Build command: `zig build -Denable-libcrun-abi=true` (default).
-- The build fails if `libsystemd` development files are missing.
-
-### OCI specification package
-- OCI schemas are consumed via the `oci-specs-zig` package referenced in `build.zig.zon`.
-- To refresh the pinned version run `zig fetch --save https://github.com/CageForge/oci-specs-zig/archive/<commit>.tar.gz`.
-- Generated types provide memory policy, Intel RDT, and netDevices parsing for Proxmox translation layers.
-
-## Local Smoke (no Proxmox)
-```bash
-./zig-out/bin/nexcage create --help
-./zig-out/bin/nexcage list --runtime lxc || true
-```
-
-## Proxmox E2E (self-hosted)
-- Configure self-hosted runner on Proxmox VE (see SELF_HOSTED_RUNNER.md)
-- Run: GitHub Actions job "Proxmox E2E (Self-Hosted)"
-
-## Debugging
-- Enable debug logs with `--debug` or `--verbose`
-- Check system libs presence: `ldconfig -p | grep -E 'libcap|libseccomp|libyajl|libsystemd'`
-
-## Vendored libcrun build
+Without Proxmox tools, operations fail cleanly — useful for checking error
+paths:
 
 ```bash
-make deps
-make prepare-crun
-make build-vendored
+./zig-out/bin/nexcage start web-1; echo "exit $?"
+# ERROR nexcage: 'pct' not found in PATH; nexcage must run on a Proxmox VE host
+# nexcage: start: not supported on this host or by this build
+# exit 1
 ```
+
+## Build options
+
+| Option | Default | Effect |
+|---|---|---|
+| `-Denable-backend-proxmox-lxc` | `true` | Proxmox LXC backend |
+| `-Denable-backend-crun` | `false` | crun backend; links vendored libcrun |
+| `-Denable-libcrun-abi` | follows crun | Compile `deps/crun`; needs the submodules and generated headers |
+| `-Denable-backend-runc` | `false` | runc backend (calls the runc binary) |
+| `-Denable-backend-proxmox-vm` | `false` | VM backend (not integrated) |
+
+A compiled-out backend is refused at run time with `UnsupportedOperation`.
+
+### crun backend
+
+Easiest through Docker, which clones the pinned dependencies and generates the
+headers:
+
+```bash
+docker build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t nexcage:crun .
+docker run --rm nexcage:crun version
+```
+
+Locally, mirror the Dockerfile: `git submodule update --init --recursive`,
+`bash scripts/gen_crun_headers_local.sh`, generate `libocispec` headers with
+`generate.py`, then `zig build -Denable-backend-crun=true`.
+
+## Where things live
+
+| Path | Contents |
+|---|---|
+| `src/main.zig` | Argument parsing, error reporting, exit codes |
+| `src/cli/` | Commands and the backend router |
+| `src/backends/proxmox-lxc/` | pct/pvesh driver (`driver.zig`, `pve.zig`) |
+| `src/core/` | Config, logging, shared types |
+| `deps/oci-spec-zig/` | OCI runtime/image types and the bundle parser |
+| `archive/` | Code and tests that no longer build, kept for reference |
+
+## Proxmox E2E
+
+The "Proxmox E2E (Self-Hosted)" workflow drives create → state → start → stop
+→ delete through the built binary on a runner with the `proxmox` label. Runner
+requirements are in [CI_CD_SETUP.md](CI_CD_SETUP.md).
 
 ## Next
-- CLI Reference: docs/CLI_REFERENCE.md
-- Architecture: docs/architecture/OVERVIEW.md
-- Testing: TESTING.md, PROXMOX_TESTING.md
+
+- [CLI_REFERENCE.md](CLI_REFERENCE.md)
+- [../TESTING.md](../TESTING.md)
+- [architecture/OVERVIEW.md](architecture/OVERVIEW.md)

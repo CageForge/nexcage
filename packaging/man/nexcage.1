@@ -1,179 +1,135 @@
-.TH Nexcage 1 "December 2024" "nexcage 0.3.0" "User Commands"
-
+.TH NEXCAGE 1 "September 2026" "nexcage 0.8.0" "User Commands"
 .SH NAME
-nexcage \- OCI-compatible container runtime next generation
-
+nexcage \- manage LXC containers on a Proxmox VE host
 .SH SYNOPSIS
 .B nexcage
-[\fIOPTIONS\fR] \fICOMMAND\fR [\fIARGS\fR]...
-
+[\fB\-\-debug\fR]
+[\fB\-\-log\-level\fR \fIlevel\fR]
+[\fB\-\-log\-file\fR \fIpath\fR]
+\fIcommand\fR [\fIoptions\fR]
 .SH DESCRIPTION
-Nexcage is a high-performance OCI-compatible runtime implementation that transforms Proxmox VE into a container and VM orchestration worker. It provides revolutionary ZFS checkpoint/restore functionality with lightning-fast filesystem-level snapshots.
-
+.B nexcage
+creates, starts, stops, deletes and inspects LXC containers on a Proxmox VE
+host through
+.BR pct (1)
+and
+.BR pvesh (1).
+Containers are created from Proxmox templates, OCI bundle directories or, on
+Proxmox VE 9.1 and later, OCI registry images.
+.PP
+Containers are addressed by name, which becomes the container hostname and
+must be unique on the node. VMIDs are allocated with
+.BR "pvesh get /cluster/nextid" .
+.B nexcage
+must run as root.
 .SH COMMANDS
 .TP
-.B create \fIcontainer_id\fR
-Create a new container from an OCI bundle.
-
+\fBcreate \-\-name\fR \fIname\fR \fIimage\fR
+Create a container.
+.I image
+is a template volume such as
+.BR local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst ,
+a template file name, an absolute path to an OCI bundle directory, or an OCI
+registry reference such as
+.B docker.io/library/redis:7
+(Proxmox VE 9.1+).
 .TP
-.B start \fIcontainer_id\fR
-Start a previously created container.
-
+\fBrun \-\-name\fR \fIname\fR \fIimage\fR
+Create a container and start it.
 .TP
-.B stop \fIcontainer_id\fR
-Stop a running container.
-
+\fBstart\fR \fIname\fR
+Start a container.
 .TP
-.B delete \fIcontainer_id\fR
-Delete a container and its associated resources.
-
+\fBstop\fR \fIname\fR
+Shut a container down cleanly; it is stopped forcibly after 60 seconds.
 .TP
-.B list
-List all containers managed by nexcage.
-
+\fBdelete\fR \fIname\fR
+Destroy a stopped container and remove its state under /run/nexcage.
 .TP
-.B state \fIcontainer_id\fR
-Get the current state of a container.
-
+\fBkill\fR \fIname\fR [\fIsignal\fR], \fBkill \-s\fR \fIsignal\fR \fIname\fR
+Send a signal (default SIGTERM) to PID 1 inside the container.
 .TP
-.B checkpoint \fIcontainer_id\fR
-Create a checkpoint (snapshot) of a running container using ZFS or CRIU.
-
+\fBlist\fR
+List containers, tab-separated: ID, IMAGE, COMMAND, CREATED, STATUS, BACKEND, NAMES.
 .TP
-.B restore \fIcontainer_id\fR
-Restore a container from a previously created checkpoint.
-
+\fBstate\fR \fIname\fR|\fIvmid\fR
+Print OCI runtime state as JSON. Fails if the container does not exist.
 .TP
-.B run \fIcontainer_id\fR
-Create and start a container in one operation.
-
-.TP
-.B spec
-Generate an OCI specification file.
-
-.TP
-.B kill \fIcontainer_id\fR [\fISIGNAL\fR]
-Send a signal to a container process.
-
-.TP
-.B pause \fIcontainer_id\fR
-Pause a running container.
-
-.TP
-.B resume \fIcontainer_id\fR
-Resume a paused container.
-
+\fBversion\fR, \fBhelp\fR
+Print the version or the list of commands.
+.PP
+Every command accepts
+.BR \-\-help .
 .SH OPTIONS
 .TP
-.B \-\-config \fIPATH\fR
-Path to configuration file (default: /etc/nexcage/nexcage.json).
-
-.TP
-.B \-\-root \fIPATH\fR
-Root directory for storage of container state (default: /run/nexcage).
-
-.TP
-.B \-\-log \fIPATH\fR
-Set the log file path (default: stderr).
-
-.TP
-.B \-\-log-format \fIFORMAT\fR
-Set the log format: 'text' or 'json' (default: text).
-
-.TP
 .B \-\-debug
-Enable debug logging.
-
+Log at debug level and print startup and system information.
 .TP
-.B \-\-systemd-cgroup
-Enable systemd cgroup support.
-
+\fB\-\-log\-level\fR \fIlevel\fR
+One of trace, debug, info (default), warn, error, fatal.
 .TP
-.B \-\-bundle, \-b \fIPATH\fR
-Path to OCI bundle directory.
-
-.TP
-.B \-\-pid-file \fIPATH\fR
-Path to write process ID to.
-
-.TP
-.B \-\-console-socket \fIPATH\fR
-Path to console socket for container I/O.
-
-.TP
-.B \-\-help, \-h
-Show help message.
-
-.TP
-.B \-\-version, \-v
-Print version information.
-
+\fB\-\-log\-file\fR \fIpath\fR
+Also write log lines to
+.IR path .
+.PP
+Log lines go to standard error; standard output carries only command output.
 .SH CONFIGURATION
-Configuration files are loaded in this order:
-.IP 1. 4
-File specified with \-\-config
-.IP 2. 4
-./config.json (current directory)
-.IP 3. 4
-/etc/nexcage/config.json
-.IP 4. 4
-/etc/nexcage/nexcage.json
-
-.SH EXAMPLES
+The first of these files that exists is read; a file that does not parse is
+an error:
+.IR ./config.json ,
+.IR /etc/nexcage/config.json ,
+.IR /etc/nexcage/nexcage.json .
 .TP
-Create and start a container:
-.B nexcage create --bundle /path/to/bundle container1
-.br
-.B nexcage start container1
-
+.B network.bridge
+Bridge for eth0, which uses DHCP. Default vmbr0.
 .TP
-Create and start in one operation:
-.B nexcage run --bundle /path/to/bundle container1
-
+.B proxmox.storage
+Storage for the root filesystem, for example local-lvm. When unset, pct uses
+its default storage, local.
+.TP
+.B proxmox.rootfs_size_gb
+Root filesystem size in GiB when
+.B proxmox.storage
+is set. Default 8.
+.TP
+.B proxmox.unprivileged
+Create unprivileged containers. Default: privileged.
+.TP
+.B proxmox.ostype
+OS type passed to pct. Default: detected from the template.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+The operation failed.
+.TP
+.B 2
+Invalid usage, such as an unknown command or a missing argument.
 .SH FILES
 .TP
-.I /etc/nexcage/nexcage.json
-Main configuration file.
-
-.TP
 .I /etc/nexcage/config.json
-Alternative configuration file.
-
+Configuration.
 .TP
-.I /run/nexcage
-Default runtime directory.
-
+.I /run/nexcage/<name>/state.json
+State written by create, start and stop.
 .TP
-.I /var/lib/nexcage
-Data directory for storage.
-
-.TP
-.I /var/log/nexcage
-Log directory.
-
-.SH DEPENDENCIES
-.TP
-.B Required:
-zfsutils-linux (>= 2.1), criu (>= 3.15)
-
-.TP
-.B Recommended:
-proxmox-ve (>= 7.0), containerd (>= 1.6)
-
-.TP
-.B Optional:
-kubernetes-cni, docker.io
-
+.I /usr/share/doc/nexcage/examples/config.json
+Example configuration.
+.SH EXAMPLES
+.nf
+nexcage create \-\-name web\-1 local:vztmpl/debian\-12\-standard_12.7\-1_amd64.tar.zst
+nexcage start web\-1
+nexcage state web\-1
+nexcage stop web\-1
+nexcage delete web\-1
+.fi
 .SH SEE ALSO
-.BR zfs (8),
-.BR criu (8),
-.BR containerd (1),
-.BR runc (1)
-
-Online documentation: https://github.com/kubebsd/nexcage
-
-.SH AUTHOR
-Proxmox LXCRI Team <maintainers@nexcage.io>
-
+.BR pct (1),
+.BR pvesh (1),
+.BR pveam (1)
+.PP
+https://github.com/CageForge/nexcage
 .SH BUGS
-Report bugs at: https://github.com/kubebsd/nexcage/issues
+Report bugs at https://github.com/CageForge/nexcage/issues

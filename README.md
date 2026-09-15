@@ -1,74 +1,118 @@
 # NexCage
 
-Next-generation container runtime for Proxmox VE using LXC and OCI backends (crun/runc).
+Command-line lifecycle for LXC containers on a Proxmox VE host. nexcage
+creates, starts, stops, deletes and inspects containers through `pct` and
+`pvesh`, from Proxmox templates, OCI bundles, or — on Proxmox VE 9.1 and later
+— OCI registry images.
 
-## Compatibility Snapshot
-- **OCI Runtime Specification**: fully parses Linux additions up to v1.3.0 (NUMA memoryPolicy, Intel RDT monitoring, netDevices inventory) using the external [`oci-specs-zig`](https://github.com/CageForge/oci-specs-zig) package.
-- **Network integration**: `linux.netDevices` aliases are applied to pct `--netX` arguments and `/etc/network/interfaces` with automatic bridge fallback.
-- **Proxmox VE**: verified on 8.x hypervisors; upcoming work tracks 9.x updates.
-- **libcrun ABI (required for crun)**: build compiles vendored sources from `deps/crun`; run `make prepare-crun` to refresh headers. Requires `pkg-config` access to `libsystemd`; the build fails if those development files are missing.
+## Status
 
-- Architecture: amd64 (x86_64) only
-- Environment: runs on Proxmox VE host (no containerization)
+Version 0.8.0 is the MVP scope:
 
-## Archival Policy
-- Deprecated documentation and code are moved to `archive/`
-- Legacy code is kept under `archive/legacy/` and may be removed in future
+| | |
+|---|---|
+| **Supported** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `run` for LXC containers on one Proxmox VE 8.x / 9.x host |
+| **Images** | `<storage>:vztmpl/…` templates, OCI bundle directories, OCI registry references (Proxmox VE 9.1+) |
+| **Not yet** | containerd / CRI integration, the `--config` flag, host PIDs in `state`, containers on other cluster nodes |
+| **Opt-in, experimental** | crun and runc backends, Proxmox VM backend |
 
-## Quick Start (Ubuntu 22.04/24.04)
+- Architecture: amd64 (x86_64)
+- Runs on the Proxmox VE host itself, as root
 
-1) Install dependencies
+## Build
+
+The default build needs only Zig 0.15.1. The first build may download the
+pinned `oci-specs-zig` package declared in `build.zig.zon`.
+
 ```bash
-sudo apt-get update -y
-sudo apt-get install -y \
-  build-essential autoconf automake libtool pkg-config \
-  libyajl-dev libcap-dev libseccomp-dev libsystemd-dev \
-  libbpf-dev libapparmor-dev libselinux1-dev libcriu-dev
+zig build -Doptimize=ReleaseSafe
+sudo install -m 0755 zig-out/bin/nexcage /usr/local/bin/nexcage
+nexcage version
 ```
 
-2) Install Zig 0.15.1 (or use CI setup) — dependencies are resolved through `build.zig.zon`, including `oci-specs-zig`.
-```bash
-# See https://ziglang.org/download/ for binary tarball
-zig version  # should print 0.15.1
+Release binaries and a `.deb` are attached to GitHub releases; see
+[docs/INSTALL.md](docs/INSTALL.md).
+
+## Configure
+
+nexcage reads the first of `./config.json`, `/etc/nexcage/config.json` and
+`/etc/nexcage/nexcage.json` that exists. A file that does not parse is an
+error. Without any file the defaults below apply.
+
+```json
+{
+  "network": { "bridge": "vmbr0" },
+  "proxmox": {
+    "storage": "local-lvm",
+    "rootfs_size_gb": 8,
+    "unprivileged": true
+  }
+}
 ```
 
-3) Build and run (default)
+| Key | Default | Effect |
+|---|---|---|
+| `network.bridge` | `vmbr0` | Bridge for `eth0`, which gets its address by DHCP |
+| `proxmox.storage` | unset: pct uses `local` | Storage for the root filesystem. Set it — stock LVM installs refuse containers on `local` |
+| `proxmox.rootfs_size_gb` | `8` | Root filesystem size, used when `storage` is set |
+| `proxmox.unprivileged` | unset: privileged | `--unprivileged` for new containers |
+| `proxmox.ostype` | detected by pct | `--ostype` for new containers |
+
+## Use
+
 ```bash
-zig build
-./zig-out/bin/nexcage --help
-./zig-out/bin/nexcage version
+# From a Proxmox template
+nexcage create --name web-1 local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst
+nexcage start web-1
+nexcage state web-1          # OCI state JSON on stdout
+nexcage list
+nexcage stop web-1           # clean shutdown, forced after 60 seconds
+nexcage delete web-1
+
+# From an OCI registry (Proxmox VE 9.1+); pulled to storage "local", then started
+nexcage run --name cache-1 docker.io/library/redis:7
+
+# Signals go to PID 1 in the container
+nexcage kill web-1 SIGKILL
 ```
 
-4) Build with vendored libcrun (project policy)
-```bash
-make prepare-crun        # generates vendored headers and checks deps
-make build-vendored      # builds with -Duse-vendored-libcrun=true
-```
+- Containers are addressed by name, which becomes the hostname and must be
+  unique. `state` also accepts a VMID.
+- VMIDs come from `pvesh get /cluster/nextid`.
+- Logs go to stderr; `--debug`, `--log-level <level>` and `--log-file <path>`
+  go before the command.
+- Exit status: `0` success, `1` the operation failed, `2` invalid usage.
 
-## CLI Examples
-```bash
-# Show command-specific help
-./zig-out/bin/nexcage create --help
+Full reference: [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md).
 
-# List containers (LXC)
-./zig-out/bin/nexcage list --runtime lxc
+## crun backend (optional)
+
+The crun backend links vendored libcrun and needs the `deps/crun` submodules
+plus generated headers. The Dockerfile prepares all of that from a clean clone:
+
+```bash
+docker build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t nexcage:crun .
 ```
 
 ## Development
-- Dev quickstart: see docs/DEV_QUICKSTART.md
-- CLI reference: see docs/CLI_REFERENCE.md
-- Architecture overview: see docs/architecture/OVERVIEW.md
-- ADRs: see docs/architecture/
 
-## Testing
-- CI smoke/unit run on GitHub Actions
-- E2E tests run on self-hosted Proxmox runner
-- **Debug Logging**: See [DEBUG_LOGGING_GUIDE.md](docs/DEBUG_LOGGING_GUIDE.md)
-- **Troubleshooting**: See [TROUBLESHOOTING_GUIDE.md](docs/TROUBLESHOOTING_GUIDE.md)
-- **Test Results**: See [TESTING_RESULTS.md](docs/TESTING_RESULTS.md)
-- Details: TESTING.md and PROXMOX_TESTING.md
+```bash
+zig build test --summary all
+```
 
-## Security & Policies
-- Security policy: SECURITY.md
-- Maintainers/Governance: MAINTAINERS.md, GOVERNANCE.md
-- Reproducible builds: REPRODUCIBLE_BUILDS.md
+- Every `.zig` file under `tests/` and `src/` that declares a test is its own
+  test step; a file that fails to compile fails by name.
+- CI (`.github/workflows/ci.yml`) builds, tests and smoke-tests on
+  GitHub-hosted runners. The Proxmox E2E job runs the container lifecycle
+  through nexcage on a self-hosted Proxmox VE runner.
+- Code and tests that no longer build are kept in [archive/](archive/README.md).
+
+Guides: [docs/DEV_QUICKSTART.md](docs/DEV_QUICKSTART.md),
+[TESTING.md](TESTING.md), [docs/CI_CD_SETUP.md](docs/CI_CD_SETUP.md),
+[docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md).
+
+## Security and policies
+
+- Security policy: [SECURITY.md](SECURITY.md)
+- Maintainers and governance: [MAINTAINERS.md](MAINTAINERS.md), [GOVERNANCE.md](GOVERNANCE.md)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
