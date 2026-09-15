@@ -17,33 +17,23 @@ concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  XDG_CACHE_HOME: ${{ github.workspace }}/.cache
-
 # Minimal permissions per job will be set automatically from here
 permissions:
   contents: read
   security-events: write
   actions: read
 
+# Every job runs on a GitHub-hosted runner. They used to target "runner0",
+# which no runner has, so those jobs sat queued until GitHub cancelled them,
+# and the self-hosted Proxmox runner. Container actions such as Semgrep and
+# Trivy run as root, and on a self-hosted runner whatever they write into the
+# workspace stays root-owned; a root-owned .cache in that workspace is what
+# makes checkout fail there. XDG_CACHE_HOME no longer points into the
+# workspace for the same reason. Build and tests are covered by ci.yml.
 jobs:
-  build-and-test:
-    name: Build & Test (ReleaseSafe)
-    runs-on: [self-hosted, runner0]
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: '0.15.1'
-      - name: Build (ReleaseSafe)
-        run: zig build -Doptimize=ReleaseSafe
-      - name: Run tests
-        run: zig build test
-
   codeql:
     name: CodeQL (C/C++)
-    runs-on: [self-hosted, runner0]
+    runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 60
     # Run on main, PRs to main, and workflow_dispatch
@@ -67,7 +57,7 @@ jobs:
 
   semgrep:
     name: Semgrep SAST
-    runs-on: [self-hosted, proxmox]  # Requires Docker
+    runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 20
     steps:
@@ -82,13 +72,17 @@ jobs:
 
   trivy-fs:
     name: Trivy FS Scan
-    runs-on: [self-hosted, proxmox]  # Requires Docker
+    runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy (filesystem)
-        uses: aquasecurity/trivy-action@0.20.0
+        # Pinned to the v0.36.0 commit, not a tag. On 2026-03-19 76 of 77
+        # trivy-action tags, 0.20.0 among them, were force-pushed to
+        # credential-stealing code (CVE-2026-33634 / GHSA-69fq-xp46-6x23);
+        # versions before 0.35.0 are affected. A tag can be moved; a SHA cannot.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -107,7 +101,7 @@ jobs:
 
   gitleaks:
     name: Gitleaks Secrets Scan
-    runs-on: [runner0]
+    runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 10
     steps:

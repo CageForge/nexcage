@@ -951,3 +951,37 @@ fn matchesAnywhere(name: []const u8, pattern: []const u8) bool {
     return false;
 }
 
+test "the proxmox section and bridge reach Config" {
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadFromString(
+        \\{
+        \\  "network": { "bridge": "vmbr9" },
+        \\  "proxmox": { "storage": "local-zfs", "rootfs_size_gb": 4, "ostype": "debian",
+        \\               "unprivileged": true, "pct_path": "/usr/bin/pct" }
+        \\}
+    );
+    defer cfg.deinit();
+
+    try std.testing.expectEqualStrings("vmbr9", cfg.network.bridge.?);
+    try std.testing.expectEqualStrings("local-zfs", cfg.proxmox.storage.?);
+    try std.testing.expectEqual(@as(?u32, 4), cfg.proxmox.rootfs_size_gb);
+    try std.testing.expectEqualStrings("debian", cfg.proxmox.ostype.?);
+    try std.testing.expectEqual(@as(?bool, true), cfg.proxmox.unprivileged);
+}
+
+test "a root filesystem size below 1 GiB is rejected" {
+    var loader = ConfigLoader.init(std.testing.allocator);
+    try std.testing.expectError(types.Error.InvalidConfig, loader.loadFromString(
+        \\{ "proxmox": { "storage": "local-lvm", "rootfs_size_gb": 0 } }
+    ));
+}
+
+test "without a config file the defaults target a Proxmox host" {
+    var cfg = try Config.init(std.testing.allocator, .lxc);
+    defer cfg.deinit();
+
+    try std.testing.expectEqualStrings(constants.DEFAULT_BRIDGE_NAME, cfg.network.bridge.?);
+    try std.testing.expect(cfg.proxmox.storage == null);
+    try std.testing.expect(cfg.proxmox.rootfs_size_gb == null);
+}
+

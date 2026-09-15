@@ -215,19 +215,24 @@ pub const ProxmoxLxcDriver = struct {
         defer if (bundle_config) |*bc| bc.deinit();
 
         if (config.image) |image_path| {
-            if (try self.pve_client.supportsOciRegistryPull()) {
-                const has_colon = std.mem.indexOf(u8, image_path, ":") != null;
-                const is_tar = std.mem.endsWith(u8, image_path, ".tar.zst");
-                const has_vztmpl = std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
-                const is_proxmox_template = is_tar or has_vztmpl;
-                const is_absolute_path = std.fs.path.isAbsolute(image_path);
+            const is_proxmox_template = std.mem.endsWith(u8, image_path, ".tar.zst") or
+                std.mem.indexOf(u8, image_path, ":vztmpl/") != null;
+            const is_registry_ref = std.mem.indexOf(u8, image_path, ":") != null and
+                !is_proxmox_template and !std.fs.path.isAbsolute(image_path);
 
-                if (has_colon and !is_proxmox_template and !is_absolute_path) {
-                    const storage = "local";
-                    const pulled = try self.pve_client.pullOciImage(image_path, storage);
-                    template_name = try self.allocator.dupe(u8, pulled);
-                    self.allocator.free(pulled);
+            if (is_registry_ref) {
+                // Only Proxmox VE 9.1+ can pull OCI images. On older hosts a
+                // registry reference used to fall through to bundle-path
+                // validation and fail as a usage error, saying nothing about
+                // the version.
+                if (!try self.pve_client.supportsOciRegistryPull()) {
+                    if (self.logger) |log| log.err("'{s}' is a registry image; pulling OCI images needs Proxmox VE 9.1 or later. Use a template (local:vztmpl/...) or an OCI bundle directory", .{image_path}) catch {};
+                    return core.Error.UnsupportedOperation;
                 }
+                const storage = "local";
+                const pulled = try self.pve_client.pullOciImage(image_path, storage);
+                template_name = try self.allocator.dupe(u8, pulled);
+                self.allocator.free(pulled);
             }
 
             if (template_name == null) {
