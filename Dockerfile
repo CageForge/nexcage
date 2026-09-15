@@ -83,15 +83,15 @@ RUN git clone https://github.com/themoriarti/bfc.git deps/bfc && \
     git -C deps/crun/libocispec submodule update --init runtime-spec image-spec yajl
 
 # Build arguments for customizing build
-ARG BUILD_FLAGS=""
+# The image clones and prepares vendored crun, so it builds the crun backend.
+# A plain `zig build` is Proxmox LXC only; pass BUILD_FLAGS="" to match it.
+ARG BUILD_FLAGS="-Denable-backend-crun=true"
 ARG BUILD_VERSION="dev"
 
 # Workaround for Docker/OrbStack ENOSYS errors with Zig cache
 # Simply remove any existing cache and build fresh
 RUN rm -rf .zig-cache /root/.cache/zig
 
-# Build project with default configuration (all features enabled)
-# Note: libcrun ABI mode is disabled by default, use -Denable-libcrun-abi=true to enable
 # Vendored crun needs two generated header sets, and neither is produced by
 # `zig build`. The Makefile prescribes `zig build prepare-crun`, a step that
 # does not exist in build.zig — this is what actually works.

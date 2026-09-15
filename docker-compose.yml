@@ -54,7 +54,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - BUILD_FLAGS=-Denable-libcrun-abi=true
+        - BUILD_FLAGS=-Denable-backend-crun=true
     image: nexcage:libcrun
     container_name: nexcage-libcrun
     privileged: true
