@@ -1,0 +1,71 @@
+name: CI
+
+# The required check for the default build: Proxmox LXC only, on a
+# GitHub-hosted runner. Replaces ci_cncf.yml and build_vendored.yml, which
+# installed a package Ubuntu no longer ships (libcriu-dev), called build steps
+# that do not exist (prepare-crun, -Duse-vendored-libcrun) and queued jobs for a
+# runner label ("runner0") that no runner has.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build and test (Proxmox LXC)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build (Debug)
+        run: zig build --summary all
+
+      - name: Build (ReleaseSafe)
+        run: zig build -Doptimize=ReleaseSafe -p zig-out-release
+
+      - name: Unit tests
+        run: zig build test --summary all
+
+      - name: Smoke tests
+        run: |
+          set -uo pipefail
+          nx=./zig-out/bin/nexcage
+          fail() { echo "::error::$*"; exit 1; }
+
+          $nx --help >/dev/null || fail "--help failed"
+          $nx version || fail "version failed"
+          $nx create --help >/dev/null || fail "create --help failed"
+
+          # No Proxmox here: operations must fail with a clear message and exit 1
+          $nx start ci-smoke 2> err.txt; rc=$?
+          cat err.txt
+          [ "$rc" -eq 1 ] || fail "start without pct: expected exit 1, got $rc"
+          grep -q "not found in PATH" err.txt || fail "start without pct: no explanation on stderr"
+
+          $nx no-such-command 2> /dev/null; rc=$?
+          [ "$rc" -eq 2 ] || fail "unknown command: expected exit 2, got $rc"
+
+      - name: Upload binary (ReleaseSafe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexcage-linux-amd64
+          path: zig-out-release/bin/nexcage
+          retention-days: 7

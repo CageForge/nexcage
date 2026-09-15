@@ -44,7 +44,8 @@ test "parse Proxmox VE version from pveversion output" {
             const dot_idx = std.mem.indexOfScalar(u8, version_str, '.') orelse break;
             const major = version_str[0..dot_idx];
             const minor_start = dot_idx + 1;
-            const minor_end = std.mem.indexOfScalar(u8, version_str[minor_start..], '.') orelse version_str.len;
+            // indexOfScalar on the subslice is relative to minor_start
+            const minor_end = if (std.mem.indexOfScalar(u8, version_str[minor_start..], '.')) |idx| minor_start + idx else version_str.len;
             const minor = version_str[minor_start..minor_end];
             
             found_version = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ major, minor });

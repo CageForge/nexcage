@@ -50,6 +50,37 @@ pub fn findVmidByName(output: []const u8, name: []const u8) ?[]const u8 {
     return null;
 }
 
+pub const PveVersion = struct {
+    major: u32,
+    minor: u32,
+};
+
+/// Reads the Proxmox VE major.minor version from `pveversion -v` output, or
+/// from the single `pve-manager/X.Y.Z/...` line plain `pveversion` prints.
+pub fn parsePveVersion(output: []const u8) ?PveVersion {
+    var lines = std.mem.splitScalar(u8, output, '\n');
+    while (lines.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        const rest = if (std.mem.startsWith(u8, line, "proxmox-ve:"))
+            std.mem.trimLeft(u8, line["proxmox-ve:".len..], " \t")
+        else if (std.mem.indexOf(u8, line, "pve-manager/")) |i|
+            line[i + "pve-manager/".len ..]
+        else
+            continue;
+        if (parseMajorMinor(rest)) |version| return version;
+    }
+    return null;
+}
+
+/// "9.1.0 (running kernel: ...)", "8.4.1/2a5fa54a" or "9.0-3" -> major, minor
+fn parseMajorMinor(text: []const u8) ?PveVersion {
+    const end = std.mem.indexOfAny(u8, text, " /(") orelse text.len;
+    var parts = std.mem.tokenizeAny(u8, text[0..end], ".-");
+    const major = std.fmt.parseInt(u32, parts.next() orelse return null, 10) catch return null;
+    const minor = std.fmt.parseInt(u32, parts.next() orelse return null, 10) catch return null;
+    return .{ .major = major, .minor = minor };
+}
+
 pub const PveClient = struct {
     const Self = @This();
 
@@ -73,37 +104,8 @@ pub const PveClient = struct {
         }
         if (res.exit_code != 0) return null;
 
-        var lines = std.mem.splitScalar(u8, res.stdout, '\n');
-        while (lines.next()) |line| {
-            if (std.mem.startsWith(u8, line, "proxmox-ve:")) {
-                var version_part = std.mem.trimLeft(u8, line["proxmox-ve:".len..], " \t");
-                const space_idx = std.mem.indexOfScalar(u8, version_part, ' ') orelse version_part.len;
-                const version_str = version_part[0..space_idx];
-                const dot_idx = std.mem.indexOfScalar(u8, version_str, '.') orelse return null;
-                const major = version_str[0..dot_idx];
-                const minor_start = dot_idx + 1;
-                const next_dot_idx = std.mem.indexOfScalar(u8, version_str[minor_start..], '.');
-                const minor_end = if (next_dot_idx) |idx| minor_start + idx else version_str.len;
-                const minor = version_str[minor_start..minor_end];
-
-                return try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ major, minor });
-            }
-            if (std.mem.indexOf(u8, line, "pve-manager/") != null) {
-                if (std.mem.indexOfScalar(u8, line, '/')) |slash_idx| {
-                    const version_part = line[slash_idx + 1 ..];
-                    const dash_idx = std.mem.indexOfScalar(u8, version_part, '-') orelse version_part.len;
-                    const version_str = version_part[0..dash_idx];
-                    const dot_idx = std.mem.indexOfScalar(u8, version_str, '.') orelse return null;
-                    const major = version_str[0..dot_idx];
-                    const minor_start = dot_idx + 1;
-                    const minor_end = std.mem.indexOfScalar(u8, version_str[minor_start..], '-') orelse version_str.len;
-                    const minor = version_str[minor_start..minor_end];
-
-                    return try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ major, minor });
-                }
-            }
-        }
-        return null;
+        const version = parsePveVersion(res.stdout) orelse return null;
+        return try std.fmt.allocPrint(self.allocator, "{d}.{d}", .{ version.major, version.minor });
     }
 
     /// Check if Proxmox VE version is >= 9.1 (supports OCI Registry pull)
@@ -417,4 +419,33 @@ test "findVmidByName matches whole names only" {
     try std.testing.expectEqualStrings("1000", findVmidByName(output, "db").?);
     try std.testing.expect(findVmidByName(output, "web") == null);
     try std.testing.expect(findVmidByName(output, "backup") == null);
+}
+
+test "parsePveVersion reads the proxmox-ve line of pveversion -v" {
+    const version = parsePveVersion(
+        \\proxmox-ve: 9.1.0 (running kernel: 6.14.8-2-pve)
+        \\pve-manager: 9.1.1 (running version: 9.1.1/42db4a6cf33dac83)
+        \\proxmox-kernel-helper: 9.0.4
+    ).?;
+    try std.testing.expectEqual(@as(u32, 9), version.major);
+    try std.testing.expectEqual(@as(u32, 1), version.minor);
+}
+
+test "parsePveVersion reads the pve-manager/ form" {
+    // The previous parser cut this line at the first '-' (inside the kernel
+    // version) and returned "8.4.1/2a5fa54a8503f96d (running kernel: 6.8.12"
+    // as the version, which then failed to parse as a number.
+    const version = parsePveVersion("pve-manager/8.4.1/2a5fa54a8503f96d (running kernel: 6.8.12-9-pve)").?;
+    try std.testing.expectEqual(@as(u32, 8), version.major);
+    try std.testing.expectEqual(@as(u32, 4), version.minor);
+}
+
+test "parsePveVersion handles a release suffix and rejects the rest" {
+    const version = parsePveVersion("proxmox-ve: 9.0-3").?;
+    try std.testing.expectEqual(@as(u32, 9), version.major);
+    try std.testing.expectEqual(@as(u32, 0), version.minor);
+
+    try std.testing.expect(parsePveVersion("") == null);
+    try std.testing.expect(parsePveVersion("proxmox-ve: unknown") == null);
+    try std.testing.expect(parsePveVersion("pve-manager: 9.1.1") == null);
 }
