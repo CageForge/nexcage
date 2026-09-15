@@ -18,17 +18,19 @@ pub const LogContext = struct {
     level: LogLevel,
     component: []const u8,
     timestamp: bool = true,
-    colorize: bool = true,
+    colorize: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, _: std.fs.File.Writer, level: LogLevel, component: []const u8) LogContext {
-        // In Zig 0.15.1, Writer doesn't expose file directly, so we store File separately
-        // For stdout, we use stdout() directly
-        const stdout = std.fs.File.stdout();
+    /// Messages are written to `file`. Console loggers should be given stderr:
+    /// stdout carries command output (the list table, state JSON) that other
+    /// programs parse. The previous signature took a Writer, ignored it and
+    /// wrote to stdout, so a "file" logger never reached its file.
+    pub fn init(allocator: std.mem.Allocator, file: std.fs.File, level: LogLevel, component: []const u8) LogContext {
         return LogContext{
             .allocator = allocator,
-            .file = stdout,
+            .file = file,
             .level = level,
             .component = component,
+            .colorize = file.isTty(),
         };
     }
 
@@ -61,97 +63,21 @@ pub const LogContext = struct {
     }
 
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
-        // Safety check: validate self pointer and fields before any access
-        // Use stderr for debug output to avoid recursion
-        const stderr = std.fs.File.stderr();
-        stderr.writeAll("[LOG] log: Starting\n") catch {};
-        
-        // Check self pointer validity by accessing fields
-        stderr.writeAll("[LOG] log: Checking self.level\n") catch {};
-        const current_level = self.level;
-        const current_level_int: u8 = @intFromEnum(current_level);
-        stderr.writeAll("[LOG] log: self.level checked\n") catch {};
-        
-        // Early return if log level is below threshold
-        stderr.writeAll("[LOG] log: Checking log level threshold\n") catch {};
-        const level_int = @intFromEnum(level);
-        const threshold_int: u8 = if (current_level_int <= @intFromEnum(LogLevel.fatal)) current_level_int else @intFromEnum(LogLevel.info);
-        
-        if (level_int < threshold_int) {
-            stderr.writeAll("[LOG] log: Log level below threshold, returning\n") catch {};
-            return;
-        }
-        stderr.writeAll("[LOG] log: Log level OK, continuing\n") catch {};
-        
-        // Use page_allocator for logger to avoid segfault from invalid allocator
-        // The logger's allocator might become invalid during execution
-        const safe_allocator = std.heap.page_allocator;
-        
-        stderr.writeAll("[LOG] log: Before allocator test\n") catch {};
-        const test_alloc = safe_allocator.alloc(u8, 1) catch {
-            stderr.writeAll("[LOG] log: Allocator test failed, skipping\n") catch {};
-            return;
-        };
-        defer safe_allocator.free(test_alloc);
-        stderr.writeAll("[LOG] log: Allocator test passed\n") catch {};
+        if (@intFromEnum(level) < @intFromEnum(self.level)) return;
 
-        stderr.writeAll("[LOG] log: Getting timestamp\n") catch {};
-        const timestamp = if (self.timestamp) blk: {
-            const now = std.time.timestamp();
-            const seconds = @as(u64, @intCast(now));
-            break :blk seconds;
-        } else 0;
-        stderr.writeAll("[LOG] log: Timestamp obtained\n") catch {};
-
-        stderr.writeAll("[LOG] log: Getting level strings\n") catch {};
-        const level_str = self.getLevelString(level);
         const color = if (self.colorize) self.getLevelColor(level) else "";
         const reset = if (self.colorize) "\x1b[0m" else "";
-        stderr.writeAll("[LOG] log: Level strings obtained\n") catch {};
 
-        stderr.writeAll("[LOG] log: Before allocPrint\n") catch {};
-        
-        if (self.timestamp) {
-            const message = std.fmt.allocPrint(safe_allocator, "{s}[{d}] {s}{s} {s}: " ++ format ++ "{s}\n", .{
-                color,
-                timestamp,
-                level_str,
-                reset,
-                self.component,
-            } ++ args ++ .{reset}) catch {
-                stderr.writeAll("[LOG] log: allocPrint failed, skipping\n") catch {};
-                return;
-            };
-            defer safe_allocator.free(message);
-            stderr.writeAll("[LOG] log: allocPrint succeeded, len = ") catch {};
-            const len_str = try std.fmt.allocPrint(safe_allocator, "{d}", .{message.len});
-            defer safe_allocator.free(len_str);
-            stderr.writeAll(len_str) catch {};
-            stderr.writeAll("\n") catch {};
-            stderr.writeAll("[LOG] log: Before file.writeAll\n") catch {};
-            // Use file.writeAll directly to avoid segfault
-            self.file.writeAll(message) catch {
-                stderr.writeAll("[LOG] log: file.writeAll failed\n") catch {};
-            };
-            stderr.writeAll("[LOG] log: file.writeAll completed\n") catch {};
-        } else {
-            const message = std.fmt.allocPrint(safe_allocator, "{s}{s} {s}: " ++ format ++ "{s}\n", .{
-                color,
-                level_str,
-                self.component,
-            } ++ args ++ .{reset}) catch {
-                stderr.writeAll("[LOG] log: allocPrint failed (no timestamp), skipping\n") catch {};
-                return;
-            };
-            defer safe_allocator.free(message);
-            stderr.writeAll("[LOG] log: Before file.writeAll (no timestamp)\n") catch {};
-            // Use file.writeAll directly to avoid segfault
-            self.file.writeAll(message) catch {
-                stderr.writeAll("[LOG] log: file.writeAll failed (no timestamp)\n") catch {};
-            };
-            stderr.writeAll("[LOG] log: file.writeAll completed (no timestamp)\n") catch {};
-        }
-        stderr.writeAll("[LOG] log: Finished\n") catch {};
+        // Streaming rather than positional: a positional writer starts at
+        // offset 0, so each message would overwrite the last one in a log file.
+        var buffer: [1024]u8 = undefined;
+        var file_writer = self.file.writerStreaming(&buffer);
+        const out = &file_writer.interface;
+
+        // A log line that cannot be written must not fail the operation it describes.
+        if (self.timestamp) out.print("[{d}] ", .{std.time.timestamp()}) catch return;
+        out.print("{s}{s}{s} {s}: " ++ format ++ "\n", .{ color, self.getLevelString(level), reset, self.component } ++ args) catch return;
+        out.flush() catch return;
     }
 
     fn getLevelString(self: *LogContext, level: LogLevel) []const u8 {
@@ -287,7 +213,7 @@ pub const LoggerFactory = struct {
     }
 
     pub fn createConsoleLogger(self: *LoggerFactory, level: LogLevel, component: []const u8) LogContext {
-        return LogContext.init(self.allocator, std.fs.File.stdout().writer(&[_]u8{ } ** 0), level, component);
+        return LogContext.init(self.allocator, std.fs.File.stderr(), level, component);
     }
 
     pub fn createStructuredLogger(self: *LoggerFactory, level: LogLevel, component: []const u8) StructuredLogger {
@@ -296,6 +222,6 @@ pub const LoggerFactory = struct {
 
     pub fn createFileLogger(self: *LoggerFactory, level: LogLevel, component: []const u8, file_path: []const u8) !LogContext {
         const file = try std.fs.cwd().createFile(file_path, .{});
-        return LogContext.init(self.allocator, file.writer(), level, component);
+        return LogContext.init(self.allocator, file, level, component);
     }
 };

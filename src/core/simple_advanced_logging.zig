@@ -14,13 +14,12 @@ pub const SimpleAdvancedLogging = struct {
 
     /// Initialize simple advanced logging system
     pub fn init(allocator: std.mem.Allocator, debug_mode: bool, log_file_path: ?[]const u8) !Self {
-        const console_logger = LogContext.init(allocator, std.fs.File.stdout().writer(&[_]u8{} ** 0), .debug, "nexcage");
-        
+        const console_logger = LogContext.init(allocator, std.fs.File.stderr(), .debug, "nexcage");
+
         var file_logger: ?LogContext = null;
         if (log_file_path) |path| {
             const file = try std.fs.cwd().createFile(path, .{});
-            var buffer: [1024]u8 = undefined;
-            file_logger = LogContext.init(allocator, file.writer(&buffer), .debug, "nexcage");
+            file_logger = LogContext.init(allocator, file, .debug, "nexcage");
         }
 
         return Self{
@@ -37,6 +36,7 @@ pub const SimpleAdvancedLogging = struct {
         // Close file logger if exists
         if (self.file_logger) |*logger| {
             logger.deinit();
+            logger.file.close();
         }
 
         // Note: log_file_path is owned by LoggingConfig, not by us

@@ -77,19 +77,25 @@ pub fn build(b: *std.Build) void {
     // feature_options: for crun backend (libcrun ABI flags)
     const feature_options = b.addOptions();
 
-    // Feature flags
-    // Check for systemd availability to set default
-    const systemd_exists = pkgConfigExists(b, "libsystemd");
-    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Enable libcrun ABI (requires libcrun and systemd, default: auto-detected)") orelse systemd_exists;
+    // Backend feature flags. The default build is Proxmox LXC only: crun needs
+    // vendored libcrun (git submodules plus generated headers) and runc is
+    // unverified, so both are opt-in.
+    const enable_backend_proxmox_lxc = b.option(bool, "enable-backend-proxmox-lxc", "Enable Proxmox LXC backend (default: true)") orelse true;
+    const enable_backend_proxmox_vm = b.option(bool, "enable-backend-proxmox-vm", "Enable Proxmox VM backend (default: false)") orelse false;
+    const enable_backend_crun = b.option(bool, "enable-backend-crun", "Enable crun OCI backend, links vendored libcrun (default: false)") orelse false;
+    const enable_backend_runc = b.option(bool, "enable-backend-runc", "Enable runc OCI backend (default: false)") orelse false;
+
+    // The libcrun ABI follows the crun backend. It used to default to "is
+    // libsystemd installed", so a plain `zig build` on any machine with
+    // libsystemd-dev demanded submodules that a fresh clone does not have.
+    const enable_libcrun_abi = b.option(bool, "enable-libcrun-abi", "Link vendored libcrun (default: follows enable-backend-crun)") orelse enable_backend_crun;
+    if (enable_backend_crun and !enable_libcrun_abi) {
+        std.debug.print("[build] error: the crun backend is implemented on libcrun; -Denable-backend-crun=true requires -Denable-libcrun-abi=true.\n", .{});
+        @panic("crun backend without libcrun ABI");
+    }
 
     var libcrun_abi_active = false;
     var libsystemd_available = false;
-
-    // Backend feature flags (most enabled by default)
-    const enable_backend_proxmox_lxc = b.option(bool, "enable-backend-proxmox-lxc", "Enable Proxmox LXC backend (default: true)") orelse true;
-    const enable_backend_proxmox_vm = b.option(bool, "enable-backend-proxmox-vm", "Enable Proxmox VM backend (default: false)") orelse false;
-    const enable_backend_crun = b.option(bool, "enable-backend-crun", "Enable Crun OCI backend (default: true)") orelse true;
-    const enable_backend_runc = b.option(bool, "enable-backend-runc", "Enable Runc OCI backend (default: true)") orelse true;
 
     build_options.addOption(bool, "enable_backend_proxmox_lxc", enable_backend_proxmox_lxc);
     build_options.addOption(bool, "enable_backend_proxmox_vm", enable_backend_proxmox_vm);

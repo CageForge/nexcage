@@ -15,43 +15,40 @@ pub const AppContext = struct {
     logging_config: core.logging_config.LoggingConfig,
     command_registry: cli.CommandRegistry,
 
-    pub fn init(allocator: std.mem.Allocator, args: []const []const u8) !AppContext {
-        // Load main configuration first
+    /// Initializes the context in place.
+    ///
+    /// Every command keeps a pointer to `self.logger`, so the logger has to
+    /// live at its final address before commands are registered. This used to
+    /// build the logger as a local, register `&logger`, and return the context
+    /// by value — leaving each command pointing into a dead stack frame. That
+    /// is the "logger allocator" segfault the CLI worked around by not logging.
+    pub fn init(self: *AppContext, allocator: std.mem.Allocator, args: []const []const u8) !void {
         var config_loader = core.ConfigLoader.init(allocator);
         var config = try config_loader.loadDefault();
+        errdefer config.deinit();
 
-        // Load logging configuration with priority: command line args > config file > environment > defaults
-        const logging_cfg = try core.logging_config.LoggingConfig.loadWithPriority(allocator, args, &config);
+        // Priority: command line args > environment > config file > defaults
+        var logging_cfg = try core.logging_config.LoggingConfig.loadWithPriority(allocator, args, &config);
+        errdefer logging_cfg.deinit(allocator);
 
-        // Initialize basic logger
-        // Use stdout writer with empty buffer (Zig 0.15.1 requires buffer parameter)
-        const stdout = std.fs.File.stdout();
-        var empty_buffer: [0]u8 = undefined;
-        const logger = core.LogContext.init(allocator, stdout.writer(&empty_buffer), config.log_level, "nexcage");
-
-        // Initialize advanced logger if debug mode or file logging is enabled
         var advanced_logger: ?core.simple_advanced_logging.SimpleAdvancedLogging = null;
         if (logging_cfg.debug_mode or logging_cfg.enable_file_logging) {
             advanced_logger = try core.simple_advanced_logging.SimpleAdvancedLogging.init(allocator, logging_cfg.debug_mode, logging_cfg.log_file_path);
         }
+        errdefer if (advanced_logger) |*logger| logger.deinit();
 
-        // Error handling is done through core.errors.ErrorHandler interface
-        // DefaultErrorHandler is available in core.errors module
-
-        // Initialize command registry
-        var command_registry = cli.CommandRegistry.init(allocator);
-
-        // Register built-in commands
-        try cli.registerBuiltinCommandsWithLogger(&command_registry, &logger);
-
-        return AppContext{
+        self.* = AppContext{
             .allocator = allocator,
             .config = config,
-            .logger = logger,
+            // logging_cfg.log_level already folds in config file, env and --debug/--log-level
+            .logger = core.LogContext.init(allocator, std.fs.File.stderr(), logging_cfg.log_level, "nexcage"),
             .advanced_logger = advanced_logger,
             .logging_config = logging_cfg,
-            .command_registry = command_registry,
+            .command_registry = cli.CommandRegistry.init(allocator),
         };
+        errdefer self.command_registry.deinit();
+
+        try cli.registerBuiltinCommandsWithLogger(&self.command_registry, &self.logger);
     }
 
     pub fn deinit(self: *AppContext) void {
@@ -86,8 +83,9 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    // Initialize application context with command line arguments
-    var app = try AppContext.init(allocator, args);
+    // Initialize application context in place: commands hold &app.logger
+    var app: AppContext = undefined;
+    try app.init(allocator, args);
     defer app.deinit();
 
     // Log application startup
@@ -97,7 +95,7 @@ pub fn main() !void {
     }
 
     if (args.len < 2) {
-        try app.logger.err("No command specified. Use 'help' for available commands.", .{});
+        try printUsage();
         return;
     }
 
@@ -133,20 +131,7 @@ pub fn main() !void {
 
     // Handle help command
     if (std.mem.eql(u8, command_name, "--help") or std.mem.eql(u8, command_name, "-h")) {
-        try app.logger.info("Proxmox LXC Runtime Interface v{s}", .{core.version.getVersion()});
-        try app.logger.info("", .{});
-        try app.logger.info("Available commands:", .{});
-        try app.logger.info("  create    Create a new container", .{});
-        try app.logger.info("  start     Start a container", .{});
-        try app.logger.info("  stop      Stop a container", .{});
-        try app.logger.info("  delete    Delete a container", .{});
-        try app.logger.info("  list      List containers", .{});
-        try app.logger.info("  kill      Send a signal to a container", .{});
-        try app.logger.info("  run       Run a command in a container", .{});
-        try app.logger.info("  help      Show this help message", .{});
-        try app.logger.info("  version   Show version information", .{});
-        try app.logger.info("", .{});
-        try app.logger.info("Use 'nexcage <command> --help' for command-specific help", .{});
+        try printUsage();
         return;
     }
 
@@ -173,6 +158,35 @@ pub fn main() !void {
     if (app.advanced_logger) |*logger| {
         logger.logCommandComplete(command_name, true) catch {};
     }
+}
+
+/// Top-level usage. This is command output, not a log message: it goes to
+/// stdout without timestamps and regardless of the configured log level.
+fn printUsage() !void {
+    var buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writerStreaming(&buffer);
+    const out = &stdout_writer.interface;
+    try out.print(
+        \\nexcage v{s} - container runtime for Proxmox VE (LXC)
+        \\
+        \\Usage: nexcage [--debug] [--log-level <level>] [--log-file <path>] <command> [options]
+        \\
+        \\Commands:
+        \\  create    Create a new container
+        \\  start     Start a container
+        \\  stop      Stop a container
+        \\  delete    Delete a container
+        \\  list      List containers
+        \\  state     Show container state as OCI JSON
+        \\  kill      Send a signal to a container
+        \\  run       Create and start a container
+        \\  help      Show this help message
+        \\  version   Show version information
+        \\
+        \\Use 'nexcage <command> --help' for command-specific help.
+        \\
+    , .{core.version.getVersion()});
+    try out.flush();
 }
 
 /// Parse runtime options from command line arguments
