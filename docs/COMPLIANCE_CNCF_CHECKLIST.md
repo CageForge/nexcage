@@ -34,10 +34,10 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
   - SLSA Provenance (basic implementation in release workflow)
   - All artifacts uploaded to GitHub Releases
 
-- [x] **Code scanning**
-  - CodeQL (`.github/workflows/security.yml`)
-  - OpenSSF Scorecards (`.github/workflows/scorecards.yml` - new)
-  - Weekly scheduled runs for continuous monitoring
+- [~] **Code scanning**
+  - Semgrep, Trivy and Gitleaks (`.github/workflows/security.yml`), non-blocking
+  - OpenSSF Scorecards (`.github/workflows/scorecards.yml`), currently disabled by GitHub for inactivity
+  - No CodeQL: it supports C/C++ but not Zig, and the repository has no C/C++ sources of its own
 
 - [ ] **DCO/CLA** — not used
   - The DCO check was removed on 2026-09-15: its action had been deleted
@@ -62,8 +62,7 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 - All artifacts uploaded and included in GitHub Releases
 
 ### Code Scanning
-- **CodeQL**: Integrated in `security.yml`, runs on push/PR
-- **OpenSSF Scorecards**: New workflow `scorecards.yml`, runs weekly + on push
+- **OpenSSF Scorecards**: `scorecards.yml`, weekly and on push (disabled by GitHub for inactivity)
 - **Semgrep**: SAST scanning in `security.yml`
 - **Trivy**: Filesystem scanning in `security.yml`
 - **Gitleaks**: Secret scanning in `security.yml`
@@ -76,7 +75,7 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 - ✅ Automated CI with mandatory gates
 - ✅ SBOM (SPDX + CycloneDX) generation
 - ✅ SLSA Provenance (basic)
-- ✅ Code scanning (CodeQL + Scorecards)
+- ✅ Code scanning (Semgrep, Trivy, Gitleaks); Scorecards disabled
 - ➖ DCO / CLA: not used; contributions need no sign-off
 
 ## Optional Enhancements
