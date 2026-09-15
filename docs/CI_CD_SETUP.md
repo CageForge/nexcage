@@ -8,7 +8,7 @@
 | `proxmox_e2e.yml` | self-hosted, `proxmox` | push/PR to `main`/`develop` | create → state → start → stop → delete through the built binary on Proxmox VE |
 | `crun_build.yml` | ubuntu-24.04 | push to `main`; PRs touching build, Dockerfile or crun | Docker build with `-Denable-backend-crun=true` |
 | `memory_leak_check.yml` | ubuntu-22.04 | push/PR | Valgrind over basic commands |
-| `security.yml` | ubuntu-latest | push/PR to `main`, weekly | CodeQL, Semgrep, Trivy, Gitleaks (non-blocking) |
+| `security.yml` | ubuntu-latest | push/PR to `main`, weekly | Semgrep, Trivy, Gitleaks (non-blocking) |
 | `version-check.yml` | ubuntu-22.04 | push/PR | `VERSION` is semver and appears in `nexcage --help` |
 | `release.yml` | ubuntu-24.04 | tag `v*` | Tests, ReleaseSafe binary, `.deb`, SBOMs, GitHub release |
 | `dependency_check.yml` | ubuntu-latest | weekly | New OCI spec / crun releases; at most one open issue per dependency |

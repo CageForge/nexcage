@@ -16,11 +16,10 @@ concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Minimal permissions per job will be set automatically from here
+# The SARIF upload steps below are disabled, so nothing needs
+# security-events: write. Re-add it together with an upload.
 permissions:
   contents: read
-  security-events: write
-  actions: read
 
 # Every job runs on a GitHub-hosted runner. They used to target "runner0",
 # which no runner has, so those jobs sat queued until GitHub cancelled them,
@@ -29,31 +28,11 @@ permissions:
 # workspace stays root-owned; a root-owned .cache in that workspace is what
 # makes checkout fail there. XDG_CACHE_HOME no longer points into the
 # workspace for the same reason. Build and tests are covered by ci.yml.
+#
+# There is no CodeQL job. It analysed C/C++, and outside the ignored deps/
+# the repository has one header, so every run failed with "No source files
+# found"; CodeQL does not analyse Zig.
 jobs:
-  codeql:
-    name: CodeQL (C/C++)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 60
-    # Run on main, PRs to main, and workflow_dispatch
-    if: |
-      github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') ||
-      github.event_name == 'pull_request' ||
-      github.event_name == 'workflow_dispatch'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: 'cpp,c'
-          queries: +security-and-quality
-          build-mode: none
-          config-file: .github/codeql/codeql-config.yml
-      - name: Analyze
-        uses: github/codeql-action/analyze@v3
-        with:
-          upload: false  # Disable upload since Advanced Security is not enabled
-
   semgrep:
     name: Semgrep SAST
     runs-on: ubuntu-latest
