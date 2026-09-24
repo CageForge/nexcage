@@ -20,7 +20,9 @@ trap 'rm -rf "$STAGE"' EXIT
 ROOT="$STAGE/$PACKAGE"
 
 echo "Building ${PACKAGE} ${VERSION}-1 (amd64)"
-zig build -Doptimize=ReleaseSafe
+# -Dcpu=baseline: the package has to run on any x86_64 Proxmox host, not just
+# on one like the machine that built it.
+zig build -Doptimize=ReleaseSafe -Dcpu=baseline
 
 install -D -m 0755 zig-out/bin/nexcage "$ROOT/usr/bin/nexcage"
 install -D -m 0644 packaging/man/nexcage.1 "$ROOT/usr/share/man/man1/nexcage.1"

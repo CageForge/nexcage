@@ -60,7 +60,11 @@ jobs:
         run: zig build test --summary all
 
       - name: Build
-        run: zig build -Doptimize=ReleaseSafe
+        # -Dcpu=baseline, not the runner's CPU. Without it Zig tunes the binary
+        # for whatever the GitHub runner happens to be, and the published
+        # binary dies with SIGILL on an older host — a Xeon E5 v2, say, which
+        # is ordinary hardware for a Proxmox node.
+        run: zig build -Doptimize=ReleaseSafe -Dcpu=baseline
 
       - name: Create artifact
         id: build

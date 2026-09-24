@@ -1,0 +1,47 @@
+# The Proxmox VE node the E2E suite runs on, declared as a Kubernetes object.
+#
+# kubemox clones the template nexcage-pve-tpl-v0-1 on prox-home. That template
+# is a Debian 13 guest with Proxmox VE 9.2.20 installed on top, so `pct`,
+# `pvesh`, `pvesm` and `pveam` are all there and the OCI registry path
+# (Proxmox VE 9.1+) works — which the old E2E host could not do.
+#
+# The guest keeps the hostname and address baked into the template
+# (nexcage-e2e, 192.168.3.80): a Proxmox node stores its configuration under
+# /etc/pve/nodes/<hostname>, so a clone must not be renamed, and cloud-init's
+# network and hostname modules are disabled inside the image. One node at a
+# time, therefore. A second concurrent node needs its own template.
+#
+# The Actions runner is deliberately not in the template — a registration
+# belongs to one machine. Register it after the VM comes up with
+# scripts/register_e2e_runner.sh.
+apiVersion: proxmox.alperen.cloud/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: nexcage-e2e-1
+  namespace: tenant-nexcage
+  labels:
+    app.kubernetes.io/name: nexcage
+    app.kubernetes.io/component: e2e-node
+spec:
+  connectionRef:
+    name: prox-home
+  nodeName: prox-home
+  name: nexcage-e2e-1
+  cloneMode: Full
+  deletionProtection: false
+  enableAutoStart: true
+  template:
+    name: nexcage-pve-tpl-v0-1
+    cores: 4
+    socket: 1
+    memory: 8192
+    disk:
+      - device: scsi0
+        size: 60
+        storage: main-pool
+    network:
+      - bridge: vmbr0
+        model: virtio
+  additionalConfig:
+    onboot: "1"
+    ipconfig0: ip=192.168.3.80/24,gw=192.168.3.1
