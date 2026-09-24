@@ -35,6 +35,11 @@ jobs:
         with:
           version: 0.15.1
 
+      - name: Formatting
+        # `make lint`, and the reason main had 21 unformatted files for a
+        # while: nothing checked.
+        run: zig fmt --check src/ tests/
+
       - name: Build (Debug)
         run: zig build --summary all
 

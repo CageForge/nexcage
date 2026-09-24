@@ -115,7 +115,7 @@ fn registerCommand(
     comptime CommandType: type,
 ) !void {
     const iface = try registry.allocator.create(interfaces.CommandInterface);
-    
+
     // Wrapper to extract ctx from iface and pass as self to concrete command
     const execute_wrapper = struct {
         fn wrap(self_iface: *interfaces.CommandInterface, options: types.RuntimeOptions, allocator: std.mem.Allocator) interfaces.Error!void {
@@ -125,7 +125,7 @@ fn registerCommand(
             };
         }
     }.wrap;
-    
+
     const help_wrapper = struct {
         fn wrap(self_iface: *interfaces.CommandInterface, allocator: std.mem.Allocator) interfaces.Error![]const u8 {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
@@ -134,7 +134,7 @@ fn registerCommand(
             };
         }
     }.wrap;
-    
+
     const validate_wrapper = struct {
         fn wrap(self_iface: *interfaces.CommandInterface, args: []const []const u8) interfaces.Error!void {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
@@ -143,7 +143,7 @@ fn registerCommand(
             };
         }
     }.wrap;
-    
+
     iface.* = .{
         .name = cmd.name,
         .description = cmd.description,
@@ -162,12 +162,12 @@ fn registerCommandWithLogger(
     logger: *const core.LogContext,
 ) !void {
     const iface = try registry.allocator.create(interfaces.CommandInterface);
-    
+
     // Set logger for the command
     if (@hasDecl(CommandType, "setLogger")) {
         cmd.setLogger(@constCast(logger));
     }
-    
+
     // Wrapper to extract ctx from iface and pass as self to concrete command
     const execute_wrapper = struct {
         fn wrap(self_iface: *interfaces.CommandInterface, options: types.RuntimeOptions, allocator: std.mem.Allocator) interfaces.Error!void {
@@ -177,7 +177,7 @@ fn registerCommandWithLogger(
             };
         }
     }.wrap;
-    
+
     const help_wrapper = struct {
         fn wrap(self_iface: *interfaces.CommandInterface, allocator: std.mem.Allocator) interfaces.Error![]const u8 {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
@@ -186,7 +186,7 @@ fn registerCommandWithLogger(
             };
         }
     }.wrap;
-    
+
     const validate_wrapper = struct {
         fn wrap(self_iface: *interfaces.CommandInterface, args: []const []const u8) interfaces.Error!void {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
@@ -195,7 +195,7 @@ fn registerCommandWithLogger(
             };
         }
     }.wrap;
-    
+
     iface.* = .{
         .name = cmd.name,
         .description = cmd.description,
@@ -204,7 +204,7 @@ fn registerCommandWithLogger(
         .help = help_wrapper,
         .validate = validate_wrapper,
     };
-    
+
     try registry.register(iface);
 }
 

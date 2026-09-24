@@ -217,7 +217,7 @@ pub const LoggerFactory = struct {
     }
 
     pub fn createStructuredLogger(self: *LoggerFactory, level: LogLevel, component: []const u8) StructuredLogger {
-        return StructuredLogger.init(self.allocator, std.fs.File.stdout().writer(&[_]u8{ } ** 0), level, component);
+        return StructuredLogger.init(self.allocator, std.fs.File.stdout().writer(&[_]u8{} ** 0), level, component);
     }
 
     pub fn createFileLogger(self: *LoggerFactory, level: LogLevel, component: []const u8, file_path: []const u8) !LogContext {

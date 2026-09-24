@@ -41,17 +41,17 @@ pub const VersionCommand = struct {
         // Use version from core module (embedded at build time)
         // This is more reliable than reading from file at runtime
         const version_str = core.version.getVersion();
-        
+
         // Parse version string (can be "0.7.2" or "0.7.2-suffix")
         const version = getVersionInfo(version_str);
-        
+
         // Format version output
-        const version_output = if (version.build) |build| 
+        const version_output = if (version.build) |build|
             try std.fmt.allocPrint(allocator, "nexcage version {d}.{d}.{d}-{s}\n", .{ version.major, version.minor, version.patch, build })
-        else 
+        else
             try std.fmt.allocPrint(allocator, "nexcage version {d}.{d}.{d}\n", .{ version.major, version.minor, version.patch });
         defer allocator.free(version_output);
-        
+
         try stdout.writeAll(version_output);
     }
 
@@ -78,18 +78,18 @@ pub fn getVersionInfo(version_str: []const u8) VersionInfo {
     var version_parts = std.mem.splitSequence(u8, version_str, "-");
     const base_version = version_parts.next() orelse "0.0.0";
     const build_suffix = version_parts.next();
-    
+
     // Parse major.minor.patch from base version
     var parts = std.mem.splitSequence(u8, base_version, ".");
-    
+
     const major_str = parts.next() orelse "0";
     const minor_str = parts.next() orelse "0";
     const patch_str = parts.next() orelse "0";
-    
+
     const major = std.fmt.parseInt(u32, major_str, 10) catch 0;
     const minor = std.fmt.parseInt(u32, minor_str, 10) catch 0;
     const patch = std.fmt.parseInt(u32, patch_str, 10) catch 0;
-    
+
     return VersionInfo{
         .major = major,
         .minor = minor,

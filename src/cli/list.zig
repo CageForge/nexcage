@@ -74,7 +74,7 @@ pub const ListCommand = struct {
         // Print aggregated results (similar to runc list format)
         const stdout = std.fs.File.stdout();
         try stdout.writeAll("ID\tIMAGE\tCOMMAND\tCREATED\tSTATUS\tBACKEND\tNAMES\n");
-        
+
         for (all_containers.items) |*container| {
             const id = container.id;
             const image = container.image orelse "unknown";
@@ -83,7 +83,7 @@ pub const ListCommand = struct {
             const status = container.status;
             const backend = container.backend_type;
             const names = container.name;
-            
+
             // Simple output without allocPrint to avoid allocator issues
             _ = try stdout.writeAll(id);
             _ = try stdout.writeAll("\t");
@@ -119,7 +119,7 @@ pub const ListCommand = struct {
                 // only the header and exited 0.
                 const proxmox_containers = try proxmox_backend.list(allocator);
                 defer allocator.free(proxmox_containers);
-                
+
                 for (proxmox_containers) |*c| {
                     try containers.append(allocator, c.*);
                 }

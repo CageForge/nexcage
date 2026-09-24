@@ -51,7 +51,7 @@ pub const ValidationUtils = struct {
             return errors.CliError.InvalidInput;
         }
     }
-    
+
     /// Validate hostname per common constraints (RFC-1123-like):
     /// - 1..253 chars, labels 1..63, [a-z0-9-], no leading/trailing '-'
     pub fn validateHostname(hostname: []const u8) bool {
@@ -122,7 +122,7 @@ pub const ValidationUtils = struct {
             const ok = (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_';
             if (!ok) return false;
         }
-        const value = kv[eq_idx+1..];
+        const value = kv[eq_idx + 1 ..];
         return std.mem.indexOfScalar(u8, value, 0) == null;
     }
 };

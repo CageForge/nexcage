@@ -66,7 +66,8 @@ pub const StateCommand = struct {
         // pct calls a container that has never run "stopped"
         if (std.mem.eql(u8, status, "stopped") and neverStarted(allocator, found.info.name)) status = "created";
 
-        const json = try std.fmt.allocPrint(allocator,
+        const json = try std.fmt.allocPrint(
+            allocator,
             "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": null,\n  \"annotations\": {{}}\n}}\n",
             .{ container_id, status, found.pid },
         );

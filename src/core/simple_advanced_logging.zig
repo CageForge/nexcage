@@ -61,7 +61,7 @@ pub const SimpleAdvancedLogging = struct {
             .@"error" => try self.console_logger.err(format, args),
             .fatal => try self.console_logger.fatal(format, args),
         }
-        
+
         // Log to file if enabled
         if (self.file_logger) |*logger| {
             switch (level) {
@@ -112,7 +112,7 @@ pub const SimpleAdvancedLogging = struct {
     /// Log command execution start
     pub fn logCommandStart(self: *Self, command_name: []const u8, args: []const []const u8) !void {
         self.command_start_time = @intCast(std.time.nanoTimestamp());
-        
+
         if (args.len > 0) {
             const joined_args = try std.mem.join(self.allocator, " ", args);
             defer self.allocator.free(joined_args);
@@ -122,7 +122,7 @@ pub const SimpleAdvancedLogging = struct {
         } else {
             try self.info("Starting command: {s}", .{command_name});
         }
-        
+
         if (self.debug_mode) {
             try self.debug("Command execution environment:", .{});
             try self.debug("  Debug mode: enabled", .{});
@@ -137,7 +137,7 @@ pub const SimpleAdvancedLogging = struct {
             const duration_ms = (@as(u64, @intCast(std.time.nanoTimestamp())) - start_time) / 1_000_000;
             try self.info("Command '{s}' completed in {d}ms", .{ command_name, duration_ms });
         }
-        
+
         if (success) {
             try self.info("Command '{s}' completed successfully", .{command_name});
         } else {
@@ -148,7 +148,7 @@ pub const SimpleAdvancedLogging = struct {
     /// Log operation start
     pub fn logOperationStart(self: *Self, operation: []const u8, target: []const u8) !void {
         try self.info("Starting operation: {s} on {s}", .{ operation, target });
-        
+
         if (self.debug_mode) {
             try self.debug("Operation details:", .{});
             try self.debug("  Operation: {s}", .{operation});
@@ -169,7 +169,7 @@ pub const SimpleAdvancedLogging = struct {
     /// Log performance metrics
     pub fn logPerformance(self: *Self, operation: []const u8, duration_ms: u64, details: ?[]const u8) !void {
         try self.info("Performance: {s} took {d}ms", .{ operation, duration_ms });
-        
+
         if (self.debug_mode and details) |d| {
             try self.debug("Performance details: {s}", .{d});
         }

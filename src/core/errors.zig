@@ -236,10 +236,10 @@ pub fn createErrorContextWithSource(
 ) !ErrorContext {
     const message = try std.fmt.allocPrint(allocator, fmt, args);
     errdefer allocator.free(message);
-    
+
     const source = try allocator.dupe(u8, source_file);
     errdefer allocator.free(source);
-    
+
     return ErrorContext{
         .allocator = allocator,
         .message = message,

@@ -22,7 +22,7 @@ pub const HelpCommand = struct {
     pub fn execute(self: *Self, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
         // Use stdout instead of debug.print for proper output
         const stdout = std.fs.File.stdout();
-        
+
         if (options.args) |args| {
             if (args.len > 0) {
                 // Show help for specific command
@@ -48,7 +48,7 @@ pub const HelpCommand = struct {
     fn getCommandHelp(self: *Self, command_name: []const u8, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
         // For now, return a simple help message
-        return std.fmt.allocPrint(allocator, "Help for command '{s}' - use 'nexcage {s} --help' for detailed help", .{command_name, command_name});
+        return std.fmt.allocPrint(allocator, "Help for command '{s}' - use 'nexcage {s} --help' for detailed help", .{ command_name, command_name });
     }
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
