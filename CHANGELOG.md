@@ -9,9 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.1] - 2026-09-24
 
-A packaging fix: the 0.9.0 binary and `.deb` were built for the build machine's
-CPU and died with `SIGILL` on older Proxmox hosts. Every command behaves as in
-0.9.0. Release notes with upgrade guidance: `docs/releases/NOTES_v0.9.1.md`.
+The first release since 0.8.0: 0.9.0 was prepared but never tagged, so its
+changes ship here. Every command behaves as 0.9.0 described; what 0.9.1 adds is
+a packaging fix. The published 0.8.0 binary and `.deb` were built for the build
+machine's CPU and die with `SIGILL` on any host without AVX2 — checked against
+the release asset on a Xeon E5-2697 v2. Release notes with upgrade guidance:
+`docs/releases/NOTES_v0.9.1.md`.
 
 ### Added
 - `deploy/kubernetes/tenant-nexcage/vm-e2e-node.yaml`: the Proxmox VE node the E2E suite runs on, declared as a kubemox `VirtualMachine` in the tenant. kubemox clones the template `nexcage-pve-tpl-v0-1` on prox-home into a Debian 13 guest running Proxmox VE 9.2.20, so `pct`, `pvesh`, `pvesm` and `pveam` are all real and the node is disposable.
@@ -28,7 +31,7 @@ CPU and died with `SIGILL` on older Proxmox hosts. Every command behaves as in
 ### Fixed
 - `zig fmt --check` failed on 21 files on `main`, so `make lint` and `make check` failed on a clean clone. The tree is formatted and CI checks it, which is why it had drifted: nothing did. The change is whitespace only — 238 insertions against 240 deletions, no line of logic touched.
 - `proxmox_e2e.yml` picked the first `vztmpl` volume as its template, which on Proxmox VE 9.1+ can be an OCI image rather than a system template — `nexcage run docker.io/…` leaves one there itself. Every container the suite creates has to boot, and the OCI bundle step uses that same archive as its rootfs, so an application image with no `/sbin/init` failed at `start` with nothing pointing at the cause. It now picks a system template by name, and the registry step frees the image it pulled.
-- The released binary and `.deb` were built for the build machine's CPU: Zig's default target is native, and `zig build -Doptimize=ReleaseSafe` on a GitHub runner produced a binary that died with `SIGILL` on a Xeon E5-2697 v2 — ordinary hardware for a Proxmox host. Both release paths now pass `-Dcpu=baseline`.
+- The released binary and `.deb` were built for the build machine's CPU: Zig's default target is native, and `zig build -Doptimize=ReleaseSafe` on a GitHub runner produced a binary that dies with `SIGILL` on a Xeon E5-2697 v2 — ordinary hardware for a Proxmox host. The published 0.8.0 asset does exactly that. Both release paths now pass `-Dcpu=baseline`, and the 0.9.1 `.deb` was run on that CPU before tagging.
 
 ## [0.9.0] - 2026-09-15
 
