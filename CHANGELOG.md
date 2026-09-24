@@ -8,9 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `deploy/kubernetes/tenant-nexcage/vm-e2e-node.yaml`: the Proxmox VE node the E2E suite runs on, declared as a kubemox `VirtualMachine` in the tenant. kubemox clones the template `nexcage-pve-tpl-v0-1` on prox-home into a Debian 13 guest running Proxmox VE 9.2.20, so `pct`, `pvesh`, `pvesm` and `pveam` are all real and the node is disposable.
+- `deploy/kubernetes/tenant-nexcage/pve-template/`: the four scripts that build that template from the Debian 13 cloud image, and what each works around — grub-pc without an install device, the netplan and systemd-networkd configuration that fights ifupdown2 for the address, the enterprise repository `proxmox-ve` adds, and the `net.ifnames=0` the Proxmox kernel's grub update drops.
+- `scripts/register_e2e_runner.sh`: registers the Actions runner on that node with the labels `proxmox,pve9,nexcage-e2e`. The template carries the runner software but no registration.
+- `proxmox_e2e.yml` exercises the OCI registry path: `nexcage run --name … docker.io/library/redis:7` pulls through `oci-registry-pull`, has to reach `running` with a real init PID, and has to be unprivileged. Proxmox VE before 9.1 cannot pull from a registry, so the step says so and skips.
 - `docs/KUBERNETES_INTEGRATION.md`: what the runtime still lacks before Kubernetes can schedule onto it (`exec`, the OCI runtime-spec command line, logs, CNI, sandboxes, an image service, a remote surface), the constraints measured in the Cozystack cluster `pskep`, and the four stages from an in-cluster build job to CRI.
 - `deploy/kubernetes/tenant-nexcage/`: the Cozystack `Tenant` nexcage is developed in, and a `Job` that builds nexcage and runs the unit tests and smoke checks inside the cluster. `tests/sim/run.sh` is not among them: the Talos nodes report `user.max_user_namespaces=0` inside pods, so the job reports that instead of failing on it.
 - `.github/workflows/buildagent.yml`: build, unit tests, simulation suite and the `.deb` on the self-hosted CageForge build agent (Debian 13, on the Proxmox host prox-home). It checks the package payload without installing it, because the runner user has no passwordless sudo.
+
+### Changed
+- `proxmox_e2e.yml` runs on `[self-hosted, pve9]` instead of `[proxmox]`, which pins it to a Proxmox VE 9.x host rather than whichever machine holds the older label.
+
+### Fixed
+- The released binary and `.deb` were built for the build machine's CPU: Zig's default target is native, and `zig build -Doptimize=ReleaseSafe` on a GitHub runner produced a binary that died with `SIGILL` on a Xeon E5-2697 v2 — ordinary hardware for a Proxmox host. Both release paths now pass `-Dcpu=baseline`.
 
 ## [0.9.0] - 2026-09-15
 

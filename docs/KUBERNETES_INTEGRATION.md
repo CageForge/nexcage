@@ -54,7 +54,7 @@ covering it.
 
 ```mermaid
 flowchart TD
-  S1["1. Build and test in-cluster<br/>Job in tenant-nexcage"] --> S2["2. PVE test node<br/>kubemox VirtualMachine + E2E runner"]
+  S1["1. Build and test in-cluster<br/>Job in tenant-nexcage<br/>done"] --> S2["2. PVE test node<br/>kubemox VirtualMachine + E2E runner<br/>done"]
   S2 --> S3["3. nexcage-agent + operator<br/>Cage CRD reconciled to nexcage calls"]
   S3 --> S4["4. CRI<br/>virtual-kubelet provider or containerd shim"]
 ```
@@ -69,15 +69,31 @@ What it does not cover: the simulation suite, and anything that calls `pct`.
 
 ### Stage 2 — a Proxmox VE test node declared from Kubernetes
 
-A kubemox `VirtualMachine` in `tenant-nexcage` provisions a VM on `prox-home`
-with Proxmox VE installed, and that VM carries the self-hosted runner the
-`proxmox_e2e.yml` workflow already targets with `runs-on: [proxmox]`. The E2E
-suite then runs against a disposable node that GitOps recreates, instead of a
-hand-kept host, and `prox-home` being PVE 9.2.20 means the OCI registry path
-(`create` from `docker.io/library/…`) becomes testable for the first time.
+Done. `deploy/kubernetes/tenant-nexcage/vm-e2e-node.yaml` is a kubemox
+`VirtualMachine` in `tenant-nexcage`; kubemox clones the template
+`nexcage-pve-tpl-v0-1` on `prox-home` into the node `nexcage-e2e-1`, a Debian
+13 guest running Proxmox VE 9.2.20. `pve-template/` holds the four scripts that
+build that template from the Debian cloud image, and
+`scripts/register_e2e_runner.sh` registers the Actions runner on the node —
+deliberately not in the template, because a registration belongs to one
+machine.
 
-Needs: a PVE-in-VM template on `prox-home`, the `VirtualMachine` manifest, and
-the runner registration baked into the template.
+`proxmox_e2e.yml` now says `runs-on: [self-hosted, pve9]`, so it lands on that
+node rather than on whichever host happens to hold the `proxmox` label, and it
+has a step for the registry path: `nexcage run --name … docker.io/library/…`,
+which only Proxmox VE 9.1 and later can do. On the node, by hand, the whole
+lifecycle works against real `pct` — create, start, `state` with the init's
+host PID, kill, stop, delete — and `nexcage run docker.io/library/redis:7`
+pulls the image through `oci-registry-pull` and starts it.
+
+Building that node also turned up a defect in what nexcage ships: the release
+workflow built with Zig's default native target, so the published binary was
+tuned to the GitHub runner's CPU and died with `SIGILL` on the node's Xeon
+E5-2697 v2. Both release paths now pass `-Dcpu=baseline`.
+
+One node at a time: the guest's hostname and address are baked into the
+template, because a Proxmox node keeps its configuration under
+`/etc/pve/nodes/<hostname>` and cannot be renamed after a clone.
 
 ### Stage 3 — nexcage-agent and an operator
 

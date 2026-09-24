@@ -17,7 +17,11 @@ concurrency:
 jobs:
   e2e:
     name: Proxmox Self-Hosted E2E
-    runs-on: [proxmox]
+    # pve9 is the label of the node kubemox provisions from
+    # nexcage-pve-tpl-v0-1 (deploy/kubernetes/tenant-nexcage). Naming it
+    # rather than plain "proxmox" keeps this job on a Proxmox VE 9.x host,
+    # which is what the OCI registry step below needs.
+    runs-on: [self-hosted, pve9]
     timeout-minutes: 30
 
     steps:
@@ -266,6 +270,64 @@ jobs:
 
         trap - EXIT
         echo "[E2E] all passed"
+
+    - name: E2E through nexcage (OCI registry image)
+      # Only Proxmox VE 9.1 and later can pull an image from a registry, so
+      # this is the first E2E host where the path can be exercised at all.
+      run: |
+        set -euo pipefail
+        LOG=e2e_registry.log
+        : > "$LOG"
+        exec > >(tee -a "$LOG") 2>&1
+        export PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH
+
+        if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
+        NEXCAGE="$PWD/zig-out/bin/nexcage"
+        nx() { $SUDO "$NEXCAGE" "$@"; }
+
+        read -r major minor <<<"$($SUDO pveversion | sed -n 's|^pve-manager/\([0-9]*\)\.\([0-9]*\).*|\1 \2|p')"
+        if [ "${major:-0}" -lt 9 ] || { [ "${major:-0}" -eq 9 ] && [ "${minor:-0}" -lt 1 ]; }; then
+          echo "::notice::Proxmox VE ${major:-?}.${minor:-?} cannot pull from a registry; skipping"
+          exit 0
+        fi
+        echo "[E2E] Proxmox VE $major.$minor supports oci-registry-pull"
+
+        IMAGE=${OCI_IMAGE:-docker.io/library/redis:7}
+        NAME="gh-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-reg"
+
+        vmid_of() { $SUDO pct list 2>/dev/null | awk -v n="$1" 'NR>1 && $NF==n {print $1}'; }
+        cleanup() {
+          set +e
+          id=$(vmid_of "$NAME")
+          [ -z "$id" ] && return
+          $SUDO pct shutdown "$id" --timeout 30 --forceStop 1 >/dev/null 2>&1
+          $SUDO pct destroy "$id" --purge 1 >/dev/null 2>&1
+        }
+        trap cleanup EXIT
+
+        echo "[E2E] run $IMAGE"
+        nx run --name "$NAME" "$IMAGE"
+
+        got=
+        for _ in $(seq 1 30); do
+          got=$(nx state "$NAME" | sed -n 's/.*"status": "\([a-z]*\)".*/\1/p' || true)
+          [ "$got" = running ] && break
+          sleep 2
+        done
+        [ "$got" = running ] || { echo "::error::expected $NAME running, saw '$got'"; exit 1; }
+
+        pid=$(nx state "$NAME" | sed -n 's/.*"pid": \([0-9]*\).*/\1/p')
+        [ -n "$pid" ] && [ "$pid" != 0 ] || { echo "::error::state reported pid '$pid'"; exit 1; }
+        echo "[E2E] $NAME from $IMAGE runs as host PID $pid"
+
+        echo "[E2E] images from a registry always run unprivileged"
+        $SUDO pct config "$(vmid_of "$NAME")" | grep -qE '^unprivileged: 1$' \
+          || { echo "::error::container from a registry image is not unprivileged"; exit 1; }
+
+        nx stop "$NAME"
+        nx delete "$NAME"
+        trap - EXIT
+        echo "[E2E] registry path passed"
 
     - name: Upload E2E logs
       if: always()
