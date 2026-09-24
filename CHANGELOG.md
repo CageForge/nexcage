@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-24
+
+A packaging fix: the 0.9.0 binary and `.deb` were built for the build machine's
+CPU and died with `SIGILL` on older Proxmox hosts. Every command behaves as in
+0.9.0. Release notes with upgrade guidance: `docs/releases/NOTES_v0.9.1.md`.
+
 ### Added
 - `deploy/kubernetes/tenant-nexcage/vm-e2e-node.yaml`: the Proxmox VE node the E2E suite runs on, declared as a kubemox `VirtualMachine` in the tenant. kubemox clones the template `nexcage-pve-tpl-v0-1` on prox-home into a Debian 13 guest running Proxmox VE 9.2.20, so `pct`, `pvesh`, `pvesm` and `pveam` are all real and the node is disposable.
 - `deploy/kubernetes/tenant-nexcage/pve-template/`: the four scripts that build that template from the Debian 13 cloud image, and what each works around — grub-pc without an install device, the netplan and systemd-networkd configuration that fights ifupdown2 for the address, the enterprise repository `proxmox-ve` adds, and the `net.ifnames=0` the Proxmox kernel's grub update drops.

@@ -50,6 +50,7 @@ nav:
   - CI/CD: CI_CD_SETUP.md
   - Compliance: COMPLIANCE_CNCF_CHECKLIST.md
   - Releases:
+    - v0.9.1: releases/NOTES_v0.9.1.md
     - v0.9.0: releases/NOTES_v0.9.0.md
     - v0.8.0 (MVP): releases/NOTES_v0.8.0.md
     - v0.7.5 (OCI Registry Pull): releases/NOTES_v0.7.5.md
