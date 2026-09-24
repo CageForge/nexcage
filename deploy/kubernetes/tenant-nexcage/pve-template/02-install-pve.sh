@@ -16,6 +16,15 @@ case "$(uname -r)" in
   *)     PHASE=1 ;;
 esac
 
+# The Debian cloud image upgrades packages on first boot, and cloud-init holds
+# the dpkg lock while it does. Without this wait the first apt call below dies
+# with "Could not get lock /var/lib/dpkg/lock-frontend".
+if command -v cloud-init >/dev/null 2>&1; then
+  echo "=== waiting for cloud-init to let go of apt ==="
+  cloud-init status --wait >/dev/null 2>&1 || true
+  cloud-init status 2>/dev/null || true
+fi
+
 if [ "$PHASE" = 1 ]; then
   echo "=== identity: cloud-init must not own it ==="
   # A Proxmox node keeps its configuration under /etc/pve/nodes/<hostname>, so

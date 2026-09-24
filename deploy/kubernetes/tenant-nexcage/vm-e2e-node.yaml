@@ -1,6 +1,6 @@
 # The Proxmox VE node the E2E suite runs on, declared as a Kubernetes object.
 #
-# kubemox clones the template nexcage-pve-tpl-v0-1 on prox-home. That template
+# kubemox clones the template nexcage-pve-tpl-v0-2 on prox-home. That template
 # is a Debian 13 guest with Proxmox VE 9.2.20 installed on top, so `pct`,
 # `pvesh`, `pvesm` and `pveam` are all there and the OCI registry path
 # (Proxmox VE 9.1+) works — which the old E2E host could not do.
@@ -31,7 +31,7 @@ spec:
   deletionProtection: false
   enableAutoStart: true
   template:
-    name: nexcage-pve-tpl-v0-1
+    name: nexcage-pve-tpl-v0-2
     cores: 4
     socket: 1
     memory: 8192

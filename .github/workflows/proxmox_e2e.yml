@@ -18,7 +18,7 @@ jobs:
   e2e:
     name: Proxmox Self-Hosted E2E
     # pve9 is the label of the node kubemox provisions from
-    # nexcage-pve-tpl-v0-1 (deploy/kubernetes/tenant-nexcage). Naming it
+    # nexcage-pve-tpl-v0-2 (deploy/kubernetes/tenant-nexcage). Naming it
     # rather than plain "proxmox" keeps this job on a Proxmox VE 9.x host,
     # which is what the OCI registry step below needs.
     runs-on: [self-hosted, pve9]

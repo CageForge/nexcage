@@ -4,9 +4,18 @@
 #
 # Afterwards, on the Proxmox host:
 #   qm set <vmid> --delete cipassword
-#   qm set <vmid> --name nexcage-pve-tpl-v0-1
+#   qm set <vmid> --name nexcage-pve-tpl-v0-2
 #   qm template <vmid>
 set -euo pipefail
+
+# The Debian cloud image upgrades packages on first boot, and cloud-init holds
+# the dpkg lock while it does — including after 04-seal-template.sh clears its
+# state, which makes the next boot a first boot again. Without this wait, apt
+# dies with "Could not get lock /var/lib/dpkg/lock-frontend".
+if command -v cloud-init >/dev/null 2>&1; then
+  echo "=== waiting for cloud-init to let go of apt ==="
+  cloud-init status --wait >/dev/null 2>&1 || true
+fi
 
 echo "=== nothing from a test run left behind ==="
 pct list
@@ -23,11 +32,15 @@ rm -f /usr/bin/nexcage /usr/local/bin/nexcage
 # becomes the template every clone tries to boot from, which fails at start
 # with no hint as to why: an application image has no /sbin/init.
 for vol in $(pvesm list local --content vztmpl 2>/dev/null | awk 'NR>1 {print $1}'); do
-  case "$vol" in
-    */vztmpl/debian-*|*/vztmpl/ubuntu-*|*/vztmpl/alpine-*|*/vztmpl/rocky-*|\
-    */vztmpl/almalinux-*|*/vztmpl/centos-*|*/vztmpl/fedora-*|*/vztmpl/opensuse-*|\
-    */vztmpl/archlinux-*|*/vztmpl/devuan-*|*/vztmpl/gentoo-*) ;;
-    *) echo "  freeing non-system template $vol"; pvesm free "$vol" >/dev/null 2>&1 ;;
+  # Match the file name, not the volid: a volid is "local:vztmpl/<name>", so a
+  # pattern anchored on a slash before vztmpl never matches and every template
+  # falls through to the branch that frees it, the system one included.
+  case "${vol##*/}" in
+    debian-*|ubuntu-*|alpine-*|rocky-*|almalinux-*|centos-*|fedora-*|\
+    opensuse-*|archlinux-*|devuan-*|gentoo-*)
+      echo "  keeping system template $vol" ;;
+    *)
+      echo "  freeing non-system template $vol"; pvesm free "$vol" >/dev/null 2>&1 ;;
   esac
 done
 pvesm list local --content vztmpl
