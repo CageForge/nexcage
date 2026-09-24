@@ -1,0 +1,21 @@
+# The Cozystack tenant nexcage work runs in. It inherits etcd, ingress,
+# monitoring and seaweedfs from tenant-root, so it costs one namespace and the
+# role bindings, nothing else.
+#
+# The tenant's namespace is tenant-nexcage; its host is nexcage.<parent host>.
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Tenant
+metadata:
+  name: nexcage
+  namespace: tenant-root
+  labels:
+    app.kubernetes.io/part-of: pskep
+    cageforge.io/project: nexcage
+spec:
+  etcd: false
+  host: ""
+  ingress: false
+  monitoring: false
+  resourceQuotas: {}
+  schedulingClass: ""
+  seaweedfs: false

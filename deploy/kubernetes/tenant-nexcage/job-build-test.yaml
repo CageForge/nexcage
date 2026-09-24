@@ -1,0 +1,93 @@
+# Builds nexcage from source and runs the unit tests and smoke checks inside
+# the cluster. Nothing here needs privileges: the pod runs under the baseline
+# PodSecurity level that Cozystack tenants get by default.
+#
+# tests/sim/run.sh is deliberately not run. It needs a user namespace it can
+# mount in, and the Talos nodes report user.max_user_namespaces=0 inside pods.
+# The job checks for it and prints SIM_CAPABLE, so the day the node sysctl
+# changes this job can grow the step.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nexcage-build-test
+  namespace: tenant-nexcage
+  labels:
+    app.kubernetes.io/name: nexcage
+    app.kubernetes.io/component: ci
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nexcage
+        app.kubernetes.io/component: ci
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: build
+          image: debian:13-slim
+          env:
+            - name: ZIG_VERSION
+              value: "0.15.1"
+            - name: NEXCAGE_REPO
+              value: "https://github.com/CageForge/nexcage.git"
+            - name: NEXCAGE_REF
+              value: "main"
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: work
+              mountPath: /work
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends \
+                ca-certificates curl git xz-utils tar zstd python3 >/dev/null
+
+              cd /work
+              echo "=== fetch zig ${ZIG_VERSION} ==="
+              curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o zig.tar.xz
+              tar -xf zig.tar.xz && mv "zig-x86_64-linux-${ZIG_VERSION}" zig
+              export PATH=/work/zig:$PATH
+              zig version
+
+              echo "=== clone nexcage (${NEXCAGE_REF}) ==="
+              git clone --depth 1 --branch "${NEXCAGE_REF}" "${NEXCAGE_REPO}" src
+              cd src
+
+              echo "=== zig fmt --check ==="
+              zig fmt --check src/ tests/ \
+                || echo "WARNING: zig fmt --check reports unformatted files"
+
+              echo "=== zig build ==="
+              zig build
+
+              echo "=== zig build test ==="
+              zig build test --summary all
+
+              echo "=== smoke ==="
+              ./zig-out/bin/nexcage version
+              ./zig-out/bin/nexcage --help >/dev/null
+
+              echo "=== simulation suite prerequisite ==="
+              echo "max_user_namespaces=$(cat /proc/sys/user/max_user_namespaces)"
+              if unshare -rm true 2>/dev/null; then
+                echo "SIM_CAPABLE=yes"
+              else
+                echo "SIM_CAPABLE=no (node needs user.max_user_namespaces>0)"
+              fi
+
+              echo "ALL_OK"
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 8Gi

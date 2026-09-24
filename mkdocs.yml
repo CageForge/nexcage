@@ -31,6 +31,7 @@ nav:
     - Dev Quickstart: DEV_QUICKSTART.md
     - Development Workflow: DEVELOPMENT_WORKFLOW.md
   - CLI Reference: CLI_REFERENCE.md
+  - Kubernetes Integration: KUBERNETES_INTEGRATION.md
   - Operations:
     - Debug Logging: DEBUG_LOGGING_GUIDE.md
     - Troubleshooting: TROUBLESHOOTING_GUIDE.md

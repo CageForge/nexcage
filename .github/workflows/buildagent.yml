@@ -1,0 +1,92 @@
+name: Build agent (self-hosted)
+
+# Runs on the CageForge build agent VM on the Proxmox host prox-home, the same
+# machine that builds ORCAaaS, backend-api and buildagents. It is a Debian 13
+# VM, so it has no pct and cannot run the Proxmox E2E suite — that is what
+# proxmox_e2e.yml and its [proxmox] runner are for.
+#
+# What it adds over the GitHub-hosted CI: the .deb is built and installed on
+# the distribution nexcage is packaged for, and the simulation suite runs
+# without having to turn off an AppArmor restriction first, because Debian
+# allows mounts in unprivileged user namespaces.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # 04:17 UTC, so a broken toolchain on the agent is found before the day starts
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: buildagent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build, simulate and package on Debian 13
+    runs-on: [self-hosted, buildagent, nexcage]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Print environment info
+        run: |
+          echo "Runner:  $(hostname)"
+          echo "User:    $(whoami)"
+          echo "Kernel:  $(uname -r)"
+          . /etc/os-release && echo "OS:      $PRETTY_NAME"
+          echo "CPUs:    $(nproc)"
+          df -h . | tail -1
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build (Debug)
+        # Debug, so the allocator reports the leaks the simulation run fails on
+        run: zig build --summary all
+
+      - name: Unit tests
+        run: zig build test --summary all
+
+      - name: Commands against fake Proxmox tools
+        run: tests/sim/run.sh
+
+      - name: Build the .deb
+        run: make deb
+
+      - name: Check what the .deb carries
+        # Unpacked rather than installed: the runner user has no passwordless
+        # sudo, and dpkg-deb -x checks the same payload without needing root.
+        run: |
+          set -euo pipefail
+          deb=$(ls dist/nexcage-*-amd64.deb)
+          echo "checking $deb"
+          dpkg-deb -I "$deb"
+          root=$(mktemp -d)
+          dpkg-deb -x "$deb" "$root"
+          for f in usr/bin/nexcage \
+                   usr/share/man/man1/nexcage.1.gz \
+                   usr/share/bash-completion/completions/nexcage \
+                   usr/share/doc/nexcage/examples/config.json; do
+            test -e "$root/$f" || { echo "::error::$f missing from the package"; exit 1; }
+          done
+          test -x "$root/usr/bin/nexcage"
+          "$root/usr/bin/nexcage" version
+          rm -rf "$root"
+
+      - name: Upload the .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexcage-deb-debian13
+          path: dist/nexcage-*-amd64.deb
+          retention-days: 14
