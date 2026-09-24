@@ -53,6 +53,11 @@ The signal is a name in any case, with or without SIG, or a number from 1 to 64.
 Init receives it only if it handles that signal, except SIGKILL and SIGSTOP;
 SIGKILL always stops the container.
 .TP
+\fBexec\fR \fIname\fR \fIcommand\fR [\fIargs\fR...], \fBexec\fR \fIname\fR \fB\-\-\fR \fIcommand\fR [\fIargs\fR...]
+Run a command inside a running container and exit with its status, as an OCI
+runtime does. Use \-\- where the command starts with a dash. The container must
+be running and the command must exist in its image.
+.TP
 \fBlist\fR
 List containers, tab-separated: ID, IMAGE, COMMAND, CREATED, STATUS, BACKEND, NAMES.
 .TP

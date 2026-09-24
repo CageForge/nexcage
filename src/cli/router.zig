@@ -140,6 +140,9 @@ pub const BackendRouter = struct {
             .stop => try proxmox_backend.stop(container_id),
             .delete => try proxmox_backend.delete(container_id),
             .kill => |kill_cfg| try proxmox_backend.kill(container_id, kill_cfg.signal),
+            // An OCI runtime exits with the status of the command it ran, so
+            // the backend's answer is carried out to main rather than dropped.
+            .exec => |exec_cfg| core.exit_status.propagated = try proxmox_backend.exec(container_id, exec_cfg.argv),
             .run => {
                 try proxmox_backend.create(sandbox_config);
                 try proxmox_backend.start(container_id);
@@ -168,6 +171,7 @@ pub const BackendRouter = struct {
             .stop => try crun_backend.stop(container_id),
             .delete => try crun_backend.delete(container_id),
             .kill => |kill_cfg| try crun_backend.kill(container_id, kill_cfg.signal),
+            .exec => |exec_cfg| try crun_backend.exec(container_id, exec_cfg.argv),
             .run => return self.notImplemented("run", "crun"),
             .state => {
                 // State operation handled by command
@@ -191,6 +195,7 @@ pub const BackendRouter = struct {
             .stop => try runc_backend.stop(container_id),
             .delete => try runc_backend.delete(container_id),
             .kill => |kill_cfg| try runc_backend.kill(container_id, kill_cfg.signal),
+            .exec => return self.notImplemented("exec", "runc"),
             .run => return self.notImplemented("run", "runc"),
             .state => {
                 // State operation handled by command
@@ -232,6 +237,7 @@ pub const Operation = union(enum) {
     run: RunConfig,
     state: void,
     kill: KillConfig,
+    exec: ExecConfig,
 };
 
 pub const CreateConfig = struct {
@@ -244,6 +250,11 @@ pub const RunConfig = struct {
 
 pub const KillConfig = struct {
     signal: []const u8,
+};
+
+pub const ExecConfig = struct {
+    /// The command and its arguments, as the caller typed them
+    argv: []const []const u8,
 };
 
 pub const Config = struct {

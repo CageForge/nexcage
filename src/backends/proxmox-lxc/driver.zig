@@ -601,6 +601,13 @@ pub const ProxmoxLxcDriver = struct {
         try self.pve_client.kill(vmid, signal);
     }
 
+    /// Run a command inside the container; returns the status it exited with
+    pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8) !u8 {
+        const vmid = try self.resolveVmid(container_id);
+        defer self.allocator.free(vmid);
+        return self.pve_client.exec(vmid, argv);
+    }
+
     /// Host PID of the container's init, or null when it is not running
     pub fn initPid(self: *Self, vmid: []const u8) !?std.posix.pid_t {
         return self.pve_client.initPid(vmid);

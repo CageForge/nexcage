@@ -223,6 +223,13 @@ jobs:
         fi
         echo "[E2E] init of $NAME is host PID $pid"
 
+        echo "[E2E] exec runs a command in the container and passes its status back"
+        got=$(nx exec "$NAME" -- sh -c 'echo from-inside')
+        [ "$got" = from-inside ] || { echo "::error::exec printed '$got'"; exit 1; }
+        expect_exit 7 nx exec "$NAME" -- sh -c 'exit 7'
+        expect_exit 2 nx exec "$NAME"
+        expect_exit 1 nx exec no-such-container-$$ true
+
         echo "[E2E] kill signals the init from the host, without pct exec"
         nx kill "$NAME" SIGCONT
         expect_status "$NAME" running

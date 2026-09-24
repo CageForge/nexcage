@@ -3,10 +3,14 @@
 What nexcage would need to run containers for Kubernetes, and how the work is
 staged in the `tenant-nexcage` tenant of the Cozystack cluster `pskep`.
 
-Status as of 0.9.0: nexcage is a command-line lifecycle tool for LXC
-containers on one Proxmox VE host. It is not an OCI runtime binary in the
-sense containerd expects, and it speaks no CRI. Nothing in Kubernetes can
-schedule onto it today.
+Status as of 0.9.1: nexcage is a command-line lifecycle tool for LXC
+containers on one Proxmox VE host. It is not yet an OCI runtime binary in the
+sense containerd expects, so nothing in Kubernetes can schedule onto it today.
+
+The way in is the one crun and runc take: containerd and CRI-O call an OCI
+runtime binary with the runtime-spec command line. nexcage does not need a
+daemon or an operator for that — it needs that command line, and the crun
+backend (vendored libcrun) to do the container work behind it.
 
 ## What the runtime is missing
 
@@ -16,7 +20,7 @@ next step, not by size.
 
 | # | Gap | Today | Needed for |
 |---|---|---|---|
-| 1 | `exec` | `nexcage exec` is parsed in `main.zig` and mapped to `Command.exec`, but no command is registered: it prints "unknown command" | `kubectl exec`, CRI `ExecSync`, exec probes, and any operator that runs a command in a container |
+| 1 | ~~`exec`~~ | **Done.** `nexcage exec <name> <command>` runs it in the container and exits with its status, as `runc exec` does. Proxmox LXC runs `pct exec`; crun goes through libcrun; runc has none | `kubectl exec`, CRI `ExecSync`, exec probes |
 | 2 | OCI runtime-spec CLI | `create --name <name> <image>`; no `create <id> --bundle <dir>`, `--pid-file`, `--console-socket`, `--root` | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | `state.bundle` | always `null` | The same. A shim reads the bundle path back from `state` |
 | 4 | Missing verbs | no `ps`, `events`, `features`, `pause`, `resume`, `update`, `delete --force` | Pod lifecycle, metrics, cgroup updates on resize |
@@ -53,8 +57,8 @@ covering it.
 ```mermaid
 flowchart TD
   S1["1. Build and test in-cluster<br/>Job in tenant-nexcage<br/>done"] --> S2["2. PVE test node<br/>kubemox VirtualMachine + E2E runner<br/>done"]
-  S2 --> S3["3. nexcage-agent + operator<br/>Cage CRD reconciled to nexcage calls"]
-  S3 --> S4["4. CRI<br/>virtual-kubelet provider or containerd shim"]
+  S2 --> S3["3. OCI runtime-spec command line<br/>so a container engine can call nexcage"]
+  S3 --> S4["4. containerd and CRI-O<br/>running pods on nexcage"]
 ```
 
 ### Stage 1 — build and test inside the cluster
@@ -93,31 +97,51 @@ One node at a time: the guest's hostname and address are baked into the
 template, because a Proxmox node keeps its configuration under
 `/etc/pve/nodes/<hostname>` and cannot be renamed after a clone.
 
-### Stage 3 — nexcage-agent and an operator
+### Stage 3 — the OCI runtime-spec command line
 
-Gap 5 is the one that has to close first: a small agent on the PVE host that
-exposes the nexcage lifecycle over an authenticated API, and an operator in
-`tenant-nexcage` that reconciles a `Cage` CRD into calls to it. This is the
-kubemox pattern applied to nexcage rather than to the Proxmox API, and it is
-what makes `kubectl get cages` meaningful.
+In progress. containerd and CRI-O do not talk to a runtime over an API: they
+exec a binary with the command line the runtime-spec defines, the same one runc
+and crun answer. Everything nexcage needs to be callable that way is CLI shape
+and the crun backend behind it.
 
-Closing gaps 1, 4, 6 and 10 in the runtime makes the operator worth using:
-without `exec` there is no debugging, without logs there is no `kubectl logs`,
-and without resource mapping every container is 512 MiB.
+`exec` is done. What is left, in the order a container engine needs it:
 
-### Stage 4 — CRI
+| | What the engine sends | nexcage today |
+|---|---|---|
+| container id | positional, `create <id>` | `--name <id>` |
+| `create` | `--bundle <dir>`, `--pid-file <file>`, `--console-socket <sock>` | `--bundle` only, in the runc backend |
+| global | `--root <dir>` — containerd passes its own state directory | `/run/nexcage`, compiled in |
+| `state` | `bundle` filled in | always `null` |
+| `delete` | `--force` | no flag |
+| `kill` | `--all` | no flag |
+| also read | `ps`, `features`, `pause`, `resume`, `update` | none |
 
-Two routes, and they are not equivalent.
+The container work behind that command line belongs to the crun backend, which
+links vendored libcrun and already has create, start, kill, delete and exec.
+The Proxmox LXC backend stays what it is: a different surface, driven by `pct`,
+not by a container engine.
 
-A **virtual-kubelet provider** registers a node object backed by the agent from
-stage 3, and pods scheduled to it become LXC containers. It needs no change on
-the Talos nodes, which is why it fits this cluster. It needs gaps 6, 7, 8 and 9
-closed: logs, an IPAM story, sandbox grouping and image pulls with credentials.
+**How to test it without containerd.** podman drives an OCI runtime with
+exactly this command line, and it is already installed on the build agent:
 
-A **containerd shim** (`containerd-shim-nexcage-v2`) is the conventional route
-and needs gaps 2, 3 and 4 closed first, so nexcage behaves like `runc` on the
-command line. It also needs containerd and a kubelet on the Proxmox host, which
-means that host becomes a cluster node — not something Talos nodes can offer.
+```bash
+podman --runtime /usr/local/bin/nexcage run --rm docker.io/library/alpine:3 echo hi
+```
+
+That is a far shorter loop than standing up containerd, and a runtime podman
+can drive is a runtime containerd can drive.
+
+### Stage 4 — containerd and CRI-O
+
+Configuration rather than new code, once stage 3 lands. containerd's
+`runc.v2` shim runs any runc-compatible binary through
+`options.BinaryName`, and CRI-O takes a `runtime_path`. A pod scheduled to that
+runtime handler then runs on nexcage.
+
+What stage 3 does not cover, and a pod needs: container output captured to a
+file for `kubectl logs`, pod IPs from the cluster CNI, sandbox grouping so the
+containers of one pod share a network namespace, and pod requests and limits
+mapped onto cgroups. Those are gaps 6 to 10 in the table above.
 
 ## Related
 

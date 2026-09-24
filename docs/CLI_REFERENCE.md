@@ -28,13 +28,15 @@ README for the keys.
 
 ## Backend selection
 
-`create`, `run`, `start`, `stop`, `delete`, `kill` and `state` go to the
-backend chosen by the routing rules in the config file, Proxmox LXC by default.
+`create`, `run`, `start`, `stop`, `delete`, `kill`, `exec` and `state` go to
+the backend chosen by the routing rules in the config file, Proxmox LXC by
+default.
 `--runtime <lxc|crun|runc|vm>` overrides that for one command.
 
 - `crun` and `runc` work only in a binary built with
   `-Denable-backend-crun=true` or `-Denable-backend-runc=true`; otherwise the
-  command fails with exit 1. They have no `run` or `state`.
+  command fails with exit 1. They have no `run` or `state`, and `runc` has no
+  `exec`.
 - `vm` is not integrated yet: every command fails with "not implemented".
 - Any other value is a usage error (exit 2).
 
@@ -48,6 +50,10 @@ backend chosen by the routing rules in the config file, Proxmox LXC by default.
 
 A failure prints one line such as `nexcage: start: not found` after the log
 line that explains it.
+
+`exec` is the exception: it exits with the status of the command it ran, the
+way `runc exec` does, so 1 and 2 from that command mean whatever the command
+means by them.
 
 ## Commands
 
@@ -132,6 +138,32 @@ The kernel delivers a signal from the host to a container's init only if init
 handles it, except `SIGKILL` and `SIGSTOP`. `SIGKILL` always stops the
 container; what `SIGTERM` does depends on the init system. Use `stop` for a
 clean shutdown.
+
+### exec
+
+```bash
+nexcage exec <name> <command> [args...]
+nexcage exec <name> -- <command> [args...]
+```
+
+Runs `<command>` inside a running container and exits with its status: `nexcage
+exec web-1 false` exits 1, and `nexcage exec web-1 sh -c 'exit 7'` exits 7. A
+caller that watches the status — containerd, a readiness probe — reads the
+command's result rather than "the runtime succeeded", which is why this command
+does not follow the exit table above.
+
+`--` separates the command from nexcage's own options, and is needed when the
+command itself starts with a dash. Everything after it is passed through
+untouched.
+
+stdin, stdout and stderr are connected straight to the process in the
+container; nexcage does not buffer the output.
+
+On the Proxmox LXC backend this runs `pct exec <vmid> -- <command>`, so the
+command has to exist in the container's image — an image without a shell has no
+`sh` for `exec` to call. A container that is not running is an error (exit 1),
+as is one that does not exist; `exec` without a command is a usage error
+(exit 2).
 
 ### list
 
