@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `exec`: `nexcage exec <name> <command> [args...]` runs a command inside a running container and exits with **its** status, the way `runc exec` does — `nexcage exec web-1 sh -c 'exit 7'` exits 7 — so a caller that reads the status, such as containerd or a readiness probe, gets the command's result rather than the runtime's. `--` passes a command that starts with a dash through untouched. stdin, stdout and stderr are connected straight to the process in the container rather than captured, so output arrives as it is produced and is not held to the 1 MB cap the other commands use. The Proxmox LXC backend runs `pct exec`, crun goes through libcrun, runc has no exec and says so. The command was parsed in `main.zig` and mapped to `Command.exec` but never registered, so it printed "unknown command".
+
 ## [0.9.1] - 2026-09-24
 
 The first release since 0.8.0: 0.9.0 was prepared but never tagged, so its

@@ -379,6 +379,47 @@ pub const PveClient = struct {
         };
     }
 
+    /// Run a command inside the container with `pct exec`, and return the
+    /// status it exited with.
+    ///
+    /// stdio is inherited rather than captured: an exec is a pipe between the
+    /// caller and the process in the container, so output has to arrive as it
+    /// is produced and must not be held to runCommand's 1 MB cap.
+    pub fn exec(self: *const Self, vmid: []const u8, argv: []const []const u8) !u8 {
+        if ((try self.initPid(vmid)) == null) {
+            if (self.logger) |log| log.err("CT {s} is not running", .{vmid}) catch {};
+            return core.Error.OperationFailed;
+        }
+
+        var args = std.ArrayListUnmanaged([]const u8){};
+        defer args.deinit(self.allocator);
+        try args.appendSlice(self.allocator, &.{ "pct", "exec", vmid, "--" });
+        try args.appendSlice(self.allocator, argv);
+
+        var child = std.process.Child.init(args.items, self.allocator);
+        child.stdin_behavior = .Inherit;
+        child.stdout_behavior = .Inherit;
+        child.stderr_behavior = .Inherit;
+        child.spawn() catch |err| {
+            if (err == error.FileNotFound) {
+                if (self.logger) |log| log.err("'pct' not found in PATH; nexcage must run on a Proxmox VE host", .{}) catch {};
+                return core.Error.UnsupportedOperation;
+            }
+            if (self.logger) |log| log.err("Failed to run 'pct exec': {s}", .{@errorName(err)}) catch {};
+            return core.Error.OperationFailed;
+        };
+        const term = child.wait() catch |err| {
+            if (self.logger) |log| log.err("waiting for 'pct exec' failed: {s}", .{@errorName(err)}) catch {};
+            return core.Error.OperationFailed;
+        };
+        return switch (term) {
+            .Exited => |code| @as(u8, @intCast(@abs(code))),
+            // Killed by a signal: report it the way a shell does.
+            .Signal => |sig| @as(u8, @intCast(128 +% @as(u32, @intCast(sig)) % 128)),
+            else => 1,
+        };
+    }
+
     /// Find an available template in Proxmox
     pub fn findAvailableTemplate(self: *const Self) ![]const u8 {
         const args = [_][]const u8{ "pveam", "list", "local" };

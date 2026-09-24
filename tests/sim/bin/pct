@@ -104,6 +104,11 @@ case "$cmd" in
     vmid=$1; shift; [ "$1" = "--" ] && shift
     exists "$vmid" || missing "$vmid"
     [ "$(status_of "$vmid")" = running ] || { echo "CT $vmid not running" >&2; exit 255; }
+    # Real pct runs the command in the container and exits with its status.
+    # Running it here stands in for that, so the checks can see the output and
+    # the status nexcage is supposed to pass through.
+    "$@"
+    exit $?
     ;;
   config)
     exists "$1" || missing "$1"

@@ -7,7 +7,7 @@ _nexcage() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    local commands="create start stop delete list state kill run help version"
+    local commands="create start stop delete list state kill exec run help version"
     local global_opts="--debug --log-level --log-file --config --help"
 
     case "$prev" in
@@ -41,7 +41,7 @@ _nexcage() {
     fi
 
     case "$cmd" in
-        start|stop|delete|state|kill)
+        start|stop|delete|state|kill|exec)
             # Container names from pct; empty when not run as root
             local names
             names=$(pct list 2>/dev/null | awk 'NR > 1 {print $NF}')

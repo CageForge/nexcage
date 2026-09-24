@@ -244,6 +244,21 @@ nx run --name kill-1 "$TPL"
 nx kill kill-1 KILL
 check "kill KILL: the init dies and the container stops" all 'rc 0' "eventually 'status_is kill-1 stopped'"
 
+echo "=== exec ==="
+nx exec web-1 echo hello;      check "exec runs the command and its output reaches stdout" \
+                                 all 'rc 0' 'out_has hello' 'called "pct exec 100 -- echo hello"'
+nx exec web-1 sh -c 'exit 7';  check "exec exits with the status of the command, as runc does" rc 7
+nx exec web-1 -- echo dashed;  check "exec <name> -- <cmd>: the separator is not passed to pct" \
+                                 all 'rc 0' 'out_has dashed' 'called "pct exec 100 -- echo dashed"'
+nx exec web-1 -- sh -c 'echo x 1>&2; exit 3'
+                               check "exec: stderr passes through and a non-zero status survives it" all 'rc 3' 'err_has x'
+nx exec nope echo hi;          check "exec on a missing container -> exit 1, nothing run" \
+                                 all 'rc 1' 'not_called_re "^pct exec"'
+nx exec web-3 echo hi;         check "exec on a stopped container -> exit 1, says it is not running" \
+                                 all 'rc 1' 'err_has "not running"' 'not_called_re "^pct exec"'
+nx exec web-1;                 check "exec without a command -> exit 2" all 'rc 2' 'not_called_re "^pct exec"'
+nx exec;                       check "exec without a name -> exit 2"    rc 2
+
 echo "=== stop ==="
 nx stop web-1
 check "stop: pct shutdown 100 --timeout 60 --forceStop 1" all 'rc 0' 'called "pct shutdown 100 --timeout 60 --forceStop 1"'

@@ -98,7 +98,9 @@ pub fn main() u8 {
         if (!failure_reported) printError("{s}", .{describeError(err)});
         return exitCodeFor(err);
     };
-    return 0;
+    // `exec` exits with the status of the command it ran, the way an OCI
+    // runtime does; every other command leaves this null.
+    return core.exit_status.propagated orelse 0;
 }
 
 fn run() !void {
@@ -266,6 +268,7 @@ fn printUsage() !void {
         \\  list      List containers
         \\  state     Show container state as OCI JSON
         \\  kill      Send a signal to a container
+        \\  exec      Run a command inside a running container
         \\  run       Create and start a container
         \\  help      Show this help message
         \\  version   Show version information
@@ -356,10 +359,17 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             // its value to be taken as the container name.
             if (options.args == null) options.args = args[i .. i + 2];
             i += 2;
+        } else if (std.mem.eql(u8, arg, "--") and options.command == .exec and options.container_id != null) {
+            // For exec, everything after "--" is the command to run, even
+            // where it starts with a dash. Without this the generic branch
+            // below drops such a token and exec sees no command at all.
+            if (i + 1 < args.len) options.args = args[i + 1 ..];
+            break;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             // This is likely the image name, container ID, or command
-            if (options.command == .start or options.command == .stop or options.command == .delete or options.command == .state or options.command == .kill) {
-                // For start/stop/delete/state, first argument is container ID
+            if (options.command == .start or options.command == .stop or options.command == .delete or options.command == .state or options.command == .kill or options.command == .exec) {
+                // For start/stop/delete/state/kill/exec, first argument is
+                // the container ID; for exec the rest is the command to run
                 if (options.container_id == null) {
                     options.container_id = try allocator.dupe(u8, arg);
                 } else {

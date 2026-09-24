@@ -10,6 +10,7 @@ pub const constants = @import("constants.zig");
 pub const integrity = @import("integrity.zig");
 pub const validation = @import("validation.zig");
 pub const signals = @import("signals.zig");
+pub const exit_status = @import("exit_status.zig");
 pub const version = @import("version.zig");
 
 // Re-export commonly used types

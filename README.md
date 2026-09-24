@@ -11,7 +11,7 @@ Status as of version 0.9.0:
 
 | | |
 |---|---|
-| **Supported** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `run` for LXC containers on one Proxmox VE 8.x / 9.x host |
+| **Supported** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `exec`, `run` for LXC containers on one Proxmox VE 8.x / 9.x host |
 | **Images** | `<storage>:vztmpl/…` templates, OCI bundle directories, OCI registry references (Proxmox VE 9.1+) |
 | **Not yet** | containerd / CRI integration, containers on other cluster nodes |
 | **Opt-in, experimental** | crun and runc backends, Proxmox VM backend |
@@ -75,6 +75,9 @@ nexcage run --name cache-1 docker.io/library/redis:7
 
 # Signals go to the container's init, from the host
 nexcage kill web-1 SIGKILL
+
+# A command inside a running container; nexcage exits with its status
+nexcage exec web-1 -- sh -c 'echo $HOSTNAME'
 ```
 
 - Containers are addressed by name, which becomes the hostname and must be
