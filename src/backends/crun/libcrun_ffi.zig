@@ -26,7 +26,7 @@ pub const Libcrun = struct {
         argc: c_int,
         handler_manager: ?*anyopaque,
     };
-    
+
     /// Opaque types for structures we don't need to access
     pub const Container = opaque {};
     pub const Error = opaque {};
@@ -115,4 +115,3 @@ pub const Libcrun = struct {
     /// Default state root
     pub const DEFAULT_STATE_ROOT: []const u8 = "/run/crun";
 };
-

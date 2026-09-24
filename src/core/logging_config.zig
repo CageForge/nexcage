@@ -59,7 +59,7 @@ pub const LoggingConfig = struct {
         var i: usize = 0;
         while (i < args.len) {
             const arg = args[i];
-            
+
             if (std.mem.eql(u8, arg, "--debug")) {
                 config.debug_mode = true;
                 config.log_level = .debug;
@@ -81,7 +81,7 @@ pub const LoggingConfig = struct {
             } else if (std.mem.eql(u8, arg, "--memory-tracking")) {
                 config.enable_memory_tracking = true;
             }
-            
+
             i += 1;
         }
 
@@ -95,7 +95,7 @@ pub const LoggingConfig = struct {
         // Load from config file
         logging_config.debug_mode = config.log_level == .debug;
         logging_config.log_level = config.log_level;
-        
+
         if (config.log_file) |log_file| {
             logging_config.log_file_path = try allocator.dupe(u8, log_file);
             logging_config.enable_file_logging = true;

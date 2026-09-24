@@ -60,8 +60,7 @@ pub const KillCommand = struct {
 
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
-        return allocator.dupe(u8,
-            "Usage: nexcage kill [--signal|-s SIGNAL] <name>\n" ++
+        return allocator.dupe(u8, "Usage: nexcage kill [--signal|-s SIGNAL] <name>\n" ++
             "       nexcage kill <name> [SIGNAL]\n\n" ++
             "Send a signal to the container's init process from the host. Default is SIGTERM.\n" ++
             "The kernel delivers it only if init handles that signal, except SIGKILL and\n" ++
@@ -69,8 +68,7 @@ pub const KillCommand = struct {
             "Options:\n" ++
             "  -s, --signal STRING   Name in any case, with or without SIG (TERM, SIGKILL),\n" ++
             "                        or a number from 1 to 64\n" ++
-            "  -h, --help            Show this help\n"
-        );
+            "  -h, --help            Show this help\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

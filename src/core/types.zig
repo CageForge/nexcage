@@ -53,7 +53,6 @@ pub const RuntimeType = enum {
     proxmox_lxc,
 };
 
-
 /// Container type enumeration
 pub const ContainerType = enum {
     lxc,
@@ -263,7 +262,7 @@ pub const ContainerConfig = struct {
     // Legacy pattern support (deprecated - use routing instead)
     crun_name_patterns: []const []const u8,
     default_container_type: ContainerType,
-    
+
     // New routing system with regex patterns
     routing: []const RoutingRule,
     default_runtime: RuntimeType,
@@ -274,7 +273,7 @@ pub const ContainerConfig = struct {
             allocator.free(pattern);
         }
         allocator.free(self.crun_name_patterns);
-        
+
         // Clean up routing rules
         for (self.routing) |rule| {
             rule.deinit(allocator);

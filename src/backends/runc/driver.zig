@@ -44,7 +44,8 @@ pub const RuncDriver = struct {
         const args = [_][]const u8{
             "runc",
             "create",
-            "--bundle", bundle_path,
+            "--bundle",
+            bundle_path,
             config.name,
         };
 
@@ -124,7 +125,7 @@ pub const RuncDriver = struct {
     /// Kill an OCI container using runc
     pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
         if (self.logger) |log| {
-            try log.info("Killing OCI container with runc: {s} signal {s}", .{container_id, signal});
+            try log.info("Killing OCI container with runc: {s} signal {s}", .{ container_id, signal });
         }
         const args = [_][]const u8{ "runc", "kill", container_id, signal };
         const result = try self.runCommand(&args);

@@ -28,10 +28,8 @@ next step, not by size.
 | 10 | Fixed resources | 512 MiB and one core unless an OCI bundle sets limits | Translating pod requests and limits into cgroups |
 | 11 | Single host | containers on other cluster nodes are not supported | A node per PVE host, or a scheduler that targets more than one |
 
-Two further gaps are operational rather than functional: nexcage exposes no
-health or metrics endpoint a probe can use, and `zig fmt --check` fails on 21
-files on `main` while no CI job runs it, so `make lint` and `make check` fail
-out of the box.
+One further gap is operational rather than functional: nexcage exposes no
+health or metrics endpoint a probe can use.
 
 ## Constraints found in the pskep cluster
 
