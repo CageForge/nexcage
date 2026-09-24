@@ -69,7 +69,7 @@ What it does not cover: the simulation suite, and anything that calls `pct`.
 
 Done. `deploy/kubernetes/tenant-nexcage/vm-e2e-node.yaml` is a kubemox
 `VirtualMachine` in `tenant-nexcage`; kubemox clones the template
-`nexcage-pve-tpl-v0-1` on `prox-home` into the node `nexcage-e2e-1`, a Debian
+`nexcage-pve-tpl-v0-2` on `prox-home` into the node `nexcage-e2e-1`, a Debian
 13 guest running Proxmox VE 9.2.20. `pve-template/` holds the four scripts that
 build that template from the Debian cloud image, and
 `scripts/register_e2e_runner.sh` registers the Actions runner on the node —

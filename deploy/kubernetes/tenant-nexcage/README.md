@@ -12,7 +12,7 @@ and which stage each of these files belongs to.
 |---|---|
 | `tenant.yaml` | The `Tenant`, which creates the `tenant-nexcage` namespace and its role bindings |
 | `job-build-test.yaml` | Builds nexcage from source in the cluster and runs the unit tests and smoke checks |
-| `vm-e2e-node.yaml` | The Proxmox VE node the E2E suite runs on, cloned by kubemox from `nexcage-pve-tpl-v0-1` on prox-home |
+| `vm-e2e-node.yaml` | The Proxmox VE node the E2E suite runs on, cloned by kubemox from `nexcage-pve-tpl-v0-2` on prox-home |
 | `pve-template/` | The four scripts that build that template from the Debian 13 cloud image |
 
 ## Apply

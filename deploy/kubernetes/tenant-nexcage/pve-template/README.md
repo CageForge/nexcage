@@ -1,6 +1,6 @@
 # The Proxmox VE template the E2E node is cloned from
 
-Four scripts that turn the Debian 13 cloud image into `nexcage-pve-tpl-v0-1`,
+Four scripts that turn the Debian 13 cloud image into `nexcage-pve-tpl-v0-2`,
 a Proxmox VE 9 guest that `../vm-e2e-node.yaml` clones through kubemox. Proxmox
 VE 9 is Debian 13, so the cloud image is the right base and no installer ISO is
 involved.
@@ -17,9 +17,9 @@ Run step 1 on the Proxmox host; steps 2 to 4 inside the VM, as root.
 Then, on the host:
 
 ```bash
-qm set 119 --delete cipassword
-qm set 119 --name nexcage-pve-tpl-v0-1
-qm template 119
+qm set <vmid> --delete cipassword
+qm set <vmid> --name nexcage-pve-tpl-v0-2
+qm template <vmid>
 ```
 
 ## Why it is built this way
@@ -54,16 +54,22 @@ is installed. Step 2 answers it with `debconf-set-selections`.
 Register it on the node kubemox created, with
 [`scripts/register_e2e_runner.sh`](../../../../scripts/register_e2e_runner.sh).
 
-## Known gap in the current template
+**Every step waits for cloud-init.** The cloud image upgrades packages on
+first boot and holds the dpkg lock while it does, so an `apt` call that does
+not wait dies with "Could not get lock /var/lib/dpkg/lock-frontend". Step 4
+clears cloud-init's state, which makes the *next* boot a first boot again — so
+the wait belongs in every step, not only the first.
 
-`nexcage-pve-tpl-v0-1` was sealed before the `net.ifnames` pin above was added
-to step 2, so a node cloned from it comes up with the address on `vmbr0` and
-`ens18` unattached. Fix it once on the new node, over the serial console
-(`socat - UNIX-CONNECT:/var/run/qemu-server/<vmid>.serial0` on the host):
+**The system template is kept, everything else in `vztmpl` is freed.** Match
+the file name, not the volid: a volid is `local:vztmpl/<name>`, so a pattern
+anchored on a slash before `vztmpl` matches nothing and every template falls
+through to the branch that frees it — the system one included. That is exactly
+what happened on the first sealing run of v0-2.
 
-```bash
-NIC=$(ip -o link show | awk -F': ' '{print $2}' | grep -vE '^(lo|vmbr|veth|fw|bond|dummy)' | head -1)
-sed -i "s/\beth0\b/$NIC/g" /etc/network/interfaces && ifreload -a
-```
+## History
 
-Rebuilding the template with the current scripts removes the need for it.
+`nexcage-pve-tpl-v0-1` was sealed before the `net.ifnames` pin existed, so a
+clone from it came up with the address on `vmbr0` and the NIC unattached, and
+it carried an OCI image in `vztmpl` that the E2E suite then picked as its
+template. `v0-2` is built from these scripts with both fixed, and was checked
+by cloning it through kubemox and running the suite on the result.

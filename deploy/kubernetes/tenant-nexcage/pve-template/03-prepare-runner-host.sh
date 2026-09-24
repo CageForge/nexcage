@@ -13,6 +13,15 @@ E2E_BRIDGE=${E2E_BRIDGE:-vmbr50}
 E2E_BRIDGE_ADDR=${E2E_BRIDGE_ADDR:-10.60.0.1/24}
 TEMPLATE=${TEMPLATE:-debian-13-standard_13.6-1_amd64.tar.zst}
 
+# The Debian cloud image upgrades packages on first boot, and cloud-init holds
+# the dpkg lock while it does — including after 04-seal-template.sh clears its
+# state, which makes the next boot a first boot again. Without this wait, apt
+# dies with "Could not get lock /var/lib/dpkg/lock-frontend".
+if command -v cloud-init >/dev/null 2>&1; then
+  echo "=== waiting for cloud-init to let go of apt ==="
+  cloud-init status --wait >/dev/null 2>&1 || true
+fi
+
 echo "=== packages the workflow needs ==="
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
