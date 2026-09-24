@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `proxmox_e2e.yml` runs on `[self-hosted, pve9]` instead of `[proxmox]`, which pins it to a Proxmox VE 9.x host rather than whichever machine holds the older label.
 
 ### Fixed
+- `proxmox_e2e.yml` picked the first `vztmpl` volume as its template, which on Proxmox VE 9.1+ can be an OCI image rather than a system template — `nexcage run docker.io/…` leaves one there itself. Every container the suite creates has to boot, and the OCI bundle step uses that same archive as its rootfs, so an application image with no `/sbin/init` failed at `start` with nothing pointing at the cause. It now picks a system template by name, and the registry step frees the image it pulled.
 - The released binary and `.deb` were built for the build machine's CPU: Zig's default target is native, and `zig build -Doptimize=ReleaseSafe` on a GitHub runner produced a binary that died with `SIGILL` on a Xeon E5-2697 v2 — ordinary hardware for a Proxmox host. Both release paths now pass `-Dcpu=baseline`.
 
 ## [0.9.0] - 2026-09-15

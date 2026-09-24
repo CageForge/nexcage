@@ -89,16 +89,28 @@ jobs:
         nx() { $SUDO "$NEXCAGE" "$@"; }
 
         echo "[E2E] Detect template (vztmpl)"
+        # A system template, not merely the first vztmpl volume. On Proxmox VE
+        # 9.1+ an OCI image pulled from a registry also lands in vztmpl, and
+        # nexcage's own `run docker.io/...` puts one there — so "the first
+        # vztmpl" can be an application image with no /sbin/init. Everything
+        # below creates containers that have to boot, and the OCI bundle step
+        # uses this same archive as its rootfs, so picking one of those fails
+        # confusingly at `start` rather than here.
+        SYSTEM_TEMPLATE_RE='vztmpl/(debian|ubuntu|alpine|rocky|almalinux|centos|fedora|opensuse|archlinux|devuan|gentoo)-'
         TPL=${TPL:-}
         if [ -z "$TPL" ]; then
-          TPL=$($SUDO pvesm list local --content vztmpl 2>/dev/null | awk '/vztmpl/ {print $1; exit}') || true
+          TPL=$($SUDO pvesm list local --content vztmpl 2>/dev/null \
+            | awk -v re="$SYSTEM_TEMPLATE_RE" '$1 ~ re {print $1; exit}') || true
         fi
         if [ -z "$TPL" ]; then
-          f=$(ls -1 /var/lib/vz/template/cache/*.tar.* 2>/dev/null | head -n1) || true
+          f=$(ls -1 /var/lib/vz/template/cache/*.tar.* 2>/dev/null \
+            | grep -E '/(debian|ubuntu|alpine|rocky|almalinux|centos|fedora|opensuse|archlinux|devuan|gentoo)-' \
+            | head -n1) || true
           if [ -n "$f" ]; then TPL="local:vztmpl/$(basename "$f")"; fi
         fi
         if [ -z "$TPL" ]; then
-          echo "::error::no LXC template found; pre-seed one with 'pveam download local <template>'"
+          echo "::error::no LXC system template found; pre-seed one with 'pveam download local <template>'"
+          $SUDO pvesm list local --content vztmpl 2>/dev/null || true
           exit 1
         fi
 
@@ -296,12 +308,23 @@ jobs:
         NAME="gh-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-reg"
 
         vmid_of() { $SUDO pct list 2>/dev/null | awk -v n="$1" 'NR>1 && $NF==n {print $1}'; }
+        vztmpl_list() { $SUDO pvesm list local --content vztmpl 2>/dev/null | awk 'NR>1 {print $1}' | sort; }
+
+        # The pull leaves the image in vztmpl, where it stays after the
+        # container is gone. Freeing it keeps the host's template list to
+        # system templates, which is what the detection above looks for.
+        before=$(vztmpl_list)
         cleanup() {
           set +e
           id=$(vmid_of "$NAME")
-          [ -z "$id" ] && return
-          $SUDO pct shutdown "$id" --timeout 30 --forceStop 1 >/dev/null 2>&1
-          $SUDO pct destroy "$id" --purge 1 >/dev/null 2>&1
+          if [ -n "$id" ]; then
+            $SUDO pct shutdown "$id" --timeout 30 --forceStop 1 >/dev/null 2>&1
+            $SUDO pct destroy "$id" --purge 1 >/dev/null 2>&1
+          fi
+          for vol in $(comm -13 <(echo "$before") <(vztmpl_list)); do
+            echo "[E2E] freeing pulled image $vol"
+            $SUDO pvesm free "$vol" >/dev/null 2>&1
+          done
         }
         trap cleanup EXIT
 
@@ -326,6 +349,7 @@ jobs:
 
         nx stop "$NAME"
         nx delete "$NAME"
+        cleanup
         trap - EXIT
         echo "[E2E] registry path passed"
 

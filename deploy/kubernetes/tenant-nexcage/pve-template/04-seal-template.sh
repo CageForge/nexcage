@@ -16,7 +16,21 @@ for id in $(pct list 2>/dev/null | awk 'NR>1 {print $1}'); do
 done
 rm -rf /var/lib/nexcage /run/nexcage
 dpkg -r nexcage >/dev/null 2>&1 || true
-rm -f /usr/bin/nexcage
+rm -f /usr/bin/nexcage /usr/local/bin/nexcage
+
+# An image pulled from a registry stays in vztmpl after its container is gone,
+# and proxmox_e2e.yml picks a template from that list. One left in the image
+# becomes the template every clone tries to boot from, which fails at start
+# with no hint as to why: an application image has no /sbin/init.
+for vol in $(pvesm list local --content vztmpl 2>/dev/null | awk 'NR>1 {print $1}'); do
+  case "$vol" in
+    */vztmpl/debian-*|*/vztmpl/ubuntu-*|*/vztmpl/alpine-*|*/vztmpl/rocky-*|\
+    */vztmpl/almalinux-*|*/vztmpl/centos-*|*/vztmpl/fedora-*|*/vztmpl/opensuse-*|\
+    */vztmpl/archlinux-*|*/vztmpl/devuan-*|*/vztmpl/gentoo-*) ;;
+    *) echo "  freeing non-system template $vol"; pvesm free "$vol" >/dev/null 2>&1 ;;
+  esac
+done
+pvesm list local --content vztmpl
 
 echo "=== a registration belongs to one runner, not to an image ==="
 RUNNER_DIR=/home/github-runner/actions-runner
