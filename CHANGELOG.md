@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `docs/KUBERNETES_INTEGRATION.md`: what the runtime still lacks before Kubernetes can schedule onto it (`exec`, the OCI runtime-spec command line, logs, CNI, sandboxes, an image service, a remote surface), the constraints measured in the Cozystack cluster `pskep`, and the four stages from an in-cluster build job to CRI.
+- `deploy/kubernetes/tenant-nexcage/`: the Cozystack `Tenant` nexcage is developed in, and a `Job` that builds nexcage and runs the unit tests and smoke checks inside the cluster. `tests/sim/run.sh` is not among them: the Talos nodes report `user.max_user_namespaces=0` inside pods, so the job reports that instead of failing on it.
+- `.github/workflows/buildagent.yml`: build, unit tests, simulation suite and the `.deb` on the self-hosted CageForge build agent (Debian 13, on the Proxmox host prox-home). It checks the package payload without installing it, because the runner user has no passwordless sudo.
+
 ## [0.9.0] - 2026-09-15
 
 Release notes with upgrade guidance: `docs/releases/NOTES_v0.9.0.md`.
