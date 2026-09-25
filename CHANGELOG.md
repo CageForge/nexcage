@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A container engine's container id was rejected. `create` applied an RFC-1123 hostname rule to the id before any backend was chosen, and podman and containerd address containers by a 64-character hex id against a 63-character label limit — so `podman --runtime nexcage run` failed on its very first call with "Invalid container name/hostname". The rule belongs to the Proxmox LXC backend, where the name becomes the container's hostname, and now lives there and says which backend requires it.
+- The catch-all routing rule in `config.json.example` matched nothing. A pattern is a regular expression only when it starts with `^` or ends with `$`; everything else is a shell-style wildcard, so `".*"` meant "a literal dot followed by anything". The example now uses `"*"`, and the reference explains the rule, because a routing rule that silently never fires sends every container to the default backend.
+
+### Added
+- With those two fixed, **podman drives nexcage end to end**: `podman --runtime nexcage run … /bin/sh -c 'echo HELLO_FROM_NEXCAGE'` prints it, having sent `create --bundle … --pid-file … <id>`, `start <id>` and `delete --force <id>` — the command line built over #261, #265 and #266, with no option the runtime did not know.
+
 ### Added
 - `start`, `kill` and `delete` work on the crun backend, which is the first time they have been run there at all: `create --console-socket` then `start` gives `"status": "running"`, and `delete --force` destroys a running container so that `state` afterwards reports it gone.
 - `kill --all` reaches `libcrun_container_killall` on the crun backend, which is what the flag means. It used to be dropped before the backend saw it, so `--all` signalled only the init. Verified as far as: the call is made, returns success where the cgroup namespace allows it, and the container stops. **Not** verified: that it reaches a process the plain `kill` would miss — a test meant to show that measured nothing, and the claim is libcrun's rather than one this repository has demonstrated. In a container whose cgroup is not delegated it fails with `read from file 'cgroup.procs': Operation not supported` and leaves the container paused.

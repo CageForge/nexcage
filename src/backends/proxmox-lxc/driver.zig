@@ -165,6 +165,17 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Creating Proxmox LXC container: {s}", .{config.name});
         }
 
+        // The name becomes the container's hostname, so it has to be one.
+        // This used to be checked in the create command, before the backend
+        // was known, which made it a rule for every backend: a container
+        // engine addresses containers by a 64-character hex id, and nexcage
+        // answered "Invalid container name/hostname" to podman's very first
+        // create. An id is not a hostname anywhere but here.
+        core.validation.SecurityValidation.validateHostname(config.name) catch {
+            if (self.logger) |log| log.err("'{s}' cannot be a container hostname; the Proxmox LXC backend uses the name as one, so it must be RFC-1123 (letters, digits and hyphens, at most 63 per label)", .{config.name}) catch {};
+            return core.Error.InvalidInput;
+        };
+
         // Every other command finds a container by name, so names must be
         // unique. Checked before any image is pulled.
         if (self.pve_client.getVmidByName(config.name)) |existing_vmid| {
