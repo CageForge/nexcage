@@ -148,9 +148,15 @@ $ nexcage --runtime crun state s1
   "systemd-scope": "", "owner": "root" }
 ```
 
-What is still missing before a container engine can drive it: `start`, `kill`
-and `delete` exist on this backend but have never been run end to end, and
-`ps`, `features`, `pause`, `resume` and `update` do not exist at all.
+`start`, `kill` and `delete` have now been run end to end on this backend for
+the first time: `create --console-socket` → `start` → `"status": "running"` →
+`delete --force` → gone. Two flags that were accepted and ignored now reach
+libcrun: `delete --force`, which the driver had hardcoded to `false`, and
+`kill --all`, which goes to `libcrun_container_killall`.
+
+What is missing before a container engine can drive it: `ps`, `features`,
+`pause`, `resume` and `update` do not exist at all, and `exec` on this backend
+needs a binding libcrun's exec entry point does not have yet.
 
 `--pid-file` and `--console-socket` are where the Proxmox LXC backend stops
 being able to pretend: the runtime-spec means `create` to leave the container's

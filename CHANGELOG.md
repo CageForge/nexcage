@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `start`, `kill` and `delete` work on the crun backend, which is the first time they have been run there at all: `create --console-socket` then `start` gives `"status": "running"`, and `delete --force` destroys a running container so that `state` afterwards reports it gone.
+- `kill --all` reaches `libcrun_container_killall` on the crun backend, which is what the flag means. It used to be dropped before the backend saw it, so `--all` signalled only the init. Verified as far as: the call is made, returns success where the cgroup namespace allows it, and the container stops. **Not** verified: that it reaches a process the plain `kill` would miss — a test meant to show that measured nothing, and the claim is libcrun's rather than one this repository has demonstrated. In a container whose cgroup is not delegated it fails with `read from file 'cgroup.procs': Operation not supported` and leaves the container paused.
+- `delete --force` reaches libcrun on the crun backend. The driver passed a hardcoded `false`, so the flag was accepted and then not forced.
+
+### Fixed
+- `kill --all` printed "nexcage signals the container's init; only SIGKILL reaches every process in it" on every backend, because it was said in the command before the backend was chosen. On crun that is untrue. The caveat now lives where the backend is known, and is printed only for Proxmox LXC.
+
+### Added
 - `create --console-socket <path>` and `create --pid-file <path>`, the two runtime-spec options a container engine sends with `create`. On the crun backend `--console-socket` makes a bundle whose spec sets `process.terminal` creatable at all: the runtime allocates the pty and sends its master end over the caller's Unix socket with `SCM_RIGHTS` — checked by receiving it and confirming `isatty` — where the same bundle without the flag still answers "use --console-socket with create when a terminal is used". The fields were already present in the libcrun context struct and simply never filled in; the Zig declaration was verified field by field against `struct libcrun_context_s` at the commit `deps/crun` is pinned to.
 - On the Proxmox LXC backend both flags fail with exit 1 and explain why: `pct create` starts no process, so there is no pty to hand over and no pid to write. They are refused rather than accepted and ignored — a caller that passes `--console-socket` and receives no file descriptor waits for one that never arrives.
 
