@@ -35,12 +35,16 @@ command line.
 `create`, `run`, `start`, `stop`, `delete`, `kill`, `exec` and `state` go to
 the backend chosen by the routing rules in the config file, Proxmox LXC by
 default.
-`--runtime <lxc|crun|runc|vm>` overrides that for one command.
+`--runtime <lxc|crun|runc|vm>` overrides that for one command, before or after
+the command name.
 
 - `crun` and `runc` work only in a binary built with
   `-Denable-backend-crun=true` or `-Denable-backend-runc=true`; otherwise the
-  command fails with exit 1. They have no `run` or `state`, and `runc` has no
-  `exec`.
+  command fails with exit 1. They have no `run` or `state`, and neither has
+  `exec`: libcrun's exec entry point has no binding in nexcage's FFI.
+- The crun backend creates the container from the bundle given with
+  `--bundle`, and keeps its state under `--root` when one is given, or
+  `/run/crun` as crun itself does.
 - `vm` is not integrated yet: every command fails with "not implemented".
 - Any other value is a usage error (exit 2).
 

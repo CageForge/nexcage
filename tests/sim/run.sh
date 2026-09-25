@@ -333,8 +333,12 @@ cat > "$S/bundles/b1/config.json" <<'JSON'
 {"ociVersion":"1.0.2","hostname":"b1","process":{"args":["/bin/sh"],"cwd":"/"},"root":{"path":"rootfs"},
  "linux":{"namespaces":[{"type":"pid"},{"type":"user"}]}}
 JSON
-nx create --name bundle-0 "$S/bundles/b1"
-check "bundle outside the allowed prefixes -> exit 2, says where bundles go" all 'rc 2' 'err_has "/tmp/nexcage-bundles/"' 'not_called_re "^pct create"'
+nx create --name bundle-0 ./relative-bundle
+check "a relative bundle path -> exit 2: the engine's working directory is not ours" \
+  all 'rc 2' 'err_has "absolute"' 'not_called_re "^pct create"'
+nx create --name bundle-e /run/engine-bundles/b1
+check "a bundle outside nexcage's own directories is accepted and then fails on its contents" \
+  all 'rc 2' '! err_has "must be an absolute path"' 'not_called_re "^pct create"'
 nx create --name bundle-x /tmp/nexcage-bundles/nocfg
 check "bundle without config.json -> exit 2, no crash" all 'rc 2' 'err_has "config.json"' 'not_called_re "^pct create"'
 nx create --name bundle-1 /tmp/nexcage-bundles/b1
@@ -372,6 +376,11 @@ nx --root relative list
 check "--root with a relative path -> exit 2" all 'rc 2' 'err_has "absolute"'
 nx --root
 check "--root without a value -> exit 2" rc 2
+
+nx --runtime lxc state from-tpl
+check "--runtime before the command routes, instead of being dropped" all 'rc 0' '! err_has "unknown command"'
+nx --runtime bogus state from-tpl
+check "--runtime bogus before the command -> exit 2, no leak" rc 2
 
 nx delete spec-1
 check "delete refuses a running container without --force" rc 1

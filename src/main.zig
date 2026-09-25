@@ -125,7 +125,7 @@ fn run() !void {
 
     // --root, likewise: every command that reads or writes per-container state
     // has to see it before it does so.
-    if (try flagValueFromArgs(args, "--root")) |root| {
+    if (try flagValueFromArgs(args, "--root", "path")) |root| {
         if (root.len == 0 or root[0] != '/') {
             printError("--root needs an absolute path, got '{s}'", .{root});
             failure_reported = true;
@@ -177,6 +177,10 @@ fn run() !void {
             i += 2; // Skip --root and its value, applied above
             continue;
         }
+        if (std.mem.eql(u8, args[i], "--runtime") and i + 1 < args.len) {
+            i += 2; // Skip --runtime and its value; parseRuntimeOptions reads it
+            continue;
+        }
         // Found the actual command
         command_name = args[i];
         command_args = args[i + 1 ..];
@@ -197,6 +201,21 @@ fn run() !void {
     // Parse runtime options
     var options = try parseRuntimeOptions(allocator, command_name, command_args);
     defer options.deinit();
+
+    // A --runtime before the command never reached the parser: the loop above
+    // skips it to find the command, and command_args starts after the command,
+    // so the flag was dropped and the routing silently stayed on the default.
+    // After the defer, so an unknown value does not leak what is already
+    // parsed on its way out.
+    if (options.runtime_type == null) {
+        if (try flagValueFromArgs(args, "--runtime", "value")) |value| {
+            options.runtime_type = parseRuntimeType(value) orelse {
+                printError("unknown runtime '{s}'; expected lxc, crun, runc or vm", .{value});
+                failure_reported = true;
+                return error.InvalidInput;
+            };
+        }
+    }
 
     // Check if help was requested
     if (options.help) {
@@ -446,18 +465,19 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
 /// The value of --config anywhere on the command line, or null. A --config
 /// with nothing after it is a usage error.
 fn configPathFromArgs(args: []const []const u8) !?[]const u8 {
-    return flagValueFromArgs(args, "--config");
+    return flagValueFromArgs(args, "--config", "path");
 }
 
 /// The value of a global flag wherever it appears, or null. The flag with
 /// nothing after it is a usage error: taking the next command-line word would
-/// silently use a container name as a path.
-fn flagValueFromArgs(args: []const []const u8, flag: []const u8) !?[]const u8 {
+/// silently use a container name as the value. `noun` names what is
+/// expected, so each flag keeps its own message.
+fn flagValueFromArgs(args: []const []const u8, flag: []const u8, noun: []const u8) !?[]const u8 {
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         if (!std.mem.eql(u8, args[i], flag)) continue;
         if (i + 1 >= args.len) {
-            printError("{s} needs a path", .{flag});
+            printError("{s} needs a {s}", .{ flag, noun });
             failure_reported = true;
             return error.InvalidInput;
         }

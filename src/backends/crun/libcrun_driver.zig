@@ -12,17 +12,23 @@ pub const CrunDriver = struct {
 
     allocator: std.mem.Allocator,
     logger: ?*core.LogContext = null,
+    /// Where libcrun keeps container state. crun's own default is /run/crun,
+    /// and a container engine always passes its own directory with --root; the
+    /// default is kept for a caller that gives none.
     state_root: []const u8 = "/run/crun",
     // Stored strings and context to keep them valid during usage
-    _state_root_z: ?[]u8 = null,
-    _bundle_z: ?[]u8 = null,
-    _id_z: ?[]u8 = null,
+    _state_root_z: ?[:0]u8 = null,
+    _bundle_z: ?[:0]u8 = null,
+    _id_z: ?[:0]u8 = null,
     _context: ?*ffi.Libcrun.Context = null,
 
     pub fn init(allocator: std.mem.Allocator, logger: ?*core.LogContext) Self {
         return Self{
             .allocator = allocator,
             .logger = logger,
+            // An explicit --root wins; without one this stays crun's default
+            // rather than nexcage's, because the state here is libcrun's.
+            .state_root = if (core.state_root.isDefault()) "/run/crun" else core.state_root.get(),
         };
     }
 
@@ -45,25 +51,26 @@ pub const CrunDriver = struct {
         // Zero-initialize context
         ctx.* = std.mem.zeroes(ffi.Libcrun.Context);
 
-        // Store strings to keep them valid
+        // allocPrintSentinel, not allocPrint plus a re-slice: writing the NUL
+        // by hand allocates one more byte than the slice that was kept, so
+        // freeing it in deinit aborted with "Allocation size N does not match
+        // free size N-1". Nothing reached this code until the crun backend was
+        // actually run, so the mismatch sat here unseen.
         if (self._state_root_z == null) {
-            const state_z = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{self.state_root});
-            self._state_root_z = state_z[0 .. state_z.len - 1 :0];
+            self._state_root_z = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{self.state_root}, 0);
         }
         ctx.state_root = self._state_root_z.?.ptr;
 
         if (bundle_path.len > 0) {
             if (self._bundle_z) |b| self.allocator.free(b);
-            const bundle_z = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{bundle_path});
-            self._bundle_z = bundle_z[0 .. bundle_z.len - 1 :0];
+            self._bundle_z = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{bundle_path}, 0);
             ctx.bundle = self._bundle_z.?.ptr;
         } else {
             ctx.bundle = null;
         }
 
         if (self._id_z) |i| self.allocator.free(i);
-        const id_z = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{container_id});
-        self._id_z = id_z[0 .. id_z.len - 1 :0];
+        self._id_z = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
         ctx.id = self._id_z.?.ptr;
 
         // Initialize optional fields (already zeroed by zeroes, which sets pointers to null)
@@ -94,11 +101,20 @@ pub const CrunDriver = struct {
         // Validate container name
         try validation.SecurityValidation.validateContainerId(config.name);
 
-        // Resolve bundle path (must already exist)
-        const bundle_path = try validation.PathSecurity.validateBundlePath(
-            try std.fmt.allocPrint(self.allocator, "/var/lib/nexcage/bundles/{s}", .{config.name}),
-            self.allocator,
-        );
+        // The bundle the caller named. A container engine passes its own
+        // directory — containerd keeps one per task under
+        // /run/containerd/… — so deriving the path from the container id, as
+        // this did, looked in a place nothing had written.
+        const requested = config.image orelse {
+            if (self.logger) |log| {
+                try log.err("crun needs a bundle: nexcage create {s} --bundle <dir>", .{config.name});
+            }
+            return core.Error.InvalidInput;
+        };
+        // validateBundlePath returns a fresh path and does not own its input,
+        // so pass the borrowed one: the allocPrint this used to hand it was
+        // never freed.
+        const bundle_path = try validation.PathSecurity.validateBundlePath(requested, self.allocator);
         defer self.allocator.free(bundle_path);
 
         var bundle_dir = std.fs.cwd().openDir(bundle_path, .{ .iterate = false }) catch |err| {
@@ -120,9 +136,8 @@ pub const CrunDriver = struct {
         };
         config_file.close();
 
-        const config_path_z = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{config_path});
-        defer self.allocator.free(config_path_z);
-        const config_path_c: [:0]const u8 = config_path_z[0 .. config_path_z.len - 1 :0];
+        const config_path_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{config_path}, 0);
+        defer self.allocator.free(config_path_c);
 
         // Allocate error structure
         var err_ptr: ?*ffi.Libcrun.Error = null;
@@ -171,9 +186,8 @@ pub const CrunDriver = struct {
         // Allocate error structure
         var err_ptr: ?*ffi.Libcrun.Error = null;
 
-        const id_cstr = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{container_id});
-        defer self.allocator.free(id_cstr);
-        const id_c: [:0]const u8 = id_cstr[0 .. id_cstr.len - 1 :0];
+        const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
+        defer self.allocator.free(id_c);
 
         // Start container using libcrun API
         const ret = ffi.Libcrun.libcrun_container_start(ctx, id_c.ptr, &err_ptr);
@@ -209,13 +223,11 @@ pub const CrunDriver = struct {
         // Allocate error structure
         var err_ptr: ?*ffi.Libcrun.Error = null;
 
-        const id_cstr = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{container_id});
-        defer self.allocator.free(id_cstr);
-        const id_c: [:0]const u8 = id_cstr[0 .. id_cstr.len - 1 :0];
+        const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
+        defer self.allocator.free(id_c);
 
-        const signal_cstr = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{signal});
-        defer self.allocator.free(signal_cstr);
-        const signal_c: [:0]const u8 = signal_cstr[0 .. signal_cstr.len - 1 :0];
+        const signal_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{signal}, 0);
+        defer self.allocator.free(signal_c);
 
         // Kill container using libcrun API
         const ret = ffi.Libcrun.libcrun_container_kill(ctx, id_c.ptr, signal_c.ptr, &err_ptr);
@@ -239,9 +251,8 @@ pub const CrunDriver = struct {
         // Allocate error structure
         var err_ptr: ?*ffi.Libcrun.Error = null;
 
-        const id_cstr = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{container_id});
-        defer self.allocator.free(id_cstr);
-        const id_c: [:0]const u8 = id_cstr[0 .. id_cstr.len - 1 :0];
+        const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
+        defer self.allocator.free(id_c);
 
         // Delete container using libcrun API (def can be null)
         const ret = ffi.Libcrun.libcrun_container_delete(ctx, null, id_c.ptr, false, &err_ptr);
@@ -256,41 +267,18 @@ pub const CrunDriver = struct {
     }
 
     /// Execute a command in a running container (best-effort; may be limited by libcrun API)
+    /// Not implemented. libcrun exposes an exec entry point, but no binding
+    /// for it exists in libcrun_ffi.zig, so there is nothing to call. This
+    /// used to build a C argv, discard it and return OperationNotSupported
+    /// after logging "not wired"; the argv construction also did not compile
+    /// once anything reached it, because a null cannot go into a list of
+    /// non-optional pointers.
     pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8) !void {
+        _ = argv;
         if (self.logger) |log| {
-            try log.info("Exec in OCI container with libcrun: {s}", .{container_id});
+            log.err("exec is not implemented for the crun backend ({s}): libcrun's exec is not bound", .{container_id}) catch {};
         }
-
-        // Validate
-        try validation.SecurityValidation.validateContainerId(container_id);
-        if (argv.len == 0) return core.Error.InvalidInput;
-
-        // Initialize minimal context
-        const ctx = try self.initContext("", container_id);
-
-        // Build C argv (NULL-terminated)
-        var tmp = std.ArrayListUnmanaged([]u8){};
-        defer {
-            if (tmp.items.len > 0) {
-                for (tmp.items) |s| self.allocator.free(s);
-                self.allocator.free(tmp.items);
-            }
-        }
-        var c_argv = std.ArrayListUnmanaged([*:0]const u8){};
-        defer if (c_argv.items.len > 0) self.allocator.free(c_argv.items);
-
-        var i: usize = 0;
-        while (i < argv.len) : (i += 1) {
-            const s_z = try std.fmt.allocPrint(self.allocator, "{s}\x00", .{argv[i]});
-            try tmp.append(self.allocator, s_z);
-            try c_argv.append(self.allocator, s_z[0 .. s_z.len - 1 :0].ptr);
-        }
-        try c_argv.append(self.allocator, null);
-
-        // If libcrun exec API available, call it via FFI; otherwise return unsupported
-        _ = ctx; // avoid unused if exec FFI not present
-        if (self.logger) |log| try log.warn("libcrun exec not wired; skipping (no-op)", .{});
-        return core.Error.OperationNotSupported;
+        return core.Error.UnsupportedOperation;
     }
 
     /// Generate basic OCI config.json

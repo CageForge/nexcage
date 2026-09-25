@@ -3,21 +3,20 @@ name: crun backend build
 # The crun backend is opt-in and links vendored libcrun, which needs the
 # submodules plus two generated header sets. The Dockerfile does all of that
 # from a clean clone (#238), so CI builds through it rather than repeating the
-# steps. Pull requests run it only when they touch what it depends on.
+# steps.
+#
+# This used to run on a pull request only when it touched build.zig, the
+# Dockerfile or src/backends/crun/. That cannot express what actually pulls the
+# backend into a compilation: Zig analyses what is reachable, so a change to
+# the router that starts calling a crun function compiles code nothing compiled
+# before. #260 did exactly that, the job did not run on the pull request, and
+# main was left broken until the push-triggered run failed unnoticed.
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-    paths:
-      - 'build.zig'
-      - 'build.zig.zon'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'src/backends/crun/**'
-      - 'scripts/gen_crun_headers_local.sh'
-      - '.github/workflows/crun_build.yml'
   workflow_dispatch:
 
 permissions:

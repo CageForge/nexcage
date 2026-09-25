@@ -217,7 +217,7 @@ pub const ProxmoxLxcDriver = struct {
                     // OCI Bundle processing
                     const safe_path = core.validation.PathSecurity.validateBundlePath(image_path, self.allocator) catch |err| {
                         if (err == core.Error.ValidationError) {
-                            if (self.logger) |log| log.err("OCI bundle '{s}' must be under /var/lib/nexcage/bundles/ or /tmp/nexcage-bundles/", .{image_path}) catch {};
+                            if (self.logger) |log| log.err("OCI bundle '{s}' must be an absolute path", .{image_path}) catch {};
                         }
                         return err;
                     };

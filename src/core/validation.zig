@@ -156,6 +156,11 @@ pub const SecurityValidation = struct {
 /// Path security utilities
 pub const PathSecurity = struct {
     /// Allowed prefixes for different path types
+    /// Bundles used to be confined to these two directories. A container
+    /// engine chooses its own — containerd keeps one per task under
+    /// /run/containerd/, podman under its storage root — so the list refused
+    /// every bundle an engine would hand over, and runc and crun accept any.
+    /// Kept only for the message that tells a person where to put one.
     pub const BUNDLE_PREFIXES = [_][]const u8{
         "/var/lib/nexcage/bundles/",
         "/tmp/nexcage-bundles/",
@@ -191,9 +196,18 @@ pub const PathSecurity = struct {
         return try std.fs.path.join(allocator, &[_][]const u8{ base, relative });
     }
 
-    /// Validate and canonicalize bundle path
+    /// Canonicalize a bundle path. Any absolute path is accepted: the caller
+    /// of an OCI runtime picks the bundle directory, and an engine's is not
+    /// one nexcage can predict. What this still guarantees is that the path
+    /// resolves — `..` cannot walk out of anything — and that it is absolute,
+    /// so a relative path cannot be read against whatever directory the
+    /// engine happened to exec nexcage from.
     pub fn validateBundlePath(path: []const u8, allocator: std.mem.Allocator) ![]u8 {
-        return SecurityValidation.validatePath(path, &BUNDLE_PREFIXES, allocator);
+        const resolved = try std.fs.path.resolve(allocator, &[_][]const u8{path});
+        // errdefer, not a free before the return: doing both frees it twice.
+        errdefer allocator.free(resolved);
+        if (resolved.len == 0 or resolved[0] != '/') return types.Error.ValidationError;
+        return resolved;
     }
 
     /// Validate and canonicalize config path
