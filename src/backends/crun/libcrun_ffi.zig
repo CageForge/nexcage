@@ -29,7 +29,22 @@ pub const Libcrun = struct {
 
     /// Opaque types for structures we don't need to access
     pub const Container = opaque {};
-    pub const Error = opaque {};
+    /// struct libcrun_error_s from src/libcrun/error.h:
+    ///
+    ///     struct libcrun_error_s { int status; char *msg; };
+    ///     typedef struct libcrun_error_s *libcrun_error_t;
+    ///
+    /// It was declared opaque here, which is why every failure on this backend
+    /// could only be reported as "<operation> failed". `status` is an errno,
+    /// or 0 when there is none; crun prints "msg: strerror(status)" in the
+    /// first case and "msg" in the second.
+    ///
+    /// libcrun_error_release frees both msg and the struct, so read before
+    /// releasing.
+    pub const Error = extern struct {
+        status: c_int,
+        msg: [*c]u8,
+    };
     pub const ContainerStatus = opaque {};
 
     /// Create a container

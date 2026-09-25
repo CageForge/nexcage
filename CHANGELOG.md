@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The crun backend says what libcrun said. `struct libcrun_error_s` was declared opaque in the FFI, so every failure was released unread and reported as "libcrun <operation> failed". It is bound now, and the message matches what `crun` itself prints — `libcrun container_create: use --console-socket with create when a terminal is used`, where there used to be nothing to go on. The failure is still `OperationFailed`: `e.status` cannot be mapped onto a specific error reliably, because `crun_error_wrap` keeps whatever status the innermost error set and several paths format the errno into the message and leave status at 0.
+
 ### Fixed
 - The crun backend did not build. `exec` in its driver had never been compiled — Zig analyses what is reachable, and nothing called it — so the `null` it appended to a list of non-optional pointers went unnoticed until the router started routing `exec` there. The driver says plainly that exec is not implemented for crun now: libcrun's exec entry point has no binding in `libcrun_ffi.zig`, and the code that pretended otherwise built a C argv, discarded it and returned "not wired".
 - `crun backend build` ran on a pull request only when it touched `build.zig`, the `Dockerfile` or `src/backends/crun/`. A path filter cannot express what pulls a backend into a compilation, so the change that broke the build passed its own checks and only failed on main afterwards. It runs on every pull request now.

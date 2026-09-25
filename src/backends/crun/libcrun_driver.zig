@@ -5,6 +5,9 @@ const ffi = @import("libcrun_ffi.zig");
 const c_stdio = @cImport({
     @cInclude("stdio.h");
 });
+const c_string = @cImport({
+    @cInclude("string.h");
+});
 
 /// Crun backend driver using libcrun ABI (not CLI)
 pub const CrunDriver = struct {
@@ -79,16 +82,39 @@ pub const CrunDriver = struct {
         return ctx;
     }
 
-    /// Handle libcrun error and convert to Zig error
+    /// Log what libcrun actually said, then release the error.
+    ///
+    /// This used to report every failure as "libcrun <operation> failed",
+    /// because the error struct was declared opaque in the FFI: the message
+    /// libcrun had written was released unread. It is bound now, so the reason
+    /// reaches the caller — which is the difference between "create failed"
+    /// and "the container already exists".
     fn handleError(self: *Self, err_ptr: *?*ffi.Libcrun.Error, operation: []const u8) !void {
-        if (err_ptr.*) |_| {
-            // Error structure is opaque, so we just log and release
+        if (err_ptr.*) |e| {
+            const message: []const u8 = if (e.msg != null) std.mem.span(@as([*:0]const u8, @ptrCast(e.msg))) else "";
             if (self.logger) |log| {
-                log.err("libcrun {s} failed", .{operation}) catch {};
+                if (message.len == 0) {
+                    log.err("libcrun {s} failed", .{operation}) catch {};
+                } else if (e.status != 0) {
+                    // crun prints "msg: strerror(status)"; status is an errno
+                    const reason = std.mem.span(c_string.strerror(e.status));
+                    log.err("libcrun {s}: {s}: {s}", .{ operation, message, reason }) catch {};
+                } else {
+                    log.err("libcrun {s}: {s}", .{ operation, message }) catch {};
+                }
             }
+            // Frees the message as well, so nothing may read it after this
             _ = ffi.Libcrun.libcrun_error_release(err_ptr);
+            // Always OperationFailed, and the message above carries the
+            // reason. Mapping e.status onto a specific error looked tempting
+            // and is not reliable: crun_error_wrap keeps whatever status the
+            // innermost error set, and several paths format the errno into the
+            // message and leave status at 0 — "container `x` does not exist:
+            // open `/run/crun/x/status`: No such file or directory" arrives
+            // with status 0. An OCI runtime exits 1 on failure anyway.
             return core.Error.OperationFailed;
         }
+        if (self.logger) |log| log.err("libcrun {s} failed without an error", .{operation}) catch {};
         return core.Error.OperationFailed;
     }
 
