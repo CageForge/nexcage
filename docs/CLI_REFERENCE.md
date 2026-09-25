@@ -1,7 +1,7 @@
 # CLI Reference
 
 ```
-nexcage [--debug] [--log-level <level>] [--log-file <path>] [--config <path>] <command> [options]
+nexcage [--debug] [--log-level <level>] [--log-file <path>] [--config <path>] [--root <dir>] <command> [options]
 ```
 
 Every command accepts `--help`. nexcage must run as root on the Proxmox VE
@@ -18,6 +18,7 @@ These work before or after the command.
 | `--log-level <level>` | `trace`, `debug`, `info` (default), `warn`, `error`, `fatal` |
 | `--log-file <path>` | Also write log lines to `<path>` |
 | `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1) |
+| `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
 
 Logs go to stderr. stdout carries only command output (`list`, `state`,
 help text).
@@ -25,6 +26,9 @@ help text).
 Without `--config`, configuration comes from the first of `./config.json`,
 `/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json` that exists; see the
 README for the keys.
+
+`--root` is read before any command touches state, wherever it appears on the
+command line.
 
 ## Backend selection
 
@@ -61,6 +65,7 @@ means by them.
 
 ```bash
 nexcage create --name <name> <image>
+nexcage create <container-id> --bundle <dir>      # the runtime-spec form
 ```
 
 Creates a container named `<name>`; the name becomes its hostname and must be
@@ -75,6 +80,12 @@ unique on the node. The VMID comes from `pvesh get /cluster/nextid`. `--image
 | Template file name | `debian-12-standard_12.7-1_amd64.tar.zst` | Looked up as `local:vztmpl/<file>` |
 | OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only; pulled to storage `local` |
 | OCI bundle directory | `/var/lib/nexcage/bundles/web` | Under `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/`, containing `config.json` and `rootfs/` |
+
+With `--bundle <dir>` the first positional word is the **container id**, not the
+image, which is the form the runtime-spec defines and a container engine sends:
+`nexcage create web-1 --bundle /var/lib/nexcage/bundles/web`. Without
+`--bundle` the positional word is still the image, so the older form keeps
+working.
 
 The container gets `eth0` on `network.bridge` with DHCP, 512 MiB of memory and
 one core unless the OCI bundle sets limits. Its root filesystem goes to
@@ -114,17 +125,19 @@ gets 60 seconds, then it is stopped forcibly.
 ### delete
 
 ```bash
-nexcage delete <name>
+nexcage delete <name> [--force]
 ```
 
-Destroys the container with `pct destroy` and removes `/run/nexcage/<name>`.
-A running container must be stopped first.
+Destroys the container with `pct destroy` and removes its state directory.
+A running container must be stopped first, unless `--force` is given: that
+shuts it down and then destroys it, as `runc delete --force` does. A container
+engine sends `--force` once it has given up waiting for a clean shutdown.
 
 ### kill
 
 ```bash
 nexcage kill <name> [SIGNAL]
-nexcage kill [-s|--signal SIGNAL] <name>
+nexcage kill [-s|--signal SIGNAL] [--all] <name>
 ```
 
 Sends `SIGNAL` to the container's init process from the host, as an OCI runtime
@@ -133,6 +146,10 @@ calls `kill(2)`. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
 `SIGKILL`, `usr1`), or a number from 1 to 64; the default is `SIGTERM`. An
 unknown signal is a usage error (exit 2); a container that is not running is an
 error (exit 1).
+
+`--all` is accepted for runc compatibility and logs what actually happens:
+nexcage signals the container's init, and only `SIGKILL` reaches every process
+in the container. It does not walk the cgroup.
 
 The kernel delivers a signal from the host to a container's init only if init
 handles it, except `SIGKILL` and `SIGSTOP`. `SIGKILL` always stops the
@@ -189,15 +206,17 @@ Prints OCI runtime state JSON:
   "id": "web-1",
   "status": "running",
   "pid": 48213,
-  "bundle": null,
+  "bundle": "/var/lib/nexcage/bundles/web",
   "annotations": {}
 }
 ```
 
 `status` is `created` for a container not yet started through nexcage, or
 `running`, `stopped` or `paused` as pct reports it. `pid` is the host PID of the
-container's init while it runs, and 0 otherwise. A container that does not
-exist is an error (exit 1).
+container's init while it runs, and 0 otherwise. `bundle` is the directory the
+container was created from, and `null` for one created from a template or a
+registry image; `start` and `stop` keep it. A container that does not exist is
+an error (exit 1).
 
 ### version, help
 

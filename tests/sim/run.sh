@@ -347,6 +347,40 @@ check "bundle: archive keeps the executable bit and symlinks" \
 check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
 check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_re "^pct set [0-9]+ --features nesting=1,keyctl=1$"
 
+echo "=== runtime-spec command line ==="
+# What a container engine sends: the id positionally, the bundle behind
+# --bundle, its own state directory behind --root.
+nx create spec-1 --bundle /tmp/nexcage-bundles/b1
+check "create <id> --bundle <dir>: the positional word is the id, not the image" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/nexcage-spec-1-[0-9]+\.tar\.zst --hostname spec-1 "'
+nx state spec-1
+check "state reports the bundle the container was created from" \
+  all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'
+nx start spec-1; nx state spec-1
+check "start keeps the bundle in state" all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'
+nx create tpl-1 --bundle /tmp/nexcage-bundles/b1 >/dev/null 2>&1 || true
+nx create --name from-tpl "$TPL"; nx state from-tpl
+check "a container created from a template reports bundle null" \
+  all 'rc 0' 'grep -q "\"bundle\": null" "$S/out"'
+
+nx --root /run/alt list
+check "--root before the command is not read as the command" all 'rc 0' '! err_has "unknown command"'
+nx create --root /run/alt --name rooted-1 "$TPL"
+check "--root: state goes under the given directory, not /run/nexcage" \
+  all 'rc 0' '[ -f "$S/run/alt/rooted-1/state.json" ]' '[ ! -e "$S/run/nexcage/rooted-1" ]'
+nx --root relative list
+check "--root with a relative path -> exit 2" all 'rc 2' 'err_has "absolute"'
+nx --root
+check "--root without a value -> exit 2" rc 2
+
+nx delete spec-1
+check "delete refuses a running container without --force" rc 1
+nx delete spec-1 --force
+check "delete --force stops it first, then destroys it" \
+  all 'rc 0' 'called_re "^pct shutdown [0-9]+ "' 'called_re "^pct destroy [0-9]+$"'
+nx start from-tpl; nx kill from-tpl --all TERM
+check "kill --all is accepted and says what it does on this backend" all 'rc 0' 'err_has "--all"'
+
 echo "=== health ==="
 # Its checks look at the host, so only the absence of leaks is checked here
 nx health

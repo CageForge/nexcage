@@ -66,13 +66,25 @@ pub const StateCommand = struct {
         // pct calls a container that has never run "stopped"
         if (std.mem.eql(u8, status, "stopped") and neverStarted(allocator, found.info.name)) status = "created";
 
-        const json = try std.fmt.allocPrint(
-            allocator,
-            "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": null,\n  \"annotations\": {{}}\n}}\n",
+        // The bundle a container was created from, as nexcage recorded it. An
+        // OCI caller reads this back to find the config.json it handed over.
+        const bundle_path = persistedBundle(allocator, found.info.name);
+        defer if (bundle_path) |bp| allocator.free(bp);
+
+        var out = std.ArrayListUnmanaged(u8){};
+        defer out.deinit(allocator);
+        const writer = out.writer(allocator);
+        try writer.print(
+            "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": ",
             .{ container_id, status, found.pid },
         );
-        defer allocator.free(json);
-        try stdout.writeAll(json);
+        if (bundle_path) |bp| {
+            try core.json.writeString(writer, bp);
+        } else {
+            try writer.writeAll("null");
+        }
+        try writer.writeAll(",\n  \"annotations\": {}\n}\n");
+        try stdout.writeAll(out.items);
     }
 
     const Found = struct {
@@ -172,14 +184,33 @@ fn ociStatus(status: []const u8) []const u8 {
     return "unknown";
 }
 
+/// The bundle path from nexcage's own record, or null when there is none.
+/// Allocated; the caller frees it.
+fn persistedBundle(allocator: std.mem.Allocator, name: []const u8) ?[]u8 {
+    if (name.len == 0 or std.mem.indexOfScalar(u8, name, '/') != null or
+        std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return null;
+
+    const path = std.fmt.allocPrint(allocator, "{s}/{s}/state.json", .{ core.state_root.get(), name }) catch return null;
+    defer allocator.free(path);
+    const data = std.fs.cwd().readFileAlloc(allocator, path, 64 * 1024) catch return null;
+    defer allocator.free(data);
+
+    const parsed = std.json.parseFromSlice(std.json.Value, allocator, data, .{}) catch return null;
+    defer parsed.deinit();
+    if (parsed.value != .object) return null;
+    const value = parsed.value.object.get("bundle") orelse return null;
+    if (value != .string) return null;
+    return allocator.dupe(u8, value.string) catch null;
+}
+
 /// Whether nexcage's own record still says "created". create writes that to
-/// /run/nexcage/<name>/state.json, and start replaces it, so a stopped
+/// <state root>/<name>/state.json, and start replaces it, so a stopped
 /// container with this record has not been started through nexcage.
 fn neverStarted(allocator: std.mem.Allocator, name: []const u8) bool {
     if (name.len == 0 or std.mem.indexOfScalar(u8, name, '/') != null or
         std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return false;
 
-    const path = std.fmt.allocPrint(allocator, "/run/nexcage/{s}/state.json", .{name}) catch return false;
+    const path = std.fmt.allocPrint(allocator, "{s}/{s}/state.json", .{ core.state_root.get(), name }) catch return false;
     defer allocator.free(path);
     const data = std.fs.cwd().readFileAlloc(allocator, path, 64 * 1024) catch return false;
     defer allocator.free(data);

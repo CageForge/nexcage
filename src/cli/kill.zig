@@ -53,6 +53,14 @@ pub const KillCommand = struct {
             return types.Error.InvalidInput;
         }
 
+        // runc takes --all to mean every process in the container's cgroup.
+        // nexcage signals the init from the host, and the kernel delivers to
+        // the whole namespace only for SIGKILL, so saying nothing here would
+        // let a caller believe more happened than did.
+        if (options.all) {
+            if (self.base.logger) |log| log.warn("--all: nexcage signals the container's init; only SIGKILL reaches every process in it", .{}) catch {};
+        }
+
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
         const op = router.Operation{ .kill = router.KillConfig{ .signal = signal } };
         try backend_router.routeAndExecute(op, container_id, options.runtime_type, null);

@@ -8,33 +8,6 @@ const oci_spec = @import("oci_spec");
 const bundle = oci_spec.runtime.bundle;
 const template_manager = @import("template_manager.zig");
 
-fn writeJsonString(writer: anytype, value: []const u8) !void {
-    try writer.writeByte('"');
-    for (value) |c| {
-        switch (c) {
-            '"' => try writer.writeAll("\\\""),
-            '\\' => try writer.writeAll("\\\\"),
-            0x08 => try writer.writeAll("\\b"),
-            0x0C => try writer.writeAll("\\f"),
-            '\n' => try writer.writeAll("\\n"),
-            '\r' => try writer.writeAll("\\r"),
-            '\t' => try writer.writeAll("\\t"),
-            else => {
-                if (c < 0x20) {
-                    var buf: [6]u8 = .{ '\\', 'u', '0', '0', 0, 0 };
-                    const hex = "0123456789abcdef";
-                    buf[4] = hex[(c >> 4) & 0xF];
-                    buf[5] = hex[c & 0xF];
-                    try writer.writeAll(buf[0..]);
-                } else {
-                    try writer.writeByte(c);
-                }
-            },
-        }
-    }
-    try writer.writeByte('"');
-}
-
 /// Proxmox LXC backend driver
 pub const ProxmoxLxcDriver = struct {
     const Self = @This();
@@ -388,7 +361,7 @@ pub const ProxmoxLxcDriver = struct {
 
         const bundle_ptr: ?*const bundle.OciBundleConfig = if (bundle_config) |*bc| bc else null;
         try self.persistRuntimeMetadata(config.name, vmid, bundle_ptr, net_runtime.items);
-        try self.writeOciState(config.name, "created", 0);
+        try self.writeOciState(config.name, "created", 0, oci_bundle_path);
 
         if (self.logger) |log| log.info("Proxmox LXC container created: {s} (vmid {s})", .{ config.name, vmid }) catch {};
     }
@@ -414,7 +387,7 @@ pub const ProxmoxLxcDriver = struct {
             return;
         }
 
-        const state_dir = "/run/nexcage";
+        const state_dir = core.state_root.get();
         std.fs.cwd().makePath(state_dir) catch {};
 
         const container_dir = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ state_dir, container_name });
@@ -432,7 +405,7 @@ pub const ProxmoxLxcDriver = struct {
         var writer = buffer.writer();
 
         try writer.writeAll("{\n  \"vmid\": ");
-        try writeJsonString(&writer, vmid);
+        try core.json.writeString(&writer, vmid);
 
         if (intel_has_data) {
             const intel = intel_cfg.?;
@@ -440,7 +413,7 @@ pub const ProxmoxLxcDriver = struct {
             var field_written = false;
             if (intel.clos_id) |clos| {
                 try writer.writeAll("    \"closID\": ");
-                try writeJsonString(&writer, clos);
+                try core.json.writeString(&writer, clos);
                 field_written = true;
             }
             if (intel.schemata) |schemata| if (schemata.len > 0) {
@@ -448,7 +421,7 @@ pub const ProxmoxLxcDriver = struct {
                 try writer.writeAll("    \"schemata\": [");
                 for (schemata, 0..) |entry, i| {
                     if (i > 0) try writer.writeAll(", ");
-                    try writeJsonString(&writer, entry);
+                    try core.json.writeString(&writer, entry);
                 }
                 try writer.writeAll("]");
                 field_written = true;
@@ -456,13 +429,13 @@ pub const ProxmoxLxcDriver = struct {
             if (intel.l3_cache_schema) |schema| if (schema.len > 0) {
                 if (field_written) try writer.writeAll(",\n");
                 try writer.writeAll("    \"l3CacheSchema\": ");
-                try writeJsonString(&writer, schema);
+                try core.json.writeString(&writer, schema);
                 field_written = true;
             };
             if (intel.mem_bw_schema) |schema| if (schema.len > 0) {
                 if (field_written) try writer.writeAll(",\n");
                 try writer.writeAll("    \"memBwSchema\": ");
-                try writeJsonString(&writer, schema);
+                try core.json.writeString(&writer, schema);
                 field_written = true;
             };
             if (intel.enable_monitoring) |flag| {
@@ -482,12 +455,12 @@ pub const ProxmoxLxcDriver = struct {
             try writer.writeAll(",\n  \"netDevices\": [\n");
             for (net_devices, 0..) |device, idx| {
                 try writer.writeAll("    {\n      \"alias\": ");
-                try writeJsonString(&writer, device.alias);
+                try core.json.writeString(&writer, device.alias);
                 try writer.writeAll(",\n      \"bridge\": ");
-                try writeJsonString(&writer, device.bridge);
+                try core.json.writeString(&writer, device.bridge);
                 if (device.host_name) |host| {
                     try writer.writeAll(",\n      \"hostName\": ");
-                    try writeJsonString(&writer, host);
+                    try core.json.writeString(&writer, host);
                 }
                 try writer.writeAll("\n    }");
                 if (idx + 1 < net_devices.len) {
@@ -547,7 +520,9 @@ pub const ProxmoxLxcDriver = struct {
         try self.pve_client.start(vmid);
 
         const init_pid = (self.pve_client.initPid(vmid) catch null) orelse 0;
-        self.writeOciState(container_id, "running", init_pid) catch {};
+        const kept_bundle = self.persistedBundle(container_id);
+        defer if (kept_bundle) |b| self.allocator.free(b);
+        self.writeOciState(container_id, "running", init_pid, kept_bundle) catch {};
     }
 
     /// Stop LXC container using pct command
@@ -560,11 +535,13 @@ pub const ProxmoxLxcDriver = struct {
         defer self.allocator.free(vmid);
 
         try self.pve_client.stop(vmid);
-        self.writeOciState(container_id, "stopped", 0) catch {};
+        const kept_bundle = self.persistedBundle(container_id);
+        defer if (kept_bundle) |b| self.allocator.free(b);
+        self.writeOciState(container_id, "stopped", 0, kept_bundle) catch {};
     }
 
     /// Delete LXC container using pct command
-    pub fn delete(self: *Self, container_id: []const u8) !void {
+    pub fn delete(self: *Self, container_id: []const u8, force: bool) !void {
         if (self.logger) |log| {
             try log.info("Deleting Proxmox LXC container: {s}", .{container_id});
         }
@@ -572,14 +549,26 @@ pub const ProxmoxLxcDriver = struct {
         const vmid = try self.resolveVmid(container_id);
         defer self.allocator.free(vmid);
 
+        // `pct destroy` refuses a running container. With --force, stop it
+        // first, as `runc delete --force` does; a container engine sends that
+        // when it has given up waiting for a clean shutdown.
+        if (force) {
+            if ((self.pve_client.initPid(vmid) catch null) != null) {
+                if (self.logger) |log| log.info("Stopping {s} before delete (--force)", .{container_id}) catch {};
+                self.pve_client.stop(vmid) catch |err| {
+                    if (self.logger) |log| log.warn("forced stop of {s} failed: {s}", .{ container_id, @errorName(err) }) catch {};
+                };
+            }
+        }
+
         try self.pve_client.delete(vmid);
 
         // Drop the state nexcage persisted for this container. The name matched
-        // a pct hostname, but never let it address anything above /run/nexcage.
+        // a pct hostname, but never let it address anything above the state root.
         if (std.mem.indexOfScalar(u8, container_id, '/') == null and
             !std.mem.eql(u8, container_id, ".") and !std.mem.eql(u8, container_id, ".."))
         {
-            const state_path = try std.fmt.allocPrint(self.allocator, "/run/nexcage/{s}", .{container_id});
+            const state_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ core.state_root.get(), container_id });
             defer self.allocator.free(state_path);
             std.fs.cwd().deleteTree(state_path) catch {};
         }
@@ -618,8 +607,25 @@ pub const ProxmoxLxcDriver = struct {
         return self.pve_client.list(allocator);
     }
 
-    fn writeOciState(self: *Self, container_id: []const u8, status: []const u8, pid: i32) !void {
-        const state_dir = "/run/nexcage";
+    /// The bundle path this container was created from, as the last state
+    /// write recorded it, or null. start and stop rewrite the state file, and
+    /// an OCI caller reads `bundle` back from `state` after both.
+    fn persistedBundle(self: *Self, container_id: []const u8) ?[]u8 {
+        if (std.mem.indexOfScalar(u8, container_id, '/') != null) return null;
+        const path = std.fmt.allocPrint(self.allocator, "{s}/{s}/state.json", .{ core.state_root.get(), container_id }) catch return null;
+        defer self.allocator.free(path);
+        const data = std.fs.cwd().readFileAlloc(self.allocator, path, 64 * 1024) catch return null;
+        defer self.allocator.free(data);
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, data, .{}) catch return null;
+        defer parsed.deinit();
+        if (parsed.value != .object) return null;
+        const value = parsed.value.object.get("bundle") orelse return null;
+        if (value != .string) return null;
+        return self.allocator.dupe(u8, value.string) catch null;
+    }
+
+    fn writeOciState(self: *Self, container_id: []const u8, status: []const u8, pid: i32, bundle_path: ?[]const u8) !void {
+        const state_dir = core.state_root.get();
         try std.fs.cwd().makePath(state_dir);
         const container_dir = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ state_dir, container_id });
         defer self.allocator.free(container_dir);
@@ -634,8 +640,10 @@ pub const ProxmoxLxcDriver = struct {
         const writer = json_buf.writer(self.allocator);
 
         try writer.writeAll("{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": ");
-        try writeJsonString(writer, container_id);
-        try writer.print(",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": null,\n  \"annotations\": {{}}\n}}\n", .{ status, pid });
+        try core.json.writeString(writer, container_id);
+        try writer.print(",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": ", .{ status, pid });
+        if (bundle_path) |bp| try core.json.writeString(writer, bp) else try writer.writeAll("null");
+        try writer.writeAll(",\n  \"annotations\": {}\n}\n");
 
         try file.writeAll(json_buf.items);
     }
