@@ -123,6 +123,17 @@ fn run() !void {
         core.config.setExplicitPath(path);
     }
 
+    // --root, likewise: every command that reads or writes per-container state
+    // has to see it before it does so.
+    if (try flagValueFromArgs(args, "--root")) |root| {
+        if (root.len == 0 or root[0] != '/') {
+            printError("--root needs an absolute path, got '{s}'", .{root});
+            failure_reported = true;
+            return error.InvalidInput;
+        }
+        core.state_root.set(root);
+    }
+
     // Initialize application context in place: commands hold &app.logger
     var app: AppContext = undefined;
     try app.init(allocator, args);
@@ -160,6 +171,10 @@ fn run() !void {
         }
         if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
             i += 2; // Skip --config and its value, applied above
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--root") and i + 1 < args.len) {
+            i += 2; // Skip --root and its value, applied above
             continue;
         }
         // Found the actual command
@@ -258,7 +273,7 @@ fn printUsage() !void {
     try out.print(
         \\nexcage v{s} - container runtime for Proxmox VE (LXC)
         \\
-        \\Usage: nexcage [--debug] [--log-level <level>] [--log-file <path>] [--config <path>] <command> [options]
+        \\Usage: nexcage [--debug] [--log-level <level>] [--log-file <path>] [--config <path>] [--root <dir>] <command> [options]
         \\
         \\Commands:
         \\  create    Create a new container
@@ -294,6 +309,8 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         .verbose = false,
         .debug = false,
         .detach = false,
+        .force = false,
+        .all = false,
         .interactive = false,
         .tty = false,
         .user = null,
@@ -302,6 +319,14 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         .args = null,
     };
     errdefer options.deinit();
+
+    // The runtime-spec form is `create <id> --bundle <dir>`, so --bundle
+    // decides what the first positional word is: the container id, not the
+    // image. Known before the loop because --bundle may come after it.
+    var bundle_given = false;
+    for (args) |a| {
+        if (std.mem.eql(u8, a, "--bundle")) bundle_given = true;
+    }
 
     // Parse arguments
     var i: usize = 0;
@@ -313,6 +338,11 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             i += 1;
         } else if (std.mem.eql(u8, arg, "--name") and i + 1 < args.len) {
             options.container_id = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--bundle") and i + 1 < args.len) {
+            // An OCI bundle directory: config.json plus rootfs/. The backend
+            // takes it where the image goes.
+            if (options.image == null) options.image = try allocator.dupe(u8, args[i + 1]);
             i += 2;
         } else if (std.mem.eql(u8, arg, "--runtime") and i + 1 < args.len) {
             const runtime_str = args[i + 1];
@@ -332,11 +362,23 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             // Applied in run() before the configuration was loaded; skipped
             // here so its value is not taken as a name or an image
             i += 2;
+        } else if (std.mem.eql(u8, arg, "--root") and i + 1 < args.len) {
+            // Where per-container state goes. An OCI runtime takes this from
+            // the caller: containerd gives each namespace its own directory.
+            // Applied in run() before any command sees it; skipped here so
+            // its value is not taken as a name or an image.
+            i += 2;
         } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--verbose")) {
             options.verbose = true;
             i += 1;
         } else if (std.mem.eql(u8, arg, "--debug")) {
             options.debug = true;
+            i += 1;
+        } else if (std.mem.eql(u8, arg, "-f") or std.mem.eql(u8, arg, "--force")) {
+            options.force = true;
+            i += 1;
+        } else if (std.mem.eql(u8, arg, "--all") or std.mem.eql(u8, arg, "-a")) {
+            options.all = true;
             i += 1;
         } else if (std.mem.eql(u8, arg, "-d") or std.mem.eql(u8, arg, "--detach")) {
             options.detach = true;
@@ -367,7 +409,11 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             break;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             // This is likely the image name, container ID, or command
-            if (options.command == .start or options.command == .stop or options.command == .delete or options.command == .state or options.command == .kill or options.command == .exec) {
+            const id_first = options.command == .start or options.command == .stop or
+                options.command == .delete or options.command == .state or
+                options.command == .kill or options.command == .exec or
+                (bundle_given and (options.command == .create or options.command == .run));
+            if (id_first) {
                 // For start/stop/delete/state/kill/exec, first argument is
                 // the container ID; for exec the rest is the command to run
                 if (options.container_id == null) {
@@ -400,11 +446,18 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
 /// The value of --config anywhere on the command line, or null. A --config
 /// with nothing after it is a usage error.
 fn configPathFromArgs(args: []const []const u8) !?[]const u8 {
+    return flagValueFromArgs(args, "--config");
+}
+
+/// The value of a global flag wherever it appears, or null. The flag with
+/// nothing after it is a usage error: taking the next command-line word would
+/// silently use a container name as a path.
+fn flagValueFromArgs(args: []const []const u8, flag: []const u8) !?[]const u8 {
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
-        if (!std.mem.eql(u8, args[i], "--config")) continue;
+        if (!std.mem.eql(u8, args[i], flag)) continue;
         if (i + 1 >= args.len) {
-            printError("--config needs a path", .{});
+            printError("{s} needs a path", .{flag});
             failure_reported = true;
             return error.InvalidInput;
         }

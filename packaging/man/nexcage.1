@@ -7,6 +7,7 @@ nexcage \- manage LXC containers on a Proxmox VE host
 [\fB\-\-log\-level\fR \fIlevel\fR]
 [\fB\-\-log\-file\fR \fIpath\fR]
 [\fB\-\-config\fR \fIpath\fR]
+[\fB\-\-root\fR \fIdir\fR]
 \fIcommand\fR [\fIoptions\fR]
 .SH DESCRIPTION
 .B nexcage
@@ -25,7 +26,7 @@ must be unique on the node. VMIDs are allocated with
 must run as root.
 .SH COMMANDS
 .TP
-\fBcreate \-\-name\fR \fIname\fR \fIimage\fR
+\fBcreate \-\-name\fR \fIname\fR \fIimage\fR, \fBcreate\fR \fIid\fR \fB\-\-bundle\fR \fIdir\fR
 Create a container.
 .I image
 is a template volume such as
@@ -44,14 +45,16 @@ Start a container.
 \fBstop\fR \fIname\fR
 Shut a container down cleanly; it is stopped forcibly after 60 seconds.
 .TP
-\fBdelete\fR \fIname\fR
-Destroy a stopped container and remove its state under /run/nexcage.
+\fBdelete\fR \fIname\fR [\fB\-\-force\fR]
+Destroy a stopped container and remove its state. With \fB\-\-force\fR, shut a
+running container down first, as \fBrunc delete \-\-force\fR does.
 .TP
-\fBkill\fR \fIname\fR [\fIsignal\fR], \fBkill \-s\fR \fIsignal\fR \fIname\fR
+\fBkill\fR \fIname\fR [\fIsignal\fR], \fBkill \-s\fR \fIsignal\fR [\fB\-\-all\fR] \fIname\fR
 Send a signal (default SIGTERM) to the container's init process from the host.
 The signal is a name in any case, with or without SIG, or a number from 1 to 64.
 Init receives it only if it handles that signal, except SIGKILL and SIGSTOP;
-SIGKILL always stops the container.
+SIGKILL always stops the container. \fB\-\-all\fR is accepted for runc
+compatibility and does not walk the cgroup: only SIGKILL reaches every process.
 .TP
 \fBexec\fR \fIname\fR \fIcommand\fR [\fIargs\fR...], \fBexec\fR \fIname\fR \fB\-\-\fR \fIcommand\fR [\fIargs\fR...]
 Run a command inside a running container and exit with its status, as an OCI
@@ -87,6 +90,12 @@ Also write log lines to
 Read configuration from
 .I path
 only. A missing or invalid file is an error.
+.TP
+\fB\-\-root\fR \fIdir\fR
+Keep per-container state under
+.I dir
+instead of /run/nexcage. An OCI runtime takes this from its caller, so that two
+callers on one host do not see each other's containers. Must be absolute.
 .PP
 Log lines go to standard error; standard output carries only command output.
 .SH CONFIGURATION

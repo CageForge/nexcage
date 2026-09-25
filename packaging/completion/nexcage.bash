@@ -46,7 +46,8 @@ _nexcage() {
             local names
             names=$(pct list 2>/dev/null | awk 'NR > 1 {print $NF}')
             local extra=""
-            [ "$cmd" = kill ] && extra="--signal -s"
+            [ "$cmd" = kill ] && extra="--signal -s --all"
+            [ "$cmd" = delete ] && extra="--force -f"
             COMPREPLY=( $(compgen -W "$names --name --help $extra" -- "$cur") )
             ;;
         create|run)

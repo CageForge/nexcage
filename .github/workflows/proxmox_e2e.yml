@@ -241,6 +241,21 @@ jobs:
         expect_status "$NAME" stopped
         expect_exit 1 nx kill "$NAME" SIGCONT
 
+        echo "[E2E] a container created from a template reports bundle null"
+        nx state "$NAME" | grep -q '"bundle": null' \
+          || { echo "::error::a template-created container should report bundle null"; exit 1; }
+
+        echo "[E2E] --root keeps state out of /run/nexcage"
+        ALTROOT=$(mktemp -d)
+        ALT_NAME="$NAME-rooted"
+        nx --root "$ALTROOT" create --name "$ALT_NAME" "$TPL"
+        [ -f "$ALTROOT/$ALT_NAME/state.json" ] \
+          || { echo "::error::--root $ALTROOT holds no state for $ALT_NAME"; ls -R "$ALTROOT"; exit 1; }
+        [ ! -e "/run/nexcage/$ALT_NAME" ] \
+          || { echo "::error::--root was given but state also landed in /run/nexcage"; exit 1; }
+        nx --root "$ALTROOT" delete "$ALT_NAME"
+        $SUDO rm -rf "$ALTROOT"
+
         echo "[E2E] delete"
         nx delete "$NAME"
         if [ -n "$(vmid_of "$NAME")" ]; then
@@ -269,13 +284,26 @@ jobs:
         expect_status "$RUN_NAME" stopped
         nx delete "$RUN_NAME"
 
-        echo "[E2E] create from an OCI bundle whose rootfs is the extracted template"
+        echo "[E2E] delete --force destroys a running container"
+        nx run --name "$RUN_NAME" "$TPL"
+        expect_status "$RUN_NAME" running
+        expect_exit 1 nx delete "$RUN_NAME"
+        nx delete "$RUN_NAME" --force
+        if [ -n "$(vmid_of "$RUN_NAME")" ]; then
+          echo "::error::pct still lists $RUN_NAME after delete --force"
+          exit 1
+        fi
+
+        echo "[E2E] create <id> --bundle <dir>, and state reports that bundle"
         $SUDO mkdir -p "$BUNDLE/rootfs"
         $SUDO tar -xpf "$($SUDO pvesm path "$TPL")" -C "$BUNDLE/rootfs"
         echo '{"ociVersion":"1.0.2","process":{"args":["/sbin/init"],"cwd":"/"},"root":{"path":"rootfs"}}' \
           | $SUDO tee "$BUNDLE/config.json" >/dev/null
-        nx create --name "$OCI_NAME" "$BUNDLE"
+        # The runtime-spec form: the id positionally, the bundle behind --bundle
+        nx create "$OCI_NAME" --bundle "$BUNDLE"
         expect_status "$OCI_NAME" created
+        got=$(nx state "$OCI_NAME" | sed -n 's/.*"bundle": "\(.*\)".*/\1/p')
+        [ "$got" = "$BUNDLE" ] || { echo "::error::state reported bundle '$got', expected $BUNDLE"; exit 1; }
         if $SUDO pvesm list local --content vztmpl | grep -q "vztmpl/nexcage-$OCI_NAME-"; then
           echo "::error::the template packed from the bundle is still on storage local"
           exit 1

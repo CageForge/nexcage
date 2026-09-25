@@ -209,6 +209,10 @@ pub const RuntimeOptions = struct {
     debug: bool = false,
     help: bool = false,
     detach: bool = false,
+    /// `delete --force`: stop a running container instead of refusing
+    force: bool = false,
+    /// `kill --all`: signal every process, not only the init
+    all: bool = false,
     interactive: bool = false,
     tty: bool = false,
     user: ?[]const u8 = null,

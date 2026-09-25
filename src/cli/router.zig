@@ -138,7 +138,7 @@ pub const BackendRouter = struct {
             .create => try proxmox_backend.create(sandbox_config),
             .start => try proxmox_backend.start(container_id),
             .stop => try proxmox_backend.stop(container_id),
-            .delete => try proxmox_backend.delete(container_id),
+            .delete => |del| try proxmox_backend.delete(container_id, del.force),
             .kill => |kill_cfg| try proxmox_backend.kill(container_id, kill_cfg.signal),
             // An OCI runtime exits with the status of the command it ran, so
             // the backend's answer is carried out to main rather than dropped.
@@ -233,7 +233,7 @@ pub const Operation = union(enum) {
     create: CreateConfig,
     start: void,
     stop: void,
-    delete: void,
+    delete: DeleteConfig,
     run: RunConfig,
     state: void,
     kill: KillConfig,
@@ -250,6 +250,13 @@ pub const RunConfig = struct {
 
 pub const KillConfig = struct {
     signal: []const u8,
+};
+
+pub const DeleteConfig = struct {
+    /// Stop the container first instead of refusing. `runc delete --force`
+    /// does the same, and a container engine relies on it when it gives up on
+    /// a clean shutdown.
+    force: bool = false,
 };
 
 pub const ExecConfig = struct {

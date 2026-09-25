@@ -21,9 +21,9 @@ next step, not by size.
 | # | Gap | Today | Needed for |
 |---|---|---|---|
 | 1 | ~~`exec`~~ | **Done.** `nexcage exec <name> <command>` runs it in the container and exits with its status, as `runc exec` does. Proxmox LXC runs `pct exec`; crun goes through libcrun; runc has none | `kubectl exec`, CRI `ExecSync`, exec probes |
-| 2 | OCI runtime-spec CLI | `create --name <name> <image>`; no `create <id> --bundle <dir>`, `--pid-file`, `--console-socket`, `--root` | A containerd shim, and `runc`-compatible tooling generally |
-| 3 | `state.bundle` | always `null` | The same. A shim reads the bundle path back from `state` |
-| 4 | Missing verbs | no `ps`, `events`, `features`, `pause`, `resume`, `update`, `delete --force` | Pod lifecycle, metrics, cgroup updates on resize |
+| 2 | OCI runtime-spec CLI | **Partly done.** `create <id> --bundle <dir>` and `--root <dir>` work; `--pid-file` and `--console-socket` do not | A containerd shim, and `runc`-compatible tooling generally |
+| 3 | ~~`state.bundle`~~ | **Done.** `state` reports the bundle the container was created from, and `start` and `stop` keep it | The same. A shim reads the bundle path back from `state` |
+| 4 | Missing verbs | `delete --force` and `kill --all` are done; no `ps`, `events`, `features`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
 | 6 | No log handling | container output is not captured to a file | Kubelet reads `/var/log/pods/…/0.log`; `kubectl logs` needs it |
 | 7 | No CNI | `eth0` on `network.bridge` with DHCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
@@ -108,13 +108,19 @@ and the crun backend behind it.
 
 | | What the engine sends | nexcage today |
 |---|---|---|
-| container id | positional, `create <id>` | `--name <id>` |
-| `create` | `--bundle <dir>`, `--pid-file <file>`, `--console-socket <sock>` | `--bundle` only, in the runc backend |
-| global | `--root <dir>` — containerd passes its own state directory | `/run/nexcage`, compiled in |
-| `state` | `bundle` filled in | always `null` |
-| `delete` | `--force` | no flag |
-| `kill` | `--all` | no flag |
-| also read | `ps`, `features`, `pause`, `resume`, `update` | none |
+| container id | positional, `create <id>` | done: with `--bundle`, the positional word is the id |
+| global | `--root <dir>` — containerd passes its own state directory | done, before or after the command |
+| `state` | `bundle` filled in | done, and `start`/`stop` keep it |
+| `delete` | `--force` | done: shuts the container down first |
+| `kill` | `--all` | accepted, and says what it really does on LXC |
+| `create` | `--pid-file <file>`, `--console-socket <sock>` | **not yet** |
+| also read | `ps`, `features`, `pause`, `resume`, `update` | **not yet** |
+
+`--pid-file` and `--console-socket` are where the Proxmox LXC backend stops
+being able to pretend: the runtime-spec means `create` to leave the container's
+process alive and waiting, and `pct create` starts nothing, so there is no PID
+to write and no console to hand over. Those two belong to the crun backend,
+which is also where the rest of the list gets its answers.
 
 The container work behind that command line belongs to the crun backend, which
 links vendored libcrun and already has create, start, kill, delete and exec.
