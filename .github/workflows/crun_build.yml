@@ -41,3 +41,19 @@ jobs:
 
       - name: Run the binary
         run: docker run --rm nexcage:ci version
+
+      # A container engine does not run the runtime from the bundle it names:
+      # containerd's shim serves a whole pod and runs it from the sandbox's
+      # directory. Nothing before this exercised that, and the backend had
+      # never entered the bundle, so a pod's container looked for its rootfs
+      # inside the sandbox's. `version` cannot see that; a container can.
+      - name: A bundle is found from a working directory that is not it
+        run: |
+          set -eux
+          mkdir -p bundle/rootfs
+          docker create --name bbsrc busybox:1.36 >/dev/null
+          docker export bbsrc | tar -x -C bundle/rootfs
+          docker rm bbsrc >/dev/null
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
+            --entrypoint /bin/sh nexcage:ci /t/foreign_cwd.sh

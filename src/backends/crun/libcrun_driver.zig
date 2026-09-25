@@ -208,6 +208,21 @@ pub const CrunDriver = struct {
         };
         defer ffi.Libcrun.libcrun_container_free(container);
 
+        // crun and runc both chdir into the bundle before they create a
+        // container, and libcrun needs them to: an OCI spec's root.path is
+        // normally relative ("rootfs"), and it is resolved against the working
+        // directory rather than against the bundle in the context.
+        // containerd's shim serves a whole pod, so it runs the runtime from
+        // the *sandbox's* directory while --bundle names the container's own.
+        // Without this the container's rootfs was looked for inside the
+        // sandbox's, where /bin/sh really is absent: only /pause lives there.
+        bundle_dir.setAsCwd() catch |err| {
+            if (self.logger) |log| {
+                try log.err("Cannot enter bundle {s}: {}", .{ bundle_path, err });
+            }
+            return core.Error.OperationFailed;
+        };
+
         // Initialize context (context and strings cleaned up in deinit)
         const ctx = try self.initContext(bundle_path, config.name);
 

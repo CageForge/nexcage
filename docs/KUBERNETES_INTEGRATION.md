@@ -23,7 +23,7 @@ next step, not by size.
 | 1 | `exec` | **Done on Proxmox LXC**, which runs `pct exec` and exits with the command's status as `runc exec` does. crun and runc have none: libcrun's exec entry point has no binding in `libcrun_ffi.zig` | `kubectl exec`, CRI `ExecSync`, exec probes |
 | 2 | OCI runtime-spec CLI | **Enough for podman and containerd to run containers.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | ~~`state`~~ | **Done.** Proxmox LXC reports the bundle it recorded; crun hands the question to libcrun, so the output is `crun state`'s | The same. A shim reads the bundle path back from `state` |
-| 4 | Missing verbs | `delete --force` and `kill --all` are done; no `ps`, `events`, `features`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
+| 4 | Missing verbs | `delete --force` and `kill --all` are done; no `ps`, `events`, `features`, `pause`, `resume`, `update`. containerd's CRI asks for **`features`** at startup and carries on without it | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
 | 6 | No log handling | container output is not captured to a file | Kubelet reads `/var/log/pods/…/0.log`; `kubectl logs` needs it |
 | 7 | No CNI | `eth0` on `network.bridge` with DHCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
@@ -249,16 +249,59 @@ by a file that is not a configuration at all, silently. A file declaring
 `ociVersion` is skipped in the search path now, and refused outright when named
 with `--config`.
 
-CRI-O is untested. podman driving it did not predict containerd's behaviour, so
-neither predicts CRI-O's. containerd's
-`runc.v2` shim runs any runc-compatible binary through
-`options.BinaryName`, and CRI-O takes a `runtime_path`. A pod scheduled to that
-runtime handler then runs on nexcage.
+**A CRI pod runs on nexcage.** The runtime handler is the one a kubelet would
+name, and `crictl` drives the same interface the kubelet drives:
 
-What stage 3 does not cover, and a pod needs: container output captured to a
-file for `kubectl logs`, pod IPs from the cluster CNI, sandbox grouping so the
-containers of one pod share a network namespace, and pod requests and limits
-mapped onto cgroups. Those are gaps 6 to 10 in the table above.
+```toml
+# /etc/containerd/config.toml
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
+  runtime_type = 'io.containerd.runc.v2'
+  [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
+    BinaryName = '/usr/local/bin/nexcage'
+```
+
+```
+$ crictl runp --runtime nexcage sandbox.json
+$ crictl pods
+POD ID          STATE   NAME     NAMESPACE   RUNTIME
+6190c7b1cca16   Ready   nx-pod   default     nexcage
+
+$ crictl logs "$CTR"
+HELLO_FROM_NEXCAGE_CRI
+uid=0(root) gid=0(root) groups=0(root),1(bin),…
+```
+
+One defect stood between the sandbox and the container, and it is the reason
+this had to be run rather than reasoned about: **the runtime was not entering
+the bundle it was given.** containerd's shim serves a whole pod, so it runs the
+runtime from the *sandbox's* directory while `--bundle` names the container's
+own; an OCI spec's `root.path` is relative (`"rootfs"`), and libcrun resolves
+it against the working directory. crun and runc `chdir` into the bundle for
+exactly this reason. Without it the container's rootfs was looked for inside
+the sandbox's — where `/bin/sh` genuinely is absent, because only `/pause`
+lives there. The pod sandbox worked throughout, because for it the two
+directories are the same one. `tests/crun/foreign_cwd.sh` is the check, and it
+needs no engine: create a container from any working directory that is not the
+bundle.
+
+The other thing CRI asks for that no engine had asked for before is
+**`features`** — containerd calls it once at startup and nexcage answers
+`unknown command`. It did not stop a pod: containerd records the failure and
+assumes nothing. It is the first verb from the "missing verbs" row that
+something has actually wanted.
+
+CRI-O is untested. podman driving it did not predict containerd's behaviour,
+and containerd's CRI did not predict its own shim's working directory, so
+neither predicts CRI-O's. CRI-O takes a `runtime_path` where containerd takes
+`options.BinaryName`.
+
+Of the gaps a pod needs, the CRI run settles three of them, and not because
+nexcage grew them: the shim captures the container's output to the file the
+kubelet reads, the sandbox holds the namespaces its containers join, and the
+cgroup comes from the spec containerd writes. That is the shape of this whole
+stage — the engine owns the pod, the runtime owns the container. What is left
+from that row is the cluster CNI (the pod above uses the node's network
+namespace) and `features`.
 
 ## Related
 
