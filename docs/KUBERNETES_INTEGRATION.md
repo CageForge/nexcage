@@ -20,7 +20,7 @@ next step, not by size.
 
 | # | Gap | Today | Needed for |
 |---|---|---|---|
-| 1 | ~~`exec`~~ | **Done.** `nexcage exec <name> <command>` runs it in the container and exits with its status, as `runc exec` does. Proxmox LXC runs `pct exec`; crun goes through libcrun; runc has none | `kubectl exec`, CRI `ExecSync`, exec probes |
+| 1 | `exec` | **Done on Proxmox LXC**, which runs `pct exec` and exits with the command's status as `runc exec` does. crun and runc have none: libcrun's exec entry point has no binding in `libcrun_ffi.zig` | `kubectl exec`, CRI `ExecSync`, exec probes |
 | 2 | OCI runtime-spec CLI | **Partly done.** `create <id> --bundle <dir>` and `--root <dir>` work; `--pid-file` and `--console-socket` do not | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | ~~`state.bundle`~~ | **Done.** `state` reports the bundle the container was created from, and `start` and `stop` keep it | The same. A shim reads the bundle path back from `state` |
 | 4 | Missing verbs | `delete --force` and `kill --all` are done; no `ps`, `events`, `features`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
@@ -115,6 +115,12 @@ and the crun backend behind it.
 | `kill` | `--all` | accepted, and says what it really does on LXC |
 | `create` | `--pid-file <file>`, `--console-socket <sock>` | **not yet** |
 | also read | `ps`, `features`, `pause`, `resume`, `update` | **not yet** |
+
+The crun backend took the bundle path from the container id —
+`/var/lib/nexcage/bundles/<id>` — and ignored the one it was given, so it
+looked where nothing had written. It uses the caller's directory now, and
+honours `--root`; bundles are no longer confined to two directories, because a
+container engine picks its own and runc and crun accept any.
 
 `--pid-file` and `--console-socket` are where the Proxmox LXC backend stops
 being able to pretend: the runtime-spec means `create` to leave the container's

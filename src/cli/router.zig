@@ -160,6 +160,10 @@ pub const BackendRouter = struct {
         if (!backends.isCrunEnabled()) return self.backendNotBuilt("crun");
 
         var crun_backend = backends.crun.CrunDriver.init(self.allocator, self.logger);
+        // The driver keeps the NUL-terminated strings libcrun's context points
+        // at; without this they leak on every command. Nothing reached this
+        // backend until exec was routed here, so nothing noticed.
+        defer crun_backend.deinit();
 
         switch (operation) {
             .create => {
@@ -184,6 +188,7 @@ pub const BackendRouter = struct {
         if (!backends.isRuncEnabled()) return self.backendNotBuilt("runc");
 
         var runc_backend = backends.runc.RuncDriver.init(self.allocator, self.logger);
+        defer runc_backend.deinit();
 
         switch (operation) {
             .create => {
