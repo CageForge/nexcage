@@ -8,6 +8,14 @@ name: Dependency Updates Check
 # release with the first "N.N" grepped out of README/CHANGELOG/docs — which was
 # nexcage's own version — and filed "Proxmox VE Release Available: 0.7 → 9.1"
 # every week.
+#
+# There is no OCI Image Spec check any more either, for the same reason (#229).
+# It took the first "vN.N.N" on any line matching "image-spec|Image Spec|OCI
+# Image" in README/CHANGELOG/docs/deps, and the line it found was
+# docs/releases/NOTES_v0.2.0.md — "Release v0.2.0 - OCI Image System" — so it
+# reported nexcage's own v0.2.0 as the image-spec version in use and compared
+# it with upstream's v1.1.1. nexcage declares no image-spec version anywhere,
+# so there was nothing truthful for that check to read.
 
 on:
   schedule:
@@ -32,51 +40,31 @@ jobs:
       - name: Check OCI Runtime Spec version
         id: oci_runtime
         run: |
-          LATEST_RUNTIME=$(curl -s https://api.github.com/repos/opencontainers/runtime-spec/releases/latest | jq -r '.tag_name')
-          CURRENT_RUNTIME=$(grep -r "runtime-spec" .github/workflows/ deps/ 2>/dev/null | head -1 | grep -oP 'v\d+\.\d+\.\d+' || echo "unknown")
+          set -uo pipefail
+          LATEST_RUNTIME=$(curl -sS https://api.github.com/repos/opencontainers/runtime-spec/releases/latest | jq -r '.tag_name // empty')
+
+          # The version nexcage itself declares, which is the only runtime-spec
+          # version the repository states anywhere: the ociVersion its `state`
+          # output carries. This used to grep .github/ and deps/ for any
+          # "vN.N.N" near the words "runtime-spec", which found nothing, so the
+          # check never fired — and would have reported whatever unrelated
+          # version appeared there first the day one did.
+          CURRENT_RUNTIME=$(grep -rhoP '"ociVersion\\?": ?\\?"\K\d+\.\d+\.\d+' src/ 2>/dev/null | sort -u | head -1)
+          [ -n "$CURRENT_RUNTIME" ] && CURRENT_RUNTIME="v$CURRENT_RUNTIME" || CURRENT_RUNTIME="unknown"
 
           echo "latest_runtime_spec=$LATEST_RUNTIME" >> $GITHUB_OUTPUT
           echo "current_runtime_spec=$CURRENT_RUNTIME" >> $GITHUB_OUTPUT
 
-          if [ "$LATEST_RUNTIME" != "$CURRENT_RUNTIME" ] && [ "$CURRENT_RUNTIME" != "unknown" ]; then
-            echo "⚠️ OCI Runtime Spec update available: $CURRENT_RUNTIME → $LATEST_RUNTIME"
+          if [ -n "$LATEST_RUNTIME" ] && [ "$CURRENT_RUNTIME" != "unknown" ] && [ "$LATEST_RUNTIME" != "$CURRENT_RUNTIME" ]; then
+            echo "⚠️ nexcage reports ociVersion $CURRENT_RUNTIME; the runtime-spec is at $LATEST_RUNTIME"
             echo "update_available=true" >> $GITHUB_OUTPUT
           else
-            echo "✅ OCI Runtime Spec is up to date"
-            echo "update_available=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Check OCI Image Spec version
-        id: oci_image
-        run: |
-          # Get latest OCI Image Spec release
-          LATEST_IMAGE=$(curl -s https://api.github.com/repos/opencontainers/image-spec/releases/latest | jq -r '.tag_name // empty')
-
-          # Try to find current version in documentation or deps
-          CURRENT_IMAGE=$(grep -rE "(image-spec|Image Spec|OCI Image)" README.md CHANGELOG.md docs/ deps/ 2>/dev/null | \
-            grep -oP 'v\d+\.\d+\.\d+' | head -1 || \
-            echo "unknown")
-
-          # If not found in docs, check submodules
-          if [ "$CURRENT_IMAGE" = "unknown" ]; then
-            CURRENT_IMAGE=$(grep -r "image-spec" .github/ deps/crun/libocispec/ 2>/dev/null | \
-              grep -oP 'v\d+\.\d+\.\d+' | head -1 || \
-              echo "unknown")
-          fi
-
-          echo "latest_image_spec=$LATEST_IMAGE" >> $GITHUB_OUTPUT
-          echo "current_image_spec=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
-
-          if [ -n "$LATEST_IMAGE" ] && [ "$LATEST_IMAGE" != "$CURRENT_IMAGE" ] && [ "$CURRENT_IMAGE" != "unknown" ]; then
-            echo "⚠️ OCI Image Spec update available: $CURRENT_IMAGE → $LATEST_IMAGE"
-            echo "update_available=true" >> $GITHUB_OUTPUT
-          else
-            echo "✅ OCI Image Spec check completed (current: $CURRENT_IMAGE, latest: $LATEST_IMAGE)"
+            echo "✅ ociVersion $CURRENT_RUNTIME, runtime-spec $LATEST_RUNTIME"
             echo "update_available=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Issue for OCI Updates
-        if: steps.oci_runtime.outputs.update_available == 'true' || steps.oci_image.outputs.update_available == 'true'
+        if: steps.oci_runtime.outputs.update_available == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -92,30 +80,17 @@ jobs:
               return;
             }
 
-            const runtimeUpdate = '${{ steps.oci_runtime.outputs.update_available }}' === 'true';
-            const imageUpdate = '${{ steps.oci_image.outputs.update_available }}' === 'true';
-
-            let body = '## OCI Specifications Update Available\n\n';
-
-            if (runtimeUpdate) {
-              body += `### OCI Runtime Spec\n`;
-              body += `- Current: ${{ steps.oci_runtime.outputs.current_runtime_spec }}\n`;
-              body += `- Latest: ${{ steps.oci_runtime.outputs.latest_runtime_spec }}\n\n`;
-            }
-
-            if (imageUpdate) {
-              body += `### OCI Image Spec\n`;
-              body += `- Current: ${{ steps.oci_image.outputs.current_image_spec }}\n`;
-              body += `- Latest: ${{ steps.oci_image.outputs.latest_image_spec }}\n\n`;
-            }
-
-            body += `This issue was automatically created by the Dependency Updates Check workflow.\n`;
-            body += `Please review and update the OCI specifications if needed.`;
+            let body = '## OCI Runtime Spec\n\n';
+            body += `nexcage reports \`"ociVersion": "${{ steps.oci_runtime.outputs.current_runtime_spec }}"\` in its \`state\` output; `;
+            body += `the OCI runtime-spec is at ${{ steps.oci_runtime.outputs.latest_runtime_spec }}.\n\n`;
+            body += `That is what the repository declares, not a guess: the number comes from the ociVersion nexcage emits. `;
+            body += `Raising it is a claim about conformance, so it is a decision rather than a bump — this issue only reports the difference.\n\n`;
+            body += `Filed by the Dependency Updates Check workflow.`;
 
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `[Dependency] OCI Spec Updates Available`,
+              title: `[Dependency] nexcage reports ociVersion ${{ steps.oci_runtime.outputs.current_runtime_spec }}, runtime-spec is ${{ steps.oci_runtime.outputs.latest_runtime_spec }}`,
               body: body,
               labels: ['dependencies', 'oci', 'automated']
             });
