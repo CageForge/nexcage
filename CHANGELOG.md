@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **containerd runs containers on nexcage.** `--log <path>` sends the runtime's own log to a file rather than stderr, which is what a container engine expects — containerd opens that file to report why a create failed and finds nothing if it is not written. `--log-format json` writes one object per line with the fields runc writes, and `--systemd-cgroup` is accepted and reaches libcrun's context, where the field already existed. `--log-file` keeps its own meaning, which is to copy nexcage's log to a file as well.
+- `src/core/rfc3339.zig` formats the log timestamp as RFC 3339. It was epoch seconds as a number, and containerd answered `Time.UnmarshalJSON: input is not a JSON string`: Go's `time.Time` wants a quoted date.
+
+### Fixed
+- An OCI bundle's `config.json` was read as nexcage's configuration. `./config.json` is first in the search path, a bundle holds a `config.json` that is a runtime spec, and a container engine runs the runtime from the bundle directory — so the routing rules were silently replaced by a file that is not a configuration. A file declaring `ociVersion` is skipped in the search path, and named with `--config` it is refused as the wrong kind of file rather than reported as missing. podman did not expose this; containerd did.
+
 ### Fixed
 - A container engine's container id was rejected. `create` applied an RFC-1123 hostname rule to the id before any backend was chosen, and podman and containerd address containers by a 64-character hex id against a 63-character label limit — so `podman --runtime nexcage run` failed on its very first call with "Invalid container name/hostname". The rule belongs to the Proxmox LXC backend, where the name becomes the container's hostname, and now lives there and says which backend requires it.
 - The catch-all routing rule in `config.json.example` matched nothing. A pattern is a regular expression only when it starts with `^` or ends with `$`; everything else is a shell-style wildcard, so `".*"` meant "a literal dot followed by anything". The example now uses `"*"`, and the reference explains the rule, because a routing rule that silently never fires sends every container to the default backend.

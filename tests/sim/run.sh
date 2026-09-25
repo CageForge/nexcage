@@ -95,6 +95,15 @@ called_re() { grep -qE -e "$1" "$S/calls.last"; }
 not_called_re() { ! grep -qE -e "$1" "$S/calls.last"; }
 all() { local c; for c in "$@"; do eval "$c" || return 1; done; }
 json_ok()   { python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$1" 2>/dev/null; }
+# Every line a JSON object, and at least one of them an error: what a container
+# engine opens this file to find.
+json_lines_have_error() {
+  python3 - "$1" <<'PYEOF' 2>/dev/null
+import json, sys
+lines = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+sys.exit(0 if any(o.get("level") == "error" for o in lines) else 1)
+PYEOF
+}
 json_get()  { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2" 2>/dev/null; }
 listed()    { awk -F'\t' -v n="$1" 'NR>1 && $7==n {f=1} END {exit !f}' "$S/out"; }
 status_is() { nx state "$1"; [ "$RC" = 0 ] && [ "$(json_get "$S/out" status)" = "$2" ]; }
@@ -381,6 +390,31 @@ nx --runtime lxc state from-tpl
 check "--runtime before the command routes, instead of being dropped" all 'rc 0' '! err_has "unknown command"'
 nx --runtime bogus state from-tpl
 check "--runtime bogus before the command -> exit 2, no leak" rc 2
+
+# What containerd puts before the command. --log used to be taken for the
+# command name, so the engine's very first call answered "unknown command".
+# A container engine runs the runtime from the bundle directory, and a bundle
+# holds a config.json that is an OCI spec. It used to be read as nexcage's own
+# configuration, silently replacing it — routing rules included.
+printf '{"ociVersion":"1.0.0","process":{"args":["/bin/sh"]},"root":{"path":"rootfs"}}' > "$S/work/config.json"
+nx list
+check "an OCI spec in the search path is not read as nexcage's config" \
+  all 'rc 0' '! err_has "SyntaxError"' '! err_has "invalid configuration"'
+nx --config "$S/work/config.json" list
+check "an OCI spec named with --config is refused, not silently ignored" \
+  all 'rc 1' 'err_has "invalid configuration"'
+rm -f "$S/work/config.json"
+
+nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup list
+check "the options containerd sends are accepted, not read as a command" \
+  all 'rc 0' '! err_has "unknown command"'
+# a command that fails, so there is a line for the engine to read back
+nx --log "$S/run/ct.json" --log-format json state no-such-container
+check "--log --log-format json: the error lands in the file containerd reads" \
+  all 'rc 1' '[ -s "$S/run/ct.json" ]' 'json_lines_have_error "$S/run/ct.json"'
+nx --log "$S/run/ct2.json" state no-such-container
+check "--log without a format writes text, not JSON" \
+  all '[ -s "$S/run/ct2.json" ]' '! grep -q "level" "$S/run/ct2.json"'
 
 nx --runtime crun state some-id
 check "state on a crun binary that lacks the backend -> exit 1, says how to build it" \

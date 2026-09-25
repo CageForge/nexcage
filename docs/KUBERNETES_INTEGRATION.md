@@ -21,7 +21,7 @@ next step, not by size.
 | # | Gap | Today | Needed for |
 |---|---|---|---|
 | 1 | `exec` | **Done on Proxmox LXC**, which runs `pct exec` and exits with the command's status as `runc exec` does. crun and runc have none: libcrun's exec entry point has no binding in `libcrun_ffi.zig` | `kubectl exec`, CRI `ExecSync`, exec probes |
-| 2 | OCI runtime-spec CLI | **Partly done.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
+| 2 | OCI runtime-spec CLI | **Enough for podman and containerd to run containers.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | ~~`state`~~ | **Done.** Proxmox LXC reports the bundle it recorded; crun hands the question to libcrun, so the output is `crun state`'s | The same. A shim reads the bundle path back from `state` |
 | 4 | Missing verbs | `delete --force` and `kill --all` are done; no `ps`, `events`, `features`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
@@ -212,8 +212,45 @@ can drive is a runtime containerd can drive.
 
 ### Stage 4 — containerd and CRI-O
 
-Configuration rather than new code, and stage 3 has now been shown to be enough
-for podman. containerd's
+containerd runs a container on nexcage:
+
+```
+$ ctr run --rm --runc-binary /usr/local/bin/nexcage \
+      docker.io/library/alpine:3.20 t2 /bin/echo HELLO_FROM_NEXCAGE
+HELLO_FROM_NEXCAGE
+
+# what containerd sent
+--root /run/containerd/runc/default --log <taskdir>/log.json --log-format json \
+    create --bundle <dir> --pid-file <file> t2
+… start t2
+… delete t2
+… delete --force t2
+```
+
+It took three rounds to get there, and each blocker was only visible once the
+one before it was gone — none of them was in the table above, which was
+predicting `ps` and `features` that containerd never asked for:
+
+1. **`unknown command '--log'`.** containerd puts `--log <file>` and
+   `--log-format json` before the command; the loop that finds the command name
+   did not skip them, so `--log` was taken for the command.
+2. **`open …/log.json: no such file`.** `--log` is not an option to swallow:
+   containerd opens that file to find out *why* the runtime failed. nexcage
+   writes its log there now, and `--log-format json` writes the shape runc
+   writes.
+3. **`Time.UnmarshalJSON: input is not a JSON string`.** The `time` field was a
+   number; Go's `time.Time` wants RFC 3339. `src/core/rfc3339.zig` formats it.
+
+Then a fourth, which podman had hidden: **an OCI bundle's `config.json`
+shadowed nexcage's own.** `./config.json` is first in the configuration search
+path, a bundle holds a `config.json` that is a runtime spec, and containerd
+runs the runtime from the bundle directory — so the routing rules were replaced
+by a file that is not a configuration at all, silently. A file declaring
+`ociVersion` is skipped in the search path now, and refused outright when named
+with `--config`.
+
+CRI-O is untested. podman driving it did not predict containerd's behaviour, so
+neither predicts CRI-O's. containerd's
 `runc.v2` shim runs any runc-compatible binary through
 `options.BinaryName`, and CRI-O takes a `runtime_path`. A pod scheduled to that
 runtime handler then runs on nexcage.

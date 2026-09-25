@@ -18,6 +18,9 @@ These work before or after the command.
 | `--log-level <level>` | `trace`, `debug`, `info` (default), `warn`, `error`, `fatal` |
 | `--log-file <path>` | Also write log lines to `<path>` |
 | `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1) |
+| `--log <path>` | The runtime's own log goes to `<path>` instead of stderr, as an OCI runtime's does. A container engine reads it back to report why the runtime failed |
+| `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
+| `--systemd-cgroup` | Accepted; cgroup management is libcrun's, and this reaches its context |
 | `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
 
 Logs go to stderr. stdout carries only command output (`list`, `state`,
@@ -26,6 +29,12 @@ help text).
 Without `--config`, configuration comes from the first of `./config.json`,
 `/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json` that exists; see the
 README for the keys.
+
+A file that declares `ociVersion` is not one of them: an OCI bundle holds a
+`config.json` that is a runtime spec, and a container engine runs the runtime
+from the bundle directory, so it would otherwise replace the configuration —
+routing rules included — without saying so. Such a file is skipped in the
+search path, and refused when named with `--config`.
 
 `--root` is read before any command touches state, wherever it appears on the
 command line.

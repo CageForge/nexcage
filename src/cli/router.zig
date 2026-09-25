@@ -198,6 +198,7 @@ pub const BackendRouter = struct {
             .create => |create_cfg| {
                 crun_backend.console_socket = create_cfg.console_socket;
                 crun_backend.pid_file = create_cfg.pid_file;
+                crun_backend.systemd_cgroup = create_cfg.systemd_cgroup;
                 const sandbox_config = try self.createSandboxConfig(operation, container_id, .crun, config);
                 defer self.cleanupSandboxConfig(operation, &sandbox_config);
                 try crun_backend.create(sandbox_config);
@@ -283,6 +284,7 @@ pub const CreateConfig = struct {
     /// only a backend that starts a process on create can honour them.
     console_socket: ?[]const u8 = null,
     pid_file: ?[]const u8 = null,
+    systemd_cgroup: bool = false,
 };
 
 pub const RunConfig = struct {
