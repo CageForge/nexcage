@@ -48,6 +48,7 @@ _nexcage() {
             local extra=""
             [ "$cmd" = kill ] && extra="--signal -s --all"
             [ "$cmd" = delete ] && extra="--force -f"
+            [ "$cmd" = create ] && extra="--bundle --console-socket --pid-file"
             COMPREPLY=( $(compgen -W "$names --name --help $extra" -- "$cur") )
             ;;
         create|run)

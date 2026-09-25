@@ -330,6 +330,8 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         .detach = false,
         .force = false,
         .all = false,
+        .console_socket = null,
+        .pid_file = null,
         .interactive = false,
         .tty = false,
         .user = null,
@@ -357,6 +359,12 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             i += 1;
         } else if (std.mem.eql(u8, arg, "--name") and i + 1 < args.len) {
             options.container_id = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--console-socket") and i + 1 < args.len) {
+            options.console_socket = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--pid-file") and i + 1 < args.len) {
+            options.pid_file = try allocator.dupe(u8, args[i + 1]);
             i += 2;
         } else if (std.mem.eql(u8, arg, "--bundle") and i + 1 < args.len) {
             // An OCI bundle directory: config.json plus rootfs/. The backend

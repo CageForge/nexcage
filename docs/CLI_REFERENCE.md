@@ -69,7 +69,7 @@ means by them.
 
 ```bash
 nexcage create --name <name> <image>
-nexcage create <container-id> --bundle <dir>      # the runtime-spec form
+nexcage create <container-id> --bundle <dir> [--console-socket <path>] [--pid-file <path>]
 ```
 
 Creates a container named `<name>`; the name becomes its hostname and must be
@@ -84,6 +84,19 @@ unique on the node. The VMID comes from `pvesh get /cluster/nextid`. `--image
 | Template file name | `debian-12-standard_12.7-1_amd64.tar.zst` | Looked up as `local:vztmpl/<file>` |
 | OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only; pulled to storage `local` |
 | OCI bundle directory | `/var/lib/nexcage/bundles/web` | Under `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/`, containing `config.json` and `rootfs/` |
+
+`--console-socket <path>` is where the runtime sends the master end of the
+container's pty, over a Unix socket with `SCM_RIGHTS`, as the runtime-spec
+requires. A bundle whose `config.json` sets `process.terminal` cannot be
+created without it. `--pid-file <path>` is where the container process's pid is
+written.
+
+Both need a backend that leaves a process running after `create`, which means
+`--runtime crun`. On the Proxmox LXC backend they fail with exit 1 and say so:
+`pct create` starts nothing, so there is no pty to hand over and no pid to
+write. They are refused rather than ignored — a caller that passes
+`--console-socket` and receives no file descriptor waits for one that is never
+coming.
 
 With `--bundle <dir>` the first positional word is the **container id**, not the
 image, which is the form the runtime-spec defines and a container engine sends:
