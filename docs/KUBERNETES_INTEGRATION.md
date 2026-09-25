@@ -154,9 +154,40 @@ the first time: `create --console-socket` → `start` → `"status": "running"` 
 libcrun: `delete --force`, which the driver had hardcoded to `false`, and
 `kill --all`, which goes to `libcrun_container_killall`.
 
-What is missing before a container engine can drive it: `ps`, `features`,
-`pause`, `resume` and `update` do not exist at all, and `exec` on this backend
-needs a binding libcrun's exec entry point does not have yet.
+**A container engine drives it.** podman runs a container on nexcage end to
+end:
+
+```
+$ podman --runtime /usr/local/bin/nexcage run --rm localhost/tiny:1 \
+      /bin/sh -c 'echo HELLO_FROM_NEXCAGE'
+HELLO_FROM_NEXCAGE
+
+# what podman sent the runtime
+create --bundle /var/lib/containers/storage/overlay-containers/<id>/userdata \
+       --pid-file /run/containers/.../pidfile <id>
+start <id>
+delete --force <id>
+```
+
+No unexpected options: the command line an engine sends is the one built in
+this stage. Two things had to change for it to work, and neither was on the
+list of missing verbs — which is the argument for running an engine against it
+rather than working down a checklist:
+
+- **The container id was rejected.** `create` applied an RFC-1123 hostname rule
+  to it before any backend was chosen, and an engine's id is 64 hex characters
+  against a 63-character label limit. That rule belongs to the Proxmox LXC
+  backend, where the name really does become a hostname, and now lives there.
+- **Routing had to reach the OCI backend.** An engine never passes
+  `--runtime`, so the configuration file has to say
+  `{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }`.
+  The catch-all in `config.json.example` was `".*"`, which matches nothing: a
+  pattern is a regex only when it starts with `^` or ends with `$`, so `.*`
+  was read as a wildcard meaning "a literal dot, then anything".
+
+What is still missing: `ps`, `features`, `pause`, `resume` and `update` do not
+exist, and `exec` on this backend needs a binding libcrun's exec entry point
+does not have yet. podman did not ask for any of them to run a container.
 
 `--pid-file` and `--console-socket` are where the Proxmox LXC backend stops
 being able to pretend: the runtime-spec means `create` to leave the container's
@@ -181,7 +212,8 @@ can drive is a runtime containerd can drive.
 
 ### Stage 4 — containerd and CRI-O
 
-Configuration rather than new code, once stage 3 lands. containerd's
+Configuration rather than new code, and stage 3 has now been shown to be enough
+for podman. containerd's
 `runc.v2` shim runs any runc-compatible binary through
 `options.BinaryName`, and CRI-O takes a `runtime_path`. A pod scheduled to that
 runtime handler then runs on nexcage.

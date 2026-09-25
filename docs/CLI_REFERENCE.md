@@ -38,6 +38,20 @@ default.
 `--runtime <lxc|crun|runc|vm>` overrides that for one command, before or after
 the command name.
 
+A routing rule's `pattern` is a **regular expression only when it starts with
+`^` or ends with `$`**; anything else is matched as a shell-style wildcard. So
+`^(kube-ovn-.*|cilium-.*)$` is a regex, `web-*` is a wildcard, and `.*` is
+neither a catch-all nor an error — as a wildcard it means a literal dot
+followed by anything, and matches nothing whose name does not begin with a
+dot. Write `*` or `^.*$` for a catch-all.
+
+A container engine never passes `--runtime`, so driving nexcage from one means
+routing to the OCI backend in the configuration file:
+
+```json
+{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }
+```
+
 - `crun` and `runc` work only in a binary built with
   `-Denable-backend-crun=true` or `-Denable-backend-runc=true`; otherwise the
   command fails with exit 1. They have no `run` or `state`, and neither has
