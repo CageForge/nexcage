@@ -164,9 +164,12 @@ calls `kill(2)`. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
 unknown signal is a usage error (exit 2); a container that is not running is an
 error (exit 1).
 
-`--all` is accepted for runc compatibility and logs what actually happens:
-nexcage signals the container's init, and only `SIGKILL` reaches every process
-in the container. It does not walk the cgroup.
+`--all` means every process in the container, not only its init. On
+`--runtime crun` it goes to `libcrun_container_killall`, which walks the
+container's cgroup — it needs one it can read, and fails with
+`read from file 'cgroup.procs': Operation not supported` where the cgroup is
+not delegated. On the Proxmox LXC backend nexcage can only signal the init from
+the host, and says so when `--all` is given rather than implying it did more.
 
 The kernel delivers a signal from the host to a container's init only if init
 handles it, except `SIGKILL` and `SIGSTOP`. `SIGKILL` always stops the
@@ -227,6 +230,15 @@ Prints OCI runtime state JSON:
   "annotations": {}
 }
 ```
+
+On `--runtime crun` the state comes from libcrun, which writes it itself, so
+the output is what `crun state` gives for the same container — the same fields
+in the same order, including `rootfs`, `created`, `systemd-scope` and `owner`,
+which the Proxmox LXC backend has no way to report. A container libcrun does
+not know is an error (exit 1) carrying libcrun's own message.
+
+On the Proxmox LXC backend nexcage composes the state itself, because `pct` has
+no such call:
 
 `status` is `created` for a container not yet started through nexcage, or
 `running`, `stopped` or `paused` as pct reports it. `pid` is the host PID of the

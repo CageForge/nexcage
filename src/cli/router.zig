@@ -155,7 +155,20 @@ pub const BackendRouter = struct {
             .start => try proxmox_backend.start(container_id),
             .stop => try proxmox_backend.stop(container_id),
             .delete => |del| try proxmox_backend.delete(container_id, del.force),
-            .kill => |kill_cfg| try proxmox_backend.kill(container_id, kill_cfg.signal),
+            .kill => |kill_cfg| {
+                // runc takes --all to mean every process in the container's
+                // cgroup. On this backend nexcage signals the init from the
+                // host and the kernel delivers to the whole namespace only for
+                // SIGKILL, so silence would let a caller believe more happened
+                // than did. This used to be said in kill.zig, before the
+                // backend was known, so it was printed on crun as well — where
+                // --all really does reach every process, through
+                // libcrun_container_killall.
+                if (kill_cfg.all) {
+                    if (self.logger) |log| log.warn("--all: on the Proxmox LXC backend nexcage signals the container's init; only SIGKILL reaches every process in it", .{}) catch {};
+                }
+                try proxmox_backend.kill(container_id, kill_cfg.signal);
+            },
             // An OCI runtime exits with the status of the command it ran, so
             // the backend's answer is carried out to main rather than dropped.
             .exec => |exec_cfg| core.exit_status.propagated = try proxmox_backend.exec(container_id, exec_cfg.argv),
@@ -191,8 +204,8 @@ pub const BackendRouter = struct {
             },
             .start => try crun_backend.start(container_id),
             .stop => try crun_backend.stop(container_id),
-            .delete => try crun_backend.delete(container_id),
-            .kill => |kill_cfg| try crun_backend.kill(container_id, kill_cfg.signal),
+            .delete => |del| try crun_backend.delete(container_id, del.force),
+            .kill => |kill_cfg| try crun_backend.kill(container_id, kill_cfg.signal, kill_cfg.all),
             .exec => |exec_cfg| try crun_backend.exec(container_id, exec_cfg.argv),
             .run => return self.notImplemented("run", "crun"),
             .state => {
@@ -278,6 +291,10 @@ pub const RunConfig = struct {
 
 pub const KillConfig = struct {
     signal: []const u8,
+    /// `kill --all`: every process in the container, not only its init. crun
+    /// has libcrun_container_killall for it; on Proxmox LXC nexcage can only
+    /// signal the init, and says so.
+    all: bool = false,
 };
 
 pub const DeleteConfig = struct {

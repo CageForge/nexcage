@@ -51,6 +51,20 @@ pub const StateCommand = struct {
             runtime_type = cfg.getRoutedRuntime(container_id);
         }
 
+        // crun prints its own state: libcrun writes the JSON the spec defines,
+        // so what comes out is what `crun state` would give. Composing a
+        // second rendering of the same fields here would only be a thing that
+        // can drift from it.
+        if (runtime_type == .crun) {
+            if (!backends.isCrunEnabled()) {
+                if (self.base.logger) |log| log.err("The crun backend is not built into this binary; rebuild with -Denable-backend-crun=true", .{}) catch {};
+                return types.Error.UnsupportedOperation;
+            }
+            var crun_backend = backends.crun.CrunDriver.init(allocator, self.base.logger);
+            defer crun_backend.deinit();
+            return crun_backend.state(container_id);
+        }
+
         // The OCI runtime spec makes querying a container that does not exist
         // an error. This used to print "status": "unknown" and exit 0, which a
         // caller cannot tell apart from a real container in an odd state.
@@ -141,9 +155,10 @@ pub const StateCommand = struct {
                 return types.Error.NotFound;
             },
             .crun, .runc, .vm => {
-                // These backends cannot report state yet. This used to print
-                // a made-up "unknown" state and exit 0, which looks like a
-                // real container.
+                // crun is handled above, by libcrun itself. runc and the VM
+                // backend cannot report state. This used to print a made-up
+                // "unknown" state and exit 0, which looks like a real
+                // container.
                 if (self.base.logger) |log| log.err("state is not implemented for the {s} backend", .{@tagName(runtime_type)}) catch {};
                 return types.Error.UnsupportedOperation;
             },

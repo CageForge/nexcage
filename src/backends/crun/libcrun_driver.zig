@@ -255,16 +255,16 @@ pub const CrunDriver = struct {
         }
     }
 
-    /// Stop an OCI container using libcrun (sends SIGTERM)
+    /// Stop an OCI container using libcrun (sends SIGTERM to the init)
     pub fn stop(self: *Self, container_id: []const u8) !void {
-        try self.kill(container_id, "TERM");
+        try self.kill(container_id, "TERM", false);
         if (self.logger) |log| {
             try log.info("Successfully stopped OCI container with libcrun: {s}", .{container_id});
         }
     }
 
     /// Kill an OCI container using libcrun
-    pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
+    pub fn kill(self: *Self, container_id: []const u8, signal: []const u8, all: bool) !void {
         if (self.logger) |log| {
             try log.info("Killing OCI container with libcrun: {s} signal {s}", .{ container_id, signal });
         }
@@ -283,16 +283,21 @@ pub const CrunDriver = struct {
         const signal_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{signal}, 0);
         defer self.allocator.free(signal_c);
 
-        // Kill container using libcrun API
-        const ret = ffi.Libcrun.libcrun_container_kill(ctx, id_c.ptr, signal_c.ptr, &err_ptr);
+        // --all is libcrun_container_killall: every process in the cgroup
+        // rather than the init alone. It used to be dropped before it reached
+        // here, so `kill --all` signalled only init and said nothing about it.
+        const ret = if (all)
+            ffi.Libcrun.libcrun_container_killall(ctx, id_c.ptr, signal_c.ptr, &err_ptr)
+        else
+            ffi.Libcrun.libcrun_container_kill(ctx, id_c.ptr, signal_c.ptr, &err_ptr);
         if (ret != 0) {
-            try self.handleError(&err_ptr, "container_kill");
+            try self.handleError(&err_ptr, if (all) "container_killall" else "container_kill");
             return;
         }
     }
 
     /// Delete an OCI container using libcrun
-    pub fn delete(self: *Self, container_id: []const u8) !void {
+    pub fn delete(self: *Self, container_id: []const u8, force: bool) !void {
         if (self.logger) |log| {
             try log.info("Deleting OCI container with libcrun: {s}", .{container_id});
         }
@@ -308,8 +313,9 @@ pub const CrunDriver = struct {
         const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
         defer self.allocator.free(id_c);
 
-        // Delete container using libcrun API (def can be null)
-        const ret = ffi.Libcrun.libcrun_container_delete(ctx, null, id_c.ptr, false, &err_ptr);
+        // force was hardcoded false, so `delete --force` was accepted and
+        // then not forced. libcrun takes it as the fourth argument.
+        const ret = ffi.Libcrun.libcrun_container_delete(ctx, null, id_c.ptr, force, &err_ptr);
         if (ret != 0) {
             try self.handleError(&err_ptr, "container_delete");
             return;
@@ -321,6 +327,32 @@ pub const CrunDriver = struct {
     }
 
     /// Execute a command in a running container (best-effort; may be limited by libcrun API)
+    /// Print the container's OCI state, as the runtime-spec defines it.
+    ///
+    /// libcrun writes the JSON itself, to a FILE*, so the output is what
+    /// `crun state` gives for the same container rather than a second
+    /// rendering of the same fields that could drift from it. The LXC backend
+    /// has to compose its own because pct has no such call.
+    pub fn state(self: *Self, container_id: []const u8) !void {
+        try validation.SecurityValidation.validateContainerId(container_id);
+
+        const ctx = try self.initContext("", container_id);
+
+        const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
+        defer self.allocator.free(id_c);
+
+        var err_ptr: ?*ffi.Libcrun.Error = null;
+        const out: ?*anyopaque = @ptrCast(c_stdio.stdout);
+        const ret = ffi.Libcrun.libcrun_container_state(ctx, id_c.ptr, out, &err_ptr);
+        // libcrun buffers through the FILE*; without this the JSON can arrive
+        // after whatever the process writes next, or not at all on exit.
+        _ = c_stdio.fflush(c_stdio.stdout);
+        if (ret != 0) {
+            try self.handleError(&err_ptr, "container_state");
+            return;
+        }
+    }
+
     /// Not implemented. libcrun exposes an exec entry point, but no binding
     /// for it exists in libcrun_ffi.zig, so there is nothing to call. This
     /// used to build a C argv, discard it and return OperationNotSupported

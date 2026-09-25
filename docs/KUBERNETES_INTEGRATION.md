@@ -22,7 +22,7 @@ next step, not by size.
 |---|---|---|---|
 | 1 | `exec` | **Done on Proxmox LXC**, which runs `pct exec` and exits with the command's status as `runc exec` does. crun and runc have none: libcrun's exec entry point has no binding in `libcrun_ffi.zig` | `kubectl exec`, CRI `ExecSync`, exec probes |
 | 2 | OCI runtime-spec CLI | **Partly done.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
-| 3 | ~~`state.bundle`~~ | **Done.** `state` reports the bundle the container was created from, and `start` and `stop` keep it | The same. A shim reads the bundle path back from `state` |
+| 3 | ~~`state`~~ | **Done.** Proxmox LXC reports the bundle it recorded; crun hands the question to libcrun, so the output is `crun state`'s | The same. A shim reads the bundle path back from `state` |
 | 4 | Missing verbs | `delete --force` and `kill --all` are done; no `ps`, `events`, `features`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
 | 6 | No log handling | container output is not captured to a file | Kubelet reads `/var/log/pods/…/0.log`; `kubectl logs` needs it |
@@ -136,8 +136,27 @@ IS_A_TTY=True
 create when a terminal is used`. That is the first runtime-spec `create` that
 completes on nexcage.
 
-What it does not yet buy is a lifecycle a caller can follow: `state` is still
-missing on this backend, so nothing can read back what was created.
+`state` followed, and it is libcrun's own: the JSON is written by
+`libcrun_container_state`, so it matches `crun state` for the same container
+field for field rather than being a second rendering that can drift. Together
+with `create` that is enough for a caller to make a container and read it back:
+
+```
+$ nexcage --runtime crun state s1
+{ "ociVersion": "1.0.0", "id": "s1", "pid": 30, "status": "created",
+  "bundle": "/run/eb/s1", "rootfs": "rootfs", "created": "...",
+  "systemd-scope": "", "owner": "root" }
+```
+
+`start`, `kill` and `delete` have now been run end to end on this backend for
+the first time: `create --console-socket` → `start` → `"status": "running"` →
+`delete --force` → gone. Two flags that were accepted and ignored now reach
+libcrun: `delete --force`, which the driver had hardcoded to `false`, and
+`kill --all`, which goes to `libcrun_container_killall`.
+
+What is missing before a container engine can drive it: `ps`, `features`,
+`pause`, `resume` and `update` do not exist at all, and `exec` on this backend
+needs a binding libcrun's exec entry point does not have yet.
 
 `--pid-file` and `--console-socket` are where the Proxmox LXC backend stops
 being able to pretend: the runtime-spec means `create` to leave the container's

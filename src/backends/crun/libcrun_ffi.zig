@@ -71,6 +71,16 @@ pub const Libcrun = struct {
     ) c_int;
 
     /// Delete a container
+    /// int libcrun_container_killall (libcrun_context_t *context, const char *id,
+    ///                                 const char *signal, libcrun_error_t *err);
+    /// What `kill --all` means: the signal goes to every process in the
+    /// container's cgroup, not only its init.
+    pub extern fn libcrun_container_killall(
+        context: *Context,
+        id: [*c]const u8,
+        signal: [*c]const u8,
+        err: *?*Error,
+    ) c_int;
     pub extern fn libcrun_container_delete(
         context: *Context,
         def: ?*anyopaque, // runtime_spec_schema_config_schema *
