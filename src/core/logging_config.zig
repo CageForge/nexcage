@@ -1,9 +1,15 @@
 const std = @import("std");
+const logging = @import("logging.zig");
 
 /// Logging configuration
 pub const LoggingConfig = struct {
     debug_mode: bool = false,
     log_file_path: ?[]const u8 = null,
+    /// --log-format. A container engine passes json and reads the file back
+    /// to find out why the runtime failed.
+    log_format: logging.LogFormat = .text,
+    /// --log: where the runtime's own log goes instead of stderr
+    runtime_log_path: ?[]const u8 = null,
     log_level: LogLevel = .info,
     enable_file_logging: bool = false,
     enable_console_logging: bool = true,
@@ -70,6 +76,20 @@ pub const LoggingConfig = struct {
                     config.log_file_path = try allocator.dupe(u8, args[i + 1]);
                     config.enable_file_logging = true;
                     i += 1; // Skip next argument as it's the file path
+                }
+            } else if (std.mem.eql(u8, arg, "--log")) {
+                // What an OCI runtime is given: its log goes to this file
+                // instead of stderr, and a container engine reads it back to
+                // report why the runtime failed. --log-file keeps its own
+                // meaning, which is to copy nexcage's log to a file as well.
+                if (i + 1 < args.len) {
+                    config.runtime_log_path = try allocator.dupe(u8, args[i + 1]);
+                    i += 1;
+                }
+            } else if (std.mem.eql(u8, arg, "--log-format")) {
+                if (i + 1 < args.len) {
+                    config.log_format = if (std.mem.eql(u8, args[i + 1], "json")) .json else .text;
+                    i += 1;
                 }
             } else if (std.mem.eql(u8, arg, "--log-level")) {
                 if (i + 1 < args.len) {
@@ -173,6 +193,14 @@ pub const LoggingConfig = struct {
         if (args_config.enable_memory_tracking) {
             logging_config.enable_memory_tracking = true;
         }
+        // --log and --log-format come only from the command line. Merging them
+        // here rather than leaving them behind in args_config is also what
+        // frees the path: nothing else owns it.
+        if (args_config.runtime_log_path) |path| {
+            if (logging_config.runtime_log_path) |old| allocator.free(old);
+            logging_config.runtime_log_path = path;
+        }
+        logging_config.log_format = args_config.log_format;
 
         return logging_config;
     }
@@ -209,6 +237,7 @@ pub const LoggingConfig = struct {
 
     /// Deinitialize configuration
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+        if (self.runtime_log_path) |path| allocator.free(path);
         if (self.log_file_path) |path| {
             allocator.free(path);
         }

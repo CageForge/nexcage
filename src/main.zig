@@ -50,11 +50,28 @@ pub const AppContext = struct {
         }
         errdefer if (advanced_logger) |*logger| logger.deinit();
 
+        // --log sends the runtime's own log to a file rather than stderr, which
+        // is what a container engine expects: containerd opens that file to
+        // report why the runtime failed, and finds nothing if it is not
+        // written. A file that cannot be opened falls back to stderr rather
+        // than failing the command.
+        var log_sink = std.fs.File.stderr();
+        if (logging_cfg.runtime_log_path) |path| {
+            if (std.fs.cwd().createFile(path, .{ .truncate = false })) |f| {
+                f.seekFromEnd(0) catch {};
+                log_sink = f;
+            } else |err| {
+                printError("warning: cannot open --log file '{s}' ({s}); logging to stderr", .{ path, @errorName(err) });
+            }
+        }
+        var runtime_logger = core.LogContext.init(allocator, log_sink, logging_cfg.log_level, "nexcage");
+        runtime_logger.format = logging_cfg.log_format;
+
         self.* = AppContext{
             .allocator = allocator,
             .config = config,
             // logging_cfg.log_level already folds in config file, env and --debug/--log-level
-            .logger = core.LogContext.init(allocator, std.fs.File.stderr(), logging_cfg.log_level, "nexcage"),
+            .logger = runtime_logger,
             .advanced_logger = advanced_logger,
             .logging_config = logging_cfg,
             .command_registry = cli.CommandRegistry.init(allocator),
@@ -179,6 +196,17 @@ fn run() !void {
         }
         if (std.mem.eql(u8, args[i], "--runtime") and i + 1 < args.len) {
             i += 2; // Skip --runtime and its value; parseRuntimeOptions reads it
+            continue;
+        }
+        // What a container engine puts before the command. Without these,
+        // `--log` was taken for the command name and containerd got
+        // "unknown command '--log'" on its very first call.
+        if ((std.mem.eql(u8, args[i], "--log") or std.mem.eql(u8, args[i], "--log-format")) and i + 1 < args.len) {
+            i += 2;
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--systemd-cgroup")) {
+            i += 1;
             continue;
         }
         // Found the actual command
@@ -332,6 +360,7 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         .all = false,
         .console_socket = null,
         .pid_file = null,
+        .systemd_cgroup = false,
         .interactive = false,
         .tty = false,
         .user = null,
@@ -379,7 +408,14 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
                 return error.InvalidInput;
             };
             i += 2;
-        } else if ((std.mem.eql(u8, arg, "--log-level") or std.mem.eql(u8, arg, "--log-file")) and i + 1 < args.len) {
+        } else if (std.mem.eql(u8, arg, "--systemd-cgroup")) {
+            // cgroup management is libcrun's; accepted so an engine that sends
+            // it is not answered with a usage error
+            options.systemd_cgroup = true;
+            i += 1;
+        } else if ((std.mem.eql(u8, arg, "--log-level") or std.mem.eql(u8, arg, "--log-file") or
+            std.mem.eql(u8, arg, "--log") or std.mem.eql(u8, arg, "--log-format")) and i + 1 < args.len)
+        {
             // Global options, which LoggingConfig reads wherever they appear.
             // After the command name they used to reach the generic "-..."
             // branch below, which skipped only the flag, so its value became

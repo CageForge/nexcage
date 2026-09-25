@@ -13,6 +13,7 @@ pub const signals = @import("signals.zig");
 pub const exit_status = @import("exit_status.zig");
 pub const state_root = @import("state_root.zig");
 pub const json = @import("json.zig");
+pub const rfc3339 = @import("rfc3339.zig");
 pub const version = @import("version.zig");
 
 // Re-export commonly used types

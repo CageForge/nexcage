@@ -71,6 +71,7 @@ pub const CreateCommand = struct {
             .image = image,
             .console_socket = options.console_socket,
             .pid_file = options.pid_file,
+            .systemd_cgroup = options.systemd_cgroup,
         } };
         try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 

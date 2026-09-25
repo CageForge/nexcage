@@ -48,7 +48,18 @@ pub const ConfigLoader = struct {
     pub fn loadDefault(self: *Self) !Config {
         // --config replaces the search: a missing file is an error there, not
         // a reason to fall back to the defaults
-        if (explicit_path) |path| return self.loadFromFile(path);
+        if (explicit_path) |path| {
+            // Named on the command line, so silence would be wrong: say it is
+            // the wrong kind of file rather than "not found".
+            return self.loadFromFile(path) catch |err| switch (err) {
+                types.Error.FileNotFound => blk: {
+                    const content = std.fs.cwd().readFileAlloc(self.allocator, path, 1024 * 1024) catch break :blk types.Error.FileNotFound;
+                    defer self.allocator.free(content);
+                    break :blk if (isOciSpec(content)) types.Error.InvalidConfig else types.Error.FileNotFound;
+                },
+                else => err,
+            };
+        }
 
         // Try to load from default locations in order
         const default_paths = [_][]const u8{
@@ -78,7 +89,25 @@ pub const ConfigLoader = struct {
         };
         defer self.allocator.free(file_content);
 
+        // An OCI bundle holds a config.json that is a runtime spec, not
+        // nexcage's configuration, and a container engine runs the runtime
+        // from the bundle directory — so ./config.json in the search path
+        // found the spec and silently replaced the real configuration, taking
+        // the routing rules with it. A file declaring ociVersion is not ours.
+        if (isOciSpec(file_content)) return types.Error.FileNotFound;
+
         return self.loadFromString(file_content);
+    }
+
+    /// Whether this is an OCI runtime spec rather than a nexcage config.
+    /// Checked on the text: the spec parses as JSON perfectly well, so
+    /// parsing cannot tell them apart, and the difference is that a spec
+    /// declares ociVersion at the top level.
+    fn isOciSpec(content: []const u8) bool {
+        var parsed = std.json.parseFromSlice(std.json.Value, std.heap.page_allocator, content, .{}) catch return false;
+        defer parsed.deinit();
+        if (parsed.value != .object) return false;
+        return parsed.value.object.get("ociVersion") != null;
     }
 
     /// Load configuration from string

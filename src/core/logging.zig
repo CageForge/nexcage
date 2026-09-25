@@ -1,4 +1,6 @@
 const std = @import("std");
+const json = @import("json.zig");
+const rfc3339 = @import("rfc3339.zig");
 
 /// Logging system for the application
 /// Log levels
@@ -12,6 +14,11 @@ pub const LogLevel = enum(u8) {
 };
 
 /// Log context
+/// How a log line is written. A container engine passes --log-format json and
+/// then reads the file back to find out why the runtime failed, so the shape
+/// matters: one object per line, with the fields runc writes.
+pub const LogFormat = enum { text, json };
+
 pub const LogContext = struct {
     allocator: std.mem.Allocator,
     file: std.fs.File,
@@ -19,6 +26,8 @@ pub const LogContext = struct {
     component: []const u8,
     timestamp: bool = true,
     colorize: bool = false,
+    /// --log-format. text for a person, json for a container engine.
+    format: LogFormat = .text,
 
     /// Messages are written to `file`. Console loggers should be given stderr:
     /// stdout carries command output (the list table, state JSON) that other
@@ -65,9 +74,6 @@ pub const LogContext = struct {
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
         if (@intFromEnum(level) < @intFromEnum(self.level)) return;
 
-        const color = if (self.colorize) self.getLevelColor(level) else "";
-        const reset = if (self.colorize) "\x1b[0m" else "";
-
         // Streaming rather than positional: a positional writer starts at
         // offset 0, so each message would overwrite the last one in a log file.
         var buffer: [1024]u8 = undefined;
@@ -75,9 +81,41 @@ pub const LogContext = struct {
         const out = &file_writer.interface;
 
         // A log line that cannot be written must not fail the operation it describes.
+        if (self.format == .json) {
+            // One object per line, with the fields runc writes and containerd
+            // reads back: it opens this file to report why the runtime failed.
+            var msg_buf: [2048]u8 = undefined;
+            const msg = std.fmt.bufPrint(&msg_buf, format, args) catch msg_buf[0..0];
+            out.writeAll("{\"level\":\"") catch return;
+            out.writeAll(self.getJsonLevel(level)) catch return;
+            out.writeAll("\",\"msg\":") catch return;
+            json.writeString(out, msg) catch return;
+            var ts_buf: [20]u8 = undefined;
+            out.writeAll(",\"time\":\"") catch return;
+            out.writeAll(rfc3339.format(&ts_buf, std.time.timestamp())) catch return;
+            out.writeAll("\"}\n") catch return;
+            out.flush() catch return;
+            return;
+        }
+
+        const color = if (self.colorize) self.getLevelColor(level) else "";
+        const reset = if (self.colorize) "\x1b[0m" else "";
+
         if (self.timestamp) out.print("[{d}] ", .{std.time.timestamp()}) catch return;
         out.print("{s}{s}{s} {s}: " ++ format ++ "\n", .{ color, self.getLevelString(level), reset, self.component } ++ args) catch return;
         out.flush() catch return;
+    }
+
+    /// The level names runc uses, which is what an engine expects to parse.
+    fn getJsonLevel(self: *LogContext, level: LogLevel) []const u8 {
+        _ = self;
+        return switch (level) {
+            .trace, .debug => "debug",
+            .info => "info",
+            .warn => "warning",
+            .@"error" => "error",
+            .fatal => "fatal",
+        };
     }
 
     fn getLevelString(self: *LogContext, level: LogLevel) []const u8 {

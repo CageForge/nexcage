@@ -23,6 +23,9 @@ pub const CrunDriver = struct {
     /// the length of the command; initContext copies them NUL-terminated.
     console_socket: ?[]const u8 = null,
     pid_file: ?[]const u8 = null,
+    /// --systemd-cgroup: libcrun's context has the field; containerd sends the
+    /// flag when it is configured with SystemdCgroup.
+    systemd_cgroup: bool = false,
     _console_socket_z: ?[:0]u8 = null,
     _pid_file_z: ?[:0]u8 = null,
     // Stored strings and context to keep them valid during usage
@@ -103,6 +106,8 @@ pub const CrunDriver = struct {
         } else {
             ctx.pid_file = null;
         }
+
+        ctx.systemd_cgroup = self.systemd_cgroup;
 
         // Initialize optional fields (already zeroed by zeroes, which sets pointers to null)
         // Additional initialization not needed - zeroed context is sufficient

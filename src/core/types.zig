@@ -220,6 +220,9 @@ pub const RuntimeOptions = struct {
     /// `create --pid-file <path>`: where the runtime writes the container
     /// process's pid, so the caller can find it without parsing `state`.
     pid_file: ?[]const u8 = null,
+    /// `--systemd-cgroup`: manage cgroups through systemd. containerd sends it
+    /// when configured with SystemdCgroup, and libcrun has the field for it.
+    systemd_cgroup: bool = false,
     interactive: bool = false,
     tty: bool = false,
     user: ?[]const u8 = null,
