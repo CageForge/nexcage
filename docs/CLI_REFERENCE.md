@@ -228,6 +228,15 @@ Prints OCI runtime state JSON:
 }
 ```
 
+On `--runtime crun` the state comes from libcrun, which writes it itself, so
+the output is what `crun state` gives for the same container — the same fields
+in the same order, including `rootfs`, `created`, `systemd-scope` and `owner`,
+which the Proxmox LXC backend has no way to report. A container libcrun does
+not know is an error (exit 1) carrying libcrun's own message.
+
+On the Proxmox LXC backend nexcage composes the state itself, because `pct` has
+no such call:
+
 `status` is `created` for a container not yet started through nexcage, or
 `running`, `stopped` or `paused` as pct reports it. `pid` is the host PID of the
 container's init while it runs, and 0 otherwise. `bundle` is the directory the

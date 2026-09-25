@@ -382,6 +382,10 @@ check "--runtime before the command routes, instead of being dropped" all 'rc 0'
 nx --runtime bogus state from-tpl
 check "--runtime bogus before the command -> exit 2, no leak" rc 2
 
+nx --runtime crun state some-id
+check "state on a crun binary that lacks the backend -> exit 1, says how to build it" \
+  all 'rc 1' 'err_has "not built into this binary"' 'not_called_re "^pct"'
+
 nx create sock-1 --bundle /tmp/nexcage-bundles/b1 --console-socket /run/x.sock
 check "--console-socket on the LXC backend -> exit 1, says why and what to use" \
   all 'rc 1' 'err_has "pct create starts no process"' 'err_has "--runtime crun"' 'not_called_re "^pct create"'

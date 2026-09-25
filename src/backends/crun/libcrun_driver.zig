@@ -321,6 +321,32 @@ pub const CrunDriver = struct {
     }
 
     /// Execute a command in a running container (best-effort; may be limited by libcrun API)
+    /// Print the container's OCI state, as the runtime-spec defines it.
+    ///
+    /// libcrun writes the JSON itself, to a FILE*, so the output is what
+    /// `crun state` gives for the same container rather than a second
+    /// rendering of the same fields that could drift from it. The LXC backend
+    /// has to compose its own because pct has no such call.
+    pub fn state(self: *Self, container_id: []const u8) !void {
+        try validation.SecurityValidation.validateContainerId(container_id);
+
+        const ctx = try self.initContext("", container_id);
+
+        const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
+        defer self.allocator.free(id_c);
+
+        var err_ptr: ?*ffi.Libcrun.Error = null;
+        const out: ?*anyopaque = @ptrCast(c_stdio.stdout);
+        const ret = ffi.Libcrun.libcrun_container_state(ctx, id_c.ptr, out, &err_ptr);
+        // libcrun buffers through the FILE*; without this the JSON can arrive
+        // after whatever the process writes next, or not at all on exit.
+        _ = c_stdio.fflush(c_stdio.stdout);
+        if (ret != 0) {
+            try self.handleError(&err_ptr, "container_state");
+            return;
+        }
+    }
+
     /// Not implemented. libcrun exposes an exec entry point, but no binding
     /// for it exists in libcrun_ffi.zig, so there is nothing to call. This
     /// used to build a C argv, discard it and return OperationNotSupported
