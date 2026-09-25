@@ -122,6 +122,18 @@ looked where nothing had written. It uses the caller's directory now, and
 honours `--root`; bundles are no longer confined to two directories, because a
 container engine picks its own and runc and crun accept any.
 
+The first thing the crun backend asks for, now that it reports what libcrun
+says, is a console socket:
+
+```
+$ nexcage --runtime crun create t1 --bundle /run/eb/t1
+libcrun container_create: use --console-socket with create when a terminal is used
+```
+
+which is the same line `crun create` prints for the same bundle. A spec with
+`terminal: true` cannot be created without one, so `--console-socket` is the
+next piece of the command line to build, not a later nicety.
+
 `--pid-file` and `--console-socket` are where the Proxmox LXC backend stops
 being able to pretend: the runtime-spec means `create` to leave the container's
 process alive and waiting, and `pct create` starts nothing, so there is no PID
