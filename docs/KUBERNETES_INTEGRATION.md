@@ -21,7 +21,7 @@ next step, not by size.
 | # | Gap | Today | Needed for |
 |---|---|---|---|
 | 1 | `exec` | **Done on Proxmox LXC**, which runs `pct exec` and exits with the command's status as `runc exec` does. crun and runc have none: libcrun's exec entry point has no binding in `libcrun_ffi.zig` | `kubectl exec`, CRI `ExecSync`, exec probes |
-| 2 | OCI runtime-spec CLI | **Partly done.** `create <id> --bundle <dir>` and `--root <dir>` work; `--pid-file` and `--console-socket` do not | A containerd shim, and `runc`-compatible tooling generally |
+| 2 | OCI runtime-spec CLI | **Partly done.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | ~~`state.bundle`~~ | **Done.** `state` reports the bundle the container was created from, and `start` and `stop` keep it | The same. A shim reads the bundle path back from `state` |
 | 4 | Missing verbs | `delete --force` and `kill --all` are done; no `ps`, `events`, `features`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
@@ -113,7 +113,7 @@ and the crun backend behind it.
 | `state` | `bundle` filled in | done, and `start`/`stop` keep it |
 | `delete` | `--force` | done: shuts the container down first |
 | `kill` | `--all` | accepted, and says what it really does on LXC |
-| `create` | `--pid-file <file>`, `--console-socket <sock>` | **not yet** |
+| `create` | `--pid-file <file>`, `--console-socket <sock>` | done on crun: the pty's master end arrives over `SCM_RIGHTS` and is a real tty. Refused on Proxmox LXC, which starts no process on create |
 | also read | `ps`, `features`, `pause`, `resume`, `update` | **not yet** |
 
 The crun backend took the bundle path from the container id —
@@ -122,17 +122,22 @@ looked where nothing had written. It uses the caller's directory now, and
 honours `--root`; bundles are no longer confined to two directories, because a
 container engine picks its own and runc and crun accept any.
 
-The first thing the crun backend asks for, now that it reports what libcrun
-says, is a console socket:
+`--console-socket` was the first thing the crun backend asked for once it could
+report what libcrun says, and it is done: with the flag, `create` on a bundle
+whose spec sets `process.terminal` succeeds and the master end of the pty
+arrives on the caller's socket —
 
 ```
-$ nexcage --runtime crun create t1 --bundle /run/eb/t1
-libcrun container_create: use --console-socket with create when a terminal is used
+RECEIVED_FDS=1
+IS_A_TTY=True
 ```
 
-which is the same line `crun create` prints for the same bundle. A spec with
-`terminal: true` cannot be created without one, so `--console-socket` is the
-next piece of the command line to build, not a later nicety.
+— while the same bundle without it still answers `use --console-socket with
+create when a terminal is used`. That is the first runtime-spec `create` that
+completes on nexcage.
+
+What it does not yet buy is a lifecycle a caller can follow: `state` is still
+missing on this backend, so nothing can read back what was created.
 
 `--pid-file` and `--console-socket` are where the Proxmox LXC backend stops
 being able to pretend: the runtime-spec means `create` to leave the container's

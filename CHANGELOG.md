@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `create --console-socket <path>` and `create --pid-file <path>`, the two runtime-spec options a container engine sends with `create`. On the crun backend `--console-socket` makes a bundle whose spec sets `process.terminal` creatable at all: the runtime allocates the pty and sends its master end over the caller's Unix socket with `SCM_RIGHTS` — checked by receiving it and confirming `isatty` — where the same bundle without the flag still answers "use --console-socket with create when a terminal is used". The fields were already present in the libcrun context struct and simply never filled in; the Zig declaration was verified field by field against `struct libcrun_context_s` at the commit `deps/crun` is pinned to.
+- On the Proxmox LXC backend both flags fail with exit 1 and explain why: `pct create` starts no process, so there is no pty to hand over and no pid to write. They are refused rather than accepted and ignored — a caller that passes `--console-socket` and receives no file descriptor waits for one that never arrives.
+
 ### Changed
 - The crun backend says what libcrun said. `struct libcrun_error_s` was declared opaque in the FFI, so every failure was released unread and reported as "libcrun <operation> failed". It is bound now, and the message matches what `crun` itself prints — `libcrun container_create: use --console-socket with create when a terminal is used`, where there used to be nothing to go on. The failure is still `OperationFailed`: `e.status` cannot be mapped onto a specific error reliably, because `crun_error_wrap` keeps whatever status the innermost error set and several paths format the errno into the message and leave status at 0.
 

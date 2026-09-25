@@ -134,6 +134,22 @@ pub const BackendRouter = struct {
         if (self.logger) |log| proxmox_backend.setLogger(log);
         proxmox_backend.setDebugMode(self.debug_mode);
 
+        // --console-socket and --pid-file mean what the runtime-spec means by
+        // them: create leaves the container's process alive on a pty, and the
+        // runtime hands the master end over and writes the pid. `pct create`
+        // starts nothing, so there is neither. Refusing is the point — a flag
+        // accepted and ignored is worse than one rejected.
+        if (operation == .create) {
+            const cc = operation.create;
+            if (cc.console_socket != null or cc.pid_file != null) {
+                const which = if (cc.console_socket != null) "--console-socket" else "--pid-file";
+                if (self.logger) |log| {
+                    log.err("{s} is not possible on the Proxmox LXC backend: pct create starts no process, so there is no pty to hand over and no pid to write. Use --runtime crun", .{which}) catch {};
+                }
+                return types.Error.UnsupportedOperation;
+            }
+        }
+
         switch (operation) {
             .create => try proxmox_backend.create(sandbox_config),
             .start => try proxmox_backend.start(container_id),
@@ -166,7 +182,9 @@ pub const BackendRouter = struct {
         defer crun_backend.deinit();
 
         switch (operation) {
-            .create => {
+            .create => |create_cfg| {
+                crun_backend.console_socket = create_cfg.console_socket;
+                crun_backend.pid_file = create_cfg.pid_file;
                 const sandbox_config = try self.createSandboxConfig(operation, container_id, .crun, config);
                 defer self.cleanupSandboxConfig(operation, &sandbox_config);
                 try crun_backend.create(sandbox_config);
@@ -247,6 +265,11 @@ pub const Operation = union(enum) {
 
 pub const CreateConfig = struct {
     image: []const u8,
+    /// Where to send the master end of the container's pty, and where to write
+    /// the container process's pid. Both belong to the runtime-spec `create`;
+    /// only a backend that starts a process on create can honour them.
+    console_socket: ?[]const u8 = null,
+    pid_file: ?[]const u8 = null,
 };
 
 pub const RunConfig = struct {

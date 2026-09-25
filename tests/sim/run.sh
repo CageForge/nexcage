@@ -382,6 +382,15 @@ check "--runtime before the command routes, instead of being dropped" all 'rc 0'
 nx --runtime bogus state from-tpl
 check "--runtime bogus before the command -> exit 2, no leak" rc 2
 
+nx create sock-1 --bundle /tmp/nexcage-bundles/b1 --console-socket /run/x.sock
+check "--console-socket on the LXC backend -> exit 1, says why and what to use" \
+  all 'rc 1' 'err_has "pct create starts no process"' 'err_has "--runtime crun"' 'not_called_re "^pct create"'
+nx create pidf-1 --bundle /tmp/nexcage-bundles/b1 --pid-file /run/x.pid
+check "--pid-file on the LXC backend -> exit 1, refused rather than ignored" \
+  all 'rc 1' 'err_has "--pid-file"' 'not_called_re "^pct create"'
+nx create plain-1 --bundle /tmp/nexcage-bundles/b1
+check "without either flag the bundle path is unaffected" all 'rc 0' 'called_re "^pct create [0-9]+ "'
+
 nx delete spec-1
 check "delete refuses a running container without --force" rc 1
 nx delete spec-1 --force

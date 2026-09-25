@@ -19,6 +19,12 @@ pub const CrunDriver = struct {
     /// and a container engine always passes its own directory with --root; the
     /// default is kept for a caller that gives none.
     state_root: []const u8 = "/run/crun",
+    /// --console-socket and --pid-file, as the caller gave them. Borrowed for
+    /// the length of the command; initContext copies them NUL-terminated.
+    console_socket: ?[]const u8 = null,
+    pid_file: ?[]const u8 = null,
+    _console_socket_z: ?[:0]u8 = null,
+    _pid_file_z: ?[:0]u8 = null,
     // Stored strings and context to keep them valid during usage
     _state_root_z: ?[:0]u8 = null,
     _bundle_z: ?[:0]u8 = null,
@@ -38,6 +44,8 @@ pub const CrunDriver = struct {
     pub fn deinit(self: *Self) void {
         if (self._context) |ctx| self.allocator.destroy(ctx);
         if (self._state_root_z) |s| self.allocator.free(s);
+        if (self._console_socket_z) |cs| self.allocator.free(cs);
+        if (self._pid_file_z) |pf| self.allocator.free(pf);
         if (self._bundle_z) |b| self.allocator.free(b);
         if (self._id_z) |i| self.allocator.free(i);
     }
@@ -75,6 +83,26 @@ pub const CrunDriver = struct {
         if (self._id_z) |i| self.allocator.free(i);
         self._id_z = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
         ctx.id = self._id_z.?.ptr;
+
+        // A spec with process.terminal set cannot be created without a console
+        // socket: libcrun answers "use --console-socket with create when a
+        // terminal is used". The fields were already in the context struct and
+        // simply never filled in.
+        if (self.console_socket) |path| {
+            if (self._console_socket_z) |cs| self.allocator.free(cs);
+            self._console_socket_z = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{path}, 0);
+            ctx.console_socket = self._console_socket_z.?.ptr;
+        } else {
+            ctx.console_socket = null;
+        }
+
+        if (self.pid_file) |path| {
+            if (self._pid_file_z) |pf| self.allocator.free(pf);
+            self._pid_file_z = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{path}, 0);
+            ctx.pid_file = self._pid_file_z.?.ptr;
+        } else {
+            ctx.pid_file = null;
+        }
 
         // Initialize optional fields (already zeroed by zeroes, which sets pointers to null)
         // Additional initialization not needed - zeroed context is sufficient

@@ -213,6 +213,13 @@ pub const RuntimeOptions = struct {
     force: bool = false,
     /// `kill --all`: signal every process, not only the init
     all: bool = false,
+    /// `create --console-socket <path>`: where the runtime sends the master
+    /// end of the container's pty, over SCM_RIGHTS. A container engine passes
+    /// it whenever the spec asks for a terminal.
+    console_socket: ?[]const u8 = null,
+    /// `create --pid-file <path>`: where the runtime writes the container
+    /// process's pid, so the caller can find it without parsing `state`.
+    pid_file: ?[]const u8 = null,
     interactive: bool = false,
     tty: bool = false,
     user: ?[]const u8 = null,
@@ -226,6 +233,8 @@ pub const RuntimeOptions = struct {
         if (self.config_file) |cfg| self.allocator.free(cfg);
         if (self.user) |u| self.allocator.free(u);
         if (self.workdir) |wd| self.allocator.free(wd);
+        if (self.console_socket) |cs| self.allocator.free(cs);
+        if (self.pid_file) |pf| self.allocator.free(pf);
         if (self.env) |e| {
             for (e) |env_var| {
                 // env vars are not allocated, just referenced
