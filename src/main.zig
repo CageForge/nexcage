@@ -346,6 +346,8 @@ fn printUsage() !void {
         \\  exec      Run a command inside a running container
         \\  features  Show what this runtime implements, as an OCI features document
         \\  ps        List the host PIDs of the processes in a container
+        \\  images    List the container templates the cluster can create from
+        \\  pull      Fetch an OCI image into a Proxmox storage as a template
         \\  run       Create and start a container
         \\  help      Show this help message
         \\  version   Show version information
@@ -480,6 +482,12 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             // --log-format, which shapes nexcage's own log.
             options.format = try allocator.dupe(u8, args[i + 1]);
             i += 2;
+        } else if (std.mem.eql(u8, arg, "--storage") and i + 1 < args.len) {
+            options.storage_name = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--filename") and i + 1 < args.len) {
+            options.filename = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
         } else if (std.mem.eql(u8, arg, "--node") and i + 1 < args.len) {
             // Which node of the Proxmox cluster `create` should make the
             // container on.
@@ -610,6 +618,8 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "kill")) return .kill;
     if (std.mem.eql(u8, command_str, "features")) return .features;
     if (std.mem.eql(u8, command_str, "ps")) return .ps;
+    if (std.mem.eql(u8, command_str, "images")) return .images;
+    if (std.mem.eql(u8, command_str, "pull")) return .pull;
     return .help; // Default to help
 }
 

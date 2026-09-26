@@ -200,6 +200,8 @@ pub const Command = enum {
     kill,
     features,
     ps,
+    images,
+    pull,
 };
 
 /// Runtime options
@@ -239,8 +241,14 @@ pub const RuntimeOptions = struct {
     process_file: ?[]const u8 = null,
     /// `ps --format <json|table>`. containerd asks for json.
     format: ?[]const u8 = null,
-    /// `create --node <name>`: which node of the Proxmox cluster to create on.
+    /// `create --node <name>`: which node of the Proxmox cluster to create on,
+    /// and which node `images` and `pull` act on.
     node: ?[]const u8 = null,
+    /// `pull --storage <name>`: the Proxmox storage to put the template on.
+    storage_name: ?[]const u8 = null,
+    /// `pull --filename <name>`: the destination file name, which Proxmox
+    /// normalises.
+    filename: ?[]const u8 = null,
 
     pub fn deinit(self: *RuntimeOptions) void {
         if (self.container_id) |id| self.allocator.free(id);
@@ -251,6 +259,8 @@ pub const RuntimeOptions = struct {
         if (self.process_file) |pf| self.allocator.free(pf);
         if (self.format) |f| self.allocator.free(f);
         if (self.node) |n| self.allocator.free(n);
+        if (self.storage_name) |sn| self.allocator.free(sn);
+        if (self.filename) |f| self.allocator.free(f);
         if (self.console_socket) |cs| self.allocator.free(cs);
         if (self.pid_file) |pf| self.allocator.free(pf);
         if (self.env) |e| {

@@ -24,15 +24,48 @@ case "$1 $2" in
     done < "$SIM/db"
     printf ']\n'
     ;;
+  "get /nodes")
+    # $SIM/nodes lists the cluster's nodes, one per line; without it there is
+    # only this host, which is what a standalone Proxmox looks like.
+    printf '['
+    sep=""
+    if [ -s "$SIM/nodes" ]; then
+      while read -r n; do
+        [ -n "$n" ] || continue
+        printf '%s{"node":"%s","status":"online","type":"node"}' "$sep" "$n"; sep=","
+      done < "$SIM/nodes"
+    else
+      printf '{"node":"%s","status":"online","type":"node"}' "$HERE"
+    fi
+    printf ']\n'
+    ;;
+  "get /nodes/"*/storage)
+    # $SIM/node_storages holds "node storage shared" lines.
+    node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage|\1|p')
+    printf '['
+    sep=""
+    if [ -s "$SIM/node_storages" ]; then
+      while read -r n st shared; do
+        [ "$n" = "$node" ] || continue
+        printf '%s{"storage":"%s","content":"vztmpl,rootdir","shared":%s}' "$sep" "$st" "${shared:-0}"; sep=","
+      done < "$SIM/node_storages"
+    else
+      printf '{"storage":"local","content":"vztmpl,rootdir","shared":0}'
+    fi
+    printf ']\n'
+    ;;
   "get /nodes/"*/storage/*/content)
     # What templates a node can see. $SIM/node_templates holds "node volid"
     # lines; without a line for that node it has none, which is what makes the
     # "the template is not there" check mean something.
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
+    want_storage=$(echo "$2" | sed -n 's|/nodes/[^/]*/storage/\([^/]*\)/content.*|\1|p')
     printf '['
     sep=""
     while read -r n volid; do
       [ "$n" = "$node" ] || continue
+      # a volid is "<storage>:vztmpl/<file>", so it belongs to one storage
+      [ "${volid%%:*}" = "$want_storage" ] || continue
       printf '%s{"volid":"%s","content":"vztmpl","format":"tzst"}' "$sep" "$volid"
       sep=","
     done < "${SIM}/node_templates" 2>/dev/null
@@ -80,9 +113,16 @@ case "$1 $2" in
     echo "$((max + 1))"
     ;;
   "create /nodes/"*)
+    # oci-registry-pull. The pulled file has to appear in two places: $SIM/templates,
+    # which the create path's template detection reads, and $SIM/node_templates,
+    # which is what a storage's content listing answers from -- `pull` reads the
+    # volid back from the storage rather than composing it.
     [ -e "$SIM/fail_pull" ] && { echo "pull failed" >&2; exit 1; }
+    node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
+    store=$(echo "$2" | sed -n 's|/nodes/[^/]*/storage/\([^/]*\)/oci-registry-pull|\1|p')
     ref=$4; tag=${ref##*:}; img=${ref%:*}; img=${img##*/}
     echo "local:vztmpl/${img}_${tag}.tar" >> "$SIM/templates"
+    echo "$node ${store:-local}:vztmpl/${img}_${tag}.tar" >> "$SIM/node_templates"
     ;;
   *) echo "fake pvesh: unsupported $*" >&2; exit 99 ;;
 esac

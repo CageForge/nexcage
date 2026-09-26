@@ -197,6 +197,120 @@ pub const PveClient = struct {
         return try std.fmt.allocPrint(self.allocator, "{s}:vztmpl/{s}_{s}.tar", .{ storage, image_name, tag_part });
     }
 
+    /// Pull an OCI image into a storage on a node, and answer with the volid
+    /// the storage ended up holding.
+    ///
+    /// The volid is read back from the storage rather than composed from the
+    /// reference. `pullOciImage` composes it, which is a guess about how PVE
+    /// normalises a name -- and the endpoint's own documentation says the
+    /// filename "will be normalized". Asking the storage is the only way to
+    /// know, and the answer is what `create` needs to be given.
+    ///
+    /// There is no credential parameter on this endpoint, so a private registry
+    /// cannot be authenticated here. The caller is told rather than left to
+    /// wonder why a pull fails.
+    pub fn pullTemplate(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+        node: []const u8,
+        storage: []const u8,
+        reference: []const u8,
+        filename: ?[]const u8,
+    ) ![]u8 {
+        const before = try self.volidsOf(allocator, node, storage);
+        defer {
+            for (before) |v| allocator.free(v);
+            allocator.free(before);
+        }
+
+        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/oci-registry-pull", .{ node, storage });
+        defer self.allocator.free(path);
+
+        var args = std.ArrayListUnmanaged([]const u8){};
+        defer args.deinit(self.allocator);
+        try args.appendSlice(self.allocator, &.{ "pvesh", "create", path, "--reference", reference });
+        if (filename) |f| try args.appendSlice(self.allocator, &.{ "--filename", f });
+
+        const res = try common.runCommand(self.allocator, self.logger, args.items);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        const already_there = res.exit_code == 25 and
+            std.mem.indexOf(u8, res.stderr, "refusing to override existing file") != null;
+        if (res.exit_code != 0 and !already_there) {
+            if (self.logger) |log| {
+                log.err("pulling {s} into {s} on {s} failed: {s}", .{ reference, storage, node, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
+            }
+            return core.Error.OperationFailed;
+        }
+
+        const after = try self.volidsOf(allocator, node, storage);
+        defer {
+            for (after) |v| allocator.free(v);
+            allocator.free(after);
+        }
+
+        // What appeared. With nothing new and no "already there", the pull
+        // reported success and left the storage as it was, which is worth an
+        // error rather than a volid nobody can use.
+        for (after) |candidate| {
+            var found_before = false;
+            for (before) |old_volid| {
+                if (std.mem.eql(u8, old_volid, candidate)) found_before = true;
+            }
+            if (!found_before) return try allocator.dupe(u8, candidate);
+        }
+
+        if (already_there) {
+            // Nothing new because it was there already: name the one that
+            // matches what was asked for.
+            if (try self.matchTemplate(allocator, after, reference, filename)) |match| return match;
+        }
+
+        if (self.logger) |log| {
+            log.err("the pull of {s} reported success but {s} on {s} holds no new template", .{ reference, storage, node }) catch {};
+        }
+        return core.Error.OperationFailed;
+    }
+
+    /// The volid whose file name looks like what was asked for, or null.
+    fn matchTemplate(self: *const Self, allocator: std.mem.Allocator, volids: []const []u8, reference: []const u8, filename: ?[]const u8) !?[]u8 {
+        _ = self;
+        if (filename) |f| {
+            for (volids) |v| {
+                if (std.mem.endsWith(u8, v, f)) return try allocator.dupe(u8, v);
+            }
+        }
+        // docker.io/library/redis:7 -> "redis" and "7"
+        const colon = std.mem.lastIndexOfScalar(u8, reference, ':') orelse reference.len;
+        const name_part = reference[0..colon];
+        const tag = if (colon < reference.len) reference[colon + 1 ..] else "latest";
+        const slash = std.mem.lastIndexOfScalar(u8, name_part, '/');
+        const image = if (slash) |i| name_part[i + 1 ..] else name_part;
+        for (volids) |v| {
+            if (std.mem.indexOf(u8, v, image) != null and std.mem.indexOf(u8, v, tag) != null) {
+                return try allocator.dupe(u8, v);
+            }
+        }
+        return null;
+    }
+
+    /// The volids of the templates on one storage of one node.
+    fn volidsOf(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8) ![][]u8 {
+        var out = std.ArrayListUnmanaged(Template){};
+        defer {
+            for (out.items) |*t| t.deinit();
+            out.deinit(allocator);
+        }
+        self.appendTemplatesOf(allocator, &out, node, storage, false) catch {};
+
+        var volids = try allocator.alloc([]u8, out.items.len);
+        errdefer allocator.free(volids);
+        for (out.items, 0..) |t, i| volids[i] = try allocator.dupe(u8, t.volid);
+        return volids;
+    }
+
     /// Ask the cluster for the next free VMID.
     ///
     /// This replaces a hash of the container name, which could land on a VMID
@@ -345,6 +459,212 @@ pub const PveClient = struct {
         }
 
         return core.Error.NotFound;
+    }
+
+    /// A template as a storage lists it.
+    pub const Template = struct {
+        allocator: std.mem.Allocator,
+        node: []u8,
+        storage: []u8,
+        volid: []u8,
+        format: []u8,
+        size: u64,
+        /// A shared storage shows the same files on every node, so this one is
+        /// reported once rather than once per node.
+        shared: bool,
+
+        pub fn deinit(self: *Template) void {
+            self.allocator.free(self.node);
+            self.allocator.free(self.storage);
+            self.allocator.free(self.volid);
+            self.allocator.free(self.format);
+        }
+    };
+
+    /// The nodes of the cluster, or just this one when the cluster cannot be
+    /// asked. The caller frees each name and the slice.
+    pub fn nodes(self: *const Self, allocator: std.mem.Allocator) ![][]u8 {
+        const args = [_][]const u8{ "pvesh", "get", "/nodes", "--output-format", "json" };
+        if (common.runCommand(self.allocator, self.logger, &args)) |res| {
+            defer {
+                self.allocator.free(res.stdout);
+                self.allocator.free(res.stderr);
+            }
+            if (res.exit_code == 0) {
+                if (std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{})) |parsed| {
+                    defer parsed.deinit();
+                    if (parsed.value == .array) {
+                        var out = std.ArrayListUnmanaged([]u8){};
+                        errdefer {
+                            for (out.items) |n| allocator.free(n);
+                            out.deinit(allocator);
+                        }
+                        for (parsed.value.array.items) |item| {
+                            if (item != .object) continue;
+                            const n = item.object.get("node") orelse continue;
+                            if (n != .string) continue;
+                            try out.append(allocator, try allocator.dupe(u8, n.string));
+                        }
+                        if (out.items.len > 0) return try out.toOwnedSlice(allocator);
+                        out.deinit(allocator);
+                    }
+                } else |_| {}
+            }
+        } else |_| {}
+
+        // No cluster to ask: this host is the whole of it.
+        const here = try self.getNodeName();
+        defer self.allocator.free(here);
+        var one = try allocator.alloc([]u8, 1);
+        errdefer allocator.free(one);
+        one[0] = try allocator.dupe(u8, here);
+        return one;
+    }
+
+    /// Every container template the cluster can see.
+    ///
+    /// A shared storage carries the same files on every node, so it is listed
+    /// from the first node that reports it and skipped afterwards -- otherwise
+    /// one template on a shared storage appears once per node and a person
+    /// counting them gets a number that means nothing.
+    pub fn listTemplates(self: *const Self, allocator: std.mem.Allocator, only_node: ?[]const u8) ![]Template {
+        const node_names = try self.nodes(allocator);
+        defer {
+            for (node_names) |n| allocator.free(n);
+            allocator.free(node_names);
+        }
+
+        var out = std.ArrayListUnmanaged(Template){};
+        errdefer {
+            for (out.items) |*t| t.deinit();
+            out.deinit(allocator);
+        }
+        // Owned copies: the storage entries are freed at the end of each node's
+        // turn, so keeping their names here would leave this comparing freed
+        // memory -- which does not crash, it just stops deduplicating, and the
+        // shared storage gets listed once per node again.
+        var seen_shared = std.ArrayListUnmanaged([]u8){};
+        defer {
+            for (seen_shared.items) |name| self.allocator.free(name);
+            seen_shared.deinit(self.allocator);
+        }
+
+        for (node_names) |node| {
+            if (only_node) |want| if (!std.mem.eql(u8, want, node)) continue;
+
+            const stores = try self.templateStorages(node);
+            defer {
+                for (stores) |st| {
+                    self.allocator.free(st.name);
+                }
+                self.allocator.free(stores);
+            }
+
+            for (stores) |st| {
+                if (st.shared) {
+                    var already = false;
+                    for (seen_shared.items) |name| {
+                        if (std.mem.eql(u8, name, st.name)) already = true;
+                    }
+                    if (already) continue;
+                    try seen_shared.append(self.allocator, try self.allocator.dupe(u8, st.name));
+                }
+                try self.appendTemplatesOf(allocator, &out, node, st.name, st.shared);
+            }
+        }
+
+        return try out.toOwnedSlice(allocator);
+    }
+
+    const StorageEntry = struct { name: []u8, shared: bool };
+
+    /// The storages of a node that can hold container templates.
+    fn templateStorages(self: *const Self, node: []const u8) ![]StorageEntry {
+        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage", .{node});
+        defer self.allocator.free(path);
+        const args = [_][]const u8{ "pvesh", "get", path, "--output-format", "json" };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) return core.Error.OperationFailed;
+
+        const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{});
+        defer parsed.deinit();
+        if (parsed.value != .array) return core.Error.OperationFailed;
+
+        var out = std.ArrayListUnmanaged(StorageEntry){};
+        errdefer {
+            for (out.items) |e| self.allocator.free(e.name);
+            out.deinit(self.allocator);
+        }
+        for (parsed.value.array.items) |item| {
+            if (item != .object) continue;
+            const content = if (item.object.get("content")) |c| (if (c == .string) c.string else "") else "";
+            if (std.mem.indexOf(u8, content, "vztmpl") == null) continue;
+            const name = if (item.object.get("storage")) |n| (if (n == .string) n.string else "") else "";
+            if (name.len == 0) continue;
+            const shared = if (item.object.get("shared")) |sh| switch (sh) {
+                .bool => |b| b,
+                .integer => |i| i != 0,
+                else => false,
+            } else false;
+            try out.append(self.allocator, .{ .name = try self.allocator.dupe(u8, name), .shared = shared });
+        }
+        return try out.toOwnedSlice(self.allocator);
+    }
+
+    fn appendTemplatesOf(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+        out: *std.ArrayListUnmanaged(Template),
+        node: []const u8,
+        storage: []const u8,
+        shared: bool,
+    ) !void {
+        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/content", .{ node, storage });
+        defer self.allocator.free(path);
+        const args = [_][]const u8{ "pvesh", "get", path, "--content", "vztmpl", "--output-format", "json" };
+        const res = common.runCommand(self.allocator, self.logger, &args) catch return;
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        // A storage that cannot be read is skipped rather than fatal: one
+        // offline mount should not hide every template in the cluster.
+        if (res.exit_code != 0) {
+            if (self.logger) |log| {
+                log.debug("storage {s} on {s} could not be listed", .{ storage, node }) catch {};
+            }
+            return;
+        }
+
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch return;
+        defer parsed.deinit();
+        if (parsed.value != .array) return;
+
+        for (parsed.value.array.items) |item| {
+            if (item != .object) continue;
+            const volid = if (item.object.get("volid")) |v| (if (v == .string) v.string else "") else "";
+            if (volid.len == 0) continue;
+            const format = if (item.object.get("format")) |f| (if (f == .string) f.string else "") else "";
+            const size: u64 = if (item.object.get("size")) |sz| switch (sz) {
+                .integer => |i| if (i < 0) 0 else @intCast(i),
+                .float => |f| @intFromFloat(f),
+                else => 0,
+            } else 0;
+
+            try out.append(allocator, .{
+                .allocator = allocator,
+                .node = try allocator.dupe(u8, node),
+                .storage = try allocator.dupe(u8, storage),
+                .volid = try allocator.dupe(u8, volid),
+                .format = try allocator.dupe(u8, format),
+                .size = size,
+                .shared = shared,
+            });
+        }
     }
 
     /// Refuse early unless the target node can see the template.
