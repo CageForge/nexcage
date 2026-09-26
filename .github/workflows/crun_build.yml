@@ -79,6 +79,18 @@ jobs:
                 "on crun", d["annotations"]["run.oci.crun.version"])
           PY
 
+      # The checks around this one are unit-sized. This is the interface a
+      # kubelet drives: a pod sandbox and a container in it, through
+      # containerd's CRI with nexcage as the runtime handler, on a CNI bridge.
+      # Three engine-facing defects in a row were invisible to everything here
+      # because nothing ran an engine.
+      - name: A pod runs on nexcage through containerd's CRI
+        run: |
+          set -eux
+          docker build -f tests/cri/Dockerfile -t nexcage:cri-test tests/cri
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/tests/cri:/t:ro" nexcage:cri-test /t/pod_on_nexcage.sh
+
       # A container engine does not run the runtime from the bundle it names:
       # containerd's shim serves a whole pod and runs it from the sandbox's
       # directory. Nothing before this exercised that, and the backend had

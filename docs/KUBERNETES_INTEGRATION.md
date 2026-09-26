@@ -26,7 +26,7 @@ next step, not by size.
 | 4 | Missing verbs | `delete --force`, `kill --all` and `features` are done; no `ps`, `events`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
 | 6 | No log handling | container output is not captured to a file | Kubelet reads `/var/log/pods/…/0.log`; `kubectl logs` needs it |
-| 7 | No CNI | `eth0` on `network.bridge` with DHCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
+| 7 | ~~No CNI~~ | **The engine's, not the runtime's.** containerd and CRI-O create the sandbox's network namespace, run the CNI plugins in it and hand the runtime a path to join. Verified on both: a pod gets an address from host-local and reaches another pod over TCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
 | 8 | No sandbox model | one container per name, no pod grouping | Multi-container pods sharing a network namespace, the pause container |
 | 9 | No image service | uses PVE templates, `pveam` and `oci-registry-pull` (PVE 9.1+) | CRI `ImageService`: pull with credentials, list, remove, image FS stats |
 | 10 | Fixed resources | 512 MiB and one core unless an OCI bundle sets limits | Translating pod requests and limits into cgroups |
@@ -346,13 +346,45 @@ What made both findings defects rather than guesses was the same control as
 before: two runtime handlers in one CRI-O config, one ending in nexcage and one
 in `/usr/bin/crun`, same pod, same bundles.
 
+**A pod network, and it is not this runtime's work.** The engine creates the
+sandbox's network namespace, runs the CNI plugins in it, and hands the runtime a
+path in `linux.namespaces`; joining a namespace by path is what libcrun already
+did for the sandbox's pid, ipc and uts. So the verification is what matters
+here, and it holds on both engines with a bridge plus host-local:
+
+```
+containerd: pod 10.88.0.2, default via 10.88.0.1     CRI-O: pod 10.89.0.2, default via 10.89.0.1
+
+# two pods, two network namespaces, both on nexcage
+pod A 10.88.0.4 listens on 8080; pod B 10.88.0.5 connects   ->   SERVED
+pod A 10.89.0.5 listens on 8080; pod B 10.89.0.6 connects   ->   SERVED
+```
+
+One thing looks like a failure and is not: `ping` to the gateway succeeds under
+containerd and fails under CRI-O. `CapEff: 00000000000005fb` in a CRI-O
+container has no `CAP_NET_RAW` (bit 13), which is CRI-O's default set, and plain
+crun through a second handler fails the same way. TCP between pods needs no raw
+socket and works on both, which is what a cluster actually requires.
+
+**This is now a check rather than a story.** `tests/cri/pod_on_nexcage.sh`
+creates a pod sandbox and a container in it through containerd's CRI, on a CNI
+bridge, and the crun CI job runs it on every pull request. Two things in it are
+deliberate. The container's image is not the sandbox's, because the first
+version used `pause` for both and **passed on a binary with the bundle defect** —
+`/pause` exists in the sandbox's rootfs too, so a container started from the
+wrong rootfs looked identical to one started from the right one. And the trace
+is asserted: without it the test would pass just as well with runc behind the
+handler. It fails on the pre-`chdir` binary with that binary's own message, and
+passes on this one.
+
 Of the gaps a pod needs, the CRI run settles three of them, and not because
 nexcage grew them: the shim captures the container's output to the file the
 kubelet reads, the sandbox holds the namespaces its containers join, and the
 cgroup comes from the spec containerd writes. That is the shape of this whole
 stage — the engine owns the pod, the runtime owns the container. What is left
-from that row is the cluster CNI (the pod above uses the node's network
-namespace) and `features`.
+from that row is what a cluster adds on top of a plain CNI bridge:
+`NetworkPolicy` and service routing, which belong to a CNI plugin and kube-proxy,
+not to a runtime.
 
 ## Related
 
