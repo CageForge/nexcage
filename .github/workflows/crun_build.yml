@@ -48,10 +48,14 @@ jobs:
       # then segfaults, or produces plausible rubbish. The check runs in the
       # builder stage because that is where deps/crun is checked out; the
       # production image does not carry the header.
+      # .dockerignore excludes scripts/ (all but one file), so the check comes
+      # in from the checkout rather than out of the image.
       - name: The features ABI still matches the vendored header
         run: |
+          set -eux
           docker build --target builder -t nexcage:builder .
-          docker run --rm nexcage:builder sh scripts/check_features_abi.sh
+          docker run --rm -v "$PWD/scripts:/s:ro" nexcage:builder \
+            sh /s/check_features_abi.sh
 
       # containerd's CRI asks for this once at startup. The values must be
       # libcrun's own, read from this build -- a features document written by
