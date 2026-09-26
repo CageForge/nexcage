@@ -33,6 +33,9 @@ pub const SandboxConfig = struct {
     security: ?SecurityConfig = null,
     network: ?NetworkConfig = null,
     storage: ?StorageConfig = null,
+    /// `create --node <name>`: the cluster node to make the container on.
+    /// Borrowed from the caller's options, which outlive the create.
+    node: ?[]const u8 = null,
 
     pub fn deinit(self: *SandboxConfig) void {
         self.allocator.free(self.name);
@@ -236,6 +239,8 @@ pub const RuntimeOptions = struct {
     process_file: ?[]const u8 = null,
     /// `ps --format <json|table>`. containerd asks for json.
     format: ?[]const u8 = null,
+    /// `create --node <name>`: which node of the Proxmox cluster to create on.
+    node: ?[]const u8 = null,
 
     pub fn deinit(self: *RuntimeOptions) void {
         if (self.container_id) |id| self.allocator.free(id);
@@ -245,6 +250,7 @@ pub const RuntimeOptions = struct {
         if (self.workdir) |wd| self.allocator.free(wd);
         if (self.process_file) |pf| self.allocator.free(pf);
         if (self.format) |f| self.allocator.free(f);
+        if (self.node) |n| self.allocator.free(n);
         if (self.console_socket) |cs| self.allocator.free(cs);
         if (self.pid_file) |pf| self.allocator.free(pf);
         if (self.env) |e| {

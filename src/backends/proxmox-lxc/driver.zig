@@ -193,6 +193,44 @@ pub const ProxmoxLxcDriver = struct {
             if (err != core.Error.NotFound) return err;
         }
 
+        // --node: make the container on another node of the cluster, through
+        // that node's API. Three things in the path below are local by
+        // construction, and each is refused rather than half-done.
+        var target_node: ?[]const u8 = null;
+        if (config.node) |wanted| {
+            const here = self.pve_client.getNodeName() catch null;
+            defer if (here) |h| self.allocator.free(h);
+            const same = if (here) |h| std.mem.eql(u8, h, wanted) else false;
+            if (!same) target_node = wanted;
+        }
+        if (target_node) |node| {
+            // A bundle's rootfs is packed into a template on *this* host's
+            // storage, and a registry pull lands here too. Neither is visible
+            // from another node unless the storage is shared, and nexcage
+            // cannot make it so.
+            const image_path = config.image orelse "";
+            const is_template = std.mem.indexOf(u8, image_path, ":vztmpl/") != null or
+                std.mem.endsWith(u8, image_path, ".tar.zst");
+            if (!is_template) {
+                if (self.logger) |log| {
+                    log.err("--node {s} needs a template that node can read, named <storage>:vztmpl/<file>. An OCI bundle is packed into a template on this host, and a registry image is pulled to this host, so neither reaches {s} unless the storage is shared", .{ node, node }) catch {};
+                }
+                return core.Error.UnsupportedOperation;
+            }
+
+            // A ZFS rootfs is a dataset in this host's pool. The container
+            // would be created there with a rootfs it cannot reach.
+            if (self.zfs_mgr.isZFSAvailable()) {
+                if (self.logger) |log| {
+                    log.err("--node {s} cannot be used with a ZFS rootfs: the dataset would be created in this host's pool. Configure a storage both nodes can use", .{node}) catch {};
+                }
+                return core.Error.UnsupportedOperation;
+            }
+
+            // Before a VMID is taken, and with a message that names the node.
+            try self.pve_client.requireTemplateOnNode(node, image_path);
+        }
+
         // 1. Process image / template
         var template_name: ?[]const u8 = null;
         defer if (template_name) |tname| self.allocator.free(tname);
@@ -297,7 +335,16 @@ pub const ProxmoxLxcDriver = struct {
             allocated_args.deinit();
         }
 
-        try args_builder.appendSlice(&[_][]const u8{ "pct", "create", vmid, final_template, "--hostname", config.name });
+        // The options after this are the same either way -- `pct create` and the
+        // API take the same names -- so only the front of the command differs.
+        var api_path: ?[]u8 = null;
+        defer if (api_path) |ap| self.allocator.free(ap);
+        if (target_node) |node| {
+            api_path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc", .{node});
+            try args_builder.appendSlice(&[_][]const u8{ "pvesh", "create", api_path.?, "--vmid", vmid, "--ostemplate", final_template, "--hostname", config.name });
+        } else {
+            try args_builder.appendSlice(&[_][]const u8{ "pct", "create", vmid, final_template, "--hostname", config.name });
+        }
 
         // Resources
         const mem_mb = if (bundle_config) |bc| (bc.memory_limit orelse (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES)) else (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES);
@@ -381,7 +428,11 @@ pub const ProxmoxLxcDriver = struct {
         try self.persistRuntimeMetadata(config.name, vmid, bundle_ptr, net_runtime.items);
         try self.writeOciState(config.name, "created", 0, oci_bundle_path);
 
-        if (self.logger) |log| log.info("Proxmox LXC container created: {s} (vmid {s})", .{ config.name, vmid }) catch {};
+        if (target_node) |node| {
+            if (self.logger) |log| log.info("Proxmox LXC container created on node {s}: {s} (vmid {s})", .{ node, config.name, vmid }) catch {};
+        } else {
+            if (self.logger) |log| log.info("Proxmox LXC container created: {s} (vmid {s})", .{ config.name, vmid }) catch {};
+        }
     }
 
     fn persistRuntimeMetadata(

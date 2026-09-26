@@ -78,9 +78,29 @@ answered wrongly:
 | `kill` | a signal goes to the container's init from the host, and the API has no call for that — `stop` and `delete` do work from here |
 | the `pid` in `state` | an init's PID belongs to its node's process table; reporting it here would name whatever holds that number on this host |
 
-`create` still makes the container on the host nexcage runs on. The name is
-checked across the whole cluster first, though, because every other command
-resolves a name and two containers sharing one would make that ambiguous.
+`create --node <name>` makes the container on another node:
+
+```bash
+nexcage create --name web-2 --node titan local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst
+```
+
+The name is checked across the whole cluster first, because every other command
+resolves a name and two containers sharing one would make that ambiguous. Then
+the template is checked **on the target node**, before a VMID is taken: a storage
+called `local` is a different directory on every node unless it is shared, so a
+volid that exists here may simply not be there. The message names the node and
+the storage rather than leaving the API to say "volume does not exist".
+
+Three things `--node` will not do, and refuses rather than half-does:
+
+| | why |
+|---|---|
+| an OCI bundle (`--bundle`) | its rootfs is packed into a template on **this** host's storage, which the other node cannot read unless that storage is shared |
+| a registry image (`docker.io/...`) | the pull lands on this host, for the same reason |
+| a ZFS rootfs | the dataset would be created in this host's pool, and the container there could not reach it |
+
+`--node` naming the host nexcage is running on is not "another node": it takes
+the ordinary local path, `pct` and all.
 
 On a host that is not in a cluster, or where `pvesh` cannot be reached, nexcage
 falls back to `pct` and behaves exactly as it did: this host's containers, and

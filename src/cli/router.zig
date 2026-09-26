@@ -56,6 +56,7 @@ pub const BackendRouter = struct {
                 // default filled in at this point would shadow it.
                 .network = if (config) |c| c.network else null,
                 .storage = null,
+                .node = create_config.node,
             },
             .run => |run_config| types.SandboxConfig{
                 .allocator = self.allocator,
@@ -199,6 +200,17 @@ pub const BackendRouter = struct {
     }
 
     fn executeCrun(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
+        // Before the "is it built" check, because --node is wrong for this
+        // backend either way: a node is a Proxmox cluster's notion, and libcrun
+        // makes the container in the kernel this process runs on. Answering
+        // "rebuild with the backend" to it would send someone the wrong way.
+        if (operation == .create and operation.create.node != null) {
+            if (self.logger) |log| {
+                log.err("--node is a Proxmox cluster option; the crun backend creates the container on this host and has nowhere else to put it", .{}) catch {};
+            }
+            return types.Error.UnsupportedOperation;
+        }
+
         // When the backend is compiled out, backends.crun is an empty struct.
         // The check is comptime-known, so the code below is never analyzed.
         if (!backends.isCrunEnabled()) return self.backendNotBuilt("crun");
@@ -303,6 +315,9 @@ pub const Operation = union(enum) {
 
 pub const CreateConfig = struct {
     image: []const u8,
+    /// `--node <name>`: a node of the Proxmox cluster other than this one.
+    /// Meaningless to every other backend, which is said rather than ignored.
+    node: ?[]const u8 = null,
     /// Where to send the master end of the container's pty, and where to write
     /// the container process's pid. Both belong to the runtime-spec `create`;
     /// only a backend that starts a process on create can honour them.
