@@ -1,44 +1,113 @@
 # NexCage
 
-Command-line lifecycle for LXC containers on a Proxmox VE host. nexcage
-creates, starts, stops, deletes and inspects containers through `pct` and
-`pvesh`, from Proxmox templates, OCI bundles, or — on Proxmox VE 9.1 and later
-— OCI registry images.
+[![CI](https://github.com/CageForge/nexcage/actions/workflows/ci.yml/badge.svg)](https://github.com/CageForge/nexcage/actions/workflows/ci.yml)
+[![crun backend build](https://github.com/CageForge/nexcage/actions/workflows/crun_build.yml/badge.svg)](https://github.com/CageForge/nexcage/actions/workflows/crun_build.yml)
+[![Proxmox E2E](https://github.com/CageForge/nexcage/actions/workflows/proxmox_e2e.yml/badge.svg)](https://github.com/CageForge/nexcage/actions/workflows/proxmox_e2e.yml)
+[![Release](https://img.shields.io/github/v/release/CageForge/nexcage?sort=semver)](https://github.com/CageForge/nexcage/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+**An OCI runtime for Proxmox VE.** nexcage wears two faces, and they share one
+binary:
+
+- **A command line for LXC containers on a Proxmox VE cluster.** It creates,
+  starts, stops, deletes and inspects them through `pct` and the Proxmox API,
+  from templates, OCI bundles, or OCI registry images.
+- **An OCI runtime that a container engine drives**, the way runc and crun are
+  driven. podman, `ctr`, containerd's CRI and CRI-O all run containers on it,
+  and Kubernetes schedules pods onto it with a `RuntimeClass`.
 
 ## Status
 
-Status as of version 0.9.0:
+As of **0.11.1**, on amd64, running on the Proxmox VE host as root:
 
 | | |
 |---|---|
-| **Supported** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `exec`, `run` for LXC containers on one Proxmox VE 8.x / 9.x host |
-| **Images** | `<storage>:vztmpl/…` templates, OCI bundle directories, OCI registry references (Proxmox VE 9.1+) |
-| **Not yet** | containerd / CRI integration, containers on other cluster nodes |
-| **Opt-in, experimental** | crun and runc backends, Proxmox VM backend |
+| **Proxmox LXC** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `exec`, `run` — on any node of the cluster. `create --node` places a container on a chosen one |
+| **Templates** | `images`, `pull`, `rmi` for what a container is created from |
+| **As an OCI runtime** | the runtime-spec command line — `create --bundle`, `start`, `state`, `kill`, `delete`, `exec`, `ps`, `features`, with `--root`, `--console-socket`, `--pid-file`, `--log`. Verified against podman, `ctr`, containerd's CRI, CRI-O and a kubelet |
+| **In Kubernetes** | a pod with `runtimeClassName: nexcage` runs on a node, with an address from the cluster's CNI, `kubectl logs` and `kubectl exec` |
+| **Not there** | `pause`, `resume`, `update`, `events` — no engine has asked for them. Images are pulled through Proxmox, so a private registry cannot be authenticated: the `oci-registry-pull` API takes no credentials |
 
-- Architecture: amd64 (x86_64)
-- Runs on the Proxmox VE host itself, as root
+Proxmox VE 8.x and 9.x. Pulling from a registry needs 9.1 or later.
 
-## Build
-
-The default build needs only Zig 0.15.1. The first build may download the
-pinned `oci-specs-zig` package declared in `build.zig.zon`.
+## Install
 
 ```bash
-zig build -Doptimize=ReleaseSafe
-sudo install -m 0755 zig-out/bin/nexcage /usr/local/bin/nexcage
-nexcage version
+VERSION=0.11.1
+wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
+wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+apt install ./nexcage-$VERSION-amd64.deb
 ```
 
-Release binaries and a `.deb` are attached to GitHub releases; see
+**From 0.11.2 a release carries two binaries.** The plain one manages LXC
+containers; the `-crun` one adds the backend a container engine drives, and is
+what to install when containerd, CRI-O or a kubelet is meant to run containers
+on nexcage. It needs `libyajl2`, `libseccomp2` and `libcap2` on the host. Before
+0.11.2, build it yourself — the Dockerfile line is under
+[Development](#development).
+
+Details, source builds and the shared-library requirements:
 [docs/INSTALL.md](docs/INSTALL.md).
+
+## Use it as a Proxmox command line
+
+```bash
+nexcage images                      # templates the cluster can create from
+nexcage pull docker.io/library/redis:7 --storage shared-rdma
+
+nexcage create --name web-1 local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst
+nexcage start web-1
+nexcage state web-1                 # OCI state JSON on stdout
+nexcage exec web-1 -- sh -c 'echo $HOSTNAME'
+nexcage list                        # every node of the cluster
+nexcage delete web-1
+
+nexcage create --name web-2 --node titan shared-rdma:vztmpl/redis_7.tar
+```
+
+Containers are addressed by name, which becomes the hostname and must be unique
+across the cluster; `state` also accepts a VMID. `exec`, `kill` and the `pid` in
+`state` work on the host the container is on, and say so for one elsewhere.
+Exit status is `0` for success, `1` when the operation failed, `2` for invalid
+usage — except `exec`, which exits with the status of the command it ran.
+
+Every command, option and exit code: [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md).
+
+## Use it as an OCI runtime
+
+A container engine never passes `--runtime`, so the configuration has to route
+to the OCI backend:
+
+```json
+{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }
+```
+
+Then name it wherever the engine names a runtime:
+
+```toml
+# containerd
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
+  runtime_type = "io.containerd.runc.v2"
+  [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
+    BinaryName = "/usr/local/bin/nexcage"
+```
+
+```bash
+podman --runtime /usr/local/bin/nexcage run --rm docker.io/library/alpine:3 echo hi
+kubectl apply -f pod.yaml     # runtimeClassName: nexcage
+```
+
+How it was verified, engine by engine, and what Kubernetes asks a runtime:
+[docs/KUBERNETES_INTEGRATION.md](docs/KUBERNETES_INTEGRATION.md).
 
 ## Configure
 
 nexcage reads the file given with `--config <path>`, or else the first of
 `./config.json`, `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
-that exists. A file that does not parse is an error. Without any file the
-defaults below apply.
+that exists. A file that does not parse is an error; a file declaring
+`ociVersion` is skipped, because that is an OCI runtime spec and not a
+configuration.
 
 ```json
 {
@@ -58,64 +127,71 @@ defaults below apply.
 | `proxmox.rootfs_size_gb` | `8` | Root filesystem size, used when `storage` is set |
 | `proxmox.unprivileged` | `true` | Create unprivileged containers, as the Proxmox VE web UI does. Images from a registry always run unprivileged |
 | `proxmox.ostype` | detected by pct | `--ostype` for new containers |
+| `runtime.routing` | Proxmox LXC | Which backend a container goes to. A pattern is a regular expression only when it starts with `^` or ends with `$`, so `".*"` matches nothing — use `"*"` |
 
-## Use
+## Documentation
+
+| | |
+|---|---|
+| [Install](docs/INSTALL.md) | Releases, source builds, what each binary needs |
+| [CLI reference](docs/CLI_REFERENCE.md) | Every command, option and exit code |
+| [Kubernetes integration](docs/KUBERNETES_INTEGRATION.md) | The runtime-spec command line, the engines, and a pod on a node |
+| [Architecture](docs/architecture/OVERVIEW.md) | How the backends and the router fit together |
+| [Troubleshooting](docs/TROUBLESHOOTING_GUIDE.md) | When something does not work |
+| [Release notes](docs/releases/) | What changed, release by release |
+
+Rendered at [nexcage.cageforge.com](https://nexcage.cageforge.com).
+
+## Development
 
 ```bash
-# From a Proxmox template
-nexcage create --name web-1 local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst
-nexcage start web-1
-nexcage state web-1          # OCI state JSON on stdout
-nexcage list
-nexcage stop web-1           # clean shutdown, forced after 60 seconds
-nexcage delete web-1
-
-# From an OCI registry (Proxmox VE 9.1+); pulled to storage "local", then started
-nexcage run --name cache-1 docker.io/library/redis:7
-
-# Signals go to the container's init, from the host
-nexcage kill web-1 SIGKILL
-
-# A command inside a running container; nexcage exits with its status
-nexcage exec web-1 -- sh -c 'echo $HOSTNAME'
+zig build test --summary all      # Zig 0.15.1
+bash tests/sim/run.sh             # the Proxmox command line, against fakes
 ```
 
-- Containers are addressed by name, which becomes the hostname and must be
-  unique. `state` also accepts a VMID.
-- VMIDs come from `pvesh get /cluster/nextid`.
-- Logs go to stderr. `--debug`, `--log-level <level>`, `--log-file <path>` and
-  `--config <path>` go before or after the command.
-- Exit status: `0` success, `1` the operation failed, `2` invalid usage.
-
-Full reference: [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md).
-
-## crun backend (optional)
-
-The crun backend links vendored libcrun and needs the `deps/crun` submodules
-plus generated headers. The Dockerfile prepares all of that from a clean clone:
+The simulator runs nexcage against fake `pct`, `pvesh` and `pveversion` in a
+user namespace, so the Proxmox paths can be exercised on a laptop. The crun
+backend links vendored libcrun and is built through the Dockerfile:
 
 ```bash
 docker build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t nexcage:crun .
 ```
 
-## Development
-
-```bash
-zig build test --summary all
-```
-
-- Every `.zig` file under `tests/` and `src/` that declares a test is its own
-  test step; a file that fails to compile fails by name.
-- CI (`.github/workflows/ci.yml`) builds, tests and smoke-tests on
-  GitHub-hosted runners. The Proxmox E2E job runs the container lifecycle
-  through nexcage on a self-hosted Proxmox VE runner.
+CI builds and tests on GitHub-hosted runners, builds the crun backend and runs a
+pod on it through containerd's CRI, and runs the container lifecycle on a
+self-hosted Proxmox VE node.
 
 Guides: [docs/DEV_QUICKSTART.md](docs/DEV_QUICKSTART.md),
 [TESTING.md](TESTING.md), [docs/CI_CD_SETUP.md](docs/CI_CD_SETUP.md),
-[docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md).
+[docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md).
 
-## Security and policies
+## Contributing
 
-- Security policy: [SECURITY.md](SECURITY.md)
-- Maintainers and governance: [MAINTAINERS.md](MAINTAINERS.md), [GOVERNANCE.md](GOVERNANCE.md)
-- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+Issues and pull requests are welcome. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md); questions and bug reports belong in
+[GitHub Issues](https://github.com/CageForge/nexcage/issues).
+
+Everyone taking part is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Please report vulnerabilities as [SECURITY.md](SECURITY.md) describes, rather
+than in a public issue.
+
+## Project
+
+- Maintainers: [MAINTAINERS.md](MAINTAINERS.md)
+- Governance: [GOVERNANCE.md](GOVERNANCE.md)
+- Changes: [CHANGELOG.md](CHANGELOG.md)
+- Open-source compliance: [docs/COMPLIANCE_CNCF_CHECKLIST.md](docs/COMPLIANCE_CNCF_CHECKLIST.md)
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Built with `-Denable-backend-crun=true`, nexcage compiles and links the
+`src/libcrun` sources of a vendored [crun](https://github.com/containers/crun),
+whose file headers state LGPL-2.1-or-later; crun's repository as a whole is
+GPL-2.0 for its own command-line tool, which nexcage does not build. The
+released `-crun` binary is that build; the plain binary links none of it.
