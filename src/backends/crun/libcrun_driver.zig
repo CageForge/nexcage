@@ -26,6 +26,15 @@ pub const CrunDriver = struct {
     /// --systemd-cgroup: libcrun's context has the field; containerd sends the
     /// flag when it is configured with SystemdCgroup.
     systemd_cgroup: bool = false,
+    /// `exec --detach`: libcrun returns once the process is started instead of
+    /// waiting for it. An engine sends it together with --console-socket.
+    detach: bool = false,
+    /// What shapes the process spec `exec` writes when the command came from a
+    /// command line rather than from `--process <file>`.
+    exec_tty: bool = false,
+    exec_cwd: ?[]const u8 = null,
+    exec_user: ?[]const u8 = null,
+    exec_env: ?[]const []const u8 = null,
     _console_socket_z: ?[:0]u8 = null,
     _pid_file_z: ?[:0]u8 = null,
     // Stored strings and context to keep them valid during usage
@@ -108,6 +117,7 @@ pub const CrunDriver = struct {
         }
 
         ctx.systemd_cgroup = self.systemd_cgroup;
+        ctx.detach = self.detach;
 
         // Initialize optional fields (already zeroed by zeroes, which sets pointers to null)
         // Additional initialization not needed - zeroed context is sufficient
@@ -496,18 +506,116 @@ pub const CrunDriver = struct {
         return out.toOwnedSlice(allocator);
     }
 
-    /// Not implemented. libcrun exposes an exec entry point, but no binding
-    /// for it exists in libcrun_ffi.zig, so there is nothing to call. This
-    /// used to build a C argv, discard it and return OperationNotSupported
-    /// after logging "not wired"; the argv construction also did not compile
-    /// once anything reached it, because a null cannot go into a list of
-    /// non-optional pointers.
-    pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8) !void {
-        _ = argv;
-        if (self.logger) |log| {
-            log.err("exec is not implemented for the crun backend ({s}): libcrun's exec is not bound", .{container_id}) catch {};
+    /// runc's `exec`, in both the shapes it comes in: `--process <file>` from a
+    /// container engine, and a command typed after the container's name.
+    ///
+    /// Both end in libcrun_container_exec_process_file, which takes the path of
+    /// a file holding the OCI process spec. For `--process` that is the
+    /// caller's own file, handed over untouched; for a command line nexcage
+    /// writes the same shape to a temporary file and removes it afterwards.
+    /// See the binding for why a path rather than the struct entry points.
+    pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8, process_file: ?[]const u8) !void {
+        try validation.SecurityValidation.validateContainerId(container_id);
+
+        var written: ?[]u8 = null;
+        defer if (written) |path| {
+            std.fs.cwd().deleteFile(path) catch {};
+            self.allocator.free(path);
+        };
+
+        const spec_path = if (process_file) |given| given else blk: {
+            if (argv.len == 0) {
+                if (self.logger) |log| {
+                    try log.err("exec needs a command, or --process <file> with the process spec", .{});
+                }
+                return core.Error.InvalidInput;
+            }
+            const path = try self.writeProcessSpec(argv);
+            written = path;
+            break :blk @as([]const u8, path);
+        };
+
+        const ctx = try self.initContext("", container_id);
+
+        const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
+        defer self.allocator.free(id_c);
+        const path_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{spec_path}, 0);
+        defer self.allocator.free(path_c);
+
+        var err_ptr: ?*ffi.Libcrun.Error = null;
+        const ret = ffi.Libcrun.libcrun_container_exec_process_file(ctx, id_c.ptr, path_c.ptr, &err_ptr);
+        if (ret < 0) {
+            try self.handleError(&err_ptr, "container_exec");
+            return core.Error.OperationFailed;
         }
-        return core.Error.UnsupportedOperation;
+
+        // An OCI runtime's `exec` exits with the status of the command it ran,
+        // and libcrun ends in wait_for_process, which returns exactly that. The
+        // Proxmox LXC backend carries it out the same way.
+        core.exit_status.propagated = if (ret > 255) 255 else @intCast(ret);
+    }
+
+    /// The OCI process spec for a command given on the command line, written
+    /// where libcrun can read it. The caller owns and removes the path.
+    fn writeProcessSpec(self: *Self, argv: []const []const u8) ![]u8 {
+        const path = try std.fmt.allocPrint(
+            self.allocator,
+            "/tmp/nexcage-exec-{d}.json",
+            .{std.os.linux.getpid()},
+        );
+        errdefer self.allocator.free(path);
+
+        var out = std.ArrayListUnmanaged(u8){};
+        defer out.deinit(self.allocator);
+        const w = out.writer(self.allocator);
+
+        var uid: u32 = 0;
+        var gid: u32 = 0;
+        if (self.exec_user) |spec| {
+            // runc's --user is uid[:gid]. An unparsable half is an error rather
+            // than a silent 0: running as root when root was not asked for is
+            // the kind of difference nobody notices until it matters.
+            var parts = std.mem.splitScalar(u8, spec, ':');
+            const uid_str = parts.next() orelse "";
+            uid = std.fmt.parseInt(u32, uid_str, 10) catch {
+                if (self.logger) |log| try log.err("--user wants uid[:gid], got '{s}'", .{spec});
+                return core.Error.InvalidInput;
+            };
+            if (parts.next()) |gid_str| {
+                gid = std.fmt.parseInt(u32, gid_str, 10) catch {
+                    if (self.logger) |log| try log.err("--user wants uid[:gid], got '{s}'", .{spec});
+                    return core.Error.InvalidInput;
+                };
+            }
+        }
+
+        try w.print("{{\"terminal\":{},\"user\":{{\"uid\":{d},\"gid\":{d}}},\"args\":[", .{ self.exec_tty, uid, gid });
+        for (argv, 0..) |a, i| {
+            if (i > 0) try w.writeAll(",");
+            try core.json.writeString(w, a);
+        }
+        try w.writeAll("],\"env\":[");
+        if (self.exec_env) |env| {
+            for (env, 0..) |e, i| {
+                if (i > 0) try w.writeAll(",");
+                try core.json.writeString(w, e);
+            }
+        } else {
+            // Without an env the exec'd process has no PATH, and `nexcage exec
+            // c1 ls` fails with "executable file not found" on a container that
+            // has ls. runc leaves it to the caller; a caller typing a command
+            // has no way to know that is why.
+            try core.json.writeString(w, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+        }
+        try w.writeAll("],\"cwd\":");
+        try core.json.writeString(w, self.exec_cwd orelse "/");
+        try w.writeAll("}\n");
+
+        const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
+        defer file.close();
+        try file.writeAll(out.items);
+
+        return path;
     }
 
     /// Generate basic OCI config.json

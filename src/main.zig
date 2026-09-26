@@ -469,8 +469,15 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         } else if (std.mem.eql(u8, arg, "--user") and i + 1 < args.len) {
             options.user = try allocator.dupe(u8, args[i + 1]);
             i += 2;
-        } else if (std.mem.eql(u8, arg, "--workdir") and i + 1 < args.len) {
+        } else if ((std.mem.eql(u8, arg, "--workdir") or std.mem.eql(u8, arg, "--cwd")) and i + 1 < args.len) {
+            // --cwd is runc's spelling of the same thing, and `exec` is where
+            // it turns up.
             options.workdir = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--process") and i + 1 < args.len) {
+            // How an engine sends an exec: the process spec in a file rather
+            // than a command on the command line.
+            options.process_file = try allocator.dupe(u8, args[i + 1]);
             i += 2;
         } else if ((std.mem.eql(u8, arg, "--signal") or std.mem.eql(u8, arg, "-s")) and i + 1 < args.len) {
             // kill reads the signal from options.args. This flag used to fall

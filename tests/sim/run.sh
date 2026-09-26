@@ -276,6 +276,21 @@ check "--version, which is how CRI-O asks" all 'rc 0' 'out_has "nexcage version"
 nx exec web-1 -- env FOO=bar
 check "an = after -- survives untouched" \
   all 'rc 0' 'called "pct exec 100 -- env FOO=bar"'
+
+# `exec --process <file>` hands over an OCI process spec: an identity to become,
+# an environment, a terminal. `pct exec` takes a command and returns when it
+# ends, so the spec cannot be honoured and ignoring it would run the command as
+# somebody else. Refusing is the same rule as --console-socket on this backend.
+printf '{"args":["/bin/true"],"cwd":"/"}' > /tmp/sim-process.json
+nx exec web-1 --process /tmp/sim-process.json
+check "exec --process is refused on the LXC backend, not ignored" \
+  all 'rc 1' 'err_has "--runtime crun"' 'not_called_re "^pct exec"'
+nx exec web-1 -d echo hi
+check "exec --detach is refused on the LXC backend" \
+  all 'rc 1' 'err_has "--detach"' 'not_called_re "^pct exec"'
+nx exec web-1 --process /tmp/sim-process.json ls
+# 2, not 1: giving both is a usage error, and nexcage keeps that distinction.
+check "exec takes a command or --process, not both" all 'rc 2' 'err_has "not both"'
 nx exec web-3 echo hi;         check "exec on a stopped container -> exit 1, says it is not running" \
                                  all 'rc 1' 'err_has "not running"' 'not_called_re "^pct exec"'
 nx exec web-1;                 check "exec without a command -> exit 2" all 'rc 2' 'not_called_re "^pct exec"'

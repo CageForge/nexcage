@@ -20,7 +20,7 @@ next step, not by size.
 
 | # | Gap | Today | Needed for |
 |---|---|---|---|
-| 1 | `exec` | **Done on Proxmox LXC**, which runs `pct exec` and exits with the command's status as `runc exec` does. crun and runc have none: libcrun's exec entry point has no binding in `libcrun_ffi.zig` | `kubectl exec`, CRI `ExecSync`, exec probes |
+| 1 | ~~`exec`~~ | **Done on both.** Proxmox LXC runs `pct exec`; crun goes to `libcrun_container_exec_process_file`, so `exec --process <file>` — the shape an engine sends — works, and `crictl exec` runs a command in a pod. Both exit with the command's status | `kubectl exec`, CRI `ExecSync`, exec probes |
 | 2 | OCI runtime-spec CLI | **Enough for podman and containerd to run containers.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | ~~`state`~~ | **Done.** Proxmox LXC reports the bundle it recorded; crun hands the question to libcrun, so the output is `crun state`'s | The same. A shim reads the bundle path back from `state` |
 | 4 | Missing verbs | `delete --force`, `kill --all` and `features` are done; no `ps`, `events`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
@@ -185,9 +185,10 @@ rather than working down a checklist:
   pattern is a regex only when it starts with `^` or ends with `$`, so `.*`
   was read as a wildcard meaning "a literal dot, then anything".
 
-What is still missing: `ps`, `features`, `pause`, `resume` and `update` do not
-exist, and `exec` on this backend needs a binding libcrun's exec entry point
-does not have yet. podman did not ask for any of them to run a container.
+What is still missing: `ps`, `pause`, `resume` and `update` do not exist.
+podman did not ask for any of them to run a container. `features` and `exec` were
+also on this list and are done — the first because containerd asked at startup,
+the second because a kubelet cannot do without it.
 
 `--pid-file` and `--console-socket` are where the Proxmox LXC backend stops
 being able to pretend: the runtime-spec means `create` to leave the container's
@@ -298,6 +299,27 @@ build's configuration read from this build:
 $ nexcage --runtime crun features | jq -c '.linux.cgroup, .linux.mountExtensions'
 {"v1":true,"v2":true,"systemd":true,"systemdUser":true}
 {"idmap":{"enabled":true}}
+```
+
+**`exec` is done on this backend too**, which is what `kubectl exec` and an exec
+probe come down to. libcrun has three entry points for it; two take a
+`runtime_spec_schema_config_schema_process *`, which libocispec generates from a
+JSON schema and which is far larger than the two structs whose hand-written
+mirror had just put a features document at the wrong offset. The third takes the
+path of a file holding that process as JSON, and libcrun's own parser builds the
+struct — a path has no layout to get wrong. So `--process <file>` hands the
+engine's own file over untouched, and a command typed on a command line is
+written to a temporary spec of the same shape.
+
+Parsing `--process` mattered more than adding the call. Without it the flag fell
+through as an unknown option and its *value* became the container id, so
+containerd's exec was answered with `exec is not implemented for the crun
+backend (/tmp/runc-process68868969)` — the file's path, in the place of a
+container.
+
+```
+$ crictl exec "$CTR" /bin/echo NEXCAGE_EXEC_OK
+NEXCAGE_EXEC_OK
 ```
 
 containerd reads two things from it — `mountExtensions.idmap` for user
