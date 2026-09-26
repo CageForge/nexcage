@@ -79,6 +79,22 @@ jobs:
                 "on crun", d["annotations"]["run.oci.crun.version"])
           PY
 
+      # Kubernetes asks for `ps --format json` and used to get `unknown
+      # command`. containerd says nothing about that in its journal and the pod
+      # runs anyway, so the only thing that showed it was recording the command
+      # lines. The check compares against crun: a list of live PIDs proves
+      # nothing on its own.
+      - name: ps reports the container's processes, and crun agrees
+        run: |
+          set -eux
+          mkdir -p bundle/rootfs
+          docker create --name bbps busybox:1.36 >/dev/null
+          docker export bbps | tar -x -C bundle/rootfs
+          docker rm bbps >/dev/null
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
+            --entrypoint /bin/sh nexcage:ci /t/ps.sh
+
       # The checks around this one are unit-sized. This is the interface a
       # kubelet drives: a pod sandbox and a container in it, through
       # containerd's CRI with nexcage as the runtime handler, on a CNI bridge.

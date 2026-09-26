@@ -291,6 +291,27 @@ check "exec --detach is refused on the LXC backend" \
 nx exec web-1 --process /tmp/sim-process.json ls
 # 2, not 1: giving both is a usage error, and nexcage keeps that distinction.
 check "exec takes a command or --process, not both" all 'rc 2' 'err_has "not both"'
+
+# Kubernetes asks for `ps --format json`, which was answered with `unknown
+# command 'ps'` -- containerd says nothing about that in its journal and the pod
+# runs anyway, so only the runtime's own command lines showed it.
+nx ps web-1
+check "ps is refused on the LXC backend, where it would answer another question" \
+  all 'rc 1' 'err_has "--runtime crun"' 'not_called_re "^pct"'
+# With --log the explanation goes to that file rather than to stderr, which is
+# what --log is for; only the terse summary line stays on stderr. Checking
+# stderr for it, as this did at first, fails on correct behaviour.
+# The log goes under /run, which is bind-mounted from $S: the sandbox mounts a
+# fresh tmpfs on /tmp, so a file written there disappears with the namespace and
+# the check cannot see it.
+rm -f "$S/run/nexcage-ps.log"
+nx --root /run/x --log /run/nexcage-ps.log --log-format json ps --format json web-1
+check "the shape containerd sends is read as ps, not as a command name" \
+  all 'rc 1' '! err_has "unknown command"' 'grep -q "runtime crun" "$S/run/nexcage-ps.log"'
+nx --runtime crun ps --format yaml web-1
+check "ps --format takes json or table" all 'rc 2' 'err_has "json or table"'
+nx ps --help
+check "ps --help says whose PIDs these are" all 'rc 0' 'out_has "host PIDs"'
 nx exec web-3 echo hi;         check "exec on a stopped container -> exit 1, says it is not running" \
                                  all 'rc 1' 'err_has "not running"' 'not_called_re "^pct exec"'
 nx exec web-1;                 check "exec without a command -> exit 2" all 'rc 2' 'not_called_re "^pct exec"'

@@ -23,7 +23,7 @@ next step, not by size.
 | 1 | ~~`exec`~~ | **Done on both.** Proxmox LXC runs `pct exec`; crun goes to `libcrun_container_exec_process_file`, so `exec --process <file>` — the shape an engine sends — works, and `crictl exec` runs a command in a pod. Both exit with the command's status | `kubectl exec`, CRI `ExecSync`, exec probes |
 | 2 | OCI runtime-spec CLI | **Enough for podman and containerd to run containers.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | ~~`state`~~ | **Done.** Proxmox LXC reports the bundle it recorded; crun hands the question to libcrun, so the output is `crun state`'s | The same. A shim reads the bundle path back from `state` |
-| 4 | Missing verbs | `delete --force`, `kill --all` and `features` are done; no `ps`, `events`, `pause`, `resume`, `update`. **Kubernetes asks for `ps --format json`** — seen in the trace on the node, swallowed quietly by containerd, and the pod ran without it | Pod lifecycle, metrics, cgroup updates on resize |
+| 4 | Missing verbs | `delete --force`, `kill --all`, `features` and **`ps`** are done — `ps` because the trace on the node showed Kubernetes asking for `ps --format json` and getting `unknown command`. No `events`, `pause`, `resume`, `update`, and nothing has asked for them | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
 | 6 | No log handling | container output is not captured to a file | Kubelet reads `/var/log/pods/…/0.log`; `kubectl logs` needs it |
 | 7 | ~~No CNI~~ | **The engine's, not the runtime's.** containerd and CRI-O create the sandbox's network namespace, run the CNI plugins in it and hand the runtime a path to join. Verified on both: a pod gets an address from host-local and reaches another pod over TCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
@@ -466,13 +466,25 @@ delete <id>
 delete --force <id>
 ```
 
-Two things in that list are worth naming. The `exec` line is the shape stage 4
+Two things in that list were worth naming. The `exec` line is the shape stage 4
 added for containerd, `--detach` included: without it `kubectl exec` would have
-failed here. And **`ps --format json` is asked for and does not exist** —
-nexcage answers `unknown command 'ps'`, containerd swallows it without a word in
-the journal, and the pod is Ready, logged, exec'd and deleted regardless. It is
-the next gap, and like `features` it was found by running the thing rather than
-by reading a list.
+failed here. And `ps --format json` was asked for and did not exist — nexcage
+answered `unknown command 'ps'`, containerd swallowed it without a word in the
+journal, and the pod was Ready, logged, exec'd and deleted regardless. Like
+`features`, it was found by running the thing rather than by reading a list.
+
+**`ps` is done now**, and it is libcrun's answer: `libcrun_container_read_pids`
+reads the container's cgroup, children included, which is where `crun ps` and
+`runc ps` get theirs. The output follows crun's — a JSON array of numbers, or a
+`PID` header and one per line — and not runc's table, which runs the host's
+`ps -ef` and filters it. `tests/crun/ps.sh` compares the list against `crun ps`
+for the same container rather than checking it looks plausible, because any list
+of live PIDs looks plausible. With that, everything in the trace above exists.
+
+So the whole of what Kubernetes asks a runtime is answered. What is left in the
+gap table is not something an engine asks for: `pause`, `resume`, `update` and
+`events` are for checkpointing, vertical resizing and a metrics stream, and none
+of them appeared in a single run.
 
 Getting the binary onto the node took two corrections that have nothing to do
 with Kubernetes, and both would have looked like runtime bugs:

@@ -196,6 +196,7 @@ pub const Command = enum {
     state,
     kill,
     features,
+    ps,
 };
 
 /// Runtime options
@@ -233,6 +234,8 @@ pub const RuntimeOptions = struct {
     /// `exec --process <file>`: a file holding an OCI process spec, which
     /// is the shape a container engine sends an exec in.
     process_file: ?[]const u8 = null,
+    /// `ps --format <json|table>`. containerd asks for json.
+    format: ?[]const u8 = null,
 
     pub fn deinit(self: *RuntimeOptions) void {
         if (self.container_id) |id| self.allocator.free(id);
@@ -241,6 +244,7 @@ pub const RuntimeOptions = struct {
         if (self.user) |u| self.allocator.free(u);
         if (self.workdir) |wd| self.allocator.free(wd);
         if (self.process_file) |pf| self.allocator.free(pf);
+        if (self.format) |f| self.allocator.free(f);
         if (self.console_socket) |cs| self.allocator.free(cs);
         if (self.pid_file) |pf| self.allocator.free(pf);
         if (self.env) |e| {
