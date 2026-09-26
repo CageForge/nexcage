@@ -16,8 +16,10 @@ an OCI runtime binary with the runtime-spec command line, so no daemon and no
 operator were needed, only that command line and the crun backend (vendored
 libcrun) behind it.
 
-What is left is not the command line. It is the table below: one host at a
-time, no image service of its own, and the verbs nothing has asked for.
+What is left is not the command line. It is the table below: no image service
+of its own, and the verbs nothing has asked for. For Kubernetes, more than one
+host was never a runtime question — a kubelet runs on each node and calls the
+binary there, the way runc is called.
 
 ## What the runtime is missing
 
@@ -37,7 +39,7 @@ next step, not by size.
 | 8 | No sandbox model | one container per name, no pod grouping | Multi-container pods sharing a network namespace, the pause container |
 | 9 | No image service | uses PVE templates, `pveam` and `oci-registry-pull` (PVE 9.1+) | CRI `ImageService`: pull with credentials, list, remove, image FS stats |
 | 10 | Fixed resources | 512 MiB and one core unless an OCI bundle sets limits | Translating pod requests and limits into cgroups |
-| 11 | Single host | containers on other cluster nodes are not supported | A node per PVE host, or a scheduler that targets more than one |
+| 11 | ~~Single host~~ | **Reads and lifecycle cover the cluster**: `list`, `state`, `start`, `stop` and `delete` find a container on any node and act through that node's API. `exec`, `kill` and the `pid` in `state` stay local and say so — they reach into a container's processes from the host, which no API offers. `create` still makes the container here | A node per PVE host, or a scheduler that targets more than one |
 
 One further gap is operational rather than functional: nexcage exposes no
 health or metrics endpoint a probe can use.

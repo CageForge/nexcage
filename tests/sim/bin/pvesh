@@ -2,7 +2,50 @@
 # Fake pvesh: next free VMID, and oci-registry-pull adds the pulled .tar to $SIM/templates.
 SIM=${SIM:?}
 echo "pvesh $*" >> "$SIM/calls"
+# The cluster: $SIM/db rows are "vmid status name [node]", and a row with no
+# node is on this host. `pct` only ever sees this host's rows, which is what
+# makes the difference between the two tools visible here.
+HERE=${SIM_NODE:-$(hostname)}
+
+# fail_all means the host cannot answer at all, and that has to include pvesh:
+# the checks that inject it are about nexcage refusing rather than guessing, and
+# they stop meaning anything if one of the two tools still answers.
+[ -e "$SIM/fail_all" ] && { cat "$SIM/fail_all" >&2; exit 13; }
+
 case "$1 $2" in
+  "get /cluster/resources")
+    printf '['
+    sep=""
+    while read -r vmid status name node; do
+      [ -n "$vmid" ] || continue
+      printf '%s{"vmid":%s,"name":"%s","node":"%s","status":"%s","type":"lxc"}' \
+        "$sep" "$vmid" "$name" "${node:-$HERE}" "$status"
+      sep=","
+    done < "$SIM/db"
+    printf ']\n'
+    ;;
+  "create /nodes/"*/lxc/*)
+    # /nodes/<node>/lxc/<vmid>/status/<action>
+    path=$2
+    vmid=$(echo "$path" | sed -n 's|.*/lxc/\([0-9]*\).*|\1|p')
+    action=${path##*/}
+    awk -v v="$vmid" '$1==v {f=1} END {exit !f}' "$SIM/db" || {
+      echo "Configuration file 'nodes/x/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    case $action in
+      start)    new=running ;;
+      shutdown) new=stopped ;;
+      stop)     new=stopped ;;
+      *) echo "fake pvesh: unsupported action $action" >&2; exit 99 ;;
+    esac
+    awk -v v="$vmid" -v s="$new" '$1==v {$2=s} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+    ;;
+  "delete /nodes/"*)
+    path=$2
+    vmid=${path##*/}
+    awk -v v="$vmid" '$1==v {f=1} END {exit !f}' "$SIM/db" || {
+      echo "Configuration file 'nodes/x/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    awk -v v="$vmid" '$1!=v {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+    ;;
   "get /cluster/nextid")
     max=$(awk 'BEGIN{m=99} $1>m {m=$1} END {print m}' "$SIM/db" 2>/dev/null || echo 99)
     echo "$((max + 1))"

@@ -241,6 +241,137 @@ pub const PveClient = struct {
         return false;
     }
 
+    /// Where a container is in the cluster, and whether that is this host.
+    ///
+    /// `pct` only ever sees the node it runs on, so resolving a name through
+    /// `pct list` answers for one host and silently says "not found" for a
+    /// container that exists on another. The cluster's own view is
+    /// /cluster/resources, which any node answers for all of them.
+    ///
+    /// `local` is what decides how everything else runs: `pct` for a container
+    /// here, the API for one elsewhere, and a refusal for the three things that
+    /// reach into the container's processes from the host, which no API offers.
+    pub const Location = struct {
+        allocator: std.mem.Allocator,
+        vmid: []u8,
+        node: []u8,
+        local: bool,
+
+        /// The node to address through the API, or null when `pct` will do.
+        pub fn remote(self: *const Location) ?[]const u8 {
+            return if (self.local) null else self.node;
+        }
+
+        pub fn deinit(self: *Location) void {
+            self.allocator.free(self.vmid);
+            self.allocator.free(self.node);
+        }
+    };
+
+    /// Find a container by name or VMID anywhere in the cluster.
+    ///
+    /// Falls back to `pct list` when the cluster cannot be asked -- a host
+    /// where pvesh is unavailable keeps working exactly as it did, seeing its
+    /// own containers and nothing else.
+    pub fn locate(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8) !Location {
+        const here = self.getNodeName() catch null;
+        defer if (here) |h| self.allocator.free(h);
+
+        if (self.clusterLookup(allocator, name_or_vmid, here)) |found| {
+            return found;
+        } else |err| {
+            if (err != core.Error.NotFound) {
+                if (self.logger) |log| {
+                    log.debug("the cluster could not be asked about '{s}' ({s}); falling back to this host", .{ name_or_vmid, @errorName(err) }) catch {};
+                }
+            } else {
+                return err;
+            }
+        }
+
+        const vmid = try self.getVmidByName(name_or_vmid);
+        errdefer allocator.free(vmid);
+        return Location{
+            .allocator = allocator,
+            .vmid = try allocator.dupe(u8, vmid),
+            .node = try allocator.dupe(u8, here orelse "localhost"),
+            .local = true,
+        };
+    }
+
+    /// /cluster/resources, which lists every container on every node.
+    fn clusterLookup(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8, here: ?[]const u8) !Location {
+        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "lxc", "--output-format", "json" };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) return core.Error.OperationFailed;
+
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch {
+            return core.Error.OperationFailed;
+        };
+        defer parsed.deinit();
+        if (parsed.value != .array) return core.Error.OperationFailed;
+
+        for (parsed.value.array.items) |item| {
+            if (item != .object) continue;
+            const obj = item.object;
+
+            const vmid_num = switch (obj.get("vmid") orelse continue) {
+                .integer => |i| i,
+                .float => |f| @as(i64, @intFromFloat(f)),
+                .string => |str| std.fmt.parseInt(i64, str, 10) catch continue,
+                else => continue,
+            };
+            var vmid_buf: [24]u8 = undefined;
+            const vmid_str = std.fmt.bufPrint(&vmid_buf, "{d}", .{vmid_num}) catch continue;
+
+            const name = if (obj.get("name")) |n| (if (n == .string) n.string else "") else "";
+            if (!std.mem.eql(u8, name, name_or_vmid) and !std.mem.eql(u8, vmid_str, name_or_vmid)) continue;
+
+            const node = if (obj.get("node")) |n| (if (n == .string) n.string else "") else "";
+            if (node.len == 0) return core.Error.OperationFailed;
+
+            const vmid_owned = try allocator.dupe(u8, vmid_str);
+            errdefer allocator.free(vmid_owned);
+            return Location{
+                .allocator = allocator,
+                .vmid = vmid_owned,
+                .node = try allocator.dupe(u8, node),
+                .local = if (here) |h| std.mem.eql(u8, h, node) else false,
+            };
+        }
+
+        return core.Error.NotFound;
+    }
+
+    /// One call against /nodes/<node>/lxc/<vmid><sub>, which is how the cluster
+    /// reaches a container that is not on this host. `pct` has no equivalent:
+    /// it is a local tool by construction.
+    fn nodeApi(self: *const Self, node: []const u8, vmid: []const u8, verb: []const u8, sub: []const u8, extra: []const []const u8) !void {
+        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}{s}", .{ node, vmid, sub });
+        defer self.allocator.free(path);
+
+        var args = std.ArrayListUnmanaged([]const u8){};
+        defer args.deinit(self.allocator);
+        try args.appendSlice(self.allocator, &.{ "pvesh", verb, path });
+        try args.appendSlice(self.allocator, extra);
+
+        const res = try common.runCommand(self.allocator, self.logger, args.items);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) {
+            if (self.logger) |log| {
+                log.err("pvesh {s} {s} failed: {s}", .{ verb, path, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
+            }
+            return self.mapPctError(res.stderr);
+        }
+    }
+
     /// Get VMID by container name
     pub fn getVmidByName(self: *const Self, name: []const u8) ![]u8 {
         const args = [_][]const u8{ "pct", "list" };
@@ -272,8 +403,73 @@ pub const PveClient = struct {
         return core.Error.OperationFailed;
     }
 
-    /// List containers
+    /// List containers across the cluster, falling back to this host.
+    ///
+    /// `pct list` answers for the node it runs on and nothing else, so on a
+    /// cluster it showed a fraction of what was there without saying so. The
+    /// cluster's own listing carries the node, which is the column a person
+    /// then needs to make sense of the rest.
     pub fn list(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
+        if (self.clusterList(allocator)) |containers| {
+            return containers;
+        } else |err| {
+            if (self.logger) |log| {
+                log.debug("the cluster could not be listed ({s}); listing this host", .{@errorName(err)}) catch {};
+            }
+        }
+        return self.localList(allocator);
+    }
+
+    fn clusterList(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
+        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "lxc", "--output-format", "json" };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) return core.Error.OperationFailed;
+
+        const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{});
+        defer parsed.deinit();
+        if (parsed.value != .array) return core.Error.OperationFailed;
+
+        var containers = std.ArrayListUnmanaged(core.ContainerInfo){};
+        errdefer {
+            for (containers.items) |*c| c.deinit();
+            containers.deinit(self.allocator);
+        }
+
+        for (parsed.value.array.items) |item| {
+            if (item != .object) continue;
+            const obj = item.object;
+            const vmid_num = switch (obj.get("vmid") orelse continue) {
+                .integer => |i| i,
+                .float => |f| @as(i64, @intFromFloat(f)),
+                .string => |str| std.fmt.parseInt(i64, str, 10) catch continue,
+                else => continue,
+            };
+            var vmid_buf: [24]u8 = undefined;
+            const vmid_str = std.fmt.bufPrint(&vmid_buf, "{d}", .{vmid_num}) catch continue;
+            const name = if (obj.get("name")) |n| (if (n == .string) n.string else "") else "";
+            const status = if (obj.get("status")) |st| (if (st == .string) st.string else "unknown") else "unknown";
+            const node = if (obj.get("node")) |n| (if (n == .string) n.string else "") else "";
+
+            try containers.append(self.allocator, core.ContainerInfo{
+                .allocator = allocator,
+                .id = try allocator.dupe(u8, vmid_str),
+                .name = try allocator.dupe(u8, if (name.len > 0) name else vmid_str),
+                .status = try allocator.dupe(u8, status),
+                .backend_type = try allocator.dupe(u8, "proxmox-lxc"),
+                .runtime = try allocator.dupe(u8, "pct"),
+                .node = if (node.len > 0) try allocator.dupe(u8, node) else null,
+            });
+        }
+        return try containers.toOwnedSlice(self.allocator);
+    }
+
+    fn localList(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
+        const here = self.getNodeName() catch null;
+        defer if (here) |h| self.allocator.free(h);
         const args = [_][]const u8{ "pct", "list" };
         const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
@@ -298,13 +494,17 @@ pub const PveClient = struct {
                 .status = try allocator.dupe(u8, entry.status),
                 .backend_type = try allocator.dupe(u8, "proxmox-lxc"),
                 .runtime = try allocator.dupe(u8, "pct"),
+                .node = if (here) |h| try allocator.dupe(u8, h) else null,
             });
         }
         return try containers.toOwnedSlice(self.allocator);
     }
 
-    /// Start container
-    pub fn start(self: *const Self, vmid: []const u8) !void {
+    /// Start container. `node` is null for a container on this host, where
+    /// `pct` is used; for one elsewhere in the cluster the API does the same
+    /// thing through the node that owns it.
+    pub fn start(self: *const Self, vmid: []const u8, node: ?[]const u8) !void {
+        if (node) |n| return self.nodeApi(n, vmid, "create", "/status/start", &.{});
         const args = [_][]const u8{ "pct", "start", vmid };
         const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
@@ -316,7 +516,8 @@ pub const PveClient = struct {
 
     /// Stop container: a clean shutdown, forced once the timeout expires.
     /// `pct stop` kills every process at once, which is what `kill` is for.
-    pub fn stop(self: *const Self, vmid: []const u8) !void {
+    pub fn stop(self: *const Self, vmid: []const u8, node: ?[]const u8) !void {
+        if (node) |n| return self.nodeApi(n, vmid, "create", "/status/shutdown", &.{ "--timeout", "60", "--forceStop", "1" });
         const args = [_][]const u8{ "pct", "shutdown", vmid, "--timeout", "60", "--forceStop", "1" };
         const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
@@ -327,7 +528,8 @@ pub const PveClient = struct {
     }
 
     /// Destroy container
-    pub fn delete(self: *const Self, vmid: []const u8) !void {
+    pub fn delete(self: *const Self, vmid: []const u8, node: ?[]const u8) !void {
+        if (node) |n| return self.nodeApi(n, vmid, "delete", "", &.{});
         const args = [_][]const u8{ "pct", "destroy", vmid };
         const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
@@ -342,7 +544,17 @@ pub const PveClient = struct {
     /// This used to run `cat /proc/1/stat` inside the container with
     /// `pct exec`, which reads back the PID in the container's own namespace
     /// (always 1) and fails wherever lxc-attach cannot run.
-    pub fn initPid(self: *const Self, vmid: []const u8) !?std.posix.pid_t {
+    pub fn initPid(self: *const Self, vmid: []const u8, node: ?[]const u8) !?std.posix.pid_t {
+        // A container on another node has an init, but its PID is a number in
+        // that node's process table and means nothing here. Reporting it would
+        // be worse than reporting none: `kill` would signal whatever holds that
+        // PID on this host.
+        if (node) |n| {
+            if (self.logger) |log| {
+                log.debug("CT {s} runs on {s}; its init PID is not a PID on this host", .{ vmid, n }) catch {};
+            }
+            return null;
+        }
         const args = [_][]const u8{ "pct", "status", vmid, "--verbose" };
         const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
@@ -361,12 +573,20 @@ pub const PveClient = struct {
     /// from inside that namespace unless init handles it, SIGKILL included, so
     /// `kill SIGKILL` did nothing; it also needed a kill binary in the image.
     /// From the host, SIGKILL and SIGSTOP are always delivered.
-    pub fn kill(self: *const Self, vmid: []const u8, signal: []const u8) !void {
+    pub fn kill(self: *const Self, vmid: []const u8, signal: []const u8, node: ?[]const u8) !void {
+        if (node) |n| {
+            if (self.logger) |log| {
+                log.err("CT {s} runs on {s}: a signal is sent to the container's init from the host, and the Proxmox API has no call for that. Run nexcage on {s}, or use stop and delete, which work from here", .{ vmid, n, n }) catch {};
+            }
+            return core.Error.UnsupportedOperation;
+        }
         const signo = core.signals.parse(signal) orelse {
             if (self.logger) |log| log.err("unknown signal '{s}'", .{signal}) catch {};
             return core.Error.InvalidInput;
         };
-        const pid = (try self.initPid(vmid)) orelse {
+        // null, not node: the refusal above means we are on the container's
+        // own host by the time we get here.
+        const pid = (try self.initPid(vmid, null)) orelse {
             if (self.logger) |log| log.err("CT {s} is not running", .{vmid}) catch {};
             return core.Error.OperationFailed;
         };
@@ -385,8 +605,14 @@ pub const PveClient = struct {
     /// stdio is inherited rather than captured: an exec is a pipe between the
     /// caller and the process in the container, so output has to arrive as it
     /// is produced and must not be held to runCommand's 1 MB cap.
-    pub fn exec(self: *const Self, vmid: []const u8, argv: []const []const u8) !u8 {
-        if ((try self.initPid(vmid)) == null) {
+    pub fn exec(self: *const Self, vmid: []const u8, argv: []const []const u8, node: ?[]const u8) !u8 {
+        if (node) |n| {
+            if (self.logger) |log| {
+                log.err("CT {s} runs on {s}: `pct exec` attaches to a container on the host it runs on, and the Proxmox API has no exec. Run nexcage on {s}", .{ vmid, n, n }) catch {};
+            }
+            return core.Error.UnsupportedOperation;
+        }
+        if ((try self.initPid(vmid, null)) == null) {
             if (self.logger) |log| log.err("CT {s} is not running", .{vmid}) catch {};
             return core.Error.OperationFailed;
         }

@@ -105,7 +105,8 @@ sys.exit(0 if any(o.get("level") == "error" for o in lines) else 1)
 PYEOF
 }
 json_get()  { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2" 2>/dev/null; }
-listed()    { awk -F'\t' -v n="$1" 'NR>1 && $7==n {f=1} END {exit !f}' "$S/out"; }
+# NAMES is the last column, after NODE was added for the cluster.
+listed()    { awk -F'\t' -v n="$1" 'NR>1 && $8==n {f=1} END {exit !f}' "$S/out"; }
 status_is() { nx state "$1"; [ "$RC" = 0 ] && [ "$(json_get "$S/out" status)" = "$2" ]; }
 init_pid()  { cat "$S/pid.$1" 2>/dev/null; }
 # Signal handlers and process exit are asynchronous: allow them 3 seconds
@@ -132,8 +133,9 @@ reset_sim
 cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_size_gb":2}}'
 nx create --name web-1 "$TPL"
 check "create from template exits 0" rc 0
-check "create checks the name first (pct list), then asks pvesh for a VMID" \
-  all 'called "pct list"' 'called "pvesh get /cluster/nextid"'
+check "create checks the name across the cluster first, then asks for a VMID" \
+  all 'called "pvesh get /cluster/resources --type lxc --output-format json"' \
+      'called "pvesh get /cluster/nextid"'
 check "pct create argv: vmid, template, hostname, bridge, rootfs from config" \
   called_re "^pct create 100 $TPL --hostname web-1 --memory [0-9]+ --cores [0-9]+ --net0 name=eth0,bridge=vmbr50,ip=dhcp --unprivileged 1 --rootfs local-lvm:2$"
 check "no --ostype unless configured" not_called_re "--ostype"
@@ -191,7 +193,7 @@ check "no config file -> default bridge, unprivileged, no --rootfs" all 'rc 0' '
 
 echo "pct list: Permission denied" > "$S/fail_all"
 nx create --name web-8 "$TPL"
-check "pct list failing -> create refuses (not read as 'name free')" all 'rc 1' 'err_has "permission denied"' 'not_called_re "^pct create"'
+check "the host unable to answer -> create refuses (not read as 'name free')" all 'rc 1' 'err_has "permission denied"' 'not_called_re "^pct create"'
 rm -f "$S/fail_all"
 
 echo "=== state ==="
@@ -206,18 +208,18 @@ echo "backup" > "$S/lock.100"
 nx state web-1; check "locked container still resolves by name" all 'rc 0' '[ "$(json_get "$S/out" id)" = web-1 ]'
 rm -f "$S/lock.100"
 echo "Permission denied" > "$S/fail_all"
-nx state web-1; check "state with pct failing -> exit 1, pct's message logged" all 'rc 1' 'err_has "permission denied"' 'err_has "pct command failed"'
+nx state web-1; check "state with the host failing -> exit 1, the tool's message logged" all 'rc 1' 'err_has "permission denied"' 'err_has "pct command failed"'
 rm -f "$S/fail_all"
 
 echo "=== list ==="
 nx list
-check "list: header + row with name in column 7" all 'rc 0' 'out_has "NAMES"' 'listed web-1'
-check "list row fields: vmid/status/backend" awk -F'\t' '$7=="web-1" && $1=="100" && $5=="stopped" && $6=="proxmox-lxc" {f=1} END {exit !f}' "$S/out"
+check "list: header + row with the name in the last column" all 'rc 0' 'out_has "NAMES"' 'listed web-1'
+check "list row fields: vmid/status/backend/node" awk -F'\t' '$8=="web-1" && $1=="100" && $5=="stopped" && $6=="proxmox-lxc" && $7!="" {f=1} END {exit !f}' "$S/out"
 echo "backup" > "$S/lock.101"
 nx list; check "list with a locked container keeps the right name" all 'listed web-2' '! listed backup'
 rm -f "$S/lock.101"
 echo "Permission denied" > "$S/fail_all"
-nx list; check "list with pct failing -> exit 1 with the reason, not an empty list" all 'rc 1' 'err_has "permission denied"' '! out_has "NAMES"'
+nx list; check "list with the host failing -> exit 1 with the reason, not an empty list" all 'rc 1' 'err_has "permission denied"' '! out_has "NAMES"'
 rm -f "$S/fail_all"
 
 echo "=== start ==="
@@ -498,6 +500,57 @@ check "features on a build without the crun backend says so" \
   all 'rc 1' 'err_has "-Denable-backend-crun=true"'
 nx features --help
 check "features --help explains where the values come from" all 'rc 0' 'out_has "crun features"'
+
+echo "=== the cluster ==="
+# A container on another node. `pct` cannot see it -- that is what the fourth
+# field means in the fake's db, and what makes these checks worth anything:
+# before this, every one of them answered "not found".
+reset_sim
+echo "200 running remote-1 titan" >> "$S/db"
+
+nx list
+check "list shows a container on another node, with the node" \
+  all 'rc 0' 'listed remote-1' 'awk -F"\t" '"'"'$8=="remote-1" && $7=="titan" {f=1} END {exit !f}'"'"' "$S/out"'
+check "and it is the cluster that was asked, not this host" \
+  called "pvesh get /cluster/resources --type lxc --output-format json"
+
+nx start remote-1
+check "start on another node goes through that node's API, not pct" \
+  all 'rc 0' 'called "pvesh create /nodes/titan/lxc/200/status/start"' 'not_called_re "^pct start"'
+
+nx state remote-1
+check "state names the node it is on" \
+  all 'rc 0' 'out_has "\"io.cageforge.nexcage.node\": \"titan\""'
+check "and reports no PID, because a PID there is not a PID here" \
+  out_has '"pid": 0'
+
+nx exec remote-1 echo hi
+check "exec on another node is refused, and says where to run it" \
+  all 'rc 1' 'err_has "runs on titan"' 'not_called_re "^pct exec"'
+nx kill remote-1
+check "kill on another node is refused: a signal comes from the host" \
+  all 'rc 1' 'err_has "runs on titan"'
+
+nx create --name remote-1 "$TPL"
+check "a name taken on another node is not free" \
+  all 'rc 1' 'err_has "already exists on node titan"' 'not_called_re "^pct create"'
+
+nx stop remote-1
+check "stop on another node goes through that node's API" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc/200/status/shutdown"'
+nx delete remote-1
+check "delete on another node goes through that node's API" \
+  all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200"'
+nx state remote-1
+check "and afterwards it is gone from the cluster" rc 1
+
+# A container here still goes through pct: the API is for what is elsewhere.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name here-1 "$TPL" >/dev/null 2>&1
+nx start here-1
+check "a container on this host still goes through pct" \
+  all 'rc 0' 'called_re "^pct start"' 'not_called_re "^pvesh create /nodes/"'
 
 echo "=== health ==="
 # Its checks look at the host, so only the absence of leaks is checked here

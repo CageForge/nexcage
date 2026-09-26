@@ -97,7 +97,16 @@ pub const StateCommand = struct {
         } else {
             try writer.writeAll("null");
         }
-        try writer.writeAll(",\n  \"annotations\": {}\n}\n");
+        // The runtime-spec has no field for a node, and annotations are where
+        // a runtime puts what the spec does not name. A caller that finds a
+        // pid of 0 on a running container can see here why.
+        if (found.info.node) |node| {
+            try writer.writeAll(",\n  \"annotations\": {\n    \"io.cageforge.nexcage.node\": ");
+            try core.json.writeString(writer, node);
+            try writer.writeAll("\n  }\n}\n");
+        } else {
+            try writer.writeAll(",\n  \"annotations\": {}\n}\n");
+        }
         try stdout.writeAll(out.items);
     }
 
@@ -128,14 +137,25 @@ pub const StateCommand = struct {
                 // Containers are addressed by name everywhere else (create
                 // sets the hostname, start/stop/delete resolve it), so match
                 // the name first; a bare VMID is accepted as well.
+                const here = backend.nodeName() catch null;
+                defer if (here) |h| allocator.free(h);
+
                 for (containers) |*c| {
                     if (std.mem.eql(u8, c.name, container_id) or std.mem.eql(u8, c.id, container_id)) {
-                        // OCI state requires the PID while the container
-                        // runs; it used to be 0 always.
-                        const pid = if (std.mem.eql(u8, c.status, "running"))
-                            (backend.initPid(c.id) catch null) orelse 0
+                        // A container on another node of the cluster has an
+                        // init, but its PID belongs to that node's process
+                        // table. Reporting it here would name whatever holds
+                        // that number on this host.
+                        const elsewhere = if (c.node) |n| (if (here) |h| !std.mem.eql(u8, h, n) else false) else false;
+
+                        // OCI state requires the PID while the container runs;
+                        // it used to be 0 always. A failure to read it on this
+                        // host is an error rather than a 0: a running container
+                        // with pid 0 is a lie a caller cannot see through.
+                        const pid = if (elsewhere or !std.mem.eql(u8, c.status, "running"))
+                            0
                         else
-                            0;
+                            try backend.initPid(c.id) orelse 0;
                         return .{
                             .info = core.ContainerInfo{
                                 .allocator = allocator,
@@ -146,6 +166,7 @@ pub const StateCommand = struct {
                                 .created = if (c.created) |created| try allocator.dupe(u8, created) else null,
                                 .image = if (c.image) |img| try allocator.dupe(u8, img) else null,
                                 .runtime = if (c.runtime) |rt| try allocator.dupe(u8, rt) else null,
+                                .node = if (c.node) |n| try allocator.dupe(u8, n) else null,
                             },
                             .pid = pid,
                         };

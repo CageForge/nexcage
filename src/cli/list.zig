@@ -45,8 +45,11 @@ pub const ListCommand = struct {
         try stdout.writeAll("  nexcage list --debug            # List with debug logging\n");
         try stdout.writeAll("  nexcage list --log-file /tmp/log # List with custom log file\n\n");
         try stdout.writeAll("OUTPUT FORMAT:\n");
-        try stdout.writeAll("  ID      IMAGE   COMMAND  CREATED  STATUS  BACKEND  NAMES\n");
-        try stdout.writeAll("  <id>    <img>   <cmd>    <time>   <state> <type>   <name>\n");
+        try stdout.writeAll("  ID      IMAGE   COMMAND  CREATED  STATUS  BACKEND  NODE   NAMES\n");
+        try stdout.writeAll("  <id>    <img>   <cmd>    <time>   <state> <type>   <node> <name>\n");
+        try stdout.writeAll("\n  NODE is the cluster node a Proxmox LXC container is on; every other\n");
+        try stdout.writeAll("  backend shows \"-\". Containers on other nodes of the cluster are\n");
+        try stdout.writeAll("  listed too, which `pct list` on one host cannot do.\n");
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
@@ -73,7 +76,7 @@ pub const ListCommand = struct {
 
         // Print aggregated results (similar to runc list format)
         const stdout = std.fs.File.stdout();
-        try stdout.writeAll("ID\tIMAGE\tCOMMAND\tCREATED\tSTATUS\tBACKEND\tNAMES\n");
+        try stdout.writeAll("ID\tIMAGE\tCOMMAND\tCREATED\tSTATUS\tBACKEND\tNODE\tNAMES\n");
 
         for (all_containers.items) |*container| {
             const id = container.id;
@@ -82,6 +85,9 @@ pub const ListCommand = struct {
             const created = container.created orelse "unknown";
             const status = container.status;
             const backend = container.backend_type;
+            // "-" rather than blank: a column that is sometimes empty is
+            // hard to read, and every Proxmox LXC row has a node.
+            const node = container.node orelse "-";
             const names = container.name;
 
             // Simple output without allocPrint to avoid allocator issues
@@ -96,6 +102,8 @@ pub const ListCommand = struct {
             _ = try stdout.writeAll(status);
             _ = try stdout.writeAll("\t");
             _ = try stdout.writeAll(backend);
+            _ = try stdout.writeAll("\t");
+            _ = try stdout.writeAll(node);
             _ = try stdout.writeAll("\t");
             _ = try stdout.writeAll(names);
             _ = try stdout.writeAll("\n");

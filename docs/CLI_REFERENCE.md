@@ -45,6 +45,47 @@ search path, and refused when named with `--config`.
 `--root` is read before any command touches state, wherever it appears on the
 command line.
 
+## Clusters
+
+A Proxmox VE cluster has more than one node, and `pct` only ever sees the one it
+runs on. nexcage asks the cluster instead — `/cluster/resources` — so a
+container is found wherever it lives:
+
+```
+$ nexcage list
+ID    IMAGE     COMMAND  CREATED   STATUS   BACKEND      NODE        NAMES
+100   unknown   pct      unknown   running  proxmox-lxc  prox-home   web-1
+200   unknown   pct      unknown   running  proxmox-lxc  titan       web-2
+
+$ nexcage start web-2        # on titan, from here
+```
+
+`start`, `stop`, `delete` and `state` work on any node: for a container on this
+host they run `pct`, and for one elsewhere they go through that node's API. The
+`state` of a container on another node carries it as an annotation:
+
+```json
+  "pid": 0,
+  "annotations": { "io.cageforge.nexcage.node": "titan" }
+```
+
+**Three things stay local**, and are refused with the node's name rather than
+answered wrongly:
+
+| | why |
+|---|---|
+| `exec` | `pct exec` attaches to a container on the host it runs on, and the API has no exec |
+| `kill` | a signal goes to the container's init from the host, and the API has no call for that — `stop` and `delete` do work from here |
+| the `pid` in `state` | an init's PID belongs to its node's process table; reporting it here would name whatever holds that number on this host |
+
+`create` still makes the container on the host nexcage runs on. The name is
+checked across the whole cluster first, though, because every other command
+resolves a name and two containers sharing one would make that ambiguous.
+
+On a host that is not in a cluster, or where `pvesh` cannot be reached, nexcage
+falls back to `pct` and behaves exactly as it did: this host's containers, and
+no others.
+
 ## Backend selection
 
 `create`, `run`, `start`, `stop`, `delete`, `kill`, `exec` and `state` go to
