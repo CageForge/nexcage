@@ -124,6 +124,12 @@ pub const ProxmoxLxcDriver = struct {
     }
 
     /// Check if Proxmox VE version is >= 9.1 (supports OCI Registry pull)
+    /// Remove a template; answers whether its storage was a shared one, where
+    /// the file is gone from every node rather than only the one named.
+    pub fn removeTemplate(self: *Self, allocator: std.mem.Allocator, node: []const u8, volid: []const u8) !bool {
+        return self.pve_client.removeTemplate(allocator, node, volid);
+    }
+
     pub fn supportsOciRegistryPull(self: *Self) !bool {
         return self.pve_client.supportsOciRegistryPull();
     }

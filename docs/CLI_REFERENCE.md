@@ -412,6 +412,34 @@ Needs **Proxmox VE 9.1 or later** on the target node, which is where
 than left with an API error. The endpoint takes **no credentials**, so a private
 registry cannot be authenticated through it.
 
+### rmi
+
+```bash
+nexcage rmi <template> [--node <name>]
+```
+
+Removes a container template from the storage it is on, named the way `images`
+lists it and `pull` prints it:
+
+```bash
+$ nexcage rmi local:vztmpl/redis_7.tar
+local:vztmpl/redis_7.tar removed from prox-home
+
+$ nexcage rmi shared-rdma:vztmpl/redis_7.tar --node titan
+shared-rdma:vztmpl/redis_7.tar removed from the shared storage; it is gone from every node
+```
+
+The node matters, because `local` is a different directory on every node. On a
+**shared** storage the file is gone from every node at once, whichever node was
+named, and the output says so rather than leaving someone to discover it.
+
+A template that is not there is an error (exit 1), not a no-op: a mistyped volid
+should not look like a successful removal. A malformed name is a usage error
+(exit 2).
+
+Removing a template does not affect containers created from it — a template is
+copied when a container is made, not referenced.
+
 ### ps
 
 ```bash
