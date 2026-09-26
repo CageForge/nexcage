@@ -358,6 +358,60 @@ container was created from, and `null` for one created from a template or a
 registry image; `start` and `stop` keep it. A container that does not exist is
 an error (exit 1).
 
+### images
+
+```bash
+nexcage images [--node <name>]
+```
+
+The container templates the cluster can create from, with the node and storage
+each one is on:
+
+```
+NODE        STORAGE      SHARED  SIZE   TEMPLATE
+prox-home   local        no      129M   local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst
+prox-home   shared-rdma  yes     31M    shared-rdma:vztmpl/redis_7.tar
+titan       local        no      98M    local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz
+```
+
+A template has to be readable by the node the container is created on, which is
+what `create --node` checks, so this is where to look before placing a container
+elsewhere. **A storage marked `SHARED` carries the same files on every node** and
+is listed once rather than once per node — counting a template twice is worse
+than not showing it.
+
+Proxmox LXC only: the crun backend is handed a bundle whose rootfs is already
+there, so it has nothing to list.
+
+### pull
+
+```bash
+nexcage pull <image-reference> [--node <name>] [--storage <name>] [--filename <name>]
+```
+
+Fetches an OCI image from a registry into a Proxmox storage, where it becomes a
+container template, and prints the volid — which is what `create` takes:
+
+```bash
+$ nexcage pull docker.io/library/redis:7 --storage shared-rdma
+shared-rdma:vztmpl/redis_7.tar
+$ nexcage create --name r1 --node titan shared-rdma:vztmpl/redis_7.tar
+```
+
+That pair is the point. `create` pulls too when given a registry reference, but
+only onto this host's `local` storage — and `local` is a different directory on
+every node, so the other node cannot read it. Pulling onto a shared storage is
+how `create --node` becomes usable.
+
+The volid is read back from the storage rather than composed from the reference:
+the endpoint normalises the file name, and only the storage knows what it
+settled on.
+
+Needs **Proxmox VE 9.1 or later** on the target node, which is where
+`oci-registry-pull` arrived; an older one is told which version it needs rather
+than left with an API error. The endpoint takes **no credentials**, so a private
+registry cannot be authenticated through it.
+
 ### ps
 
 ```bash

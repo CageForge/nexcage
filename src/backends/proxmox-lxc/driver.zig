@@ -732,6 +732,24 @@ pub const ProxmoxLxcDriver = struct {
         return self.pve_client.getNodeName();
     }
 
+    /// The templates the cluster can create from; `only_node` narrows it.
+    /// Distinct from `listTemplates`, which reads this host's template cache.
+    pub fn listClusterTemplates(self: *Self, allocator: std.mem.Allocator, only_node: ?[]const u8) ![]pve.PveClient.Template {
+        return self.pve_client.listTemplates(allocator, only_node);
+    }
+
+    /// Pull an OCI image into a storage on a node, answering with the volid.
+    pub fn pullTemplate(
+        self: *Self,
+        allocator: std.mem.Allocator,
+        node: []const u8,
+        storage: []const u8,
+        reference: []const u8,
+        filename: ?[]const u8,
+    ) ![]u8 {
+        return self.pve_client.pullTemplate(allocator, node, storage, reference, filename);
+    }
+
     pub fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
         return self.pve_client.getVmidByName(name);
     }

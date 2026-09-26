@@ -591,6 +591,58 @@ nx start here-1
 check "a container on this host still goes through pct" \
   all 'rc 0' 'called_re "^pct start"' 'not_called_re "^pvesh create /nodes/"'
 
+echo "=== images and pull ==="
+reset_sim
+: > "$S/node_templates"; : > "$S/nodes"; : > "$S/node_storages"
+HOST=$(hostname)
+printf '%s\n' "$HOST" titan > "$S/nodes"
+# `shared-rdma` is shared: both nodes report it, and it must be listed once.
+{ echo "$HOST local 0"; echo "$HOST shared-rdma 1"; echo "titan local 0"; echo "titan shared-rdma 1"; } > "$S/node_storages"
+{ echo "$HOST local:vztmpl/debian-13.tar.zst"
+  echo "$HOST shared-rdma:vztmpl/redis_7.tar"
+  echo "titan shared-rdma:vztmpl/redis_7.tar"
+  echo "titan local:vztmpl/alpine-3.22.tar.zst"; } > "$S/node_templates"
+
+nx images
+check "images lists a template with its node and storage" \
+  all 'rc 0' 'out_has "NODE	STORAGE	SHARED	SIZE	TEMPLATE"' \
+      'grep -q "local:vztmpl/debian-13.tar.zst" "$S/out"'
+check "images sees the other node's own template too" \
+  out_has "local:vztmpl/alpine-3.22.tar.zst"
+# The subtlety worth testing: a shared storage carries the same file on every
+# node, so listing per node would show it twice and a count would mean nothing.
+check "a template on a shared storage is listed once, not once per node" \
+  [ "$(grep -c 'shared-rdma:vztmpl/redis_7.tar' "$S/out")" = 1 ]
+check "and the shared storage is marked as shared" \
+  awk -F'\t' '$5 ~ /shared-rdma/ && $3=="yes" {f=1} END {exit !f}' "$S/out"
+
+nx images --node titan
+check "images --node narrows it to that node" \
+  all 'rc 0' 'out_has "local:vztmpl/alpine-3.22.tar.zst"' '! out_has "debian-13"'
+
+nx --runtime crun images
+check "images on the crun backend says templates are not its business" \
+  all 'rc 1' 'err_has "already there"'
+
+# Pulling needs PVE 9.1+, which is where oci-registry-pull arrived.
+echo 9.1.0 > "$S/pvever"
+nx pull docker.io/library/nginx:1.27
+check "pull answers with the volid the storage ended up holding" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/.*/storage/local/oci-registry-pull --reference docker.io/library/nginx:1.27"' \
+      'grep -q "^local:vztmpl/nginx_1.27.tar$" "$S/out"'
+nx pull docker.io/library/nginx:1.27 --node titan --storage shared-rdma
+check "pull --node --storage puts it where create --node can read it" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/storage/shared-rdma/oci-registry-pull"' \
+      'grep -q "^shared-rdma:vztmpl/nginx_1.27.tar$" "$S/out"'
+
+# An older Proxmox has no such endpoint, and the version is why -- not an
+# obscure API failure.
+echo 8.4.1 > "$S/pvever"
+nx pull docker.io/library/nginx:1.27
+check "pull on a Proxmox older than 9.1 says which version it needs" \
+  all 'rc 1' 'err_has "9.1 or later"' 'not_called_re "oci-registry-pull"'
+echo 9.1.0 > "$S/pvever"
+
 echo "=== health ==="
 # Its checks look at the host, so only the absence of leaks is checked here
 nx health
