@@ -42,6 +42,39 @@ jobs:
       - name: Run the binary
         run: docker run --rm nexcage:ci version
 
+      # The features document is read through a hand-written Zig mirror of two
+      # crun structs, and the vendored crun is a fork that moves -- it already
+      # carries a field upstream does not. A wrong layout compiles fine and
+      # then segfaults, or produces plausible rubbish. The check runs in the
+      # builder stage because that is where deps/crun is checked out; the
+      # production image does not carry the header.
+      - name: The features ABI still matches the vendored header
+        run: |
+          docker build --target builder -t nexcage:builder .
+          docker run --rm nexcage:builder sh scripts/check_features_abi.sh
+
+      # containerd's CRI asks for this once at startup. The values must be
+      # libcrun's own, read from this build -- a features document written by
+      # hand would be a set of promises to a kubelet about someone else's
+      # compile-time configuration, free to drift from it silently.
+      - name: The features document comes from this build's libcrun
+        run: |
+          set -eux
+          docker run --rm nexcage:ci --runtime crun features > features.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("features.json"))
+          assert d["ociVersionMin"].startswith("1."), d["ociVersionMin"]
+          assert "createRuntime" in d["hooks"], d["hooks"]
+          assert "mount" in d["linux"]["namespaces"], d["linux"]["namespaces"]
+          assert "bind" in d["mountOptions"], d["mountOptions"][:10]
+          assert d["linux"]["cgroup"]["v2"] is True, d["linux"]["cgroup"]
+          assert d["annotations"]["run.oci.crun.version"], d["annotations"]
+          assert d["annotations"]["io.cageforge.nexcage.backend"] == "crun"
+          print("spec", d["ociVersionMin"], "to", d["ociVersionMax"],
+                "on crun", d["annotations"]["run.oci.crun.version"])
+          PY
+
       # A container engine does not run the runtime from the bundle it names:
       # containerd's shim serves a whole pod and runs it from the sandbox's
       # directory. Nothing before this exercised that, and the backend had

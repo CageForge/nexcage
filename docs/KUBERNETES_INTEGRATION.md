@@ -23,7 +23,7 @@ next step, not by size.
 | 1 | `exec` | **Done on Proxmox LXC**, which runs `pct exec` and exits with the command's status as `runc exec` does. crun and runc have none: libcrun's exec entry point has no binding in `libcrun_ffi.zig` | `kubectl exec`, CRI `ExecSync`, exec probes |
 | 2 | OCI runtime-spec CLI | **Enough for podman and containerd to run containers.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | ~~`state`~~ | **Done.** Proxmox LXC reports the bundle it recorded; crun hands the question to libcrun, so the output is `crun state`'s | The same. A shim reads the bundle path back from `state` |
-| 4 | Missing verbs | `delete --force` and `kill --all` are done; no `ps`, `events`, `features`, `pause`, `resume`, `update`. containerd's CRI asks for **`features`** at startup and carries on without it | Pod lifecycle, metrics, cgroup updates on resize |
+| 4 | Missing verbs | `delete --force`, `kill --all` and `features` are done; no `ps`, `events`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
 | 6 | No log handling | container output is not captured to a file | Kubelet reads `/var/log/pods/…/0.log`; `kubectl logs` needs it |
 | 7 | No CNI | `eth0` on `network.bridge` with DHCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
@@ -285,10 +285,29 @@ needs no engine: create a container from any working directory that is not the
 bundle.
 
 The other thing CRI asks for that no engine had asked for before is
-**`features`** — containerd calls it once at startup and nexcage answers
-`unknown command`. It did not stop a pod: containerd records the failure and
-assumes nothing. It is the first verb from the "missing verbs" row that
-something has actually wanted.
+**`features`**, and it is answered now. containerd calls it once at startup; it
+never stopped a pod, because containerd records the failure and then assumes
+nothing, which is also the reason a wrong answer would be worse than none —
+what a runtime claims there, a kubelet believes.
+
+So nexcage claims nothing of its own. The document comes from
+`libcrun_container_get_features`, the call behind `crun features`, so it is this
+build's configuration read from this build:
+
+```
+$ nexcage --runtime crun features | jq -c '.linux.cgroup, .linux.mountExtensions'
+{"v1":true,"v2":true,"systemd":true,"systemdUser":true}
+{"idmap":{"enabled":true}}
+```
+
+containerd reads two things from it — `mountExtensions.idmap` for user
+namespaces and `rro` in `mountOptions` for recursive read-only mounts — and
+both are libcrun's answers rather than assertions maintained here. `features`
+carries no container id, and a container id is nexcage's routing key, so the
+backend is resolved the way a container with no name would route. On the
+Proxmox LXC backend it refuses and says where the answer lives: `pct` creates
+the container there, so the hooks and seccomp a features document promises are
+not nexcage's to report.
 
 CRI-O is untested. podman driving it did not predict containerd's behaviour,
 and containerd's CRI did not predict its own shim's working directory, so
