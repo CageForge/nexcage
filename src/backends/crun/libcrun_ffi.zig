@@ -134,6 +134,24 @@ pub const Libcrun = struct {
     /// Release error
     pub extern fn libcrun_error_release(err: *?*Error) c_int;
 
+    /// int libcrun_container_read_pids (libcrun_context_t *context, const char *id,
+    ///                                  bool recurse, pid_t **pids,
+    ///                                  libcrun_error_t *err);
+    ///
+    /// The host PIDs of the processes in the container's cgroup, which is what
+    /// `crun ps` and `runc ps` report. `*pids` comes back as a plain malloc'd
+    /// array terminated by a 0, and the caller frees it -- crun's own ps leaks
+    /// it, which costs nothing in a process that is about to exit.
+    ///
+    /// `recurse` walks the cgroup's children as well; crun passes true.
+    pub extern fn libcrun_container_read_pids(
+        context: *Context,
+        id: [*c]const u8,
+        recurse: bool,
+        pids: *[*c]c_int,
+        err: *?*Error,
+    ) c_int;
+
     /// int libcrun_container_exec_process_file (libcrun_context_t *context,
     ///                                         const char *id, const char *path,
     ///                                         libcrun_error_t *err);
