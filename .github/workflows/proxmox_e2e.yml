@@ -197,7 +197,10 @@ jobs:
         expect_exit 2 nx start --runtime bogus "$NAME"
 
         echo "[E2E] list shows the container"
-        nx list | awk -F'\t' -v n="$NAME" '$7==n {found=1} END {exit !found}'
+        # $8, not $7: NODE comes before NAMES now that list covers the cluster.
+        nx list | awk -F'\t' -v n="$NAME" '$8==n {found=1} END {exit !found}'
+        echo "[E2E] and the NODE column names this host"
+        nx list | awk -F'\t' -v n="$NAME" -v h="$(hostname)" '$8==n && $7==h {found=1} END {exit !found}'
         if [ -n "$SUDO" ]; then
           echo "[E2E] list without root fails instead of printing an empty table"
           expect_exit 1 "$NEXCAGE" list

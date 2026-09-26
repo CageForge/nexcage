@@ -44,6 +44,9 @@ pub const ContainerInfo = struct {
     created: ?[]const u8 = null,
     image: ?[]const u8 = null,
     runtime: ?[]const u8 = null,
+    /// The cluster node the container is on. Null where the backend has no
+    /// notion of nodes, which is every backend but Proxmox LXC.
+    node: ?[]const u8 = null,
 
     pub fn deinit(self: *ContainerInfo) void {
         self.allocator.free(self.id);
@@ -53,6 +56,7 @@ pub const ContainerInfo = struct {
         if (self.created) |c| self.allocator.free(c);
         if (self.image) |i| self.allocator.free(i);
         if (self.runtime) |r| self.allocator.free(r);
+        if (self.node) |n| self.allocator.free(n);
     }
 };
 

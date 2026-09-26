@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A Proxmox VE cluster is more than one node, and nexcage now sees all of them.** `pct` only ever answers for the host it runs on, so on a cluster `list` showed a fraction of what was there without saying so, and every other command reported a container on another node as missing. Names and VMIDs resolve through `/cluster/resources` instead: `list`, `state`, `start`, `stop` and `delete` find a container wherever it lives and act through the owning node's API, while a container on this host still goes through `pct`. `list` grew a `NODE` column, and `state` carries the node as the annotation `io.cageforge.nexcage.node`.
+- `create` checks the name across the whole cluster before taking a VMID. Every other command resolves a name, and two containers sharing one would make that ambiguous.
+
+### Changed
+- `list` output has a `NODE` column between `BACKEND` and `NAMES`. A script reading the name out of the seventh tab-separated field wants the eighth now.
+
+### Fixed
+- `state` reported `"pid": 0` for a running container whenever the PID could not be read, which a caller cannot tell from a container that has none. Reading it is an error now — except for a container on another node, where there is no PID on this host to report and the annotation says which node to ask.
+
+
 ## [0.10.0] - 2026-09-26
 
 Container engines run containers on nexcage, and Kubernetes schedules pods

@@ -177,10 +177,17 @@ pub const ProxmoxLxcDriver = struct {
         };
 
         // Every other command finds a container by name, so names must be
-        // unique. Checked before any image is pulled.
-        if (self.pve_client.getVmidByName(config.name)) |existing_vmid| {
-            defer self.allocator.free(existing_vmid);
-            if (self.logger) |log| log.err("Container '{s}' already exists (vmid {s})", .{ config.name, existing_vmid }) catch {};
+        // unique -- and unique across the cluster, not just on this host, or
+        // the name would resolve to two containers and the first one found
+        // would win. Checked before any image is pulled.
+        if (self.pve_client.locate(self.allocator, config.name)) |found| {
+            var existing = found;
+            defer existing.deinit();
+            if (existing.local) {
+                if (self.logger) |log| log.err("Container '{s}' already exists (vmid {s})", .{ config.name, existing.vmid }) catch {};
+            } else {
+                if (self.logger) |log| log.err("Container '{s}' already exists on node {s} (vmid {s})", .{ config.name, existing.node, existing.vmid }) catch {};
+            }
             return core.Error.OperationFailed;
         } else |err| {
             if (err != core.Error.NotFound) return err;
@@ -525,12 +532,12 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Starting Proxmox LXC container: {s}", .{container_id});
         }
 
-        const vmid = try self.resolveVmid(container_id);
-        defer self.allocator.free(vmid);
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
 
-        try self.pve_client.start(vmid);
+        try self.pve_client.start(loc.vmid, loc.remote());
 
-        const init_pid = (self.pve_client.initPid(vmid) catch null) orelse 0;
+        const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
         const kept_bundle = self.persistedBundle(container_id);
         defer if (kept_bundle) |b| self.allocator.free(b);
         self.writeOciState(container_id, "running", init_pid, kept_bundle) catch {};
@@ -542,10 +549,10 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Stopping Proxmox LXC container: {s}", .{container_id});
         }
 
-        const vmid = try self.resolveVmid(container_id);
-        defer self.allocator.free(vmid);
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
 
-        try self.pve_client.stop(vmid);
+        try self.pve_client.stop(loc.vmid, loc.remote());
         const kept_bundle = self.persistedBundle(container_id);
         defer if (kept_bundle) |b| self.allocator.free(b);
         self.writeOciState(container_id, "stopped", 0, kept_bundle) catch {};
@@ -557,22 +564,27 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Deleting Proxmox LXC container: {s}", .{container_id});
         }
 
-        const vmid = try self.resolveVmid(container_id);
-        defer self.allocator.free(vmid);
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        const vmid = loc.vmid;
 
         // `pct destroy` refuses a running container. With --force, stop it
         // first, as `runc delete --force` does; a container engine sends that
         // when it has given up waiting for a clean shutdown.
         if (force) {
-            if ((self.pve_client.initPid(vmid) catch null) != null) {
+            // On another node there is no PID here to look at, so the stop is
+            // sent unconditionally: shutdown on a stopped container is a no-op
+            // the API accepts, and the alternative is refusing --force for a
+            // container the cluster can perfectly well stop.
+            if (!loc.local or (self.pve_client.initPid(vmid, loc.remote()) catch null) != null) {
                 if (self.logger) |log| log.info("Stopping {s} before delete (--force)", .{container_id}) catch {};
-                self.pve_client.stop(vmid) catch |err| {
+                self.pve_client.stop(vmid, loc.remote()) catch |err| {
                     if (self.logger) |log| log.warn("forced stop of {s} failed: {s}", .{ container_id, @errorName(err) }) catch {};
                 };
             }
         }
 
-        try self.pve_client.delete(vmid);
+        try self.pve_client.delete(vmid, loc.remote());
 
         // Drop the state nexcage persisted for this container. The name matched
         // a pct hostname, but never let it address anything above the state root.
@@ -596,21 +608,24 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Send a signal to the container's init process from the host
     pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
-        const vmid = try self.resolveVmid(container_id);
-        defer self.allocator.free(vmid);
-        try self.pve_client.kill(vmid, signal);
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        try self.pve_client.kill(loc.vmid, signal, loc.remote());
     }
 
     /// Run a command inside the container; returns the status it exited with
     pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8) !u8 {
-        const vmid = try self.resolveVmid(container_id);
-        defer self.allocator.free(vmid);
-        return self.pve_client.exec(vmid, argv);
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        return self.pve_client.exec(loc.vmid, argv, loc.remote());
     }
 
     /// Host PID of the container's init, or null when it is not running
+    /// Host PID of a container's init on **this** host. `state` asks for it by
+    /// VMID, which carries no node, so a container elsewhere in the cluster is
+    /// reported without a PID rather than with one from the wrong machine.
     pub fn initPid(self: *Self, vmid: []const u8) !?std.posix.pid_t {
-        return self.pve_client.initPid(vmid);
+        return self.pve_client.initPid(vmid, null);
     }
 
     /// List LXC containers using pct command
@@ -659,8 +674,28 @@ pub const ProxmoxLxcDriver = struct {
         try file.writeAll(json_buf.items);
     }
 
+    /// The node nexcage is running on. `state` needs it to tell a container
+    /// here from one on another node of the cluster, where a host PID would
+    /// mean nothing.
+    pub fn nodeName(self: *Self) ![]const u8 {
+        return self.pve_client.getNodeName();
+    }
+
     pub fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
         return self.pve_client.getVmidByName(name);
+    }
+
+    /// Name → where the container is, for commands that act on an existing
+    /// one. Looks across the cluster, so a container on another node resolves
+    /// instead of being reported as missing; the not-found case is logged under
+    /// the name the user typed.
+    fn resolveLocation(self: *Self, container_id: []const u8) !pve.PveClient.Location {
+        return self.pve_client.locate(self.allocator, container_id) catch |err| {
+            if (err == core.Error.NotFound) {
+                if (self.logger) |log| log.err("Container '{s}' not found on any node", .{container_id}) catch {};
+            }
+            return err;
+        };
     }
 
     /// Name → VMID for commands that act on an existing container, with the
