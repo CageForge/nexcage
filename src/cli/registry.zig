@@ -17,6 +17,7 @@ const features = @import("features.zig");
 const ps = @import("ps.zig");
 const images = @import("images.zig");
 const pull = @import("pull.zig");
+const rmi = @import("rmi.zig");
 const kill = @import("kill.zig");
 const exec = @import("exec.zig");
 // const template = @import("template.zig");
@@ -116,6 +117,7 @@ var features_cmd = features.FeaturesCommand{};
 var ps_cmd = ps.PsCommand{};
 var images_cmd = images.ImagesCommand{};
 var pull_cmd = pull.PullCommand{};
+var rmi_cmd = rmi.RmiCommand{};
 // var template_cmd = template.TemplateCommand{};
 
 /// Generic command registration helper
@@ -236,6 +238,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
     try registerCommand(registry, &ps_cmd, ps.PsCommand);
     try registerCommand(registry, &images_cmd, images.ImagesCommand);
     try registerCommand(registry, &pull_cmd, pull.PullCommand);
+    try registerCommand(registry, &rmi_cmd, rmi.RmiCommand);
 }
 
 /// Register all built-in commands with logger
@@ -256,4 +259,5 @@ pub fn registerBuiltinCommandsWithLogger(registry: *CommandRegistry, logger: *co
     try registerCommandWithLogger(registry, &ps_cmd, ps.PsCommand, logger);
     try registerCommandWithLogger(registry, &images_cmd, images.ImagesCommand, logger);
     try registerCommandWithLogger(registry, &pull_cmd, pull.PullCommand, logger);
+    try registerCommandWithLogger(registry, &rmi_cmd, rmi.RmiCommand, logger);
 }

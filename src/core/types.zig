@@ -202,6 +202,7 @@ pub const Command = enum {
     ps,
     images,
     pull,
+    rmi,
 };
 
 /// Runtime options

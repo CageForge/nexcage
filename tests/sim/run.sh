@@ -643,6 +643,37 @@ check "pull on a Proxmox older than 9.1 says which version it needs" \
   all 'rc 1' 'err_has "9.1 or later"' 'not_called_re "oci-registry-pull"'
 echo 9.1.0 > "$S/pvever"
 
+echo "--- rmi ---"
+nx rmi "local:vztmpl/debian-13.tar.zst"
+check "rmi removes the template from this node's storage" \
+  all 'rc 0' 'called_re "^pvesh delete /nodes/.*/storage/local/content/local:vztmpl/debian-13.tar.zst"' \
+      'out_has "removed from"'
+nx images
+check "and it is gone from the listing" all 'rc 0' '! out_has "debian-13.tar.zst"'
+
+# A mistyped volid must not look like a successful removal.
+nx rmi "local:vztmpl/there-was-never-such-a-thing.tar"
+check "rmi on a template that is not there is an error, not a no-op" \
+  all 'rc 1' 'err_has "does not have the template"' 'not_called_re "^pvesh delete"'
+nx rmi "no-such-storage:vztmpl/x.tar"
+check "rmi names the storage the node does not have" \
+  all 'rc 1' 'err_has "no storage called"'
+nx rmi not-a-volid
+# 2, not 1: a malformed name is a usage error, and nexcage keeps that apart
+# from "the thing is not there", which is 1.
+check "rmi wants <storage>:vztmpl/<file>" all 'rc 2' 'err_has "vztmpl"'
+
+# On a shared storage the file goes for every node, and that is said.
+nx rmi "shared-rdma:vztmpl/redis_7.tar" --node titan
+check "rmi on a shared storage says it is gone from every node" \
+  all 'rc 0' 'out_has "gone from every node"'
+nx images
+check "and the shared template is gone from the listing" all 'rc 0' '! out_has "redis_7.tar"'
+
+nx --runtime crun rmi "local:vztmpl/x.tar"
+check "rmi on the crun backend says templates are not its business" \
+  all 'rc 1' 'err_has "already there"'
+
 echo "=== health ==="
 # Its checks look at the host, so only the absence of leaks is checked here
 nx health

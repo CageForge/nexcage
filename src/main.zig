@@ -348,6 +348,7 @@ fn printUsage() !void {
         \\  ps        List the host PIDs of the processes in a container
         \\  images    List the container templates the cluster can create from
         \\  pull      Fetch an OCI image into a Proxmox storage as a template
+        \\  rmi       Remove a container template from a Proxmox storage
         \\  run       Create and start a container
         \\  help      Show this help message
         \\  version   Show version information
@@ -620,6 +621,7 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "ps")) return .ps;
     if (std.mem.eql(u8, command_str, "images")) return .images;
     if (std.mem.eql(u8, command_str, "pull")) return .pull;
+    if (std.mem.eql(u8, command_str, "rmi")) return .rmi;
     return .help; // Default to help
 }
 

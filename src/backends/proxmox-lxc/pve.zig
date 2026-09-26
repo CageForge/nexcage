@@ -311,6 +311,80 @@ pub const PveClient = struct {
         return volids;
     }
 
+    /// Remove a template from the storage it is on.
+    ///
+    /// The volid names its own storage, so there is nothing to guess. Two things
+    /// are checked first, because a delete that reports success without deleting
+    /// anything is the worst answer this command can give: that the template is
+    /// there at all, and whether the storage is shared -- on a shared storage
+    /// the file goes for every node at once, and the caller should know that
+    /// before it happens rather than after.
+    pub fn removeTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, volid: []const u8) !bool {
+        const colon = std.mem.indexOfScalar(u8, volid, ':') orelse {
+            if (self.logger) |log| {
+                log.err("a template is named <storage>:vztmpl/<file>, got '{s}'", .{volid}) catch {};
+            }
+            return core.Error.InvalidInput;
+        };
+        const storage = volid[0..colon];
+
+        // Is it there, and is that storage shared?
+        var shared = false;
+        var present = false;
+        {
+            const stores = try self.templateStorages(node);
+            defer {
+                for (stores) |st| self.allocator.free(st.name);
+                self.allocator.free(stores);
+            }
+            var known_storage = false;
+            for (stores) |st| {
+                if (!std.mem.eql(u8, st.name, storage)) continue;
+                known_storage = true;
+                shared = st.shared;
+            }
+            if (!known_storage) {
+                if (self.logger) |log| {
+                    log.err("node {s} has no storage called '{s}'", .{ node, storage }) catch {};
+                }
+                return core.Error.NotFound;
+            }
+
+            const volids = try self.volidsOf(allocator, node, storage);
+            defer {
+                for (volids) |v| allocator.free(v);
+                allocator.free(volids);
+            }
+            for (volids) |v| {
+                if (std.mem.eql(u8, v, volid)) present = true;
+            }
+        }
+
+        if (!present) {
+            if (self.logger) |log| {
+                log.err("node {s} does not have the template '{s}'; nothing was removed", .{ node, volid }) catch {};
+            }
+            return core.Error.NotFound;
+        }
+
+        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/content/{s}", .{ node, storage, volid });
+        defer self.allocator.free(path);
+        const args = [_][]const u8{ "pvesh", "delete", path };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) {
+            if (self.logger) |log| {
+                log.err("removing {s} from {s} on {s} failed: {s}", .{ volid, storage, node, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
+            }
+            return self.mapPctError(res.stderr);
+        }
+
+        return shared;
+    }
+
     /// Ask the cluster for the next free VMID.
     ///
     /// This replaces a hash of the container name, which could land on a VMID

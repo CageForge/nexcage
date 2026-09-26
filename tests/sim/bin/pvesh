@@ -101,6 +101,23 @@ case "$1 $2" in
     esac
     awk -v v="$vmid" -v s="$new" '$1==v {$2=s} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
     ;;
+  "delete /nodes/"*/storage/*/content/*)
+    # Removing a template. This case has to come before the container delete
+    # below, which would otherwise read the volid's last segment as a VMID.
+    node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
+    volid=${2##*/content/}
+    grep -qF "$node $volid" "$SIM/node_templates" 2>/dev/null || {
+      echo "volume '$volid' does not exist" >&2; exit 2; }
+    # A shared storage is one set of files, not one per node: deleting from any
+    # node removes it for all of them. Modelling it per node made a removal look
+    # like it had only half worked.
+    store=${volid%%:*}
+    if awk -v s="$store" '$2==s && $3=="1" {f=1} END {exit !f}' "$SIM/node_storages" 2>/dev/null; then
+      grep -vF " $volid" "$SIM/node_templates" > "$SIM/nt.tmp" && mv "$SIM/nt.tmp" "$SIM/node_templates"
+    else
+      grep -vF "$node $volid" "$SIM/node_templates" > "$SIM/nt.tmp" && mv "$SIM/nt.tmp" "$SIM/node_templates"
+    fi
+    ;;
   "delete /nodes/"*)
     path=$2
     vmid=${path##*/}
