@@ -345,6 +345,7 @@ fn printUsage() !void {
         \\  kill      Send a signal to a container
         \\  exec      Run a command inside a running container
         \\  features  Show what this runtime implements, as an OCI features document
+        \\  ps        List the host PIDs of the processes in a container
         \\  run       Create and start a container
         \\  help      Show this help message
         \\  version   Show version information
@@ -474,6 +475,11 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             // it turns up.
             options.workdir = try allocator.dupe(u8, args[i + 1]);
             i += 2;
+        } else if (std.mem.eql(u8, arg, "--format") and i + 1 < args.len) {
+            // `ps --format json`, which is how containerd asks. Distinct from
+            // --log-format, which shapes nexcage's own log.
+            options.format = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
         } else if (std.mem.eql(u8, arg, "--process") and i + 1 < args.len) {
             // How an engine sends an exec: the process spec in a file rather
             // than a command on the command line.
@@ -496,6 +502,7 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             const id_first = options.command == .start or options.command == .stop or
                 options.command == .delete or options.command == .state or
                 options.command == .kill or options.command == .exec or
+                options.command == .ps or
                 (bundle_given and (options.command == .create or options.command == .run));
             if (id_first) {
                 // For start/stop/delete/state/kill/exec, first argument is
@@ -597,6 +604,7 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "state")) return .state;
     if (std.mem.eql(u8, command_str, "kill")) return .kill;
     if (std.mem.eql(u8, command_str, "features")) return .features;
+    if (std.mem.eql(u8, command_str, "ps")) return .ps;
     return .help; // Default to help
 }
 

@@ -297,6 +297,37 @@ container was created from, and `null` for one created from a template or a
 registry image; `start` and `stop` keep it. A container that does not exist is
 an error (exit 1).
 
+### ps
+
+```bash
+nexcage --runtime crun ps [--format json|table] <name>
+```
+
+The host PIDs of the processes in the container's cgroup, children included.
+Kubernetes asks for this: the kubelet's containerd sends `ps --format json <id>`
+to list a task's processes, and before this existed nexcage answered `unknown
+command 'ps'` — which containerd swallows without a word in its journal, so the
+pod ran and nothing said the question had been asked.
+
+```
+$ nexcage --runtime crun ps --format json abc123
+[
+  11,
+  14,
+  15
+]
+```
+
+`--format table` prints a `PID` header and one number per line. Neither form is
+runc's table, which runs the host's `ps -ef` and filters it by those PIDs; crun
+prints the numbers, and the values come from `libcrun_container_read_pids`, so
+the answer is the one `crun ps` gives for the same container.
+
+Answered by the crun backend only. On Proxmox LXC it is refused rather than
+answered with something else: `pct exec <id> ps` reports the PIDs the container
+sees in its own namespace, which is a different set of numbers for a different
+question.
+
 ### features
 
 ```bash

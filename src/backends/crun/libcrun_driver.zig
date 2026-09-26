@@ -506,6 +506,46 @@ pub const CrunDriver = struct {
         return out.toOwnedSlice(allocator);
     }
 
+    /// The host PIDs of the processes in the container, as `crun ps` reports
+    /// them: read from the container's cgroup, children included. The caller
+    /// owns the slice.
+    ///
+    /// Kubernetes asks for this. On a node under k3s the kubelet's containerd
+    /// sends `ps --format json <id>` for the task's PID list, gets
+    /// `unknown command 'ps'`, and says nothing about it in the journal -- the
+    /// pod runs regardless, which is why this went unnoticed until the command
+    /// lines were recorded.
+    pub fn pids(self: *Self, container_id: []const u8, allocator: std.mem.Allocator) ![]i32 {
+        try validation.SecurityValidation.validateContainerId(container_id);
+
+        const ctx = try self.initContext("", container_id);
+
+        const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
+        defer self.allocator.free(id_c);
+
+        var raw: [*c]c_int = null;
+        var err_ptr: ?*ffi.Libcrun.Error = null;
+        const ret = ffi.Libcrun.libcrun_container_read_pids(ctx, id_c.ptr, true, &raw, &err_ptr);
+        if (ret < 0) {
+            try self.handleError(&err_ptr, "container_read_pids");
+            return core.Error.OperationFailed;
+        }
+        defer if (raw != null) std.c.free(@ptrCast(raw));
+
+        // A 0 ends the array. A container whose cgroup holds nothing is an
+        // empty list rather than an error: that is what a container being torn
+        // down looks like, and crun answers the same way.
+        var count: usize = 0;
+        if (raw != null) {
+            while (raw[count] != 0) : (count += 1) {}
+        }
+
+        const out = try allocator.alloc(i32, count);
+        var i: usize = 0;
+        while (i < count) : (i += 1) out[i] = raw[i];
+        return out;
+    }
+
     /// runc's `exec`, in both the shapes it comes in: `--process <file>` from a
     /// container engine, and a command typed after the container's name.
     ///
