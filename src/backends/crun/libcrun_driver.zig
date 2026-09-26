@@ -506,6 +506,35 @@ pub const CrunDriver = struct {
         return out.toOwnedSlice(allocator);
     }
 
+    /// Freeze every process in the container, and thaw them again. This is the
+    /// cgroup freezer: the processes stay in memory exactly where they were,
+    /// which is what the runtime-spec means by paused -- not a checkpoint.
+    pub fn pause(self: *Self, container_id: []const u8) !void {
+        return self.freeze(container_id, true);
+    }
+
+    pub fn resume_(self: *Self, container_id: []const u8) !void {
+        return self.freeze(container_id, false);
+    }
+
+    fn freeze(self: *Self, container_id: []const u8, on: bool) !void {
+        try validation.SecurityValidation.validateContainerId(container_id);
+
+        const ctx = try self.initContext("", container_id);
+        const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
+        defer self.allocator.free(id_c);
+
+        var err_ptr: ?*ffi.Libcrun.Error = null;
+        const ret = if (on)
+            ffi.Libcrun.libcrun_container_pause(ctx, id_c.ptr, &err_ptr)
+        else
+            ffi.Libcrun.libcrun_container_unpause(ctx, id_c.ptr, &err_ptr);
+        if (ret < 0) {
+            try self.handleError(&err_ptr, if (on) "container_pause" else "container_unpause");
+            return core.Error.OperationFailed;
+        }
+    }
+
     /// The host PIDs of the processes in the container, as `crun ps` reports
     /// them: read from the container's cgroup, children included. The caller
     /// owns the slice.

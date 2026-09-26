@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`pause` and `resume`**, the cgroup freezer: every process in the container stops where it is and stays in memory. On the crun backend through libcrun; on Proxmox LXC by writing the freezer of the container's cgroup. `state` reports `paused` for a frozen container, which it has to read from the cgroup itself — `pct status` keeps saying `running`, because Proxmox has no notion of the state. Refused for a container on another node, naming it: the cgroup filesystem there is not this host's to write.
+- This is deliberately **not** `pct suspend`. On a container that runs `lxc-checkpoint -s`, which dumps the processes through CRIU and takes the container down; measured on a Proxmox VE 9.2 host, where it also simply failed. The freezer is the operation the runtime-spec describes, and nexcage never calls `pct suspend`.
+
+### Fixed
+- **The cluster lookup never worked on a real Proxmox host.** It asked `/cluster/resources --type lxc`, and the API's enumeration is `vm, storage, node, sdn` — so every call was rejected with "400 Parameter verification failed" and quietly fell back to `pct list`. That fallback is right for a container on this host and answers "not found" for one anywhere else, which is the exact thing cluster support was added for. Containers come back under `--type vm` with their own `type` field, which is what is read now. The simulator's fake accepted the wrong flag, so the tests agreed with the mistake; it refuses it the way Proxmox does.
+- **A container the cluster's listing had not caught up with was reported as missing.** `/cluster/resources` is a cache that `pvestatd` refreshes every few seconds, so `create` followed straight away by `start` failed on a real host. A miss in the cluster now means "keep looking on this host", and only both sources coming up empty is a container that does not exist.
+- **`state` and `list` showed a stale status for a container on this host.** The cluster's cached copy was preferred over `pct`, so `state` said `stopped` for seconds after a successful `start` while `list` said `running`. For a container here `pct` is the current answer; the cluster keeps the one thing only it knows, which node a container elsewhere is on.
+- A leak on every `start`, `stop`, `pause` and `resume` that resolved a name through the fallback path: `getVmidByName` allocates, the result was duplicated into the location and the original never freed. Harmless in a process that exits immediately, and reported by the allocator on every run.
+
+
 ## [0.11.2] - 2026-09-27
 
 A release carries the binary a container engine drives, instead of leaving

@@ -429,6 +429,14 @@ pub const PveClient = struct {
         return false;
     }
 
+    /// A /cluster/resources entry is a container rather than a virtual machine.
+    /// The listing is asked for with `--type vm`, which covers both, and each
+    /// entry says which it is.
+    fn isLxcEntry(obj: std.json.ObjectMap) bool {
+        const t = obj.get("type") orelse return false;
+        return t == .string and std.mem.eql(u8, t.string, "lxc");
+    }
+
     /// Where a container is in the cluster, and whether that is this host.
     ///
     /// `pct` only ever sees the node it runs on, so resolving a name through
@@ -465,23 +473,38 @@ pub const PveClient = struct {
         const here = self.getNodeName() catch null;
         defer if (here) |h| self.allocator.free(h);
 
+        // The cluster first, because only it knows which node a container is on.
+        //
+        // Its "not found" is not an answer, though: /cluster/resources is a
+        // cached view that pvestatd refreshes every few seconds, so a container
+        // created a moment ago is not in it yet while `pct list` sees it at
+        // once. Treating that as missing made `create` followed straight away by
+        // `start` fail on a real host. So a miss here means keep looking, and
+        // only both sources coming up empty is a container that does not exist.
         if (self.clusterLookup(allocator, name_or_vmid, here)) |found| {
             return found;
         } else |err| {
-            if (err != core.Error.NotFound) {
-                if (self.logger) |log| {
-                    log.debug("the cluster could not be asked about '{s}' ({s}); falling back to this host", .{ name_or_vmid, @errorName(err) }) catch {};
+            if (self.logger) |log| {
+                if (err == core.Error.NotFound) {
+                    log.debug("'{s}' is not in the cluster's listing yet; asking this host", .{name_or_vmid}) catch {};
+                } else {
+                    log.debug("the cluster could not be asked about '{s}' ({s}); asking this host", .{ name_or_vmid, @errorName(err) }) catch {};
                 }
-            } else {
-                return err;
             }
         }
 
+        // getVmidByName allocates with the client's allocator; the Location owns
+        // a copy made with the caller's. Both exist for a moment and only one
+        // was being freed -- a leak the GPA reported on every start, stop, pause
+        // and resume that came through this path.
         const vmid = try self.getVmidByName(name_or_vmid);
-        errdefer allocator.free(vmid);
+        defer self.allocator.free(vmid);
+
+        const vmid_owned = try allocator.dupe(u8, vmid);
+        errdefer allocator.free(vmid_owned);
         return Location{
             .allocator = allocator,
-            .vmid = try allocator.dupe(u8, vmid),
+            .vmid = vmid_owned,
             .node = try allocator.dupe(u8, here orelse "localhost"),
             .local = true,
         };
@@ -489,7 +512,17 @@ pub const PveClient = struct {
 
     /// /cluster/resources, which lists every container on every node.
     fn clusterLookup(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8, here: ?[]const u8) !Location {
-        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "lxc", "--output-format", "json" };
+        // `--type vm`, not `--type lxc`: the API's enumeration is vm, storage,
+        // node, sdn, and it rejects anything else with "400 Parameter
+        // verification failed". Containers come back under vm with their own
+        // `type` field set to lxc, which is what the filter below reads.
+        //
+        // This was `--type lxc` when cluster support was written, so every
+        // lookup failed and fell back to `pct list` -- which works for a
+        // container on this host and answers "not found" for one anywhere else,
+        // the exact thing the cluster support was for. The simulator's fake
+        // accepted the wrong flag, so the tests agreed with the mistake.
+        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json" };
         const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
             self.allocator.free(res.stdout);
@@ -506,6 +539,7 @@ pub const PveClient = struct {
         for (parsed.value.array.items) |item| {
             if (item != .object) continue;
             const obj = item.object;
+            if (!isLxcEntry(obj)) continue;
 
             const vmid_num = switch (obj.get("vmid") orelse continue) {
                 .integer => |i| i,
@@ -875,18 +909,63 @@ pub const PveClient = struct {
     /// cluster's own listing carries the node, which is the column a person
     /// then needs to make sense of the rest.
     pub fn list(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
-        if (self.clusterList(allocator)) |containers| {
-            return containers;
-        } else |err| {
+        const cluster = self.clusterList(allocator) catch |err| {
             if (self.logger) |log| {
                 log.debug("the cluster could not be listed ({s}); listing this host", .{@errorName(err)}) catch {};
             }
+            return self.localList(allocator);
+        };
+
+        // The cluster's listing is a cached view: pvestatd refreshes it every
+        // few seconds, so a container created a moment ago is in `pct list` and
+        // not yet here. Returning only the cluster's answer made `nexcage list`
+        // -- and `state`, which reads it -- miss a container that plainly
+        // exists. This host's own containers are merged in, by VMID.
+        const local = self.localList(allocator) catch {
+            return cluster;
+        };
+        defer {
+            for (local) |*c| c.deinit();
+            self.allocator.free(local);
         }
-        return self.localList(allocator);
+
+        var merged = std.ArrayListUnmanaged(core.ContainerInfo).fromOwnedSlice(cluster);
+        errdefer {
+            for (merged.items) |*c| c.deinit();
+            merged.deinit(self.allocator);
+        }
+        // For a container on this host, `pct list` is the current answer and the
+        // cluster's is a cache that can be seconds behind -- a container started
+        // a moment ago is still "stopped" there. So a local entry replaces the
+        // cluster's for the same VMID rather than being dropped as a duplicate,
+        // which is what made `state` say stopped right after a successful start
+        // while `list` said running. The cluster stays authoritative for the one
+        // thing only it knows: which node a container on another host is on.
+        for (local) |*c| {
+            var replaced = false;
+            for (merged.items) |*m| {
+                if (!std.mem.eql(u8, m.id, c.id)) continue;
+                allocator.free(m.status);
+                m.status = try allocator.dupe(u8, c.status);
+                replaced = true;
+            }
+            if (replaced) continue;
+            try merged.append(self.allocator, core.ContainerInfo{
+                .allocator = allocator,
+                .id = try allocator.dupe(u8, c.id),
+                .name = try allocator.dupe(u8, c.name),
+                .status = try allocator.dupe(u8, c.status),
+                .backend_type = try allocator.dupe(u8, c.backend_type),
+                .runtime = if (c.runtime) |rt| try allocator.dupe(u8, rt) else null,
+                .node = if (c.node) |n| try allocator.dupe(u8, n) else null,
+            });
+        }
+        return try merged.toOwnedSlice(self.allocator);
     }
 
     fn clusterList(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
-        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "lxc", "--output-format", "json" };
+        // `--type vm` and a filter, for the reason spelt out in clusterLookup.
+        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json" };
         const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
             self.allocator.free(res.stdout);
@@ -907,6 +986,7 @@ pub const PveClient = struct {
         for (parsed.value.array.items) |item| {
             if (item != .object) continue;
             const obj = item.object;
+            if (!isLxcEntry(obj)) continue;
             const vmid_num = switch (obj.get("vmid") orelse continue) {
                 .integer => |i| i,
                 .float => |f| @as(i64, @intFromFloat(f)),
@@ -1028,6 +1108,70 @@ pub const PveClient = struct {
         }
         if (res.exit_code != 0) return self.mapPctError(res.stderr);
         return parsePctStatus(res.stdout).pid;
+    }
+
+    /// Freeze or thaw a container through the cgroup freezer.
+    ///
+    /// `pct suspend` is **not** this: on a container it runs `lxc-checkpoint -s`,
+    /// which dumps the processes to disk through CRIU and takes the container
+    /// down -- measured on a Proxmox VE 9.2 host, where it also simply failed.
+    /// The runtime-spec's paused means the processes stop where they are and
+    /// stay in memory, and that is the cgroup freezer.
+    ///
+    /// Proxmox puts a container's processes under
+    /// `/sys/fs/cgroup/lxc/<vmid>/ns/...`, and writing to the freezer of
+    /// `lxc/<vmid>` freezes all of it: `cgroup.events` then reports `frozen 1`.
+    ///
+    /// **`pct status` keeps saying `running` for a frozen container** -- Proxmox
+    /// has no notion of this state. `nexcage state` reads the freezer itself, so
+    /// it says `paused`.
+    pub fn freeze(self: *const Self, vmid: []const u8, on: bool, node: ?[]const u8) !void {
+        if (node) |n| {
+            if (self.logger) |log| {
+                log.err("CT {s} runs on {s}: freezing is done through that host's cgroup filesystem, and the Proxmox API has no call for it. Run nexcage on {s}", .{ vmid, n, n }) catch {};
+            }
+            return core.Error.UnsupportedOperation;
+        }
+
+        const path = try std.fmt.allocPrint(self.allocator, "/sys/fs/cgroup/lxc/{s}/cgroup.freeze", .{vmid});
+        defer self.allocator.free(path);
+
+        const file = std.fs.cwd().openFile(path, .{ .mode = .write_only }) catch |err| {
+            if (self.logger) |log| {
+                switch (err) {
+                    error.FileNotFound => log.err("no cgroup freezer for CT {s} at {s}: the container is not running, or this host is not on cgroup v2", .{ vmid, path }) catch {},
+                    error.AccessDenied => log.err("cannot write {s}: freezing a container needs root", .{path}) catch {},
+                    else => log.err("cannot open {s}: {s}", .{ path, @errorName(err) }) catch {},
+                }
+            }
+            return switch (err) {
+                error.FileNotFound => core.Error.NotFound,
+                error.AccessDenied => core.Error.PermissionDenied,
+                else => core.Error.OperationFailed,
+            };
+        };
+        defer file.close();
+
+        file.writeAll(if (on) "1" else "0") catch |err| {
+            if (self.logger) |log| log.err("writing {s} failed: {s}", .{ path, @errorName(err) }) catch {};
+            return core.Error.OperationFailed;
+        };
+    }
+
+    /// Whether a container's processes are frozen, read from the cgroup itself.
+    /// Null when there is no freezer to read -- a container that is not running,
+    /// or a host that is not on cgroup v2.
+    pub fn isFrozen(self: *const Self, vmid: []const u8) ?bool {
+        const path = std.fmt.allocPrint(self.allocator, "/sys/fs/cgroup/lxc/{s}/cgroup.freeze", .{vmid}) catch return null;
+        defer self.allocator.free(path);
+
+        var buf: [16]u8 = undefined;
+        const file = std.fs.cwd().openFile(path, .{}) catch return null;
+        defer file.close();
+        const n = file.readAll(&buf) catch return null;
+        const value = std.mem.trim(u8, buf[0..n], " \t\r\n");
+        if (value.len == 0) return null;
+        return value[0] == '1';
     }
 
     /// Send a signal to the container's init from the host, as an OCI runtime

@@ -21,6 +21,7 @@ missing() { echo "Configuration file 'nodes/pve/lxc/$1.conf' does not exist" >&2
 # A zombie counts as gone: its new parent may not have reaped it yet
 alive() { local st; st=$(awk '{print $3}' "/proc/$1/stat" 2>/dev/null) && [ -n "$st" ] && [ "$st" != Z ]; }
 stop_init() {
+  rm -rf "/sys/fs/cgroup/lxc/$1" 2>/dev/null
   [ -e "$SIM/pid.$1" ] || return 0
   kill -9 "$(cat "$SIM/pid.$1")" 2>/dev/null
   rm -f "$SIM/pid.$1"
@@ -72,6 +73,8 @@ case "$cmd" in
     [ "$(status_of "$1")" = running ] && { echo "CT $1 already running" >&2; exit 255; }
     set_status "$1" running
     : > "$SIM/sig.$1"
+    # A running container has a cgroup with a freezer; a stopped one does not.
+    mkdir -p "/sys/fs/cgroup/lxc/$1" 2>/dev/null && echo 0 > "/sys/fs/cgroup/lxc/$1/cgroup.freeze" 2>/dev/null
     python3 "$HERE/../fake_init.py" "$SIM/sig.$1" </dev/null >/dev/null 2>&1 &
     echo $! > "$SIM/pid.$1"
     for _ in $(seq 1 50); do

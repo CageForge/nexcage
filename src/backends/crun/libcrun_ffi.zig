@@ -134,6 +134,25 @@ pub const Libcrun = struct {
     /// Release error
     pub extern fn libcrun_error_release(err: *?*Error) c_int;
 
+    /// int libcrun_container_pause (libcrun_context_t *context, const char *id,
+    ///                              libcrun_error_t *err);
+    /// int libcrun_container_unpause (libcrun_context_t *context, const char *id,
+    ///                                libcrun_error_t *err);
+    ///
+    /// The cgroup freezer, which is what `runc pause` and `runc resume` mean:
+    /// every process in the container stops where it is and stays in memory.
+    pub extern fn libcrun_container_pause(
+        context: *Context,
+        id: [*c]const u8,
+        err: *?*Error,
+    ) c_int;
+
+    pub extern fn libcrun_container_unpause(
+        context: *Context,
+        id: [*c]const u8,
+        err: *?*Error,
+    ) c_int;
+
     /// int libcrun_container_read_pids (libcrun_context_t *context, const char *id,
     ///                                  bool recurse, pid_t **pids,
     ///                                  libcrun_error_t *err);

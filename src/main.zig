@@ -349,6 +349,8 @@ fn printUsage() !void {
         \\  images    List the container templates the cluster can create from
         \\  pull      Fetch an OCI image into a Proxmox storage as a template
         \\  rmi       Remove a container template from a Proxmox storage
+        \\  pause     Freeze every process in a container
+        \\  resume    Thaw a frozen container
         \\  run       Create and start a container
         \\  help      Show this help message
         \\  version   Show version information
@@ -516,7 +518,8 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             const id_first = options.command == .start or options.command == .stop or
                 options.command == .delete or options.command == .state or
                 options.command == .kill or options.command == .exec or
-                options.command == .ps or
+                options.command == .ps or options.command == .pause or
+                options.command == .resume_ or
                 (bundle_given and (options.command == .create or options.command == .run));
             if (id_first) {
                 // For start/stop/delete/state/kill/exec, first argument is
@@ -622,6 +625,8 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "images")) return .images;
     if (std.mem.eql(u8, command_str, "pull")) return .pull;
     if (std.mem.eql(u8, command_str, "rmi")) return .rmi;
+    if (std.mem.eql(u8, command_str, "pause")) return .pause;
+    if (std.mem.eql(u8, command_str, "resume")) return .resume_;
     return .help; // Default to help
 }
 

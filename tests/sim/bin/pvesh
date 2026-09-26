@@ -14,13 +14,44 @@ HERE=${SIM_NODE:-$(hostname)}
 
 case "$1 $2" in
   "get /cluster/resources")
+    # The real API's --type enumeration is vm, storage, node, sdn. It rejects
+    # anything else, and nexcage asked for "lxc" for three releases: every
+    # lookup failed and fell back to `pct list`, which is right for a container
+    # on this host and wrong for one anywhere else. This fake accepted the wrong
+    # flag and so agreed with the mistake -- it refuses it now, the way Proxmox
+    # does, so the tests can catch it instead of confirming it.
+    want=""
+    for a in "$@"; do [ "$prev_arg" = "--type" ] && want=$a; prev_arg=$a; done
+    case $want in
+      vm) : ;;
+      "") echo "400 Parameter verification failed." >&2
+          echo "type: parameter is missing" >&2; exit 2 ;;
+      storage|node|sdn) printf '[]\n'; exit 0 ;;
+      *)  echo "400 Parameter verification failed." >&2
+          echo "type: value '$want' does not have a value in the enumeration 'vm, storage, node, sdn'" >&2
+          exit 2 ;;
+    esac
+    # A container carries "type":"lxc"; a virtual machine would carry "qemu",
+    # and one is here so the filter has something to leave out.
+    #
+    # $SIM/stale_cluster models what pvestatd's cache really does: the listing
+    # lags a few seconds, so a container that `pct list` already sees is not in
+    # it yet. A name in that file is left out of this answer.
     printf '['
-    sep=""
+    printf '{"vmid":9999,"name":"a-virtual-machine","node":"%s","status":"running","type":"qemu"}' "$HERE"
     while read -r vmid status name node; do
       [ -n "$vmid" ] || continue
-      printf '%s{"vmid":%s,"name":"%s","node":"%s","status":"%s","type":"lxc"}' \
-        "$sep" "$vmid" "$name" "${node:-$HERE}" "$status"
-      sep=","
+      if [ -s "$SIM/stale_cluster" ] && grep -qxF "$name" "$SIM/stale_cluster" 2>/dev/null; then continue; fi
+      # $SIM/stale_status makes the cached listing report an out-of-date status
+      # for a name, which is what pvestatd's cache really does for a few seconds
+      # after a start or a stop. The two sources can then disagree, and only a
+      # real host could show that before.
+      if [ -s "$SIM/stale_status" ]; then
+        old_status=$(awk -v n="$name" '$1==n {print $2}' "$SIM/stale_status" 2>/dev/null)
+        [ -n "$old_status" ] && status=$old_status
+      fi
+      printf ',{"vmid":%s,"name":"%s","node":"%s","status":"%s","type":"lxc"}' \
+        "$vmid" "$name" "${node:-$HERE}" "$status"
     done < "$SIM/db"
     printf ']\n'
     ;;
