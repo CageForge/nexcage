@@ -10,7 +10,12 @@ host: it calls `pct`, `pvesh`, `pvesm` and `pveversion`, and writes state under
 
 ## Global options
 
-These work before or after the command.
+These work before or after the command, and in either spelling: `--root <dir>`
+and `--root=<dir>` mean the same thing. Both are needed because an engine picks
+one without asking — containerd sends the two-word form, CRI-O sends `--root=`
+for `create` (through conmon) and the two-word form for everything after it.
+The split stops at a bare `--`, so an argument to the command `exec` runs
+inside the container keeps its `=`.
 
 | Option | Effect |
 |---|---|
@@ -22,6 +27,7 @@ These work before or after the command.
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
 | `--systemd-cgroup` | Accepted; cgroup management is libcrun's, and this reaches its context |
 | `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
+| `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
 
 Logs go to stderr. stdout carries only command output (`list`, `state`,
 help text).
