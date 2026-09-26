@@ -210,7 +210,17 @@ clean shutdown.
 ```bash
 nexcage exec <name> <command> [args...]
 nexcage exec <name> -- <command> [args...]
+nexcage exec --process <file> <name>
 ```
+
+| Option | Effect |
+|---|---|
+| `--process <file>` | An OCI process spec: the args, the user, the environment, whether there is a terminal. This is how a container engine sends an exec — containerd and CRI-O write the file and name it — and it takes no command of its own |
+| `-t`, `--tty` | The command gets a terminal |
+| `-d`, `--detach` | Return once the command is started, rather than waiting for it |
+| `--cwd <dir>` | Working directory inside the container (`--workdir` is the same flag) |
+| `--user <uid[:gid]>` | Identity to run as; an unparsable value is an error rather than a silent root |
+| `--console-socket <path>`, `--pid-file <path>` | As with `create` |
 
 Runs `<command>` inside a running container and exits with its status: `nexcage
 exec web-1 false` exits 1, and `nexcage exec web-1 sh -c 'exit 7'` exits 7. A
@@ -230,6 +240,17 @@ command has to exist in the container's image — an image without a shell has n
 `sh` for `exec` to call. A container that is not running is an error (exit 1),
 as is one that does not exist; `exec` without a command is a usage error
 (exit 2).
+
+`--process` and `--detach` are refused there rather than ignored: `pct exec`
+takes a command and returns when it ends, so there is no identity to apply from
+a spec and nothing to detach from. Same rule as `--console-socket` on `create`.
+
+On the crun backend both forms go to `libcrun_container_exec_process_file`,
+which takes the path of a file holding the process spec. `--process` hands the
+caller's file over untouched; a command typed on the command line is written to
+a temporary spec, which nexcage removes afterwards. That spec carries a default
+`PATH` when `--env` gives none, because a process with no `PATH` cannot find
+`ls` and nothing would say why.
 
 ### list
 

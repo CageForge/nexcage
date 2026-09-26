@@ -202,6 +202,23 @@ until crictl logs "$CTR" 2>/dev/null | grep -q NEXCAGE_CRI_OK; do
 done
 echo "ok: the container ran /bin/sh from its own rootfs"
 
+# What `kubectl exec` and an exec probe come down to. The engine sends this as
+# `exec --process <file>` with an OCI process spec, not as a command line.
+exec_out=$(crictl exec "$CTR" /bin/echo NEXCAGE_EXEC_OK 2>/tmp/exec.err) || {
+    grep -oE 'desc = .*' /tmp/exec.err >&2 || cat /tmp/exec.err >&2
+    fail "crictl exec did not run"
+}
+case "$exec_out" in
+    *NEXCAGE_EXEC_OK*) echo "ok: crictl exec ran a command in the container" ;;
+    *) fail "crictl exec printed '$exec_out'" ;;
+esac
+
+# And the status comes back, which is what an exec probe reads.
+if crictl exec "$CTR" /bin/false >/dev/null 2>&1; then
+    fail "crictl exec of /bin/false reported success"
+fi
+echo "ok: a failing exec reports its status"
+
 crictl stopp "$POD" >/dev/null 2>&1 || fail "the pod would not stop"
 crictl rmp -f "$POD" >/dev/null 2>&1 || fail "the pod would not be removed"
 POD=""
@@ -216,13 +233,13 @@ echo "ok: the pod stopped and was removed"
 # container itself and never asks, while CRI-O asks constantly. Requiring it
 # would fail on correct behaviour.
 [ -s "$TRACE" ] || fail "nexcage was never called: the handler did not reach it"
-for verb in create start delete; do
+for verb in create start exec delete; do
     grep -qE "(^| )$verb( |$)" "$TRACE" || {
         echo "what nexcage was asked:" >&2
         sed 's/[0-9a-f]\{64\}/<id>/g' "$TRACE" >&2
         fail "the engine never sent '$verb'"
     }
 done
-echo "ok: nexcage was asked create, start and delete"
+echo "ok: nexcage was asked create, start, exec and delete"
 
 echo "PASS: a pod runs on nexcage through containerd's CRI"

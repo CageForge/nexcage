@@ -171,7 +171,22 @@ pub const BackendRouter = struct {
             },
             // An OCI runtime exits with the status of the command it ran, so
             // the backend's answer is carried out to main rather than dropped.
-            .exec => |exec_cfg| core.exit_status.propagated = try proxmox_backend.exec(container_id, exec_cfg.argv),
+            .exec => |exec_cfg| {
+                // `exec --process <file>` hands over an OCI process spec: a
+                // user and group to become, capabilities, rlimits, a terminal.
+                // `pct exec` takes a command and nothing else, so honouring the
+                // file is not possible and ignoring it would run the command
+                // with the wrong identity. --detach has no meaning there
+                // either: pct exec returns when the command does.
+                if (exec_cfg.process_file != null or exec_cfg.detach) {
+                    const which = if (exec_cfg.process_file != null) "--process" else "--detach";
+                    if (self.logger) |log| {
+                        log.err("{s} is not possible on the Proxmox LXC backend: pct exec takes a command and returns when it ends. Use --runtime crun", .{which}) catch {};
+                    }
+                    return types.Error.UnsupportedOperation;
+                }
+                core.exit_status.propagated = try proxmox_backend.exec(container_id, exec_cfg.argv);
+            },
             .run => {
                 try proxmox_backend.create(sandbox_config);
                 try proxmox_backend.start(container_id);
@@ -207,7 +222,16 @@ pub const BackendRouter = struct {
             .stop => try crun_backend.stop(container_id),
             .delete => |del| try crun_backend.delete(container_id, del.force),
             .kill => |kill_cfg| try crun_backend.kill(container_id, kill_cfg.signal, kill_cfg.all),
-            .exec => |exec_cfg| try crun_backend.exec(container_id, exec_cfg.argv),
+            .exec => |exec_cfg| {
+                crun_backend.detach = exec_cfg.detach;
+                crun_backend.console_socket = exec_cfg.console_socket;
+                crun_backend.pid_file = exec_cfg.pid_file;
+                crun_backend.exec_tty = exec_cfg.tty;
+                crun_backend.exec_cwd = exec_cfg.cwd;
+                crun_backend.exec_user = exec_cfg.user;
+                crun_backend.exec_env = exec_cfg.env;
+                try crun_backend.exec(container_id, exec_cfg.argv, exec_cfg.process_file);
+            },
             .run => return self.notImplemented("run", "crun"),
             .state => {
                 // State operation handled by command
@@ -309,6 +333,18 @@ pub const DeleteConfig = struct {
 pub const ExecConfig = struct {
     /// The command and its arguments, as the caller typed them
     argv: []const []const u8,
+    /// `--process <file>`: the OCI process spec in a file, which is how a
+    /// container engine sends an exec. With it there is no argv.
+    process_file: ?[]const u8 = null,
+    /// `--detach`, and what shapes the process spec when the command came from
+    /// a command line instead of a file.
+    detach: bool = false,
+    tty: bool = false,
+    cwd: ?[]const u8 = null,
+    user: ?[]const u8 = null,
+    env: ?[]const []const u8 = null,
+    console_socket: ?[]const u8 = null,
+    pid_file: ?[]const u8 = null,
 };
 
 pub const Config = struct {

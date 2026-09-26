@@ -230,6 +230,9 @@ pub const RuntimeOptions = struct {
     workdir: ?[]const u8 = null,
     env: ?[]const []const u8 = null,
     args: ?[]const []const u8 = null,
+    /// `exec --process <file>`: a file holding an OCI process spec, which
+    /// is the shape a container engine sends an exec in.
+    process_file: ?[]const u8 = null,
 
     pub fn deinit(self: *RuntimeOptions) void {
         if (self.container_id) |id| self.allocator.free(id);
@@ -237,6 +240,7 @@ pub const RuntimeOptions = struct {
         if (self.config_file) |cfg| self.allocator.free(cfg);
         if (self.user) |u| self.allocator.free(u);
         if (self.workdir) |wd| self.allocator.free(wd);
+        if (self.process_file) |pf| self.allocator.free(pf);
         if (self.console_socket) |cs| self.allocator.free(cs);
         if (self.pid_file) |pf| self.allocator.free(pf);
         if (self.env) |e| {

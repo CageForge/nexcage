@@ -134,6 +134,27 @@ pub const Libcrun = struct {
     /// Release error
     pub extern fn libcrun_error_release(err: *?*Error) c_int;
 
+    /// int libcrun_container_exec_process_file (libcrun_context_t *context,
+    ///                                         const char *id, const char *path,
+    ///                                         libcrun_error_t *err);
+    ///
+    /// The path holds an OCI process spec as JSON, and libcrun's own parser
+    /// builds the struct from it. libcrun's other two exec entry points take a
+    /// `runtime_spec_schema_config_schema_process *` instead: libocispec
+    /// generates that type from a JSON schema and it is far larger than the two
+    /// structs whose hand-written mirror already put a features document at the
+    /// wrong offset. A path has no layout to get wrong.
+    ///
+    /// Returns the exit status of the command on success -- libcrun ends in
+    /// wait_for_process, which is how `crun exec` propagates it -- and a
+    /// negative value with `err` set on failure.
+    pub extern fn libcrun_container_exec_process_file(
+        context: *Context,
+        id: [*c]const u8,
+        path: [*c]const u8,
+        err: *?*Error,
+    ) c_int;
+
     // -- The features document ------------------------------------------
     //
     // `nexcage features` answers with what this build of libcrun can do,
