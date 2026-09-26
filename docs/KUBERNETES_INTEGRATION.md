@@ -23,7 +23,7 @@ next step, not by size.
 | 1 | ~~`exec`~~ | **Done on both.** Proxmox LXC runs `pct exec`; crun goes to `libcrun_container_exec_process_file`, so `exec --process <file>` — the shape an engine sends — works, and `crictl exec` runs a command in a pod. Both exit with the command's status | `kubectl exec`, CRI `ExecSync`, exec probes |
 | 2 | OCI runtime-spec CLI | **Enough for podman and containerd to run containers.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | ~~`state`~~ | **Done.** Proxmox LXC reports the bundle it recorded; crun hands the question to libcrun, so the output is `crun state`'s | The same. A shim reads the bundle path back from `state` |
-| 4 | Missing verbs | `delete --force`, `kill --all` and `features` are done; no `ps`, `events`, `pause`, `resume`, `update` | Pod lifecycle, metrics, cgroup updates on resize |
+| 4 | Missing verbs | `delete --force`, `kill --all` and `features` are done; no `ps`, `events`, `pause`, `resume`, `update`. **Kubernetes asks for `ps --format json`** — seen in the trace on the node, swallowed quietly by containerd, and the pod ran without it | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
 | 6 | No log handling | container output is not captured to a file | Kubelet reads `/var/log/pods/…/0.log`; `kubectl logs` needs it |
 | 7 | ~~No CNI~~ | **The engine's, not the runtime's.** containerd and CRI-O create the sandbox's network namespace, run the CNI plugins in it and hand the runtime a path to join. Verified on both: a pod gets an address from host-local and reaches another pod over TCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
@@ -59,6 +59,7 @@ flowchart TD
   S1["1. Build and test in-cluster<br/>Job in tenant-nexcage<br/>done"] --> S2["2. PVE test node<br/>kubemox VirtualMachine + E2E runner<br/>done"]
   S2 --> S3["3. OCI runtime-spec command line<br/>so a container engine can call nexcage"]
   S3 --> S4["4. containerd and CRI-O<br/>running pods on nexcage<br/>both done"]
+  S4 --> S5["5. Kubernetes scheduling a pod onto nexcage<br/>done on nexcage-e2e-1"]
 ```
 
 ### Stage 1 — build and test inside the cluster
@@ -407,6 +408,85 @@ stage — the engine owns the pod, the runtime owns the container. What is left
 from that row is what a cluster adds on top of a plain CNI bridge:
 `NetworkPolicy` and service routing, which belong to a CNI plugin and kube-proxy,
 not to a runtime.
+
+### Stage 5 — Kubernetes scheduling a pod onto nexcage
+
+Done, on `nexcage-e2e-1`. Everything before this drove a container engine
+directly — podman, `ctr`, `crictl`, a standalone kubelet. This adds the two
+things only a cluster has, an API server and a `RuntimeClass`, so the pod
+arrives the way a user's pod arrives.
+
+`tests/k8s/pod_on_node.sh` is the run: it installs k3s if the node has none,
+adds one runtime to the containerd configuration k3s generates, and applies a
+pod that names the class.
+
+```toml
+# /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl
+{{ template "base" . }}
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
+  runtime_type = "io.containerd.runc.v2"
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
+  BinaryName = "/usr/local/bin/nexcage"
+```
+
+```yaml
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata: { name: nexcage }
+handler: nexcage
+---
+spec:
+  runtimeClassName: nexcage
+```
+
+```
+ok: the pod was accepted with runtimeClassName: nexcage
+ok: the pod is Ready
+ok: pod IP 10.42.0.5, from the cluster's CNI
+ok: kubectl logs returns the container's output
+ok: kubectl exec runs a command in the pod
+ok: the pod was deleted
+PASS: Kubernetes scheduled a pod onto nexcage on nexcage-e2e
+```
+
+**What Kubernetes asks a runtime**, recorded on that node — the whole surface,
+in one place at last:
+
+```
+features
+create --bundle <dir> --pid-file <file> <id>      (with --root, --log, --log-format json)
+start <id>
+ps --format json <id>
+exec --process /tmp/runc-process82872205 --detach --pid-file <file> <id>
+kill <id> 15
+kill <id> 9
+kill --all <id> 9
+delete <id>
+delete --force <id>
+```
+
+Two things in that list are worth naming. The `exec` line is the shape stage 4
+added for containerd, `--detach` included: without it `kubectl exec` would have
+failed here. And **`ps --format json` is asked for and does not exist** —
+nexcage answers `unknown command 'ps'`, containerd swallows it without a word in
+the journal, and the pod is Ready, logged, exec'd and deleted regardless. It is
+the next gap, and like `features` it was found by running the thing rather than
+by reading a list.
+
+Getting the binary onto the node took two corrections that have nothing to do
+with Kubernetes, and both would have looked like runtime bugs:
+
+- The host is a Xeon E5-2697 v2 with no AVX2, so a build tuned for a newer CPU
+  dies with `SIGILL`. `-Dcpu=baseline`, as the release workflow already does.
+- The crun build links libyajl, and the node did not have it: `error while
+  loading shared libraries: libyajl.so.2`. `libyajl2`, `libseccomp2` and
+  `libcap2` are what a crun-enabled nexcage needs present.
+
+The script leaves the node as it found it unless `--keep` is passed, because that
+node is the E2E runner. One caution it enforces: `/etc/nexcage/config.json`
+routing everything to crun would also be read by the E2E suite's own build,
+which has no crun backend, so it is written only when absent and removed after.
 
 ## Related
 
