@@ -263,6 +263,19 @@ nx exec web-1 -- sh -c 'echo x 1>&2; exit 3'
                                check "exec: stderr passes through and a non-zero status survives it" all 'rc 3' 'err_has x'
 nx exec nope echo hi;          check "exec on a missing container -> exit 1, nothing run" \
                                  all 'rc 1' 'not_called_re "^pct exec"'
+
+# A container engine writes a flag either way, and the choice is not ours:
+# containerd sends `--root <dir>`, CRI-O sends `--root=<dir>`. CRI-O's first
+# call came back as `unknown command '--root=/run/nexcage-crio'`.
+nx --root=/tmp/sim-root-eq state web-1
+check "--flag=value is a flag, not a command name" all 'rc 0' 'out_has "\"id\": \"web-1\""'
+nx --version
+check "--version, which is how CRI-O asks" all 'rc 0' 'out_has "nexcage version"'
+# ...and the splitting stops at `--`: what follows belongs to the command run
+# inside the container, where FOO=bar is an argument and not a flag.
+nx exec web-1 -- env FOO=bar
+check "an = after -- survives untouched" \
+  all 'rc 0' 'called "pct exec 100 -- env FOO=bar"'
 nx exec web-3 echo hi;         check "exec on a stopped container -> exit 1, says it is not running" \
                                  all 'rc 1' 'err_has "not running"' 'not_called_re "^pct exec"'
 nx exec web-1;                 check "exec without a command -> exit 2" all 'rc 2' 'not_called_re "^pct exec"'

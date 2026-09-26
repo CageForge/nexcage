@@ -126,8 +126,16 @@ fn run() !void {
     const allocator = gpa.allocator();
 
     // Parse command line arguments first
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const raw_args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, raw_args);
+
+    // A container engine writes a flag either way: containerd sends
+    // `--root <dir>`, CRI-O sends `--root=/run/crio/runc`. Every parser below
+    // reads the two-word form only, so CRI-O's very first call came back as
+    // `unknown command '--root=/run/nexcage-crio'`. One pass here, before
+    // anything looks at the vector, and the rest is unchanged.
+    const args = try splitEqualsFlags(allocator, raw_args);
+    defer allocator.free(args);
 
     // --config, before or after the command, has to be known before anything
     // loads the configuration. It used to be parsed and never read.
@@ -225,6 +233,11 @@ fn run() !void {
         try printUsage();
         return;
     }
+
+    // CRI-O asks a runtime its version before it will use one, and asks with
+    // the flag rather than the subcommand. Mapped onto the same command, so
+    // the two spellings cannot print different things.
+    if (std.mem.eql(u8, command_name, "--version")) command_name = "version";
 
     // Parse runtime options
     var options = try parseRuntimeOptions(allocator, command_name, command_args);
@@ -511,6 +524,37 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
 /// with nothing after it is a usage error.
 fn configPathFromArgs(args: []const []const u8) !?[]const u8 {
     return flagValueFromArgs(args, "--config", "path");
+}
+
+/// `--flag=value` as two words, `--flag` and `value`, so that every parser
+/// which reads the two-word form reads both spellings. runc and crun accept
+/// either, and an engine picks one without asking: containerd passes
+/// `--root <dir>`, CRI-O passes `--root=<dir>`.
+///
+/// The words are subslices of argv, so no string is copied; only the vector
+/// is allocated, and the caller frees it. Anything after a bare `--` is the
+/// command `exec` runs inside the container and is passed through untouched --
+/// `env FOO=bar` is not a flag.
+fn splitEqualsFlags(allocator: std.mem.Allocator, args: []const []const u8) ![][]const u8 {
+    var out = std.ArrayListUnmanaged([]const u8){};
+    errdefer out.deinit(allocator);
+    try out.ensureTotalCapacity(allocator, args.len + 4);
+
+    var past_separator = false;
+    for (args) |arg| {
+        if (!past_separator and std.mem.eql(u8, arg, "--")) past_separator = true;
+        if (!past_separator and arg.len > 2 and std.mem.startsWith(u8, arg, "--")) {
+            if (std.mem.indexOfScalar(u8, arg[2..], '=')) |rel| {
+                const eq = rel + 2;
+                try out.append(allocator, arg[0..eq]);
+                try out.append(allocator, arg[eq + 1 ..]);
+                continue;
+            }
+        }
+        try out.append(allocator, arg);
+    }
+
+    return out.toOwnedSlice(allocator);
 }
 
 /// The value of a global flag wherever it appears, or null. The flag with

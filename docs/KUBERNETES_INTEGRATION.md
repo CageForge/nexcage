@@ -58,7 +58,7 @@ covering it.
 flowchart TD
   S1["1. Build and test in-cluster<br/>Job in tenant-nexcage<br/>done"] --> S2["2. PVE test node<br/>kubemox VirtualMachine + E2E runner<br/>done"]
   S2 --> S3["3. OCI runtime-spec command line<br/>so a container engine can call nexcage"]
-  S3 --> S4["4. containerd and CRI-O<br/>running pods on nexcage"]
+  S3 --> S4["4. containerd and CRI-O<br/>running pods on nexcage<br/>both done"]
 ```
 
 ### Stage 1 — build and test inside the cluster
@@ -309,10 +309,42 @@ Proxmox LXC backend it refuses and says where the answer lives: `pct` creates
 the container there, so the hooks and seccomp a features document promises are
 not nexcage's to report.
 
-CRI-O is untested. podman driving it did not predict containerd's behaviour,
-and containerd's CRI did not predict its own shim's working directory, so
-neither predicts CRI-O's. CRI-O takes a `runtime_path` where containerd takes
-`options.BinaryName`.
+**CRI-O runs a pod on nexcage too**, and it did not predict containerd any more
+than containerd predicted podman:
+
+```toml
+# /etc/crio/crio.conf.d/10-nexcage.conf
+[crio.runtime.runtimes.nexcage]
+runtime_path = "/usr/local/bin/nexcage"
+runtime_type = "oci"
+runtime_root = "/run/nexcage-crio"
+```
+
+```
+$ crictl runp --runtime nexcage sandbox.json && crictl logs "$CTR"
+HELLO_FROM_NEXCAGE_CRIO
+uid=0(root) gid=0(root) groups=0(root),1(bin),…
+```
+
+Two things stood in the way, and neither was a container operation:
+
+1. **`--root=/run/nexcage-crio` was read as a command name.** CRI-O writes a
+   flag with an `=`, and every parser here read the two-word form only. It even
+   mixes them: `create` goes through conmon, which writes `--root=<dir>`, while
+   `start`, `state`, `kill` and `delete` come from CRI-O itself with
+   `--root <dir>`. runc and crun accept either without noticing the question.
+   `--flag=value` is now split into two words before anything looks at the
+   vector, and the split stops at a bare `--`, so `exec … -- env FOO=bar` keeps
+   its `=`.
+2. **`--version`.** CRI-O asks a runtime its version before it will use one,
+   and asks with the flag. `version` as a subcommand was the only spelling.
+   The flag maps onto the same command, so the two cannot drift.
+
+After that the trace is crun's, call for call, `features` included — and
+`features`, which nexcage only grew for containerd, is asked by CRI-O as well.
+What made both findings defects rather than guesses was the same control as
+before: two runtime handlers in one CRI-O config, one ending in nexcage and one
+in `/usr/bin/crun`, same pod, same bundles.
 
 Of the gaps a pod needs, the CRI run settles three of them, and not because
 nexcage grew them: the shim captures the container's output to the file the
