@@ -18,7 +18,7 @@ binary:
 
 ## Status
 
-As of **0.11.1**, on amd64, running on the Proxmox VE host as root:
+As of **0.11.2**, on amd64, running on the Proxmox VE host as root:
 
 | | |
 |---|---|
@@ -33,19 +33,17 @@ Proxmox VE 8.x and 9.x. Pulling from a registry needs 9.1 or later.
 ## Install
 
 ```bash
-VERSION=0.11.1
+VERSION=0.11.2
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
 apt install ./nexcage-$VERSION-amd64.deb
 ```
 
-**From 0.11.2 a release carries two binaries.** The plain one manages LXC
+**A release carries two binaries** (since 0.11.2). The plain one manages LXC
 containers; the `-crun` one adds the backend a container engine drives, and is
 what to install when containerd, CRI-O or a kubelet is meant to run containers
-on nexcage. It needs `libyajl2`, `libseccomp2` and `libcap2` on the host. Before
-0.11.2, build it yourself — the Dockerfile line is under
-[Development](#development).
+on nexcage. It needs `libyajl2`, `libseccomp2` and `libcap2` on the host.
 
 Details, source builds and the shared-library requirements:
 [docs/INSTALL.md](docs/INSTALL.md).
