@@ -46,6 +46,11 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
     License 2.0 without a sign-off.
 
 - [x] Release artifacts (GitHub Releases with binaries, SBOMs, provenance)
+  - Two binaries since 0.11.2: the default one, and `-crun` with the OCI
+    runtime backend compiled in. The second is built through the Dockerfile,
+    because vendored libcrun needs the submodules and generated headers, and
+    the job checks the backend is really in it by asking the binary for
+    `features` -- an answer only libcrun can give.
 
 ## Implementation Details
 
@@ -77,6 +82,20 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 - ✅ SLSA Provenance (basic)
 - ✅ Code scanning (Semgrep, Trivy, Gitleaks); Scorecards disabled
 - ➖ DCO / CLA: not used; contributions need no sign-off
+
+## Known Gaps
+
+Named rather than left for someone to discover:
+
+- [ ] **ADOPTERS.md** — there are none to list yet, and an empty file would say
+      less than its absence.
+- [ ] **ROADMAP.md** — what is missing is tracked in the gap table of
+      `docs/KUBERNETES_INTEGRATION.md` and in each release's notes, not in a
+      roadmap of its own.
+- [~] **OpenSSF Scorecards** — the workflow exists and GitHub disabled it for
+      inactivity, so there is deliberately no Scorecard badge in the README: a
+      badge for a check that does not run is worse than none.
+- [ ] **A public communication channel** beyond GitHub Issues.
 
 ## Optional Enhancements
 

@@ -1,5 +1,5 @@
 site_name: NexCage Docs
-site_description: Command-line lifecycle for LXC containers on a Proxmox VE host
+site_description: An OCI runtime for Proxmox VE - a command line for LXC containers on a cluster, and a runtime that containerd, CRI-O and a kubelet drive
 site_url: https://cageforge.github.io/nexcage/
 repo_url: https://github.com/CageForge/nexcage
 repo_name: CageForge/nexcage

@@ -153,6 +153,62 @@ jobs:
           name: nexcage-${{ steps.get_version.outputs.version }}-amd64.provenance
           path: dist/provenance.json
 
+  build-crun:
+    name: Build with the crun backend (amd64)
+    runs-on: ubuntu-24.04
+    needs: build
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      # The crun backend links vendored libcrun, which needs the submodules and
+      # two generated header sets. The Dockerfile does all of that from a clean
+      # clone, which is why this goes through Docker rather than `zig build`.
+      # -Dcpu=baseline for the same reason as the default binary: a Proxmox node
+      # is often older than a GitHub runner.
+      - name: Build the image
+        run: |
+          docker build \
+            --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" \
+            -t nexcage:crun-release .
+
+      - name: It runs, and the backend is really in it
+        # Checked inside the image, where the shared libraries are. `features`
+        # is answered by libcrun itself, so it cannot succeed on a binary that
+        # was built without the backend.
+        run: |
+          set -eux
+          docker run --rm nexcage:crun-release version
+          docker run --rm nexcage:crun-release --runtime crun features \
+            | head -3
+
+      - name: Extract the binary
+        id: extract
+        run: |
+          set -eux
+          mkdir -p dist
+          BIN_NAME=nexcage-${{ needs.build.outputs.version }}-amd64-crun
+          cid=$(docker create nexcage:crun-release)
+          docker cp "$cid:/usr/local/bin/nexcage" "dist/${BIN_NAME}"
+          docker rm "$cid"
+          chmod +x "dist/${BIN_NAME}"
+          file "dist/${BIN_NAME}"
+          # What a host has to have for this one to start. Unlike the default
+          # binary it is dynamically linked against libcrun's dependencies, and
+          # a Proxmox node does not have libyajl by default -- worth having in
+          # the job log when someone asks why it will not run.
+          docker run --rm --entrypoint /bin/sh nexcage:crun-release \
+            -c 'ldd /usr/local/bin/nexcage' || true
+
+      - name: Upload the crun binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexcage-${{ needs.build.outputs.version }}-amd64-crun
+          path: dist/nexcage-${{ needs.build.outputs.version }}-amd64-crun
+
   build-deb:
     name: Build .deb (amd64)
     runs-on: ubuntu-24.04
@@ -193,7 +249,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build, build-deb]
+    needs: [build, build-crun, build-deb]
 
     steps:
       - name: Checkout code

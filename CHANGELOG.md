@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A release carries a second binary, `nexcage-<version>-amd64-crun`**, with the OCI runtime backend compiled in — the build a container engine drives. It goes through the Dockerfile, because vendored libcrun needs the submodules and two generated header sets, and it is built with `-Dcpu=baseline` for the same reason the default binary is: a Proxmox node is often older than a GitHub runner. The job asks the binary for `features` to check the backend is really in it, since only libcrun can answer that, and records `ldd` in the log because the binary needs `libyajl2`, `libseccomp2` and `libcap2` on the host and a Proxmox VE install does not have the first.
+
+### Changed
+- The README said "Status as of version 0.9.0" and listed containerd/CRI integration and containers on other cluster nodes as not yet done. Both have been done for some time, and the project's own front page was the last place saying otherwise. It now describes the two things nexcage is — a command line for LXC containers on a cluster, and an OCI runtime engines drive — with badges, the documentation map, and the sections an open-source project is expected to carry. `docs/index.md` and the site description said the same stale thing and now match.
+- `docs/architecture/OVERVIEW.md` described nexcage as turning CLI commands into `pct` calls. It is called from two directions, and the diagram shows both.
+
+
 ## [0.11.1] - 2026-09-26
 
 A small one. `images`, `pull` and `rmi` shipped in 0.11.0 having met only
