@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The E2E suite covers `images`, `pull` and `rmi` against a real Proxmox host. They had only ever met the simulator's fakes, and a storage listing is exactly the kind of thing a fake gets subtly wrong — three of the failures while writing those fakes were the fake and not the code. The step pulls an image, checks the volid it printed is the one `pvesm` holds, removes it, and checks it is gone from the storage rather than only from the listing; removing it twice has to be an error. It frees anything it pulled on the way out, even on failure.
+
+### Changed
+- `images --node` on a node the cluster does not have is an error naming the nodes it does have, instead of an empty listing and exit 0. Silence there reads as "that node has no templates", which is a different thing and sends someone looking in the wrong place.
+
+### Fixed
+- The E2E job uploaded only `e2e_lxc.log`. The registry step has been writing `e2e_registry.log` all along and it was never collected, so a failure there left nothing to read afterwards. All of them are collected now.
+
+
 ## [0.11.0] - 2026-09-26
 
 A Proxmox VE cluster is more than one node. `pct` only ever answers for the

@@ -391,12 +391,84 @@ jobs:
         trap - EXIT
         echo "[E2E] registry path passed"
 
+    - name: E2E through nexcage (templates - images, pull, rmi)
+      # These three never met a real pvesh before: the simulator has fakes for
+      # the storage endpoints, and nothing else exercised them. A storage
+      # listing is exactly the kind of thing a fake gets subtly wrong.
+      run: |
+        set -euo pipefail
+        LOG=e2e_templates.log
+        : > "$LOG"
+        exec > >(tee -a "$LOG") 2>&1
+        export PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH
+
+        if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
+        NEXCAGE="$PWD/zig-out/bin/nexcage"
+        nx() { $SUDO "$NEXCAGE" "$@"; }
+        HERE=$(hostname)
+
+        vztmpl_list() { $SUDO pvesm list local --content vztmpl 2>/dev/null | awk 'NR>1 {print $1}' | sort; }
+        before=$(vztmpl_list)
+        cleanup() {
+          set +e
+          for vol in $(comm -13 <(echo "$before") <(vztmpl_list)); do
+            echo "[E2E] freeing $vol"
+            $SUDO pvesm free "$vol" >/dev/null 2>&1
+          done
+        }
+        trap cleanup EXIT
+
+        echo "[E2E] images lists what this node has, and agrees with pvesm"
+        nx images | head -5
+        for vol in $(vztmpl_list); do
+          nx images | awk -F'\t' -v v="$vol" -v h="$HERE" '$5==v && $1==h && $2=="local" {f=1} END {exit !f}' \
+            || { echo "::error::images does not list $vol on $HERE/local"; exit 1; }
+        done
+
+        echo "[E2E] a node the cluster does not have is an error, not an empty list"
+        if nx images --node definitely-not-a-node >/dev/null 2>&1; then
+          echo "::error::images accepted a node that does not exist"; exit 1
+        fi
+
+        read -r major minor <<<"$($SUDO pveversion | sed -n 's|^pve-manager/\([0-9]*\)\.\([0-9]*\).*|\1 \2|p')"
+        if [ "${major:-0}" -lt 9 ] || { [ "${major:-0}" -eq 9 ] && [ "${minor:-0}" -lt 1 ]; }; then
+          echo "::notice::Proxmox VE ${major:-?}.${minor:-?} cannot pull from a registry; images checked, pull and rmi skipped"
+          exit 0
+        fi
+
+        echo "[E2E] pull, and the volid it prints is the one the storage holds"
+        volid=$(nx pull docker.io/library/alpine:3.20)
+        echo "[E2E] pulled $volid"
+        vztmpl_list | grep -qxF "$volid" \
+          || { echo "::error::pvesm does not have '$volid' after pull"; exit 1; }
+        nx images | grep -qF "$volid" \
+          || { echo "::error::images does not show '$volid' after pull"; exit 1; }
+
+        echo "[E2E] rmi removes it from the storage, not just from the listing"
+        nx rmi "$volid"
+        vztmpl_list | grep -qxF "$volid" \
+          && { echo "::error::'$volid' is still on the storage after rmi"; exit 1; }
+        nx images | grep -qF "$volid" \
+          && { echo "::error::images still shows '$volid' after rmi"; exit 1; }
+
+        echo "[E2E] and removing it twice is an error, not a second success"
+        if nx rmi "$volid" >/dev/null 2>&1; then
+          echo "::error::rmi succeeded on a template that is gone"; exit 1
+        fi
+
+        cleanup
+        trap - EXIT
+        echo "[E2E] templates path passed"
+
     - name: Upload E2E logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: proxmox-e2e-logs
-        path: e2e_lxc.log
+        # Every step's log, not just the first: the registry step has written
+        # e2e_registry.log all along and it was never collected, so a failure
+        # there left nothing to read afterwards.
+        path: e2e_*.log
         retention-days: 7
 
     - name: Cleanup leftover E2E containers (always)

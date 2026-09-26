@@ -620,6 +620,10 @@ nx images --node titan
 check "images --node narrows it to that node" \
   all 'rc 0' 'out_has "local:vztmpl/alpine-3.22.tar.zst"' '! out_has "debian-13"'
 
+nx images --node no-such-node
+check "images on a node the cluster does not have is an error, not an empty list" \
+  all 'rc 1' 'err_has "no node called"' 'err_has "titan"'
+
 nx --runtime crun images
 check "images on the crun backend says templates are not its business" \
   all 'rc 1' 'err_has "already there"'

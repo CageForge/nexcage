@@ -623,6 +623,28 @@ pub const PveClient = struct {
             seen_shared.deinit(self.allocator);
         }
 
+        // A node nobody has heard of is an error, not an empty list. Silence
+        // there reads as "that node has no templates", which is a different
+        // thing and sends someone looking in the wrong place.
+        if (only_node) |want| {
+            var known = false;
+            for (node_names) |n| {
+                if (std.mem.eql(u8, n, want)) known = true;
+            }
+            if (!known) {
+                if (self.logger) |log| {
+                    var names = std.ArrayListUnmanaged(u8){};
+                    defer names.deinit(self.allocator);
+                    for (node_names, 0..) |n, i| {
+                        if (i > 0) try names.appendSlice(self.allocator, ", ");
+                        try names.appendSlice(self.allocator, n);
+                    }
+                    log.err("no node called '{s}' in this cluster; it has: {s}", .{ want, names.items }) catch {};
+                }
+                return core.Error.NotFound;
+            }
+        }
+
         for (node_names) |node| {
             if (only_node) |want| if (!std.mem.eql(u8, want, node)) continue;
 
