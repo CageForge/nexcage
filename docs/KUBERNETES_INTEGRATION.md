@@ -3,14 +3,21 @@
 What nexcage would need to run containers for Kubernetes, and how the work is
 staged in the `tenant-nexcage` tenant of the Cozystack cluster `pskep`.
 
-Status as of 0.9.1: nexcage is a command-line lifecycle tool for LXC
-containers on one Proxmox VE host. It is not yet an OCI runtime binary in the
-sense containerd expects, so nothing in Kubernetes can schedule onto it today.
+**Status as of 0.10.0: Kubernetes schedules pods onto nexcage.** A pod with
+`runtimeClassName: nexcage` runs on a node, with an address from the cluster's
+CNI, `kubectl logs` and `kubectl exec`; podman, `ctr`, containerd's CRI and
+CRI-O all drive it as well. Everything a kubelet's containerd asks an OCI
+runtime is answered.
 
-The way in is the one crun and runc take: containerd and CRI-O call an OCI
-runtime binary with the runtime-spec command line. nexcage does not need a
-daemon or an operator for that — it needs that command line, and the crun
-backend (vendored libcrun) to do the container work behind it.
+At 0.9.1 none of that was true: nexcage was a command-line lifecycle tool for
+LXC containers on one Proxmox VE host, and nothing in Kubernetes could schedule
+onto it. The way in was the one crun and runc take — containerd and CRI-O call
+an OCI runtime binary with the runtime-spec command line, so no daemon and no
+operator were needed, only that command line and the crun backend (vendored
+libcrun) behind it.
+
+What is left is not the command line. It is the table below: one host at a
+time, no image service of its own, and the verbs nothing has asked for.
 
 ## What the runtime is missing
 
