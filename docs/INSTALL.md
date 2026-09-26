@@ -6,9 +6,9 @@ nexcage runs on the Proxmox VE host (8.x or 9.x, amd64) as root. It needs
 ## From a release
 
 Each GitHub release carries the binary `nexcage-<version>-amd64`, the package
-`nexcage-<version>-amd64.deb`, SBOMs and `checksums.txt`. **From 0.11.2** there
+`nexcage-<version>-amd64.deb`, SBOMs and `checksums.txt`. **Since 0.11.2** there
 is a second binary, `nexcage-<version>-amd64-crun`, with the OCI runtime backend
-built in; for earlier versions that build has to be made from source.
+built in; for 0.11.1 and earlier that build has to be made from source.
 
 **Which binary you want.** The plain one manages LXC containers on Proxmox VE
 and is what most uses need. The `-crun` one adds the backend a container engine
@@ -18,7 +18,7 @@ run containers on nexcage. Everything the plain binary does, it does too.
 ### .deb
 
 ```bash
-VERSION=0.11.1
+VERSION=0.11.2
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
@@ -31,14 +31,14 @@ example configuration at `/usr/share/doc/nexcage/examples/config.json`.
 ### Binary
 
 ```bash
-VERSION=0.11.1
+VERSION=0.11.2
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
 install -m 0755 nexcage-$VERSION-amd64 /usr/local/bin/nexcage
 ```
 
-### The binary with the crun backend (0.11.2 and later)
+### The binary with the crun backend (since 0.11.2)
 
 ```bash
 VERSION=0.11.2

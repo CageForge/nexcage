@@ -3,7 +3,7 @@
 What nexcage would need to run containers for Kubernetes, and how the work is
 staged in the `tenant-nexcage` tenant of the Cozystack cluster `pskep`.
 
-**Status as of 0.11.1: Kubernetes schedules pods onto nexcage.** A pod with
+**Status as of 0.11.2: Kubernetes schedules pods onto nexcage.** A pod with
 `runtimeClassName: nexcage` runs on a node, with an address from the cluster's
 CNI, `kubectl logs` and `kubectl exec`; podman, `ctr`, containerd's CRI and
 CRI-O all drive it as well. Everything a kubelet's containerd asks an OCI
