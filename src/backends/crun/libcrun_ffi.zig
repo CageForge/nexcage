@@ -134,6 +134,106 @@ pub const Libcrun = struct {
     /// Release error
     pub extern fn libcrun_error_release(err: *?*Error) c_int;
 
+    // -- The features document ------------------------------------------
+    //
+    // `nexcage features` answers with what this build of libcrun can do,
+    // because libcrun is what does the work. The alternative was to write the
+    // document by hand, and a features document is a set of promises to a
+    // kubelet: every line of it would have been my claim about someone else's
+    // compile-time configuration, free to drift from it silently.
+    //
+    // These mirror `struct features_info_s` and its parts in
+    // deps/crun/src/libcrun/container.h at the **vendored** commit, which is
+    // kubebsd/crun c1ef7a1e (pinned in the Dockerfile and in build.zig's
+    // include paths) -- not upstream containers/crun. The fork carries one
+    // field upstream does not, `memory_policy` at the end of linux_info_s, and
+    // reading upstream's layout here put everything after it at the wrong
+    // offset: annotations became rubbish and potentiallyUnsafeConfigAnnotations
+    // was a garbage pointer that segfaulted on the first dereference.
+    //
+    // So: a hand-written binding of a C struct is only correct for the layout
+    // it was written against, and this one is written against a fork that moves.
+    // Re-read that header when the submodule pin changes. featuresJson checks
+    // the first field looks like a version, and the crun CI job asserts on the
+    // document's contents, which is what would catch a shift further in.
+
+    /// struct cgroup_info_s
+    pub const CgroupInfo = extern struct {
+        v1: bool,
+        v2: bool,
+        systemd: bool,
+        systemd_user: bool,
+    };
+
+    /// struct seccomp_info_s
+    pub const SeccompInfo = extern struct {
+        enabled: bool,
+        actions: [*c][*c]u8,
+        operators: [*c][*c]u8,
+        archs: [*c][*c]u8,
+    };
+
+    /// struct apparmor_info_s, selinux_info_s, idmap_info_s, intel_rdt_s and
+    /// net_devices_s are each a single `bool enabled`.
+    pub const EnabledInfo = extern struct {
+        enabled: bool,
+    };
+
+    /// struct mount_ext_info_s
+    pub const MountExtInfo = extern struct {
+        idmap: EnabledInfo,
+    };
+
+    /// struct memory_policy_info_s. The vendored fork has this and upstream
+    /// crun does not.
+    pub const MemoryPolicyInfo = extern struct {
+        mode: [*c][*c]u8,
+        flags: [*c][*c]u8,
+    };
+
+    /// struct linux_info_s
+    pub const LinuxInfo = extern struct {
+        namespaces: [*c][*c]u8,
+        capabilities: [*c][*c]u8,
+        cgroup: CgroupInfo,
+        seccomp: SeccompInfo,
+        apparmor: EnabledInfo,
+        selinux: EnabledInfo,
+        mount_ext: MountExtInfo,
+        intel_rdt: EnabledInfo,
+        net_devices: EnabledInfo,
+        memory_policy: MemoryPolicyInfo,
+    };
+
+    /// struct annotations_info_s
+    pub const AnnotationsInfo = extern struct {
+        io_github_seccomp_libseccomp_version: [*c]u8,
+        run_oci_crun_checkpoint_enabled: bool,
+        run_oci_crun_commit: [*c]u8,
+        run_oci_crun_version: [*c]u8,
+        run_oci_crun_wasm: bool,
+    };
+
+    /// struct features_info_s
+    pub const FeaturesInfo = extern struct {
+        oci_version_min: [*c]u8,
+        oci_version_max: [*c]u8,
+        hooks: [*c][*c]u8,
+        mount_options: [*c][*c]u8,
+        linux: LinuxInfo,
+        annotations: AnnotationsInfo,
+        potentially_unsafe_annotations: [*c][*c]u8,
+    };
+
+    /// int libcrun_container_get_features (libcrun_context_t *context,
+    ///                                     struct features_info_s **info,
+    ///                                     libcrun_error_t *err);
+    pub extern fn libcrun_container_get_features(
+        context: *Context,
+        info: *?*FeaturesInfo,
+        err: *?*Error,
+    ) c_int;
+
     /// Options for container create
     pub const CREATE_OPTIONS_PREFORK: c_uint = 1;
 

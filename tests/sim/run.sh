@@ -437,6 +437,19 @@ check "delete --force stops it first, then destroys it" \
 nx start from-tpl; nx kill from-tpl --all TERM
 check "kill --all is accepted and says what it does on this backend" all 'rc 0' 'err_has "--all"'
 
+# containerd's CRI asks for `features` once at startup. On this backend there
+# is nothing honest to answer with: `pct` creates the container, so the hooks,
+# seccomp and capabilities a features document promises are not nexcage's to
+# report. Refusing and saying where the answer lives beats inventing one.
+nx features
+check "features refuses on the LXC backend and points at crun" \
+  all 'rc 1' 'err_has "--runtime crun"' 'not_called_re "^pct"'
+nx --runtime crun features
+check "features on a build without the crun backend says so" \
+  all 'rc 1' 'err_has "-Denable-backend-crun=true"'
+nx features --help
+check "features --help explains where the values come from" all 'rc 0' 'out_has "crun features"'
+
 echo "=== health ==="
 # Its checks look at the host, so only the absence of leaks is checked here
 nx health

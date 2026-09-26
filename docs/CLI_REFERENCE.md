@@ -270,6 +270,54 @@ container was created from, and `null` for one created from a template or a
 registry image; `start` and `stop` keep it. A container that does not exist is
 an error (exit 1).
 
+### features
+
+```bash
+nexcage --runtime crun features
+```
+
+Prints the OCI runtime-spec features document: the spec versions this build
+accepts, the hooks it runs, the mount options and namespaces it knows, and
+whether seccomp, AppArmor, SELinux and idmapped mounts are compiled in.
+containerd's CRI asks for it once at startup.
+
+Every value comes from `libcrun_container_get_features`, the same call behind
+`crun features`, so the answer is this build's own configuration rather than a
+document maintained here that could promise what the binary does not do. The
+field order and shapes follow crun's output too, down to the checkpoint
+annotations being strings rather than booleans.
+
+```json
+{
+  "ociVersionMin": "1.0.0",
+  "ociVersionMax": "1.1.0+dev",
+  "hooks": ["prestart", "createRuntime", "createContainer", "startContainer", "poststart", "poststop"],
+  "mountOptions": ["rw", "rro", "bind", "idmap", "…"],
+  "linux": {
+    "namespaces": ["cgroup", "ipc", "mount", "network", "pid", "user", "uts"],
+    "cgroup": { "v1": true, "v2": true, "systemd": true, "systemdUser": true },
+    "seccomp": { "enabled": true, "actions": ["…"], "operators": ["…"] },
+    "mountExtensions": { "idmap": { "enabled": true } }
+  },
+  "annotations": {
+    "run.oci.crun.version": "1.24",
+    "io.cageforge.nexcage.version": "0.9.1",
+    "io.cageforge.nexcage.backend": "crun"
+  }
+}
+```
+
+The command takes no container id, so there is no routing key: an explicit
+`--runtime` wins, otherwise the routing rules are asked about an empty id,
+which for the catch-all an engine needs (`"*"`) is crun.
+
+Answered by the crun backend only. On the Proxmox LXC backend it exits 1 and
+says where the answer lives: a features document is a claim about how a runtime
+implements the spec — which hooks it runs, whether it applies seccomp,
+AppArmor, capabilities, an idmapped mount — and `pct` creates the container
+there, so any document would be an assertion about `pct` dressed as this
+runtime's. Same reason `--console-socket` is refused there.
+
 ### version, help
 
 ```bash

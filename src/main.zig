@@ -331,6 +331,7 @@ fn printUsage() !void {
         \\  state     Show container state as OCI JSON
         \\  kill      Send a signal to a container
         \\  exec      Run a command inside a running container
+        \\  features  Show what this runtime implements, as an OCI features document
         \\  run       Create and start a container
         \\  help      Show this help message
         \\  version   Show version information
@@ -544,6 +545,7 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "version")) return .version;
     if (std.mem.eql(u8, command_str, "state")) return .state;
     if (std.mem.eql(u8, command_str, "kill")) return .kill;
+    if (std.mem.eql(u8, command_str, "features")) return .features;
     return .help; // Default to help
 }
 

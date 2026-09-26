@@ -373,6 +373,129 @@ pub const CrunDriver = struct {
         }
     }
 
+    /// The features document for this build, as the runtime-spec defines it.
+    /// The caller owns the bytes.
+    ///
+    /// Every value in it comes from `libcrun_container_get_features`, which is
+    /// where `crun features` gets its own answer. Writing the document by hand
+    /// was the alternative, and a features document is a set of promises to a
+    /// kubelet: each line would have been an assertion about someone else's
+    /// compile-time configuration, free to drift from it without a sound.
+    ///
+    /// The field order and shapes follow crun's own output, down to the two
+    /// checkpoint annotations being strings rather than booleans, so that a
+    /// caller which special-cases crun's document sees no difference.
+    pub fn featuresJson(self: *Self, allocator: std.mem.Allocator) ![]u8 {
+        const ctx = try self.initContext("", "");
+
+        var err_ptr: ?*ffi.Libcrun.Error = null;
+        var info_ptr: ?*ffi.Libcrun.FeaturesInfo = null;
+        const ret = ffi.Libcrun.libcrun_container_get_features(ctx, &info_ptr, &err_ptr);
+        if (ret != 0) {
+            try self.handleError(&err_ptr, "container_get_features");
+            return core.Error.OperationFailed;
+        }
+        const info = info_ptr orelse {
+            if (self.logger) |log| {
+                try log.err("libcrun reported no features and no error", .{});
+            }
+            return core.Error.OperationFailed;
+        };
+        defer freeFeatures(info);
+
+        // FeaturesInfo is a hand-written mirror of a C layout, so it is only
+        // correct for the crun it was written against. A wrong layout shows up
+        // as rubbish in the first string read, and a features document full of
+        // rubbish is worse for a caller than no command at all.
+        const version_min = cSpan(info.oci_version_min) orelse "";
+        if (version_min.len == 0 or !std.ascii.isDigit(version_min[0])) {
+            if (self.logger) |log| {
+                try log.err("libcrun's features do not start with a version: the vendored crun and libcrun_ffi.zig's struct_features_info_s have diverged", .{});
+            }
+            return core.Error.OperationFailed;
+        }
+
+        var out = std.ArrayListUnmanaged(u8){};
+        errdefer out.deinit(allocator);
+        const w = out.writer(allocator);
+
+        try w.writeAll("{\n  \"ociVersionMin\": ");
+        try core.json.writeString(w, version_min);
+        try w.writeAll(",\n  \"ociVersionMax\": ");
+        try core.json.writeString(w, cSpan(info.oci_version_max) orelse "");
+        try w.writeAll(",\n  \"hooks\": ");
+        try writeCStrArray(w, info.hooks);
+        try w.writeAll(",\n  \"mountOptions\": ");
+        try writeCStrArray(w, info.mount_options);
+
+        const lx = info.linux;
+        try w.writeAll(",\n  \"linux\": {\n    \"namespaces\": ");
+        try writeCStrArray(w, lx.namespaces);
+        try w.writeAll(",\n    \"capabilities\": ");
+        try writeCStrArray(w, lx.capabilities);
+        try w.print(
+            ",\n    \"cgroup\": {{ \"v1\": {}, \"v2\": {}, \"systemd\": {}, \"systemdUser\": {} }}",
+            .{ lx.cgroup.v1, lx.cgroup.v2, lx.cgroup.systemd, lx.cgroup.systemd_user },
+        );
+        try w.print(",\n    \"seccomp\": {{ \"enabled\": {}", .{lx.seccomp.enabled});
+        // crun emits actions and operators only when it has them, and leaves
+        // archs out of the document altogether. Both are copied rather than
+        // improved on: this is meant to be crun's answer, not a second one.
+        if (lx.seccomp.actions != null) {
+            try w.writeAll(", \"actions\": ");
+            try writeCStrArray(w, lx.seccomp.actions);
+        }
+        if (lx.seccomp.operators != null) {
+            try w.writeAll(", \"operators\": ");
+            try writeCStrArray(w, lx.seccomp.operators);
+        }
+        try w.writeAll(" }");
+        try w.print(",\n    \"apparmor\": {{ \"enabled\": {} }}", .{lx.apparmor.enabled});
+        try w.print(",\n    \"selinux\": {{ \"enabled\": {} }}", .{lx.selinux.enabled});
+        try w.print(",\n    \"mountExtensions\": {{ \"idmap\": {{ \"enabled\": {} }} }}", .{lx.mount_ext.idmap.enabled});
+        try w.print(",\n    \"intelRdt\": {{ \"enabled\": {} }}", .{lx.intel_rdt.enabled});
+        try w.print(",\n    \"netDevices\": {{ \"enabled\": {} }}", .{lx.net_devices.enabled});
+        // memoryPolicy is the vendored fork's own addition, and it emits the
+        // two arrays only when it has them.
+        try w.writeAll(",\n    \"memoryPolicy\": {");
+        if (lx.memory_policy.mode != null) {
+            try w.writeAll(" \"modes\": ");
+            try writeCStrArray(w, lx.memory_policy.mode);
+        }
+        if (lx.memory_policy.flags != null) {
+            if (lx.memory_policy.mode != null) try w.writeAll(",");
+            try w.writeAll(" \"flags\": ");
+            try writeCStrArray(w, lx.memory_policy.flags);
+        }
+        try w.writeAll(" }");
+        try w.writeAll("\n  }");
+
+        const ann = info.annotations;
+        try w.writeAll(",\n  \"annotations\": {");
+        var first_annotation = true;
+        if (cSpan(ann.io_github_seccomp_libseccomp_version)) |v| {
+            if (v.len > 0) try writeAnnotation(w, &first_annotation, "io.github.seccomp.libseccomp.version", v);
+        }
+        const checkpoint = if (ann.run_oci_crun_checkpoint_enabled) "true" else "false";
+        try writeAnnotation(w, &first_annotation, "org.opencontainers.runc.checkpoint.enabled", checkpoint);
+        try writeAnnotation(w, &first_annotation, "run.oci.crun.checkpoint.enabled", checkpoint);
+        if (cSpan(ann.run_oci_crun_commit)) |v| try writeAnnotation(w, &first_annotation, "run.oci.crun.commit", v);
+        if (cSpan(ann.run_oci_crun_version)) |v| try writeAnnotation(w, &first_annotation, "run.oci.crun.version", v);
+        try writeAnnotation(w, &first_annotation, "run.oci.crun.wasm", if (ann.run_oci_crun_wasm) "true" else "false");
+        // Which binary answered, and through which backend. A caller that
+        // finds crun's version here should still be able to tell that it is
+        // talking to nexcage.
+        try writeAnnotation(w, &first_annotation, "io.cageforge.nexcage.version", core.version.getVersion());
+        try writeAnnotation(w, &first_annotation, "io.cageforge.nexcage.backend", "crun");
+        try w.writeAll("\n  }");
+
+        try w.writeAll(",\n  \"potentiallyUnsafeConfigAnnotations\": ");
+        try writeCStrArray(w, info.potentially_unsafe_annotations);
+        try w.writeAll("\n}\n");
+
+        return out.toOwnedSlice(allocator);
+    }
+
     /// Not implemented. libcrun exposes an exec entry point, but no binding
     /// for it exists in libcrun_ffi.zig, so there is nothing to call. This
     /// used to build a C argv, discard it and return OperationNotSupported
@@ -405,3 +528,67 @@ pub const CrunDriver = struct {
         try file.writeAll("{\"ociVersion\":\"1.0.0\",\"process\":{\"terminal\":true,\"user\":{\"uid\":0,\"gid\":0},\"args\":[\"/bin/sh\"],\"env\":[\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"]},\"root\":{\"path\":\"rootfs\",\"readonly\":false},\"hostname\":\"container\",\"linux\":{\"namespaces\":[{\"type\":\"pid\"},{\"type\":\"network\"},{\"type\":\"ipc\"},{\"type\":\"uts\"},{\"type\":\"mount\"}]}}");
     }
 };
+
+/// A C string as a slice, or null when the pointer is null.
+fn cSpan(p: [*c]u8) ?[]const u8 {
+    if (p == null) return null;
+    return std.mem.span(p);
+}
+
+/// A NULL-terminated array of C strings, as a JSON array.
+fn writeCStrArray(w: anytype, arr: [*c][*c]u8) !void {
+    try w.writeAll("[");
+    if (arr != null) {
+        var i: usize = 0;
+        while (arr[i] != null) : (i += 1) {
+            if (i > 0) try w.writeAll(", ");
+            try core.json.writeString(w, std.mem.span(arr[i]));
+        }
+    }
+    try w.writeAll("]");
+}
+
+/// One `"key": "value"` of the annotations object, with the comma the previous
+/// one needs. Every annotation in a features document is a string, including
+/// the ones that hold "true" and "false".
+fn writeAnnotation(w: anytype, first: *bool, key: []const u8, value: []const u8) !void {
+    if (!first.*) try w.writeAll(",");
+    first.* = false;
+    try w.writeAll("\n    ");
+    try core.json.writeString(w, key);
+    try w.writeAll(": ");
+    try core.json.writeString(w, value);
+}
+
+/// Release what libcrun_container_get_features allocated.
+///
+/// This is `cleanup_struct_features_free` from crun's container.h, which is a
+/// static inline and so is not a symbol nexcage can call. It is copied field
+/// for field on purpose, including what it does *not* free: seccomp.archs, the
+/// annotation strings and potentiallyUnsafeConfigAnnotations are left alone
+/// there, and freeing them here would be a guess about their ownership that
+/// crun's own code does not make.
+fn freeFeatures(info: *ffi.Libcrun.FeaturesInfo) void {
+    freeCStr(info.oci_version_min);
+    freeCStr(info.oci_version_max);
+    freeCStrArray(info.hooks);
+    freeCStrArray(info.mount_options);
+    freeCStrArray(info.linux.namespaces);
+    freeCStrArray(info.linux.capabilities);
+    freeCStrArray(info.linux.seccomp.actions);
+    freeCStrArray(info.linux.seccomp.operators);
+    std.c.free(info);
+}
+
+fn freeCStr(p: [*c]u8) void {
+    if (p != null) std.c.free(p);
+}
+
+fn freeCStrArray(arr: [*c][*c]u8) void {
+    if (arr == null) return;
+    var i: usize = 0;
+    while (arr[i] != null) : (i += 1) std.c.free(arr[i]);
+    // The array itself is a double pointer, which does not coerce to the
+    // anyopaque free() takes; each element above does.
+    std.c.free(@ptrCast(arr));
+}
