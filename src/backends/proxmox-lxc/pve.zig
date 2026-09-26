@@ -347,6 +347,55 @@ pub const PveClient = struct {
         return core.Error.NotFound;
     }
 
+    /// Refuse early unless the target node can see the template.
+    ///
+    /// A storage named `local` is a different directory on every node, so a
+    /// volid that exists here may simply not be there -- and the API's own
+    /// answer for that arrives after a VMID has been taken. The message names
+    /// the storages on that node which do hold templates, because the fix is
+    /// usually to put the template on one of them.
+    pub fn requireTemplateOnNode(self: *const Self, node: []const u8, volid: []const u8) !void {
+        const colon = std.mem.indexOfScalar(u8, volid, ':') orelse {
+            if (self.logger) |log| {
+                log.err("--node needs a template named as <storage>:vztmpl/<file>, got '{s}'", .{volid}) catch {};
+            }
+            return core.Error.InvalidInput;
+        };
+        const storage = volid[0..colon];
+
+        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/content", .{ node, storage });
+        defer self.allocator.free(path);
+        const args = [_][]const u8{ "pvesh", "get", path, "--content", "vztmpl", "--output-format", "json" };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) {
+            if (self.logger) |log| {
+                log.err("node {s} has no storage '{s}' to take the template from: {s}", .{ node, storage, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
+            }
+            return core.Error.NotFound;
+        }
+
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch {
+            return core.Error.OperationFailed;
+        };
+        defer parsed.deinit();
+        if (parsed.value == .array) {
+            for (parsed.value.array.items) |item| {
+                if (item != .object) continue;
+                const v = item.object.get("volid") orelse continue;
+                if (v == .string and std.mem.eql(u8, v.string, volid)) return;
+            }
+        }
+
+        if (self.logger) |log| {
+            log.err("node {s} does not have the template '{s}'. A storage called '{s}' is a different directory on each node unless it is shared; put the template there, or use a shared storage", .{ node, volid, storage }) catch {};
+        }
+        return core.Error.NotFound;
+    }
+
     /// One call against /nodes/<node>/lxc/<vmid><sub>, which is how the cluster
     /// reaches a container that is not on this host. `pct` has no equivalent:
     /// it is a local tool by construction.

@@ -544,6 +544,45 @@ check "delete on another node goes through that node's API" \
 nx state remote-1
 check "and afterwards it is gone from the cluster" rc 1
 
+echo "--- create --node ---"
+reset_sim
+: > "$S/node_templates"
+echo "titan $TPL" >> "$S/node_templates"
+cfg '{"network":{"bridge":"vmbr0"}}'
+
+nx create --name there-1 --node titan "$TPL"
+check "create --node makes the container through that node's API" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc --vmid [0-9]+ --ostemplate .* --hostname there-1"' \
+      'not_called_re "^pct create"'
+# calls.last holds only the last invocation, so this is asserted on the create
+# itself rather than after the list that follows it.
+check "the template was checked on that node, and before the VMID was taken" \
+  all 'called_re "^pvesh get /nodes/titan/storage/local/content --content vztmpl"' \
+      'awk "/storage\\/local\\/content/{t=NR} /cluster\\/nextid/{n=NR} END{exit !(t && n && t<n)}" "$S/calls.last"'
+nx list
+check "and it is listed on that node" \
+  all 'rc 0' 'awk -F"\t" '"'"'$8=="there-1" && $7=="titan" {f=1} END {exit !f}'"'"' "$S/out"'
+
+# The template check is the point: a node that cannot see it is told so, and
+# nothing is created.
+nx create --name there-2 --node otherhost "$TPL"
+check "a node without the template is refused, with the node named" \
+  all 'rc 1' 'err_has "does not have the template"' 'not_called_re "^pvesh create /nodes/otherhost/lxc"'
+
+# An OCI bundle is packed into a template on *this* host, so it cannot travel.
+nx create --name there-3 --node titan --bundle /tmp/nexcage-bundles/b1
+check "--node with a bundle is refused, not half-done" \
+  all 'rc 1' 'err_has "packed into a template on this host"'
+
+nx --runtime crun create --node titan --bundle /tmp/nexcage-bundles/b1 there-4
+check "--node on the crun backend says it has nowhere to put it" \
+  all 'rc 1' 'err_has "nowhere else to put it"'
+
+# Naming this host is not "another node": it is the ordinary local path.
+nx create --name here-2 --node "$(hostname)" "$TPL"
+check "--node naming this host goes through pct, as it should" \
+  all 'rc 0' 'called_re "^pct create"' 'not_called_re "^pvesh create /nodes/"'
+
 # A container here still goes through pct: the API is for what is elsewhere.
 reset_sim
 cfg '{"network":{"bridge":"vmbr0"}}'

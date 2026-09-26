@@ -72,6 +72,7 @@ pub const CreateCommand = struct {
             .console_socket = options.console_socket,
             .pid_file = options.pid_file,
             .systemd_cgroup = options.systemd_cgroup,
+            .node = options.node,
         } };
         try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 

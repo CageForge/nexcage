@@ -24,6 +24,35 @@ case "$1 $2" in
     done < "$SIM/db"
     printf ']\n'
     ;;
+  "get /nodes/"*/storage/*/content)
+    # What templates a node can see. $SIM/node_templates holds "node volid"
+    # lines; without a line for that node it has none, which is what makes the
+    # "the template is not there" check mean something.
+    node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
+    printf '['
+    sep=""
+    while read -r n volid; do
+      [ "$n" = "$node" ] || continue
+      printf '%s{"volid":"%s","content":"vztmpl","format":"tzst"}' "$sep" "$volid"
+      sep=","
+    done < "${SIM}/node_templates" 2>/dev/null
+    printf ']\n'
+    ;;
+  "create /nodes/"*/lxc)
+    # Create on a node: --vmid N --ostemplate T --hostname H ...
+    node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/lxc|\1|p')
+    vmid=""; host=""
+    shift 2
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --vmid) vmid=$2; shift 2 ;;
+        --hostname) host=$2; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    [ -n "$vmid" ] || { echo "no vmid given" >&2; exit 2; }
+    echo "$vmid stopped $host $node" >> "$SIM/db"
+    ;;
   "create /nodes/"*/lxc/*)
     # /nodes/<node>/lxc/<vmid>/status/<action>
     path=$2

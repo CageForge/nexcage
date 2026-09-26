@@ -480,6 +480,11 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             // --log-format, which shapes nexcage's own log.
             options.format = try allocator.dupe(u8, args[i + 1]);
             i += 2;
+        } else if (std.mem.eql(u8, arg, "--node") and i + 1 < args.len) {
+            // Which node of the Proxmox cluster `create` should make the
+            // container on.
+            options.node = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
         } else if (std.mem.eql(u8, arg, "--process") and i + 1 < args.len) {
             // How an engine sends an exec: the process spec in a file rather
             // than a command on the command line.

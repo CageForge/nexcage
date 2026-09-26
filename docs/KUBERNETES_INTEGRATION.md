@@ -39,7 +39,7 @@ next step, not by size.
 | 8 | No sandbox model | one container per name, no pod grouping | Multi-container pods sharing a network namespace, the pause container |
 | 9 | No image service | uses PVE templates, `pveam` and `oci-registry-pull` (PVE 9.1+) | CRI `ImageService`: pull with credentials, list, remove, image FS stats |
 | 10 | Fixed resources | 512 MiB and one core unless an OCI bundle sets limits | Translating pod requests and limits into cgroups |
-| 11 | ~~Single host~~ | **Reads and lifecycle cover the cluster**: `list`, `state`, `start`, `stop` and `delete` find a container on any node and act through that node's API. `exec`, `kill` and the `pid` in `state` stay local and say so — they reach into a container's processes from the host, which no API offers. `create` still makes the container here | A node per PVE host, or a scheduler that targets more than one |
+| 11 | ~~Single host~~ | **Reads and lifecycle cover the cluster**: `list`, `state`, `start`, `stop` and `delete` find a container on any node and act through that node's API. `exec`, `kill` and the `pid` in `state` stay local and say so — they reach into a container's processes from the host, which no API offers. `create --node <name>` places a new one on a chosen node, from a template that node can read | A node per PVE host, or a scheduler that targets more than one |
 
 One further gap is operational rather than functional: nexcage exposes no
 health or metrics endpoint a probe can use.
