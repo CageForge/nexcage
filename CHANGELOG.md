@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-27
+
+`update` -- the last runtime-spec verb that was missing -- vendored crun moves
+from 1.24 to 1.30.1, and two things are removed: the runc backend, which
+nothing ever built or ran, and `crun_name_patterns`. **Read the upgrade note
+if you install the `-crun` binary: it needs `libjson-c5` now, not `libyajl2`.**
+
+
 ### Added
 - **`update`**, the runtime-spec verb for a running container's resource limits, with runc's and crun's flag names (`--memory`, `--memory-swap`, `--cpu-quota`, `--cpu-period`, `--cpu-share`, `--pids-limit`, ...) and `--resources <file|->` for a `linux.resources` document — `update --resources=- <id>` with the document on stdin is what containerd sends for an in-place pod resize, and the CRI test asks for one. On the crun backend it reaches libcrun either way. On Proxmox LXC the settings are said to `pct set` in its own terms — bytes to MiB, quota over period to `cpulimit` in cores, cgroup v1 shares to the v2 weight `cpuunits` the way runc converts them — and a container on another node goes through that node's `/config` API; what Proxmox cannot express (pids, cpusets, reservations) is refused by name rather than dropped, because a limit asked for and silently not applied is the worst answer an update can give. Proxmox keeps the change in the config, so it survives a restart.
 
