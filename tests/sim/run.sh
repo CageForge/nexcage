@@ -460,6 +460,24 @@ check "an OCI spec named with --config is refused, not silently ignored" \
   all 'rc 1' 'err_has "invalid configuration"'
 rm -f "$S/work/config.json"
 
+# Routing by name (ADR-001). A glob under runtime.routing is the matcher
+# crun_name_patterns used to be, so the proof is both directions of one rule:
+# a matching name reaches the crun backend and a non-matching one reaches pct.
+cfg '{"runtime":{"routing":[{"pattern":"kube-ovn-*","runtime":"crun"}]}}'
+nx state kube-ovn-1
+check "a glob under runtime.routing sends a matching name to crun" \
+  all 'rc 1' 'err_has "not built into this binary"' 'not_called_re "^pct"'
+nx state from-tpl
+check "and a name it does not match goes to Proxmox LXC" \
+  all 'rc 0' 'called_re "^pct"'
+# The removed key is ignored -- and says so, because a container it used to
+# send to crun now lands on the default backend.
+cfg '{"container_config":{"crun_name_patterns":["kube-ovn-*"]}}'
+nx state kube-ovn-1
+check "crun_name_patterns no longer routes, and the warning names runtime.routing" \
+  all 'rc 1' 'called_re "^pct"' 'err_has "crun_name_patterns is ignored"' 'err_has "runtime.routing"'
+rm -f "$S/work/config.json"
+
 nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup list
 check "the options containerd sends are accepted, not read as a command" \
   all 'rc 0' '! err_has "unknown command"'

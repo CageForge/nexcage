@@ -1,158 +1,108 @@
 # ADR-001: Container Runtime Selection
 
 ## Status
-**ACCEPTED** - 2024-12-01
+
+**Revised 2026-09-27.** This supersedes the decision of 2024-12-01, which chose
+crun as the primary container runtime with runc as an automatic fallback. That
+decision was never what shipped; the review that produced this revision is
+[#85](https://github.com/CageForge/nexcage/issues/85).
 
 ## Context
 
-We needed to select a container runtime for the Proxmox LXCRI project that would provide:
-- High performance and low overhead
-- OCI compliance for container portability
-- Integration capabilities with Proxmox VE
-- Security features and isolation
-- Active maintenance and community support
-
-### Options Considered
-
-1. **runc** - Reference OCI runtime implementation
-2. **crun** - Fast and lightweight OCI runtime in C
-3. **kata-containers** - Secure runtime using lightweight VMs
-4. **gVisor** - User-space kernel for enhanced security
-5. **Custom runtime** - Build from scratch
+nexcage is one binary on a Proxmox VE host, called from two directions
+([OVERVIEW.md](OVERVIEW.md)): a person or a script manages LXC containers with
+it, and a container engine — podman, containerd, CRI-O, a kubelet — drives it
+with the OCI runtime-spec command line. The 2024 decision was taken before the
+first of those existed as the centre of the project, and it assumed nexcage
+would *call* a runtime binary. Two questions need an answer that the code
+agrees with: which backend a container goes to by default, and how that is
+decided for a container whose caller never says.
 
 ## Decision
 
-**We chose `crun` as the primary container runtime with `runc` as fallback.**
+1. **The Proxmox LXC backend is the default.** It turns commands into `pct`
+   and Proxmox API calls, across every node of the cluster, and is what a
+   plain build contains. Nothing selects it; everything not routed elsewhere
+   lands there.
 
-### Rationale
+2. **The crun backend is libcrun, linked in.** For an OCI bundle — what an
+   engine hands over — nexcage does the container work through the vendored
+   libcrun (`deps/crun`, a fork), not by executing a `crun` binary. It is an
+   opt-in build (`-Denable-backend-crun=true`) and ships as the `-crun`
+   release binary. It is the backend an engine's host is configured for.
 
-#### Why crun:
-- **Performance**: ~50% faster startup times compared to runc
-- **Memory efficiency**: Lower memory footprint (~30% less RAM usage)
-- **C implementation**: Better integration with Proxmox's C/C++ ecosystem
-- **OCI compliance**: Full OCI Runtime Specification v1.0+ support
-- **Active development**: Regular updates and security patches
-- **cgroups v2 support**: Modern resource management capabilities
+3. **Routing is a name lookup, in the configuration, first match wins.**
+   `runtime.routing` is a list of `{ "pattern", "runtime" }`; a pattern is a
+   glob unless it starts with `^` or ends with `$`, in which case it is a
+   regular expression. `*` is the catch-all. `--runtime` overrides it for one
+   command. An engine never passes `--runtime`, so a host that runs
+   containers for one is configured with a single rule:
 
-#### Why runc as fallback:
-- **Stability**: Battle-tested in production environments
-- **Compatibility**: Widest ecosystem support
-- **Reference implementation**: Guaranteed OCI compliance
-- **Emergency backup**: Provides reliability if crun issues arise
+   ```json
+   { "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }
+   ```
 
-### Implementation Strategy
+   `container_config.routing` and `container_config.default_runtime` are also
+   read, for older files; when both lists are present the `container_config`
+   one replaces the other wholesale. `container_config.crun_name_patterns`, a
+   glob list routing to crun that predates `routing`, is **removed** in this
+   revision: a glob under `routing` is the same matcher, so each entry had a
+   one-line equivalent. A file that still carries it gets a warning naming
+   the replacement.
 
-```zig
-// Runtime selection logic
-pub const RuntimeConfig = struct {
-    primary_runtime: RuntimeType = .crun,
-    fallback_runtime: RuntimeType = .runc,
-    auto_fallback_enabled: bool = true,
-    runtime_timeout: u32 = 30, // seconds
-};
+4. **There is no fallback between backends.** The 2024 design had
+   `auto_fallback_enabled`: try the primary, use the other if it is
+   unavailable. A container is one thing on one backend — an LXC container
+   and a libcrun container are not interchangeable — so a command routed to a
+   backend that is compiled out fails with `UnsupportedOperation` and says
+   how to build it, rather than quietly making a different kind of
+   container.
 
-pub const RuntimeType = enum {
-    crun,
-    runc,
-    custom,
-};
-
-pub fn selectRuntime(config: RuntimeConfig, container_spec: ContainerSpec) RuntimeType {
-    // Try primary runtime first
-    if (isRuntimeAvailable(config.primary_runtime)) {
-        return config.primary_runtime;
-    }
-    
-    // Fallback to secondary runtime
-    if (config.auto_fallback_enabled and isRuntimeAvailable(config.fallback_runtime)) {
-        logger.warn("Primary runtime unavailable, using fallback: {}", .{config.fallback_runtime});
-        return config.fallback_runtime;
-    }
-    
-    return error.NoRuntimeAvailable;
-}
-```
+5. **runc is not a supported backend.** `src/backends/runc` shells out to a
+   `runc` binary for create/start/kill/delete; no workflow builds it and it
+   has never been run. A second OCI backend would implement the same
+   interface libcrun already answers. Its removal is
+   [#88](https://github.com/CageForge/nexcage/issues/88).
 
 ## Consequences
 
-### Positive
-- **Performance gains**: Faster container startup and lower resource usage
-- **Modern features**: Access to latest cgroups v2 and security features
-- **Reliability**: Fallback mechanism ensures operational continuity
-- **Future-proofing**: crun's active development provides ongoing improvements
+Positive:
 
-### Negative
-- **Complexity**: Managing two runtimes increases system complexity
-- **Testing overhead**: Need to test both runtime paths
-- **Documentation**: Must document both runtime configurations
-- **Debugging**: Runtime-specific issues require specialized knowledge
+- One code path per face, each verified where it is used: the LXC backend by
+  the Proxmox E2E job on a real PVE 9.2 host; the crun backend by podman,
+  `ctr`, containerd's CRI, CRI-O and a kubelet, with a Kubernetes pod
+  scheduled onto it through a `RuntimeClass`
+  ([KUBERNETES_INTEGRATION.md](../KUBERNETES_INTEGRATION.md)).
+- Routing is one function (`Config.getRoutedRuntime`) with one source of
+  rules, and the simulator proves both directions of a rule.
 
-### Mitigation Strategies
+Negative:
 
-1. **Comprehensive testing**: CI/CD tests both runtime paths
-2. **Runtime detection**: Automatic runtime capability detection
-3. **Monitoring**: Runtime performance and failure metrics
-4. **Documentation**: Clear guidelines for runtime selection and troubleshooting
+- Linking libcrun couples nexcage to its ABI. The fork's `features` structs
+  differ from upstream's by a trailing field, which segfaulted `features`
+  once; `scripts/check_features_abi.sh` now compares the vendored header
+  against the Zig mirror in CI. A crun bump is a deliberate change, not a
+  version number ([#227](https://github.com/CageForge/nexcage/issues/227)).
+- The `-crun` binary needs `libyajl2`, `libseccomp2` and `libcap2` on the
+  host, and a Proxmox VE install lacks the first.
 
-## Implementation Details
+## What changed since 2024-12-01, and why
 
-### Runtime Detection
-```bash
-# Check crun availability and version
-crun --version
-crun spec --version
-
-# Verify OCI compliance
-crun check-compliance
-
-# Performance benchmark
-time crun run test-container
-```
-
-### Configuration Options
-```json
-{
-  "runtime": {
-    "primary": "crun",
-    "fallback": "runc",
-    "auto_fallback": true,
-    "timeout": 30,
-    "performance_monitoring": true,
-    "feature_detection": {
-      "cgroups_v2": true,
-      "seccomp": true,
-      "user_namespaces": true
-    }
-  }
-}
-```
-
-### Monitoring and Metrics
-- Runtime selection decisions
-- Container startup times by runtime
-- Resource usage comparison
-- Failure rates and fallback frequency
-- Feature utilization statistics
-
-## Review Schedule
-
-This ADR will be reviewed:
-- **Next review**: 2025-06-01 (6 months)
-- **Trigger events**:
-  - Major crun/runc version releases
-  - Significant performance regressions
-  - New runtime alternatives emerging
-  - Production issues with current selection
+| Then | Now | Why |
+|---|---|---|
+| crun primary, runc fallback | Proxmox LXC default; crun for engines; runc unsupported | nexcage became a Proxmox-first runtime; the OCI half is driven by engines, and libcrun answers them |
+| call the `crun` binary | link libcrun | one process, libcrun's own errors, no PATH dependence |
+| automatic fallback | none | a container is one thing on one backend |
+| `crun_name_patterns` | `runtime.routing` | one matcher, one list |
 
 ## References
 
+- [OVERVIEW.md](OVERVIEW.md), [BACKENDS.md](BACKENDS.md)
+- [KUBERNETES_INTEGRATION.md](../KUBERNETES_INTEGRATION.md) — what each engine asks a runtime
+- README, *Configure* — the routing table as a user sees it
 - [OCI Runtime Specification](https://github.com/opencontainers/runtime-spec)
-- [crun Project](https://github.com/containers/crun)
-- [runc Project](https://github.com/opencontainers/runc)
-- [Container Runtime Comparison Benchmarks](https://www.redhat.com/en/blog/container-runtime-security)
-- [Proxmox VE Container Integration](https://pve.proxmox.com/wiki/Linux_Container)
+- [crun](https://github.com/containers/crun) and the vendored fork, `deps/crun`
+- [#85](https://github.com/CageForge/nexcage/issues/85), [#88](https://github.com/CageForge/nexcage/issues/88), [#227](https://github.com/CageForge/nexcage/issues/227)
 
 ---
-**Author**: Proxmox LXCRI Team  
-**Reviewers**: Architecture Committee  
-**Last Updated**: 2024-12-01
+**Last updated**: 2026-09-27 (revision); original 2024-12-01

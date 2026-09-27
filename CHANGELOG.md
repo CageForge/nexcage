@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- ADR-001 records the runtime selection that ships rather than the one decided in 2024: Proxmox LXC is the default backend, the crun backend is libcrun linked in and is what a container engine's host routes to, there is no fallback between backends, and runc is not supported. Routing is one name lookup with one list of rules. `docs/architecture/BACKENDS.md` said `kill` went through `pct exec` and name lookup through `pct list`; neither has been true since 0.9.0 and 0.11.0.
+
+### Removed
+- `container_config.crun_name_patterns`. It routed names matching a glob to crun before `runtime.routing` existed and stayed on as a fallback after every glob it could express had a one-line equivalent there — the same matcher. A file that still carries the key gets a warning naming the replacement, because a container it used to route to crun now goes to the default backend, and that should not happen without a word.
+
 ## [0.12.0] - 2026-09-27
 
 `pause` and `resume` -- the cgroup freezer -- and three fixes to code that

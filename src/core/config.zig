@@ -478,22 +478,15 @@ pub const ConfigLoader = struct {
             const obj = container_value.object;
             var container_cfg = config.container_config;
 
-            if (obj.get("crun_name_patterns")) |patterns_value| {
-                switch (patterns_value) {
-                    .array => |patterns_array| {
-                        var patterns = try self.allocator.alloc([]const u8, patterns_array.items.len);
-                        for (patterns_array.items, 0..) |pattern_item, i| {
-                            switch (pattern_item) {
-                                .string => |pattern_str| {
-                                    patterns[i] = try self.allocator.dupe(u8, pattern_str);
-                                },
-                                else => {},
-                            }
-                        }
-                        container_cfg.crun_name_patterns = patterns;
-                    },
-                    else => {},
-                }
+            // `crun_name_patterns` routed names matching a glob to crun before
+            // `routing` existed, and was kept as a fallback long after every
+            // glob it could express had a one-line equivalent there. It is
+            // ignored now -- but not silently: a file that still relies on it
+            // would otherwise route those containers to the default backend
+            // without a word. main.zig logs the warning once the logger is up,
+            // because nothing here can.
+            if (obj.get("crun_name_patterns") != null) {
+                config.legacy_crun_name_patterns = true;
             }
 
             if (obj.get("default_container_type")) |type_value| {
@@ -718,6 +711,10 @@ pub const Config = struct {
     resources: types.ResourceLimits,
     container_config: types.ContainerConfig,
     proxmox: types.ProxmoxSettings = .{},
+    /// The file carried `container_config.crun_name_patterns`, which nothing
+    /// reads any more. Set by the parser, reported by main once there is a
+    /// logger to report it with.
+    legacy_crun_name_patterns: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) !Config {
         return Config{
@@ -748,7 +745,6 @@ pub const Config = struct {
                 .network_bandwidth = null,
             },
             .container_config = types.ContainerConfig{
-                .crun_name_patterns = &[_][]const u8{},
                 .default_container_type = .lxc,
                 .routing = &[_]types.RoutingRule{},
                 .default_runtime = .lxc,
@@ -769,46 +765,17 @@ pub const Config = struct {
         };
     }
 
-    /// Get runtime type based on routing rules with pattern matching
+    /// The backend a container goes to: the first routing rule its name
+    /// matches, else the default. ADR-001 is the record of why this is a
+    /// name lookup and nothing more -- there is no fallback from one backend
+    /// to another, because a container is one thing on one backend.
     pub fn getRoutedRuntime(self: *const Self, container_name: []const u8) types.RuntimeType {
-        // Check new routing rules first (takes precedence)
         for (self.container_config.routing) |rule| {
             if (self.matchesRoutingPattern(container_name, rule.pattern)) {
                 return rule.runtime;
             }
         }
-
-        // Fallback to legacy pattern matching for backward compatibility
-        for (self.container_config.crun_name_patterns) |pattern| {
-            if (self.matchesPattern(container_name, pattern)) {
-                return .crun;
-            }
-        }
-
-        // Return default runtime
         return self.container_config.default_runtime;
-    }
-
-    fn matchesPattern(_: *const Self, name: []const u8, pattern: []const u8) bool {
-        var name_idx: usize = 0;
-        var pattern_idx: usize = 0;
-
-        while (pattern_idx < pattern.len) {
-            if (pattern[pattern_idx] == '*') {
-                // Skip until next pattern character or end
-                while (name_idx < name.len and (pattern_idx + 1 >= pattern.len or name[name_idx] != pattern[pattern_idx + 1])) {
-                    name_idx += 1;
-                }
-                pattern_idx += 1;
-            } else if (name_idx < name.len and pattern[pattern_idx] == name[name_idx]) {
-                name_idx += 1;
-                pattern_idx += 1;
-            } else {
-                return false;
-            }
-        }
-
-        return name_idx == name.len;
     }
 
     /// Enhanced pattern matching that supports both simple wildcards and basic regex patterns
@@ -1049,4 +1016,29 @@ test "without a config file the defaults target a Proxmox host" {
     try std.testing.expectEqualStrings(constants.DEFAULT_BRIDGE_NAME, cfg.network.bridge.?);
     try std.testing.expect(cfg.proxmox.storage == null);
     try std.testing.expect(cfg.proxmox.rootfs_size_gb == null);
+}
+
+test "routing is a name lookup: a glob under runtime.routing, first match wins" {
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadFromString(
+        \\{ "runtime": { "routing": [ { "pattern": "kube-ovn-*", "runtime": "crun" } ] } }
+    );
+    defer cfg.deinit();
+
+    try std.testing.expectEqual(types.RuntimeType.crun, cfg.getRoutedRuntime("kube-ovn-1"));
+    try std.testing.expectEqual(cfg.container_config.default_runtime, cfg.getRoutedRuntime("web-1"));
+    try std.testing.expect(!cfg.legacy_crun_name_patterns);
+}
+
+test "crun_name_patterns is ignored, and the file is flagged so main can say so" {
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadFromString(
+        \\{ "container_config": { "crun_name_patterns": ["kube-ovn-*"] } }
+    );
+    defer cfg.deinit();
+
+    // The name the key used to send to crun lands on the default backend now;
+    // the flag is what turns that into a warning rather than a silence.
+    try std.testing.expectEqual(cfg.container_config.default_runtime, cfg.getRoutedRuntime("kube-ovn-1"));
+    try std.testing.expect(cfg.legacy_crun_name_patterns);
 }
