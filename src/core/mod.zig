@@ -10,6 +10,7 @@ pub const constants = @import("constants.zig");
 pub const integrity = @import("integrity.zig");
 pub const validation = @import("validation.zig");
 pub const signals = @import("signals.zig");
+pub const resources = @import("resources.zig");
 pub const exit_status = @import("exit_status.zig");
 pub const state_root = @import("state_root.zig");
 pub const json = @import("json.zig");

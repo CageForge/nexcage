@@ -219,6 +219,20 @@ if crictl exec "$CTR" /bin/false >/dev/null 2>&1; then
 fi
 echo "ok: a failing exec reports its status"
 
+# An in-place resize. The kubelet's UpdateContainerResources reaches the
+# runtime as `update --resources=- <id>` with a linux.resources document on
+# stdin; crictl update is that call by hand. The kernel's word on the result
+# is the container's cgroup, which is under this test's own cgroup namespace.
+crictl update --memory 67108864 "$CTR" >/tmp/update.err 2>&1 \
+    || fail "crictl update failed: $(cat /tmp/update.err)"
+grep -qE "(^| )update .*--resources[= ]-( |$)" "$TRACE" \
+    || fail "the engine did not send 'update --resources=- <id>'; it was asked: $(sed 's/[0-9a-f]\{64\}/<id>/g' "$TRACE" | tr '\n' '|')"
+mem_max=$(find /sys/fs/cgroup -name memory.max -path "*${CTR}*" 2>/dev/null | head -1)
+[ -n "$mem_max" ] || fail "no memory.max for container $CTR under /sys/fs/cgroup"
+got=$(cat "$mem_max")
+[ "$got" = 67108864 ] || fail "after update --memory 67108864, $mem_max holds '$got'"
+echo "ok: crictl update resized the container, and its cgroup says memory.max=$got"
+
 crictl stopp "$POD" >/dev/null 2>&1 || fail "the pod would not stop"
 crictl rmp -f "$POD" >/dev/null 2>&1 || fail "the pod would not be removed"
 POD=""
@@ -233,13 +247,13 @@ echo "ok: the pod stopped and was removed"
 # container itself and never asks, while CRI-O asks constantly. Requiring it
 # would fail on correct behaviour.
 [ -s "$TRACE" ] || fail "nexcage was never called: the handler did not reach it"
-for verb in create start exec delete; do
+for verb in create start exec update delete; do
     grep -qE "(^| )$verb( |$)" "$TRACE" || {
         echo "what nexcage was asked:" >&2
         sed 's/[0-9a-f]\{64\}/<id>/g' "$TRACE" >&2
         fail "the engine never sent '$verb'"
     }
 done
-echo "ok: nexcage was asked create, start, exec and delete"
+echo "ok: nexcage was asked create, start, exec, update and delete"
 
 echo "PASS: a pod runs on nexcage through containerd's CRI"

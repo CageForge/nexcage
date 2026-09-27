@@ -312,6 +312,35 @@ jobs:
         fi
         echo "[E2E] and it ran to completion after resume, printing '$got'"
 
+        echo "[E2E] update changes the limits Proxmox can express, and the kernel shows them"
+        # runc's words into pct's, then the cgroup Proxmox writes for the
+        # container -- lxc/<vmid>, not its ns child -- is the kernel's word on
+        # what applies. 768M is 805306368 bytes; 50000/100000 is cpulimit 0.5;
+        # 1024 shares is weight 39 by runc's conversion, and pct's own default
+        # weight is 100, so 39 cannot be there by accident.
+        nx update --memory 768M --cpu-quota 50000 --cpu-period 100000 --cpu-share 1024 "$NAME"
+        conf_has "$ID" "^memory: 768\$"
+        conf_has "$ID" "^cpulimit: 0.5\$"
+        conf_has "$ID" "^cpuunits: 39\$"
+        for pair in "memory.max=805306368" "cpu.max=50000 100000" "cpu.weight=39"; do
+          f=${pair%%=*}; want=${pair#*=}
+          got=$($SUDO cat "$FREEZER/$f")
+          [ "$got" = "$want" ] || { echo "::error::$FREEZER/$f is '$got' after update; wanted '$want'"; exit 1; }
+          echo "[E2E] $FREEZER/$f = $got"
+        done
+        echo "[E2E] --memory-swap is memory plus swap, as runc means it; the cgroup gets the swap alone"
+        nx update --memory 768M --memory-swap 1G "$NAME"
+        conf_has "$ID" "^swap: 256\$"
+        got=$($SUDO cat "$FREEZER/memory.swap.max")
+        [ "$got" = 268435456 ] || { echo "::error::memory.swap.max is '$got'; wanted 268435456 (1G - 768M)"; exit 1; }
+        echo "[E2E] a limit Proxmox cannot express is refused by name, not dropped"
+        expect_exit 1 nx update --pids-limit 100 "$NAME"
+        echo "[E2E] and an in-place resize the way containerd sends it: --resources=- with the document on stdin"
+        printf '{"memory":{"limit":536870912}}' | nx update --resources=- "$NAME"
+        got=$($SUDO cat "$FREEZER/memory.max")
+        [ "$got" = 536870912 ] || { echo "::error::memory.max is '$got' after a resources document asking for 536870912"; exit 1; }
+        echo "[E2E] $FREEZER/memory.max = $got, from the document"
+
         echo "[E2E] pause and resume on a container that does not exist are errors"
         expect_exit 1 nx pause no-such-container-$$
         expect_exit 1 nx resume no-such-container-$$

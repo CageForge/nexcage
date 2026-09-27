@@ -153,6 +153,25 @@ pub const Libcrun = struct {
         err: *?*Error,
     ) c_int;
 
+    /// int libcrun_container_update (libcrun_context_t *context, const char *id,
+    ///                               const char *content, size_t len, libcrun_error_t *err);
+    /// int libcrun_container_update_from_values (libcrun_context_t *context, const char *id,
+    ///                                           struct libcrun_update_value_s *values, size_t len,
+    ///                                           libcrun_error_t *err);
+    ///
+    /// `update`, both ways crun itself offers it: a runtime-spec linux.resources
+    /// document, which is what a container engine sends for an in-place resize,
+    /// or a list of settings in crun's section/name vocabulary, which is what a
+    /// command line says.
+    pub const UpdateValue = extern struct {
+        section: [*:0]const u8,
+        name: [*:0]const u8,
+        numeric: bool,
+        value: [*:0]const u8,
+    };
+    pub extern fn libcrun_container_update(context: *Context, id: [*c]const u8, content: [*]const u8, len: usize, err: *?*Error) c_int;
+    pub extern fn libcrun_container_update_from_values(context: *Context, id: [*c]const u8, values: [*]UpdateValue, len: usize, err: *?*Error) c_int;
+
     /// int libcrun_container_read_pids (libcrun_context_t *context, const char *id,
     ///                                  bool recurse, pid_t **pids,
     ///                                  libcrun_error_t *err);

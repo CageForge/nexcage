@@ -175,5 +175,13 @@ case "$1 $2" in
     echo "${store:-local}:vztmpl/${img}_${tag}.tar" >> "$SIM/templates"
     echo "$node ${store:-local}:vztmpl/${img}_${tag}.tar" >> "$SIM/node_templates"
     ;;
+  "set /nodes/"*/lxc/*/config)
+    # A container's options through its node's API -- what `update` uses for
+    # a container elsewhere. Recorded like every call; nothing more to model.
+    ;;
+  "get /nodes/"*/lxc/*/config)
+    # What `update --memory-swap` reads when no --memory came with it.
+    echo '{"memory":512,"swap":512,"cores":1}'
+    ;;
   *) echo "fake pvesh: unsupported $*" >&2; exit 99 ;;
 esac

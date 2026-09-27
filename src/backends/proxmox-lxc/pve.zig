@@ -1139,6 +1139,143 @@ pub const PveClient = struct {
         };
     }
 
+    /// `update` in pct's terms. runc's vocabulary is the runtime-spec's --
+    /// bytes, a quota over a period, cgroup v1 shares -- and pct's is MiB,
+    /// cores and a cgroup v2 weight; the arithmetic is in core/resources.zig.
+    /// A setting Proxmox has no option for is an error naming it, because a
+    /// limit that was asked for and silently not applied is the worst outcome
+    /// an update can have. Local containers go through `pct set`; one on
+    /// another node through `pvesh set /nodes/<node>/lxc/<vmid>/config`, which
+    /// takes the same options.
+    pub fn setResources(self: *const Self, vmid: []const u8, values: []const core.types.ResourceUpdate, node: ?[]const u8) !void {
+        const res = core.resources;
+        var args = std.ArrayListUnmanaged([]const u8){};
+        defer {
+            for (args.items) |a| self.allocator.free(a);
+            args.deinit(self.allocator);
+        }
+
+        var memory_bytes: ?i64 = null;
+        var swap_total: ?i64 = null;
+        var quota: ?i64 = null;
+        var period: ?i64 = null;
+        for (values) |v| {
+            const num: i64 = if (v.numeric) std.fmt.parseInt(i64, v.value, 10) catch {
+                if (self.logger) |log| log.err("{s}.{s}: '{s}' is not a number", .{ v.section, v.name, v.value }) catch {};
+                return core.Error.InvalidInput;
+            } else 0;
+            if (isSetting(v, "memory", "limit")) {
+                if (num < 0) {
+                    if (self.logger) |log| log.err("--memory -1: Proxmox has no unlimited memory for a container; give a size", .{}) catch {};
+                    return core.Error.UnsupportedOperation;
+                }
+                memory_bytes = num;
+                try pushOption(self.allocator, &args, "--memory", "{d}", .{res.mibCeil(num)});
+            } else if (isSetting(v, "memory", "swap")) {
+                if (num < 0) {
+                    if (self.logger) |log| log.err("--memory-swap -1: Proxmox has no unlimited swap for a container; give a size", .{}) catch {};
+                    return core.Error.UnsupportedOperation;
+                }
+                swap_total = num;
+            } else if (isSetting(v, "cpu", "quota")) {
+                quota = num;
+            } else if (isSetting(v, "cpu", "period")) {
+                period = num;
+            } else if (isSetting(v, "cpu", "shares")) {
+                try pushOption(self.allocator, &args, "--cpuunits", "{d}", .{res.sharesToWeight(num)});
+            } else {
+                if (self.logger) |log| log.err("{s}.{s} has no Proxmox setting for a container: pct set knows memory, swap, cpulimit and cpuunits, so this backend takes --memory, --memory-swap, --cpu-quota/--cpu-period and --cpu-share", .{ v.section, v.name }) catch {};
+                return core.Error.UnsupportedOperation;
+            }
+        }
+
+        if (swap_total) |total| {
+            // runc's --memory-swap is memory plus swap; pct's --swap is swap
+            // alone. The difference needs the memory limit, from this call or
+            // from the container's config.
+            const limit = memory_bytes orelse (try self.currentMemoryBytes(vmid, node));
+            if (total < limit) {
+                if (self.logger) |log| log.err("--memory-swap is memory plus swap, as runc means it, and {d} is less than the memory limit of {d}", .{ total, limit }) catch {};
+                return core.Error.InvalidInput;
+            }
+            try pushOption(self.allocator, &args, "--swap", "{d}", .{@divFloor(total - limit + (1024 * 1024 - 1), 1024 * 1024)});
+        }
+        if (quota) |q| {
+            var buf: [32]u8 = undefined;
+            const cores = res.cpulimit(&buf, q, period orelse 100000) catch {
+                if (self.logger) |log| log.err("--cpu-period must be positive", .{}) catch {};
+                return core.Error.InvalidInput;
+            };
+            try pushOption(self.allocator, &args, "--cpulimit", "{s}", .{cores});
+        } else if (period != null) {
+            if (self.logger) |log| log.err("--cpu-period on its own changes nothing here: Proxmox has a CPU limit in cores, which is quota over period, so give --cpu-quota too", .{}) catch {};
+            return core.Error.InvalidInput;
+        }
+        if (args.items.len == 0) return;
+
+        if (node) |n| return self.nodeApi(n, vmid, "set", "/config", args.items);
+
+        var argv = std.ArrayListUnmanaged([]const u8){};
+        defer argv.deinit(self.allocator);
+        try argv.appendSlice(self.allocator, &.{ "pct", "set", vmid });
+        try argv.appendSlice(self.allocator, args.items);
+        const out = try common.runCommand(self.allocator, self.logger, argv.items);
+        defer {
+            self.allocator.free(out.stdout);
+            self.allocator.free(out.stderr);
+        }
+        if (out.exit_code != 0) {
+            if (self.logger) |log| log.err("pct set {s} failed: {s}", .{ vmid, std.mem.trim(u8, out.stderr, " \t\r\n") }) catch {};
+            return self.mapPctError(out.stderr);
+        }
+    }
+
+    fn isSetting(v: core.types.ResourceUpdate, section: []const u8, name: []const u8) bool {
+        return std.mem.eql(u8, v.section, section) and std.mem.eql(u8, v.name, name);
+    }
+
+    fn pushOption(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged([]const u8), flag: []const u8, comptime fmt: []const u8, v: anytype) !void {
+        try out.append(allocator, try allocator.dupe(u8, flag));
+        try out.append(allocator, try std.fmt.allocPrint(allocator, fmt, v));
+    }
+
+    /// The container's memory limit in bytes, from its config: `pct config`
+    /// here, the node's API elsewhere. pct's default is 512 MiB.
+    fn currentMemoryBytes(self: *const Self, vmid: []const u8, node: ?[]const u8) !i64 {
+        var mib: i64 = 512;
+        if (node) |n| {
+            const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}/config", .{ n, vmid });
+            defer self.allocator.free(path);
+            const args = [_][]const u8{ "pvesh", "get", path, "--output-format", "json" };
+            const res = try common.runCommand(self.allocator, self.logger, &args);
+            defer {
+                self.allocator.free(res.stdout);
+                self.allocator.free(res.stderr);
+            }
+            if (res.exit_code != 0) return self.mapPctError(res.stderr);
+            const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch return core.Error.OperationFailed;
+            defer parsed.deinit();
+            if (parsed.value == .object) if (parsed.value.object.get("memory")) |m| if (m == .integer) {
+                mib = m.integer;
+            };
+        } else {
+            const args = [_][]const u8{ "pct", "config", vmid };
+            const res = try common.runCommand(self.allocator, self.logger, &args);
+            defer {
+                self.allocator.free(res.stdout);
+                self.allocator.free(res.stderr);
+            }
+            if (res.exit_code != 0) return self.mapPctError(res.stderr);
+            var lines = std.mem.splitScalar(u8, res.stdout, '\n');
+            while (lines.next()) |line| {
+                if (std.mem.startsWith(u8, line, "memory: ")) {
+                    mib = std.fmt.parseInt(i64, std.mem.trim(u8, line["memory: ".len..], " \t\r"), 10) catch mib;
+                }
+            }
+        }
+        return mib * 1024 * 1024;
+    }
+
     /// Whether a container's processes are frozen, read from the cgroup itself.
     /// Null when there is no freezer to read -- a container that is not running,
     /// or a host that is not on cgroup v2.

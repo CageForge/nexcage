@@ -38,7 +38,7 @@ next step, not by size.
 | 7 | ~~No CNI~~ | **The engine's, not the runtime's.** containerd and CRI-O create the sandbox's network namespace, run the CNI plugins in it and hand the runtime a path to join. Verified on both: a pod gets an address from host-local and reaches another pod over TCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
 | 8 | No sandbox model | one container per name, no pod grouping | Multi-container pods sharing a network namespace, the pause container |
 | 9 | No image service | **Not the runtime's job for Kubernetes**: containerd and CRI-O implement `ImageService` themselves and hand the runtime a bundle whose rootfs is already unpacked — runc never pulls anything either. For the command-line use there is now `images` (what the cluster can create from, per node and storage), `pull` (an OCI image into a chosen storage) and `rmi`. Pull with credentials is not possible: `oci-registry-pull` has no parameter for them | CRI `ImageService`: pull with credentials, list, remove, image FS stats |
-| 10 | Fixed resources | 512 MiB and one core unless an OCI bundle sets limits | Translating pod requests and limits into cgroups |
+| 10 | ~~Fixed resources~~ | **Done.** A bundle's `linux.resources` apply at create through libcrun, and **`update`** changes a running container's limits: `update --resources=- <id>` with the document on stdin is what containerd sends for an in-place pod resize. On Proxmox LXC the same settings become `pct set` in its terms (MiB, cores, a cgroup v2 weight), and what pct cannot express is refused by name | Pod requests and limits, and resizing them in place |
 | 11 | ~~Single host~~ | **Reads and lifecycle cover the cluster**: `list`, `state`, `start`, `stop` and `delete` find a container on any node and act through that node's API. `exec`, `kill` and the `pid` in `state` stay local and say so — they reach into a container's processes from the host, which no API offers. `create --node <name>` places a new one on a chosen node, from a template that node can read | A node per PVE host, or a scheduler that targets more than one |
 
 One further gap is operational rather than functional: nexcage exposes no
@@ -124,7 +124,7 @@ and the crun backend behind it.
 | `delete` | `--force` | done: shuts the container down first |
 | `kill` | `--all` | accepted, and says what it really does on LXC |
 | `create` | `--pid-file <file>`, `--console-socket <sock>` | done on crun: the pty's master end arrives over `SCM_RIGHTS` and is a real tty. Refused on Proxmox LXC, which starts no process on create |
-| also read | `ps`, `features`, `pause`, `resume`, `update` | **not yet** |
+| also read | `ps`, `features`, `pause`, `resume`, `update` | all done: `ps` and `features` (0.10.0), `pause`/`resume` (0.12.0), `update` (0.13.0) |
 
 The crun backend took the bundle path from the container id —
 `/var/lib/nexcage/bundles/<id>` — and ignored the one it was given, so it
@@ -195,8 +195,8 @@ rather than working down a checklist:
   pattern is a regex only when it starts with `^` or ends with `$`, so `.*`
   was read as a wildcard meaning "a literal dot, then anything".
 
-What is still missing: `ps`, `pause`, `resume` and `update` do not exist.
-podman did not ask for any of them to run a container. `features` and `exec` were
+What was still missing at that point: `ps`, `pause`, `resume` and `update` did
+not exist (all four do now). podman did not ask for any of them to run a container. `features` and `exec` were
 also on this list and are done — the first because containerd asked at startup,
 the second because a kubelet cannot do without it.
 
@@ -490,10 +490,11 @@ reads the container's cgroup, children included, which is where `crun ps` and
 for the same container rather than checking it looks plausible, because any list
 of live PIDs looks plausible. With that, everything in the trace above exists.
 
-So the whole of what Kubernetes asks a runtime is answered. What is left in the
-gap table is not something an engine asks for: `pause`, `resume`, `update` and
-`events` are for checkpointing, vertical resizing and a metrics stream, and none
-of them appeared in a single run.
+So the whole of what Kubernetes asks a runtime is answered. `pause`, `resume`
+and `update` came later anyway — the freezer in 0.12.0, and `update` in 0.13.0
+because an in-place pod resize does send it (`update --resources=- <id>`, the
+`linux.resources` document on stdin), and the CRI test now asks for one. What
+is left is `events`, a metrics stream, which nothing has asked for.
 
 Getting the binary onto the node took two corrections that have nothing to do
 with Kubernetes, and both would have looked like runtime bugs:

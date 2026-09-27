@@ -517,6 +517,51 @@ pub const CrunDriver = struct {
         return self.freeze(container_id, false);
     }
 
+    /// Change a running container's resource limits: a runtime-spec
+    /// linux.resources document, which is what a container engine sends and
+    /// libcrun reads itself, or the settings a command line named, handed
+    /// over in crun's own section/name form.
+    pub fn update(self: *Self, container_id: []const u8, resources_json: ?[]const u8, values: []const core.types.ResourceUpdate) !void {
+        try validation.SecurityValidation.validateContainerId(container_id);
+
+        const ctx = try self.initContext("", container_id);
+        const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
+        defer self.allocator.free(id_c);
+        var err_ptr: ?*ffi.Libcrun.Error = null;
+
+        if (resources_json) |doc| {
+            const ret = ffi.Libcrun.libcrun_container_update(ctx, id_c.ptr, doc.ptr, doc.len, &err_ptr);
+            if (ret < 0) {
+                try self.handleError(&err_ptr, "container_update");
+                return core.Error.OperationFailed;
+            }
+            return;
+        }
+
+        // One C string per field, alive until the call has returned.
+        var strings = std.ArrayListUnmanaged([:0]u8){};
+        defer {
+            for (strings.items) |str| self.allocator.free(str);
+            strings.deinit(self.allocator);
+        }
+        const c_values = try self.allocator.alloc(ffi.Libcrun.UpdateValue, values.len);
+        defer self.allocator.free(c_values);
+        for (values, 0..) |v, i| {
+            const section = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{v.section}, 0);
+            try strings.append(self.allocator, section);
+            const name = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{v.name}, 0);
+            try strings.append(self.allocator, name);
+            const value = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{v.value}, 0);
+            try strings.append(self.allocator, value);
+            c_values[i] = .{ .section = section.ptr, .name = name.ptr, .numeric = v.numeric, .value = value.ptr };
+        }
+        const ret = ffi.Libcrun.libcrun_container_update_from_values(ctx, id_c.ptr, c_values.ptr, c_values.len, &err_ptr);
+        if (ret < 0) {
+            try self.handleError(&err_ptr, "container_update_from_values");
+            return core.Error.OperationFailed;
+        }
+    }
+
     fn freeze(self: *Self, container_id: []const u8, on: bool) !void {
         try validation.SecurityValidation.validateContainerId(container_id);
 
