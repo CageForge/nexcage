@@ -129,6 +129,19 @@ pub const ListCommand = struct {
                 defer allocator.free(proxmox_containers);
 
                 for (proxmox_containers) |*c| {
+                    // `pct list` says "running" for a frozen container, so
+                    // without this `list` and `state` disagreed about the same
+                    // container from the same binary -- one saying running and
+                    // the other paused. The freezer is the only thing that
+                    // knows. A container on another node has no cgroup here, so
+                    // isFrozen answers null for it and nothing changes; VMIDs
+                    // are unique across the cluster, so there is nothing to
+                    // mistake it for.
+                    if (std.mem.eql(u8, c.status, "running") and (proxmox_backend.isFrozen(c.id) orelse false)) {
+                        const paused = try allocator.dupe(u8, "paused");
+                        allocator.free(c.status);
+                        c.status = paused;
+                    }
                     try containers.append(allocator, c.*);
                 }
             },

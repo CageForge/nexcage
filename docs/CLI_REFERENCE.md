@@ -328,9 +328,17 @@ a temporary spec, which nexcage removes afterwards. That spec carries a default
 nexcage list
 ```
 
-Tab-separated columns `ID IMAGE COMMAND CREATED STATUS BACKEND NAMES`, from
-`pct list`. `ID` is the VMID and `NAMES` the container name. When `pct list`
-fails, `list` fails too (exit 1) instead of printing an empty table.
+Tab-separated columns `ID IMAGE COMMAND CREATED STATUS BACKEND NODE NAMES`.
+`ID` is the VMID, `NODE` the cluster node the container is on, and `NAMES` the
+container name; every backend that is not Proxmox LXC shows `-` for the node.
+Containers on the other nodes of the cluster are listed too, which `pct list`
+on one host cannot do.
+
+`STATUS` is what `pct` says, except that a frozen container is `paused` — the
+same answer [`state`](#state) gives, read from the same cgroup freezer.
+
+When the listing cannot be read at all, `list` fails (exit 1) instead of
+printing an empty table.
 
 ### state
 
@@ -360,8 +368,9 @@ not know is an error (exit 1) carrying libcrun's own message.
 On the Proxmox LXC backend nexcage composes the state itself, because `pct` has
 no such call:
 
-`status` is `created` for a container not yet started through nexcage, or
-`running`, `stopped` or `paused` as pct reports it. `pid` is the host PID of the
+`status` is `created` for a container not yet started through nexcage, and
+otherwise `running` or `stopped` as pct reports it — or `paused`, which pct
+cannot report: that one is read from the container's cgroup freezer. `pid` is the host PID of the
 container's init while it runs, and 0 otherwise. `bundle` is the directory the
 container was created from, and `null` for one created from a template or a
 registry image; `start` and `stop` keep it. A container that does not exist is
@@ -547,7 +556,7 @@ annotations being strings rather than booleans.
   },
   "annotations": {
     "run.oci.crun.version": "1.24",
-    "io.cageforge.nexcage.version": "0.11.2",
+    "io.cageforge.nexcage.version": "0.12.0",
     "io.cageforge.nexcage.backend": "crun"
   }
 }

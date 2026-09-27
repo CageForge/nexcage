@@ -239,10 +239,90 @@ jobs:
         expect_exit 2 nx kill "$NAME" 'TERM;id'
         expect_exit 2 nx kill "$NAME" NOSUCHSIGNAL
 
+        echo "[E2E] pause freezes the container's cgroup, and the kernel agrees it is frozen"
+        FREEZER="/sys/fs/cgroup/lxc/$ID"
+        # cgroup.freeze is what nexcage asked for; cgroup.events is the kernel
+        # saying it took effect, which it does once every task is actually
+        # frozen (or thawed). Only the second one is evidence, and it can lag
+        # the write by a moment.
+        expect_frozen() {
+          local want=$1
+          for _ in $(seq 1 10); do
+            if $SUDO grep -qx "frozen $want" "$FREEZER/cgroup.events"; then
+              echo "[E2E] $FREEZER/cgroup.events: frozen $want"; return 0
+            fi
+            sleep 1
+          done
+          echo "::error::$FREEZER/cgroup.events never said 'frozen $want':"
+          $SUDO cat "$FREEZER/cgroup.events" "$FREEZER/cgroup.freeze"
+          return 1
+        }
+        nx pause "$NAME"
+        expect_status "$NAME" paused
+        expect_frozen 1
+        echo "[E2E] pct still calls it running -- which is why state reads the freezer"
+        pct_says=$($SUDO pct status "$ID" | awk '{print $2}')
+        [ "$pct_says" = running ] || echo "::warning::pct status now says '$pct_says' for a frozen container; CLI_REFERENCE says it says running"
+        echo "[E2E] list says paused too, rather than disagreeing with state"
+        nx list | awk -F'\t' -v n="$NAME" '$8==n && $5=="paused" {found=1} END {exit !found}'
+
+        echo "[E2E] a command sent into a frozen container is held, and runs once it is thawed"
+        # One exec proves both halves. Started now, it cannot finish: the
+        # process lxc-attach puts into the container's cgroup is frozen the
+        # moment it arrives there. After resume that same process runs, prints
+        # and exits -- which also means the test leaves nothing frozen behind.
+        #
+        # Not `timeout nx ...`: nx is a shell function and timeout can only
+        # exec a program. The first version of this check did exactly that,
+        # got 127 in five milliseconds, and took it for "did not succeed".
+        EXEC_OUT=$(mktemp)
+        $SUDO "$NEXCAGE" exec "$NAME" -- sh -c 'echo thawed' >"$EXEC_OUT" 2>&1 &
+        EXEC_PID=$!
+        # /proc rather than kill -0: the child is sudo, which is root's, and a
+        # zombie is a finished exec, not a held one.
+        exec_alive() { [ -r "/proc/$EXEC_PID/status" ] && ! grep -q '^State:.*Z' "/proc/$EXEC_PID/status"; }
+        # An exec on this host takes a few seconds when nothing is frozen, so
+        # the wait has to be several times that to mean anything.
+        HOLD=20
+        sleep "$HOLD"
+        if ! exec_alive; then
+          rc=0; wait "$EXEC_PID" || rc=$?
+          echo "::error::exec finished inside a paused container within ${HOLD}s (rc=$rc, output: '$(cat "$EXEC_OUT")')"
+          exit 1
+        fi
+        echo "[E2E] the exec has been held for ${HOLD}s by the freezer"
+
+        echo "[E2E] resume thaws it"
+        nx resume "$NAME"
+        expect_status "$NAME" running
+        expect_frozen 0
+        # The held exec must now finish on its own. Bounded, so a hang here
+        # fails the job with a message instead of eating its timeout.
+        for _ in $(seq 1 30); do exec_alive || break; sleep 2; done
+        if exec_alive; then
+          echo "::error::the exec started while paused is still not finished 60s after resume"
+          $SUDO kill "$EXEC_PID" 2>/dev/null || true
+          exit 1
+        fi
+        rc=0; wait "$EXEC_PID" || rc=$?
+        got=$(cat "$EXEC_OUT"); rm -f "$EXEC_OUT"
+        if [ "$rc" -ne 0 ] || [ "$got" != thawed ]; then
+          echo "::error::the held exec ended with rc=$rc and printed '$got'"
+          exit 1
+        fi
+        echo "[E2E] and it ran to completion after resume, printing '$got'"
+
+        echo "[E2E] pause and resume on a container that does not exist are errors"
+        expect_exit 1 nx pause no-such-container-$$
+        expect_exit 1 nx resume no-such-container-$$
+
         echo "[E2E] stop"
         nx stop "$NAME"
         expect_status "$NAME" stopped
         expect_exit 1 nx kill "$NAME" SIGCONT
+
+        echo "[E2E] a stopped container has no freezer, and pause says so"
+        expect_exit 1 nx pause "$NAME"
 
         echo "[E2E] a container created from a template reports bundle null"
         nx state "$NAME" | grep -q '"bundle": null' \

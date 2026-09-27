@@ -553,17 +553,31 @@ nx state fz-1
 check "state calls a frozen container paused, where pct says running" \
   all 'rc 0' '[ "$(json_get "$S/out" status)" = paused ]'
 
+# And `list` has to say the same. It read pct's answer only, so the same binary
+# called one container running and paused depending on which command was asked.
+nx list
+check "list calls it paused too, rather than disagreeing with state" \
+  awk -F'\t' '$8=="fz-1" && $5=="paused" {f=1} END {exit !f}' "$S/out"
+
 nx resume fz-1
 check "resume thaws it" \
   all 'rc 0' '[ "$(cat "$S/cgroup/lxc/100/cgroup.freeze" 2>/dev/null)" = 0 ]'
 nx state fz-1
 check "and state says running again" all 'rc 0' '[ "$(json_get "$S/out" status)" = running ]'
+nx list
+check "and so does list" \
+  awk -F'\t' '$8=="fz-1" && $5=="running" {f=1} END {exit !f}' "$S/out"
 
 # A container that is not running has no cgroup to freeze.
 nx stop fz-1 >/dev/null 2>&1
 nx pause fz-1
 check "pause on a stopped container is an error naming why" \
   all 'rc 1' 'err_has "not running"'
+
+nx pause no-such-fz-$$
+check "pause on a container that does not exist is an error" all 'rc 1'
+nx resume no-such-fz-$$
+check "and so is resume" all 'rc 1'
 
 # pct suspend is lxc-checkpoint, which is a different thing; nexcage must never
 # reach for it.
