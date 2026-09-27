@@ -18,7 +18,7 @@ binary:
 
 ## Status
 
-As of **0.12.0**, on amd64, running on the Proxmox VE host as root:
+As of **0.13.0**, on amd64, running on the Proxmox VE host as root:
 
 | | |
 |---|---|
@@ -34,7 +34,7 @@ Proxmox VE 8.x and 9.x. Pulling from a registry needs 9.1 or later.
 ## Install
 
 ```bash
-VERSION=0.12.0
+VERSION=0.13.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
