@@ -30,7 +30,6 @@
         ]
     },
     "container_config": {
-        "crun_name_patterns": ["kube-ovn-*", "cilium-*"],
         "default_container_type": "lxc"
     },
     "storage": {

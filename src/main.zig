@@ -67,6 +67,12 @@ pub const AppContext = struct {
         var runtime_logger = core.LogContext.init(allocator, log_sink, logging_cfg.log_level, "nexcage");
         runtime_logger.format = logging_cfg.log_format;
 
+        // A config that still routes with the removed key would otherwise
+        // send those containers to the default backend without a word.
+        if (config.legacy_crun_name_patterns) {
+            runtime_logger.warn("container_config.crun_name_patterns is ignored since 0.13.0; put each glob under runtime.routing as {{\"pattern\": \"<glob>\", \"runtime\": \"crun\"}} -- it is the same matcher", .{}) catch {};
+        }
+
         self.* = AppContext{
             .allocator = allocator,
             .config = config,

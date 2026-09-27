@@ -8,7 +8,7 @@ Proxmox LXC.
 | Backend | Build option | Default | State |
 |---|---|---|---|
 | Proxmox LXC | `-Denable-backend-proxmox-lxc` | on | Supported; exercised by the Proxmox E2E job |
-| crun | `-Denable-backend-crun` | off | Experimental; links vendored libcrun from `deps/crun` |
+| crun | `-Denable-backend-crun` | off | Supported for the OCI runtime-spec command line; links vendored libcrun from `deps/crun`. Verified with podman, `ctr`, containerd's CRI, CRI-O and a kubelet; ships as the `-crun` release binary |
 | runc | `-Denable-backend-runc` | off | Experimental; calls the `runc` binary |
 | Proxmox VM | `-Denable-backend-proxmox-vm` | off | Stub; operations only log a warning |
 
@@ -35,5 +35,5 @@ flowchart LR
 | start | `pct start <vmid>` |
 | stop | `pct shutdown <vmid> --timeout 60 --forceStop 1` |
 | delete | `pct destroy <vmid>` |
-| kill | `pct exec <vmid> -- kill -s <signal> 1` |
-| list, name to VMID | `pct list` |
+| kill | `kill(2)` to the container's init from the host, with the PID from `pct status --verbose` — `pct exec` cannot deliver SIGKILL to a namespace's init |
+| list, name to VMID | `pvesh get /cluster/resources --type vm` for every node, merged with `pct list` for this one (the cluster view is a cache) |
