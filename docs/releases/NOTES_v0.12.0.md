@@ -95,8 +95,9 @@ there is not this host's to write.
 
 The E2E suite runs all of this on a real Proxmox host, and takes the kernel's
 word rather than its own: `cgroup.events` has to say `frozen 1`, not just
-`cgroup.freeze` holding what nexcage wrote, and nothing may run inside the
-container while it is frozen. Every defect fixed in this release was in code the
+`cgroup.freeze` holding what nexcage wrote, and a command sent into the
+container while it is frozen has to be held there — and to run once it is
+thawed. Every defect fixed in this release was in code the
 simulator's fakes were perfectly happy with.
 
 ## Upgrading from 0.11.x
