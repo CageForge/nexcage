@@ -138,10 +138,6 @@ pub const ProxmoxLxcDriver = struct {
         return self.pve_client.getNodeName();
     }
 
-    pub fn pullOciImage(self: *Self, image_ref: []const u8, storage: []const u8) ![]const u8 {
-        return self.pve_client.pullOciImage(image_ref, storage);
-    }
-
     pub fn setZFSPool(self: *Self, pool: []const u8) !void {
         try self.zfs_mgr.setPool(pool);
     }
@@ -264,10 +260,25 @@ pub const ProxmoxLxcDriver = struct {
                     if (self.logger) |log| log.err("'{s}' is a registry image; pulling OCI images needs Proxmox VE 9.1 or later. Use a template (local:vztmpl/...) or an OCI bundle directory", .{image_path}) catch {};
                     return core.Error.UnsupportedOperation;
                 }
-                const storage = "local";
-                const pulled = try self.pve_client.pullOciImage(image_path, storage);
-                template_name = try self.allocator.dupe(u8, pulled);
-                self.allocator.free(pulled);
+                const storage = config.template_storage orelse "local";
+                const node = self.pve_client.getNodeName() catch |err| {
+                    if (self.logger) |log| log.err("cannot tell which node this is ({s}), and a registry image is pulled onto a node's storage", .{@errorName(err)}) catch {};
+                    return core.Error.OperationFailed;
+                };
+                defer self.allocator.free(node);
+                // Reuse before pull. An image already on the storage is what a
+                // container engine would use too -- `docker run` does not
+                // pull what it has -- and `pull` is the explicit fetch. This
+                // used to call the endpoint every time and then *compose* the
+                // volid from the reference, a guess about how PVE normalises
+                // a file name; the volid is read back from the storage now,
+                // the way `pull` reads it, so what pct is given exists.
+                if (try self.pve_client.findTemplate(self.allocator, node, storage, image_path, null)) |found| {
+                    if (self.logger) |log| log.info("{s} is already on {s} as {s}; not pulling it again", .{ image_path, storage, found }) catch {};
+                    template_name = found;
+                } else {
+                    template_name = try self.pve_client.pullTemplate(self.allocator, node, storage, image_path, null);
+                }
             }
 
             if (template_name == null) {

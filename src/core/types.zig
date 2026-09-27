@@ -36,6 +36,10 @@ pub const SandboxConfig = struct {
     /// `create --node <name>`: the cluster node to make the container on.
     /// Borrowed from the caller's options, which outlive the create.
     node: ?[]const u8 = null,
+    /// `create --storage <name>`: the Proxmox storage a registry image is
+    /// found on, or pulled to. Borrowed the same way. Not the root filesystem
+    /// storage -- that is `proxmox.storage` -- but where templates live.
+    template_storage: ?[]const u8 = null,
 
     pub fn deinit(self: *SandboxConfig) void {
         self.allocator.free(self.name);

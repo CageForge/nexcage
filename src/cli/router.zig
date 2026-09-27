@@ -57,6 +57,7 @@ pub const BackendRouter = struct {
                 .network = if (config) |c| c.network else null,
                 .storage = null,
                 .node = create_config.node,
+                .template_storage = create_config.storage,
             },
             .run => |run_config| types.SandboxConfig{
                 .allocator = self.allocator,
@@ -67,6 +68,7 @@ pub const BackendRouter = struct {
                 .security = null,
                 .network = null,
                 .storage = null,
+                .template_storage = run_config.storage,
             },
             else => types.SandboxConfig{
                 .allocator = self.allocator,
@@ -334,10 +336,14 @@ pub const CreateConfig = struct {
     console_socket: ?[]const u8 = null,
     pid_file: ?[]const u8 = null,
     systemd_cgroup: bool = false,
+    /// `--storage <name>`: where a registry image is found or pulled to, as
+    /// for `pull`. Meaningless for a template or a bundle.
+    storage: ?[]const u8 = null,
 };
 
 pub const RunConfig = struct {
     image: []const u8,
+    storage: ?[]const u8 = null,
 };
 
 pub const KillConfig = struct {

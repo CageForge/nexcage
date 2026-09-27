@@ -54,7 +54,7 @@ pub const RunCommand = struct {
         // Use router for backend selection and execution
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
-        const operation = router.Operation{ .run = router.RunConfig{ .image = image } };
+        const operation = router.Operation{ .run = router.RunConfig{ .image = image, .storage = options.storage_name } };
         try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 
         try self.logOperation("Running container", container_id);

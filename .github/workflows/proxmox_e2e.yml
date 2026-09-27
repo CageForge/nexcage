@@ -427,6 +427,11 @@ jobs:
 
         vmid_of() { $SUDO pct list 2>/dev/null | awk -v n="$1" 'NR>1 && $NF==n {print $1}'; }
         vztmpl_list() { $SUDO pvesm list local --content vztmpl 2>/dev/null | awk 'NR>1 {print $1}' | sort; }
+        # Proxmox records every registry pull as a task of this type, which is
+        # the evidence for "did not pull again": the template count cannot be,
+        # because a repeated pull is refused by pvesh and leaves the count as
+        # it was too.
+        pulls_recorded() { $SUDO pvesh get "/nodes/$(hostname)/tasks" --typefilter ociregistrypull --limit 500 --output-format json 2>/dev/null | grep -o '"upid"' | wc -l; }
 
         # The pull leaves the image in vztmpl, where it stays after the
         # container is gone. Freeing it keeps the host's template list to
@@ -434,11 +439,12 @@ jobs:
         before=$(vztmpl_list)
         cleanup() {
           set +e
-          id=$(vmid_of "$NAME")
-          if [ -n "$id" ]; then
+          for n in "$NAME" "$NAME-2"; do
+            id=$(vmid_of "$n")
+            [ -z "$id" ] && continue
             $SUDO pct shutdown "$id" --timeout 30 --forceStop 1 >/dev/null 2>&1
             $SUDO pct destroy "$id" --purge 1 >/dev/null 2>&1
-          fi
+          done
           for vol in $(comm -13 <(echo "$before") <(vztmpl_list)); do
             echo "[E2E] freeing pulled image $vol"
             $SUDO pvesm free "$vol" >/dev/null 2>&1
@@ -464,6 +470,14 @@ jobs:
         echo "[E2E] images from a registry always run unprivileged"
         $SUDO pct config "$(vmid_of "$NAME")" | grep -qE '^unprivileged: 1$' \
           || { echo "::error::container from a registry image is not unprivileged"; exit 1; }
+
+        echo "[E2E] a second create from the same reference reuses the pulled image"
+        pulls=$(pulls_recorded)
+        nx create --name "$NAME-2" "$IMAGE"
+        now=$(pulls_recorded)
+        [ "$now" = "$pulls" ] || { echo "::error::a second create from $IMAGE pulled again: Proxmox recorded $((now - pulls)) new ociregistrypull task(s)"; exit 1; }
+        echo "[E2E] Proxmox recorded no new pull ($pulls before, $now after); the image on the storage was used"
+        nx delete "$NAME-2"
 
         nx stop "$NAME"
         nx delete "$NAME"
