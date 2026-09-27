@@ -6,7 +6,7 @@ set -euo pipefail
 PVE_HOST="mgr.cp.if.ua"
 PVE_USER="root"
 RUNNER_USER="github-runner"
-GITHUB_REPO="kubebsd/nexcage"
+GITHUB_REPO="CageForge/nexcage"
 RUNNER_NAME="proxmox-runner"
 
 # Colors for output

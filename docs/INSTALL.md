@@ -52,12 +52,13 @@ It links libcrun's dependencies dynamically, and a Proxmox VE host does not
 have all of them:
 
 ```bash
-apt install libyajl2 libseccomp2 libcap2
+apt install libjson-c5 libseccomp2 libcap2
 ```
 
-Without `libyajl2` the binary does not start at all —
-`error while loading shared libraries: libyajl.so.2`. The plain binary needs
-none of this.
+Without one of them the binary does not start at all —
+`error while loading shared libraries: libjson-c.so.5`. A Proxmox VE 9 host
+has `libjson-c5` already; releases before 0.13.0 linked `libyajl2` instead,
+which it does not. The plain binary needs none of this.
 
 A container engine never passes `--runtime`, so the configuration has to send
 containers to that backend:

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Generate config.h and git-version.h for vendored crun using local toolchain
-# Requires: autoconf/automake/libtool, pkg-config, gcc, make, and dev libs: libyajl-dev, libcap-dev, libseccomp-dev, libsystemd-dev
+# Requires: autoconf/automake/libtool, pkg-config, gcc, make, and dev libs: libjson-c-dev, libcap-dev, libseccomp-dev, libsystemd-dev
 
 OWNER_REPO="containers/crun"
 DEPS_DIR="$(cd "$(dirname "$0")/.." && pwd)/deps/crun"

@@ -2,9 +2,10 @@
 # The features document is read through a hand-written Zig mirror of crun's
 # `struct features_info_s` and `struct linux_info_s` (src/backends/crun/
 # libcrun_ffi.zig). A hand-written mirror is only correct for the layout it was
-# written against, and the vendored crun is a fork that moves: it already
-# carries a field upstream does not have, `memory_policy` at the end of
-# linux_info_s. Reading the wrong layout does not fail to compile — it puts
+# written against, and the vendored crun moves: `memory_policy` at the end of
+# linux_info_s arrived after the mirror was first written, and the first
+# mirror was written against an older header without it. Reading the wrong
+# layout does not fail to compile — it puts
 # every field after the divergence at the wrong offset, which is a segfault on
 # the first pointer dereferenced, or worse, a features document full of
 # plausible rubbish that a kubelet believes.
