@@ -684,6 +684,16 @@ pub const ProxmoxLxcDriver = struct {
         self.writeOciState(container_id, "paused", 0, kept) catch {};
     }
 
+    /// Change a container's resource limits through `pct set`, or through the
+    /// owning node's API for a container elsewhere -- `/config` is a call the
+    /// API does have. Only what Proxmox can express is applied; the rest is
+    /// refused by name. Nothing about the OCI state changes.
+    pub fn update(self: *Self, container_id: []const u8, values: []const core.types.ResourceUpdate) !void {
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        try self.pve_client.setResources(loc.vmid, values, loc.remote());
+    }
+
     pub fn unpause(self: *Self, container_id: []const u8) !void {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();

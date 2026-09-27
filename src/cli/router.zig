@@ -175,6 +175,7 @@ pub const BackendRouter = struct {
             // the backend's answer is carried out to main rather than dropped.
             .pause => try proxmox_backend.pause(container_id),
             .resume_ => try proxmox_backend.unpause(container_id),
+            .update => |up| try proxmox_backend.update(container_id, up.values),
             .exec => |exec_cfg| {
                 // `exec --process <file>` hands over an OCI process spec: a
                 // user and group to become, capabilities, rlimits, a terminal.
@@ -250,6 +251,7 @@ pub const BackendRouter = struct {
             .run => return self.notImplemented("run", "crun"),
             .pause => try crun_backend.pause(container_id),
             .resume_ => try crun_backend.resume_(container_id),
+            .update => |up| try crun_backend.update(container_id, up.resources_json, up.values),
             .state => {
                 // State operation handled by command
             },
@@ -295,6 +297,15 @@ pub const Operation = union(enum) {
     /// and `resume` take a container and nothing else.
     pause: void,
     resume_: void,
+    update: UpdateConfig,
+};
+
+/// `update`: the linux.resources document an engine sent, for a backend that
+/// reads one (libcrun), and the settings in it -- or the ones the command line
+/// named -- for a backend that cannot (Proxmox LXC, which says them to pct).
+pub const UpdateConfig = struct {
+    resources_json: ?[]const u8 = null,
+    values: []const types.ResourceUpdate = &.{},
 };
 
 pub const CreateConfig = struct {

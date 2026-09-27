@@ -207,6 +207,18 @@ pub const Command = enum {
     rmi,
     pause,
     resume_,
+    update,
+};
+
+/// One resource setting for `update`, in crun's own vocabulary: the section
+/// and field of the runtime-spec `linux.resources` object it changes, so what
+/// a caller can say to crun it can say here. `value` is owned.
+pub const ResourceUpdate = struct {
+    section: []const u8,
+    name: []const u8,
+    value: []const u8,
+    /// A number (`memory.limit`) rather than a string (`cpu.cpus`)
+    numeric: bool,
 };
 
 /// Runtime options
@@ -254,6 +266,12 @@ pub const RuntimeOptions = struct {
     /// `pull --filename <name>`: the destination file name, which Proxmox
     /// normalises.
     filename: ?[]const u8 = null,
+    /// `update --resources <file>`: a runtime-spec `linux.resources` object,
+    /// which is how a container engine sends a resize. `-` is stdin.
+    resources_path: ?[]const u8 = null,
+    /// `update --memory <n>`, `--cpu-quota <n>` and the rest, as runc and
+    /// crun name them; each is one setting, in the order given.
+    resource_updates: ?[]ResourceUpdate = null,
 
     pub fn deinit(self: *RuntimeOptions) void {
         if (self.container_id) |id| self.allocator.free(id);
@@ -266,6 +284,11 @@ pub const RuntimeOptions = struct {
         if (self.node) |n| self.allocator.free(n);
         if (self.storage_name) |sn| self.allocator.free(sn);
         if (self.filename) |f| self.allocator.free(f);
+        if (self.resources_path) |rp| self.allocator.free(rp);
+        if (self.resource_updates) |ups| {
+            for (ups) |u| self.allocator.free(u.value);
+            self.allocator.free(ups);
+        }
         if (self.console_socket) |cs| self.allocator.free(cs);
         if (self.pid_file) |pf| self.allocator.free(pf);
         if (self.env) |e| {

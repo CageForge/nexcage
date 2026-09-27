@@ -20,6 +20,7 @@ const pull = @import("pull.zig");
 const rmi = @import("rmi.zig");
 const pause_cmd_mod = @import("pause.zig");
 const resume_cmd_mod = @import("resume.zig");
+const update_cmd_mod = @import("update.zig");
 const kill = @import("kill.zig");
 const exec = @import("exec.zig");
 // const template = @import("template.zig");
@@ -122,6 +123,7 @@ var pull_cmd = pull.PullCommand{};
 var rmi_cmd = rmi.RmiCommand{};
 var pause_cmd = pause_cmd_mod.PauseCommand{};
 var resume_cmd = resume_cmd_mod.ResumeCommand{};
+var update_cmd = update_cmd_mod.UpdateCommand{};
 // var template_cmd = template.TemplateCommand{};
 
 /// Generic command registration helper
@@ -245,6 +247,7 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
     try registerCommand(registry, &rmi_cmd, rmi.RmiCommand);
     try registerCommand(registry, &pause_cmd, pause_cmd_mod.PauseCommand);
     try registerCommand(registry, &resume_cmd, resume_cmd_mod.ResumeCommand);
+    try registerCommand(registry, &update_cmd, update_cmd_mod.UpdateCommand);
 }
 
 /// Register all built-in commands with logger
@@ -268,4 +271,5 @@ pub fn registerBuiltinCommandsWithLogger(registry: *CommandRegistry, logger: *co
     try registerCommandWithLogger(registry, &rmi_cmd, rmi.RmiCommand, logger);
     try registerCommandWithLogger(registry, &pause_cmd, pause_cmd_mod.PauseCommand, logger);
     try registerCommandWithLogger(registry, &resume_cmd, resume_cmd_mod.ResumeCommand, logger);
+    try registerCommandWithLogger(registry, &update_cmd, update_cmd_mod.UpdateCommand, logger);
 }

@@ -632,6 +632,58 @@ check "and so is resume" all 'rc 1'
 check "nothing in this suite ever ran pct suspend" \
   all '! grep -q "^pct suspend" "$S/calls"'
 
+echo "=== update ==="
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name up-1 "$TPL" >/dev/null 2>&1
+nx start up-1 >/dev/null 2>&1
+
+# runc's words into pct's: bytes into MiB, quota over period into cores,
+# shares into a cgroup v2 weight. Each is a `pct set`, and the arguments are
+# the proof that the arithmetic happened.
+nx update --memory 1G up-1
+check "update --memory: bytes become the MiB pct takes" \
+  all 'rc 0' 'called "pct set 100 --memory 1024"'
+nx update --memory 1G --memory-swap 3G up-1
+check "--memory-swap is memory plus swap, as runc means it; pct gets the difference" \
+  all 'rc 0' 'called "pct set 100 --memory 1024 --swap 2048"'
+nx update --memory-swap 1G up-1
+check "--memory-swap alone reads the memory limit from the config (512 MiB) for the difference" \
+  all 'rc 0' 'called "pct set 100 --swap 512"' 'called "pct config 100"'
+nx update --cpu-quota 150000 --cpu-period 100000 up-1
+check "quota over period is pct's cpulimit, in cores" \
+  all 'rc 0' 'called "pct set 100 --cpulimit 1.5"'
+nx update --cpu-quota -1 up-1
+check "quota -1 lifts the limit: cpulimit 0" \
+  all 'rc 0' 'called "pct set 100 --cpulimit 0"'
+nx update --cpu-share 1024 up-1
+check "shares become the cgroup v2 weight runc would set" \
+  all 'rc 0' 'called "pct set 100 --cpuunits 39"'
+nx update --pids-limit 100 up-1
+check "a limit Proxmox cannot express is refused by name, not dropped" \
+  all 'rc 1' 'err_has "pids.limit has no Proxmox setting"' 'not_called_re "^pct set"'
+nx update --memory lots up-1
+check "a size that is not one is a usage error before any backend" \
+  all 'rc 2' 'err_has "not a size"' 'not_called_re "^pct set"'
+nx update up-1
+check "update with nothing to change is a usage error" all 'rc 2'
+
+# The shape an engine sends: a linux.resources document. Applied through
+# the same arithmetic, and `-` is stdin, which is how containerd sends a
+# resize (`update --resources=- <id>`).
+printf '{"memory":{"limit":536870912},"cpu":{"quota":50000,"period":100000}}' > "$S/run/res.json"
+nx update --resources /run/res.json up-1
+check "--resources: the linux.resources document an engine sends, applied through pct" \
+  all 'rc 0' 'called "pct set 100 --memory 512 --cpulimit 0.5"'
+printf '{"memory":{"limit":268435456}}' | nx update --resources=- up-1
+check "--resources=- reads the document from stdin, as containerd sends it" \
+  all 'rc 0' 'called "pct set 100 --memory 256"'
+nx update --memory 1G --resources /run/res.json up-1
+check "--resources together with value flags is a usage error" \
+  all 'rc 2' 'not_called_re "^pct set"'
+nx update --memory 1G no-such-up-$$
+check "update on a container that does not exist is an error" all 'rc 1' 'not_called_re "^pct set"'
+
 echo "=== the cluster ==="
 # A container on another node. `pct` cannot see it -- that is what the fourth
 # field means in the fake's db, and what makes these checks worth anything:
@@ -669,6 +721,11 @@ check "kill on another node is refused: a signal comes from the host" \
 nx pause remote-1
 check "pause on another node is refused: the freezer is that host's filesystem" \
   all 'rc 1' 'err_has "runs on titan"'
+# `update` is the one thing on this list the API does have: a container's
+# options are a `set` on its node's config.
+nx update --memory 1G remote-1
+check "update on another node goes through that node's API, not pct" \
+  all 'rc 0' 'called_re "^pvesh set /nodes/[^/]+/lxc/[0-9]+/config --memory 1024$"' 'not_called_re "^pct set"'
 
 nx create --name remote-1 "$TPL"
 check "a name taken on another node is not free" \

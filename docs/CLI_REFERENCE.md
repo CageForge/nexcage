@@ -494,6 +494,51 @@ the containers it owns.
 A container that is not running has no cgroup to freeze, and that is an error
 (exit 1) rather than silence.
 
+### update
+
+```bash
+nexcage update [--memory <size>] [--memory-swap <size>] [--cpu-quota <us>] [--cpu-period <us>] [--cpu-share <n>] [...] <name>
+nexcage update --resources <file|-> <name>
+```
+
+Changes a running container's resource limits, as `runc update` and `crun
+update` do, with their flag names: `--memory`, `--memory-swap`,
+`--memory-reservation`, `--cpu-quota`, `--cpu-period`, `--cpu-share`,
+`--cpuset-cpus`, `--cpuset-mems`, `--pids-limit`, `--blkio-weight`,
+`--cpu-rt-period`, `--cpu-rt-runtime`, `--kernel-memory`,
+`--kernel-memory-tcp`. Memory sizes take a binary suffix (`512M`, `2G`) or
+`-1` for no limit; everything else is a number.
+
+`--resources <file>` is a runtime-spec `linux.resources` object, and `-` reads
+it from stdin. **That is how containerd sends an in-place resize**:
+`update --resources=- <id>` with the document on stdin. It cannot be combined
+with the value flags.
+
+On the crun backend everything reaches libcrun. On the Proxmox LXC backend the
+settings are said to `pct set`, in its terms:
+
+| runc's words | pct's |
+|---|---|
+| `--memory <bytes>` | `--memory <MiB>`, rounded up |
+| `--memory-swap <bytes>` (memory plus swap) | `--swap <MiB>`, the difference from the memory limit — this call's, or the config's |
+| `--cpu-quota` / `--cpu-period` | `--cpulimit <cores>`, quota over period; a quota of `-1` is `0`, no limit |
+| `--cpu-share <shares>` | `--cpuunits <weight>`, converted the way runc converts cgroup v1 shares to a v2 weight (1024 → 39) |
+| anything else | refused, naming the setting, because a limit asked for and silently not applied is the worst answer |
+
+A container on another node is updated through that node's API
+(`pvesh set /nodes/<node>/lxc/<vmid>/config`), which takes the same options.
+Proxmox applies the change to the running container and keeps it in the
+config, so it survives a restart — unlike a runtime's cgroup write.
+
+```bash
+$ nexcage update --memory 768M --cpu-quota 50000 --cpu-period 100000 web-1
+$ pct config 100 | grep -E '^(memory|cpulimit):'
+cpulimit: 0.5
+memory: 768
+$ cat /sys/fs/cgroup/lxc/100/memory.max
+805306368
+```
+
 ### ps
 
 ```bash

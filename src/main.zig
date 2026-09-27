@@ -360,6 +360,7 @@ fn printUsage() !void {
         \\  rmi       Remove a container template from a Proxmox storage
         \\  pause     Freeze every process in a container
         \\  resume    Thaw a frozen container
+        \\  update    Change a running container's resource limits
         \\  run       Create and start a container
         \\  help      Show this help message
         \\  version   Show version information
@@ -497,6 +498,18 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         } else if (std.mem.eql(u8, arg, "--storage") and i + 1 < args.len) {
             options.storage_name = try allocator.dupe(u8, args[i + 1]);
             i += 2;
+        } else if ((std.mem.eql(u8, arg, "--resources") or std.mem.eql(u8, arg, "-r")) and i + 1 < args.len) {
+            // How a container engine sends a resize: a runtime-spec
+            // linux.resources object in a file, "-" for stdin.
+            options.resources_path = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
+        } else if (options.command == .update and updateFlag(arg) != null) {
+            if (i + 1 >= args.len) {
+                printError("{s} needs a value", .{arg});
+                return error.InvalidInput;
+            }
+            try addResourceUpdate(allocator, &options, updateFlag(arg).?, args[i + 1]);
+            i += 2;
         } else if (std.mem.eql(u8, arg, "--filename") and i + 1 < args.len) {
             options.filename = try allocator.dupe(u8, args[i + 1]);
             i += 2;
@@ -527,7 +540,7 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             const id_first = options.command == .start or options.command == .stop or
                 options.command == .delete or options.command == .state or
                 options.command == .kill or options.command == .exec or
-                options.command == .ps or options.command == .pause or
+                options.command == .ps or options.command == .pause or options.command == .update or
                 options.command == .resume_ or
                 (bundle_given and (options.command == .create or options.command == .run));
             if (id_first) {
@@ -636,6 +649,7 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "rmi")) return .rmi;
     if (std.mem.eql(u8, command_str, "pause")) return .pause;
     if (std.mem.eql(u8, command_str, "resume")) return .resume_;
+    if (std.mem.eql(u8, command_str, "update")) return .update;
     return .help; // Default to help
 }
 
@@ -657,4 +671,45 @@ fn reportUnknownRuntime(value: []const u8) void {
     } else {
         printError("unknown runtime '{s}'; expected lxc, crun or vm", .{value});
     }
+}
+
+/// `update`'s value flags, named as runc and crun name them, and the section
+/// and field of the runtime-spec linux.resources object each one sets. This is
+/// crun's own table, so what a caller can say to crun it can say here.
+const UpdateFlag = struct { flag: []const u8, section: []const u8, name: []const u8, numeric: bool };
+const update_flags = [_]UpdateFlag{
+    .{ .flag = "--blkio-weight", .section = "blockIO", .name = "weight", .numeric = true },
+    .{ .flag = "--cpu-period", .section = "cpu", .name = "period", .numeric = true },
+    .{ .flag = "--cpu-quota", .section = "cpu", .name = "quota", .numeric = true },
+    .{ .flag = "--cpu-share", .section = "cpu", .name = "shares", .numeric = true },
+    // runc's spelling of the same flag
+    .{ .flag = "--cpu-shares", .section = "cpu", .name = "shares", .numeric = true },
+    .{ .flag = "--cpu-rt-period", .section = "cpu", .name = "realtimePeriod", .numeric = true },
+    .{ .flag = "--cpu-rt-runtime", .section = "cpu", .name = "realtimeRuntime", .numeric = true },
+    .{ .flag = "--cpuset-cpus", .section = "cpu", .name = "cpus", .numeric = false },
+    .{ .flag = "--cpuset-mems", .section = "cpu", .name = "mems", .numeric = false },
+    .{ .flag = "--kernel-memory", .section = "memory", .name = "kernel", .numeric = true },
+    .{ .flag = "--kernel-memory-tcp", .section = "memory", .name = "kernelTCP", .numeric = true },
+    .{ .flag = "--memory", .section = "memory", .name = "limit", .numeric = true },
+    .{ .flag = "--memory-reservation", .section = "memory", .name = "reservation", .numeric = true },
+    .{ .flag = "--memory-swap", .section = "memory", .name = "swap", .numeric = true },
+    .{ .flag = "--pids-limit", .section = "pids", .name = "limit", .numeric = true },
+};
+
+fn updateFlag(arg: []const u8) ?UpdateFlag {
+    for (update_flags) |f| if (std.mem.eql(u8, f.flag, arg)) return f;
+    return null;
+}
+
+/// Append one setting, keeping the order the flags were given in: the
+/// Proxmox backend turns the list into one `pct set`, and a caller reading
+/// the recorded call expects to recognise the order.
+fn addResourceUpdate(allocator: std.mem.Allocator, options: *core.RuntimeOptions, desc: UpdateFlag, raw: []const u8) !void {
+    const old = options.resource_updates orelse &[_]core.types.ResourceUpdate{};
+    var grown = try allocator.alloc(core.types.ResourceUpdate, old.len + 1);
+    errdefer allocator.free(grown);
+    @memcpy(grown[0..old.len], old);
+    grown[old.len] = .{ .section = desc.section, .name = desc.name, .value = try allocator.dupe(u8, raw), .numeric = desc.numeric };
+    if (options.resource_updates) |o| allocator.free(o);
+    options.resource_updates = grown;
 }

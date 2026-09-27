@@ -24,10 +24,10 @@ As of **0.12.0**, on amd64, running on the Proxmox VE host as root:
 |---|---|
 | **Proxmox LXC** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `exec`, `run` — on any node of the cluster. `create --node` places a container on a chosen one |
 | **Templates** | `images`, `pull`, `rmi` for what a container is created from |
-| **Freezing** | `pause` and `resume`, the cgroup freezer, on both backends. `state` reports `paused`, which `pct status` cannot |
-| **As an OCI runtime** | the runtime-spec command line — `create --bundle`, `start`, `state`, `kill`, `delete`, `exec`, `ps`, `features`, with `--root`, `--console-socket`, `--pid-file`, `--log`. Verified against podman, `ctr`, containerd's CRI, CRI-O and a kubelet |
+| **Freezing, resizing** | `pause` and `resume`, the cgroup freezer, on both backends; `state` reports `paused`, which `pct status` cannot. `update` changes a running container's limits — through libcrun, or `pct set` in its own terms |
+| **As an OCI runtime** | the runtime-spec command line — `create --bundle`, `start`, `state`, `kill`, `delete`, `exec`, `ps`, `features`, `update`, with `--root`, `--console-socket`, `--pid-file`, `--log`. Verified against podman, `ctr`, containerd's CRI, CRI-O and a kubelet |
 | **In Kubernetes** | a pod with `runtimeClassName: nexcage` runs on a node, with an address from the cluster's CNI, `kubectl logs` and `kubectl exec` |
-| **Not there** | `update` and `events` — no engine has asked for either. Images are pulled through Proxmox, so a private registry cannot be authenticated: the `oci-registry-pull` API takes no credentials |
+| **Not there** | `events` — no engine has asked for it. Images are pulled through Proxmox, so a private registry cannot be authenticated: the `oci-registry-pull` API takes no credentials |
 
 Proxmox VE 8.x and 9.x. Pulling from a registry needs 9.1 or later.
 
