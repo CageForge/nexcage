@@ -63,7 +63,7 @@ pub const DeleteCommand = struct {
         return allocator.dupe(u8, "Usage: nexcage delete --name <id> [--runtime <type>]\n\n" ++
             "Options:\n" ++
             "  --name <id>        Container/VM identifier\n" ++
-            "  --runtime <type>   lxc|crun|runc|vm; overrides routing from the config file\n\n" ++
+            "  --runtime <type>   lxc|crun|vm; overrides routing from the config file\n\n" ++
             "Notes:\n" ++
             "  If LXC tools are missing, command fails with UnsupportedOperation.\n");
     }

@@ -55,7 +55,6 @@ pub const RuntimeType = enum {
     lxc,
     qemu,
     crun,
-    runc,
     vm,
     proxmox_lxc,
 };
@@ -64,7 +63,6 @@ pub const RuntimeType = enum {
 pub const ContainerType = enum {
     lxc,
     crun,
-    runc,
     vm,
     proxmox_lxc,
 };

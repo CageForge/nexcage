@@ -46,7 +46,7 @@ pub const CreateCommand = struct {
             try out.writeAll("    --name <id>     Container ID/name (required)\n");
             try out.writeAll("    --image <img>   Container image (required)\n");
             try out.writeAll("    --storage <s>   Storage a registry image is found on or pulled to (default: local)\n");
-            try out.writeAll("    --runtime <rt>  Runtime type (lxc, crun, runc, vm)\n");
+            try out.writeAll("    --runtime <rt>  Runtime type (lxc, crun, vm)\n");
             try out.writeAll("    --config <cfg>  Configuration file path\n");
             try out.writeAll("    --verbose       Enable verbose logging\n");
             try out.writeAll("    --debug         Enable debug logging\n");

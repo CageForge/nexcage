@@ -120,7 +120,7 @@ node a container elsewhere is on.
 `create`, `run`, `start`, `stop`, `delete`, `kill`, `exec` and `state` go to
 the backend chosen by the routing rules in the config file, Proxmox LXC by
 default.
-`--runtime <lxc|crun|runc|vm>` overrides that for one command, before or after
+`--runtime <lxc|crun|vm>` overrides that for one command, before or after
 the command name.
 
 A routing rule's `pattern` is a **regular expression only when it starts with
@@ -137,8 +137,8 @@ routing to the OCI backend in the configuration file:
 { "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }
 ```
 
-- `crun` and `runc` work only in a binary built with
-  `-Denable-backend-crun=true` or `-Denable-backend-runc=true`; otherwise the
+- `crun` works only in a binary built with `-Denable-backend-crun=true`;
+  otherwise the
   command fails with exit 1. They have no `run` or `state`, and neither has
   `exec`: libcrun's exec entry point has no binding in nexcage's FFI.
 - The crun backend creates the container from the bundle given with

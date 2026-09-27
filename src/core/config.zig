@@ -37,6 +37,10 @@ pub const ConfigLoader = struct {
     const Self = @This();
 
     allocator: std.mem.Allocator,
+    /// A runtime named "runc" was read somewhere in the file. Reported by
+    /// main once there is a logger: the rule routes to crun, and the file
+    /// should say so itself.
+    saw_runc: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
@@ -586,17 +590,21 @@ pub const ConfigLoader = struct {
             config.container_config = container_cfg;
         }
 
+        config.legacy_runc_runtime = self.saw_runc;
         return config;
     }
 
     fn parseRuntimeType(self: *Self, runtime_str: []const u8) types.RuntimeType {
-        _ = self;
         if (std.mem.eql(u8, runtime_str, "lxc")) {
             return .lxc;
         } else if (std.mem.eql(u8, runtime_str, "crun")) {
             return .crun;
         } else if (std.mem.eql(u8, runtime_str, "runc")) {
-            return .runc;
+            // The runc backend was removed in 0.13.0. A container a rule sent
+            // to it is an OCI container, and crun is the OCI backend -- so the
+            // rule keeps working, and main says what it now means.
+            self.saw_runc = true;
+            return .crun;
         } else if (std.mem.eql(u8, runtime_str, "proxmox")) {
             return .vm; // proxmox maps to vm
         }
@@ -618,13 +626,13 @@ pub const ConfigLoader = struct {
     }
 
     fn parseContainerType(self: *Self, type_str: []const u8) types.ContainerType {
-        _ = self;
         if (std.mem.eql(u8, type_str, "lxc")) {
             return .lxc;
         } else if (std.mem.eql(u8, type_str, "crun")) {
             return .crun;
         } else if (std.mem.eql(u8, type_str, "runc")) {
-            return .runc;
+            self.saw_runc = true;
+            return .crun;
         } else if (std.mem.eql(u8, type_str, "vm")) {
             return .vm;
         } else if (std.mem.eql(u8, type_str, "proxmox-lxc")) {
@@ -715,6 +723,9 @@ pub const Config = struct {
     /// reads any more. Set by the parser, reported by main once there is a
     /// logger to report it with.
     legacy_crun_name_patterns: bool = false,
+    /// The file names "runc" as a runtime. The backend was removed in 0.13.0;
+    /// such a rule routes to crun, and main says so once it can.
+    legacy_runc_runtime: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) !Config {
         return Config{
@@ -758,7 +769,6 @@ pub const Config = struct {
         return switch (runtime_type) {
             .lxc => .lxc,
             .crun => .crun,
-            .runc => .runc,
             .vm => .vm,
             .proxmox_lxc => .proxmox_lxc,
             else => self.container_config.default_container_type,
@@ -1041,4 +1051,15 @@ test "crun_name_patterns is ignored, and the file is flagged so main can say so"
     // the flag is what turns that into a warning rather than a silence.
     try std.testing.expectEqual(cfg.container_config.default_runtime, cfg.getRoutedRuntime("kube-ovn-1"));
     try std.testing.expect(cfg.legacy_crun_name_patterns);
+}
+
+test "a rule naming runc routes to crun and is flagged: the backend is gone, the container is still OCI" {
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadFromString(
+        \\{ "runtime": { "routing": [ { "pattern": "*", "runtime": "runc" } ] } }
+    );
+    defer cfg.deinit();
+
+    try std.testing.expectEqual(types.RuntimeType.crun, cfg.getRoutedRuntime("anything"));
+    try std.testing.expect(cfg.legacy_runc_runtime);
 }

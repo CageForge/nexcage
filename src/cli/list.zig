@@ -71,7 +71,6 @@ pub const ListCommand = struct {
         // List from each backend type
         try self.listFromBackend(allocator, .proxmox_lxc, &all_containers);
         try self.listFromBackend(allocator, .crun, &all_containers);
-        try self.listFromBackend(allocator, .runc, &all_containers);
         try self.listFromBackend(allocator, .vm, &all_containers);
 
         // Print aggregated results (similar to runc list format)
@@ -145,8 +144,8 @@ pub const ListCommand = struct {
                     try containers.append(allocator, c.*);
                 }
             },
-            .crun, .runc => {
-                // Note: CRUN/RUNC listing not yet implemented
+            .crun => {
+                // Note: crun listing not yet implemented
                 // Backend drivers exist but list() method needs implementation
             },
             .vm => {

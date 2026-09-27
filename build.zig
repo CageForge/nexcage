@@ -78,12 +78,10 @@ pub fn build(b: *std.Build) void {
     const feature_options = b.addOptions();
 
     // Backend feature flags. The default build is Proxmox LXC only: crun needs
-    // vendored libcrun (git submodules plus generated headers) and runc is
-    // unverified, so both are opt-in.
+    // vendored libcrun (git submodules plus generated headers), so it is opt-in.
     const enable_backend_proxmox_lxc = b.option(bool, "enable-backend-proxmox-lxc", "Enable Proxmox LXC backend (default: true)") orelse true;
     const enable_backend_proxmox_vm = b.option(bool, "enable-backend-proxmox-vm", "Enable Proxmox VM backend (default: false)") orelse false;
     const enable_backend_crun = b.option(bool, "enable-backend-crun", "Enable crun OCI backend, links vendored libcrun (default: false)") orelse false;
-    const enable_backend_runc = b.option(bool, "enable-backend-runc", "Enable runc OCI backend (default: false)") orelse false;
 
     // The libcrun ABI follows the crun backend. It used to default to "is
     // libsystemd installed", so a plain `zig build` on any machine with
@@ -100,7 +98,6 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(bool, "enable_backend_proxmox_lxc", enable_backend_proxmox_lxc);
     build_options.addOption(bool, "enable_backend_proxmox_vm", enable_backend_proxmox_vm);
     build_options.addOption(bool, "enable_backend_crun", enable_backend_crun);
-    build_options.addOption(bool, "enable_backend_runc", enable_backend_runc);
 
     build_options.addOption(bool, "enable_libcrun_abi", enable_libcrun_abi);
 
@@ -366,4 +363,5 @@ pub fn build(b: *std.Build) void {
 
             test_step.dependOn(&b.addRunArtifact(file_test).step);
         }
-    }}
+    }
+}
