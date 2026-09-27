@@ -106,6 +106,15 @@ On a host that is not in a cluster, or where `pvesh` cannot be reached, nexcage
 falls back to `pct` and behaves exactly as it did: this host's containers, and
 no others.
 
+**The cluster's listing is a cache**, refreshed by `pvestatd` every few seconds,
+and nexcage is built around that in two places. A container created a moment ago
+is not in it yet, so a name missing there means "keep looking on this host"
+rather than "no such container" — otherwise `create` followed straight away by
+`start` fails. And for a container on this host, `pct` is the current answer
+while the cluster's copy can be seconds stale, so `list` and `state` take the
+status from `pct` and keep from the cluster the one thing only it knows: which
+node a container elsewhere is on.
+
 ## Backend selection
 
 `create`, `run`, `start`, `stop`, `delete`, `kill`, `exec` and `state` go to
@@ -439,6 +448,42 @@ should not look like a successful removal. A malformed name is a usage error
 
 Removing a template does not affect containers created from it — a template is
 copied when a container is made, not referenced.
+
+### pause, resume
+
+```bash
+nexcage pause <name>
+nexcage resume <name>
+```
+
+The cgroup freezer, which is what the runtime-spec means by paused: every process
+in the container stops where it is and stays in memory. Nothing is written to
+disk.
+
+```bash
+$ nexcage pause web-1
+$ nexcage state web-1 | grep status
+  "status": "paused",
+$ pct status 100
+status: running
+```
+
+**That last line is not a mistake.** Proxmox has no notion of a frozen container,
+so `pct status` keeps saying `running`; `nexcage state` reads the freezer itself,
+which is the only thing that knows.
+
+This is **not** `pct suspend`. On a container that runs `lxc-checkpoint -s`,
+which dumps the processes through CRIU and takes the container down — a
+different operation, and on a stock Proxmox VE 9.2 host it simply fails.
+nexcage never calls it.
+
+Freezing happens on the host the container is on: for one on another node it is
+refused, naming the node, because the cgroup filesystem there is not this host's
+to write. On the crun backend both go to libcrun, which does the same thing for
+the containers it owns.
+
+A container that is not running has no cgroup to freeze, and that is an error
+(exit 1) rather than silence.
 
 ### ps
 

@@ -663,6 +663,33 @@ pub const ProxmoxLxcDriver = struct {
         }
     }
 
+    /// Freeze the container's processes, and thaw them again.
+    pub fn pause(self: *Self, container_id: []const u8) !void {
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        try self.pve_client.freeze(loc.vmid, true, loc.remote());
+        const kept = self.persistedBundle(container_id);
+        defer if (kept) |b| self.allocator.free(b);
+        self.writeOciState(container_id, "paused", 0, kept) catch {};
+    }
+
+    pub fn unpause(self: *Self, container_id: []const u8) !void {
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        try self.pve_client.freeze(loc.vmid, false, loc.remote());
+        const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
+        const kept = self.persistedBundle(container_id);
+        defer if (kept) |b| self.allocator.free(b);
+        self.writeOciState(container_id, "running", init_pid, kept) catch {};
+    }
+
+    /// Whether the container's processes are frozen. `pct status` cannot answer
+    /// this -- Proxmox has no notion of the state -- so `state` reads the
+    /// cgroup.
+    pub fn isFrozen(self: *Self, vmid: []const u8) ?bool {
+        return self.pve_client.isFrozen(vmid);
+    }
+
     /// Send a signal to the container's init process from the host
     pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
         var loc = try self.resolveLocation(container_id);

@@ -37,7 +37,7 @@ if ! unshare -rm bash -c 'mount -t tmpfs tmpfs /tmp' 2>/dev/null; then
   echo "on Ubuntu 24.04: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0" >&2
   exit 2
 fi
-mkdir -p "$SIM/run" "$SIM/work" "$SIM/bundles" "$SIM/cache"
+mkdir -p "$SIM/run" "$SIM/work" "$SIM/bundles" "$SIM/cache" "$SIM/cgroup"
 
 # Fake pct start leaves a fake init running per started container
 stop_inits() {
@@ -52,7 +52,7 @@ trap stop_inits EXIT
 
 reset_sim() {
   stop_inits
-  rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/*
+  rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/* "$S"/cgroup/*
   mkdir -p "$S/cache"
   : > "$S/db"; : > "$S/calls"
   rm -f "$S"/fail_* "$S/pvever" "$S"/lock.* "$S"/conf.* "$S"/tarlist.* "$S"/sig.*
@@ -60,10 +60,14 @@ reset_sim() {
 }
 cfg() { printf '%s\n' "$1" > "$S/work/config.json"; }
 nexcage_ns() {
+  # /sys/fs/cgroup is bound from $SIM, not a fresh tmpfs: `pause` writes the
+  # freezer and a later `state` has to read what it wrote, and every nx call is
+  # its own namespace.
   unshare -rm bash -c '
     mount --bind "$SIM/run" /run &&
     mount -t tmpfs tmpfs /tmp &&
     mkdir /tmp/nexcage-bundles && mount --bind "$SIM/bundles" /tmp/nexcage-bundles &&
+    mount --bind "$SIM/cgroup" /sys/fs/cgroup &&
     cd "$SIM/work" && exec env PATH="$BIN:/usr/bin:/bin" "$NEXCAGE" "$@"' nexcage "$@"
 }
 nx() {
@@ -134,7 +138,7 @@ cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_siz
 nx create --name web-1 "$TPL"
 check "create from template exits 0" rc 0
 check "create checks the name across the cluster first, then asks for a VMID" \
-  all 'called "pvesh get /cluster/resources --type lxc --output-format json"' \
+  all 'called "pvesh get /cluster/resources --type vm --output-format json"' \
       'called "pvesh get /cluster/nextid"'
 check "pct create argv: vmid, template, hostname, bridge, rootfs from config" \
   called_re "^pct create 100 $TPL --hostname web-1 --memory [0-9]+ --cores [0-9]+ --net0 name=eth0,bridge=vmbr50,ip=dhcp --unprivileged 1 --rootfs local-lvm:2$"
@@ -501,6 +505,71 @@ check "features on a build without the crun backend says so" \
 nx features --help
 check "features --help explains where the values come from" all 'rc 0' 'out_has "crun features"'
 
+echo "--- the cluster listing lags ---"
+# /cluster/resources is a cached view that pvestatd refreshes every few seconds.
+# A container created a moment ago is not in it yet, while `pct list` sees it at
+# once, so a miss there has to mean "keep looking" rather than "no such
+# container". Getting this wrong made create-then-start fail on a real host.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name lag-1 "$TPL" >/dev/null 2>&1
+echo lag-1 > "$S/stale_cluster"
+nx start lag-1
+check "a container the cluster listing has not caught up with still starts" \
+  all 'rc 0' 'called_re "^pct start"'
+nx state lag-1
+check "and state finds it too" all 'rc 0' '[ "$(json_get "$S/out" id)" = lag-1 ]'
+nx start no-such-container-anywhere
+check "while a container that exists nowhere is still not found" \
+  all 'rc 1' 'err_has "not found"'
+: > "$S/stale_cluster"
+
+# The cache can also be *wrong* rather than empty: for a few seconds after a
+# start it still says stopped. For a container on this host `pct list` is the
+# current answer, so it has to win -- state said "stopped" right after a
+# successful start until it did.
+echo "lag-1 stopped" > "$S/stale_status"
+nx state lag-1
+check "this host's status wins over the cluster's stale copy" \
+  all 'rc 0' '[ "$(json_get "$S/out" status)" = running ]'
+nx list
+check "and the listing shows the current status, not the cached one" \
+  awk -F'\t' '$8=="lag-1" && $5=="running" {f=1} END {exit !f}' "$S/out"
+: > "$S/stale_status"
+
+echo "=== pause and resume ==="
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name fz-1 "$TPL" >/dev/null 2>&1
+nx start fz-1 >/dev/null 2>&1
+
+nx pause fz-1
+check "pause writes the cgroup freezer" \
+  all 'rc 0' '[ "$(cat "$S/cgroup/lxc/100/cgroup.freeze" 2>/dev/null)" = 1 ]' \
+      'not_called_re "^pct suspend"'
+# `pct status` says running for a frozen container, so state has to read the
+# freezer -- that is the whole reason it does.
+nx state fz-1
+check "state calls a frozen container paused, where pct says running" \
+  all 'rc 0' '[ "$(json_get "$S/out" status)" = paused ]'
+
+nx resume fz-1
+check "resume thaws it" \
+  all 'rc 0' '[ "$(cat "$S/cgroup/lxc/100/cgroup.freeze" 2>/dev/null)" = 0 ]'
+nx state fz-1
+check "and state says running again" all 'rc 0' '[ "$(json_get "$S/out" status)" = running ]'
+
+# A container that is not running has no cgroup to freeze.
+nx stop fz-1 >/dev/null 2>&1
+nx pause fz-1
+check "pause on a stopped container is an error naming why" \
+  all 'rc 1' 'err_has "not running"'
+
+# pct suspend is lxc-checkpoint, which is a different thing; nexcage must never
+# reach for it.
+check "nothing in this suite ever ran pct suspend" \
+  all '! grep -q "^pct suspend" "$S/calls"'
+
 echo "=== the cluster ==="
 # A container on another node. `pct` cannot see it -- that is what the fourth
 # field means in the fake's db, and what makes these checks worth anything:
@@ -512,7 +581,12 @@ nx list
 check "list shows a container on another node, with the node" \
   all 'rc 0' 'listed remote-1' 'awk -F"\t" '"'"'$8=="remote-1" && $7=="titan" {f=1} END {exit !f}'"'"' "$S/out"'
 check "and it is the cluster that was asked, not this host" \
-  called "pvesh get /cluster/resources --type lxc --output-format json"
+  called "pvesh get /cluster/resources --type vm --output-format json"
+# --type vm covers virtual machines too, and the fake has one. A container
+# listing must not show it: the entry's own "type" field is what separates them,
+# and asking for "lxc" is rejected by the real API outright.
+check "a virtual machine is not listed as a container" \
+  all '! out_has a-virtual-machine' '! grep -q 9999 "$S/out"'
 
 nx start remote-1
 check "start on another node goes through that node's API, not pct" \
@@ -529,6 +603,9 @@ check "exec on another node is refused, and says where to run it" \
   all 'rc 1' 'err_has "runs on titan"' 'not_called_re "^pct exec"'
 nx kill remote-1
 check "kill on another node is refused: a signal comes from the host" \
+  all 'rc 1' 'err_has "runs on titan"'
+nx pause remote-1
+check "pause on another node is refused: the freezer is that host's filesystem" \
   all 'rc 1' 'err_has "runs on titan"'
 
 nx create --name remote-1 "$TPL"

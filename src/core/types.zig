@@ -203,6 +203,8 @@ pub const Command = enum {
     images,
     pull,
     rmi,
+    pause,
+    resume_,
 };
 
 /// Runtime options

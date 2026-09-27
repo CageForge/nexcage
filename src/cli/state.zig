@@ -79,6 +79,10 @@ pub const StateCommand = struct {
         var status = ociStatus(found.info.status);
         // pct calls a container that has never run "stopped"
         if (std.mem.eql(u8, status, "stopped") and neverStarted(allocator, found.info.name)) status = "created";
+        // A frozen container is running as far as pct is concerned. The
+        // runtime-spec calls it paused, and a caller deciding what to do with it
+        // needs the difference.
+        if (found.frozen) status = "paused";
 
         // The bundle a container was created from, as nexcage recorded it. An
         // OCI caller reads this back to find the config.json it handed over.
@@ -114,6 +118,9 @@ pub const StateCommand = struct {
         info: core.ContainerInfo,
         /// Host PID of the container's init while it runs, 0 otherwise
         pid: std.posix.pid_t = 0,
+        /// Whether the container's processes are frozen by the cgroup freezer,
+        /// which is what the runtime-spec calls paused.
+        frozen: bool = false,
     };
 
     fn findContainer(self: *Self, allocator: std.mem.Allocator, runtime_type: types.RuntimeType, container_id: []const u8) !Found {
@@ -156,6 +163,13 @@ pub const StateCommand = struct {
                             0
                         else
                             try backend.initPid(c.id) orelse 0;
+
+                        // `pct status` says "running" for a frozen container:
+                        // Proxmox has no notion of the state, so the freezer
+                        // itself is the only thing that knows. Only for a
+                        // container on this host -- the cgroup filesystem of
+                        // another node is not ours to read.
+                        const frozen = if (elsewhere) false else (backend.isFrozen(c.id) orelse false);
                         return .{
                             .info = core.ContainerInfo{
                                 .allocator = allocator,
@@ -169,6 +183,7 @@ pub const StateCommand = struct {
                                 .node = if (c.node) |n| try allocator.dupe(u8, n) else null,
                             },
                             .pid = pid,
+                            .frozen = frozen,
                         };
                     }
                 }

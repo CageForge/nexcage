@@ -172,6 +172,8 @@ pub const BackendRouter = struct {
             },
             // An OCI runtime exits with the status of the command it ran, so
             // the backend's answer is carried out to main rather than dropped.
+            .pause => try proxmox_backend.pause(container_id),
+            .resume_ => try proxmox_backend.unpause(container_id),
             .exec => |exec_cfg| {
                 // `exec --process <file>` hands over an OCI process spec: a
                 // user and group to become, capabilities, rlimits, a terminal.
@@ -245,6 +247,8 @@ pub const BackendRouter = struct {
                 try crun_backend.exec(container_id, exec_cfg.argv, exec_cfg.process_file);
             },
             .run => return self.notImplemented("run", "crun"),
+            .pause => try crun_backend.pause(container_id),
+            .resume_ => try crun_backend.resume_(container_id),
             .state => {
                 // State operation handled by command
             },
@@ -269,6 +273,8 @@ pub const BackendRouter = struct {
             .delete => try runc_backend.delete(container_id),
             .kill => |kill_cfg| try runc_backend.kill(container_id, kill_cfg.signal),
             .exec => return self.notImplemented("exec", "runc"),
+            .pause => return self.notImplemented("pause", "runc"),
+            .resume_ => return self.notImplemented("resume", "runc"),
             .run => return self.notImplemented("run", "runc"),
             .state => {
                 // State operation handled by command
@@ -311,6 +317,10 @@ pub const Operation = union(enum) {
     state: void,
     kill: KillConfig,
     exec: ExecConfig,
+    /// The cgroup freezer, both ways. No options: the runtime-spec's `pause`
+    /// and `resume` take a container and nothing else.
+    pause: void,
+    resume_: void,
 };
 
 pub const CreateConfig = struct {
