@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - ADR-001 records the runtime selection that ships rather than the one decided in 2024: Proxmox LXC is the default backend, the crun backend is libcrun linked in and is what a container engine's host routes to, there is no fallback between backends, and runc is not supported. Routing is one name lookup with one list of rules. `docs/architecture/BACKENDS.md` said `kill` went through `pct exec` and name lookup through `pct list`; neither has been true since 0.9.0 and 0.11.0.
 
+### Fixed
+- **`create` from a registry image called the pull endpoint every time and then guessed the volid.** It composed `<storage>:vztmpl/<image>_<tag>.tar` from the reference, which is a guess about how Proxmox normalises a file name, and pulled onto `local` whatever was asked. It now looks on the storage first and reuses an image that is already there — what a container engine does — and otherwise pulls the way `pull` does, reading the volid back from the storage so that what `pct create` is given exists. `create --storage <name>` and `run --storage <name>` say where, as for `pull`. The simulator's fake `pvesh` wrote every pull as `local:` whatever storage was asked for, so a correct `--storage` failed against the fake and not against Proxmox; it names the storage now. The E2E on a real host counts Proxmox's own `ociregistrypull` tasks across a second `create` from the same reference: there must be no new one.
+
 ### Removed
 - `container_config.crun_name_patterns`. It routed names matching a glob to crun before `runtime.routing` existed and stayed on as a fallback after every glob it could express had a one-line equivalent there — the same matcher. A file that still carries the key gets a warning naming the replacement, because a container it used to route to crun now goes to the default backend, and that should not happen without a word.
 

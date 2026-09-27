@@ -167,7 +167,7 @@ means by them.
 ### create
 
 ```bash
-nexcage create --name <name> <image>
+nexcage create --name <name> [--storage <name>] <image>
 nexcage create <container-id> --bundle <dir> [--console-socket <path>] [--pid-file <path>]
 ```
 
@@ -181,7 +181,7 @@ unique on the node. The VMID comes from `pvesh get /cluster/nextid`. `--image
 |---|---|---|
 | Proxmox template | `local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst` | Any `<storage>:vztmpl/…` volume |
 | Template file name | `debian-12-standard_12.7-1_amd64.tar.zst` | Looked up as `local:vztmpl/<file>` |
-| OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only; pulled to storage `local` |
+| OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only. Found on `--storage` (default `local`) if already pulled, else pulled there through `oci-registry-pull`; the volid is read back from the storage, never guessed from the reference |
 | OCI bundle directory | `/var/lib/nexcage/bundles/web` | Under `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/`, containing `config.json` and `rootfs/` |
 
 `--console-socket <path>` is where the runtime sends the master end of the

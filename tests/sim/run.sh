@@ -57,6 +57,12 @@ reset_sim() {
   : > "$S/db"; : > "$S/calls"
   rm -f "$S"/fail_* "$S/pvever" "$S"/lock.* "$S"/conf.* "$S"/tarlist.* "$S"/sig.*
   printf "%s\n" "$TPL" local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz local:vztmpl/debian-12.tar.zst > "$S/templates"
+  # The storage's content listing is the other view of the same files, and it
+  # was never reset: a pull from a later section -- or an earlier run of this
+  # suite -- stayed listed, and create, which now looks there before pulling,
+  # found templates that pct then refused. Sections that model other nodes
+  # overwrite this file; this host starts with what pct accepts.
+  { for t in "$TPL" local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz local:vztmpl/debian-12.tar.zst; do echo "$(hostname) $t"; done; } > "$S/node_templates"
 }
 cfg() { printf '%s\n' "$1" > "$S/work/config.json"; }
 nexcage_ns() {
@@ -183,6 +189,19 @@ cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_siz
 touch "$S/fail_pull"
 nx create --name nginx-2 docker.io/library/nginx:1.27
 check "registry pull failing -> exit 1, no pct create" all 'rc 1' 'not_called_re "^pct create"'
+rm -f "$S/fail_pull"
+# Reuse before pull: nginx:latest went onto the storage a few checks ago, so a
+# second create from the same reference must take it from there. It used to
+# call the endpoint every time and then guess the volid from the reference.
+nx create --name nginx-3 docker.io/library/nginx:latest
+check "a registry image already on the storage is reused, not pulled again" \
+  all 'rc 0' 'not_called_re "oci-registry-pull"' 'called_re "^pct create [0-9]+ local:vztmpl/nginx_latest\.tar "'
+# --storage names where the pull lands, as it does for `pull`, and what pct is
+# given is what that storage holds afterwards.
+nx create --name nginx-4 --storage shared-rdma docker.io/library/nginx:1.26
+check "create --storage pulls into that storage and creates from what it holds" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/[^/]+/storage/shared-rdma/oci-registry-pull --reference docker.io/library/nginx:1.26"' \
+      'called_re "^pct create [0-9]+ shared-rdma:vztmpl/nginx_1\.26\.tar "'
 rm -f "$S/fail_pull" "$S/pvever"
 
 cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","ostype":"debian","unprivileged":true}}'

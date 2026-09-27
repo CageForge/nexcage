@@ -169,7 +169,10 @@ case "$1 $2" in
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
     store=$(echo "$2" | sed -n 's|/nodes/[^/]*/storage/\([^/]*\)/oci-registry-pull|\1|p')
     ref=$4; tag=${ref##*:}; img=${ref%:*}; img=${img##*/}
-    echo "local:vztmpl/${img}_${tag}.tar" >> "$SIM/templates"
+    # The volid names the storage that was asked for, as it does on PVE. This
+    # used to write local: whatever the path said, so a correct --storage on
+    # create failed against the fake at pct create, not against Proxmox.
+    echo "${store:-local}:vztmpl/${img}_${tag}.tar" >> "$SIM/templates"
     echo "$node ${store:-local}:vztmpl/${img}_${tag}.tar" >> "$SIM/node_templates"
     ;;
   *) echo "fake pvesh: unsupported $*" >&2; exit 99 ;;

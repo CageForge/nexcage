@@ -164,47 +164,28 @@ pub const PveClient = struct {
         return try self.allocator.dupe(u8, node_name);
     }
 
-    /// Pull OCI image from registry using pvesh command
-    pub fn pullOciImage(self: *const Self, image_ref: []const u8, storage: []const u8) ![]const u8 {
-        if (self.logger) |log| try log.info("Pulling OCI image from registry: {s}", .{image_ref});
-
-        const node_name = try self.getNodeName();
-        defer self.allocator.free(node_name);
-
-        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/oci-registry-pull", .{ node_name, storage });
-        defer self.allocator.free(path);
-
-        const args = [_][]const u8{ "pvesh", "create", path, "--reference", image_ref };
-        const res = try common.runCommand(self.allocator, self.logger, &args);
+    /// The volid of a template on `storage` that already holds `reference`,
+    /// or null. What `create` asks before it pulls: an image already there is
+    /// what a container engine would use too, and `pull` is the explicit
+    /// fetch. Matched the way an "already there" pull is matched.
+    pub fn findTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8, reference: []const u8, filename: ?[]const u8) !?[]u8 {
+        const volids = try self.volidsOf(allocator, node, storage);
         defer {
-            self.allocator.free(res.stdout);
-            self.allocator.free(res.stderr);
+            for (volids) |v| allocator.free(v);
+            allocator.free(volids);
         }
-
-        const template_exists = res.exit_code == 25 and std.mem.indexOf(u8, res.stderr, "refusing to override existing file") != null;
-        if (res.exit_code != 0 and !template_exists) {
-            if (self.logger) |log| try log.err("Failed to pull OCI image {s}: {s}", .{ image_ref, res.stderr });
-            return core.Error.OperationFailed;
-        }
-
-        // Extract template name (constructed)
-        const colon_idx = std.mem.lastIndexOfScalar(u8, image_ref, ':') orelse image_ref.len;
-        const image_part = image_ref[0..colon_idx];
-        const tag_part = if (colon_idx < image_ref.len) image_ref[colon_idx + 1 ..] else "latest";
-        const slash_idx = std.mem.lastIndexOfScalar(u8, image_part, '/');
-        const image_name = if (slash_idx) |idx| image_part[idx + 1 ..] else image_part;
-
-        return try std.fmt.allocPrint(self.allocator, "{s}:vztmpl/{s}_{s}.tar", .{ storage, image_name, tag_part });
+        return try self.matchTemplate(allocator, volids, reference, filename);
     }
 
     /// Pull an OCI image into a storage on a node, and answer with the volid
     /// the storage ended up holding.
     ///
     /// The volid is read back from the storage rather than composed from the
-    /// reference. `pullOciImage` composes it, which is a guess about how PVE
-    /// normalises a name -- and the endpoint's own documentation says the
-    /// filename "will be normalized". Asking the storage is the only way to
-    /// know, and the answer is what `create` needs to be given.
+    /// reference. Composing it -- which `create` did until 0.13.0 -- is a
+    /// guess about how PVE normalises a name, and the endpoint's own
+    /// documentation says the filename "will be normalized". Asking the
+    /// storage is the only way to know, and the answer is what `pct create`
+    /// needs to be given.
     ///
     /// There is no credential parameter on this endpoint, so a private registry
     /// cannot be authenticated here. The caller is told rather than left to

@@ -45,6 +45,7 @@ pub const CreateCommand = struct {
             try out.writeAll("  Options:\n");
             try out.writeAll("    --name <id>     Container ID/name (required)\n");
             try out.writeAll("    --image <img>   Container image (required)\n");
+            try out.writeAll("    --storage <s>   Storage a registry image is found on or pulled to (default: local)\n");
             try out.writeAll("    --runtime <rt>  Runtime type (lxc, crun, runc, vm)\n");
             try out.writeAll("    --config <cfg>  Configuration file path\n");
             try out.writeAll("    --verbose       Enable verbose logging\n");
@@ -53,6 +54,7 @@ pub const CreateCommand = struct {
             try out.writeAll("  Examples:\n");
             try out.writeAll("    nexcage create --name my-container --image local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst\n");
             try out.writeAll("    nexcage create --name web-1 --image docker.io/library/nginx:latest   # Proxmox VE 9.1+\n");
+            try out.writeAll("    nexcage create --name r1 --storage shared-rdma docker.io/library/redis:7\n");
             return;
         }
 
@@ -73,6 +75,7 @@ pub const CreateCommand = struct {
             .pid_file = options.pid_file,
             .systemd_cgroup = options.systemd_cgroup,
             .node = options.node,
+            .storage = options.storage_name,
         } };
         try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 
