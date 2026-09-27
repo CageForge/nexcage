@@ -190,9 +190,9 @@ pub const StateCommand = struct {
 
                 return types.Error.NotFound;
             },
-            .crun, .runc, .vm => {
-                // crun is handled above, by libcrun itself. runc and the VM
-                // backend cannot report state. This used to print a made-up
+            .crun, .vm => {
+                // crun is handled above, by libcrun itself. The VM backend
+                // cannot report state. This used to print a made-up
                 // "unknown" state and exit 0, which looks like a real
                 // container.
                 if (self.base.logger) |log| log.err("state is not implemented for the {s} backend", .{@tagName(runtime_type)}) catch {};

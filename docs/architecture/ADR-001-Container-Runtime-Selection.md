@@ -58,11 +58,14 @@ decided for a container whose caller never says.
    how to build it, rather than quietly making a different kind of
    container.
 
-5. **runc is not a supported backend.** `src/backends/runc` shells out to a
-   `runc` binary for create/start/kill/delete; no workflow builds it and it
-   has never been run. A second OCI backend would implement the same
-   interface libcrun already answers. Its removal is
-   [#88](https://github.com/CageForge/nexcage/issues/88).
+5. **There is no runc backend.** `src/backends/runc` shelled out to a `runc`
+   binary for create/start/kill/delete; no workflow ever built it and it was
+   never run, and a second OCI backend would implement the same interface
+   libcrun already answers. It was removed in 0.13.0
+   ([#88](https://github.com/CageForge/nexcage/issues/88)). A routing rule
+   that still names `runc` routes to crun with a warning — the container it
+   describes is an OCI container either way — and `--runtime runc` is refused
+   with the replacement named.
 
 ## Consequences
 
@@ -90,7 +93,7 @@ Negative:
 
 | Then | Now | Why |
 |---|---|---|
-| crun primary, runc fallback | Proxmox LXC default; crun for engines; runc unsupported | nexcage became a Proxmox-first runtime; the OCI half is driven by engines, and libcrun answers them |
+| crun primary, runc fallback | Proxmox LXC default; crun for engines; no runc | nexcage became a Proxmox-first runtime; the OCI half is driven by engines, and libcrun answers them |
 | call the `crun` binary | link libcrun | one process, libcrun's own errors, no PATH dependence |
 | automatic fallback | none | a container is one thing on one backend |
 | `crun_name_patterns` | `runtime.routing` | one matcher, one list |

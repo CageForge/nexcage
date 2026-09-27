@@ -109,7 +109,6 @@ pub const BackendRouter = struct {
         switch (runtime_type) {
             .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
             .crun => try self.executeCrun(operation, container_id, config),
-            .runc => try self.executeRunc(operation, container_id, config),
             .vm => try self.executeVm(operation, container_id, config),
             else => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
         }
@@ -251,33 +250,6 @@ pub const BackendRouter = struct {
             .run => return self.notImplemented("run", "crun"),
             .pause => try crun_backend.pause(container_id),
             .resume_ => try crun_backend.resume_(container_id),
-            .state => {
-                // State operation handled by command
-            },
-        }
-    }
-
-    fn executeRunc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
-        // Same as crun: backends.runc is an empty struct when compiled out.
-        if (!backends.isRuncEnabled()) return self.backendNotBuilt("runc");
-
-        var runc_backend = backends.runc.RuncDriver.init(self.allocator, self.logger);
-        defer runc_backend.deinit();
-
-        switch (operation) {
-            .create => {
-                const sandbox_config = try self.createSandboxConfig(operation, container_id, .runc, config);
-                defer self.cleanupSandboxConfig(operation, &sandbox_config);
-                try runc_backend.create(sandbox_config);
-            },
-            .start => try runc_backend.start(container_id),
-            .stop => try runc_backend.stop(container_id),
-            .delete => try runc_backend.delete(container_id),
-            .kill => |kill_cfg| try runc_backend.kill(container_id, kill_cfg.signal),
-            .exec => return self.notImplemented("exec", "runc"),
-            .pause => return self.notImplemented("pause", "runc"),
-            .resume_ => return self.notImplemented("resume", "runc"),
-            .run => return self.notImplemented("run", "runc"),
             .state => {
                 // State operation handled by command
             },

@@ -72,6 +72,9 @@ pub const AppContext = struct {
         if (config.legacy_crun_name_patterns) {
             runtime_logger.warn("container_config.crun_name_patterns is ignored since 0.13.0; put each glob under runtime.routing as {{\"pattern\": \"<glob>\", \"runtime\": \"crun\"}} -- it is the same matcher", .{}) catch {};
         }
+        if (config.legacy_runc_runtime) {
+            runtime_logger.warn("runc is not a backend since 0.13.0; a rule naming it routes to crun, the OCI backend. Change the rule to say crun", .{}) catch {};
+        }
 
         self.* = AppContext{
             .allocator = allocator,
@@ -257,7 +260,7 @@ fn run() !void {
     if (options.runtime_type == null) {
         if (try flagValueFromArgs(args, "--runtime", "value")) |value| {
             options.runtime_type = parseRuntimeType(value) orelse {
-                printError("unknown runtime '{s}'; expected lxc, crun, runc or vm", .{value});
+                reportUnknownRuntime(value);
                 failure_reported = true;
                 return error.InvalidInput;
             };
@@ -429,7 +432,7 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         } else if (std.mem.eql(u8, arg, "--runtime") and i + 1 < args.len) {
             const runtime_str = args[i + 1];
             options.runtime_type = parseRuntimeType(runtime_str) orelse {
-                printError("unknown runtime '{s}'; expected lxc, crun, runc or vm", .{runtime_str});
+                reportUnknownRuntime(runtime_str);
                 failure_reported = true;
                 return error.InvalidInput;
             };
@@ -642,7 +645,16 @@ fn parseRuntimeType(runtime_str: []const u8) ?core.RuntimeType {
     // The router sends only .vm to the VM backend; .qemu went to LXC
     if (std.mem.eql(u8, runtime_str, "vm") or std.mem.eql(u8, runtime_str, "qemu")) return .vm;
     if (std.mem.eql(u8, runtime_str, "crun")) return .crun;
-    // "runc" used to select crun
-    if (std.mem.eql(u8, runtime_str, "runc")) return .runc;
     return null;
+}
+
+/// `--runtime runc` gets the reason and the replacement, not a list that
+/// merely no longer contains it: the backend was removed in 0.13.0, and crun
+/// runs the same OCI containers.
+fn reportUnknownRuntime(value: []const u8) void {
+    if (std.mem.eql(u8, value, "runc")) {
+        printError("runc is not a backend since 0.13.0; the crun backend runs OCI containers -- use --runtime crun", .{});
+    } else {
+        printError("unknown runtime '{s}'; expected lxc, crun or vm", .{value});
+    }
 }

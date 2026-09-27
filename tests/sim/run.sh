@@ -497,6 +497,17 @@ check "crun_name_patterns no longer routes, and the warning names runtime.routin
   all 'rc 1' 'called_re "^pct"' 'err_has "crun_name_patterns is ignored"' 'err_has "runtime.routing"'
 rm -f "$S/work/config.json"
 
+# No runc backend since 0.13.0. A rule that still names it describes an OCI
+# container, so it goes to crun -- and is said, since the file should change.
+cfg '{"runtime":{"routing":[{"pattern":"*","runtime":"runc"}]}}'
+nx state from-tpl
+check "a routing rule naming runc goes to crun, with a warning that says so" \
+  all 'rc 1' 'err_has "not built into this binary"' 'err_has "runc is not a backend"' 'not_called_re "^pct"'
+rm -f "$S/work/config.json"
+nx --runtime runc state from-tpl
+check "--runtime runc is refused with the replacement named, not a shorter list" \
+  all 'rc 2' 'err_has "use --runtime crun"' 'not_called_re "^pct"'
+
 nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup list
 check "the options containerd sends are accepted, not read as a command" \
   all 'rc 0' '! err_has "unknown command"'

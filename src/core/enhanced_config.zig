@@ -89,7 +89,6 @@ pub const EnhancedConfigLoader = struct {
 
         // Return default priorities
         if (std.mem.eql(u8, backend_name, "crun")) return 10;
-        if (std.mem.eql(u8, backend_name, "runc")) return 20;
         if (std.mem.eql(u8, backend_name, "proxmox-lxc")) return 30;
         if (std.mem.eql(u8, backend_name, "proxmox-vm")) return 40;
 
