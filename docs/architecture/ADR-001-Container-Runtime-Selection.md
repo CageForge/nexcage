@@ -86,8 +86,9 @@ Negative:
   once; `scripts/check_features_abi.sh` now compares the vendored header
   against the Zig mirror in CI. A crun bump is a deliberate change, not a
   version number ([#227](https://github.com/CageForge/nexcage/issues/227)).
-- The `-crun` binary needs `libyajl2`, `libseccomp2` and `libcap2` on the
-  host, and a Proxmox VE install lacks the first.
+- The `-crun` binary needs `libjson-c5`, `libseccomp2` and `libcap2` on the
+  host. A Proxmox VE 9 install has all three; releases before 0.13.0 needed
+  `libyajl2` instead, which it lacks.
 
 ## What changed since 2024-12-01, and why
 

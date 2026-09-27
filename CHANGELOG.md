@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Vendored crun 1.24 → 1.30.1.** The pin moves from the fork's revert-carrying commit to a branch that is upstream 1.30.1 plus the `.upstream_tag` marker the header script reads; the `intelrdt` revert the old vendoring carried was not needed to build. `scripts/check_features_abi.sh` passes against the new header unchanged, so the Zig mirror of the features structs did not move. **The `-crun` binary now needs `libjson-c5` instead of `libyajl2`**: crun 1.28 replaced YAJL with json-c, libocispec included. A Proxmox VE 9 host has `libjson-c5` (it did not have `libyajl2`), so this is one library fewer to install (#227).
 - ADR-001 records the runtime selection that ships rather than the one decided in 2024: Proxmox LXC is the default backend, the crun backend is libcrun linked in and is what a container engine's host routes to, there is no fallback between backends, and runc is not supported. Routing is one name lookup with one list of rules. `docs/architecture/BACKENDS.md` said `kill` went through `pct exec` and name lookup through `pct list`; neither has been true since 0.9.0 and 0.11.0.
 
 ### Fixed

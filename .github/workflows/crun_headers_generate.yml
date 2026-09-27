@@ -12,7 +12,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y build-essential autoconf automake libtool pkg-config \
-            libyajl-dev libcap-dev libseccomp-dev libsystemd-dev curl
+            libjson-c-dev libcap-dev libseccomp-dev libsystemd-dev curl
       - name: Generate headers (local toolchain)
         run: |
           bash scripts/gen_crun_headers_local.sh || exit 1

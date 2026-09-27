@@ -500,9 +500,10 @@ with Kubernetes, and both would have looked like runtime bugs:
 
 - The host is a Xeon E5-2697 v2 with no AVX2, so a build tuned for a newer CPU
   dies with `SIGILL`. `-Dcpu=baseline`, as the release workflow already does.
-- The crun build links libyajl, and the node did not have it: `error while
-  loading shared libraries: libyajl.so.2`. `libyajl2`, `libseccomp2` and
-  `libcap2` are what a crun-enabled nexcage needs present.
+- The crun build linked libyajl, and the node did not have it: `error while
+  loading shared libraries: libyajl.so.2`. Since 0.13.0 the vendored crun
+  (1.30.1) uses json-c instead, and a Proxmox VE 9 host has `libjson-c5`;
+  `libseccomp2` and `libcap2` are the other two a crun-enabled nexcage needs.
 
 The script leaves the node as it found it unless `--keep` is passed, because that
 node is the E2E runner. One caution it enforces: `/etc/nexcage/config.json`

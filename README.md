@@ -44,7 +44,7 @@ apt install ./nexcage-$VERSION-amd64.deb
 **A release carries two binaries** (since 0.11.2). The plain one manages LXC
 containers; the `-crun` one adds the backend a container engine drives, and is
 what to install when containerd, CRI-O or a kubelet is meant to run containers
-on nexcage. It needs `libyajl2`, `libseccomp2` and `libcap2` on the host.
+on nexcage. It needs `libjson-c5`, `libseccomp2` and `libcap2` on the host.
 
 Details, source builds and the shared-library requirements:
 [docs/INSTALL.md](docs/INSTALL.md).

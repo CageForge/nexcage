@@ -198,7 +198,7 @@ jobs:
           file "dist/${BIN_NAME}"
           # What a host has to have for this one to start. Unlike the default
           # binary it is dynamically linked against libcrun's dependencies, and
-          # a Proxmox node does not have libyajl by default -- worth having in
+          # a Proxmox node has libjson-c5 but not every library -- worth having in
           # the job log when someone asks why it will not run.
           docker run --rm --entrypoint /bin/sh nexcage:crun-release \
             -c 'ldd /usr/local/bin/nexcage' || true

@@ -34,7 +34,7 @@ docker run --rm -t \
   "$IMAGE" bash -lc "set -e; \
     apt-get update -y >/dev/null && apt-get install -y >/dev/null \
       build-essential autoconf automake libtool pkg-config \
-      libyajl-dev libcap-dev libseccomp-dev libsystemd-dev curl ca-certificates >/dev/null; \
+      libjson-c-dev libcap-dev libseccomp-dev libsystemd-dev curl ca-certificates >/dev/null; \
     curl -fsSL https://github.com/$OWNER_REPO/releases/download/$TAG/crun-$TAG.tar.gz -o /tmp/crun.tar.gz; \
     mkdir -p /tmp/crun && tar -C /tmp/crun -xzf /tmp/crun.tar.gz; \
     cd /tmp/crun/crun-$TAG; \

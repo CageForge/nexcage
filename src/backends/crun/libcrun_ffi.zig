@@ -201,13 +201,15 @@ pub const Libcrun = struct {
     // compile-time configuration, free to drift from it silently.
     //
     // These mirror `struct features_info_s` and its parts in
-    // deps/crun/src/libcrun/container.h at the **vendored** commit, which is
-    // kubebsd/crun c1ef7a1e (pinned in the Dockerfile and in build.zig's
-    // include paths) -- not upstream containers/crun. The fork carries one
-    // field upstream does not, `memory_policy` at the end of linux_info_s, and
-    // reading upstream's layout here put everything after it at the wrong
-    // offset: annotations became rubbish and potentiallyUnsafeConfigAnnotations
-    // was a garbage pointer that segfaulted on the first dereference.
+    // deps/crun/src/libcrun/container.h at the **vendored** commit -- the
+    // submodule pin, which the Dockerfile checks out by hash: CageForge/crun
+    // 7d6f6955, which is upstream 1.30.1. The first version of this mirror
+    // was written against an unpacked crun 1.23.1 tree that build.zig's
+    // include paths pointed at, and 1.24 had added `memory_policy` at the
+    // end of linux_info_s; reading the old layout here put everything after
+    // it at the wrong offset: annotations became rubbish and
+    // potentiallyUnsafeConfigAnnotations was a garbage pointer that
+    // segfaulted on the first dereference.
     //
     // So: a hand-written binding of a C struct is only correct for the layout
     // it was written against, and this one is written against a fork that moves.

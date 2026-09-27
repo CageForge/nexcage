@@ -24,14 +24,14 @@ RUN apt-get update && apt-get install -y \
     # Required system libraries for nexcage
     libcap-dev \
     libseccomp-dev \
-    libyajl-dev \
+    # crun 1.28 replaced YAJL with json-c, libocispec included
+    libjson-c-dev \
     # Optional libraries for libcrun ABI mode
     libsystemd-dev \
     # Additional build dependencies for crun
     go-md2man \
     # libprotobuf-c-dev: required by crun
     libprotobuf-c-dev \
-    libyajl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set library paths
@@ -75,10 +75,10 @@ COPY . .
 # never work inside this image — the previous `git init || true && git
 # submodule update` was a no-op that `|| true` made look harmless. Clone the
 # dependency explicitly at its pinned commit instead.
-RUN git clone https://github.com/kubebsd/crun.git deps/crun && \
-    git -C deps/crun checkout -q c1ef7a1ee256236c6d8f41a6c7cda228f8b7bb79 && \
+RUN git clone https://github.com/CageForge/crun.git deps/crun && \
+    git -C deps/crun checkout -q 7d6f69551c5ccc0cbc3bc67bfd6674847d75787b && \
     git -C deps/crun submodule update --init libocispec && \
-    git -C deps/crun/libocispec submodule update --init runtime-spec image-spec yajl
+    git -C deps/crun/libocispec submodule update --init runtime-spec image-spec
 
 # Build arguments for customizing build
 # The image clones and prepares vendored crun, so it builds the crun backend.
@@ -118,7 +118,7 @@ RUN apt-get update && apt-get install -y \
     # Required runtime libraries
     libcap2 \
     libseccomp2 \
-    libyajl2 \
+    libjson-c5 \
     # Optional runtime library for libcrun ABI mode
     libsystemd0 \
     # OCI runtime backends

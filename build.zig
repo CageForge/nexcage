@@ -186,8 +186,6 @@ pub fn build(b: *std.Build) void {
         });
         libcrun_module.addIncludePath(.{ .cwd_relative = "/usr/include" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-        libcrun_module.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
-        libcrun_module.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
@@ -242,7 +240,8 @@ pub fn build(b: *std.Build) void {
         exe.root_module.linkSystemLibrary("systemd", .{ .use_pkg_config = .no, .needed = true });
         exe.linkSystemLibrary("cap");
         exe.linkSystemLibrary("seccomp");
-        exe.linkSystemLibrary("yajl");
+        // json-c, not yajl: crun 1.28 replaced it, libocispec included.
+        exe.linkSystemLibrary("json-c");
         exe.linkSystemLibrary("systemd");
         exe.linkSystemLibrary("pthread");
         exe.linkSystemLibrary("dl");
@@ -290,7 +289,7 @@ pub fn build(b: *std.Build) void {
         test_exe.root_module.linkSystemLibrary("systemd", .{ .use_pkg_config = .no, .needed = true });
         test_exe.linkSystemLibrary("cap");
         test_exe.linkSystemLibrary("seccomp");
-        test_exe.linkSystemLibrary("yajl");
+        test_exe.linkSystemLibrary("json-c");
         test_exe.linkSystemLibrary("systemd");
         test_exe.linkSystemLibrary("pthread");
         test_exe.linkSystemLibrary("dl");
