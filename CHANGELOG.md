@@ -7,16 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-27
+
+`pause` and `resume` -- the cgroup freezer -- and three fixes to code that
+0.11.0, 0.11.1 and 0.11.2 all shipped broken: **the cluster lookup never
+worked on a real Proxmox host.** If you run nexcage on a cluster, this is the
+release where containers on other nodes actually resolve.
+
 ### Added
 - **`pause` and `resume`**, the cgroup freezer: every process in the container stops where it is and stays in memory. On the crun backend through libcrun; on Proxmox LXC by writing the freezer of the container's cgroup. `state` reports `paused` for a frozen container, which it has to read from the cgroup itself — `pct status` keeps saying `running`, because Proxmox has no notion of the state. Refused for a container on another node, naming it: the cgroup filesystem there is not this host's to write.
-- This is deliberately **not** `pct suspend`. On a container that runs `lxc-checkpoint -s`, which dumps the processes through CRIU and takes the container down; measured on a Proxmox VE 9.2 host, where it also simply failed. The freezer is the operation the runtime-spec describes, and nexcage never calls `pct suspend`.
+- The E2E suite exercises `pause` and `resume` against a real Proxmox host, where the evidence is the kernel's own: `cgroup.events` has to say `frozen 1`, not merely `cgroup.freeze` holding what nexcage wrote, and nothing may run inside the container while it is frozen. Every defect this release fixes was in code that the simulator's fakes were happy with, so a freezer is not something to ship on a fake alone.
+- This is deliberately **not** `pct suspend`. On a container that runs `lxc-checkpoint -s`, which dumps the processes through CRIU and takes the container down -- and on the Proxmox VE 9.2 host this was measured on, it simply failed. The freezer is the operation the runtime-spec describes, and nexcage never calls `pct suspend`; the simulator asserts that no run in the suite ever does.
 
 ### Fixed
 - **The cluster lookup never worked on a real Proxmox host.** It asked `/cluster/resources --type lxc`, and the API's enumeration is `vm, storage, node, sdn` — so every call was rejected with "400 Parameter verification failed" and quietly fell back to `pct list`. That fallback is right for a container on this host and answers "not found" for one anywhere else, which is the exact thing cluster support was added for. Containers come back under `--type vm` with their own `type` field, which is what is read now. The simulator's fake accepted the wrong flag, so the tests agreed with the mistake; it refuses it the way Proxmox does.
 - **A container the cluster's listing had not caught up with was reported as missing.** `/cluster/resources` is a cache that `pvestatd` refreshes every few seconds, so `create` followed straight away by `start` failed on a real host. A miss in the cluster now means "keep looking on this host", and only both sources coming up empty is a container that does not exist.
 - **`state` and `list` showed a stale status for a container on this host.** The cluster's cached copy was preferred over `pct`, so `state` said `stopped` for seconds after a successful `start` while `list` said `running`. For a container here `pct` is the current answer; the cluster keeps the one thing only it knows, which node a container elsewhere is on.
+- `list` called a frozen container `running` while `state` called the same container `paused`: two answers from one binary, which is the same fault as the stale-status one above. `list` reads the freezer now. A container on another node has no cgroup here, so nothing changes for it.
 - A leak on every `start`, `stop`, `pause` and `resume` that resolved a name through the fallback path: `getVmidByName` allocates, the result was duplicated into the location and the original never freed. Harmless in a process that exits immediately, and reported by the allocator on every run.
-
 
 ## [0.11.2] - 2026-09-27
 

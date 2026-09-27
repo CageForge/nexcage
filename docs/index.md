@@ -26,4 +26,4 @@ Kubernetes schedules pods onto it with a `RuntimeClass`.
 - [Troubleshooting](TROUBLESHOOTING_GUIDE.md) — when something does not work
 - [Dev Quickstart](DEV_QUICKSTART.md) — build and test from source
 - [CI/CD](CI_CD_SETUP.md) — the workflows and the self-hosted Proxmox runner
-- [Release notes](releases/NOTES_v0.11.1.md) — what changed, release by release
+- [Release notes](releases/NOTES_v0.12.0.md) — what changed, release by release

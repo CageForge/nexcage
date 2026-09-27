@@ -239,10 +239,51 @@ jobs:
         expect_exit 2 nx kill "$NAME" 'TERM;id'
         expect_exit 2 nx kill "$NAME" NOSUCHSIGNAL
 
+        echo "[E2E] pause freezes the container's cgroup, and the kernel agrees it is frozen"
+        FREEZER="/sys/fs/cgroup/lxc/$ID"
+        nx pause "$NAME"
+        expect_status "$NAME" paused
+        # cgroup.freeze is what nexcage asked for; cgroup.events is the kernel
+        # saying it took effect. Only the second one is evidence.
+        $SUDO grep -qx 'frozen 1' "$FREEZER/cgroup.events" || {
+          echo "::error::$FREEZER/cgroup.events does not say the cgroup is frozen:"
+          $SUDO cat "$FREEZER/cgroup.events" "$FREEZER/cgroup.freeze"
+          exit 1
+        }
+        echo "[E2E] pct still calls it running -- which is why state reads the freezer"
+        pct_says=$($SUDO pct status "$ID" | awk '{print $2}')
+        [ "$pct_says" = running ] || echo "::warning::pct status now says '$pct_says' for a frozen container; CLI_REFERENCE says it says running"
+        echo "[E2E] list says paused too, rather than disagreeing with state"
+        nx list | awk -F'\t' -v n="$NAME" '$8==n && $5=="paused" {found=1} END {exit !found}'
+        echo "[E2E] and nothing can run inside a frozen container"
+        rc=0; timeout 10 nx exec "$NAME" -- true || rc=$?
+        [ "$rc" -ne 0 ] || { echo "::error::exec succeeded in a paused container"; exit 1; }
+        echo "[E2E] exec in a paused container did not succeed (rc=$rc)"
+
+        echo "[E2E] resume thaws it"
+        nx resume "$NAME"
+        expect_status "$NAME" running
+        $SUDO grep -qx 'frozen 0' "$FREEZER/cgroup.events" || {
+          echo "::error::$FREEZER/cgroup.events still says frozen after resume"
+          $SUDO cat "$FREEZER/cgroup.events"
+          exit 1
+        }
+        # Guarded: the exec above was killed while frozen, and if that left
+        # anything stuck this has to fail loudly rather than hang the job.
+        got=$(timeout 30 nx exec "$NAME" -- sh -c 'echo thawed')
+        [ "$got" = thawed ] || { echo "::error::exec after resume printed '$got'"; exit 1; }
+
+        echo "[E2E] pause and resume on a container that does not exist are errors"
+        expect_exit 1 nx pause no-such-container-$$
+        expect_exit 1 nx resume no-such-container-$$
+
         echo "[E2E] stop"
         nx stop "$NAME"
         expect_status "$NAME" stopped
         expect_exit 1 nx kill "$NAME" SIGCONT
+
+        echo "[E2E] a stopped container has no freezer, and pause says so"
+        expect_exit 1 nx pause "$NAME"
 
         echo "[E2E] a container created from a template reports bundle null"
         nx state "$NAME" | grep -q '"bundle": null' \
