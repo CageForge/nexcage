@@ -32,6 +32,7 @@ tests
 
 # CI/CD files
 .github
+.actrc
 
 # Development files
 .env

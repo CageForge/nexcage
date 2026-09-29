@@ -86,6 +86,17 @@ nexcage delete e2e-1
 nexcage state e2e-1; echo "exit $?"   # 1
 ```
 
+## Containers, CI jobs and performance, locally
+
+`scripts/dev.sh` runs all of the above and the container tests that
+`crun_build.yml` runs — the crun backend's `features`, `ps` and foreign working
+directory checks, and a pod through containerd's CRI — under rootless podman or
+Docker, the GitHub-hosted CI jobs through act, and the performance suites in
+`tests/perf/`: every command's wall time, peak memory and, on the Proxmox LXC
+backend, the number of `pct`/`pvesh`/`pvesm` runs, compared against another
+revision with `scripts/dev.sh perf --against main`. See
+[docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
+
 ## Memory checks
 
 `memory_leak_check.yml` runs basic commands under Valgrind. Debug builds also

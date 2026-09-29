@@ -29,6 +29,7 @@ nav:
   - Getting Started:
     - Install: INSTALL.md
     - Dev Quickstart: DEV_QUICKSTART.md
+    - Local Development: LOCAL_DEVELOPMENT.md
     - Development Workflow: DEVELOPMENT_WORKFLOW.md
   - CLI Reference: CLI_REFERENCE.md
   - Kubernetes Integration: KUBERNETES_INTEGRATION.md

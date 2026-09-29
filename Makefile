@@ -5,7 +5,7 @@
 PREFIX ?= /usr/local
 ZIG ?= zig
 
-.PHONY: help build release test sim install uninstall clean format lint check deb crun-docker crun-headers docs-serve docs-build
+.PHONY: help build release test sim install uninstall clean format lint check deb crun-docker crun-headers docs-serve docs-build doctor dev-setup e2e act local-ci perf dev-shell
 .DEFAULT_GOAL := help
 
 help:
@@ -26,6 +26,15 @@ help:
 	@echo "  crun-headers  Generate vendored crun headers in Docker"
 	@echo "  docs-serve    Serve the docs locally (Docker mkdocs)"
 	@echo "  docs-build    Build the docs site (Docker mkdocs)"
+	@echo ""
+	@echo "Local development (scripts/dev.sh, docs/LOCAL_DEVELOPMENT.md):"
+	@echo "  doctor        Check the tools the targets below need"
+	@echo "  dev-setup     podman socket, act runner image, busybox bundle"
+	@echo "  e2e           sim + crun backend + a pod through containerd, no Proxmox"
+	@echo "  act           The GitHub-hosted CI jobs through act"
+	@echo "  local-ci      lint + test + sim, then every CI job through act"
+	@echo "  perf          Time every command; PERF_ARGS='--against main' to compare"
+	@echo "  dev-shell     A shell with nexcage, crun, containerd and crictl"
 
 build:
 	$(ZIG) build
@@ -72,3 +81,24 @@ docs-serve:
 
 docs-build:
 	bash scripts/mkdocs_build.sh
+
+doctor:
+	bash scripts/dev.sh doctor
+
+dev-setup:
+	bash scripts/dev.sh setup
+
+e2e:
+	bash scripts/dev.sh e2e
+
+act:
+	bash scripts/dev.sh act
+
+local-ci:
+	bash scripts/dev.sh all
+
+perf:
+	bash scripts/dev.sh perf $(PERF_ARGS)
+
+dev-shell:
+	bash scripts/dev.sh shell

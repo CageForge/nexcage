@@ -1,0 +1,14 @@
+# act defaults for this repository; see docs/LOCAL_DEVELOPMENT.md. scripts/dev.sh act
+# adds what depends on the machine: DOCKER_HOST and DOCKER_BUILDKIT=0 for podman,
+# and the main repository's .git when run from a linked worktree.
+# Build the image once: podman build --format docker -t localhost/nexcage-act:latest .github/act
+-P ubuntu-latest=localhost/nexcage-act:latest
+-P ubuntu-24.04=localhost/nexcage-act:latest
+-P ubuntu-22.04=localhost/nexcage-act:latest
+# The image is local, so never try to pull it.
+--pull=false
+# Mount the checkout instead of copying it: the copy drops deps/crun/.git.
+--bind
+# Keep act's artifact server on loopback; its default is this machine's LAN
+# address. Job containers use host networking, so they still reach it.
+--artifact-server-addr=127.0.0.1
