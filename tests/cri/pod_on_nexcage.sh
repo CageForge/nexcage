@@ -50,7 +50,11 @@ if [ -w /sys/fs/cgroup/cgroup.subtree_control ]; then
     for p in $(cat /sys/fs/cgroup/cgroup.procs 2>/dev/null); do
         echo "$p" > /sys/fs/cgroup/init/cgroup.procs 2>/dev/null || true
     done
-    echo "+cpu +cpuset +memory +pids +io" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null || true
+    # One at a time: a write naming a controller the parent did not delegate
+    # fails as a whole. Rootless podman delegates only cpu, memory and pids.
+    for c in cpu cpuset memory pids io; do
+        echo "+$c" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null || true
+    done
 fi
 case "$(cat /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null)" in
     *cpu*) : ;;
@@ -79,7 +83,18 @@ exec $NEXCAGE "\$@"
 EOT
 chmod +x /nexcage-traced
 
-cat > /etc/containerd/config.toml <<'TOML'
+# In a user namespace -- rootless podman -- the kernel will not let the shim
+# lower oom_score_adj and AppArmor profiles cannot be loaded, so containerd
+# has to be told not to try; it warns about both at startup. Only the initial
+# namespace maps all of 0..4294967294 to itself.
+USERNS_CRI=""
+if ! awk 'NR == 1 && $1 == 0 && $2 == 0 && $3 == 4294967295 { f = 1 } END { exit !f }' /proc/self/uid_map; then
+    USERNS_CRI="restrict_oom_score_adj = true
+  disable_apparmor = true"
+    echo "ok: running in a user namespace, so oom_score_adj and AppArmor are left alone"
+fi
+
+cat > /etc/containerd/config.toml <<TOML
 version = 3
 
 [plugins.'io.containerd.cri.v1.images']
@@ -91,6 +106,7 @@ version = 3
   use_local_image_pull = true
 
 [plugins.'io.containerd.cri.v1.runtime']
+  $USERNS_CRI
   [plugins.'io.containerd.cri.v1.runtime'.containerd]
     default_runtime_name = 'nexcage'
     [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]

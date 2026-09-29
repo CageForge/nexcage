@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`scripts/dev.sh`, one entry point for local development**, with `make doctor`, `dev-setup`, `e2e`, `act`, `local-ci`, `perf` and `dev-shell`: a check of every tool with how to get what is missing; the unit tests and the simulator; the crun-backend image and the checks `crun_build.yml` runs on it; a pod through containerd's CRI; a shell with nexcage, crun, containerd and crictl (`shell [CMD]`); the GitHub-hosted CI jobs through act, with the repository's `.actrc` and runner image (`.github/act`); and `pve-e2e`, which dispatches the Proxmox E2E for the pushed branch and follows it. No root needed; rootless podman or Docker. [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
+- **Performance suites** in `tests/perf/`: the Proxmox LXC lifecycle against the simulator — wall time, peak memory and the number of `pct`/`pvesh`/`pvesm` runs per command — and the crun backend's lifecycle next to crun's own binary. `scripts/dev.sh perf --against <ref>` builds both revisions ReleaseSafe, runs them in alternating rounds and exits 1 on a regression: any extra Proxmox tool run, or a time shift most of the samples agree on.
+
+### Changed
+- The simulator's fake host moved from `tests/sim/run.sh` into `tests/sim/lib.sh`, which the perf suite shares.
+- `crun_build.yml`'s features document check is `tests/crun/features_check.py`, so the local run and CI run the same one.
+- `.gitignore` covers what the GitHub-hosted jobs write into their checkout (`zig-out-release/`, `err.txt`, `features.json`, `bundle/`), because act runs them in this one; `.dockerignore` leaves out `.actrc`.
+
+### Fixed
+- **The CRI test could not run under rootless podman.** It enabled cgroup controllers in one write naming `cpuset` and `io`, which a user's cgroup does not delegate, so the write failed as a whole and enabled none; and containerd in a user namespace was not told to leave `oom_score_adj` and AppArmor alone, so libcrun's `write to /proc/self/oom_score_adj` failed every sandbox. Controllers are enabled one at a time now, and the two containerd options are set when the test runs in a user namespace. CI's rootful Docker is unaffected.
+
 ## [0.13.0] - 2026-09-27
 
 `update` -- the last runtime-spec verb that was missing -- vendored crun moves

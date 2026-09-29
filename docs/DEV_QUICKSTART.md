@@ -10,6 +10,19 @@
 The default build links only libc. The first build may download the pinned
 `oci-specs-zig` package from `build.zig.zon`.
 
+## Everything in one command
+
+`scripts/dev.sh` checks the tools, builds, runs every test that works without
+Proxmox — the simulator, the crun backend, a pod through containerd — runs the
+CI jobs through act, and times every command. See
+[LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md).
+
+```bash
+scripts/dev.sh doctor     # what is missing, and how to get it
+scripts/dev.sh check      # zig fmt, unit tests, the simulator
+scripts/dev.sh all        # what a pull request runs, minus Proxmox
+```
+
 ## Build, test, run
 
 ```bash

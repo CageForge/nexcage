@@ -26,6 +26,13 @@ test-reports/*
 # Build outputs written by release.yml and scripts/build_deb_local.sh
 /dist/
 
+# Scratch the GitHub-hosted jobs write into their checkout. act runs them with
+# --bind (see .actrc), so locally that checkout is this one.
+/zig-out-release/
+/err.txt
+/features.json
+/bundle/
+
 # Tool binaries and logs dropped at the repository root
 /gitleaks
 /*.log
