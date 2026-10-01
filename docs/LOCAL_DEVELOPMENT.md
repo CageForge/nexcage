@@ -26,7 +26,7 @@ scripts/dev.sh all          # before a pull request: check, then every CI job th
 | `cri` | | A pod through containerd's CRI with nexcage as the runtime handler: sandbox, CNI address, container, `exec`, `update`, removal | a container engine | 5 s, plus the images |
 | `e2e` | `e2e` | `sim` + `crun` + `cri` | | |
 | `shell [CMD]` | `dev-shell` | A shell with nexcage (crun backend), crun, containerd and crictl, or CMD run there | a container engine | |
-| `act` | `act` | The GitHub-hosted CI jobs, in the runner image | act, a container engine | 1.5–4 min per job |
+| `act` | `act` | The GitHub-hosted CI jobs, in the runner image | act, a container engine; gh logged in for `dependency_check.yml` | 1.5–4 min per job |
 | `all` | `local-ci` | `check`, then `act`, whose `crun_build.yml` job is `crun` and `cri` as CI runs them | | 12 min |
 | `pve-e2e` | | `proxmox_e2e.yml` on the self-hosted Proxmox VE runner, for this branch | gh, the branch pushed | 10 min |
 | `perf` | `perf` | Times every command; see [Performance](#performance) | zig; a container engine for `--suite crun` | 1 min for `lxc`, 4 min for both with `--against` |
@@ -95,8 +95,9 @@ nexcage --runtime crun delete --force demo
 
 `scripts/dev.sh act` runs, by default, every job a pull request gets on a
 GitHub-hosted runner: `ci.yml` (`build-test`, `simulation`),
-`version-check.yml`, `crun_build.yml` and `memory_leak_check.yml`. Name jobs to
-run others, and pass act's own options after `--`:
+`version-check.yml`, `crun_build.yml` and `memory_leak_check.yml`, plus the
+crun job of `dependency_check.yml` in its dry run. Name jobs to run others, and
+pass act's own options after `--`:
 
 ```bash
 scripts/dev.sh act ci.yml:simulation
@@ -119,10 +120,15 @@ cannot know:
   `.git`, which the worktree's `.git` file points into and which is otherwise
   outside the container.
 
+`dependency_check.yml` is scheduled, so `dev.sh` dispatches it, with
+`dry_run=true` and the token `gh auth token` holds: the job reads the
+repository's open issues and the crun releases and prints what it would file,
+edit or close. Without that input and with a token it does those things in
+CageForge/nexcage, so keep `--input dry_run=true` when running act on it by
+hand; without a gh login `dev.sh` skips the job and says so.
+
 Not in the default set: `proxmox_e2e.yml` and `buildagent.yml` need
-self-hosted runners, `security.yml` uploads to GitHub's code scanning, and
-`dependency_check.yml`, given a token, files and edits issues in the
-repository.
+self-hosted runners, and `security.yml` uploads to GitHub's code scanning.
 
 ## The Proxmox E2E
 

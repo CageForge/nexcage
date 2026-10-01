@@ -37,53 +37,11 @@ and technical details into the issue before starting implementation.
 
 ## 3. Local Workflow Testing
 
-### Prerequisites
-1. Install Docker
-2. Install GitHub CLI (`gh`)
-3. Install act (`curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash`)
-
-### Testing Workflows Locally
-1. List available workflows:
-   ```bash
-   act -l
-   ```
-
-2. Run a specific workflow:
-   ```bash
-   act -W .github/workflows/[workflow-name].yml
-   ```
-
-3. Run a specific job in a workflow:
-   ```bash
-   act -j [job-name] -W .github/workflows/[workflow-name].yml
-   ```
-
-4. Run with specific event:
-   ```bash
-   act push -W .github/workflows/[workflow-name].yml
-   ```
-
-### Common Issues and Solutions
-1. Docker permissions:
-   ```bash
-   sudo usermod -aG docker $USER
-   ```
-
-2. GitHub token:
-   ```bash
-   gh auth login
-   ```
-
-3. Workflow secrets:
-   Create a `.secrets` file with required secrets:
-   ```bash
-   GITHUB_TOKEN=your_token_here
-   ```
-
-4. Run with secrets:
-   ```bash
-   act --secret-file .secrets
-   ```
+`scripts/dev.sh` runs everything that works without a Proxmox host, including
+the GitHub-hosted CI jobs through act; [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md)
+is the guide. `scripts/dev.sh check` is the gate before a commit and
+`scripts/dev.sh all` before a pull request. The E2E workflow and the build
+agent need self-hosted runners and are not run locally.
 
 ## 4. Code Review and Merge
 
