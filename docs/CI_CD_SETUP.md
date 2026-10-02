@@ -35,6 +35,10 @@ Proxmox VE host, and on that host:
 - **The bridge** `vmbr50`, or `BRIDGE` set in the runner environment.
 - **Container storage**: `local-lvm` if present, otherwise `local`; override
   with `ROOTFS`.
+- **A storage that can snapshot** for the snapshot checks: the first lvm-thin
+  or ZFS storage in `pvesm status`, or `SNAPSTORE`. `local` cannot snapshot a
+  raw volume, so on a node without one the checks are skipped with a warning;
+  `03-prepare-runner-host.sh` makes a ZFS pool on a file (`e2e-zfs`) for them.
 - **A workspace the runner user owns.** Container actions run as root and can
   leave root-owned files behind; a root-owned
   `/opt/github-runner/_work/nexcage/nexcage/.cache` makes checkout fail with
