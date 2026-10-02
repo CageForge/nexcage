@@ -93,8 +93,8 @@ pub const StateCommand = struct {
         defer out.deinit(allocator);
         const writer = out.writer(allocator);
         try writer.print(
-            "{{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": ",
-            .{ container_id, status, found.pid },
+            "{{\n  \"ociVersion\": \"{s}\",\n  \"id\": \"{s}\",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": ",
+            .{ core.constants.OCI_RUNTIME_SPEC_VERSION, container_id, status, found.pid },
         );
         if (bundle_path) |bp| {
             try core.json.writeString(writer, bp);

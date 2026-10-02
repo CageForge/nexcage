@@ -153,7 +153,7 @@ with `create` that is enough for a caller to make a container and read it back:
 
 ```
 $ nexcage --runtime crun state s1
-{ "ociVersion": "1.0.0", "id": "s1", "pid": 30, "status": "created",
+{ "ociVersion": "1.3.0", "id": "s1", "pid": 30, "status": "created",
   "bundle": "/run/eb/s1", "rootfs": "rootfs", "created": "...",
   "systemd-scope": "", "owner": "root" }
 ```

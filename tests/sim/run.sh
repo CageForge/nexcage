@@ -163,7 +163,7 @@ echo "=== state ==="
 nx state web-1
 check "state of created container: exit 0, stdout is pure JSON" all 'rc 0' 'json_ok "$S/out"'
 check "state of a container never started: id, status created, pid 0, ociVersion" \
-  all '[ "$(json_get "$S/out" id)" = web-1 ]' '[ "$(json_get "$S/out" status)" = created ]' '[ "$(json_get "$S/out" pid)" = 0 ]' '[ "$(json_get "$S/out" ociVersion)" = 1.0.0 ]'
+  all '[ "$(json_get "$S/out" id)" = web-1 ]' '[ "$(json_get "$S/out" status)" = created ]' '[ "$(json_get "$S/out" pid)" = 0 ]' '[ "$(json_get "$S/out" ociVersion)" = 1.3.0 ]'
 nx state 100;  check "state by VMID works" all 'rc 0' '[ "$(json_get "$S/out" status)" = created ]'
 nx state nope; check "state of missing container -> exit 1, not found" all 'rc 1' 'err_has "not found"'
 nx state;      check "state without name -> exit 2" rc 2
