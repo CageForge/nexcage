@@ -208,6 +208,11 @@ pub const Command = enum {
     pause,
     resume_,
     update,
+    /// Snapshots through Proxmox VE, with pct's names
+    snapshot,
+    snapshots,
+    rollback,
+    delsnapshot,
 };
 
 /// One resource setting for `update`, in crun's own vocabulary: the section
@@ -272,6 +277,11 @@ pub const RuntimeOptions = struct {
     /// `update --memory <n>`, `--cpu-quota <n>` and the rest, as runc and
     /// crun name them; each is one setting, in the order given.
     resource_updates: ?[]ResourceUpdate = null,
+    /// `snapshot --description <text>`: Proxmox's note on the snapshot.
+    description: ?[]const u8 = null,
+    /// `rollback --start`: start the container once it is back at the
+    /// snapshot, as pct's own flag does.
+    start_after_rollback: bool = false,
 
     pub fn deinit(self: *RuntimeOptions) void {
         if (self.container_id) |id| self.allocator.free(id);
@@ -285,6 +295,7 @@ pub const RuntimeOptions = struct {
         if (self.storage_name) |sn| self.allocator.free(sn);
         if (self.filename) |f| self.allocator.free(f);
         if (self.resources_path) |rp| self.allocator.free(rp);
+        if (self.description) |d| self.allocator.free(d);
         if (self.resource_updates) |ups| {
             for (ups) |u| self.allocator.free(u.value);
             self.allocator.free(ups);

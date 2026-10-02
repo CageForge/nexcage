@@ -59,6 +59,7 @@ nexcage create --name web-1 local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst
 nexcage start web-1
 nexcage state web-1                 # OCI state JSON on stdout
 nexcage exec web-1 -- sh -c 'echo $HOSTNAME'
+nexcage snapshot web-1 before-upgrade   # through pct, on zfs or lvm-thin
 nexcage list                        # every node of the cluster
 nexcage delete web-1
 

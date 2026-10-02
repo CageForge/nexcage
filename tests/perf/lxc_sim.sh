@@ -124,6 +124,10 @@ lifecycle() {
   measure exec          exec "pc-$i" true
   measure kill          kill "pc-$i" SIGCONT
   measure stop          stop "pc-$i"
+  measure snapshot      snapshot "pc-$i" perf
+  measure snapshots     snapshots "pc-$i"
+  measure rollback      rollback "pc-$i" perf
+  measure delsnapshot   delsnapshot "pc-$i" perf
   measure delete        delete "pc-$i"
   measure run           run --name "pr-$i" "$TPL"
   quiet stop "pr-$i"; quiet delete "pr-$i"

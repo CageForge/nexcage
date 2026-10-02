@@ -27,6 +27,23 @@ stop_init() {
   rm -f "$SIM/pid.$1"
 }
 
+# Start a container: a fake init per container, with a cgroup and a freezer,
+# as `pct start` leaves them. Shared with `rollback --start`.
+start_ct() {
+  set_status "$1" running
+  : > "$SIM/sig.$1"
+  # A running container has a cgroup with a freezer; a stopped one does not.
+  mkdir -p "/sys/fs/cgroup/lxc/$1" 2>/dev/null && echo 0 > "/sys/fs/cgroup/lxc/$1/cgroup.freeze" 2>/dev/null
+  python3 "$HERE/../fake_init.py" "$SIM/sig.$1" </dev/null >/dev/null 2>&1 &
+  echo $! > "$SIM/pid.$1"
+  for _ in $(seq 1 50); do
+    grep -qx READY "$SIM/sig.$1" 2>/dev/null && break
+    sleep 0.1
+  done
+}
+# A snapshot by name in a container's list: "name epoch description..."
+has_snap() { awk -v n="$2" '$1==n {f=1} END {exit !f}' "$SIM/snaps.$1" 2>/dev/null; }
+
 # As with LXC, a container whose init has exited is stopped
 for pidfile in "$SIM"/pid.*; do
   [ -e "$pidfile" ] || continue
@@ -71,16 +88,7 @@ case "$cmd" in
   start)
     exists "$1" || missing "$1"
     [ "$(status_of "$1")" = running ] && { echo "CT $1 already running" >&2; exit 255; }
-    set_status "$1" running
-    : > "$SIM/sig.$1"
-    # A running container has a cgroup with a freezer; a stopped one does not.
-    mkdir -p "/sys/fs/cgroup/lxc/$1" 2>/dev/null && echo 0 > "/sys/fs/cgroup/lxc/$1/cgroup.freeze" 2>/dev/null
-    python3 "$HERE/../fake_init.py" "$SIM/sig.$1" </dev/null >/dev/null 2>&1 &
-    echo $! > "$SIM/pid.$1"
-    for _ in $(seq 1 50); do
-      grep -qx READY "$SIM/sig.$1" 2>/dev/null && break
-      sleep 0.1
-    done
+    start_ct "$1"
     ;;
   shutdown|stop)
     exists "$1" || missing "$1"
@@ -126,6 +134,47 @@ case "$cmd" in
   set)
     exists "$1" || missing "$1"
     echo "set: $*" >> "$SIM/conf.$1"
+    ;;
+  # Snapshots: a list per container in $SIM/snaps.<vmid>, "name epoch
+  # description". The refusals are pct's own words. $SIM/fail_snapshot holds
+  # what pct says for a storage that cannot snapshot.
+  snapshot)
+    vmid=$1; name=$2; shift 2
+    exists "$vmid" || missing "$vmid"
+    desc=""
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --description) desc=$2; shift 2 ;;
+        *) echo "fake pct: unknown snapshot option $1" >&2; exit 99 ;;
+      esac
+    done
+    [ -e "$SIM/fail_snapshot" ] && { cat "$SIM/fail_snapshot" >&2; exit 255; }
+    [ "$name" = current ] && { echo "unable to use snapshot name 'current' (reserved name)" >&2; exit 255; }
+    has_snap "$vmid" "$name" && { echo "snapshot name '$name' already used" >&2; exit 255; }
+    printf '%s %s %s\n' "$name" "$(date +%s)" "$desc" >> "$SIM/snaps.$vmid"
+    ;;
+  rollback)
+    vmid=$1; name=$2; shift 2
+    exists "$vmid" || missing "$vmid"
+    start=0
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --start) start=$2; shift 2 ;;
+        *) echo "fake pct: unknown rollback option $1" >&2; exit 99 ;;
+      esac
+    done
+    has_snap "$vmid" "$name" || { echo "snapshot '$name' does not exist" >&2; exit 2; }
+    [ "$(status_of "$vmid")" = running ] && { echo "unable to rollback vm $vmid: vm is running" >&2; exit 255; }
+    echo "rollback: $name" >> "$SIM/conf.$vmid"
+    # Not `[ ... ] && start_ct`: as the arm's last command its status would
+    # be the script's, and a rollback without --start would "fail".
+    if [ "$start" = 1 ]; then start_ct "$vmid"; fi
+    ;;
+  delsnapshot)
+    vmid=$1; name=$2
+    exists "$vmid" || missing "$vmid"
+    has_snap "$vmid" "$name" || { echo "snapshot '$name' does not exist" >&2; exit 2; }
+    awk -v n="$name" '$1!=n' "$SIM/snaps.$vmid" > "$SIM/snaps.$vmid.tmp" && mv "$SIM/snaps.$vmid.tmp" "$SIM/snaps.$vmid"
     ;;
   *) echo "fake pct: unsupported $cmd" >&2; exit 99 ;;
 esac

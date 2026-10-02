@@ -176,6 +176,9 @@ pub const BackendRouter = struct {
             .pause => try proxmox_backend.pause(container_id),
             .resume_ => try proxmox_backend.unpause(container_id),
             .update => |up| try proxmox_backend.update(container_id, up.values),
+            .snapshot => |s| try proxmox_backend.snapshot(container_id, s.name, s.description),
+            .rollback => |r| try proxmox_backend.rollback(container_id, r.name, r.start),
+            .delsnapshot => |s| try proxmox_backend.deleteSnapshot(container_id, s.name),
             .exec => |exec_cfg| {
                 // `exec --process <file>` hands over an OCI process spec: a
                 // user and group to become, capabilities, rlimits, a terminal.
@@ -215,6 +218,20 @@ pub const BackendRouter = struct {
             return types.Error.UnsupportedOperation;
         }
 
+        // Snapshots are Proxmox's: the node's storage takes one of the
+        // container's volumes. libcrun has no storage of its own, so the
+        // answer is the same whether or not the backend is built, and it is
+        // given before the "is it built" check for the same reason as --node.
+        switch (operation) {
+            .snapshot, .rollback, .delsnapshot => {
+                if (self.logger) |log| {
+                    log.err("{s} is a Proxmox VE operation: the node's storage takes a snapshot of the container's volumes, and the crun backend has no storage of its own to snapshot. It is for containers on the Proxmox LXC backend", .{@tagName(operation)}) catch {};
+                }
+                return types.Error.UnsupportedOperation;
+            },
+            else => {},
+        }
+
         // When the backend is compiled out, backends.crun is an empty struct.
         // The check is comptime-known, so the code below is never analyzed.
         if (!backends.isCrunEnabled()) return self.backendNotBuilt("crun");
@@ -252,6 +269,7 @@ pub const BackendRouter = struct {
             .pause => try crun_backend.pause(container_id),
             .resume_ => try crun_backend.resume_(container_id),
             .update => |up| try crun_backend.update(container_id, up.resources_json, up.values),
+            .snapshot, .rollback, .delsnapshot => unreachable, // refused above
             .state => {
                 // State operation handled by command
             },
@@ -298,6 +316,23 @@ pub const Operation = union(enum) {
     pause: void,
     resume_: void,
     update: UpdateConfig,
+    /// Snapshots through Proxmox VE. `snapshots`, the listing, is not here:
+    /// like `state` it is answered by the command, which prints.
+    snapshot: SnapshotConfig,
+    rollback: RollbackConfig,
+    delsnapshot: SnapshotConfig,
+};
+
+pub const SnapshotConfig = struct {
+    name: []const u8,
+    /// `--description <text>`, Proxmox's note on the snapshot
+    description: ?[]const u8 = null,
+};
+
+pub const RollbackConfig = struct {
+    name: []const u8,
+    /// `--start`: start the container once it is back at the snapshot
+    start: bool = false,
 };
 
 /// `update`: the linux.resources document an engine sent, for a backend that

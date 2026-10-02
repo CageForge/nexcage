@@ -704,6 +704,44 @@ pub const ProxmoxLxcDriver = struct {
         self.writeOciState(container_id, "running", init_pid, kept) catch {};
     }
 
+    /// Snapshots, through Proxmox: it holds the container's volumes and knows
+    /// how to snapshot each storage, so there is nothing for nexcage to do but
+    /// name the container -- by VMID to `pct` here, through the node's API
+    /// for one elsewhere, found the way every command finds it.
+    pub fn snapshot(self: *Self, container_id: []const u8, name: []const u8, description: ?[]const u8) !void {
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        try self.pve_client.snapshot(loc.vmid, name, description, loc.remote());
+    }
+
+    /// Roll back to a snapshot. Proxmox only rolls back a stopped container,
+    /// so the OCI state nexcage keeps is left as it is -- unless --start
+    /// brought the container up again, which is `start`'s bookkeeping.
+    pub fn rollback(self: *Self, container_id: []const u8, name: []const u8, start_after: bool) !void {
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        try self.pve_client.rollback(loc.vmid, name, start_after, loc.remote());
+        if (start_after) {
+            const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
+            const kept = self.persistedBundle(container_id);
+            defer if (kept) |b| self.allocator.free(b);
+            self.writeOciState(container_id, "running", init_pid, kept) catch {};
+        }
+    }
+
+    pub fn deleteSnapshot(self: *Self, container_id: []const u8, name: []const u8) !void {
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        try self.pve_client.deleteSnapshot(loc.vmid, name, loc.remote());
+    }
+
+    /// The container's snapshots, oldest first, from its node's API.
+    pub fn listSnapshots(self: *Self, allocator: std.mem.Allocator, container_id: []const u8) ![]pve.PveClient.Snapshot {
+        var loc = try self.resolveLocation(container_id);
+        defer loc.deinit();
+        return self.pve_client.listSnapshots(allocator, loc.vmid, loc.node);
+    }
+
     /// Whether the container's processes are frozen. `pct status` cannot answer
     /// this -- Proxmox has no notion of the state -- so `state` reads the
     /// cgroup.

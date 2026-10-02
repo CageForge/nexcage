@@ -345,6 +345,36 @@ jobs:
         expect_exit 1 nx pause no-such-container-$$
         expect_exit 1 nx resume no-such-container-$$
 
+        echo "[E2E] snapshots through pct, with a file written in between to prove the rollback"
+        # lvm-thin can snapshot; a raw volume on the directory storage cannot,
+        # and on a node without local-lvm that is what the container has.
+        if [ "$ROOTFS" = local-lvm ]; then
+          nx snapshot "$NAME" e2e-before --description "before the e2e write"
+          $SUDO pct listsnapshot "$ID" | grep -q 'e2e-before' \
+            || { echo "::error::pct listsnapshot $ID does not show e2e-before after nexcage snapshot"; exit 1; }
+          nx snapshots "$NAME" | grep -q '^e2e-before' \
+            || { echo "::error::nexcage snapshots does not list e2e-before"; nx snapshots "$NAME"; exit 1; }
+          nx exec "$NAME" -- sh -c 'echo after > /root/e2e-after-snapshot'
+          nx exec "$NAME" -- test -f /root/e2e-after-snapshot
+          echo "[E2E] rollback of a running container is Proxmox's refusal, passed on"
+          expect_exit 1 nx rollback "$NAME" e2e-before
+          nx stop "$NAME"
+          expect_status "$NAME" stopped
+          nx rollback "$NAME" e2e-before --start
+          expect_status "$NAME" running
+          # exec exits with the command's status, so `test -f` on the file
+          # written after the snapshot is 1 once the rollback took it away.
+          expect_exit 1 nx exec "$NAME" -- test -f /root/e2e-after-snapshot
+          echo "[E2E] the file written after the snapshot is gone, and --start brought the container up"
+          nx delsnapshot "$NAME" e2e-before
+          expect_exit 1 nx delsnapshot "$NAME" e2e-before
+          if $SUDO pct listsnapshot "$ID" | grep -q 'e2e-before'; then
+            echo "::error::e2e-before is still there after delsnapshot"; exit 1
+          fi
+        else
+          echo "::warning::snapshot checks skipped: the rootfs storage is $ROOTFS, a raw volume that cannot snapshot; this node has no local-lvm"
+        fi
+
         echo "[E2E] stop"
         nx stop "$NAME"
         expect_status "$NAME" stopped

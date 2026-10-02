@@ -155,6 +155,7 @@ Two suites:
 
 **`lxc-sim`** (`tests/perf/lxc_sim.sh`) runs the Proxmox LXC lifecycle —
 `version`, `list` with ten containers, `create`, `state`, `start`, `exec`,
+`snapshot`, `snapshots`, `rollback`, `delsnapshot`,
 `kill`, `stop`, `delete`, `run`, `create` from an 8 MB OCI bundle — against the
 simulator's fake tools. For each command:
 
