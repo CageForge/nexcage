@@ -13,11 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **`state` reports `ociVersion` 1.3.0**, the runtime-spec baseline since v0.7.4, from one constant, `OCI_RUNTIME_SPEC_VERSION`; both backends wrote a hand-written `1.0.0`, which the dependency check reported as #294. `features` is unchanged: it is libcrun's own claim about what the library implements.
+- **The crun job of `dependency_check.yml` keeps one open issue truthful.** It rewrites the issue's title and body when the pin or the latest release moves, and closes the issue once the pin is based on the latest release; `workflow_dispatch` gained `dry_run`, which prints what would be filed, edited or closed instead, and `scripts/dev.sh act` runs the job that way by default.
 - The simulator's fake host moved from `tests/sim/run.sh` into `tests/sim/lib.sh`, which the perf suite shares.
 - `crun_build.yml`'s features document check is `tests/crun/features_check.py`, so the local run and CI run the same one.
 - `.gitignore` covers what the GitHub-hosted jobs write into their checkout (`zig-out-release/`, `err.txt`, `features.json`, `bundle/`), because act runs them in this one; `.dockerignore` leaves out `.actrc`.
 
 ### Fixed
+- **The dependency check reported the vendored crun as 1.14.2** in #227, its 26 closed duplicates and #295, filed after the pin had reached 1.30.1. In a submodule checkout `.git` is a file, so the step's `[ -d .git ]` never matched and it took the first `N.N.N` on any line of NEWS containing "version", a changelog line from 2024. It now reports the pinned commit of the fork `.gitmodules` names and the release `.upstream_tag` declares, checked against the newest NEWS entry; the latest-release lookup is authenticated rather than turning a rate limit into "null"; and an update means the pin is version-older than the release, not merely different.
 - **The CRI test could not run under rootless podman.** It enabled cgroup controllers in one write naming `cpuset` and `io`, which a user's cgroup does not delegate, so the write failed as a whole and enabled none; and containerd in a user namespace was not told to leave `oom_score_adj` and AppArmor alone, so libcrun's `write to /proc/self/oom_score_adj` failed every sandbox. Controllers are enabled one at a time now, and the two containerd options are set when the test runs in a user namespace. CI's rootful Docker is unaffected.
 
 ## [0.13.0] - 2026-09-27

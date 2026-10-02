@@ -2,7 +2,10 @@ name: Dependency Updates Check
 
 # Files at most one open issue per dependency: before creating one, each job
 # looks for an open issue with its labels and stops if it finds it. Without
-# that the workflow filed a new copy every Monday.
+# that the workflow filed a new copy every Monday. The crun job goes further:
+# it rewrites that issue's title and body when what it reports has changed,
+# and closes it once the pin is based on the latest release, so the open issue
+# cannot go stale the way #227 and #295 did.
 #
 # There is no Proxmox VE release check any more. It compared the latest PVE
 # release with the first "N.N" grepped out of README/CHANGELOG/docs — which was
@@ -27,6 +30,11 @@ on:
         description: 'Check all dependencies (OCI, crun)'
         required: false
         default: 'true'
+        type: boolean
+      dry_run:
+        description: 'Print what would be done to issues without creating, editing or closing any'
+        required: false
+        default: false
         type: boolean
 
 jobs:
@@ -80,6 +88,7 @@ jobs:
               return;
             }
 
+            const title = `[Dependency] nexcage reports ociVersion ${{ steps.oci_runtime.outputs.current_runtime_spec }}, runtime-spec is ${{ steps.oci_runtime.outputs.latest_runtime_spec }}`;
             let body = '## OCI Runtime Spec\n\n';
             body += `nexcage reports \`"ociVersion": "${{ steps.oci_runtime.outputs.current_runtime_spec }}"\` in its \`state\` output; `;
             body += `the OCI runtime-spec is at ${{ steps.oci_runtime.outputs.latest_runtime_spec }}.\n\n`;
@@ -87,10 +96,14 @@ jobs:
             body += `Raising it is a claim about conformance, so it is a decision rather than a bump — this issue only reports the difference.\n\n`;
             body += `Filed by the Dependency Updates Check workflow.`;
 
+            if (${{ inputs.dry_run == true }}) {
+              core.info(`dry run: would file "${title}"`);
+              return;
+            }
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `[Dependency] nexcage reports ociVersion ${{ steps.oci_runtime.outputs.current_runtime_spec }}, runtime-spec is ${{ steps.oci_runtime.outputs.latest_runtime_spec }}`,
+              title: title,
               body: body,
               labels: ['dependencies', 'oci', 'automated']
             });
@@ -108,75 +121,158 @@ jobs:
       - name: Get crun version from deps
         id: current_crun
         run: |
-          if [ -d "deps/crun" ]; then
-            cd deps/crun
-            # Check if it's a git repository
-            if [ -d ".git" ]; then
-              # Try to get tag, if not available use commit hash
-              if CURRENT_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null); then
-                CURRENT_VERSION="$CURRENT_TAG"
-              elif CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
-                CURRENT_VERSION="$CURRENT_TAG"
-              else
-                CURRENT_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-              fi
-            else
-              # Not a git repo, try to find version in files (VERSION, Makefile, etc.)
-              CURRENT_VERSION=$(grep -rE "VERSION|version" Makefile.am configure.ac NEWS 2>/dev/null | \
-                grep -oP '\d+\.\d+\.\d+' | head -1 || \
-                echo "unknown")
-            fi
-            echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-            cd ../..
-          else
-            echo "current_version=unknown" >> $GITHUB_OUTPUT
+          set -uo pipefail
+          # deps/crun is a submodule of a crun fork that carries no tags, so
+          # `git describe` cannot name it. This step used to test
+          # `[ -d .git ]` first, which is false in a submodule checkout (.git
+          # is a file there, pointing into the superproject), so it always
+          # fell through to the first "N.N.N" on any line of Makefile.am,
+          # configure.ac or NEWS containing "version". That was a changelog
+          # line from 2024, "follow up for 1.14.2", and it became the
+          # "Current Version: 1.14.2" of #227, its 26 closed duplicates and
+          # #295, while the vendored code was 1.24 and then 1.30.1.
+          #
+          # What the repository pins is the submodule commit, so report that.
+          # The release it is based on is what the fork's .upstream_tag
+          # declares, the marker scripts/gen_crun_headers_local.sh and
+          # crun_vendor_sync.yml read, checked against the newest NEWS entry:
+          # crun's release commit adds "* crun-N.N" there and is the commit
+          # that gets tagged. A pin without the marker falls back to NEWS.
+          if ! HEAD_SHORT=$(git rev-parse --short HEAD 2>/dev/null); then
+            echo "::error::$PWD is not a git checkout, so there is no pinned crun to read"
+            exit 1
           fi
+          read -r _ TYPE PIN _ < <(git ls-tree HEAD -- deps/crun) || true
+          if [ "${TYPE:-}" != "commit" ]; then
+            echo "::error::deps/crun is not a submodule in $HEAD_SHORT, so there is no pinned crun to report"
+            exit 1
+          fi
+          URL=$(git config -f .gitmodules --get submodule.deps/crun.url || true)
+          case "$URL" in
+            https://github.com/*/*|git@github.com:*/*)
+              FORK=${URL#https://github.com/}; FORK=${FORK#git@github.com:}; FORK=${FORK%.git} ;;
+            *)
+              echo "::error::.gitmodules gives deps/crun the url '$URL', which is not a GitHub repository"
+              exit 1 ;;
+          esac
+          # A submodule checkout has a .git *file*, so test for existence, not
+          # for a directory. Without this, an empty deps/crun makes git walk
+          # up and answer with nexcage's own HEAD.
+          if [ ! -e deps/crun/.git ]; then
+            echo "::error::deps/crun is not checked out; the checkout step needs submodules: recursive"
+            exit 1
+          fi
+          CHECKED_OUT=$(git -C deps/crun rev-parse --verify --quiet HEAD 2>/dev/null || true)
+          if [ "$CHECKED_OUT" != "$PIN" ]; then
+            echo "::error::deps/crun is checked out at ${CHECKED_OUT:-nothing} but this commit pins $PIN"
+            exit 1
+          fi
+          BASE=$(sed -nE '/^\* crun-[0-9]+(\.[0-9]+)+/{ s/^\* crun-([0-9]+(\.[0-9]+)+).*$/\1/p; q; }' deps/crun/NEWS 2>/dev/null || true)
+          if [ -z "$BASE" ]; then
+            echo "::error::deps/crun/NEWS has no '* crun-N.N' entry, so the release the pin follows is unknown"
+            exit 1
+          fi
+          if [ -f deps/crun/.upstream_tag ]; then
+            MARKED=$(head -n1 deps/crun/.upstream_tag | tr -d '[:space:]')
+            if [ "$MARKED" != "$BASE" ]; then
+              echo "::error::deps/crun/.upstream_tag names '$MARKED' but the newest NEWS entry is crun-$BASE, so the pinned commit is not the release its marker claims"
+              exit 1
+            fi
+            SOURCE="the fork's \`.upstream_tag\` names that release and its NEWS agrees"
+          else
+            SOURCE="the newest entry in its NEWS is \`* crun-$BASE\`, and the pin has no \`.upstream_tag\`"
+          fi
+          echo "deps/crun pins $FORK@${PIN:0:8}, based on crun $BASE: ${SOURCE//\`/}"
+          {
+            echo "commit=$PIN"
+            echo "fork=$FORK"
+            echo "base_version=$BASE"
+            echo "base_source=$SOURCE"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check latest crun release
         id: latest_crun
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ steps.current_crun.outputs.base_version }}
         run: |
-          LATEST_VERSION=$(curl -s https://api.github.com/repos/containers/crun/releases/latest | jq -r '.tag_name')
-          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
-
-          CURRENT="${{ steps.current_crun.outputs.current_version }}"
-
-          if [ "$LATEST_VERSION" != "$CURRENT" ] && [ "$CURRENT" != "unknown" ]; then
-            echo "⚠️ crun update available: $CURRENT → $LATEST_VERSION"
-            echo "update_available=true" >> $GITHUB_OUTPUT
+          set -uo pipefail
+          # Authenticated on purpose: the anonymous curl this replaces shared
+          # one rate limit with every runner on the same address, and its
+          # `jq -r .tag_name` turned a "rate limit exceeded" reply into a
+          # latest version of "null".
+          LATEST=$(gh api repos/containers/crun/releases/latest --jq '.tag_name // empty' || true)
+          if [ -z "$LATEST" ]; then
+            echo "::error::could not read the latest containers/crun release, so nothing was compared"
+            exit 1
+          fi
+          echo "latest_version=$LATEST" >> "$GITHUB_OUTPUT"
+          # An update is available when the base is an older release than
+          # the latest, not merely a different string: sort -V knows that
+          # 1.30 comes before 1.30.1.
+          if [ "$BASE" != "$LATEST" ] && printf '%s\n%s\n' "$BASE" "$LATEST" | sort -CV; then
+            echo "⚠️ crun update available: $BASE → $LATEST"
+            echo "update_available=true" >> "$GITHUB_OUTPUT"
           else
-            echo "✅ crun is up to date"
-            echo "update_available=false" >> $GITHUB_OUTPUT
+            echo "✅ crun $BASE is not behind the latest release, $LATEST"
+            echo "update_available=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create Issue for crun Update
-        if: steps.latest_crun.outputs.update_available == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const open = await github.paginate(github.rest.issues.listForRepo, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'automated,crun',
-              per_page: 100,
-            });
-            if (open.length > 0) {
-              core.info(`#${open[0].number} already tracks crun updates; not filing another`);
-              return;
-            }
+      - name: File, refresh or close the crun issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN: ${{ steps.current_crun.outputs.commit }}
+          FORK: ${{ steps.current_crun.outputs.fork }}
+          BASE: ${{ steps.current_crun.outputs.base_version }}
+          SOURCE: ${{ steps.current_crun.outputs.base_source }}
+          LATEST: ${{ steps.latest_crun.outputs.latest_version }}
+          UPDATE: ${{ steps.latest_crun.outputs.update_available }}
+          DRY_RUN: ${{ inputs.dry_run == true }}
+        run: |
+          set -uo pipefail
+          PINNED="[$FORK@${PIN:0:8}](https://github.com/$FORK/commit/$PIN)"
+          RELEASE="[$LATEST](https://github.com/containers/crun/releases/tag/$LATEST)"
+          # At most one open issue tracks crun: the one carrying the
+          # workflow's labels. Reuse it, bring it up to date when the pin or
+          # the latest release moved since it was filed, and close it once the
+          # pin is based on the latest release. Nothing corrected #227, so it
+          # said "1.14.2" for five months, and #295 was filed as
+          # "1.14.2 → 1.30.1" against a pin that already was 1.30.1.
+          OPEN=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label automated --label crun --limit 100 --json number,title)
+          NUMBER=$(jq -r 'first(.[].number) // empty' <<<"$OPEN")
 
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `[Dependency] crun Update Available: ${{ steps.current_crun.outputs.current_version }} → ${{ steps.latest_crun.outputs.latest_version }}`,
-              body: `## crun Library Update Available\n\n` +
-                    `- **Current Version**: ${{ steps.current_crun.outputs.current_version }}\n` +
-                    `- **Latest Version**: ${{ steps.latest_crun.outputs.latest_version }}\n\n` +
-                    `This issue was automatically created by the Dependency Updates Check workflow.\n` +
-                    `Please review and update crun if needed.\n\n` +
-                    `Release: https://github.com/containers/crun/releases/tag/${{ steps.latest_crun.outputs.latest_version }}`,
-              labels: ['dependencies', 'crun', 'automated']
-            });
+          if [ "$UPDATE" != true ]; then
+            if [ -z "$NUMBER" ]; then
+              echo "crun $BASE is current and no issue tracks it; nothing to do"
+              exit 0
+            fi
+            echo "#$NUMBER is open but crun $BASE is not behind $LATEST; closing it"
+            if [ "$DRY_RUN" = true ]; then echo "dry run: not closing it"; exit 0; fi
+            gh issue close "$NUMBER" --repo "$GITHUB_REPOSITORY" --reason completed \
+              --comment "\`deps/crun\` is pinned to $PINNED, which is based on crun $BASE: $SOURCE. The latest containers/crun release is $RELEASE, so there is nothing to update. Closed by the Dependency Updates Check workflow."
+            exit 0
+          fi
+
+          TITLE="[Dependency] crun Update Available: $BASE ($FORK@${PIN:0:8}) → $LATEST"
+          BODY=$(cat <<EOF
+          ## crun
+
+          \`deps/crun\` is pinned to $PINNED, which is based on crun $BASE: $SOURCE. The latest containers/crun release is $RELEASE.
+
+          Filed by the Dependency Updates Check workflow, which updates this issue in place when the pin or the latest release moves and closes it once the pin is based on the latest release.
+          EOF
+          )
+          if [ -z "$NUMBER" ]; then
+            echo "no open issue tracks crun; filing: $TITLE"
+            if [ "$DRY_RUN" = true ]; then echo "dry run: not filing it"; exit 0; fi
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY" --label dependencies --label crun --label automated
+          elif [ "$(jq -r --argjson n "$NUMBER" '.[] | select(.number == $n) | .title' <<<"$OPEN")" = "$TITLE" ]; then
+            echo "#$NUMBER already reports this; not filing another"
+          else
+            echo "#$NUMBER is open but out of date; updating it to: $TITLE"
+            if [ "$DRY_RUN" = true ]; then echo "dry run: not updating it"; exit 0; fi
+            gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
 
   summary:
     name: Dependency Check Summary
