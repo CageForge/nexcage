@@ -43,13 +43,13 @@ jobs:
           set -uo pipefail
           LATEST_RUNTIME=$(curl -sS https://api.github.com/repos/opencontainers/runtime-spec/releases/latest | jq -r '.tag_name // empty')
 
-          # The version nexcage itself declares, which is the only runtime-spec
-          # version the repository states anywhere: the ociVersion its `state`
-          # output carries. This used to grep .github/ and deps/ for any
-          # "vN.N.N" near the words "runtime-spec", which found nothing, so the
-          # check never fired — and would have reported whatever unrelated
-          # version appeared there first the day one did.
-          CURRENT_RUNTIME=$(grep -rhoP '"ociVersion\\?": ?\\?"\K\d+\.\d+\.\d+' src/ 2>/dev/null | sort -u | head -1)
+          # The version nexcage itself declares: OCI_RUNTIME_SPEC_VERSION in
+          # src/core/constants.zig, which its `state` output carries. This used
+          # to grep .github/ and deps/ for any "vN.N.N" near the words
+          # "runtime-spec", which found nothing, so the check never fired; then
+          # it took the first `"ociVersion": "N.N.N"` literal in src/, where a
+          # test bundle's 1.0.0 sorts before the real value.
+          CURRENT_RUNTIME=$(grep -hoP 'OCI_RUNTIME_SPEC_VERSION[^"]*"\K\d+\.\d+\.\d+' src/core/constants.zig 2>/dev/null | head -1)
           [ -n "$CURRENT_RUNTIME" ] && CURRENT_RUNTIME="v$CURRENT_RUNTIME" || CURRENT_RUNTIME="unknown"
 
           echo "latest_runtime_spec=$LATEST_RUNTIME" >> $GITHUB_OUTPUT

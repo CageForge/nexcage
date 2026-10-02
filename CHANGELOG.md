@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Performance suites** in `tests/perf/`: the Proxmox LXC lifecycle against the simulator — wall time, peak memory and the number of `pct`/`pvesh`/`pvesm` runs per command — and the crun backend's lifecycle next to crun's own binary. `scripts/dev.sh perf --against <ref>` builds both revisions ReleaseSafe, runs them in alternating rounds and exits 1 on a regression: any extra Proxmox tool run, or a time shift most of the samples agree on.
 
 ### Changed
+- **`state` reports `ociVersion` 1.3.0**, the runtime-spec baseline since v0.7.4, from one constant, `OCI_RUNTIME_SPEC_VERSION`; both backends wrote a hand-written `1.0.0`, which the dependency check reported as #294. `features` is unchanged: it is libcrun's own claim about what the library implements.
 - The simulator's fake host moved from `tests/sim/run.sh` into `tests/sim/lib.sh`, which the perf suite shares.
 - `crun_build.yml`'s features document check is `tests/crun/features_check.py`, so the local run and CI run the same one.
 - `.gitignore` covers what the GitHub-hosted jobs write into their checkout (`zig-out-release/`, `err.txt`, `features.json`, `bundle/`), because act runs them in this one; `.dockerignore` leaves out `.actrc`.

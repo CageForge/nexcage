@@ -19,6 +19,15 @@ pub const DEFAULT_BRIDGE_NAME: []const u8 = "vmbr0";
 // "proxmox.rootfs_size_gb"; matches the Proxmox VE web UI default.
 pub const DEFAULT_ROOTFS_SIZE_GB: u32 = 8;
 
+// OCI runtime-spec
+// The version of the OCI runtime-spec that nexcage's own documents follow:
+// `state` names it, and bundle parsing has accepted 1.3.0 configs since
+// v0.7.4. It is nexcage's claim, not a backend's: `features` answers for
+// libcrun alone and reports that library's own range. The Dependency Updates
+// Check workflow reads this line. Until it existed, `state` carried a
+// hand-written "1.0.0" in two places, which #294 reported.
+pub const OCI_RUNTIME_SPEC_VERSION: []const u8 = "1.3.0";
+
 // VM constants
 pub const DEFAULT_VM_ID: u32 = 100;
 pub const DEFAULT_VM_MEMORY_GB: u32 = 1;

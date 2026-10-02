@@ -350,7 +350,7 @@ Prints OCI runtime state JSON:
 
 ```json
 {
-  "ociVersion": "1.0.0",
+  "ociVersion": "1.3.0",
   "id": "web-1",
   "status": "running",
   "pid": 48213,

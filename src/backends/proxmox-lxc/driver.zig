@@ -770,7 +770,7 @@ pub const ProxmoxLxcDriver = struct {
         defer json_buf.deinit(self.allocator);
         const writer = json_buf.writer(self.allocator);
 
-        try writer.writeAll("{\n  \"ociVersion\": \"1.0.0\",\n  \"id\": ");
+        try writer.print("{{\n  \"ociVersion\": \"{s}\",\n  \"id\": ", .{core.constants.OCI_RUNTIME_SPEC_VERSION});
         try core.json.writeString(writer, container_id);
         try writer.print(",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": ", .{ status, pid });
         if (bundle_path) |bp| try core.json.writeString(writer, bp) else try writer.writeAll("null");
