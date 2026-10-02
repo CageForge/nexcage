@@ -22,8 +22,10 @@ DEV=$REPO/zig-out/dev
 BUNDLE=$DEV/bundle
 
 # The jobs `act` runs by default: every job a pull request gets on a
-# GitHub-hosted runner, except security.yml, whose scanners upload to GitHub.
-ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check"
+# GitHub-hosted runner, except security.yml, whose scanners upload to GitHub,
+# plus dependency_check.yml's crun job in its dry run, which reads the
+# repository's issues and the crun releases and writes nothing.
+ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
 
 if [ -t 2 ]; then B=$'\033[1m' R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' N=$'\033[0m'; else B='' R='' G='' Y='' N=''; fi
 say()  { echo "${B}==> $*${N}" >&2; }
@@ -183,7 +185,7 @@ doctor() {
 
   echo "${B}pve-e2e${N}"
   if have gh && gh auth status >/dev/null 2>&1; then ok "gh (logged in)" "$(gh --version | head -1)"
-  else opt "gh" "optional: gh auth login, to dispatch the Proxmox E2E"; fi
+  else opt "gh" "optional: gh auth login, to dispatch the Proxmox E2E and to run dependency_check through act"; fi
 
   echo
   if [ "$bad" = 0 ]; then echo "${G}everything the commands need is here${N}"
@@ -304,11 +306,26 @@ act_jobs() {
   [ "$ENGINE" != podman ] || extra=(--env DOCKER_BUILDKIT=0 "${extra[@]}")
   mkdir -p "$DEV/act-artifacts"
   for a in "${jobs[@]}"; do
-    local wf=${a%%:*} job=${a#*:}
+    local wf=${a%%:*} job=${a#*:} event=pull_request
+    local -a run=("$ACT") with=()
     [ -f ".github/workflows/$wf" ] || die "no workflow .github/workflows/$wf"
     [ "$job" != "$a" ] || die "'$a': name a job as WORKFLOW:JOB, e.g. ci.yml:simulation"
-    step "act-${wf%.yml}-$job" "$ACT" pull_request -W ".github/workflows/$wf" -j "$job" \
-      --artifact-server-path "$DEV/act-artifacts" "${extra[@]}"
+    case "$wf" in
+      dependency_check.yml)
+        # Scheduled, so it is dispatched here. Given a token its last step
+        # files, edits or closes issues in the repository; dry_run prints
+        # what it would do instead. The token is gh's, read inside the step
+        # so that it never appears on a command line or in a log.
+        if ! gh auth token >/dev/null 2>&1; then
+          warn "skipping $a: it reads GitHub with gh's token (gh auth login)"; continue
+        fi
+        event=workflow_dispatch
+        with=(--input dry_run=true -s GITHUB_TOKEN)
+        # shellcheck disable=SC2016  # the inner shell expands these
+        run=(bash -c 'GITHUB_TOKEN=$(gh auth token) exec "$0" "$@"' "$ACT") ;;
+    esac
+    step "act-${wf%.yml}-$job" "${run[@]}" "$event" -W ".github/workflows/$wf" -j "$job" \
+      --artifact-server-path "$DEV/act-artifacts" "${with[@]}" "${extra[@]}"
   done
 }
 
