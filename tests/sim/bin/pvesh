@@ -117,6 +117,68 @@ case "$1 $2" in
     [ -n "$vmid" ] || { echo "no vmid given" >&2; exit 2; }
     echo "$vmid stopped $host $node" >> "$SIM/db"
     ;;
+  "get /nodes/"*/lxc/*/snapshot)
+    # The node's snapshot list, from the same per-container file the fake pct
+    # writes: name, snaptime, description and parent, plus the "current" entry
+    # the real API adds for where the container is now.
+    vmid=$(echo "$2" | sed -n 's|.*/lxc/\([0-9]*\)/snapshot|\1|p')
+    awk -v v="$vmid" '$1==v {f=1} END {exit !f}' "$SIM/db" || {
+      echo "Configuration file 'nodes/x/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    printf '['
+    parent=""
+    if [ -s "$SIM/snaps.$vmid" ]; then
+      while read -r name t desc; do
+        [ -n "$name" ] || continue
+        printf '{"name":"%s","snaptime":%s' "$name" "$t"
+        [ -n "$desc" ] && printf ',"description":"%s"' "$desc"
+        [ -n "$parent" ] && printf ',"parent":"%s"' "$parent"
+        printf '},'
+        parent=$name
+      done < "$SIM/snaps.$vmid"
+    fi
+    printf '{"name":"current","description":"You are here!"'
+    [ -n "$parent" ] && printf ',"parent":"%s"' "$parent"
+    printf ',"running":0}]\n'
+    ;;
+  "create /nodes/"*/lxc/*/snapshot/*/rollback)
+    vmid=$(echo "$2" | sed -n 's|.*/lxc/\([0-9]*\)/snapshot/.*|\1|p')
+    name=$(echo "$2" | sed -n 's|.*/snapshot/\([^/]*\)/rollback|\1|p')
+    shift 2
+    start=0
+    while [ $# -gt 0 ]; do case $1 in --start) start=$2; shift 2 ;; *) shift ;; esac; done
+    awk -v v="$vmid" '$1==v {f=1} END {exit !f}' "$SIM/db" || {
+      echo "Configuration file 'nodes/x/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    awk -v n="$name" '$1==n {f=1} END {exit !f}' "$SIM/snaps.$vmid" 2>/dev/null || {
+      echo "snapshot '$name' does not exist" >&2; exit 2; }
+    # As pct does: a running container is stopped before the rollback.
+    awk -v v="$vmid" '$1==v {$2="stopped"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+    echo "rollback: $name" >> "$SIM/conf.$vmid"
+    if [ "$start" = 1 ]; then
+      awk -v v="$vmid" '$1==v {$2="running"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+    fi
+    ;;
+  "create /nodes/"*/lxc/*/snapshot)
+    # A snapshot through the node's API: --snapname N [--description D], with
+    # the same rules as the fake pct.
+    vmid=$(echo "$2" | sed -n 's|.*/lxc/\([0-9]*\)/snapshot|\1|p')
+    shift 2
+    name=""; desc=""
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --snapname) name=$2; shift 2 ;;
+        --description) desc=$2; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    awk -v v="$vmid" '$1==v {f=1} END {exit !f}' "$SIM/db" || {
+      echo "Configuration file 'nodes/x/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    [ -n "$name" ] || { echo "400 Parameter verification failed." >&2; echo "snapname: property is missing" >&2; exit 2; }
+    [ -e "$SIM/fail_snapshot" ] && { cat "$SIM/fail_snapshot" >&2; exit 255; }
+    [ "$name" = current ] && { echo "unable to use snapshot name 'current' (reserved name)" >&2; exit 255; }
+    awk -v n="$name" '$1==n {f=1} END {exit !f}' "$SIM/snaps.$vmid" 2>/dev/null && {
+      echo "snapshot name '$name' already used" >&2; exit 255; }
+    printf '%s %s %s\n' "$name" "$(date +%s)" "$desc" >> "$SIM/snaps.$vmid"
+    ;;
   "create /nodes/"*/lxc/*)
     # /nodes/<node>/lxc/<vmid>/status/<action>
     path=$2
@@ -148,6 +210,15 @@ case "$1 $2" in
     else
       grep -vF "$node $volid" "$SIM/node_templates" > "$SIM/nt.tmp" && mv "$SIM/nt.tmp" "$SIM/node_templates"
     fi
+    ;;
+  "delete /nodes/"*/lxc/*/snapshot/*)
+    vmid=$(echo "$2" | sed -n 's|.*/lxc/\([0-9]*\)/snapshot/.*|\1|p')
+    name=${2##*/snapshot/}
+    awk -v v="$vmid" '$1==v {f=1} END {exit !f}' "$SIM/db" || {
+      echo "Configuration file 'nodes/x/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    awk -v n="$name" '$1==n {f=1} END {exit !f}' "$SIM/snaps.$vmid" 2>/dev/null || {
+      echo "snapshot '$name' does not exist" >&2; exit 2; }
+    awk -v n="$name" '$1!=n' "$SIM/snaps.$vmid" > "$SIM/snaps.$vmid.tmp" && mv "$SIM/snaps.$vmid.tmp" "$SIM/snaps.$vmid"
     ;;
   "delete /nodes/"*)
     path=$2

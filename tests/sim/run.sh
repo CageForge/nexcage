@@ -71,7 +71,7 @@ nx -h;         check "-h prints usage"                   all 'rc 0' 'out_has "Co
 nx version;    check "version prints a version"          all 'rc 0' 'out_has "nexcage version "'
 nx help;       check "help lists commands"               all 'rc 0' 'out_has "create"'
 nx bogus;      check "unknown command -> exit 2"         all 'rc 2' 'err_has "unknown command"'
-for c in create start stop delete list state kill run version help health; do
+for c in create start stop delete list state kill run version help health snapshot snapshots rollback delsnapshot; do
   nx "$c" --help; check "$c --help exits 0 without touching pct" all 'rc 0' '[ -s "$S/out" ]' 'not_called_re "^pct"'
 done
 nx version --help; check "version --help prints help, not the version" all 'rc 0' 'out_has "Usage: nexcage version"'
@@ -624,6 +624,96 @@ check "--resources together with value flags is a usage error" \
 nx update --memory 1G no-such-up-$$
 check "update on a container that does not exist is an error" all 'rc 1' 'not_called_re "^pct set"'
 
+echo "=== snapshots ==="
+# Proxmox takes the snapshot; nexcage names the container. The fake pct keeps
+# a snapshot list per container, and the fake pvesh answers the node's
+# /snapshot path from the same list, which is what `snapshots` reads.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name sn-1 "$TPL" >/dev/null 2>&1
+
+nx snapshot sn-1 before --description "before the upgrade"
+check "snapshot takes one through pct, with the description" \
+  all 'rc 0' 'called "pct snapshot 100 before --description before the upgrade"'
+nx snapshot --description "flag first" sn-1 early
+check "the description may come before the container too" \
+  all 'rc 0' 'called "pct snapshot 100 early --description flag first"'
+nx snapshots sn-1
+check "snapshots lists them from the node's API, oldest first, without 'current'" \
+  all 'rc 0' 'called_re "^pvesh get /nodes/[^/]+/lxc/100/snapshot --output-format json$"' \
+      'out_has "before the upgrade"' '[ "$(awk -F"\t" "NR==2 {print \$1}" "$S/out")" = before ]' '! out_has current'
+nx snapshots --format json sn-1
+check "snapshots --format json is a JSON array with the names and a UTC time" \
+  all 'rc 0' 'json_ok "$S/out"' \
+      "[ \"\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[1][\"name\"])' \"$S/out\")\" = early ]" \
+      'grep -qE "\"created\": \"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\"" "$S/out"'
+nx snapshots --format xml sn-1
+check "snapshots --format takes json or table only" all 'rc 2' 'not_called_re "^pvesh"'
+
+nx snapshot sn-1 before
+check "a name already used is pct's refusal, passed on" all 'rc 1' 'err_has "already used"'
+nx snapshot sn-1 current
+check "'current' is Proxmox's reserved name, and the refusal is pct's" all 'rc 1' 'err_has reserved'
+nx snapshot sn-1
+check "snapshot without a name is a usage error, before any pct" all 'rc 2' 'not_called_re "^pct snapshot"'
+nx snapshot sn-1 two words
+check "a second word after the name is a usage error, not a name silently dropped" \
+  all 'rc 2' 'not_called_re "^pct snapshot"'
+# What pct says for a raw volume on a directory storage: the format cannot be
+# snapshotted. nexcage adds which storages can.
+echo "unable to create snapshot: can't snapshot this image format" > "$S/fail_snapshot"
+nx snapshot sn-1 nope
+check "a storage that cannot snapshot: pct's refusal, plus which storages can" \
+  all 'rc 1' 'err_has "cannot take snapshots"' 'err_has "lvm-thin"'
+rm -f "$S/fail_snapshot"
+
+# Proxmox stops a running container itself before rolling it back, and
+# nexcage's own record has to say so afterwards, as it does after stop.
+nx start sn-1 >/dev/null 2>&1
+nx rollback sn-1 before
+check "rollback of a running container: Proxmox stops it first, through pct, exit 0" \
+  all 'rc 0' 'called "pct rollback 100 before"' '[ "$(awk "\$1==100 {print \$2}" "$S/db")" = stopped ]' \
+      'grep -q "^rollback: before$" "$S/conf.100"'
+check "and nexcage's state record says stopped, with no pid" \
+  all '[ "$(json_get "$S/run/nexcage/sn-1/state.json" status)" = stopped ]' '[ "$(json_get "$S/run/nexcage/sn-1/state.json" pid)" = 0 ]'
+nx rollback sn-1 before
+check "rollback of a stopped container goes through pct, and it stays stopped" \
+  all 'rc 0' 'called "pct rollback 100 before"' '[ "$(awk "\$1==100 {print \$2}" "$S/db")" = stopped ]'
+nx rollback sn-1 before --start
+check "rollback --start asks pct to start it afterwards, and it runs" \
+  all 'rc 0' 'called "pct rollback 100 before --start 1"' '[ "$(awk "\$1==100 {print \$2}" "$S/db")" = running ]'
+nx state sn-1
+check "state agrees it is running after rollback --start" \
+  all 'rc 0' '[ "$(json_get "$S/out" status)" = running ]' '[ "$(json_get "$S/out" pid)" != 0 ]'
+nx stop sn-1 >/dev/null 2>&1
+nx rollback sn-1 ghost
+check "rollback to a snapshot that does not exist is an error" all 'rc 1' 'err_has "does not exist"'
+
+nx create --name sn-2 "$TPL" >/dev/null 2>&1
+nx snapshot sn-2 fresh >/dev/null 2>&1
+nx rollback sn-2 fresh
+check "a never-started container is still 'created' after a rollback" \
+  all 'rc 0' '[ "$(json_get "$S/run/nexcage/sn-2/state.json" status)" = created ]'
+nx state sn-2
+check "and state says so" all 'rc 0' '[ "$(json_get "$S/out" status)" = created ]'
+
+nx delsnapshot sn-1 before
+check "delsnapshot removes it through pct" all 'rc 0' 'called "pct delsnapshot 100 before"'
+nx snapshots sn-1
+check "and the list no longer has it, while the other stays" \
+  all 'rc 0' '! out_has before' 'out_has early'
+nx delsnapshot sn-1 before
+check "deleting it twice is an error" all 'rc 1' 'err_has "does not exist"'
+
+nx --runtime crun snapshot sn-1 x
+check "snapshot on the crun backend is refused as a Proxmox operation, before any pct" \
+  all 'rc 1' 'err_has "Proxmox VE operation"' 'not_called_re "^pct"'
+nx --runtime crun snapshots sn-1
+check "so is the listing" all 'rc 1' 'err_has "Proxmox VE operation"' 'not_called_re "^pvesh"'
+nx snapshot no-such-sn-$$ x
+check "snapshot of a container that does not exist is an error naming it" \
+  all 'rc 1' 'err_has "not found"' 'not_called_re "^pct snapshot"'
+
 echo "=== the cluster ==="
 # A container on another node. `pct` cannot see it -- that is what the fourth
 # field means in the fake's db, and what makes these checks worth anything:
@@ -666,6 +756,21 @@ check "pause on another node is refused: the freezer is that host's filesystem" 
 nx update --memory 1G remote-1
 check "update on another node goes through that node's API, not pct" \
   all 'rc 0' 'called_re "^pvesh set /nodes/[^/]+/lxc/[0-9]+/config --memory 1024$"' 'not_called_re "^pct set"'
+
+# Snapshots are the API's as well: /nodes/<node>/lxc/<vmid>/snapshot.
+nx snapshot remote-1 s1 --description there
+check "snapshot on another node goes through that node's API, not pct" \
+  all 'rc 0' 'called "pvesh create /nodes/titan/lxc/200/snapshot --snapname s1 --description there"' 'not_called_re "^pct snapshot"'
+nx snapshots remote-1
+check "snapshots on another node reads that node's list" \
+  all 'rc 0' 'called "pvesh get /nodes/titan/lxc/200/snapshot --output-format json"' 'out_has s1'
+nx stop remote-1 >/dev/null 2>&1
+nx rollback remote-1 s1 --start
+check "rollback on another node goes through that node's API, with --start" \
+  all 'rc 0' 'called "pvesh create /nodes/titan/lxc/200/snapshot/s1/rollback --start 1"' 'not_called_re "^pct rollback"'
+nx delsnapshot remote-1 s1
+check "delsnapshot on another node goes through that node's API" \
+  all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200/snapshot/s1"' 'not_called_re "^pct delsnapshot"'
 
 nx create --name remote-1 "$TPL"
 check "a name taken on another node is not free" \

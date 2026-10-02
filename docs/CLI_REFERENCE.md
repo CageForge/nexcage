@@ -539,6 +539,52 @@ $ cat /sys/fs/cgroup/lxc/100/memory.max
 805306368
 ```
 
+### snapshot, snapshots, rollback, delsnapshot
+
+```bash
+nexcage snapshot <name> <snapshot> [--description <text>]
+nexcage snapshots [--format json|table] <name>
+nexcage rollback <name> <snapshot> [--start]
+nexcage delsnapshot <name> <snapshot>
+```
+
+Snapshots of a container's volumes, through Proxmox, with pct's verbs. Proxmox
+holds the volumes and knows how to snapshot each kind of storage, so each of
+these is one `pct` call for a container on this host and one call to the
+node's API for a container elsewhere; what nexcage adds is the container by
+name, found on any node of the cluster.
+
+The storage has to be one that can snapshot: zfs, lvm-thin, or a directory
+storage holding qcow2. A raw volume on a directory storage cannot, and the
+answer is then pct's refusal plus one line saying which storages can. The
+snapshot's name is Proxmox's: letters, digits, `-` and `_`, not `current`, and
+not one already used.
+
+`rollback` of a running container stops it first: Proxmox kills it, as `pct
+rollback` does, and it stays stopped unless `--start`, which brings it up
+again as pct's own flag does. nexcage's `state` says `stopped` afterwards, as
+it does after `stop`. Everything written since the snapshot is gone.
+
+`snapshots` reads the node's API, for a container here as for one elsewhere,
+because the API gives the times as numbers; they are printed as UTC. The
+`current` entry Proxmox lists to mark the present state is not a snapshot and
+is left out. The table is tab-separated; `--format json` is an array of
+`{name, created, description, parent}`.
+
+```bash
+$ nexcage snapshot web-1 before-upgrade --description 'before 1.2'
+$ nexcage snapshots web-1
+NAME            CREATED                 DESCRIPTION
+before-upgrade  2026-10-02T08:00:00Z    before 1.2
+$ nexcage rollback web-1 before-upgrade --start
+$ nexcage delsnapshot web-1 before-upgrade
+```
+
+These are Proxmox verbs, not runtime-spec ones: `--runtime crun` refuses them,
+because libcrun has no storage of its own to snapshot. Exit status is `1` for
+a refusal from Proxmox or a container that does not exist, `2` for a usage
+error, as elsewhere.
+
 ### ps
 
 ```bash

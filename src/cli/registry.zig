@@ -21,6 +21,7 @@ const rmi = @import("rmi.zig");
 const pause_cmd_mod = @import("pause.zig");
 const resume_cmd_mod = @import("resume.zig");
 const update_cmd_mod = @import("update.zig");
+const snapshot_cmd_mod = @import("snapshot.zig");
 const kill = @import("kill.zig");
 const exec = @import("exec.zig");
 // const template = @import("template.zig");
@@ -124,6 +125,10 @@ var rmi_cmd = rmi.RmiCommand{};
 var pause_cmd = pause_cmd_mod.PauseCommand{};
 var resume_cmd = resume_cmd_mod.ResumeCommand{};
 var update_cmd = update_cmd_mod.UpdateCommand{};
+var snapshot_cmd = snapshot_cmd_mod.SnapshotCommand{};
+var snapshots_cmd = snapshot_cmd_mod.SnapshotsCommand{};
+var rollback_cmd = snapshot_cmd_mod.RollbackCommand{};
+var delsnapshot_cmd = snapshot_cmd_mod.DelsnapshotCommand{};
 // var template_cmd = template.TemplateCommand{};
 
 /// Generic command registration helper
@@ -248,6 +253,10 @@ pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
     try registerCommand(registry, &pause_cmd, pause_cmd_mod.PauseCommand);
     try registerCommand(registry, &resume_cmd, resume_cmd_mod.ResumeCommand);
     try registerCommand(registry, &update_cmd, update_cmd_mod.UpdateCommand);
+    try registerCommand(registry, &snapshot_cmd, snapshot_cmd_mod.SnapshotCommand);
+    try registerCommand(registry, &snapshots_cmd, snapshot_cmd_mod.SnapshotsCommand);
+    try registerCommand(registry, &rollback_cmd, snapshot_cmd_mod.RollbackCommand);
+    try registerCommand(registry, &delsnapshot_cmd, snapshot_cmd_mod.DelsnapshotCommand);
 }
 
 /// Register all built-in commands with logger
@@ -272,4 +281,8 @@ pub fn registerBuiltinCommandsWithLogger(registry: *CommandRegistry, logger: *co
     try registerCommandWithLogger(registry, &pause_cmd, pause_cmd_mod.PauseCommand, logger);
     try registerCommandWithLogger(registry, &resume_cmd, resume_cmd_mod.ResumeCommand, logger);
     try registerCommandWithLogger(registry, &update_cmd, update_cmd_mod.UpdateCommand, logger);
+    try registerCommandWithLogger(registry, &snapshot_cmd, snapshot_cmd_mod.SnapshotCommand, logger);
+    try registerCommandWithLogger(registry, &snapshots_cmd, snapshot_cmd_mod.SnapshotsCommand, logger);
+    try registerCommandWithLogger(registry, &rollback_cmd, snapshot_cmd_mod.RollbackCommand, logger);
+    try registerCommandWithLogger(registry, &delsnapshot_cmd, snapshot_cmd_mod.DelsnapshotCommand, logger);
 }

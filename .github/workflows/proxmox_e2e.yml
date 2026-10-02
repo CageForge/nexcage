@@ -119,12 +119,22 @@ jobs:
           if $SUDO pvesm status | awk '{print $1}' | grep -qx local-lvm; then ROOTFS=local-lvm; else ROOTFS=local; fi
         fi
 
+        # The snapshot checks need a storage that can snapshot: lvm-thin or ZFS.
+        # `local` is a directory storage, where a container's rootfs is a raw
+        # volume that cannot be. 03-prepare-runner-host.sh makes a ZFS pool on
+        # a file for this; a node without any such storage skips the checks and
+        # says so.
+        SNAPSTORE=${SNAPSTORE:-}
+        if [ -z "$SNAPSTORE" ]; then
+          SNAPSTORE=$($SUDO pvesm status | awk '$2=="lvmthin" || $2=="zfspool" {print $1; exit}') || true
+        fi
+
         BRIDGE=${BRIDGE:-vmbr50}
         if ! ip -br link | awk '{print $1}' | grep -qx "$BRIDGE"; then
           echo "::error::bridge $BRIDGE not found on the runner"
           exit 1
         fi
-        echo "Template: $TPL  Storage: $ROOTFS  Bridge: $BRIDGE"
+        echo "Template: $TPL  Storage: $ROOTFS  Snapshot storage: ${SNAPSTORE:-none}  Bridge: $BRIDGE"
 
         # nexcage reads ./config.json before /etc/nexcage/config.json
         cat > config.json <<EOF
@@ -137,12 +147,13 @@ jobs:
         NAME="gh-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         RUN_NAME="$NAME-run"
         OCI_NAME="$NAME-oci"
+        SNAP_NAME="$NAME-snap"
         BUNDLE="/var/lib/nexcage/bundles/$OCI_NAME"
 
         vmid_of() { $SUDO pct list 2>/dev/null | awk -v n="$1" 'NR>1 && $NF==n {print $1}'; }
         cleanup() {
           set +e
-          for n in "$NAME" "$RUN_NAME" "$OCI_NAME"; do
+          for n in "$NAME" "$RUN_NAME" "$OCI_NAME" "$SNAP_NAME"; do
             id=$(vmid_of "$n")
             [ -z "$id" ] && continue
             echo "[E2E] Cleanup $n vmid=$id"
@@ -344,6 +355,65 @@ jobs:
         echo "[E2E] pause and resume on a container that does not exist are errors"
         expect_exit 1 nx pause no-such-container-$$
         expect_exit 1 nx resume no-such-container-$$
+
+        echo "[E2E] a snapshot of a raw volume on the directory storage is Proxmox's refusal, with the line about which storages can"
+        # The main container's rootfs is on $ROOTFS. On `local` that is a raw
+        # volume, and pct's refusal is what the hint in nexcage keys on; this
+        # is where the real pct's wording meets that match.
+        if [ "$ROOTFS" = local ]; then
+          out=$(nx snapshot "$NAME" e2e-nope 2>&1) && { echo "::error::snapshot on a raw volume on $ROOTFS succeeded; it should not be able to"; exit 1; }
+          echo "$out" | grep -q 'cannot take snapshots' \
+            || { echo "::error::the refusal lacks nexcage's line about which storages can; pct said:"; echo "$out"; exit 1; }
+          echo "[E2E] refused, and the line is there"
+        fi
+
+        echo "[E2E] snapshots through pct, on a storage that can: take, list, write a file, roll back, see it gone, delete"
+        if [ -n "$SNAPSTORE" ]; then
+          SNAPCFG="$PWD/e2e-snap-config.json"
+          cat > "$SNAPCFG" <<EOF
+        {
+          "network": { "bridge": "$BRIDGE" },
+          "proxmox": { "storage": "$SNAPSTORE", "rootfs_size_gb": 2 }
+        }
+        EOF
+          nx run --config "$SNAPCFG" --name "$SNAP_NAME" "$TPL"
+          expect_status "$SNAP_NAME" running
+          SID=$(vmid_of "$SNAP_NAME")
+          conf_has "$SID" "^rootfs: $SNAPSTORE:"
+          nx snapshot "$SNAP_NAME" e2e-before --description "before the e2e write"
+          $SUDO pct listsnapshot "$SID" | grep -q 'e2e-before' \
+            || { echo "::error::pct listsnapshot $SID does not show e2e-before after nexcage snapshot"; exit 1; }
+          nx snapshots "$SNAP_NAME" | grep -q '^e2e-before' \
+            || { echo "::error::nexcage snapshots does not list e2e-before"; nx snapshots "$SNAP_NAME"; exit 1; }
+          nx exec "$SNAP_NAME" -- sh -c 'echo after > /root/e2e-after-snapshot'
+          nx exec "$SNAP_NAME" -- test -f /root/e2e-after-snapshot
+          echo "[E2E] rollback of a running container: Proxmox stops it first, and nexcage's state says stopped"
+          # Measured here on PVE 9.2: AbstractConfig::snapshot_rollback kills a
+          # running container and rolls back; it exits 0, not with a refusal.
+          nx rollback "$SNAP_NAME" e2e-before
+          expect_status "$SNAP_NAME" stopped
+          nx state "$SNAP_NAME" | grep -q '"status": "stopped"' \
+            || { echo "::error::state after the rollback of a running container is not stopped:"; nx state "$SNAP_NAME"; exit 1; }
+          nx start "$SNAP_NAME"
+          # exec exits with the command's status, so `test -f` on the file
+          # written after the snapshot is 1 once the rollback took it away.
+          expect_exit 1 nx exec "$SNAP_NAME" -- test -f /root/e2e-after-snapshot
+          echo "[E2E] the file written after the snapshot is gone"
+          nx exec "$SNAP_NAME" -- sh -c 'echo again > /root/e2e-after-snapshot'
+          nx rollback "$SNAP_NAME" e2e-before --start
+          expect_status "$SNAP_NAME" running
+          expect_exit 1 nx exec "$SNAP_NAME" -- test -f /root/e2e-after-snapshot
+          echo "[E2E] rollback --start brought the container up, and the second file is gone too"
+          nx delsnapshot "$SNAP_NAME" e2e-before
+          expect_exit 1 nx delsnapshot "$SNAP_NAME" e2e-before
+          if $SUDO pct listsnapshot "$SID" | grep -q 'e2e-before'; then
+            echo "::error::e2e-before is still there after delsnapshot"; exit 1
+          fi
+          nx delete --force "$SNAP_NAME"
+          rm -f "$SNAPCFG"
+        else
+          echo "::warning::snapshot checks skipped: no lvm-thin or ZFS storage on this node; 03-prepare-runner-host.sh makes a ZFS pool on a file for them"
+        fi
 
         echo "[E2E] stop"
         nx stop "$NAME"

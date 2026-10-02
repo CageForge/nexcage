@@ -1373,6 +1373,119 @@ pub const PveClient = struct {
         };
     }
 
+    /// One of a container's snapshots, as the node's API lists them.
+    pub const Snapshot = struct {
+        allocator: std.mem.Allocator,
+        name: []u8,
+        /// Proxmox's note on it; empty when none was given.
+        description: []u8,
+        /// When it was taken, as an epoch second. Null for an entry the API
+        /// gives no time for.
+        snaptime: ?i64,
+        /// The snapshot it was taken on top of, or null for the first.
+        parent: ?[]u8,
+
+        pub fn deinit(self: *Snapshot) void {
+            self.allocator.free(self.name);
+            self.allocator.free(self.description);
+            if (self.parent) |p| self.allocator.free(p);
+        }
+
+        fn earlier(_: void, a: Snapshot, b: Snapshot) bool {
+            return (a.snaptime orelse 0) < (b.snaptime orelse 0);
+        }
+    };
+
+    /// Take a snapshot of the container's volumes. Proxmox holds those volumes
+    /// and knows how to snapshot each kind of storage, so this is one `pct`
+    /// call here and one API call for a container on another node; nothing
+    /// is for nexcage to do but name the container. A storage that cannot
+    /// snapshot -- a raw volume on a directory storage -- is pct's refusal,
+    /// passed on with the one thing pct does not say: which storages can.
+    pub fn snapshot(self: *const Self, vmid: []const u8, name: []const u8, description: ?[]const u8, node: ?[]const u8) !void {
+        var args = std.ArrayListUnmanaged([]const u8){};
+        defer args.deinit(self.allocator);
+        var path: ?[]u8 = null;
+        defer if (path) |p| self.allocator.free(p);
+        if (node) |n| {
+            path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}/snapshot", .{ n, vmid });
+            try args.appendSlice(self.allocator, &.{ "pvesh", "create", path.?, "--snapname", name });
+        } else {
+            try args.appendSlice(self.allocator, &.{ "pct", "snapshot", vmid, name });
+        }
+        if (description) |d| try args.appendSlice(self.allocator, &.{ "--description", d });
+        try self.runSnapshotCommand(args.items);
+    }
+
+    /// Roll the container back to a snapshot. Proxmox stops a running
+    /// container itself first, with a kill, and `start_after` is pct's own
+    /// --start: bring it up again afterwards.
+    pub fn rollback(self: *const Self, vmid: []const u8, name: []const u8, start_after: bool, node: ?[]const u8) !void {
+        var args = std.ArrayListUnmanaged([]const u8){};
+        defer args.deinit(self.allocator);
+        var path: ?[]u8 = null;
+        defer if (path) |p| self.allocator.free(p);
+        if (node) |n| {
+            path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}/snapshot/{s}/rollback", .{ n, vmid, name });
+            try args.appendSlice(self.allocator, &.{ "pvesh", "create", path.? });
+        } else {
+            try args.appendSlice(self.allocator, &.{ "pct", "rollback", vmid, name });
+        }
+        if (start_after) try args.appendSlice(self.allocator, &.{ "--start", "1" });
+        try self.runSnapshotCommand(args.items);
+    }
+
+    /// Delete a snapshot. A name that is not there is pct's error, passed on.
+    pub fn deleteSnapshot(self: *const Self, vmid: []const u8, name: []const u8, node: ?[]const u8) !void {
+        if (node) |n| {
+            const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}/snapshot/{s}", .{ n, vmid, name });
+            defer self.allocator.free(path);
+            return self.runSnapshotCommand(&.{ "pvesh", "delete", path });
+        }
+        return self.runSnapshotCommand(&.{ "pct", "delsnapshot", vmid, name });
+    }
+
+    /// The container's snapshots, oldest first, from the node's API -- for a
+    /// container here as for one elsewhere, because the API answers with
+    /// names, times as numbers and parents, where `pct listsnapshot` prints a
+    /// tree for a person, in the node's local time with no zone. The "current"
+    /// entry the API adds, which marks where the container is now, is not a
+    /// snapshot and is left out.
+    pub fn listSnapshots(self: *const Self, allocator: std.mem.Allocator, vmid: []const u8, node: []const u8) ![]Snapshot {
+        const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}/snapshot", .{ node, vmid });
+        defer self.allocator.free(path);
+        const args = [_][]const u8{ "pvesh", "get", path, "--output-format", "json" };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) return self.mapPctError(res.stderr);
+        return parseSnapshotList(allocator, res.stdout) catch |err| {
+            if (self.logger) |log| log.err("the answer for {s} was not a snapshot list ({s}): {s}", .{ path, @errorName(err), std.mem.trim(u8, res.stdout, " \t\r\n") }) catch {};
+            return core.Error.OperationFailed;
+        };
+    }
+
+    /// Run one of the snapshot commands, `pct` or `pvesh`, and pass its
+    /// refusal on. The one line added is for the storage that cannot
+    /// snapshot, because pct names the format and not the fix.
+    fn runSnapshotCommand(self: *const Self, args: []const []const u8) !void {
+        const res = try common.runCommand(self.allocator, self.logger, args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code == 0) return;
+        const err = self.mapPctError(res.stderr);
+        if (std.mem.indexOf(u8, res.stderr, "can't snapshot this image format") != null or
+            std.mem.indexOf(u8, res.stderr, "snapshot feature is not available") != null)
+        {
+            if (self.logger) |log| log.err("the container's rootfs is on a storage that cannot take snapshots: a raw volume on a directory storage cannot, and zfs, lvm-thin and qcow2 can", .{}) catch {};
+        }
+        return err;
+    }
+
     /// Find an available template in Proxmox
     pub fn findAvailableTemplate(self: *const Self) ![]const u8 {
         const args = [_][]const u8{ "pveam", "list", "local" };
@@ -1505,4 +1618,99 @@ test "parsePveVersion handles a release suffix and rejects the rest" {
     try std.testing.expect(parsePveVersion("") == null);
     try std.testing.expect(parsePveVersion("proxmox-ve: unknown") == null);
     try std.testing.expect(parsePveVersion("pve-manager: 9.1.1") == null);
+}
+
+/// The snapshot list the API returns, parsed into `Snapshot`s and sorted oldest
+/// first. The entry named "current" is the container's present state, not a
+/// snapshot, and is skipped.
+pub fn parseSnapshotList(allocator: std.mem.Allocator, json: []const u8) ![]PveClient.Snapshot {
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json, .{});
+    defer parsed.deinit();
+    if (parsed.value != .array) return error.NotAnArray;
+
+    var out = std.ArrayListUnmanaged(PveClient.Snapshot){};
+    errdefer {
+        for (out.items) |*s| s.deinit();
+        out.deinit(allocator);
+    }
+    for (parsed.value.array.items) |item| {
+        if (item != .object) continue;
+        const obj = item.object;
+        const name_v = obj.get("name") orelse continue;
+        if (name_v != .string) continue;
+        if (std.mem.eql(u8, name_v.string, "current")) continue;
+
+        const name = try allocator.dupe(u8, name_v.string);
+        errdefer allocator.free(name);
+        const description = try allocator.dupe(u8, if (obj.get("description")) |d| (if (d == .string) d.string else "") else "");
+        errdefer allocator.free(description);
+        const parent: ?[]u8 = if (obj.get("parent")) |p| (if (p == .string) try allocator.dupe(u8, p.string) else null) else null;
+        errdefer if (parent) |p| allocator.free(p);
+        const snaptime: ?i64 = if (obj.get("snaptime")) |t| (if (t == .integer) t.integer else null) else null;
+
+        try out.append(allocator, .{
+            .allocator = allocator,
+            .name = name,
+            .description = description,
+            .snaptime = snaptime,
+            .parent = parent,
+        });
+    }
+    std.mem.sort(PveClient.Snapshot, out.items, {}, PveClient.Snapshot.earlier);
+    return out.toOwnedSlice(allocator);
+}
+
+/// An epoch second as UTC, `2026-10-02T08:00:00Z`: unambiguous where the
+/// node's local time, which `pct listsnapshot` prints, carries no zone. An
+/// empty string for a time before 1970, which no snapshot has.
+pub fn formatUtc(buf: []u8, secs: i64) []const u8 {
+    if (secs < 0) return "";
+    const es = std.time.epoch.EpochSeconds{ .secs = @intCast(secs) };
+    const year_day = es.getEpochDay().calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+    const day_secs = es.getDaySeconds();
+    return std.fmt.bufPrint(buf, "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}Z", .{
+        year_day.year,
+        month_day.month.numeric(),
+        @as(u32, month_day.day_index) + 1,
+        day_secs.getHoursIntoDay(),
+        day_secs.getMinutesIntoHour(),
+        day_secs.getSecondsIntoMinute(),
+    }) catch "";
+}
+
+test "parseSnapshotList: oldest first, 'current' left out, missing fields tolerated" {
+    const json =
+        \\[{"name":"later","snaptime":1790928000,"description":"after the upgrade","parent":"before"},
+        \\ {"name":"current","description":"You are here!","parent":"later","running":0},
+        \\ {"name":"before","snaptime":1790812799}]
+    ;
+    const list = try parseSnapshotList(std.testing.allocator, json);
+    defer {
+        for (list) |*s| s.deinit();
+        std.testing.allocator.free(list);
+    }
+    try std.testing.expectEqual(@as(usize, 2), list.len);
+    try std.testing.expectEqualStrings("before", list[0].name);
+    try std.testing.expectEqualStrings("", list[0].description);
+    try std.testing.expect(list[0].parent == null);
+    try std.testing.expectEqualStrings("later", list[1].name);
+    try std.testing.expectEqualStrings("after the upgrade", list[1].description);
+    try std.testing.expectEqualStrings("before", list[1].parent.?);
+    try std.testing.expectEqual(@as(?i64, 1790928000), list[1].snaptime);
+}
+
+test "parseSnapshotList: an empty list and a non-list answer" {
+    const empty = try parseSnapshotList(std.testing.allocator, "[]");
+    defer std.testing.allocator.free(empty);
+    try std.testing.expectEqual(@as(usize, 0), empty.len);
+    try std.testing.expectError(error.NotAnArray, parseSnapshotList(std.testing.allocator, "{\"errors\":{}}"));
+}
+
+test "formatUtc writes the epoch second as UTC with a zone" {
+    var buf: [32]u8 = undefined;
+    try std.testing.expectEqualStrings("2026-10-02T08:00:00Z", formatUtc(&buf, 1790928000));
+    try std.testing.expectEqualStrings("2026-09-30T23:59:59Z", formatUtc(&buf, 1790812799));
+    try std.testing.expectEqualStrings("1970-01-01T00:00:00Z", formatUtc(&buf, 0));
+    try std.testing.expectEqualStrings("", formatUtc(&buf, -1));
 }

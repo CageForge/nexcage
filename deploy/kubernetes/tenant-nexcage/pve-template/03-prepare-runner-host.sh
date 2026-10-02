@@ -70,3 +70,22 @@ if [ ! -x "$DIR/config.sh" ]; then
 fi
 ls "$DIR/config.sh"
 echo "RUNNER_HOST_PREPARED"
+
+echo "=== a storage that can snapshot: a ZFS pool on a file ==="
+# The VM has one disk and `local` is a directory storage, where a container's
+# rootfs is a raw volume that cannot be snapshotted. proxmox_e2e.yml's snapshot
+# checks need lvm-thin or ZFS, and ZFS comes with Proxmox VE, so a pool on a
+# sparse file is enough: it costs what the containers on it use. The pool's
+# cachefile records the path, which is how it comes back after a reboot; if it
+# does not, `zpool import -d /var/lib e2ezfs`.
+E2E_ZFS_POOL=${E2E_ZFS_POOL:-e2ezfs}
+E2E_ZFS_FILE=${E2E_ZFS_FILE:-/var/lib/e2e-zfs.img}
+E2E_ZFS_SIZE=${E2E_ZFS_SIZE:-16G}
+if ! zpool list -H -o name 2>/dev/null | grep -qx "$E2E_ZFS_POOL"; then
+  [ -e "$E2E_ZFS_FILE" ] || truncate -s "$E2E_ZFS_SIZE" "$E2E_ZFS_FILE"
+  zpool create -o ashift=12 -O compression=lz4 "$E2E_ZFS_POOL" "$E2E_ZFS_FILE"
+fi
+if ! pvesm status 2>/dev/null | awk '{print $1}' | grep -qx e2e-zfs; then
+  pvesm add zfspool e2e-zfs --pool "$E2E_ZFS_POOL" --content rootdir,images
+fi
+pvesm status | awk '$1=="e2e-zfs"'

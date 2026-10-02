@@ -361,6 +361,10 @@ fn printUsage() !void {
         \\  pause     Freeze every process in a container
         \\  resume    Thaw a frozen container
         \\  update    Change a running container's resource limits
+        \\  snapshot  Take a snapshot of a container, through Proxmox
+        \\  snapshots List a container's snapshots
+        \\  rollback  Roll a container back to a snapshot
+        \\  delsnapshot  Delete a snapshot
         \\  run       Create and start a container
         \\  help      Show this help message
         \\  version   Show version information
@@ -523,6 +527,17 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             // than a command on the command line.
             options.process_file = try allocator.dupe(u8, args[i + 1]);
             i += 2;
+        } else if (std.mem.eql(u8, arg, "--description") and i + 1 < args.len) {
+            // `snapshot --description <text>`. Named here so that the generic
+            // branch below does not drop it and take its value for the
+            // container's name; after the snapshot's name the command reads it
+            // from options.args itself.
+            options.description = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--start")) {
+            // `rollback --start`: pct's flag, start the container afterwards.
+            options.start_after_rollback = true;
+            i += 1;
         } else if ((std.mem.eql(u8, arg, "--signal") or std.mem.eql(u8, arg, "-s")) and i + 1 < args.len) {
             // kill reads the signal from options.args. This flag used to fall
             // into the generic "-..." branch below, which dropped it and left
@@ -541,7 +556,8 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
                 options.command == .delete or options.command == .state or
                 options.command == .kill or options.command == .exec or
                 options.command == .ps or options.command == .pause or options.command == .update or
-                options.command == .resume_ or
+                options.command == .resume_ or options.command == .snapshot or options.command == .snapshots or
+                options.command == .rollback or options.command == .delsnapshot or
                 (bundle_given and (options.command == .create or options.command == .run));
             if (id_first) {
                 // For start/stop/delete/state/kill/exec, first argument is
@@ -650,6 +666,10 @@ fn parseCommand(command_str: []const u8) core.Command {
     if (std.mem.eql(u8, command_str, "pause")) return .pause;
     if (std.mem.eql(u8, command_str, "resume")) return .resume_;
     if (std.mem.eql(u8, command_str, "update")) return .update;
+    if (std.mem.eql(u8, command_str, "snapshot")) return .snapshot;
+    if (std.mem.eql(u8, command_str, "snapshots")) return .snapshots;
+    if (std.mem.eql(u8, command_str, "rollback")) return .rollback;
+    if (std.mem.eql(u8, command_str, "delsnapshot")) return .delsnapshot;
     return .help; // Default to help
 }
 

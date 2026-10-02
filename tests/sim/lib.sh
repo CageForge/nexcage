@@ -52,7 +52,7 @@ reset_sim() {
   rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/* "$S"/cgroup/*
   mkdir -p "$S/cache"
   : > "$S/db"; : > "$S/calls"
-  rm -f "$S"/fail_* "$S/pvever" "$S"/lock.* "$S"/conf.* "$S"/tarlist.* "$S"/sig.*
+  rm -f "$S"/fail_* "$S/pvever" "$S"/lock.* "$S"/conf.* "$S"/tarlist.* "$S"/sig.* "$S"/snaps.*
   printf "%s\n" "$TPL" local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz local:vztmpl/debian-12.tar.zst > "$S/templates"
   # The storage's content listing is the other view of the same files, and it
   # was never reset: a pull from a later section -- or an earlier run of this
