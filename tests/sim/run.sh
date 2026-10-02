@@ -667,16 +667,18 @@ check "a storage that cannot snapshot: pct's refusal, plus which storages can" \
   all 'rc 1' 'err_has "cannot take snapshots"' 'err_has "lvm-thin"'
 rm -f "$S/fail_snapshot"
 
+# Proxmox stops a running container itself before rolling it back, and
+# nexcage's own record has to say so afterwards, as it does after stop.
 nx start sn-1 >/dev/null 2>&1
 nx rollback sn-1 before
-check "rollback of a running container is refused by Proxmox, and the reason is passed on" \
-  all 'rc 1' 'err_has "is running"' 'called "pct rollback 100 before"'
-nx stop sn-1 >/dev/null 2>&1
+check "rollback of a running container: Proxmox stops it first, through pct, exit 0" \
+  all 'rc 0' 'called "pct rollback 100 before"' '[ "$(awk "\$1==100 {print \$2}" "$S/db")" = stopped ]' \
+      'grep -q "^rollback: before$" "$S/conf.100"'
+check "and nexcage's state record says stopped, with no pid" \
+  all '[ "$(json_get "$S/run/nexcage/sn-1/state.json" status)" = stopped ]' '[ "$(json_get "$S/run/nexcage/sn-1/state.json" pid)" = 0 ]'
 nx rollback sn-1 before
-check "rollback goes through pct" \
-  all 'rc 0' 'called "pct rollback 100 before"' 'grep -q "^rollback: before$" "$S/conf.100"'
-check "and a stopped container stays stopped" \
-  all '[ "$(awk "\$1==100 {print \$2}" "$S/db")" = stopped ]'
+check "rollback of a stopped container goes through pct, and it stays stopped" \
+  all 'rc 0' 'called "pct rollback 100 before"' '[ "$(awk "\$1==100 {print \$2}" "$S/db")" = stopped ]'
 nx rollback sn-1 before --start
 check "rollback --start asks pct to start it afterwards, and it runs" \
   all 'rc 0' 'called "pct rollback 100 before --start 1"' '[ "$(awk "\$1==100 {print \$2}" "$S/db")" = running ]'
@@ -686,6 +688,14 @@ check "state agrees it is running after rollback --start" \
 nx stop sn-1 >/dev/null 2>&1
 nx rollback sn-1 ghost
 check "rollback to a snapshot that does not exist is an error" all 'rc 1' 'err_has "does not exist"'
+
+nx create --name sn-2 "$TPL" >/dev/null 2>&1
+nx snapshot sn-2 fresh >/dev/null 2>&1
+nx rollback sn-2 fresh
+check "a never-started container is still 'created' after a rollback" \
+  all 'rc 0' '[ "$(json_get "$S/run/nexcage/sn-2/state.json" status)" = created ]'
+nx state sn-2
+check "and state says so" all 'rc 0' '[ "$(json_get "$S/out" status)" = created ]'
 
 nx delsnapshot sn-1 before
 check "delsnapshot removes it through pct" all 'rc 0' 'called "pct delsnapshot 100 before"'

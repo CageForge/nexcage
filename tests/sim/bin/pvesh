@@ -150,8 +150,8 @@ case "$1 $2" in
       echo "Configuration file 'nodes/x/lxc/$vmid.conf' does not exist" >&2; exit 2; }
     awk -v n="$name" '$1==n {f=1} END {exit !f}' "$SIM/snaps.$vmid" 2>/dev/null || {
       echo "snapshot '$name' does not exist" >&2; exit 2; }
-    [ "$(awk -v v="$vmid" '$1==v {print $2}' "$SIM/db")" = running ] && {
-      echo "unable to rollback vm $vmid: vm is running" >&2; exit 255; }
+    # As pct does: a running container is stopped before the rollback.
+    awk -v v="$vmid" '$1==v {$2="stopped"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
     echo "rollback: $name" >> "$SIM/conf.$vmid"
     if [ "$start" = 1 ]; then
       awk -v v="$vmid" '$1==v {$2="running"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"

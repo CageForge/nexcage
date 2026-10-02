@@ -387,16 +387,23 @@ jobs:
             || { echo "::error::nexcage snapshots does not list e2e-before"; nx snapshots "$SNAP_NAME"; exit 1; }
           nx exec "$SNAP_NAME" -- sh -c 'echo after > /root/e2e-after-snapshot'
           nx exec "$SNAP_NAME" -- test -f /root/e2e-after-snapshot
-          echo "[E2E] rollback of a running container is Proxmox's refusal, passed on"
-          expect_exit 1 nx rollback "$SNAP_NAME" e2e-before
-          nx stop "$SNAP_NAME"
+          echo "[E2E] rollback of a running container: Proxmox stops it first, and nexcage's state says stopped"
+          # Measured here on PVE 9.2: AbstractConfig::snapshot_rollback kills a
+          # running container and rolls back; it exits 0, not with a refusal.
+          nx rollback "$SNAP_NAME" e2e-before
           expect_status "$SNAP_NAME" stopped
-          nx rollback "$SNAP_NAME" e2e-before --start
-          expect_status "$SNAP_NAME" running
+          nx state "$SNAP_NAME" | grep -q '"status": "stopped"' \
+            || { echo "::error::state after the rollback of a running container is not stopped:"; nx state "$SNAP_NAME"; exit 1; }
+          nx start "$SNAP_NAME"
           # exec exits with the command's status, so `test -f` on the file
           # written after the snapshot is 1 once the rollback took it away.
           expect_exit 1 nx exec "$SNAP_NAME" -- test -f /root/e2e-after-snapshot
-          echo "[E2E] the file written after the snapshot is gone, and --start brought the container up"
+          echo "[E2E] the file written after the snapshot is gone"
+          nx exec "$SNAP_NAME" -- sh -c 'echo again > /root/e2e-after-snapshot'
+          nx rollback "$SNAP_NAME" e2e-before --start
+          expect_status "$SNAP_NAME" running
+          expect_exit 1 nx exec "$SNAP_NAME" -- test -f /root/e2e-after-snapshot
+          echo "[E2E] rollback --start brought the container up, and the second file is gone too"
           nx delsnapshot "$SNAP_NAME" e2e-before
           expect_exit 1 nx delsnapshot "$SNAP_NAME" e2e-before
           if $SUDO pct listsnapshot "$SID" | grep -q 'e2e-before'; then

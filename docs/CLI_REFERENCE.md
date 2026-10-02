@@ -560,9 +560,10 @@ answer is then pct's refusal plus one line saying which storages can. The
 snapshot's name is Proxmox's: letters, digits, `-` and `_`, not `current`, and
 not one already used.
 
-`rollback` needs the container stopped; Proxmox refuses a running one, and the
-refusal is passed on as it is. `--start` brings the container up afterwards,
-as pct's own flag does. Everything written since the snapshot is gone.
+`rollback` of a running container stops it first: Proxmox kills it, as `pct
+rollback` does, and it stays stopped unless `--start`, which brings it up
+again as pct's own flag does. nexcage's `state` says `stopped` afterwards, as
+it does after `stop`. Everything written since the snapshot is gone.
 
 `snapshots` reads the node's API, for a container here as for one elsewhere,
 because the API gives the times as numbers; they are printed as UTC. The
@@ -575,7 +576,6 @@ $ nexcage snapshot web-1 before-upgrade --description 'before 1.2'
 $ nexcage snapshots web-1
 NAME            CREATED                 DESCRIPTION
 before-upgrade  2026-10-02T08:00:00Z    before 1.2
-$ nexcage stop web-1
 $ nexcage rollback web-1 before-upgrade --start
 $ nexcage delsnapshot web-1 before-upgrade
 ```

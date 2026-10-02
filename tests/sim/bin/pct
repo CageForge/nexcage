@@ -164,7 +164,11 @@ case "$cmd" in
       esac
     done
     has_snap "$vmid" "$name" || { echo "snapshot '$name' does not exist" >&2; exit 2; }
-    [ "$(status_of "$vmid")" = running ] && { echo "unable to rollback vm $vmid: vm is running" >&2; exit 255; }
+    # Proxmox VE (AbstractConfig::snapshot_rollback) stops a running
+    # container itself before rolling back -- PVE::LXC::vm_stop with kill --
+    # and starts it again only with --start. Measured on 9.2, where the
+    # rollback of a running container exited 0.
+    if [ "$(status_of "$vmid")" = running ]; then stop_init "$vmid"; set_status "$vmid" stopped; fi
     echo "rollback: $name" >> "$SIM/conf.$vmid"
     # Not `[ ... ] && start_ct`: as the arm's last command its status would
     # be the script's, and a rollback without --start would "fail".

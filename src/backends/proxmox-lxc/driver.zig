@@ -714,18 +714,28 @@ pub const ProxmoxLxcDriver = struct {
         try self.pve_client.snapshot(loc.vmid, name, description, loc.remote());
     }
 
-    /// Roll back to a snapshot. Proxmox only rolls back a stopped container,
-    /// so the OCI state nexcage keeps is left as it is -- unless --start
-    /// brought the container up again, which is `start`'s bookkeeping.
+    /// Roll back to a snapshot. Proxmox stops a running container itself
+    /// before rolling it back -- `PVE::LXC::vm_stop` with kill, from
+    /// AbstractConfig::snapshot_rollback -- and starts it again only with
+    /// --start. The OCI state nexcage keeps follows: `stop`'s bookkeeping for a
+    /// container that had been started, `start`'s when --start brought it up.
+    /// One that was never started stays "created"; a rollback does not change
+    /// that.
     pub fn rollback(self: *Self, container_id: []const u8, name: []const u8, start_after: bool) !void {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
         try self.pve_client.rollback(loc.vmid, name, start_after, loc.remote());
+        const kept = self.persistedBundle(container_id);
+        defer if (kept) |b| self.allocator.free(b);
         if (start_after) {
             const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
-            const kept = self.persistedBundle(container_id);
-            defer if (kept) |b| self.allocator.free(b);
             self.writeOciState(container_id, "running", init_pid, kept) catch {};
+            return;
+        }
+        const was = self.persistedStatus(container_id);
+        defer if (was) |s| self.allocator.free(s);
+        if (was != null and !std.mem.eql(u8, was.?, "created")) {
+            self.writeOciState(container_id, "stopped", 0, kept) catch {};
         }
     }
 
@@ -780,6 +790,17 @@ pub const ProxmoxLxcDriver = struct {
     /// write recorded it, or null. start and stop rewrite the state file, and
     /// an OCI caller reads `bundle` back from `state` after both.
     fn persistedBundle(self: *Self, container_id: []const u8) ?[]u8 {
+        return self.persistedString(container_id, "bundle");
+    }
+
+    /// The status the last state write recorded: "created" until the first
+    /// start, then what start, stop and their kin wrote.
+    fn persistedStatus(self: *Self, container_id: []const u8) ?[]u8 {
+        return self.persistedString(container_id, "status");
+    }
+
+    /// One string field of the container's state.json, or null.
+    fn persistedString(self: *Self, container_id: []const u8, key: []const u8) ?[]u8 {
         if (std.mem.indexOfScalar(u8, container_id, '/') != null) return null;
         const path = std.fmt.allocPrint(self.allocator, "{s}/{s}/state.json", .{ core.state_root.get(), container_id }) catch return null;
         defer self.allocator.free(path);
@@ -788,7 +809,7 @@ pub const ProxmoxLxcDriver = struct {
         const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, data, .{}) catch return null;
         defer parsed.deinit();
         if (parsed.value != .object) return null;
-        const value = parsed.value.object.get("bundle") orelse return null;
+        const value = parsed.value.object.get(key) orelse return null;
         if (value != .string) return null;
         return self.allocator.dupe(u8, value.string) catch null;
     }

@@ -152,15 +152,14 @@ pub const RollbackCommand = struct {
     pub fn help(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
         _ = self;
         return allocator.dupe(u8, "Usage: nexcage rollback <container-name> <snapshot-name> [--start]\n\n" ++
-            "Roll the container's volumes back to a snapshot, through Proxmox. The\n" ++
-            "container has to be stopped; Proxmox refuses a running one, and the\n" ++
-            "refusal is passed on as it is. Everything written since the snapshot\n" ++
-            "is gone afterwards.\n\n" ++
+            "Roll the container's volumes back to a snapshot, through Proxmox. A\n" ++
+            "running container is stopped first -- Proxmox kills it, as pct rollback\n" ++
+            "does -- and stays stopped unless --start. Everything written since the\n" ++
+            "snapshot is gone afterwards.\n\n" ++
             "Options:\n" ++
             "  --start       Start the container once it is back at the snapshot\n" ++
             "  -h, --help    Show this help message\n\n" ++
             "Examples:\n" ++
-            "  nexcage stop web-1\n" ++
             "  nexcage rollback web-1 before-upgrade --start\n");
     }
 

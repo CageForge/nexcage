@@ -1417,9 +1417,9 @@ pub const PveClient = struct {
         try self.runSnapshotCommand(args.items);
     }
 
-    /// Roll the container back to a snapshot. Proxmox rolls back a stopped
-    /// container and refuses a running one; that refusal is passed on as it
-    /// is. `start_after` is pct's own --start: bring the container up afterwards.
+    /// Roll the container back to a snapshot. Proxmox stops a running
+    /// container itself first, with a kill, and `start_after` is pct's own
+    /// --start: bring it up again afterwards.
     pub fn rollback(self: *const Self, vmid: []const u8, name: []const u8, start_after: bool, node: ?[]const u8) !void {
         var args = std.ArrayListUnmanaged([]const u8){};
         defer args.deinit(self.allocator);
