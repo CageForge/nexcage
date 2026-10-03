@@ -31,6 +31,30 @@ As of **0.13.0**, on amd64, running on the Proxmox VE host as root:
 
 Proxmox VE 8.x and 9.x. Pulling from a registry needs 9.1 or later.
 
+## System Requirements & Prerequisites
+
+`nexcage` runs directly on the Proxmox VE host as `root`.
+
+### Host Environment
+* **OS:** Proxmox VE 8.x or 9.x (amd64 architecture).
+  * *Note:* Pulling container images directly from a registry requires Proxmox VE 9.1 or later.
+* **Privileges:** `root` access on the host.
+* **Base Proxmox Tooling:** `pct`, `pvesh`, and `pveversion` (included by default with Proxmox VE).
+
+### System Dependencies
+* **For Standard LXC CLI (`nexcage-*-amd64`):**
+  * No additional runtime dependencies required beyond stock Proxmox VE.
+* **For OCI Runtime Mode (`nexcage-*-amd64-crun`):**
+  * Required runtime libraries (must be installed on the host for `containerd`/`CRI-O`/Kubernetes integration):
+    ```bash
+    apt install -y libjson-c5 libseccomp2 libcap2
+    ```
+
+### Build Dependencies (Source builds only)
+* **Zig Compiler:** Version `0.15.1` (or newer compatible toolchain).
+* **Packaging Utilities:** `dpkg-deb`, `gzip`, `du`, `cut`, `tr` (for building `.deb` packages via `scripts/build_deb_local.sh`).
+* **Container Engine:** Docker or Podman (optional, required only for building the `-crun` embedded binary from source).
+
 ## Install
 
 ```bash
@@ -102,6 +126,17 @@ How it was verified, engine by engine, and what Kubernetes asks a runtime:
 [docs/KUBERNETES_INTEGRATION.md](docs/KUBERNETES_INTEGRATION.md).
 
 ## Configure
+
+For standard Proxmox LXC management:
+```bash
+sudo mkdir -p /etc/nexcage
+sudo cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json
+```
+For OCI runtime mode (containerd / CRI-O / Kubernetes with -crun binary):
+```bash
+sudo mkdir -p /etc/nexcage
+sudo cp /usr/share/doc/nexcage/examples/config.oci.example.json /etc/nexcage/config.json
+```
 
 nexcage reads the file given with `--config <path>`, or else the first of
 `./config.json`, `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`

@@ -87,10 +87,22 @@ To build a `.deb` yourself: `bash scripts/build_deb_local.sh` (needs
 
 ## Configure
 
+Depending on how you intend to use `nexcage`, choose the appropriate base configuration:
+
+1. **For standalone Proxmox LXC management (CLI mode):**
+
 ```bash
 mkdir -p /etc/nexcage
 cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json   # .deb install
 # or: cp packaging/config/config.json /etc/nexcage/config.json            # source tree
+```
+2. **For OCI Runtime mode (containerd / CRI-O / Kubernetes using the -crun binary):**
+
+The OCI backend requires explicit routing rules to forward container operations to crun:
+
+```bash
+mkdir -p /etc/nexcage
+cp /usr/share/doc/nexcage/examples/config.oci.example.json /etc/nexcage/config.json
 ```
 
 Set at least `proxmox.storage` to a storage that holds container volumes

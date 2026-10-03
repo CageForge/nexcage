@@ -29,6 +29,7 @@ install -D -m 0644 packaging/man/nexcage.1 "$ROOT/usr/share/man/man1/nexcage.1"
 gzip -9n "$ROOT/usr/share/man/man1/nexcage.1"
 install -D -m 0644 packaging/completion/nexcage.bash "$ROOT/usr/share/bash-completion/completions/nexcage"
 install -D -m 0644 packaging/config/config.json "$ROOT/usr/share/doc/$PACKAGE/examples/config.json"
+install -D -m 0644 packaging/config/config.oci.example.json "$ROOT/usr/share/doc/$PACKAGE/examples/config.oci.example.json"
 install -D -m 0644 README.md "$ROOT/usr/share/doc/$PACKAGE/README.md"
 install -D -m 0644 LICENSE "$ROOT/usr/share/doc/$PACKAGE/copyright"
 
