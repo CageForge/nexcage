@@ -45,13 +45,13 @@ not code.
 | Item | Why now | Issue |
 |---|---|---|
 | Release snapshots: `snapshot`, `snapshots`, `rollback`, `delsnapshot` | Merged in [#300] and exercised by the E2E suite on a real host | [#299] |
-| Remove the Proxmox VM backend | 267 lines, compiled out by default, built by no workflow, and its operations log a warning: the state the runc backend was in when 0.13.0 removed it. `qm` can come back with a test behind it | no issue yet |
-| Fix `CODEOWNERS` and `MAINTAINERS.md` | GitHub reports every owner in `CODEOWNERS` as unknown: `@CageForge` is the organization, which cannot own code except through a team, and `@moriarti` is a different account from the maintainer's, `@themoriarti`. The file has never requested a review | no issue yet |
-| Protect `main` | It has no branch protection. Require `CI` and `crun backend build` to pass before a merge | no issue yet |
-| Make the review rule the one practised | `GOVERNANCE.md` and `MAINTAINERS.md` ask for two LGTMs on non-trivial changes, with one active maintainer to give them | no issue yet |
+| Remove the Proxmox VM backend | 267 lines, compiled out by default and built by no workflow. The router refuses every operation routed to it without calling the driver, and the driver imports a module the build does not define: the state the runc backend was in when 0.13.0 removed it. `qm` can come back with a test behind it | [#306] |
+| Fix `CODEOWNERS` and `MAINTAINERS.md` | GitHub reports every owner in `CODEOWNERS` as unknown: `@CageForge` is the organization, which cannot own code except through a team, and `@moriarti` is a different account from the maintainer's, `@themoriarti`. The file has never requested a review | [#303] |
+| Protect `main` | It has no branch protection. Require `CI` and `crun backend build` to pass before a merge | [#305] |
+| Make the review rule the one practised | `GOVERNANCE.md` and `MAINTAINERS.md` ask for two LGTMs on non-trivial changes, with one active maintainer to give them | [#304] |
 | Answer [#301] | An outside documentation contribution, open since 2026-10-04 | [#301] |
 | Close what is settled | [#117] and [#118] are superseded by snapshots through pct, as the changelog already says. [#119]'s caching shipped in 0.13.0 as reuse of an image already on the storage. [#108] asks for FreeBSD jails, which have no backend and no Proxmox (see *Not planned*). [#131] is a 2025 plan: what still applies becomes its own issue. Five sprint milestones were due in 2025 | — |
-| Docs that disagree with the code | `CLI_REFERENCE.md` says a bundle must sit under `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/`, which 0.10.0 stopped requiring. Rows 6 and 8 of the gap table in `KUBERNETES_INTEGRATION.md` read as open, though logs and sandboxes are the engine's, as row 7 already says of CNI; row 5 is *Not planned* below. The changelog's *Support Policy* is about v0.3.x | no issue yet |
+| Docs that disagree with the code | `CLI_REFERENCE.md` says a bundle must sit under `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/`, which 0.10.0 stopped requiring. Rows 6 and 8 of the gap table in `KUBERNETES_INTEGRATION.md` read as open, though logs and sandboxes are the engine's, as row 7 already says of CNI; row 5 is *Not planned* below. The changelog's *Support Policy* is about v0.3.x | [#307] |
 
 ## 0.15.0 — the Proxmox command line, deeper
 
@@ -60,8 +60,8 @@ is the face with the fewest options.
 
 | Item | Why | Issue |
 |---|---|---|
-| `create` takes what `pct create` is usually given | The storage, root filesystem size and bridge come from the config file, and the network is always DHCP. Memory, cores, a static address and gateway, a VLAN tag, mount points, `onboot` and tags need a `pct set` afterwards, outside nexcage. `update` already turns limits into pct's terms; `create` should accept the same | no issue yet |
-| Private registries | `oci-registry-pull` takes no credentials, so `pull` and `create` cannot reach a private registry. Ask Proxmox for a credentials parameter first; a registry client inside a binary that runs as root is the fallback, and wants an ADR before code | no issue yet |
+| `create` takes what `pct create` is usually given | The storage, root filesystem size and bridge come from the config file, and the network is always DHCP. Memory, cores, a static address and gateway, a VLAN tag, mount points, `onboot` and tags need a `pct set` afterwards, outside nexcage. `update` already turns limits into pct's terms; `create` should accept the same | [#308] |
+| Private registries | `oci-registry-pull` takes no credentials, so `pull` and `create` cannot reach a private registry. Ask Proxmox for a credentials parameter first; a registry client inside a binary that runs as root is the fallback, and wants an ADR before code | [#309] |
 
 ## 0.16.0 — the OCI runtime, measured by the suites that define it
 
@@ -71,10 +71,10 @@ everything, not only what one engine happened to ask.
 
 | Item | Why | Issue |
 |---|---|---|
-| The runtime-spec validation suite ([opencontainers/runtime-tools]) against the crun backend, in CI | The specification's own tests. Results recorded, known failures named | no issue yet |
-| `critest` ([cri-tools]) against containerd with nexcage as the runtime handler | What Kubernetes checks of a CRI runtime. `tests/cri/pod_on_nexcage.sh` is one pod | no issue yet |
-| The k3s pod test from a workflow | `tests/k8s/pod_on_node.sh` runs on `nexcage-e2e-1` by hand today | no issue yet |
-| An install for a Kubernetes node on Proxmox VE | The routing config, containerd and CRI-O drop-ins and a `RuntimeClass` shipped with the `-crun` package and in `deploy/`, rather than assembled from `KUBERNETES_INTEGRATION.md`. [#301] starts on the config | no issue yet |
+| The runtime-spec validation suite ([opencontainers/runtime-tools]) against the crun backend, in CI | The specification's own tests. Results recorded, known failures named | [#310] |
+| `critest` ([cri-tools]) against containerd with nexcage as the runtime handler | What Kubernetes checks of a CRI runtime. `tests/cri/pod_on_nexcage.sh` is one pod | [#311] |
+| The k3s pod test from a workflow | `tests/k8s/pod_on_node.sh` runs on `nexcage-e2e-1` by hand today | [#312] |
+| An install for a Kubernetes node on Proxmox VE | The routing config, containerd and CRI-O drop-ins and a `RuntimeClass` shipped with the `-crun` package and in `deploy/`, rather than assembled from `KUBERNETES_INTEGRATION.md`. [#301] starts on the config | [#313] |
 | `events` | Only once an engine sends it. The trace will say | — |
 
 ## 0.17.0 — isolation profiles
@@ -96,9 +96,9 @@ It comes before 1.0 because 1.0 freezes the configuration it changes.
 
 | Item | Why | Issue |
 |---|---|---|
-| ADR-005: isolation profiles | What a profile holds — the backend, and that backend's parameters; how an engine names one — the handler a `RuntimeClass` names, or an annotation the engine copies into the bundle (containerd's `pod_annotations`, CRI-O's `allowed_annotations`); and what becomes of `runtime.routing` | no issue yet |
-| Profiles on the crun backend | The backend engines already drive, so the first place a profile can be proved end to end. Its shape follows the ADR | no issue yet |
-| The Proxmox LXC backend driven by an engine | For a profile to be able to choose it. `pct create` starts no process, which is why `--console-socket` and `--pid-file` are refused there today, and a bundle's rootfs is not a template. The largest item on this page | no issue yet |
+| ADR-005: isolation profiles | What a profile holds — the backend, and that backend's parameters; how an engine names one — the handler a `RuntimeClass` names, or an annotation the engine copies into the bundle (containerd's `pod_annotations`, CRI-O's `allowed_annotations`); and what becomes of `runtime.routing` | [#314] |
+| Profiles on the crun backend | The backend engines already drive, so the first place a profile can be proved end to end. Its shape follows the ADR | [#315] |
+| The Proxmox LXC backend driven by an engine | For a profile to be able to choose it. `pct create` starts no process, which is why `--console-socket` and `--pid-file` are refused there today, and a bundle's rootfs is not a template. The largest item on this page | [#316] |
 
 ## 1.0 — what the number promises
 
@@ -107,32 +107,34 @@ It comes before 1.0 because 1.0 freezes the configuration it changes.
 1. **Interfaces change only after a warning.** Command names, flags, exit
    codes, `list` columns, the `state` document and config keys change only
    after a release that warns about it — as 0.13.0 did for
-   `crun_name_patterns` and for a routing rule naming `runc`.
+   `crun_name_patterns` and for a routing rule naming `runc`. [#317]
 2. **Conformance on record.** The runtime-spec validation suite and `critest`
-   run in CI, and their results ship with each release's notes.
+   run in CI, and their results ship with each release's notes. [#310],
+   [#311]
 3. **Every Proxmox VE major the README names runs the E2E suite.**
 4. **Releases that can be verified.** Artifacts signed, and their provenance
    attested by the build (GitHub artifact attestations or Sigstore). Today
    `release.yml` writes `provenance.json` with a heredoc, which proves nothing
    about the binary. An APT repository, so that `apt upgrade` brings a fix to
-   a node.
+   a node. [#318], [#319]
 5. **A threat model for what ships.** ADR-003 describes a 2024 design —
    "Proxmox LXCRI", PCI-DSS, zero trust — the way ADR-001 did before its
    revision. A root binary on a Proxmox host, handed bundles it did not write,
    needs its own: what it trusts, what it refuses, what a bundle can reach.
    With it, scans that block: all three jobs in `security.yml` are
-   `continue-on-error`. And OpenSSF Scorecards running again.
+   `continue-on-error`. And OpenSSF Scorecards running again. [#320],
+   [#321]
 6. **A support policy**: which minor release receives fixes after 1.0, and
-   for how long.
+   for how long. [#322]
 
 ## Later, when asked
 
 - **`exec`, `kill` and `pause` on a container on another node.** No Proxmox
   API reaches into a container's processes; the cluster's own root SSH between
   nodes does. That is a root binary opening root sessions on other hosts, so
-  it needs an ADR, and a user who needs it.
+  it needs an ADR, and a user who needs it. [#323]
 - **Backup, restore and migration through pct** — `vzdump`, `pct restore`,
-  `pct migrate` — by name on any node, the way snapshots went.
+  `pct migrate` — by name on any node, the way snapshots went. [#324]
 
 ## Open question
 
@@ -165,5 +167,27 @@ asks" needs a place to be asked.
 [#299]: https://github.com/CageForge/nexcage/issues/299
 [#300]: https://github.com/CageForge/nexcage/pull/300
 [#301]: https://github.com/CageForge/nexcage/pull/301
+[#303]: https://github.com/CageForge/nexcage/issues/303
+[#304]: https://github.com/CageForge/nexcage/issues/304
+[#305]: https://github.com/CageForge/nexcage/issues/305
+[#306]: https://github.com/CageForge/nexcage/issues/306
+[#307]: https://github.com/CageForge/nexcage/issues/307
+[#308]: https://github.com/CageForge/nexcage/issues/308
+[#309]: https://github.com/CageForge/nexcage/issues/309
+[#310]: https://github.com/CageForge/nexcage/issues/310
+[#311]: https://github.com/CageForge/nexcage/issues/311
+[#312]: https://github.com/CageForge/nexcage/issues/312
+[#313]: https://github.com/CageForge/nexcage/issues/313
+[#314]: https://github.com/CageForge/nexcage/issues/314
+[#315]: https://github.com/CageForge/nexcage/issues/315
+[#316]: https://github.com/CageForge/nexcage/issues/316
+[#317]: https://github.com/CageForge/nexcage/issues/317
+[#318]: https://github.com/CageForge/nexcage/issues/318
+[#319]: https://github.com/CageForge/nexcage/issues/319
+[#320]: https://github.com/CageForge/nexcage/issues/320
+[#321]: https://github.com/CageForge/nexcage/issues/321
+[#322]: https://github.com/CageForge/nexcage/issues/322
+[#323]: https://github.com/CageForge/nexcage/issues/323
+[#324]: https://github.com/CageForge/nexcage/issues/324
 [opencontainers/runtime-tools]: https://github.com/opencontainers/runtime-tools
 [cri-tools]: https://github.com/kubernetes-sigs/cri-tools
