@@ -67,6 +67,16 @@ decided for a container whose caller never says.
    describes is an OCI container either way — and `--runtime runc` is refused
    with the replacement named.
 
+6. **There is no VM backend.** `src/backends/proxmox-vm` was compiled out by
+   default and built by no workflow; the router refused every operation
+   routed to it without calling the driver, and the driver imported a module
+   the build did not define. It was removed in 0.14.0
+   ([#306](https://github.com/CageForge/nexcage/issues/306)). Unlike runc,
+   nothing can stand in for it — the default backend would make a container
+   where a VM was asked for — so a configuration naming `vm` (or `proxmox`,
+   which was mapped to it) is refused as a whole, and `--runtime vm` exits 2
+   saying why. `qm` can come back with a test behind it.
+
 ## Consequences
 
 Positive:

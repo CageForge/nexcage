@@ -71,7 +71,6 @@ pub const ListCommand = struct {
         // List from each backend type
         try self.listFromBackend(allocator, .proxmox_lxc, &all_containers);
         try self.listFromBackend(allocator, .crun, &all_containers);
-        try self.listFromBackend(allocator, .vm, &all_containers);
 
         // Print aggregated results (similar to runc list format)
         const stdout = std.fs.File.stdout();
@@ -148,10 +147,6 @@ pub const ListCommand = struct {
                 // Note: crun listing not yet implemented
                 // Backend drivers exist but list() method needs implementation
             },
-            .vm => {
-                // Note: VM listing not yet implemented
-                // Proxmox VM backend is functional but list() method pending
-            },
             else => {},
         }
     }
@@ -160,7 +155,7 @@ pub const ListCommand = struct {
         _ = self;
         return allocator.dupe(u8, "Usage: nexcage list\n\n" ++
             "Description:\n" ++
-            "  List containers from all available backends (LXC, Proxmox LXC, CRUN, RUNC, VM)\n" ++
+            "  List containers from all available backends (LXC, Proxmox LXC, CRUN)\n" ++
             "  Output format similar to 'docker ps' or 'runc list'\n\n" ++
             "Output columns:\n" ++
             "  ID       - Container identifier\n" ++
@@ -168,7 +163,7 @@ pub const ListCommand = struct {
             "  COMMAND  - Runtime command\n" ++
             "  CREATED  - Creation timestamp\n" ++
             "  STATUS   - Container status\n" ++
-            "  BACKEND  - Backend type (lxc, proxmox-lxc, crun, runc, vm)\n" ++
+            "  BACKEND  - Backend type (lxc, proxmox-lxc, crun)\n" ++
             "  NAMES    - Container names\n\n" ++
             "Notes:\n" ++
             "  Proxmox LXC containers are listed via 'pct list'; list fails when it does.\n");

@@ -120,7 +120,7 @@ node a container elsewhere is on.
 `create`, `run`, `start`, `stop`, `delete`, `kill`, `exec` and `state` go to
 the backend chosen by the routing rules in the config file, Proxmox LXC by
 default.
-`--runtime <lxc|crun|vm>` overrides that for one command, before or after
+`--runtime <lxc|crun>` overrides that for one command, before or after
 the command name.
 
 A routing rule's `pattern` is a **regular expression only when it starts with
@@ -144,7 +144,11 @@ routing to the OCI backend in the configuration file:
 - The crun backend creates the container from the bundle given with
   `--bundle`, and keeps its state under `--root` when one is given, or
   `/run/crun` as crun itself does.
-- `vm` is not integrated yet: every command fails with "not implemented".
+- `vm` and `qemu` named the Proxmox VM backend, removed in 0.14.0, and exit 2
+  saying so. A routing rule naming `vm`, or `proxmox`, which meant the same,
+  makes the configuration file an error (exit 1) for every command: no
+  backend is left to run what it describes, and the default one would make
+  a container where a VM was asked for.
 - Any other value is a usage error (exit 2).
 
 ## Exit status
