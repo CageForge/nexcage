@@ -50,7 +50,6 @@ not code.
 | Protect `main` | It has no branch protection. Require `CI` and `crun backend build` to pass before a merge | [#305] |
 | Make the review rule the one practised | `GOVERNANCE.md` and `MAINTAINERS.md` ask for two LGTMs on non-trivial changes, with one active maintainer to give them | [#304] |
 | Answer [#301] | An outside documentation contribution, open since 2026-10-04 | [#301] |
-| Close what is settled | [#117] and [#118] are superseded by snapshots through pct, as the changelog already says. [#119]'s caching shipped in 0.13.0 as reuse of an image already on the storage. [#108] asks for FreeBSD jails, which have no backend and no Proxmox (see *Not planned*). [#131] is a 2025 plan: what still applies becomes its own issue. Five sprint milestones were due in 2025 | — |
 | Docs that disagree with the code | `CLI_REFERENCE.md` says a bundle must sit under `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/`, which 0.10.0 stopped requiring. Rows 6 and 8 of the gap table in `KUBERNETES_INTEGRATION.md` read as open, though logs and sandboxes are the engine's, as row 7 already says of CNI; row 5 is *Not planned* below. The changelog's *Support Policy* is about v0.3.x | [#307] |
 
 ## 0.15.0 — the Proxmox command line, deeper
@@ -161,8 +160,6 @@ asks" needs a place to be asked.
 [#116]: https://github.com/CageForge/nexcage/issues/116
 [#117]: https://github.com/CageForge/nexcage/issues/117
 [#118]: https://github.com/CageForge/nexcage/issues/118
-[#119]: https://github.com/CageForge/nexcage/issues/119
-[#131]: https://github.com/CageForge/nexcage/issues/131
 [#163]: https://github.com/CageForge/nexcage/issues/163
 [#299]: https://github.com/CageForge/nexcage/issues/299
 [#300]: https://github.com/CageForge/nexcage/pull/300
