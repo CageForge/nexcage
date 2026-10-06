@@ -99,8 +99,7 @@ zig build -Denable-backend-crun=true
 ```
 
 `make crun-docker` runs the Docker build. In CI, `.github/workflows/crun_build.yml`
-builds it on pushes to `main` and on pull requests that touch the build,
-the Dockerfile or the crun backend.
+builds it on pushes to `main` and on every pull request to `main`.
 
 ### Updating the vendored crun
 
@@ -120,11 +119,13 @@ its `config.h`. Everything else is upstream at a tag. To move to a new release:
    checkout), and change the hash the `Dockerfile` checks out; the Dockerfile
    clones by hash because `.dockerignore` excludes `.git`. If libocispec's
    submodules changed, the `submodule update --init` line there changes too.
-3. Run `sh scripts/check_features_abi.sh <path to the new container.h>`. It
-   compares the field order of the `features` structs against the Zig mirror
-   in `src/backends/crun/libcrun_ffi.zig`; a layout change there does not fail
-   to compile, it segfaults `features` — so the mirror moves with the header,
-   or the bump does not go in.
+3. Run `sh scripts/check_features_abi.sh <path to the new container.h>` from the
+   repository root. It compares the field order of the `features` structs in
+   the header against the order the Zig mirror in
+   `src/backends/crun/libcrun_ffi.zig` was written for, which the script lists
+   itself; a layout change in the header does not fail to compile, it
+   segfaults `features` — so the mirror and the script's lists move with the
+   header, or the bump does not go in.
 4. Read upstream's `NEWS` between the two tags for build changes. 1.28
    replaced YAJL with json-c, libocispec included, which reached the builder
    and runtime stages of the Dockerfile, `build.zig`'s link lines, two
@@ -140,8 +141,9 @@ its `config.h`. Everything else is upstream at a tag. To move to a new release:
    docker run --rm --privileged --cgroupns=private -v "$PWD/tests/cri:/t:ro" nexcage:cri-test /t/pod_on_nexcage.sh
    ```
 
-   `crun_build.yml` repeats all of it in CI, plus `tests/crun/ps.sh` and
-   `foreign_cwd.sh`. After the release, check the published `-crun` binary on
+   `crun_build.yml` repeats all of it in CI except the `ldd` line, plus
+   `tests/crun/ps.sh` and `foreign_cwd.sh`; the release's `build-crun` job runs
+   `ldd` and logs it. After the release, check the published `-crun` binary on
    a Proxmox host: `ldd` there is what tells you which libraries the host
    needs, and `docs/INSTALL.md` has to name them.
 

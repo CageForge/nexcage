@@ -11,7 +11,7 @@ Run step 1 on the Proxmox host; steps 2 to 4 inside the VM, as root.
 |---|---|---|
 | `01-create-vm.sh` | Proxmox host | VM from the cloud image, 4 cores, 8 GB, 60 GB, serial console, cloud-init |
 | `02-install-pve.sh` | in the VM | Proxmox repository, Proxmox kernel, `vmbr0`, then `proxmox-ve`. Reboots once — run it again after |
-| `03-prepare-runner-host.sh` | in the VM | What `proxmox_e2e.yml` needs: its packages, the `vmbr50` bridge, an LXC template, the runner user, and the runner software **unregistered** |
+| `03-prepare-runner-host.sh` | in the VM | What `proxmox_e2e.yml` needs: its packages, the `vmbr50` bridge, an LXC template, the runner user, the runner software **unregistered**, and a ZFS pool on a sparse file, added as the storage `e2e-zfs` for the snapshot checks |
 | `04-seal-template.sh` | in the VM | Removes everything belonging to this one machine, then powers off |
 
 Then, on the host:
@@ -72,4 +72,7 @@ what happened on the first sealing run of v0-2.
 clone from it came up with the address on `vmbr0` and the NIC unattached, and
 it carried an OCI image in `vztmpl` that the E2E suite then picked as its
 template. `v0-2` is built from these scripts with both fixed, and was checked
-by cloning it through kubemox and running the suite on the result.
+by cloning it through kubemox and running the suite on the result. It was
+sealed before step 3 made the ZFS pool, so a fresh clone of `v0-2` has no
+`e2e-zfs` until step 3 is run on it again; until then the E2E skips its
+snapshot checks and says so.

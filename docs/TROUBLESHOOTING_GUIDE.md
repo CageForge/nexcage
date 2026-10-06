@@ -12,15 +12,22 @@ This document contains detailed instructions for diagnosing and resolving common
 ./nexcage --version
 ./nexcage --help
 
-# Check available commands
+# List containers
 ./nexcage list
 ```
 
 ### 2. Enable Debug Mode
 ```bash
-# Full diagnostics with logging
-./nexcage --debug --log-file /tmp/nexcage-debug.log <command>
+# Full diagnostics go to stderr
+./nexcage --debug <command> 2> /tmp/nexcage-debug.log
 ```
+
+The file named with `--log-file` (or `NEXCAGE_LOG_FILE`, or `runtime.log_path`
+or `log_file` in the configuration) holds only the startup line,
+`Starting command`, the details `--debug` adds and, on success, the
+`completed in` and `completed successfully` lines. It never holds an ERROR or
+WARN line, and a failed command adds nothing to it after `Starting command`
+and the `--debug` lines that follow it.
 
 ## Common Problems and Solutions
 
@@ -29,10 +36,10 @@ This document contains detailed instructions for diagnosing and resolving common
 #### Problem: "Container not created"
 ```bash
 # Diagnostics
-./nexcage --debug --log-file /tmp/create-debug.log create --name test-container --image ubuntu:20.04
+./nexcage --debug create --name test-container --image ubuntu:20.04 2> /tmp/create-debug.log
 
 # Log analysis
-grep -E "(ERROR|WARN|Failed)" /tmp/create-debug.log
+grep -E "(ERROR|WARN|Failed|^nexcage:)" /tmp/create-debug.log
 ```
 
 **Possible Causes:**
@@ -47,19 +54,19 @@ grep -E "(ERROR|WARN|Failed)" /tmp/create-debug.log
 ls -la /path/to/oci-bundle/
 ls -la /path/to/oci-bundle/config.json
 
-# 2. Check permissions
-sudo chown -R $USER:$USER /var/lib/lxc/
-sudo chmod -R 755 /var/lib/lxc/
+# 2. Check permissions: nexcage needs root on the Proxmox host
+id -u    # must print 0
 
-# 3. Install dependencies
-sudo apt-get update
-sudo apt-get install lxc-utils lxc-dev
+# 3. Check dependencies: nexcage runs pct, pvesh, pvesm, pveversion and hostname, and `tar --zstd` to pack an OCI bundle
+which pct pvesh pvesm pveversion hostname tar zstd
+# the -crun binary also needs the shared libraries libcrun is built against: libsystemd, libcap, libseccomp, libjson-c
+ldd ./nexcage | grep 'not found'
 ```
 
 #### Problem: "Image not found"
 ```bash
 # Check available images
-./nexcage --debug list
+./nexcage --debug images
 
 # Check LXC templates
 pveam list
@@ -110,7 +117,7 @@ pct start 100 --debug
 #### Problem: "Network configuration error"
 ```bash
 # Network diagnostics
-./nexcage --debug --log-file /tmp/network-debug.log create --name net-test --image ubuntu:20.04
+./nexcage --debug create --name net-test --image ubuntu:20.04 2> /tmp/network-debug.log
 ```
 
 **Solutions:**
@@ -156,8 +163,7 @@ sudo echo 3 > /proc/sys/vm/drop_caches
 
 #### Problem: "Memory issues"
 ```bash
-# Memory tracking
-export NEXCAGE_MEMORY_TRACKING=1
+# Debug log; nexcage has no memory tracking (NEXCAGE_MEMORY_TRACKING is ignored)
 ./nexcage --debug --log-file /tmp/memory.log list
 ```
 
@@ -190,10 +196,8 @@ sudo chown $USER:$USER /var/log/nexcage
 
 #### Problem: "Permission denied"
 ```bash
-# Check permissions
-ls -la /var/lib/lxc/
-sudo chown -R $USER:$USER /var/lib/lxc/
-sudo chmod -R 755 /var/lib/lxc/
+# nexcage needs root on the Proxmox host
+id -u    # must print 0
 ```
 
 ### 5. OCI Bundle Issues
@@ -208,7 +212,7 @@ cat /path/to/bundle/config.json | jq .
 
 **Solutions:**
 ```bash
-# 1. Bundles must live under /var/lib/nexcage/bundles/ or /tmp/nexcage-bundles/
+# 1. A bundle can be any absolute path; it needs config.json and rootfs/
 mkdir -p /var/lib/nexcage/bundles/test/rootfs
 echo '{"ociVersion":"1.0.0","process":{"args":["/sbin/init"]},"root":{"path":"rootfs"}}' > /var/lib/nexcage/bundles/test/config.json
 # rootfs/ has to boot as a system container, e.g. an extracted template
@@ -238,20 +242,18 @@ mkdir -p /path/to/bundle/rootfs
 
 #### Check Proxmox Connection
 ```bash
-# Connection test
-curl -k https://localhost:8006/api2/json/version
-
-# Check tokens
-cat ~/.proxmox-credentials
+# nexcage uses no API connection or token: it runs pct and pvesh on the host
+pvesh get /version
+pct list
 ```
 
 #### VMID Problems
 ```bash
-# Find available VMIDs
-pct list | awk '{print $1}' | grep -E '^[0-9]+$' | sort -n
+# The VMID nexcage takes next
+pvesh get /cluster/nextid
 
-# Check conflicts
-pct list | grep "test-container"
+# Check conflicts: a name must be unique across the cluster
+./nexcage list | grep "test-container"
 ```
 
 ### 2. Network Problem Diagnostics
@@ -346,7 +348,12 @@ echo "Log written to /tmp/diagnostics.log"
 #!/bin/bash
 # monitor-nexcage.sh
 
-LOG_FILE="/var/log/nexcage/production.log"
+# The runtime log: pass it to every nexcage invocation as --log "$LOG_FILE".
+# It is not the file runtime.log_path names in the configuration: that is the
+# --log-file log, and it never holds an ERROR line.
+# With --log-format json, grep for '"level":"error"' instead of ERROR. The
+# final 'nexcage: <command>: ...' line goes to stderr only.
+LOG_FILE="/var/log/nexcage/oci-runtime.log"
 ALERT_EMAIL="admin@example.com"
 
 # Monitor errors
@@ -384,8 +391,10 @@ done
 ### 1. Prometheus Metrics
 ```bash
 # Export metrics from logs
+# The --log-file log (runtime.log_path in the configuration): only it has the
+# 'completed in' lines, never the --log runtime log
 grep "completed in" /var/log/nexcage/production.log | \
-  awk '{print "nexcage_command_duration_seconds{command=\""$4"\"} " $6/1000}' > /var/lib/prometheus/nexcage.prom
+  LC_ALL=C awk -v q="'" '{c=$5; gsub(q, "", c); print "nexcage_command_duration_seconds{command=\"" c "\"} " $8/1000}' > /var/lib/prometheus/nexcage.prom
 ```
 
 ### 2. Grafana Dashboard
@@ -507,15 +516,10 @@ NEXCAGE_LOG_FILE=/tmp/env-test.log NEXCAGE_LOG_LEVEL=warn ./nexcage list
 
 #### Known Issues
 
-1. **Memory Leaks**: Some memory leaks detected in configuration parsing
-   - **Impact**: Non-critical, doesn't affect functionality
-   - **Workaround**: Restart application periodically
-   - **Fix**: Planned for future release
-
-2. **File Permissions**: Log file creation may fail in restricted directories
+1. **File Permissions**: Log file creation may fail in restricted directories
    - **Impact**: Logging to file disabled
    - **Workaround**: Use accessible directories like `/tmp/`
-   - **Fix**: Implement proper error handling
+   - **Fix**: Since 0.8.0 nexcage prints a warning and logs to stderr only; the command still runs
 
 #### Validation Checklist
 

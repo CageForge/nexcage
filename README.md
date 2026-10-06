@@ -22,9 +22,9 @@ As of **0.13.0**, on amd64, running on the Proxmox VE host as root:
 
 | | |
 |---|---|
-| **Proxmox LXC** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `exec`, `run` — on any node of the cluster. `create --node` places a container on a chosen one |
+| **Proxmox LXC** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `exec` — on any node of the cluster, except `kill` and `exec`, which work on the host the container is on. `create --node` places a container on a chosen one; `run` (create, then start) always creates on this host |
 | **Templates** | `images`, `pull`, `rmi` for what a container is created from |
-| **Freezing, resizing** | `pause` and `resume`, the cgroup freezer, on both backends; `state` reports `paused`, which `pct status` cannot. `update` changes a running container's limits — through libcrun, or `pct set` in its own terms |
+| **Freezing, resizing** | `pause` and `resume`, the cgroup freezer, on both backends — on Proxmox LXC only on the host the container is on; `state` reports `paused`, which `pct status` cannot, for a container on this host (one frozen on another node shows as `running`). `update` changes a running container's limits — through libcrun, or `pct set` in its own terms |
 | **As an OCI runtime** | the runtime-spec command line — `create --bundle`, `start`, `state`, `kill`, `delete`, `exec`, `ps`, `features`, `update`, with `--root`, `--console-socket`, `--pid-file`, `--log`. Verified against podman, `ctr`, containerd's CRI, CRI-O and a kubelet |
 | **In Kubernetes** | a pod with `runtimeClassName: nexcage` runs on a node, with an address from the cluster's CNI, `kubectl logs` and `kubectl exec` |
 | **Not there** | `events` — no engine has asked for it. Images are pulled through Proxmox, so a private registry cannot be authenticated: the `oci-registry-pull` API takes no credentials |
@@ -44,7 +44,8 @@ apt install ./nexcage-$VERSION-amd64.deb
 **A release carries two binaries** (since 0.11.2). The plain one manages LXC
 containers; the `-crun` one adds the backend a container engine drives, and is
 what to install when containerd, CRI-O or a kubelet is meant to run containers
-on nexcage. It needs `libjson-c5`, `libseccomp2` and `libcap2` on the host.
+on nexcage. It needs `libjson-c5`, `libseccomp2`, `libcap2` and `libsystemd0` on
+the host.
 
 Details, source builds and the shared-library requirements:
 [docs/INSTALL.md](docs/INSTALL.md).
@@ -67,8 +68,9 @@ nexcage create --name web-2 --node titan shared-rdma:vztmpl/redis_7.tar
 ```
 
 Containers are addressed by name, which becomes the hostname and must be unique
-across the cluster; `state` also accepts a VMID. `exec`, `kill` and the `pid` in
-`state` work on the host the container is on, and say so for one elsewhere.
+across the cluster; `state` also accepts a VMID. `exec`, `kill`, `pause`,
+`resume` and the `pid` in `state` work on the host the container is on, and
+say so for one elsewhere.
 Exit status is `0` for success, `1` when the operation failed, `2` for invalid
 usage — except `exec`, which exits with the status of the command it ran.
 
@@ -106,8 +108,8 @@ How it was verified, engine by engine, and what Kubernetes asks a runtime:
 nexcage reads the file given with `--config <path>`, or else the first of
 `./config.json`, `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
 that exists. A file that does not parse is an error; a file declaring
-`ociVersion` is skipped, because that is an OCI runtime spec and not a
-configuration.
+`ociVersion` is skipped in that search, and refused when named with
+`--config`, because that is an OCI runtime spec and not a configuration.
 
 ```json
 {
@@ -128,6 +130,8 @@ configuration.
 | `proxmox.unprivileged` | `true` | Create unprivileged containers, as the Proxmox VE web UI does. Images from a registry always run unprivileged |
 | `proxmox.ostype` | detected by pct | `--ostype` for new containers |
 | `runtime.routing` | Proxmox LXC | Which backend a container goes to. A pattern is a regular expression only when it starts with `^` or ends with `$`, so `".*"` matches nothing — use `"*"` |
+| `runtime.log_level` (or top-level `log_level`, which wins) | `info` | `debug`, `info`, `warn` or `error`; any other value means `info`. `debug` also turns on the lines `--debug` writes to stderr. `NEXCAGE_LOG_LEVEL` and `--log-level` override it only with a level other than `info` |
+| `runtime.log_path` (or top-level `log_file`, which wins) | unset | The same as `--log-file`: the startup line, each command's start line and, when the command succeeds, its completion lines go to this file as well as to stderr. The command's own log lines do not, and this is not the runtime log a container engine passes with `--log` |
 
 ## Documentation
 
@@ -145,8 +149,8 @@ Rendered at [nexcage.cageforge.com](https://nexcage.cageforge.com).
 ## Development
 
 ```bash
-zig build test --summary all      # Zig 0.15.1
-bash tests/sim/run.sh             # the Proxmox command line, against fakes
+zig build test --summary all       # Zig 0.15.1
+zig build && bash tests/sim/run.sh # the Proxmox command line, against fakes
 ```
 
 The simulator runs nexcage against fake `pct`, `pvesh` and `pveversion` in a
@@ -192,6 +196,10 @@ Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 Built with `-Denable-backend-crun=true`, nexcage compiles and links the
 `src/libcrun` sources of a vendored [crun](https://github.com/containers/crun),
-whose file headers state LGPL-2.1-or-later; crun's repository as a whole is
-GPL-2.0 for its own command-line tool, which nexcage does not build. The
-released `-crun` binary is that build; the plain binary links none of it.
+whose file headers state LGPL-2.1-or-later, and the `src` sources of crun's
+libocispec submodule (the OCI spec parsers, most of them generated at build
+time), which carries its own license in `libocispec/COPYING` (GPL-3.0 for the
+generator, with a special exception for its generated parser files). crun's
+repository as a whole is GPL-2.0 for its own command-line tool, which nexcage
+does not build. The released `-crun` binary is that build; the plain binary
+links none of it.

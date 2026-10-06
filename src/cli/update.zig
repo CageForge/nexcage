@@ -127,7 +127,8 @@ pub const UpdateCommand = struct {
             "  --memory-reservation <size>  Soft limit\n" ++
             "  --cpu-quota <us>             CPU quota per period; -1 for no limit\n" ++
             "  --cpu-period <us>            The period (default 100000)\n" ++
-            "  --cpu-share <n>              CPU weight, as cgroup v1 shares\n" ++
+            "  --cpu-share <n>              CPU weight, as cgroup v1 shares;\n" ++
+            "                               --cpu-shares is accepted too\n" ++
             "  --cpuset-cpus <list>         CPUs the container may use\n" ++
             "  --cpuset-mems <list>         Memory nodes it may use\n" ++
             "  --pids-limit <n>             Maximum number of processes\n" ++

@@ -11,7 +11,7 @@ pub const ListCommand = struct {
     const Self = @This();
 
     name: []const u8 = "list",
-    description: []const u8 = "List containers and virtual machines from all backends",
+    description: []const u8 = "List containers from the Proxmox LXC backend",
     base: base_command.BaseCommand = .{},
 
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
@@ -34,7 +34,7 @@ pub const ListCommand = struct {
         _ = self; // Avoid unused parameter warning
         const stdout = std.fs.File.stdout();
         try stdout.writeAll("Usage: nexcage list [OPTIONS]\n\n");
-        try stdout.writeAll("List containers and virtual machines from all backends\n\n");
+        try stdout.writeAll("List containers from the Proxmox LXC backend\n\n");
         try stdout.writeAll("OPTIONS:\n");
         try stdout.writeAll("  --help, -h    Show this help message\n");
         try stdout.writeAll("  --debug       Enable debug logging\n");
@@ -47,8 +47,8 @@ pub const ListCommand = struct {
         try stdout.writeAll("OUTPUT FORMAT:\n");
         try stdout.writeAll("  ID      IMAGE   COMMAND  CREATED  STATUS  BACKEND  NODE   NAMES\n");
         try stdout.writeAll("  <id>    <img>   <cmd>    <time>   <state> <type>   <node> <name>\n");
-        try stdout.writeAll("\n  NODE is the cluster node a Proxmox LXC container is on; every other\n");
-        try stdout.writeAll("  backend shows \"-\". Containers on other nodes of the cluster are\n");
+        try stdout.writeAll("\n  NODE is the cluster node a Proxmox LXC container is on, or \"-\" when it\n");
+        try stdout.writeAll("  is not known. Containers on other nodes of the cluster are\n");
         try stdout.writeAll("  listed too, which `pct list` on one host cannot do.\n");
     }
 
@@ -155,18 +155,20 @@ pub const ListCommand = struct {
         _ = self;
         return allocator.dupe(u8, "Usage: nexcage list\n\n" ++
             "Description:\n" ++
-            "  List containers from all available backends (LXC, Proxmox LXC, CRUN)\n" ++
+            "  List containers from the Proxmox LXC backend; crun containers are not listed\n" ++
             "  Output format similar to 'docker ps' or 'runc list'\n\n" ++
             "Output columns:\n" ++
             "  ID       - Container identifier\n" ++
-            "  IMAGE    - Container image or template\n" ++
+            "  IMAGE    - Always \"unknown\": Proxmox LXC rows carry no image\n" ++
             "  COMMAND  - Runtime command\n" ++
-            "  CREATED  - Creation timestamp\n" ++
+            "  CREATED  - Always \"unknown\": Proxmox LXC rows carry no timestamp\n" ++
             "  STATUS   - Container status\n" ++
-            "  BACKEND  - Backend type (lxc, proxmox-lxc, crun)\n" ++
+            "  BACKEND  - Backend type (proxmox-lxc)\n" ++
+            "  NODE     - Cluster node the container is on (\"-\" when unknown)\n" ++
             "  NAMES    - Container names\n\n" ++
             "Notes:\n" ++
-            "  Proxmox LXC containers are listed via 'pct list'; list fails when it does.\n");
+            "  Proxmox LXC containers are listed via 'pvesh get /cluster/resources'\n" ++
+            "  merged with 'pct list'; list fails only when both fail.\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

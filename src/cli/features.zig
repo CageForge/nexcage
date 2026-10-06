@@ -98,8 +98,9 @@ pub const FeaturesCommand = struct {
             "namespaces it knows, and whether seccomp, AppArmor, SELinux and\n" ++
             "idmapped mounts are compiled in.\n\n" ++
             "The values come from the vendored libcrun this binary links, which\n" ++
-            "is what does the container work, so the answer is the same one\n" ++
-            "`crun features` gives for the same build.\n\n" ++
+            "is what does the container work, so the answer is the one\n" ++
+            "`crun features` gives for the same build, plus two annotations,\n" ++
+            "io.cageforge.nexcage.version and io.cageforge.nexcage.backend.\n\n" ++
             "Answered by the crun backend only. The command takes no container\n" ++
             "id, so there is nothing to route on: pass --runtime crun, or let\n" ++
             "the config file's routing rules resolve to crun (an engine never\n" ++
