@@ -791,6 +791,8 @@ reset_sim
 echo "titan $TPL" >> "$S/node_templates"
 cfg '{"network":{"bridge":"vmbr0"}}'
 
+# The fake host has the zfs tools, as every stock Proxmox VE host does: --node
+# used to be refused wherever `zfs version` worked.
 nx create --name there-1 --node titan "$TPL"
 check "create --node makes the container through that node's API" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc --vmid [0-9]+ --ostemplate .* --hostname there-1"' \
@@ -809,6 +811,14 @@ check "and it is listed on that node" \
 nx create --name there-2 --node otherhost "$TPL"
 check "a node without the template is refused, with the node named" \
   all 'rc 1' 'err_has "does not have the template"' 'not_called_re "^pvesh create /nodes/otherhost/lxc"'
+
+# A rootfs on a ZFS storage is Proxmox's to make, on the node that owns the
+# container: the stock-host setup #327 refused.
+cfg '{"network":{"bridge":"vmbr0"},"proxmox":{"storage":"local-zfs","rootfs_size_gb":4}}'
+nx create --name there-zs --node titan "$TPL"
+check "create --node with a ZFS storage hands the rootfs to that node" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc --vmid [0-9]+ .*--hostname there-zs .*--rootfs local-zfs:4$"'
+cfg '{"network":{"bridge":"vmbr0"}}'
 
 # An OCI bundle is packed into a template on *this* host, so it cannot travel.
 nx create --name there-3 --node titan --bundle /tmp/nexcage-bundles/b1
