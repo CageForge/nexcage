@@ -29,7 +29,9 @@ As of **0.13.0**, on amd64, running on the Proxmox VE host as root:
 | **In Kubernetes** | a pod with `runtimeClassName: nexcage` runs on a node, with an address from the cluster's CNI, `kubectl logs` and `kubectl exec` |
 | **Not there** | `events` — no engine has asked for it. Images are pulled through Proxmox, so a private registry cannot be authenticated: the `oci-registry-pull` API takes no credentials |
 
-Proxmox VE 8.x and 9.x. Pulling from a registry needs 9.1 or later.
+Proxmox VE 9.x. Pulling from a registry needs 9.1 or later. Proxmox VE 8.x is
+not supported: earlier releases ran on it, but the E2E suite never did, and
+Proxmox ended its own support for 8.x in August 2026.
 
 ## Install
 
@@ -184,6 +186,7 @@ than in a public issue.
 - Maintainers: [MAINTAINERS.md](MAINTAINERS.md)
 - Governance: [GOVERNANCE.md](GOVERNANCE.md)
 - Changes: [CHANGELOG.md](CHANGELOG.md)
+- Roadmap: [ROADMAP.md](ROADMAP.md)
 - Open-source compliance: [docs/COMPLIANCE_CNCF_CHECKLIST.md](docs/COMPLIANCE_CNCF_CHECKLIST.md)
 
 ## License
