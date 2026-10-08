@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """critest's results, checked against tests/cri/critest-known-failures.
 
-    critest_check.py <report.json> <known-failures>
+    critest_check.py <report.json> <known-failures> [<reference.json>]
 
-The report is ginkgo's --ginkgo.json-report. A spec that fails and is not
-listed is a regression; a listed spec that does not fail is stale. Either is
-exit 1, and so is a failure outside any spec, such as the suite's setup, which
-leaves every spec skipped.
+The reports are ginkgo's --ginkgo.json-report: nexcage's, and optionally the
+same suite through another runtime, whose result is printed beside each
+failure. A spec that fails and is not listed is a regression; a listed spec
+that does not fail is stale. Either is exit 1, and so is a failure outside any
+spec, such as the suite's setup, which leaves every spec skipped.
 """
 import json
 import sys
@@ -54,9 +55,17 @@ def known_failures(path):
     return known, either
 
 
-def main(report, known_path):
+def main(report, known_path, reference=None):
     specs, setup = results(report)
     known, either = known_failures(known_path)
+    other = results(reference)[0] if reference else {}
+
+    def crun_says(name):
+        if not reference:
+            return ""
+        state = other.get(name, ("not run", None))[0]
+        return " (crun: " + ("fails too" if state in FAILED else state) + ")"
+
     bad = 0
     print("=== against tests/cri/critest-known-failures")
     for line in setup:
@@ -67,7 +76,7 @@ def main(report, known_path):
             continue
         if state in FAILED and name not in known:
             bad += 1
-            print(f"REGRESSION  {name}\n            {first_line(message)}")
+            print(f"REGRESSION  {name}{crun_says(name)}\n            {first_line(message)}")
         elif state not in FAILED and name in known:
             bad += 1
             print(f"STALE       {name}: listed as a known failure, and {state}: take it off the list")
@@ -76,13 +85,18 @@ def main(report, known_path):
             bad += 1
             print(f"STALE       {name}: listed, but critest has no such spec")
 
-    count = {}
-    for state, _ in specs.values():
-        count[state] = count.get(state, 0) + 1
-    print("critest: " + ", ".join(f"{n} {s}" for s, n in sorted(count.items())) + f", of {len(specs)}")
+    def tally(results):
+        count = {}
+        for state, _ in results.values():
+            count[state] = count.get(state, 0) + 1
+        return ", ".join(f"{n} {s}" for s, n in sorted(count.items())) + f", of {len(results)}"
+
+    print("critest through nexcage: " + tally(specs))
+    if reference:
+        print("critest through crun:    " + tally(other))
     for name in sorted(known):
         if name in specs and specs[name][0] in FAILED:
-            print(f"known       {name}\n            {known[name]}")
+            print(f"known       {name}{crun_says(name)}\n            {known[name]}")
     for name in sorted(either):
         if name in specs:
             print(f"unchecked   {name}: {specs[name][0]} this time\n            {either[name]}")
@@ -95,6 +109,6 @@ def main(report, known_path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (3, 4):
         sys.exit(__doc__)
     sys.exit(main(*sys.argv[1:]))

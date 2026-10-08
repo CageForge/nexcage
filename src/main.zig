@@ -75,6 +75,7 @@ pub const AppContext = struct {
         }
         var runtime_logger = core.LogContext.init(allocator, log_sink, logging_cfg.log_level, "nexcage");
         runtime_logger.format = logging_cfg.log_format;
+        if (log_sink.handle != std.fs.File.stderr().handle) runtime_logger.echo = std.fs.File.stderr();
 
         // A config that still routes with the removed key would otherwise
         // send those containers to the default backend without a word.

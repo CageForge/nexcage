@@ -4,3 +4,41 @@
 # crun_build.yml red; so does a listed spec that does not fail. A spec written
 # `~name` is run and its result printed, but not checked: it passes or fails by
 # chance. docs/KUBERNETES_INTEGRATION.md has the results and what they mean.
+
+# The setting.
+[k8s.io] AppArmor runtime should support deprecated apparmor_profile field should fail with an unloaded apparmor_profile
+    The runner has AppArmor, so these run rather than skip, and each one
+    first loads critest's test profiles with `sudo apparmor_parser`
+    (apparmor_linux.go:86). The image has neither.
+[k8s.io] AppArmor runtime should support deprecated apparmor_profile field should enforce a apparmor_profile blocking writes
+    The runner has AppArmor, so these run rather than skip, and each one
+    first loads critest's test profiles with `sudo apparmor_parser`
+    (apparmor_linux.go:86). The image has neither.
+[k8s.io] AppArmor runtime should support deprecated apparmor_profile field should enforce a permissive deprecated profile
+    The runner has AppArmor, so these run rather than skip, and each one
+    first loads critest's test profiles with `sudo apparmor_parser`
+    (apparmor_linux.go:86). The image has neither.
+[k8s.io] AppArmor runtime should support apparmor field should fail with an unloaded apparmor_profile
+    The runner has AppArmor, so these run rather than skip, and each one
+    first loads critest's test profiles with `sudo apparmor_parser`
+    (apparmor_linux.go:86). The image has neither.
+[k8s.io] AppArmor runtime should support apparmor field should enforce a apparmor_profile blocking writes
+    The runner has AppArmor, so these run rather than skip, and each one
+    first loads critest's test profiles with `sudo apparmor_parser`
+    (apparmor_linux.go:86). The image has neither.
+[k8s.io] AppArmor runtime should support apparmor field should enforce a permissive deprecated profile
+    The runner has AppArmor, so these run rather than skip, and each one
+    first loads critest's test profiles with `sudo apparmor_parser`
+    (apparmor_linux.go:86). The image has neither.
+[k8s.io] AppArmor runtime should prefer new apparmor field should fail with an unloaded apparmor_profile
+    The runner has AppArmor, so these run rather than skip, and each one
+    first loads critest's test profiles with `sudo apparmor_parser`
+    (apparmor_linux.go:86). The image has neither.
+[k8s.io] AppArmor runtime should prefer new apparmor field should enforce a apparmor_profile blocking writes
+    The runner has AppArmor, so these run rather than skip, and each one
+    first loads critest's test profiles with `sudo apparmor_parser`
+    (apparmor_linux.go:86). The image has neither.
+[k8s.io] AppArmor runtime should prefer new apparmor field should work with apparmor profile
+    The runner has AppArmor, so these run rather than skip, and each one
+    first loads critest's test profiles with `sudo apparmor_parser`
+    (apparmor_linux.go:86). The image has neither.

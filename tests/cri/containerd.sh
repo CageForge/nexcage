@@ -72,6 +72,17 @@ exec $NEXCAGE "\$@"
 EOT
 chmod +x /nexcage-traced
 
+# crun as a second handler, when the image has it: critest.sh runs the suite
+# through it as well, to tell nexcage's failures from the setting's.
+CRUN_RUNTIME=""
+if CRUN=$(command -v crun); then
+    CRUN_RUNTIME="[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.crun]
+      runtime_type = 'io.containerd.runc.v2'
+      snapshotter = 'native'
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.crun.options]
+        BinaryName = '$CRUN'"
+fi
+
 # In a user namespace -- rootless podman -- the kernel will not let the shim
 # lower oom_score_adj and AppArmor profiles cannot be loaded, so containerd
 # has to be told not to try; it warns about both at startup. Only the initial
@@ -103,6 +114,7 @@ version = 3
       snapshotter = 'native'
       [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
         BinaryName = '/nexcage-traced'
+    $CRUN_RUNTIME
 
   [plugins.'io.containerd.cri.v1.runtime'.cni]
     bin_dirs = ['/usr/lib/cni', '/opt/cni/bin']

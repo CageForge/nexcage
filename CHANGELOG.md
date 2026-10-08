@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **The runtime-spec validation suite runs against the crun backend in CI** (#310). `crun_build.yml` runs opencontainers/runtime-tools (runtime-spec 1.3.0) against the `-crun` build routed to crun, and the image's crun for reference. nexcage passes 33 of 58 tests; each of the 25 that fail is named in `tests/runtime-tools/known-failures` with the reason, and fails with crun run directly too: tests that cannot read cgroup v2, cgroup v1 settings libcrun refuses by name, and tests that contradict runtime-spec 1.3.0 or themselves. A failure not on the list turns the job red, and so does a listed test that passes. `docs/RUNTIME_SPEC_VALIDATION.md` has the results.
 
+### Fixed
+- **containerd could not stop a pod whose container had just exited** (#361), found by critest. containerd's shim decides what a failed `kill` means from the command's output: "no such process" means the process has already exited, which is fine for a stop. With `--log <file>`, which every engine passes, nexcage wrote libcrun's reason to the file only, and stderr said `operation failed`. StopContainer then failed, and StopPodSandbox with it. An error now goes to stderr as well, as runc and crun print theirs. Without `--log` nothing changes.
+
 ## [0.15.0] - 2026-10-08
 
 `create` takes what `pct create` is usually given -- limits, cores, a static

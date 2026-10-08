@@ -306,9 +306,10 @@ check "exec takes a command or --process, not both" all 'rc 2' 'err_has "not bot
 nx ps web-1
 check "ps is refused on the LXC backend, where it would answer another question" \
   all 'rc 1' 'err_has "--runtime crun"' 'not_called_re "^pct"'
-# With --log the explanation goes to that file rather than to stderr, which is
-# what --log is for; only the terse summary line stays on stderr. Checking
-# stderr for it, as this did at first, fails on correct behaviour.
+# With --log the explanation goes to that file, and an error to stderr as
+# well, as runc and crun print theirs: containerd's shim reads the command's
+# output to tell one failure from another, and found only "operation failed"
+# there (#361).
 # The log goes under /run, which is bind-mounted from $S: the sandbox mounts a
 # fresh tmpfs on /tmp, so a file written there disappears with the namespace and
 # the check cannot see it.
@@ -316,6 +317,8 @@ rm -f "$S/run/nexcage-ps.log"
 nx --root /run/x --log /run/nexcage-ps.log --log-format json ps --format json web-1
 check "the shape containerd sends is read as ps, not as a command name" \
   all 'rc 1' '! err_has "unknown command"' 'grep -q "runtime crun" "$S/run/nexcage-ps.log"'
+check "and the reason is on stderr as well, where the engine reads it" \
+  all 'err_has "runtime crun"' '! err_has "\"level\""'
 nx --runtime crun ps --format yaml web-1
 check "ps --format takes json or table" all 'rc 2' 'err_has "json or table"'
 nx ps --help

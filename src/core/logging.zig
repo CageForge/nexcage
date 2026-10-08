@@ -28,6 +28,13 @@ pub const LogContext = struct {
     colorize: bool = false,
     /// --log-format. text for a person, json for a container engine.
     format: LogFormat = .text,
+    /// Errors are written here as well, as one plain line. main points it at
+    /// stderr when --log sends the log to a file, which is what runc and crun
+    /// do: an engine reads the command's own output to tell one failure from
+    /// another. containerd's shim takes "no such process" from `kill` as a
+    /// process that has already exited; with the reason only in the file, it
+    /// saw "operation failed" and could not stop the pod.
+    echo: ?std.fs.File = null,
 
     /// Messages are written to `file`. Console loggers should be given stderr:
     /// stdout carries command output (the list table, state JSON) that other
@@ -73,6 +80,15 @@ pub const LogContext = struct {
 
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
         if (@intFromEnum(level) < @intFromEnum(self.level)) return;
+
+        if (self.echo) |echo| {
+            if (@intFromEnum(level) >= @intFromEnum(LogLevel.@"error")) {
+                var echo_buffer: [1024]u8 = undefined;
+                var echo_writer = echo.writerStreaming(&echo_buffer);
+                echo_writer.interface.print("{s}: " ++ format ++ "\n", .{self.component} ++ args) catch {};
+                echo_writer.interface.flush() catch {};
+            }
+        }
 
         // Streaming rather than positional: a positional writer starts at
         // offset 0, so each message would overwrite the last one in a log file.
@@ -142,6 +158,46 @@ pub const LogContext = struct {
         };
     }
 };
+
+test "an error is echoed as a plain line, and nothing below it is" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const log_file = try tmp.dir.createFile("log.json", .{});
+    defer log_file.close();
+    const echo_file = try tmp.dir.createFile("stderr", .{});
+    defer echo_file.close();
+
+    var logger = LogContext.init(std.testing.allocator, log_file, .info, "nexcage");
+    logger.format = .json;
+    logger.echo = echo_file;
+    try logger.info("Killing container {s}", .{"web-1"});
+    try logger.warn("a warning", .{});
+    try logger.err("libcrun container_kill: {s}", .{"process not running: No such process"});
+
+    var buf: [512]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        "nexcage: libcrun container_kill: process not running: No such process\n",
+        try tmp.dir.readFile("stderr", &buf),
+    );
+    // The file keeps every line, the error among them.
+    const logged = try tmp.dir.readFile("log.json", &buf);
+    try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, logged, "\n"));
+    try std.testing.expect(std.mem.indexOf(u8, logged, "\"level\":\"error\"") != null);
+}
+
+test "without echo an error goes to the log alone" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const log_file = try tmp.dir.createFile("log", .{});
+    defer log_file.close();
+
+    var logger = LogContext.init(std.testing.allocator, log_file, .info, "nexcage");
+    try logger.err("boom", .{});
+
+    var buf: [256]u8 = undefined;
+    const logged = try tmp.dir.readFile("log", &buf);
+    try std.testing.expect(std.mem.endsWith(u8, logged, "ERROR nexcage: boom\n"));
+}
 
 /// Structured logging
 pub const StructuredLogger = struct {
