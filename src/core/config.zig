@@ -14,22 +14,34 @@ pub fn setExplicitPath(path: ?[]const u8) void {
     explicit_path = path;
 }
 
-/// Where loadDefault looks when --config names no file, in order
-pub const default_paths = [_][]const u8{
+/// Where loadDefault looks when --config names no file, in order.
+const default_paths = [_][]const u8{
     "./config.json",
     "/etc/nexcage/config.json",
     "/etc/nexcage/nexcage.json",
 };
 
-/// The file loadDefault reads: the one --config names, else the first of
-/// default_paths that exists. Null when it would use the built-in defaults.
-pub fn resolvedPath() ?[]const u8 {
+/// The file loadDefault reads: the one --config names, else the first default
+/// location that exists. null when there is none and the built-in defaults
+/// apply. For `health`, which used to look at files of its own.
+pub fn activePath() ?[]const u8 {
     if (explicit_path) |path| return path;
     for (default_paths) |path| {
-        std.fs.cwd().access(path, .{}) catch continue;
+        // loadDefault moves on only past a file that is not there, so a file
+        // that is there but cannot be read is still the one in use.
+        std.fs.cwd().access(path, .{}) catch |err| switch (err) {
+            error.FileNotFound => continue,
+            else => {},
+        };
         return path;
     }
     return null;
+}
+
+test "the file in use is the one --config names" {
+    setExplicitPath("alt.json");
+    defer setExplicitPath(null);
+    try std.testing.expectEqualStrings("alt.json", activePath().?);
 }
 
 test "an explicit path replaces the default search, and must exist" {
@@ -1021,12 +1033,6 @@ fn matchesAnywhere(name: []const u8, pattern: []const u8) bool {
         pos += 1;
     }
     return false;
-}
-
-test "resolvedPath is the file --config names, whether or not it exists" {
-    setExplicitPath("/nonexistent/nexcage.json");
-    defer setExplicitPath(null);
-    try std.testing.expectEqualStrings("/nonexistent/nexcage.json", resolvedPath().?);
 }
 
 test "the proxmox section and bridge reach Config" {

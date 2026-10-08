@@ -233,11 +233,11 @@ added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
 nexcage run --name <name> <image>
 ```
 
-`create` followed by `start`. `<image>`, `--bundle`, `--storage` and `--node`
-work as for `create`: with `--node` the container is made on that node and
-started there. On Proxmox LXC `--console-socket` and `--pid-file` are refused
-as `create` refuses them, before anything is made. The crun backend does not
-implement `run` (exit 1), and refuses `--node` by name as it does for
+`create` followed by `start`, on this host. `--node` is refused (exit 1): to
+make the container on another node, `create --node`, then `start`.
+`--console-socket` and `--pid-file` are refused as `create` refuses them, since
+`pct start` runs the container's init itself; and the crun backend does not
+implement `run` (exit 1). `<image>`, `--bundle` and `--storage` work as for
 `create`.
 
 ### start
@@ -307,7 +307,7 @@ nexcage exec --process <file> <name>
 | `-d`, `--detach` | Return once the command is started, rather than waiting for it |
 | `--cwd <dir>` | Working directory inside the container (`--workdir` is the same flag) |
 | `--user <uid[:gid]>` | Identity to run as. On the crun backend an unparsable value is an error rather than a silent root |
-| `--console-socket <path>`, `--pid-file <path>` | Where to send the master end of the pty and where to write the pid |
+| `--console-socket <path>`, `--pid-file <path>` | Where to send the master end of the pty and where to write the pid; crun backend only |
 
 Runs `<command>` inside a running container and exits with its status: `nexcage
 exec web-1 false` exits 1, and `nexcage exec web-1 sh -c 'exit 7'` exits 7. A
@@ -328,14 +328,16 @@ command has to exist in the container's image — an image without a shell has n
 as is one that does not exist; `exec` without a command is a usage error
 (exit 2).
 
-Every option in the table is refused there rather than ignored, with exit 1
-and the flag named: `pct exec` runs the command as root, in a directory nexcage
-does not choose, and returns when it ends, so there is no identity to apply
-from a spec or `--user`, no directory for `--cwd`, no terminal for `--tty` or
-`--console-socket`, no pid of its own for `--pid-file` and nothing to detach
-from. Same rule as `--console-socket` on `create`. With `--process` even crun takes the terminal,
-working directory and user from the file, not from `--tty`, `--cwd` and
-`--user`.
+`--process`, `--detach`, `--user`, `--cwd`, `--console-socket` and
+`--pid-file` are refused there rather than ignored (exit 1): `pct exec` takes a
+command, runs it as root in a directory nexcage does not choose, and returns
+when it ends, so there is no identity or directory to apply, nothing to detach
+from and no pty or pid to hand back. Same rule as `--console-socket` on
+`create`. `--tty` is honoured when nexcage runs on a terminal: `pct exec` runs
+`lxc-attach`, which gives the command a terminal whenever one of its standard
+descriptors is one. With none, `--tty` is refused. With `--process` even crun
+takes the terminal, working directory and user from the file, not from
+`--tty`, `--cwd` and `--user`.
 
 On the crun backend both forms go to `libcrun_container_exec_process_file`,
 which takes the path of a file holding the process spec. `--process` hands the
@@ -707,20 +709,16 @@ check. It exits 1 if any check failed and 0 otherwise; warnings do not fail.
 These are failures: `pct version` missing or failing; any of
 `/var/lib/nexcage`, `/var/cache/nexcage`, `/tmp/nexcage` and `/etc/pve/lxc` not
 existing (fixed paths, not read from the configuration, and nexcage creates
-none of them); and a config file that does not load. These are only warnings:
-the Proxmox API line, which always warns because that check is not
-implemented; `zpool status`; `ip link show`; no `nameserver` line in
-`/etc/resolv.conf`; no config file; `pgrep nexcage`; and `df -h /`.
+none of them). These are only warnings: the Proxmox API line, which always warns
+because that check is not implemented; `zpool status`; `ip link show`; no
+config file; `pgrep nexcage`; and `df -h /`. It resolves no names and asks no
+host outside this one.
 
-The config file it checks is the one every other command loads: the file
-`--config` names, else the first of `./config.json`, `/etc/nexcage/config.json`
-and `/etc/nexcage/nexcage.json` that exists. It is read by the same loader, so
-a pass means the commands can use it. Like every command, `health` loads its
-configuration first, so a file that does not load usually stops it there with
-exit 1, before any check runs.
-
-The network check looks up no name: an air-gapped cluster, or one with its own
-resolver policy, has no outside host to ask, and a root tool should not ask one.
+It reports the config file the other commands read: the one `--config` names,
+else the first of `./config.json`, `/etc/nexcage/config.json` and
+`/etc/nexcage/nexcage.json` that exists. Like every command, `health` loads
+that file first, and one that is not valid stops it there with exit 1, before
+any check runs.
 
 `nexcage health --help` prints help and runs no checks.
 

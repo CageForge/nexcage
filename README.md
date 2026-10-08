@@ -132,7 +132,7 @@ that exists. A file that does not parse is an error; a file declaring
 | `proxmox.unprivileged` | `true` | Create unprivileged containers, as the Proxmox VE web UI does. Images from a registry always run unprivileged |
 | `proxmox.ostype` | detected by pct | `--ostype` for new containers |
 | `runtime.routing` | Proxmox LXC | Which backend a container goes to. A pattern is a regular expression only when it starts with `^` or ends with `$`, so `".*"` matches nothing — use `"*"` |
-| `runtime.log_level` (or top-level `log_level`, which wins) | `info` | `debug`, `info`, `warn` or `error`; any other value means `info`. `debug` also turns on the lines `--debug` writes to stderr. `NEXCAGE_LOG_LEVEL` overrides it, and `--log-level` overrides both, whatever the level |
+| `runtime.log_level` (or top-level `log_level`, which wins) | `info` | `debug`, `info`, `warn` or `error`; any other value means `info`. `debug` also turns on the lines `--debug` writes to stderr. `NEXCAGE_LOG_LEVEL`, then `--log-level`, override it, `info` included |
 | `runtime.log_path` (or top-level `log_file`, which wins) | unset | The same as `--log-file`: the startup line, each command's start line and, when the command succeeds, its completion lines go to this file as well as to stderr. The command's own log lines do not, and this is not the runtime log a container engine passes with `--log` |
 
 ## Documentation

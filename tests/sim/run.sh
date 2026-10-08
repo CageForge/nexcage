@@ -253,16 +253,19 @@ check "exec --process is refused on the LXC backend, not ignored" \
 nx exec web-1 -d echo hi
 check "exec --detach is refused on the LXC backend" \
   all 'rc 1' 'err_has "--detach"' 'not_called_re "^pct exec"'
-# The rest of exec's options are crun's too: pct exec runs the command as root,
-# wherever it likes, with no terminal or pid handed over (#329). Each is refused
-# by name before pct runs, rather than quietly answered with something else.
-for flag in "--user 1000" "--cwd /srv" "--workdir /srv" "--tty" "-t" "--console-socket /run/x.sock" "--pid-file /run/x.pid"; do
-  name=${flag%% *}; [ "$name" = --workdir ] && name=--cwd; [ "$name" = -t ] && name=--tty
+# pct exec runs the command as root, where nexcage does not choose, and hands
+# back no pty or pid: these used to be dropped, so `--user 1000` ran as root.
+for flag in "--user 1000" "--cwd /srv" "--console-socket /tmp/sim-console.sock" "--pid-file /tmp/sim-exec.pid"; do
   # shellcheck disable=SC2086 # the flag and its value are two words
-  nx exec web-1 $flag echo hi
-  check "exec $flag is refused on the LXC backend, by name" \
-    all 'rc 1' "err_has \"$name\"" 'err_has "--runtime crun"' 'not_called_re "^pct exec"'
+  nx exec $flag web-1 id
+  check "exec ${flag%% *} is refused on the LXC backend, not ignored" \
+    all 'rc 1' "err_has '${flag%% *}'" 'not_called_re "^pct exec"'
 done
+# lxc-attach, which pct exec runs, gives the command a terminal when one of the
+# caller's standard descriptors is one. With none, --tty cannot be honoured.
+nx exec -t web-1 echo hi < /dev/null
+check "exec --tty with no terminal is refused on the LXC backend" \
+  all 'rc 1' 'err_has "--tty"' 'not_called_re "^pct exec"'
 nx exec web-1 --process /tmp/sim-process.json ls
 # 2, not 1: giving both is a usage error, and nexcage keeps that distinction.
 check "exec takes a command or --process, not both" all 'rc 2' 'err_has "not both"'
@@ -322,6 +325,14 @@ check "run: rootfs/bridge from config" called_re "bridge=vmbr50,ip=dhcp .*--root
 check "run: state reports running" status_is app-1 running
 nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start" all 'rc 1' 'not_called_re "^pct start"'
 nx run --name app-2;        check "run without image -> exit 2" rc 2
+# run used to accept these and drop them: --node made the container on this
+# host, and a caller passing --console-socket waited for a pty that never came.
+for flag in "--node titan" "--console-socket /tmp/sim-console.sock" "--pid-file /tmp/sim-run.pid"; do
+  # shellcheck disable=SC2086 # the flag and its value are two words
+  nx run --name app-3 $flag "$TPL"
+  check "run ${flag%% *} is refused, nothing created" \
+    all 'rc 1' "err_has '${flag%% *}'" 'not_called_re "^pct create"' 'not_called_re "^pvesh create"'
+done
 
 echo "=== option parsing ==="
 nx start --log-level debug web-3
@@ -499,14 +510,6 @@ check "--pid-file on the LXC backend -> exit 1, refused rather than ignored" \
   all 'rc 1' 'err_has "--pid-file"' 'not_called_re "^pct create"'
 nx create plain-1 --bundle /tmp/nexcage-bundles/b1
 check "without either flag the bundle path is unaffected" all 'rc 0' 'called_re "^pct create [0-9]+ "'
-# run is create then start: the flags are refused as for create, before either
-# (#328: they used to be dropped, and the container made and started anyway).
-nx run sock-2 --bundle /tmp/nexcage-bundles/b1 --console-socket /run/x.sock
-check "run --console-socket on the LXC backend -> exit 1, nothing created or started" \
-  all 'rc 1' 'err_has "--console-socket"' 'not_called_re "^pct create"' 'not_called_re "^pct start"'
-nx run --name pidf-2 "$TPL" --pid-file /run/x.pid
-check "run --pid-file on the LXC backend -> exit 1, nothing created or started" \
-  all 'rc 1' 'err_has "--pid-file"' 'not_called_re "^pct create"' 'not_called_re "^pct start"'
 
 nx delete spec-1
 check "delete refuses a running container without --force" rc 1
@@ -861,23 +864,9 @@ nx create --name there-3 --node titan --bundle /tmp/nexcage-bundles/b1
 check "--node with a bundle is refused, not half-done" \
   all 'rc 1' 'err_has "packed into a template on this host"'
 
-# run --node makes the container there and starts it there, as create --node
-# then start would; it used to make it on this host without a word (#328).
-nx run --name there-r --node titan "$TPL"
-check "run --node creates through that node's API and starts it there" \
-  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc --vmid [0-9]+ .*--hostname there-r"' \
-      'called_re "^pvesh create /nodes/titan/lxc/[0-9]+/status/start$"' \
-      'not_called_re "^pct create"' 'not_called_re "^pct start"'
-nx run --name there-r2 --node otherhost "$TPL"
-check "run --node on a node without the template is refused, nothing started" \
-  all 'rc 1' 'err_has "does not have the template"' 'not_called_re "status/start"' 'not_called_re "^pct start"'
-
 nx --runtime crun create --node titan --bundle /tmp/nexcage-bundles/b1 there-4
 check "--node on the crun backend says it has nowhere to put it" \
   all 'rc 1' 'err_has "nowhere else to put it"'
-nx --runtime crun run --node titan --bundle /tmp/nexcage-bundles/b1 there-5
-check "run --node on the crun backend is refused by name" \
-  all 'rc 1' 'err_has "--node"' 'err_has "nowhere else to put it"'
 
 # Naming this host is not "another node": it is the ordinary local path.
 nx create --name here-2 --node "$(hostname)" "$TPL"
@@ -980,17 +969,17 @@ check "rmi on the crun backend says templates are not its business" \
   all 'rc 1' 'err_has "already there"'
 
 echo "=== health ==="
-# Most of its checks look at the host, so they are not asserted here. The
-# configuration it checks is the one the commands load, --config included, and
-# the network check asks no host outside the cluster (#334).
-cfg '{"network":{"bridge":"vmbr0"}}'
+# Most of its checks look at the host, so only what does not depend on the host
+# is checked here: which configuration it reports, and that it asks no outside
+# host. It used to look at /etc/nexcage/config.json, then ./config.json,
+# whatever the commands read, and to run `nslookup google.com`.
+cfg '{"proxmox":{"storage":"local-lvm"}}'
 nx health
-check "health checks the file the commands load: ./config.json first" \
-  all 'err_has "Config file loads: ./config.json"' '! err_has "google"' 'err_has "dns_resolver"'
-printf '{"network":{"bridge":"vmbr7"}}\n' > "$S/work/alt.json"
+check "health reports the config file the commands read" err_has "Config file in use: ./config.json"
+check "health resolves no outside name" all '! grep -qiE "dns|google" "$S/err"'
+printf '{}\n' > "$S/work/alt.json"
 nx --config alt.json health
-check "health --config checks that file instead" \
-  all 'err_has "Config file loads: alt.json"' '! err_has "./config.json"'
+check "health reports the file --config names" err_has "Config file in use: alt.json"
 
 echo
 check "no leaks, panics or invalid frees in any run" all '[ "$LEAKS" = 0 ]'

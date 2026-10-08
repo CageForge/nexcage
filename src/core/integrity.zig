@@ -102,33 +102,18 @@ pub const IntegrityChecker = struct {
         } else {
             try report.addCheck("network_interfaces", .warn, "Network interface issues detected", .{});
         }
-
-        // A resolver is configured. Nothing is looked up: a lookup needs a
-        // name, and any name outside the cluster is one an air-gapped host
-        // cannot resolve and a root tool has no business asking about.
-        if (self.checkResolverConfigured()) {
-            try report.addCheck("dns_resolver", .pass, "A nameserver is configured in /etc/resolv.conf", .{});
-        } else {
-            try report.addCheck("dns_resolver", .warn, "No nameserver in /etc/resolv.conf", .{});
-        }
     }
 
-    /// Check configuration integrity: the file every other command would
-    /// load, --config included, through the same loader.
+    /// Report the configuration file the commands read. main loads it before
+    /// any command runs and stops on one that does not parse, so by the time
+    /// this runs the file is valid; what is left to say is which one it is.
     fn checkConfigurationIntegrity(self: *IntegrityChecker, report: *IntegrityReport) !void {
         if (self.logger) |log| try log.info("Checking configuration integrity...", .{});
 
-        const path = config.resolvedPath() orelse {
-            try report.addCheck("config_file", .warn, "No config file at ./config.json, /etc/nexcage/config.json or /etc/nexcage/nexcage.json; the built-in defaults are in use", .{});
-            return;
-        };
-        var loader = config.ConfigLoader.init(self.allocator);
-        if (loader.loadFromFile(path)) |loaded| {
-            var cfg = loaded;
-            cfg.deinit();
-            try report.addCheck("config_file", .pass, "Config file loads: {s}", .{path});
-        } else |err| {
-            try report.addCheck("config_file", .fail, "Config file does not load: {s} ({s})", .{ path, @errorName(err) });
+        if (config.activePath()) |path| {
+            try report.addCheck("config_file", .pass, "Config file in use: {s}", .{path});
+        } else {
+            try report.addCheck("config_file", .warn, "No config file in use; the built-in defaults apply", .{});
         }
     }
 
@@ -230,17 +215,6 @@ pub const IntegrityChecker = struct {
         }
 
         return result.exit_code == 0;
-    }
-
-    /// /etc/resolv.conf names at least one nameserver
-    fn checkResolverConfigured(self: *IntegrityChecker) bool {
-        const content = std.fs.cwd().readFileAlloc(self.allocator, "/etc/resolv.conf", 64 * 1024) catch return false;
-        defer self.allocator.free(content);
-        var lines = std.mem.splitScalar(u8, content, '\n');
-        while (lines.next()) |line| {
-            if (std.mem.startsWith(u8, std.mem.trimLeft(u8, line, " \t"), "nameserver")) return true;
-        }
-        return false;
     }
 
     /// Check if nexcage process is running
