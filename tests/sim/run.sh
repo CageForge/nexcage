@@ -969,8 +969,17 @@ check "rmi on the crun backend says templates are not its business" \
   all 'rc 1' 'err_has "already there"'
 
 echo "=== health ==="
-# Its checks look at the host, so only the absence of leaks is checked here
+# Most of its checks look at the host, so only what does not depend on the host
+# is checked here: which configuration it reports, and that it asks no outside
+# host. It used to look at /etc/nexcage/config.json, then ./config.json,
+# whatever the commands read, and to run `nslookup google.com`.
+cfg '{"proxmox":{"storage":"local-lvm"}}'
 nx health
+check "health reports the config file the commands read" err_has "Config file in use: ./config.json"
+check "health resolves no outside name" all '! grep -qiE "dns|google" "$S/err"'
+printf '{}\n' > "$S/work/alt.json"
+nx --config alt.json health
+check "health reports the file --config names" err_has "Config file in use: alt.json"
 
 echo
 check "no leaks, panics or invalid frees in any run" all '[ "$LEAKS" = 0 ]'

@@ -14,6 +14,36 @@ pub fn setExplicitPath(path: ?[]const u8) void {
     explicit_path = path;
 }
 
+/// Where loadDefault looks when --config names no file, in order.
+const default_paths = [_][]const u8{
+    "./config.json",
+    "/etc/nexcage/config.json",
+    "/etc/nexcage/nexcage.json",
+};
+
+/// The file loadDefault reads: the one --config names, else the first default
+/// location that exists. null when there is none and the built-in defaults
+/// apply. For `health`, which used to look at files of its own.
+pub fn activePath() ?[]const u8 {
+    if (explicit_path) |path| return path;
+    for (default_paths) |path| {
+        // loadDefault moves on only past a file that is not there, so a file
+        // that is there but cannot be read is still the one in use.
+        std.fs.cwd().access(path, .{}) catch |err| switch (err) {
+            error.FileNotFound => continue,
+            else => {},
+        };
+        return path;
+    }
+    return null;
+}
+
+test "the file in use is the one --config names" {
+    setExplicitPath("alt.json");
+    defer setExplicitPath(null);
+    try std.testing.expectEqualStrings("alt.json", activePath().?);
+}
+
 test "an explicit path replaces the default search, and must exist" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -70,12 +100,6 @@ pub const ConfigLoader = struct {
         }
 
         // Try to load from default locations in order
-        const default_paths = [_][]const u8{
-            "./config.json",
-            "/etc/nexcage/config.json",
-            "/etc/nexcage/nexcage.json",
-        };
-
         for (default_paths) |path| {
             if (self.loadFromFile(path)) |config| {
                 return config;

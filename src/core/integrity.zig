@@ -1,5 +1,6 @@
 const std = @import("std");
 const logging = @import("logging.zig");
+const config = @import("config.zig");
 
 /// System integrity checker for monitoring critical components
 pub const IntegrityChecker = struct {
@@ -101,49 +102,18 @@ pub const IntegrityChecker = struct {
         } else {
             try report.addCheck("network_interfaces", .warn, "Network interface issues detected", .{});
         }
-
-        // Check DNS resolution
-        const dns_check = self.checkDnsResolution();
-        if (dns_check) {
-            try report.addCheck("dns_resolution", .pass, "DNS resolution working", .{});
-        } else {
-            try report.addCheck("dns_resolution", .warn, "DNS resolution issues", .{});
-        }
     }
 
-    /// Check configuration integrity
+    /// Report the configuration file the commands read. main loads it before
+    /// any command runs and stops on one that does not parse, so by the time
+    /// this runs the file is valid; what is left to say is which one it is.
     fn checkConfigurationIntegrity(self: *IntegrityChecker, report: *IntegrityReport) !void {
         if (self.logger) |log| try log.info("Checking configuration integrity...", .{});
 
-        // Check if config file exists and is readable
-        const config_paths = [_][]const u8{
-            "/etc/nexcage/config.json",
-            "config.json",
-        };
-
-        var config_found = false;
-        for (config_paths) |path| {
-            if (self.checkPathAccess(path)) {
-                try report.addCheck("config_file", .pass, "Config file found: {s}", .{path});
-                config_found = true;
-                break;
-            } else |_| {
-                // Path not accessible, continue to next
-            }
-        }
-
-        if (!config_found) {
-            try report.addCheck("config_file", .warn, "No config file found in standard locations", .{});
-        }
-
-        // Check if config is valid JSON
-        if (config_found) {
-            const json_check = self.validateConfigJson();
-            if (json_check) {
-                try report.addCheck("config_json_valid", .pass, "Config file contains valid JSON", .{});
-            } else {
-                try report.addCheck("config_json_valid", .fail, "Config file contains invalid JSON", .{});
-            }
+        if (config.activePath()) |path| {
+            try report.addCheck("config_file", .pass, "Config file in use: {s}", .{path});
+        } else {
+            try report.addCheck("config_file", .warn, "No config file in use; the built-in defaults apply", .{});
         }
     }
 
@@ -245,45 +215,6 @@ pub const IntegrityChecker = struct {
         }
 
         return result.exit_code == 0;
-    }
-
-    /// Check DNS resolution
-    fn checkDnsResolution(self: *IntegrityChecker) bool {
-        const result = self.runCommand(&[_][]const u8{ "nslookup", "google.com" }) catch return false;
-        defer {
-            self.allocator.free(result.stdout);
-            self.allocator.free(result.stderr);
-        }
-
-        return result.exit_code == 0;
-    }
-
-    /// Validate config JSON
-    fn validateConfigJson(self: *IntegrityChecker) bool {
-        const config_paths = [_][]const u8{
-            "/etc/nexcage/config.json",
-            "config.json",
-        };
-
-        for (config_paths) |path| {
-            // Check if path is absolute
-            const file = if (std.fs.path.isAbsolute(path))
-                std.fs.openFileAbsolute(path, .{}) catch continue
-            else
-                std.fs.cwd().openFile(path, .{}) catch continue;
-
-            defer file.close();
-
-            const content = file.readToEndAlloc(self.allocator, 1024 * 1024) catch continue;
-            defer self.allocator.free(content);
-
-            var parsed = std.json.parseFromSlice(std.json.Value, self.allocator, content, .{}) catch continue;
-            defer parsed.deinit();
-
-            return true;
-        }
-
-        return false;
     }
 
     /// Check if nexcage process is running
