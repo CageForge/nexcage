@@ -524,6 +524,52 @@ delete it by hand when the run is done. On a node that already had k3s, the
 containerd template with the `nexcage` runtime (pointing at `/nexcage-traced`,
 which is removed) and `RuntimeClass/nexcage` are left in place as well.
 
+## critest: what Kubernetes checks of a runtime
+
+`crun_build.yml` runs critest, the CRI validation suite from cri-tools
+(v1.37.0, 142 specs). It runs against containerd with nexcage as the runtime
+handler, routing `*` → crun, and again through the image's own crun for
+reference (#311). Each run takes under two minutes.
+`tests/cri/critest-known-failures` names every spec that fails, with the
+reason. A failure the list does not name turns the job red, and so does a
+named spec that passes.
+
+**On the CI host, 110 specs pass, 10 fail and 22 are skipped, spec for spec
+the same as through crun.** None of the ten is nexcage's:
+
+- **AppArmor (9).** The runner has AppArmor, so these specs run rather than
+  skip. Each one first loads critest's test profiles with
+  `sudo apparmor_parser`, and the image has neither.
+- **Pod sandbox metrics (1).** containerd reads a sandbox's metrics from the
+  pod's cgroup parent. critest gives the pod none when the engine uses
+  cgroupfs, as here; a kubelet always sets one.
+
+The 22 skipped specs:
+
+| Specs | Why skipped |
+|---|---|
+| Benchmarks (5) | Run only with `-benchmark` |
+| NRI (13) | Need `-nri-socket` |
+| Image ID consistency (2), image volume digest (1) | containerd's image handling, not the runtime's |
+| User namespaces with idmapped mounts (1) | The filesystem under `/run/containerd` in the CI container cannot be idmapped |
+
+critest found one defect, in its first run: #361. The attach spec's cleanup
+could not stop the pod. The container had exited, `kill` failed, and with
+`--log` nexcage gave containerd only "operation failed", so containerd could
+not tell that the process was already gone. With the fix the spec passes, as
+it does through crun. On a node, the same thing happens whenever a container
+exits while the kubelet stops it. It is fixed in the same change that brought
+critest in.
+
+To run it:
+
+```bash
+docker build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t nexcage:ci .
+docker build -f tests/cri/Dockerfile -t nexcage:cri-test tests/cri
+docker run --rm --privileged --cgroupns=private \
+  -v "$PWD/tests/cri:/t:ro" nexcage:cri-test /t/critest.sh
+```
+
 ## Related
 
 - [architecture/DEPLOYMENT.md](architecture/DEPLOYMENT.md) — where the binary runs today

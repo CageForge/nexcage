@@ -124,3 +124,15 @@ jobs:
           docker run --rm --privileged --cgroupns=private \
             -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
             --entrypoint /bin/sh nexcage:ci /t/foreign_cwd.sh
+
+      # critest (#311), the CRI validation suite from cri-tools: what
+      # Kubernetes checks of a runtime, through the same containerd and the
+      # image the pod step built. It runs last: it takes the longest, and a
+      # failure here should not hide the checks above. The step fails on a
+      # failure tests/cri/critest-known-failures does not name, and on a named
+      # one that does not fail.
+      - name: critest, the CRI validation suite
+        run: |
+          set -eux
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/tests/cri:/t:ro" nexcage:cri-test /t/critest.sh
