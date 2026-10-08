@@ -34,7 +34,6 @@ jobs:
           IMG=docker.io/library/busybox:1.36
           CANDIDATES="/root/.config/containers/auth.json /run/containers/0/auth.json /root/.docker/config.json"
           SAVE=$(mktemp -d)
-          TOKEN=probe309
 
           echo "== $($SUDO pveversion); $(skopeo --version 2>&1)"
           $SUDO pveversion -v | grep -E 'storage|pve-manager' || true
@@ -67,7 +66,6 @@ jobs:
           cleanup() {
             restore
             free_new
-            $SUDO pveum user token remove root@pam "$TOKEN" >/dev/null 2>&1 || true
             $SUDO rm -rf "$SAVE"
           }
           trap cleanup EXIT
@@ -81,45 +79,28 @@ jobs:
             fi
           done
 
-          # The pvedaemon path: the API on this node, with a token that exists
-          # for this job only.
-          $SUDO pveum user token remove root@pam "$TOKEN" >/dev/null 2>&1 || true
-          SECRET=$($SUDO pveum user token add root@pam "$TOKEN" --privsep 0 --output-format json \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
-          CA=$(mktemp); $SUDO cat /etc/pve/pve-root-ca.pem > "$CA"
-
           # skopeo itself, as root through sudo and with no --authfile: what
           # Proxmox's call would find if it passed nothing and kept HOME.
           via_skopeo() {
             $SUDO skopeo inspect "docker://$IMG" >/dev/null 2>/tmp/sk.err && echo "pulled" \
               || echo "FAILED: $(tail -1 /tmp/sk.err | cut -c1-200)"
           }
+          # pvedaemon runs with no HOME, USER or XDG_* (printed above), and its
+          # API was not reachable from the node itself in the first two runs.
+          # The same skopeo, as root, with an environment as empty as that.
+          via_noenv() {
+            $SUDO env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin skopeo inspect "docker://$IMG" >/dev/null 2>/tmp/ne.err && echo "pulled" \
+              || echo "FAILED: $(tail -1 /tmp/ne.err | cut -c1-200)"
+          }
           via_pvesh() {
-            out=$($SUDO pvesh create "/nodes/$NODE/storage/local/oci-registry-pull" --reference "$IMG" 2>&1); rc=$?
+            $SUDO pvesh create "/nodes/$NODE/storage/local/oci-registry-pull" --reference "$IMG" >/tmp/pv.out 2>/tmp/pv.err; rc=$?
+            new=$(comm -13 <(echo "$BEFORE") <(tmpls) | tr '\n' ' ')
             free_new
-            echo "$out" | grep -iE 'skopeo|authfile|creds' | head -3 | sed 's/^/    | /' >&2
-            [ $rc -eq 0 ] && echo "pulled" || echo "FAILED: $(echo "$out" | grep -iE 'unauthor|denied|incorrect|error' | tail -1 | cut -c1-200)"
+            { echo "    | exit $rc; new on the storage: ${new:-nothing}"
+              sed 's/^/    | stdout: /' /tmp/pv.out | cut -c1-220 | tail -4
+              sed 's/^/    | stderr: /' /tmp/pv.err | cut -c1-220 | tail -4; } >&2
+            [ -n "$new" ] && echo "pulled" || echo "FAILED (nothing on the storage)"
           }
-          via_pvedaemon() {
-            resp=$(curl -sS --connect-timeout 10 --max-time 60 --cacert "$CA" -X POST \
-              -H "Authorization: PVEAPIToken=root@pam!$TOKEN=$SECRET" \
-              --data-urlencode "reference=$IMG" \
-              "https://$NODE:8006/api2/json/nodes/$NODE/storage/local/oci-registry-pull" 2>&1)
-            upid=$(echo "$resp" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("data") or "")' 2>/dev/null)
-            [ -n "$upid" ] || { echo "PROBE BROKEN: the API gave no task: $(echo "$resp" | head -c 200)"; return; }
-            for _ in $(seq 1 120); do
-              st=$($SUDO pvesh get "/nodes/$NODE/tasks/$upid/status" --output-format json 2>/dev/null)
-              echo "$st" | grep -q '"status":"stopped"' && break
-              sleep 2
-            done
-            exitstatus=$(echo "$st" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("exitstatus",""))')
-            free_new
-            if [ "$exitstatus" = OK ]; then echo "pulled"; else
-              echo "FAILED: $exitstatus: $($SUDO pvesh get "/nodes/$NODE/tasks/$upid/log" --output-format json 2>/dev/null \
-                | python3 -c 'import json,sys; print(" | ".join(l["t"] for l in json.load(sys.stdin))[-200:])')"
-            fi
-          }
-
           # Credentials docker.io will refuse: user nexcage-probe, password wrong.
           WRONG=$(printf 'nexcage-probe:wrong' | base64)
           put() { $SUDO mkdir -p "$(dirname "$1")"; printf '{"auths":{"docker.io":{"auth":"%s"},"https://index.docker.io/v1/":{"auth":"%s"}}}\n' "$WRONG" "$WRONG" | $SUDO tee "$1" >/dev/null; }
@@ -128,13 +109,13 @@ jobs:
           echo "== no auth file anywhere (the baseline: all must pull)"
           echo "skopeo:    $(via_skopeo)"
           echo "pvesh:     $(via_pvesh)"
-          echo "pvedaemon: $(via_pvedaemon)"
+          echo "no env:    $(via_noenv)"
           for f in $CANDIDATES; do
             echo
             echo "== wrong credentials in $f only (FAILED means that path reads it)"
             put "$f"
             echo "skopeo:    $(via_skopeo)"
             echo "pvesh:     $(via_pvesh)"
-            echo "pvedaemon: $(via_pvedaemon)"
+            echo "no env:    $(via_noenv)"
             $SUDO rm -f "$f"
           done
