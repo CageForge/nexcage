@@ -51,6 +51,7 @@ nav:
   - CI/CD: CI_CD_SETUP.md
   - Compliance: COMPLIANCE_CNCF_CHECKLIST.md
   - Releases:
+    - v0.14.1: releases/NOTES_v0.14.1.md
     - v0.14.0: releases/NOTES_v0.14.0.md
     - v0.13.0: releases/NOTES_v0.13.0.md
     - v0.12.0: releases/NOTES_v0.12.0.md

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-08
+
+Flags that `run` and `exec` accepted on Proxmox LXC and then dropped are
+refused by name -- **`exec --user 1000` ran the command as root** -- and three
+smaller fixes: an explicit `--log-level info`, `health`'s idea of the
+configuration, and CI's Zig install.
+
 ### Changed
 - **CI installs Zig with `mlugg/setup-zig`**, pinned to v2.2.1 by commit, instead of `goto-bus-stop/setup-zig`, which its README calls unmaintained (#338). The Proxmox E2E on `main` failed in that step, timing out on the download before any test ran; on the self-hosted runners the new action keeps Zig in the runner's tool cache rather than fetching it every run. The release workflow builds without the Zig cache, from the tagged tree alone.
 
