@@ -6,7 +6,7 @@
 #              namespace so that unshare and the mounts are not counted. The
 #              fakes are small shell scripts, so this is nexcage plus a few
 #              milliseconds for each tool it runs.
-#   calls      how many times it ran pct, pvesh, pvesm, pveam or pveversion.
+#   calls      how many times it ran pct, pvesh, pvesm, pveam, pveversion or zfs.
 #              On a real node each of those is a Perl process that takes
 #              0.3-1 s, so this is most of what a user waits for there. It does
 #              not vary between runs, which makes it the number to gate on.

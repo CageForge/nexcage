@@ -33,7 +33,7 @@ help:
 	@echo "  e2e           sim + crun backend + a pod through containerd, no Proxmox"
 	@echo "  act           The GitHub-hosted CI jobs through act"
 	@echo "  local-ci      lint + test + sim, then every CI job through act"
-	@echo "  perf          Time every command; PERF_ARGS='--against main' to compare"
+	@echo "  perf          Time the lifecycle commands; PERF_ARGS='--against main' to compare"
 	@echo "  dev-shell     A shell with nexcage, crun, containerd and crictl"
 
 build:

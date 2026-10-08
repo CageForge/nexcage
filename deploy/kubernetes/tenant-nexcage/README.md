@@ -5,8 +5,11 @@ cluster they were written against is `pskep`: five Talos nodes, Cozystack, with
 kubemox connected to the Proxmox host `prox-home`.
 
 [../../../docs/KUBERNETES_INTEGRATION.md](../../../docs/KUBERNETES_INTEGRATION.md)
-explains what the runtime still needs before Kubernetes can schedule onto it,
-and which stage each of these files belongs to.
+explains how Kubernetes came to schedule pods onto nexcage (through a
+`RuntimeClass`, on a node running k3s that `tests/k8s/pod_on_node.sh`
+installs when there is none, not on `pskep`), what the runtime still lacks,
+such as `events` and an image service of its own, and which stage each of
+these files belongs to.
 
 | File | What it does |
 |---|---|

@@ -7,14 +7,14 @@
 - A Proxmox VE 9.x host to run containers; building and unit tests work
   anywhere
 
-The default build links only libc. The first build may download the pinned
-`oci-specs-zig` package from `build.zig.zon`.
+The default build links only libc. `oci-spec-zig` is vendored in
+`deps/oci-spec-zig`, so the build downloads nothing.
 
 ## Everything in one command
 
 `scripts/dev.sh` checks the tools, builds, runs every test that works without
 Proxmox — the simulator, the crun backend, a pod through containerd — runs the
-CI jobs through act, and times every command. See
+CI jobs through act, and times the lifecycle commands. See
 [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md).
 
 ```bash
@@ -52,7 +52,9 @@ paths:
 | `-Denable-backend-crun` | `false` | crun backend; links vendored libcrun |
 | `-Denable-libcrun-abi` | follows crun | Compile `deps/crun`; needs the submodules and generated headers |
 
-A compiled-out backend is refused at run time with `UnsupportedOperation`.
+A compiled-out crun backend is refused at run time with
+`UnsupportedOperation`. The Proxmox LXC backend cannot be compiled out:
+`-Denable-backend-proxmox-lxc=false` fails to build.
 
 ### crun backend
 
@@ -81,8 +83,8 @@ Locally, mirror the Dockerfile: `git submodule update --init --recursive`,
 ## Proxmox E2E
 
 The "Proxmox E2E (Self-Hosted)" workflow drives create → state → start → stop
-→ delete through the built binary on a runner with the `proxmox` label. Runner
-requirements are in [CI_CD_SETUP.md](CI_CD_SETUP.md).
+→ delete through the built binary on a self-hosted runner with the `pve9`
+label. Runner requirements are in [CI_CD_SETUP.md](CI_CD_SETUP.md).
 
 ## Next
 

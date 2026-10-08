@@ -12,7 +12,7 @@ pub const CreateCommand = struct {
     const Self = @This();
 
     name: []const u8 = "create",
-    description: []const u8 = "Create a new container or virtual machine",
+    description: []const u8 = "Create a new container",
     base: base_command.BaseCommand = .{},
 
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
@@ -46,6 +46,14 @@ pub const CreateCommand = struct {
             try out.writeAll("    --name <id>     Container ID/name (required)\n");
             try out.writeAll("    --image <img>   Container image (required)\n");
             try out.writeAll("    --storage <s>   Storage a registry image is found on or pulled to (default: local)\n");
+            try out.writeAll("    --bundle <dir>  OCI bundle directory, an absolute path (config.json and rootfs/), in\n");
+            try out.writeAll("                    place of an image; the first positional word is then the container id\n");
+            try out.writeAll("                    (create <id> --bundle <dir>)\n");
+            try out.writeAll("    --console-socket <path>, --pid-file <path>\n");
+            try out.writeAll("                    crun only; refused on Proxmox LXC, where pct create starts no process\n");
+            try out.writeAll("    --node <n>      Proxmox cluster node to create on (default: this one); Proxmox LXC only.\n");
+            try out.writeAll("                    On another node the image must be a <storage>:vztmpl/ template that node\n");
+            try out.writeAll("                    can read\n");
             try out.writeAll("    --runtime <rt>  Runtime type (lxc, crun)\n");
             try out.writeAll("    --config <cfg>  Configuration file path\n");
             try out.writeAll("    --verbose       Enable verbose logging\n");

@@ -18,7 +18,11 @@ Tests that exercise real code live next to it:
 | `src/backends/proxmox-lxc/pve.zig` | `pct list` parsing (locks, header, name matching), Proxmox VE version parsing |
 | `src/core/config.zig` | The `proxmox` and `network` config sections, bounds, defaults |
 | `src/core/constants.zig` | Defaults (bridge, memory, rootfs size) |
-| `tests/oci/*_simple_test.zig`, `tests/simple_*.zig` | Self-contained checks of OCI types and validation |
+| `src/core/resources.zig` | `update`'s sizes, a `linux.resources` document, and their conversion to pct's memory, cpulimit and CPU weight |
+| `src/core/signals.zig` | Signal names and numbers `kill` accepts |
+| `src/core/rfc3339.zig` | Timestamps in the JSON log |
+| `src/core/enhanced_config.zig` | Loading a JSON config through `core.config` with the `config_integration` wrapper, which no command uses |
+| `tests/oci/*_simple_test.zig`, `tests/simple_*.zig`, `tests/backends/proxmox-lxc/simple_test.zig` | Self-contained checks that import only `std` |
 
 ## Running against fake Proxmox tools
 
@@ -36,8 +40,8 @@ arguments and print what the real tools print (`pct list` uses
 `printf "%-10s %-10s %-12s %-20s\n"` for VMID, Status, Lock and Name). Like the
 real pct, the fake refuses a template volume that does not exist, and it lists
 the archive nexcage packs from an OCI bundle so the run can check what went
-into it. Files named `fail_*`, `no_kill` and `lock.<vmid>` in the scratch
-directory make the tools fail or report a lock.
+into it. Files named `fail_*` and `lock.<vmid>` in the scratch directory make
+the tools fail or report a lock.
 
 nexcage runs as uid 0 in a user and mount namespace, with `/run` and
 `/tmp/nexcage-bundles` bound to `zig-out/sim` and a tmpfs over `/tmp`, so it
@@ -56,20 +60,33 @@ user namespace by default; there, run
 
 1. builds nexcage and runs `--help` / `version`
 2. writes `./config.json` with the runner's bridge and storage
-3. `create` from a template → `state` is `stopped` → `pct config` shows the
+3. `create` from a template → `state` is `created` → `pct config` shows the
    hostname, the bridge and a 2 GB rootfs on the configured storage
 4. a duplicate `create` exits 1; an invalid name and an unknown `--runtime`
    exit 2; `list` shows the container, and `list` without root exits 1
 5. `start` → `running`; `state --log-level warn <name>` (an option after the
-   command) reports the right container; `kill <name> SIGCONT` succeeds and the
-   container keeps running (skipped with a warning when `pct exec` itself fails
-   on the runner); a malformed signal exits 2
-6. `stop` → `stopped`; `kill` on it exits 1; `delete` → pct no longer lists it;
-   `state` and `start` on it exit 1
-7. `run` → `running` → `stop` → `delete`
+   command) reports the right container; `state` reports the init's host PID;
+   `exec` passes the command's output and exit status back; `kill <name>
+   SIGCONT` succeeds and the container keeps running; a malformed signal exits
+   2; `pause` freezes the cgroup and holds an `exec` until `resume`; `update`
+   sets memory, swap and CPU limits that `pct config` and the cgroup show; a
+   second container, run on an lvm-thin or ZFS storage, goes through
+   `snapshot`, `snapshots`, `rollback` and `delsnapshot` (skipped with a
+   warning without one)
+6. `stop` → `stopped`; `kill` and `pause` on it exit 1; `state` reports
+   `bundle` null; `--root` keeps state out of `/run/nexcage`; `delete` → pct
+   no longer lists it; `state` and `start` on it exit 1
+7. `run --config <file>` → `running` with that file's rootfs size → `kill
+   SIGKILL` → `stopped` → `delete`; a second `run`, where `delete` exits 1 and
+   `delete --force` destroys it
 8. an OCI bundle under `/var/lib/nexcage/bundles/` whose `rootfs/` is the
-   extracted template: `create` → `stopped`, and the template packed from it is
-   gone from storage `local` → `start` → `running` → `stop` → `delete`
+   extracted template: `create <id> --bundle <dir>` → `created` and `state`
+   reports the bundle, and the template packed from it is gone from storage
+   `local` → `start` → `running` → `stop` → `delete`
+9. on Proxmox VE 9.1 and later, `run` from `docker.io/library/redis:7` →
+   `running`, unprivileged; a second `create` from it pulls nothing
+10. `images` agrees with `pvesm`; on 9.1 and later, `pull` puts a template on
+   storage `local` and `rmi` removes it
 
 A cleanup trap destroys the containers and the bundle if any step fails, and a
 final step removes anything named `gh-e2e-*` a cancelled run left behind.
@@ -92,8 +109,9 @@ nexcage state e2e-1; echo "exit $?"   # 1
 `crun_build.yml` runs — the crun backend's `features`, `ps` and foreign working
 directory checks, and a pod through containerd's CRI — under rootless podman or
 Docker, the GitHub-hosted CI jobs through act, and the performance suites in
-`tests/perf/`: every command's wall time, peak memory and, on the Proxmox LXC
-backend, the number of `pct`/`pvesh`/`pvesm` runs, compared against another
+`tests/perf/`: the wall time of the lifecycle commands and, on the Proxmox LXC
+backend, peak memory and the number of
+`pct`/`pvesh`/`pvesm`/`pveam`/`pveversion`/`zfs` runs, compared against another
 revision with `scripts/dev.sh perf --against main`. See
 [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
 
