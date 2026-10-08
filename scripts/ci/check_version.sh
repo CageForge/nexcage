@@ -23,6 +23,15 @@ fi
 
 echo "Detected version: $VERSION"
 
+# build.zig.zon carries the version too, for anything that reads the package
+# manifest. Nothing in the build does, which is how it stayed at 0.9.0 through
+# four releases.
+ZON_VERSION=$(sed -n 's/^[[:space:]]*\.version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' build.zig.zon)
+if [[ "$ZON_VERSION" != "$VERSION" ]]; then
+  echo "build.zig.zon says version '$ZON_VERSION', VERSION says '$VERSION'" >&2
+  exit 1
+fi
+
 # Build should embed version; quick compile test
 zig version >/dev/null
 zig build >/dev/null

@@ -9,7 +9,7 @@
 | `crun_build.yml` | ubuntu-24.04 | push/PR to `main` | Docker build with `-Denable-backend-crun=true` |
 | `memory_leak_check.yml` | ubuntu-22.04 | push/PR | Valgrind over basic commands |
 | `security.yml` | ubuntu-latest | push/PR to `main`, weekly | Semgrep, Trivy, Gitleaks (non-blocking) |
-| `version-check.yml` | ubuntu-22.04 | push/PR | `VERSION` is semver and appears in `nexcage --help` |
+| `version-check.yml` | ubuntu-22.04 | push/PR | `VERSION` is semver, matches `build.zig.zon` and appears in `nexcage --help` |
 | `release.yml` | ubuntu-24.04 | tag `v*` | Tests, ReleaseSafe binary, `-crun` binary, `.deb`, SBOMs, GitHub release |
 | `dependency_check.yml` | ubuntu-latest | weekly | New OCI spec / crun releases; at most one open issue per dependency |
 | `scorecards.yml`, `pages.yml`, `docs_mike.yml` | ubuntu-latest | various | OpenSSF Scorecards, documentation site |
