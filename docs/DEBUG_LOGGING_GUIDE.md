@@ -202,7 +202,7 @@ nexcage uses a priority system for logging configuration, where higher priority 
 3. **Configuration File** - Low priority
 4. **Default Values** - Lowest priority
 
-A level of `info` on the command line or in `NEXCAGE_LOG_LEVEL` (or an unknown level, which is read as `info`) counts as unset, so it does not override a level set by a lower priority source. No source turns DEBUG mode off once another has turned it on.
+A level on the command line or in `NEXCAGE_LOG_LEVEL` overrides a lower priority source whatever it is, `info` included; an unknown level counts as unset. A configuration file's `debug` level also turns on DEBUG mode, and an explicit level from a higher source turns it off with the level; nothing turns off the DEBUG mode `--debug` or `NEXCAGE_DEBUG` turns on.
 
 ### Command Line Arguments
 ```bash
