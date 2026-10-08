@@ -1,0 +1,45 @@
+# The runtime-spec validation suite's tests that fail against nexcage routed to
+# crun, one per line: the test, then why. Each one is also checked against the
+# image's own crun, and the job prints whether crun fails it too. A failure not
+# listed here turns crun_build.yml red; so does a listed test that passes.
+# A test written `~name` is run and its result printed, but not checked: it
+# passes or fails by chance. docs/RUNTIME_SPEC_VALIDATION.md has the results
+# and what they mean.
+
+# What libcrun does, as runc does.
+delete  libcrun deletes a container in the `created` state without --force, as runc does; the spec reads "not stopped" as an error
+
+# The test cannot read cgroup v2, which is all a current host has: the suite's
+# cgroup v2 reader is unimplemented (cgroups/cgroups_v2.go) and these tests
+# look for v1 hierarchies. They say nothing about the runtime.
+delete_only_create_resources  makes /sys/fs/cgroup/pids/cgrouptest, a cgroup v1 path
+delete_resources  "find pids cgroup": the suite reads cgroup v1 only
+linux_cgroups_cpus  "find cpu cgroup": the suite reads cgroup v1 only
+linux_cgroups_devices  "find devices": the suite reads cgroup v1 only
+linux_cgroups_hugetlb  the test exits with "cgroupv2 is not supported yet"
+linux_cgroups_pids  "find pids cgroup": the suite reads cgroup v1 only
+linux_cgroups_relative_cpus  "find cpus cgroup": the suite reads cgroup v1 only
+linux_cgroups_relative_devices  "find devices": the suite reads cgroup v1 only
+linux_cgroups_relative_hugetlb  "find hugetlb cgroup": the suite reads cgroup v1 only
+linux_cgroups_relative_pids  "find pids cgroup": the suite reads cgroup v1 only
+
+# The test asks for a setting cgroup v2 does not have, and libcrun refuses it
+# by name, which is what the spec asks of a runtime that cannot apply a value.
+linux_cgroups_blkio  blockIO.leafWeight: "cannot set leaf_weight with cgroupv2"
+linux_cgroups_relative_blkio  blockIO.leafWeight: "cannot set leaf_weight with cgroupv2"
+linux_cgroups_memory  memory.kernel, deprecated by the spec: "cannot set kernel memory with cgroupv2"
+linux_cgroups_relative_memory  memory.kernel, deprecated by the spec: "cannot set kernel memory with cgroupv2"
+linux_cgroups_network  network.classID and priorities: "network limits not supported on cgroupv2"
+linux_cgroups_relative_network  network.classID and priorities: "network limits not supported on cgroupv2"
+
+# The test contradicts runtime-spec 1.3.0, or itself.
+hooks  expects "post-start1" where its own hook writes "post-start1 called", and the same for the other post-* hooks, so no runtime can match it
+poststart_fail  asserts runtime-spec 1.0's rule, log a warning and carry on; 1.3.0's lifecycle, step 9, says a failing poststart hook MUST be an error and stop the container, and libcrun's start fails
+prestart  asserts that prestart hooks run at `start`; 1.3.0 says they MUST be called as part of `create` (config.md, Prestart), which libcrun does
+~poststart  the container's process and the hook append to one file at the same time, and the test wants the process's line first; "after the process is executed" is not "after it has written". It passed 1 run in 20 against nexcage and 7 in 20 against crun 1.30.1
+misc_props  the unknown-annotation case runs /runtimetest in a bundle the test never copies it into; the other two cases pass
+pidfile  the process is `true`, which has exited by the time the test kills it before delete, and a runtime must refuse to signal a stopped container
+process_rlimits  runtimetest is a Go program, and Go (1.19 and later) raises its own soft RLIMIT_NOFILE towards the hard limit at startup, so it never sees the 3000 it was given
+
+# The host.
+linux_process_apparmor_profile  needs a profile named acme_secure_profile loaded on the host; the CI runner has AppArmor and no such profile (without AppArmor, libcrun ignores the field and the test passes)

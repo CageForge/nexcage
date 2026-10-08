@@ -96,6 +96,19 @@ jobs:
           docker run --rm --privileged --cgroupns=private \
             -v "$PWD/tests/cri:/t:ro" nexcage:cri-test /t/pod_on_nexcage.sh
 
+      # The runtime-spec's own validation suite (#310), opencontainers/
+      # runtime-tools, against this build routed to crun, with the image's crun
+      # alongside for reference. It asks what the specification says, not only
+      # what one engine happened to ask. The step fails on a failure
+      # tests/runtime-tools/known-failures does not name, and on a named one
+      # that passes.
+      - name: The runtime-spec validation suite
+        run: |
+          set -eux
+          docker build -f tests/runtime-tools/Dockerfile -t nexcage:runtime-tools tests/runtime-tools
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/tests/runtime-tools:/t:ro" nexcage:runtime-tools /t/run.sh
+
       # A container engine does not run the runtime from the bundle it names:
       # containerd's shim serves a whole pod and runs it from the sandbox's
       # directory. Nothing before this exercised that, and the backend had
