@@ -1,0 +1,120 @@
+name: Probe - which auth file a registry pull reads (#309)
+
+# A one-off probe, not a test: it answers #309's open question on the E2E node
+# and is removed again in the same pull request.
+#
+# Proxmox's oci-registry-pull runs `skopeo copy` with no --authfile. Which
+# file does that skopeo read: when nexcage calls pvesh on the node, and when
+# the pull goes through pvedaemon, as `--node` does? A file with wrong
+# credentials for docker.io answers it without a private registry or a secret:
+# an anonymous pull of a public image works, and fails with "unauthorized" as
+# soon as skopeo sends the wrong credentials it found.
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ '.github/workflows/probe_registry_auth.yml' ]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, pve9]
+    timeout-minutes: 20
+    steps:
+      - name: Which auth file a registry pull reads
+        run: |
+          # Failures are the answer here, not a reason to stop.
+          set +e -u
+          export PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH
+          if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
+          NODE=$(hostname)
+          IMG=docker.io/library/busybox:1.36
+          CANDIDATES="/root/.config/containers/auth.json /run/containers/0/auth.json /root/.docker/config.json"
+          SAVE=$(mktemp -d)
+          TOKEN=probe309
+
+          echo "== $($SUDO pveversion); $(skopeo --version 2>&1)"
+          echo "== pvedaemon's environment"
+          $SUDO cat "/proc/$(pgrep -o pvedaemon)/environ" | tr '\0' '\n' \
+            | grep -E '^(HOME|USER|XDG_[A-Z_]*|REGISTRY_AUTH_FILE)=' || echo "(none of HOME, USER, XDG_*, REGISTRY_AUTH_FILE)"
+
+          tmpls() { $SUDO pvesm list local --content vztmpl 2>/dev/null | awk 'NR>1 {print $1}' | sort; }
+          BEFORE=$(tmpls)
+          free_new() {
+            for v in $(comm -13 <(echo "$BEFORE") <(tmpls)); do $SUDO pvesm free "$v" >/dev/null 2>&1; done
+          }
+          restore() {
+            for f in $CANDIDATES; do
+              $SUDO rm -f "$f"
+              b="$SAVE/$(echo "$f" | tr / _)"
+              [ -f "$b" ] && $SUDO cp -p "$b" "$f"
+            done
+          }
+          cleanup() {
+            restore
+            free_new
+            $SUDO pveum user token remove root@pam "$TOKEN" >/dev/null 2>&1 || true
+            $SUDO rm -rf "$SAVE"
+          }
+          trap cleanup EXIT
+
+          # Whatever the node has is kept aside, and put back at the end.
+          for f in $CANDIDATES; do
+            if $SUDO test -f "$f"; then
+              echo "(the node has $f; set aside for the probe)"
+              $SUDO cp -p "$f" "$SAVE/$(echo "$f" | tr / _)"
+              $SUDO rm -f "$f"
+            fi
+          done
+
+          # The pvedaemon path: the API on this node, with a token that exists
+          # for this job only.
+          $SUDO pveum user token remove root@pam "$TOKEN" >/dev/null 2>&1 || true
+          SECRET=$($SUDO pveum user token add root@pam "$TOKEN" --privsep 0 --output-format json \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          CA=$(mktemp); $SUDO cat /etc/pve/pve-root-ca.pem > "$CA"
+
+          via_pvesh() {
+            out=$($SUDO pvesh create "/nodes/$NODE/storage/local/oci-registry-pull" --reference "$IMG" 2>&1); rc=$?
+            free_new
+            [ $rc -eq 0 ] && echo "pulled" || echo "FAILED: $(echo "$out" | grep -iE 'unauthor|denied|incorrect|error' | tail -1 | cut -c1-200)"
+          }
+          via_pvedaemon() {
+            resp=$(curl -sS --cacert "$CA" --resolve "$NODE:8006:127.0.0.1" -X POST \
+              -H "Authorization: PVEAPIToken=root@pam!$TOKEN=$SECRET" \
+              --data-urlencode "reference=$IMG" \
+              "https://$NODE:8006/api2/json/nodes/$NODE/storage/local/oci-registry-pull" 2>&1)
+            upid=$(echo "$resp" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("data") or "")' 2>/dev/null)
+            [ -n "$upid" ] || { echo "PROBE BROKEN: the API gave no task: $(echo "$resp" | head -c 200)"; return; }
+            for _ in $(seq 1 120); do
+              st=$($SUDO pvesh get "/nodes/$NODE/tasks/$upid/status" --output-format json 2>/dev/null)
+              echo "$st" | grep -q '"status":"stopped"' && break
+              sleep 2
+            done
+            exitstatus=$(echo "$st" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("exitstatus",""))')
+            free_new
+            if [ "$exitstatus" = OK ]; then echo "pulled"; else
+              echo "FAILED: $exitstatus: $($SUDO pvesh get "/nodes/$NODE/tasks/$upid/log" --output-format json 2>/dev/null \
+                | python3 -c 'import json,sys; print(" | ".join(l["t"] for l in json.load(sys.stdin))[-200:])')"
+            fi
+          }
+
+          # Credentials docker.io will refuse: user nexcage-probe, password wrong.
+          WRONG=$(printf 'nexcage-probe:wrong' | base64)
+          put() { $SUDO mkdir -p "$(dirname "$1")"; printf '{"auths":{"docker.io":{"auth":"%s"},"https://index.docker.io/v1/":{"auth":"%s"}}}\n' "$WRONG" "$WRONG" | $SUDO tee "$1" >/dev/null; }
+
+          echo
+          echo "== no auth file anywhere (the baseline: both must pull)"
+          echo "pvesh:     $(via_pvesh)"
+          echo "pvedaemon: $(via_pvedaemon)"
+          for f in $CANDIDATES; do
+            echo
+            echo "== wrong credentials in $f only (FAILED means that path reads it)"
+            put "$f"
+            echo "pvesh:     $(via_pvesh)"
+            echo "pvedaemon: $(via_pvedaemon)"
+            $SUDO rm -f "$f"
+          done
