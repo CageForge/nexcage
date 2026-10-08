@@ -8,18 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Snapshots through Proxmox**: `snapshot`, `snapshots`, `rollback` and `delsnapshot`, with pct's names, for the Proxmox LXC backend (#299). Proxmox takes the snapshot, so each is one `pct` call for a container here and one call to its node's API for a container elsewhere; nexcage adds the container by name on any node, a plain line when the storage cannot snapshot, and `--format json` for the list. The crun backend refuses them: libcrun has no storage of its own to snapshot. The successor of #116, #117, #118 and #163, which asked for this through libzfs.
+- **`ROADMAP.md`**: what comes next and why, release by release up to the criteria for 1.0, and what is not planned. No dates past the next release; each item links its issue.
+- **Snapshots through Proxmox**: `snapshot`, `snapshots`, `rollback` and `delsnapshot`, with pct's names, for the Proxmox LXC backend (#299). Proxmox takes the snapshot, so `snapshot`, `rollback` and `delsnapshot` are each one `pct` call for a container here and one call to its node's API for a container elsewhere, and `snapshots` reads the node's API for both; nexcage adds the container by name on any node, a plain line when the storage cannot snapshot, and `--format json` for the list. The crun backend refuses them: libcrun has no storage of its own to snapshot. The successor of #116, #117, #118 and #163, which asked for this through libzfs.
 - **`scripts/dev.sh`, one entry point for local development**, with `make doctor`, `dev-setup`, `e2e`, `act`, `local-ci`, `perf` and `dev-shell`: a check of every tool with how to get what is missing; the unit tests and the simulator; the crun-backend image and the checks `crun_build.yml` runs on it; a pod through containerd's CRI; a shell with nexcage, crun, containerd and crictl (`shell [CMD]`); the GitHub-hosted CI jobs through act, with the repository's `.actrc` and runner image (`.github/act`); and `pve-e2e`, which dispatches the Proxmox E2E for the pushed branch and follows it. No root needed; rootless podman or Docker. [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
-- **Performance suites** in `tests/perf/`: the Proxmox LXC lifecycle against the simulator — wall time, peak memory and the number of `pct`/`pvesh`/`pvesm` runs per command — and the crun backend's lifecycle next to crun's own binary. `scripts/dev.sh perf --against <ref>` builds both revisions ReleaseSafe, runs them in alternating rounds and exits 1 on a regression: any extra Proxmox tool run, or a time shift most of the samples agree on.
+- **Performance suites** in `tests/perf/`: the Proxmox LXC lifecycle against the simulator — wall time, peak memory and the number of Proxmox tool runs (`pct`, `pvesh`, `pvesm`, `pveam`, `pveversion`, `zfs`) per command — and the crun backend's lifecycle next to crun's own binary. `scripts/dev.sh perf --against <ref>` builds both revisions ReleaseSafe, runs them in alternating rounds and exits 1 on a regression: any extra Proxmox tool run, or a time shift most of the samples agree on.
 
 ### Changed
+- **Proxmox VE 8.x is no longer supported.** nexcage ran on it, but the E2E suite only ever ran on 9.x, and Proxmox ended support for 8.x in August 2026 together with Debian 12. Nothing in the code refuses an 8.x host; the README, `docs/INSTALL.md` and `docs/DEV_QUICKSTART.md` stop promising it.
 - **`state` reports `ociVersion` 1.3.0**, the runtime-spec baseline since v0.7.4, from one constant, `OCI_RUNTIME_SPEC_VERSION`; both backends wrote a hand-written `1.0.0`, which the dependency check reported as #294. `features` is unchanged: it is libcrun's own claim about what the library implements.
 - **The crun job of `dependency_check.yml` keeps one open issue truthful.** It rewrites the issue's title and body when the pin or the latest release moves, and closes the issue once the pin is based on the latest release; `workflow_dispatch` gained `dry_run`, which prints what would be filed, edited or closed instead, and `scripts/dev.sh act` runs the job that way by default.
 - The simulator's fake host moved from `tests/sim/run.sh` into `tests/sim/lib.sh`, which the perf suite shares.
 - `crun_build.yml`'s features document check is `tests/crun/features_check.py`, so the local run and CI run the same one.
 - `.gitignore` covers what the GitHub-hosted jobs write into their checkout (`zig-out-release/`, `err.txt`, `features.json`, `bundle/`), because act runs them in this one; `.dockerignore` leaves out `.actrc`.
 
+### Removed
+- **The Proxmox VM backend**, with `-Denable-backend-proxmox-vm` (#306). It was compiled out by default and built by no workflow; the router answered every operation routed to it as not implemented without calling the driver, and the driver imported `integrations/proxmox-api`, a module `build.zig` does not define — a build with the option on succeeded only because nothing reached it. Unlike runc in 0.13.0 there is nothing to route such a container to instead: the default backend would make a container where a VM was asked for. So a configuration naming `vm` as a runtime, or `proxmox`, which was mapped to it, is now an error for every command, saying what to name instead; `--runtime vm` and `--runtime qemu` exit 2 saying the backend was removed. `qm` can come back with a test behind it.
+
 ### Fixed
+- **Documentation and `--help` that disagreed with the code** (#307), checked statement by statement against the source across the README, `docs/`, the architecture notes, the man page, the bash completion, `config.json.example` and every command's `--help`. Among what was wrong: a bundle had to sit under two directories (any absolute path has been accepted since 0.10.0); the crun backend had no `state` or `exec` (it has both); the Kubernetes gap table listed logs and sandboxes, which the engine provides, and `update` as missing; `--log-file` was said to receive the log, when it holds only start and completion lines and never an error; `pause` and `resume` were not among the things that stay local on a cluster; `list` was said to cover every backend (it lists Proxmox LXC only); the man page, the completion and `help` lacked a dozen commands; `config.json.example` carried keys nothing reads; and the CycloneDX SBOM was said to come from `cyclonedx-action`, when the release workflow writes a stub with no components. The changelog's *Support Policy* and *Upgrade Path* described v0.1 to v0.4 and say what is true now.
 - **The dependency check reported the vendored crun as 1.14.2** in #227, its 26 closed duplicates and #295, filed after the pin had reached 1.30.1. In a submodule checkout `.git` is a file, so the step's `[ -d .git ]` never matched and it took the first `N.N.N` on any line of NEWS containing "version", a changelog line from 2024. It now reports the pinned commit of the fork `.gitmodules` names and the release `.upstream_tag` declares, checked against the newest NEWS entry; the latest-release lookup is authenticated rather than turning a rate limit into "null"; and an update means the pin is version-older than the release, not merely different.
 - **The CRI test could not run under rootless podman.** It enabled cgroup controllers in one write naming `cpuset` and `io`, which a user's cgroup does not delegate, so the write failed as a whole and enabled none; and containerd in a user namespace was not told to leave `oom_score_adj` and AppArmor alone, so libcrun's `write to /proc/self/oom_score_adj` failed every sandbox. Controllers are enabled one at a time now, and the two containerd options are set when the test runs in a user namespace. CI's rootful Docker is unaffected.
 - **`create --node` was refused on any host with the zfs tools installed** (#327) — which is every stock Proxmox VE host: Proxmox VE installs them, and the E2E node has them without asking. The guard meant to stop nexcage making a ZFS dataset in this host's pool for a container on another node asked whether `zfs version` works, which says only that the tools are there. nexcage makes a dataset of its own only in a pool it is given, which no configuration key sets, and that is what the guard asks now; a rootfs on a ZFS storage, which Proxmox makes on the owning node, goes through. The simulator's fake `zfs` answered "not installed", so the `create --node` checks ran on a host Proxmox VE does not ship. It reports the tools installed now, as a real host does, and four of those checks fail on the previous binary, as does a new one with `proxmox.storage` on ZFS. The lxc-sim perf suite counts one more `zfs` call for `create`, `run` and a bundle `create`: on a host with the tools, nexcage asks `zfs version` twice per create, which the fake now shows.
@@ -777,24 +783,16 @@ This release introduces a complete modular architecture following SOLID principl
 
 ---
 
-## Version History Summary
-
-- **v0.4.0**: Modular Architecture - Complete redesign with SOLID principles
-- **v0.3.0**: ZFS Checkpoint/Restore - Performance and snapshot improvements
-- **v0.2.0**: Proxmox Integration - Full Proxmox VE integration
-- **v0.1.0**: Initial Release - Basic functionality
-
 ## Support Policy
 
-- **v0.4.0+**: Active development and support
-- **v0.3.x**: Security updates only
-- **v0.2.x**: Critical bug fixes only
-- **v0.1.x**: Deprecated, no support
+Before 1.0, a fix lands in the next release; there are no maintenance
+branches. Which releases receive security fixes is in
+[SECURITY.md](SECURITY.md). The policy for 1.0 and after is not written yet.
 
 ## Upgrade Path
 
-- **From v0.3.x to v0.4.0**: Major upgrade required, see migration guide
-- **From v0.2.x to v0.4.0**: Major upgrade required, see migration guide
-- **From v0.1.x to v0.4.0**: Major upgrade required, see migration guide
-
-For detailed migration instructions, see `docs/MODULAR_ARCHITECTURE.md` as of the v0.4.0 tag.
+Every release since 0.8.0 has notes in `docs/releases/NOTES_v<version>.md`
+that say what changes for someone upgrading: a renamed column, a new shared
+library, a removed configuration key. Going from one release to a later one,
+read the notes of each release in between. 0.9.0 was prepared but never
+tagged; its changes ship in 0.9.1.

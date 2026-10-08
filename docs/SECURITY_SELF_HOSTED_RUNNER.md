@@ -242,8 +242,6 @@ Update workflow files to use minimal permissions:
 # .github/workflows/ci.yml
 permissions:
   contents: read      # Read repository contents
-  pull-requests: write # Comment on PRs
-  checks: write        # Update check status
   # NO contents: write for PRs from forks
   # NO secrets access
 ```
@@ -292,71 +290,24 @@ jobs:
 
 ### Secure Runner Setup Script
 
-```bash
-#!/bin/bash
-# scripts/setup_secure_runner.sh
-
-set -euo pipefail
-
-RUNNER_USER="github-runner"
-RUNNER_DIR="/opt/github-runner"
-REPO_URL="$1"  # Pass repository URL
-
-# 1. Create dedicated user
-sudo useradd -r -m -s /bin/bash -d "$RUNNER_DIR" "$RUNNER_USER"
-
-# 2. Create runner directory
-sudo mkdir -p "$RUNNER_DIR"/_work
-sudo chown -R "$RUNNER_USER:$RUNNER_USER" "$RUNNER_DIR"
-
-# 3. Download and install runner
-cd "$RUNNER_DIR"
-sudo -u "$RUNNER_USER" bash << EOF
-curl -o actions-runner-linux-x64-2.311.0.tar.gz \
-  -L https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
-tar xzf actions-runner-linux-x64-2.311.0.tar.gz
-./config.sh --url "$REPO_URL" --token "$2" --name proxmox-runner --work _work
-EOF
-
-# 4. Configure systemd service with security limits
-sudo tee /etc/systemd/system/github-runner.service > /dev/null << SERVICE_EOF
-[Unit]
-Description=GitHub Actions Runner
-After=network.target
-
-[Service]
-Type=simple
-User=$RUNNER_USER
-Group=$RUNNER_USER
-WorkingDirectory=$RUNNER_DIR
-ExecStart=$RUNNER_DIR/run.sh
-
-# Security
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=$RUNNER_DIR/_work
-
-# Resource limits
-MemoryLimit=4G
-CPUQuota=200%
-TasksMax=100
-
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-SERVICE_EOF
-
-# 5. Enable and start service
-sudo systemctl daemon-reload
-sudo systemctl enable github-runner
-sudo systemctl start github-runner
-
-echo "✅ Secure runner configured"
-```
+Run `scripts/setup_secure_runner.sh <repo-url> <registration-token>` (exactly
+two arguments; set `RUNNER_NAME` to override the default `proxmox-runner`).
+It creates the `github-runner` user unless it exists; creates
+`/opt/github-runner/_work`, owned by that user, with `chmod 750` on
+`/opt/github-runner` and `chmod 700` on `_work`; downloads and unpacks
+actions runner 2.311.0 unless already present; registers with
+`config.sh --unattended --replace` unless `.runner` exists; and writes
+`/etc/systemd/system/github-runner.service`, which runs
+`/opt/github-runner/run.sh` as `github-runner` with journal logging and
+settings that include NoNewPrivileges, PrivateTmp, ProtectSystem=strict,
+ProtectHome, ReadWritePaths=/opt/github-runner/_work, ProtectKernelTunables,
+ProtectKernelModules, ProtectControlGroups, RestrictNamespaces,
+RestrictRealtime, LockPersonality, MemoryDenyWriteExecute,
+RestrictAddressFamilies=AF_INET AF_INET6, SystemCallFilter=@system-service,
+SystemCallErrorNumber=EPERM, MemoryLimit=4G, CPUQuota=200%, TasksMax=100,
+LimitNOFILE=4096, LimitNPROC=512, Restart=always, RestartSec=10 and
+TimeoutStopSec=90. It then enables and starts the service and, two seconds
+later, exits non-zero if the service is not active.
 
 ## 🚨 Security Incident Response
 

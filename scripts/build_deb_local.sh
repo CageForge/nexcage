@@ -47,10 +47,10 @@ Recommends: pve-container
 Homepage: https://github.com/CageForge/nexcage
 Description: command-line lifecycle for Proxmox VE LXC containers
  nexcage creates, starts, stops, deletes and inspects LXC containers on a
- Proxmox VE host through pct and pvesh. Containers are created from Proxmox
+ Proxmox VE cluster through pct and pvesh. Containers are created from Proxmox
  templates, OCI bundles or, on Proxmox VE 9.1 and later, OCI registry images.
  .
- It runs on the Proxmox VE host as root. An example configuration is in
+ It runs on a Proxmox VE host as root. An example configuration is in
  /usr/share/doc/nexcage/examples/config.json.
 EOF
 

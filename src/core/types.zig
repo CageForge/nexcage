@@ -53,9 +53,7 @@ pub const SandboxConfig = struct {
 /// Runtime type enumeration
 pub const RuntimeType = enum {
     lxc,
-    qemu,
     crun,
-    vm,
     proxmox_lxc,
 };
 
@@ -63,7 +61,6 @@ pub const RuntimeType = enum {
 pub const ContainerType = enum {
     lxc,
     crun,
-    vm,
     proxmox_lxc,
 };
 

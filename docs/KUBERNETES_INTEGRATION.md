@@ -32,14 +32,14 @@ next step, not by size.
 | 1 | ~~`exec`~~ | **Done on both.** Proxmox LXC runs `pct exec`; crun goes to `libcrun_container_exec_process_file`, so `exec --process <file>` — the shape an engine sends — works, and `crictl exec` runs a command in a pod. Both exit with the command's status | `kubectl exec`, CRI `ExecSync`, exec probes |
 | 2 | OCI runtime-spec CLI | **Enough for podman and containerd to run containers.** `create <id> --bundle <dir>`, `--root <dir>`, `--console-socket` and `--pid-file` work; the last two on the crun backend, refused on Proxmox LXC | A containerd shim, and `runc`-compatible tooling generally |
 | 3 | ~~`state`~~ | **Done.** Proxmox LXC reports the bundle it recorded; crun hands the question to libcrun, so the output is `crun state`'s | The same. A shim reads the bundle path back from `state` |
-| 4 | Missing verbs | `delete --force`, `kill --all`, `features` and **`ps`** are done — `ps` because the trace on the node showed Kubernetes asking for `ps --format json` and getting `unknown command`. **`pause` and `resume`** are done too — the cgroup freezer, on both backends. No `events` or `update` yet, and nothing has asked for either | Pod lifecycle, metrics, cgroup updates on resize |
+| 4 | Missing verbs | `delete --force`, `kill --all`, `features` and **`ps`** are done — `ps` because the trace on the node showed Kubernetes asking for `ps --format json` and getting `unknown command`. **`pause` and `resume`** are done too — the cgroup freezer, on both backends — and **`update`** (0.13.0), because an in-place pod resize sends it. No `events` yet, and nothing has asked for it | Pod lifecycle, metrics, cgroup updates on resize |
 | 5 | No remote surface | CLI only, must run as root on the PVE host | Anything in a Kubernetes pod driving nexcage. A pod cannot call `pct` |
-| 6 | No log handling | container output is not captured to a file | Kubelet reads `/var/log/pods/…/0.log`; `kubectl logs` needs it |
+| 6 | ~~No log handling~~ | **The engine's, not the runtime's.** The engine captures the container's output to the file the kubelet reads, as it does for runc. Verified: `kubectl logs` and `crictl logs` return a nexcage container's output | Kubelet reads `/var/log/pods/…/0.log`; `kubectl logs` needs it |
 | 7 | ~~No CNI~~ | **The engine's, not the runtime's.** containerd and CRI-O create the sandbox's network namespace, run the CNI plugins in it and hand the runtime a path to join. Verified on both: a pod gets an address from host-local and reaches another pod over TCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
-| 8 | No sandbox model | one container per name, no pod grouping | Multi-container pods sharing a network namespace, the pause container |
+| 8 | ~~No sandbox model~~ | **The engine's, not the runtime's.** containerd and CRI-O create the pod sandbox and hand each container in it the sandbox's namespaces to join by path in `linux.namespaces`. Verified: a sandbox and a container in it both run on nexcage | Multi-container pods sharing a network namespace, the pause container |
 | 9 | No image service | **Not the runtime's job for Kubernetes**: containerd and CRI-O implement `ImageService` themselves and hand the runtime a bundle whose rootfs is already unpacked — runc never pulls anything either. For the command-line use there is now `images` (what the cluster can create from, per node and storage), `pull` (an OCI image into a chosen storage) and `rmi`. Pull with credentials is not possible: `oci-registry-pull` has no parameter for them | CRI `ImageService`: pull with credentials, list, remove, image FS stats |
 | 10 | ~~Fixed resources~~ | **Done.** A bundle's `linux.resources` apply at create through libcrun, and **`update`** changes a running container's limits: `update --resources=- <id>` with the document on stdin is what containerd sends for an in-place pod resize. On Proxmox LXC the same settings become `pct set` in its terms (MiB, cores, a cgroup v2 weight), and what pct cannot express is refused by name | Pod requests and limits, and resizing them in place |
-| 11 | ~~Single host~~ | **Reads and lifecycle cover the cluster**: `list`, `state`, `start`, `stop`, `delete`, `update` and the snapshot verbs find a container on any node and act through that node's API. `exec`, `kill` and the `pid` in `state` stay local and say so — they reach into a container's processes from the host, which no API offers. `create --node <name>` places a new one on a chosen node, from a template that node can read | A node per PVE host, or a scheduler that targets more than one |
+| 11 | ~~Single host~~ | **Reads and lifecycle cover the cluster**: `list`, `state`, `start`, `stop`, `delete`, `update` and the snapshot verbs find a container on any node and act through that node's API. `exec`, `kill`, `pause`, `resume` and the `pid` in `state` stay local and say so. They reach into a container's processes or its cgroup freezer from the host, and no API offers that. For the same reason, `state` reports a frozen container on another node as `running`. `create --node <name>` places a new one on a chosen node, from a template that node can read | A node per PVE host, or a scheduler that targets more than one |
 
 One further gap is operational rather than functional: nexcage exposes no
 health or metrics endpoint a probe can use.
@@ -66,7 +66,7 @@ covering it.
 ```mermaid
 flowchart TD
   S1["1. Build and test in-cluster<br/>Job in tenant-nexcage<br/>done"] --> S2["2. PVE test node<br/>kubemox VirtualMachine + E2E runner<br/>done"]
-  S2 --> S3["3. OCI runtime-spec command line<br/>so a container engine can call nexcage"]
+  S2 --> S3["3. OCI runtime-spec command line<br/>so a container engine can call nexcage<br/>done"]
   S3 --> S4["4. containerd and CRI-O<br/>running pods on nexcage<br/>both done"]
   S4 --> S5["5. Kubernetes scheduling a pod onto nexcage<br/>done on nexcage-e2e-1"]
 ```
@@ -109,12 +109,12 @@ template, because a Proxmox node keeps its configuration under
 
 ### Stage 3 — the OCI runtime-spec command line
 
-In progress. containerd and CRI-O do not talk to a runtime over an API: they
+Done. containerd and CRI-O do not talk to a runtime over an API: they
 exec a binary with the command line the runtime-spec defines, the same one runc
 and crun answer. Everything nexcage needs to be callable that way is CLI shape
 and the crun backend behind it.
 
-`exec` is done. What is left, in the order a container engine needs it:
+`exec` is done, and so is the rest. In the order a container engine needs it:
 
 | | What the engine sends | nexcage today |
 |---|---|---|
@@ -436,8 +436,14 @@ pod that names the class.
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
   runtime_type = "io.containerd.runc.v2"
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
-  BinaryName = "/usr/local/bin/nexcage"
+  BinaryName = "/nexcage-traced"
 ```
+
+`/nexcage-traced` is a small shell wrapper the script writes. It appends each
+call's arguments to `/tmp/nexcage-node-trace.log`, then execs the nexcage
+binary (`$NEXCAGE`, by default `/usr/local/bin/nexcage`); that log is where
+the list of what Kubernetes asks a runtime, below, comes from. Outside the
+test, a plain setup points `BinaryName` straight at `/usr/local/bin/nexcage`.
 
 ```yaml
 apiVersion: node.k8s.io/v1
@@ -504,12 +510,19 @@ with Kubernetes, and both would have looked like runtime bugs:
 - The crun build linked libyajl, and the node did not have it: `error while
   loading shared libraries: libyajl.so.2`. Since 0.13.0 the vendored crun
   (1.30.1) uses json-c instead, and a Proxmox VE 9 host has `libjson-c5`;
-  `libseccomp2` and `libcap2` are the other two a crun-enabled nexcage needs.
+  `libseccomp2`, `libcap2` and `libsystemd0` are the others a crun-enabled
+  nexcage needs.
 
-The script leaves the node as it found it unless `--keep` is passed, because that
-node is the E2E runner. One caution it enforces: `/etc/nexcage/config.json`
-routing everything to crun would also be read by the E2E suite's own build,
-which has no crun backend, so it is written only when absent and removed after.
+The script removes the k3s it installed unless `--keep` is passed (or
+`KEEP=1`), because that node is the E2E runner. It does not undo everything.
+`/etc/nexcage/config.json` routing everything to crun is read by any nexcage on
+that node that finds no `./config.json` first, and a default build has no crun
+backend. The E2E workflow writes its own `./config.json` in its workspace and is
+not affected, but a command run by hand is. So the file is written only when
+absent, but it is not removed after: if the script wrote it (it says so),
+delete it by hand when the run is done. On a node that already had k3s, the
+containerd template with the `nexcage` runtime (pointing at `/nexcage-traced`,
+which is removed) and `RuntimeClass/nexcage` are left in place as well.
 
 ## Related
 

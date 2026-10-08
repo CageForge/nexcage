@@ -24,7 +24,6 @@ flowchart TD
   router --> lxc["Proxmox LXC backend"]
   router -->|routing rules| crun["crun backend<br/>vendored libcrun"]
   crun --> kernel[("containers in this kernel")]
-  router -.->|opt-in build| other["VM backend (stub)"]
   lxc -->|pct, pvesh| pve[("Proxmox VE")]
 ```
 
@@ -36,12 +35,12 @@ sequenceDiagram
   participant C as nexcage start
   participant R as Router
   participant D as ProxmoxLxcDriver
-  participant P as pct
+  participant P as pct, pvesh
 
   U->>C: nexcage start web-1
   C->>R: route web-1
   R->>D: start(web-1)
-  D->>P: pct list
+  D->>P: pvesh get /cluster/resources (pct list if web-1 is not in it or pvesh fails)
   P-->>D: web-1 is VMID 101
   D->>P: pct start 101
   P-->>D: exit 0

@@ -19,21 +19,21 @@ flowchart TB
   main --> utils
   cli --> core
   cli --> backends
-  cli --> utils
-  cli --> cfg
   cfg --> core
   backends --> core
-  backends --> utils
   backends --> oci
   utils --> core
-  utils --> oci
 ```
+
+`build.zig` also makes `utils` available to `cli` and `backends`, `oci_spec` to
+`utils`, and `config_integration` to `cli`, but no source file in those modules
+imports them.
 
 | Module | Root | Contents |
 |---|---|---|
 | `core` | `src/core/mod.zig` | Shared types and errors, config loading, logging, input validation, version |
-| `cli` | `src/cli/mod.zig` | One file per command; `registry.zig` maps names to commands, `router.zig` picks the backend |
-| `backends` | `src/backends/mod.zig` | One directory per backend, each compiled in or out by a build option; see [BACKENDS.md](BACKENDS.md) |
-| `utils` | `src/utils/mod.zig` | Filesystem and network helpers, OCI-to-LXC conversion |
-| `config_integration` | `src/core/enhanced_config.zig` | Configuration helpers imported by the CLI |
+| `cli` | `src/cli/mod.zig` | One file per command, except that `snapshot.zig` holds `snapshot`, `snapshots`, `rollback` and `delsnapshot`; `registry.zig` maps names to commands, `router.zig` picks the backend |
+| `backends` | `src/backends/mod.zig` | One directory per backend; crun is compiled in only with its build option; see [BACKENDS.md](BACKENDS.md) |
+| `utils` | `src/utils/mod.zig` | Filesystem and network helpers |
+| `config_integration` | `src/core/enhanced_config.zig` | A thin wrapper around `core`'s config loader; `build.zig` wires it into `cli`, but no source file imports it |
 | `oci_spec` | `deps/oci-spec-zig/src/lib.zig` | Vendored copy of oci-specs-zig |

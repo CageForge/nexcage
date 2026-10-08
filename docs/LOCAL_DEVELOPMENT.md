@@ -3,8 +3,10 @@
 `scripts/dev.sh` is the one entry point for working on nexcage on a
 workstation: it checks the tools, builds, runs every test that works without a
 Proxmox host, runs the GitHub-hosted CI jobs through
-[act](https://github.com/nektos/act), and times every command for performance
-work. Nothing in it needs root. The `make` targets below call it.
+[act](https://github.com/nektos/act), and times the lifecycle commands for
+performance work. Nothing in it needs root. The `make` targets below call it,
+except `build`, `check` and `sim`, which run zig and `tests/sim/run.sh`
+directly.
 
 ```bash
 scripts/dev.sh setup        # once: podman socket, act's runner image, a busybox rootfs
@@ -18,18 +20,18 @@ scripts/dev.sh all          # before a pull request: check, then every CI job th
 |---|---|---|---|---|
 | `doctor` | `doctor` | Checks every tool below and says how to get what is missing | | 1 s |
 | `setup` | `dev-setup` | Starts podman's API socket, builds act's runner image, fetches busybox | a container engine | minutes, once: the act image is 1.7 GB |
-| `build` | `build` | Debug to `zig-out/bin`, ReleaseSafe to `zig-out/release/bin` | zig 0.15.1 | seconds |
+| `build` | `build` (Debug only) | Debug to `zig-out/bin`, ReleaseSafe to `zig-out/release/bin` | zig 0.15.1 | seconds |
 | `test` | `check` | `zig fmt --check`, unit tests | zig | 6 s |
-| `sim` | `sim` | Every command against fake `pct`/`pvesh`/`pvesm` ([TESTING.md](../TESTING.md#running-against-fake-proxmox-tools)) | zig, unshare | 12 s |
+| `sim` | `sim` | Every command against fake `pct`/`pvesh`/`pvesm` ([TESTING.md](../TESTING.md#running-against-fake-proxmox-tools)) | zig, unshare, python3, tar, zstd | 12 s |
 | `check` | | `test` + `sim` | | 20 s |
-| `crun` | | The crun-backend image and what `crun_build.yml` checks on it: the features ABI, the features document, `ps` against crun, a bundle from a foreign working directory | a container engine | 3 min first, then seconds |
+| `crun` | | The crun-backend image and what `crun_build.yml` checks on it: `version`, the features ABI, the features document, `ps` against crun, a bundle from a foreign working directory | a container engine | 3 min first, then seconds |
 | `cri` | | A pod through containerd's CRI with nexcage as the runtime handler: sandbox, CNI address, container, `exec`, `update`, removal | a container engine | 5 s, plus the images |
 | `e2e` | `e2e` | `sim` + `crun` + `cri` | | |
 | `shell [CMD]` | `dev-shell` | A shell with nexcage (crun backend), crun, containerd and crictl, or CMD run there | a container engine | |
 | `act` | `act` | The GitHub-hosted CI jobs, in the runner image | act, a container engine; gh logged in for `dependency_check.yml` | 1.5–4 min per job |
 | `all` | `local-ci` | `check`, then `act`, whose `crun_build.yml` job is `crun` and `cri` as CI runs them | | 12 min |
 | `pve-e2e` | | `proxmox_e2e.yml` on the self-hosted Proxmox VE runner, for this branch | gh, the branch pushed | 10 min |
-| `perf` | `perf` | Times every command; see [Performance](#performance) | zig; a container engine for `--suite crun` | 1 min for `lxc`, 4 min for both with `--against` |
+| `perf` | `perf` | Times the lifecycle commands; see [Performance](#performance) | zig, python3, tar; unshare and zstd unless `--suite crun`; a container engine unless `--suite lxc` | 1 min for `lxc`, 4 min for both with `--against` |
 
 ¹ A 12-core workstation with rootless podman, warm caches.
 
@@ -81,7 +83,9 @@ handle both:
 `scripts/dev.sh shell` leaves you in that container with the checkout at
 `/src` (read-only) and a busybox bundle at `/bundle`, its processes already
 moved out of the root cgroup as the tests do — otherwise containers get no
-cgroup of their own and `ps` fails. `scripts/dev.sh shell CMD...` runs CMD
+cgroup of their own and `ps` fails. The bundle's `config.json` is the one
+`crun`, `e2e` or the crun perf suite last wrote; before any of them has run
+there is none, and `create` fails. `scripts/dev.sh shell CMD...` runs CMD
 there instead.
 
 ```bash
@@ -94,10 +98,10 @@ nexcage --runtime crun delete --force demo
 ## CI through act
 
 `scripts/dev.sh act` runs, by default, every job a pull request gets on a
-GitHub-hosted runner: `ci.yml` (`build-test`, `simulation`),
-`version-check.yml`, `crun_build.yml` and `memory_leak_check.yml`, plus the
-crun job of `dependency_check.yml` in its dry run. Name jobs to run others, and
-pass act's own options after `--`:
+GitHub-hosted runner except those of `security.yml`: `ci.yml` (`build-test`,
+`simulation`), `version-check.yml`, `crun_build.yml` and
+`memory_leak_check.yml`, plus the crun job of `dependency_check.yml` in its dry
+run. Name jobs to run others, and pass act's own options after `--`:
 
 ```bash
 scripts/dev.sh act ci.yml:simulation
@@ -127,8 +131,8 @@ edit or close. Without that input and with a token it does those things in
 CageForge/nexcage, so keep `--input dry_run=true` when running act on it by
 hand; without a gh login `dev.sh` skips the job and says so.
 
-Not in the default set: `proxmox_e2e.yml` and `buildagent.yml` need
-self-hosted runners, and `security.yml` uploads to GitHub's code scanning.
+Not in the default set: `proxmox_e2e.yml` and `buildagent.yml`, which need
+self-hosted runners, and `security.yml`.
 
 ## The Proxmox E2E
 
@@ -161,12 +165,13 @@ Two suites:
 
 **`lxc-sim`** (`tests/perf/lxc_sim.sh`) runs the Proxmox LXC lifecycle —
 `version`, `list` with ten containers, `create`, `state`, `start`, `exec`,
-`snapshot`, `snapshots`, `rollback`, `delsnapshot`,
-`kill`, `stop`, `delete`, `run`, `create` from an 8 MB OCI bundle — against the
+`kill`, `stop`, `snapshot`, `snapshots`, `rollback`, `delsnapshot`,
+`delete`, `run`, `create` from an 8 MB OCI bundle — against the
 simulator's fake tools. For each command:
 
-- `calls`: how many times it ran `pct`, `pvesh`, `pvesm`, `pveam` or
-  `pveversion`. On a real node each is a Perl process costing 0.3–1 s, so this
+- `calls`: how many times it ran `pct`, `pvesh`, `pvesm`, `pveam`,
+  `pveversion` or `zfs` — every call the fake tools log; `create` and `run`
+  ask `zfs version`. On a real node each is a Perl process costing 0.3–1 s, so this
   is most of what a user of a real node waits for, and it does not vary
   between runs. Any increase is a regression.
 - `wall_us`: nexcage's own wall time, measured inside the namespace. The fakes

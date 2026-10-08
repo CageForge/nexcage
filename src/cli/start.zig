@@ -11,7 +11,7 @@ pub const StartCommand = struct {
     const Self = @This();
 
     name: []const u8 = "start",
-    description: []const u8 = "Start a container or virtual machine",
+    description: []const u8 = "Start a container",
     base: base_command.BaseCommand = .{},
 
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
@@ -83,10 +83,11 @@ pub const StartCommand = struct {
         _ = self;
         return allocator.dupe(u8, "Usage: nexcage start --name <id> [--runtime <type>]\n\n" ++
             "Options:\n" ++
-            "  --name <id>        Container/VM identifier\n" ++
-            "  --runtime <type>   lxc|crun|runc|vm; overrides routing from the config file\n\n" ++
+            "  --name <id>        Container identifier\n" ++
+            "  --runtime <type>   lxc|crun; overrides routing from the config file\n\n" ++
             "Notes:\n" ++
-            "  If LXC tools are missing, command fails with UnsupportedOperation.\n");
+            "  If pct is not in PATH, the Proxmox LXC backend fails: nexcage must run on a\n" ++
+            "  Proxmox VE host.\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

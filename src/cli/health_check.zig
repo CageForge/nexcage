@@ -37,7 +37,7 @@ pub const HealthCommand = struct {
             \\  nexcage health                    # Run full system integrity check
             \\
             \\The health check verifies:
-            \\  - Proxmox connectivity (pct command, API)
+            \\  - Proxmox connectivity (pct command; the API check always warns)
             \\  - Storage integrity (directories, ZFS pools)
             \\  - Network integrity (interfaces, DNS)
             \\  - Configuration integrity (config files, JSON validity)

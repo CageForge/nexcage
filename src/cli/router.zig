@@ -109,8 +109,6 @@ pub const BackendRouter = struct {
         switch (runtime_type) {
             .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
             .crun => try self.executeCrun(operation, container_id, config),
-            .vm => try self.executeVm(operation, container_id, config),
-            else => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
         }
     }
 
@@ -274,14 +272,6 @@ pub const BackendRouter = struct {
                 // State operation handled by command
             },
         }
-    }
-
-    fn executeVm(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
-        _ = config;
-        _ = container_id;
-        // This logged a warning and returned success, so `create` reported a
-        // VM that was never created and exited 0.
-        return self.notImplemented(@tagName(operation), "Proxmox VM");
     }
 
     /// The error must belong to core.types.Error: the command registry

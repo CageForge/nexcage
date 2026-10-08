@@ -66,10 +66,17 @@ pub const RunCommand = struct {
         // Allocated because execute() frees it: returning the literal made
         // `nexcage run --help` abort with "Invalid free".
         return allocator.dupe(u8, "Usage: nexcage run --name <name> <image>\n\n" ++
-            "Create a container and start it; the same as create followed by start.\n" ++
+            "Create a container and start it, as create followed by start would, except\n" ++
+            "that --node is ignored, so the container is made on this node, and\n" ++
+            "--console-socket and --pid-file are ignored rather than refused. The crun\n" ++
+            "backend does not implement run.\n" ++
             "<image> takes the same forms as for create (see 'nexcage create --help').\n\n" ++
             "Options:\n" ++
             "  --name <name>   Container name, used as its hostname (required)\n" ++
+            "  --storage <s>   Storage a registry image is found on or pulled to (default: local)\n" ++
+            "  --bundle <dir>  OCI bundle directory, an absolute path, in place of <image>;\n" ++
+            "                  the first positional word is then the container name\n" ++
+            "                  (run <name> --bundle <dir>)\n" ++
             "  -h, --help      Show this help message\n");
     }
 

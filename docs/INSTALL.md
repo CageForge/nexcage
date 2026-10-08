@@ -1,14 +1,20 @@
 # Installing nexcage
 
-nexcage runs on the Proxmox VE host (8.x or 9.x, amd64) as root. It needs
+nexcage runs on the Proxmox VE host (9.x, amd64) as root. It needs
 `pct`, `pvesh` and `pveversion`, which Proxmox VE provides.
+
+Proxmox VE 8.x is not supported. Releases before 0.14.0 ran on it, but no
+test ever did — the E2E suite runs on 9.x — and Proxmox ended support for 8.x
+in August 2026, with Debian 12. nexcage does not refuse an 8.x host; it no
+longer promises anything there.
 
 ## From a release
 
 Each GitHub release carries the binary `nexcage-<version>-amd64`, the package
-`nexcage-<version>-amd64.deb`, SBOMs and `checksums.txt`. **Since 0.11.2** there
-is a second binary, `nexcage-<version>-amd64-crun`, with the OCI runtime backend
-built in; for 0.11.1 and earlier that build has to be made from source.
+`nexcage-<version>-amd64.deb`, SBOMs, `provenance.json` and `checksums.txt`.
+**Since 0.11.2** there is a second binary, `nexcage-<version>-amd64-crun`, with
+the OCI runtime backend built in; for 0.11.1 and earlier that build has to be
+made from source.
 
 **Which binary you want.** The plain one manages LXC containers on Proxmox VE
 and is what most uses need. The `-crun` one adds the backend a container engine
@@ -52,7 +58,7 @@ It links libcrun's dependencies dynamically, and a Proxmox VE host does not
 have all of them:
 
 ```bash
-apt install libjson-c5 libseccomp2 libcap2
+apt install libjson-c5 libseccomp2 libcap2 libsystemd0
 ```
 
 Without one of them the binary does not start at all —
