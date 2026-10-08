@@ -154,6 +154,36 @@ rm -f "$S/work/config.json"
 nx create --name web-7 "$TPL"
 check "no config file -> default bridge, unprivileged, no --rootfs" all 'rc 0' 'called_re "bridge=vmbr0,ip=dhcp --unprivileged 1$"'
 
+# What pct create is usually given (#308): update's limits under update's
+# names and in pct's terms, pct's own names for the rest, net0 in its syntax.
+cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_size_gb":2}}'
+nx create --name opt-1 --memory 1G --memory-swap 1536M --cores 3 --cpu-quota 150000 --cpu-share 512 \
+  --ip 192.0.2.10/24 --gw 192.0.2.1 --vlan 20 --firewall --onboot --tags 'web;prod' \
+  --mp 'local-lvm:1,mp=/data' --mp '/srv/x,mp=/mnt/x,ro=1' "$TPL"
+check "create takes update's limits, said to pct as update says them" \
+  all 'rc 0' 'called_re "^pct create .* --memory 1024 "' 'called_re " --swap 512 "' \
+      'called_re " --cpulimit 1\.5 "' 'called_re " --cpuunits 20 "'
+check "--memory and --cores replace the defaults rather than doubling them" \
+  all 'called_re " --cores 3 "' '[ "$(grep -o -- " --memory " "$S/calls.last" | wc -l)" = 1 ]' \
+      '[ "$(grep -o -- " --cores " "$S/calls.last" | wc -l)" = 1 ]'
+check "--ip, --gw, --vlan and --firewall are net0's ip=, gw=, tag= and firewall=1" \
+  called_re " --net0 name=eth0,bridge=vmbr50,ip=192\.0\.2\.10/24,gw=192\.0\.2\.1,tag=20,firewall=1 "
+check "--onboot, --tags and each --mp reach pct as pct takes them" \
+  all 'called_re " --onboot 1 "' 'called_re " --tags web;prod "' \
+      'called_re " --mp0 local-lvm:1,mp=/data --mp1 /srv/x,mp=/mnt/x,ro=1$"'
+nx create --name opt-2 --memory-swap 256M "$TPL"
+check "--memory-swap is memory plus swap: below the default memory it is refused, before pct" \
+  all 'rc 2' 'err_has "memory plus swap"' 'not_called_re "^pct create"'
+nx create --name opt-2 --pids-limit 100 "$TPL"
+check "a limit Proxmox has no setting for is refused by name, as update refuses it" \
+  all 'rc 1' 'err_has "pids.limit has no Proxmox setting"' 'not_called_re "^pct create"'
+nx create --name opt-2 --vlan 5000 "$TPL"
+check "--vlan outside 1-4094 is a usage error" all 'rc 2' 'err_has "VLAN tag"' 'not_called_re "^pct create"'
+nx create --name opt-2 --ip 10.0.0.5/24,hwaddr=02:00:00:00:00:01 "$TPL"
+check "an address with ',' or '=' would add a net0 key: refused" all 'rc 2' 'err_has "without"' 'not_called_re "^pct create"'
+nx create --name opt-2 --cores 0 "$TPL"
+check "--cores 0 is a usage error" all 'rc 2' 'err_has "--cores"' 'not_called_re "^pct create"'
+
 echo "pct list: Permission denied" > "$S/fail_all"
 nx create --name web-8 "$TPL"
 check "the host unable to answer -> create refuses (not read as 'name free')" all 'rc 1' 'err_has "permission denied"' 'not_called_re "^pct create"'
@@ -394,6 +424,12 @@ check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
 check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
 check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_re "^pct set [0-9]+ --features nesting=1,keyctl=1$"
+nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
+check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
+  all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
+nx --runtime crun create --memory 1G --bundle /tmp/nexcage-bundles/b1 crun-opt
+check "create's Proxmox options on the crun backend: refused, naming the bundle's config.json" \
+  all 'rc 1' 'err_has "is for the Proxmox LXC backend"' 'err_has "config.json"'
 
 echo "=== runtime-spec command line ==="
 # What a container engine sends: the id positionally, the bundle behind
@@ -857,6 +893,9 @@ cfg '{"network":{"bridge":"vmbr0"},"proxmox":{"storage":"local-zfs","rootfs_size
 nx create --name there-zs --node titan "$TPL"
 check "create --node with a ZFS storage hands the rootfs to that node" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc --vmid [0-9]+ .*--hostname there-zs .*--rootfs local-zfs:4$"'
+nx create --name there-o --node titan --memory 1G --vlan 7 --onboot "$TPL"
+check "create --node says the same options to that node's API" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc .*--net0 name=eth0,bridge=vmbr0,ip=dhcp,tag=7 .*--memory 1024 --onboot 1"'
 cfg '{"network":{"bridge":"vmbr0"}}'
 
 # An OCI bundle is packed into a template on *this* host, so it cannot travel.

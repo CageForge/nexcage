@@ -40,6 +40,9 @@ pub const SandboxConfig = struct {
     /// found on, or pulled to. Borrowed the same way. Not the root filesystem
     /// storage -- that is `proxmox.storage` -- but where templates live.
     template_storage: ?[]const u8 = null,
+    /// `create --memory`, `--cores`, `--ip` and the rest (#308): what pct
+    /// create is usually given. Borrowed the same way.
+    pve: ProxmoxCreateOptions = .{},
 
     pub fn deinit(self: *SandboxConfig) void {
         self.allocator.free(self.name);
@@ -47,6 +50,43 @@ pub const SandboxConfig = struct {
         if (self.security) |*s| s.deinit();
         if (self.network) |*n| n.deinit(self.allocator);
         if (self.storage) |*s| s.deinit(self.allocator);
+    }
+};
+
+/// What `create` says to pct beyond the image and the name, on the Proxmox LXC
+/// backend (#308). Each maps onto one pct option, through `pct create` here
+/// and the node's API for `--node`; nothing here means pct's default.
+pub const ProxmoxCreateOptions = struct {
+    /// `--memory`, `--memory-swap`, `--cpu-quota`, `--cpu-period` and
+    /// `--cpu-share`, as `update` takes them and in its units: bytes,
+    /// microseconds, cgroup v1 shares. Turned into pct's terms the way
+    /// `update` turns them.
+    limits: []const ResourceUpdate = &.{},
+    /// pct's --cores
+    cores: ?[]const u8 = null,
+    /// net0's ip=, gw= and tag=, and firewall=1
+    ip: ?[]const u8 = null,
+    gw: ?[]const u8 = null,
+    vlan: ?[]const u8 = null,
+    firewall: bool = false,
+    /// pct's --onboot 1 and --tags
+    onboot: bool = false,
+    tags: ?[]const u8 = null,
+    /// `--mp <spec>`, in the order given: pct's mp0, mp1, ... verbatim
+    mount_points: []const []const u8 = &.{},
+
+    /// The flag of the first option given, for a backend that takes none.
+    pub fn firstGiven(self: ProxmoxCreateOptions) ?[]const u8 {
+        if (self.limits.len > 0) return "--memory and the other limits";
+        if (self.cores != null) return "--cores";
+        if (self.ip != null) return "--ip";
+        if (self.gw != null) return "--gw";
+        if (self.vlan != null) return "--vlan";
+        if (self.firewall) return "--firewall";
+        if (self.onboot) return "--onboot";
+        if (self.tags != null) return "--tags";
+        if (self.mount_points.len > 0) return "--mp";
+        return null;
     }
 };
 
@@ -274,6 +314,10 @@ pub const RuntimeOptions = struct {
     /// `update --memory <n>`, `--cpu-quota <n>` and the rest, as runc and
     /// crun name them; each is one setting, in the order given.
     resource_updates: ?[]ResourceUpdate = null,
+    /// `create`'s pct options (#308) other than the limits, which arrive in
+    /// resource_updates as for update. The strings and the mount point list
+    /// are owned.
+    create_options: ProxmoxCreateOptions = .{},
     /// `snapshot --description <text>`: Proxmox's note on the snapshot.
     description: ?[]const u8 = null,
     /// `rollback --start`: start the container once it is back at the
@@ -297,6 +341,10 @@ pub const RuntimeOptions = struct {
             for (ups) |u| self.allocator.free(u.value);
             self.allocator.free(ups);
         }
+        const co = self.create_options;
+        inline for (.{ co.cores, co.ip, co.gw, co.vlan, co.tags }) |s| if (s) |v| self.allocator.free(v);
+        for (co.mount_points) |mp| self.allocator.free(mp);
+        if (co.mount_points.len > 0) self.allocator.free(co.mount_points);
         if (self.console_socket) |cs| self.allocator.free(cs);
         if (self.pid_file) |pf| self.allocator.free(pf);
         if (self.env) |e| {

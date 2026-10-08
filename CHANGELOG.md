@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`create` takes what `pct create` is usually given** (#308): `--memory`, `--memory-swap`, `--cpu-quota`, `--cpu-period` and `--cpu-share` under `update`'s names and said to pct the way `update` says them (one conversion, shared); `--cores`; `--ip`, `--gw`, `--vlan` and `--firewall`, which are `net0`'s `ip=`, `gw=`, `tag=` and `firewall=1`; `--onboot`; `--tags`; and `--mp <spec>`, repeatable, in pct's own syntax as `mp0`, `mp1`, .... They go through `pct create` for a container here and the node's API for one made with `--node`, so nothing needs a `pct set` by VMID afterwards. A limit Proxmox cannot express is refused by name, as `update` refuses it; an address containing `,` or `=`, which would add a `net0` key, and a VLAN tag outside 1-4094 are usage errors; `--mp` with an OCI bundle is refused, because the bundle's mounts take the `mp` entries; and the crun backend refuses all of them, since it takes limits, network and mounts from the bundle's `config.json`. The Proxmox E2E creates a container with every option and reads each one back from `pct config`.
+
 ## [0.14.1] - 2026-10-08
 
 Flags that `run` and `exec` accepted on Proxmox LXC and then dropped are

@@ -517,13 +517,28 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             // linux.resources object in a file, "-" for stdin.
             options.resources_path = try allocator.dupe(u8, args[i + 1]);
             i += 2;
-        } else if (options.command == .update and updateFlag(arg) != null) {
+        } else if ((options.command == .update or options.command == .create) and updateFlag(arg) != null) {
+            // create takes update's limits under update's names (#308)
             if (i + 1 >= args.len) {
                 printError("{s} needs a value", .{arg});
                 return error.InvalidInput;
             }
             try addResourceUpdate(allocator, &options, updateFlag(arg).?, args[i + 1]);
             i += 2;
+        } else if (options.command == .create and createValueFlag(arg) != null) {
+            // What pct create is usually given (#308), under pct's names
+            if (i + 1 >= args.len) {
+                printError("{s} needs a value", .{arg});
+                return error.InvalidInput;
+            }
+            try setCreateOption(allocator, &options.create_options, createValueFlag(arg).?, args[i + 1]);
+            i += 2;
+        } else if (options.command == .create and std.mem.eql(u8, arg, "--firewall")) {
+            options.create_options.firewall = true;
+            i += 1;
+        } else if (options.command == .create and std.mem.eql(u8, arg, "--onboot")) {
+            options.create_options.onboot = true;
+            i += 1;
         } else if (std.mem.eql(u8, arg, "--filename") and i + 1 < args.len) {
             options.filename = try allocator.dupe(u8, args[i + 1]);
             i += 2;
@@ -726,6 +741,40 @@ const update_flags = [_]UpdateFlag{
     .{ .flag = "--memory-swap", .section = "memory", .name = "swap", .numeric = true },
     .{ .flag = "--pids-limit", .section = "pids", .name = "limit", .numeric = true },
 };
+
+/// `create`'s pct options that take a value (#308). --mp may be given more
+/// than once; each of the others is the last one given.
+const CreateValueFlag = enum { cores, ip, gw, vlan, tags, mp };
+fn createValueFlag(arg: []const u8) ?CreateValueFlag {
+    const names = [_]struct { []const u8, CreateValueFlag }{
+        .{ "--cores", .cores }, .{ "--ip", .ip },     .{ "--gw", .gw },
+        .{ "--vlan", .vlan },   .{ "--tags", .tags }, .{ "--mp", .mp },
+    };
+    for (names) |n| if (std.mem.eql(u8, n[0], arg)) return n[1];
+    return null;
+}
+
+fn setCreateOption(allocator: std.mem.Allocator, co: *core.types.ProxmoxCreateOptions, which: CreateValueFlag, raw: []const u8) !void {
+    const value = try allocator.dupe(u8, raw);
+    errdefer allocator.free(value);
+    const slot: *?[]const u8 = switch (which) {
+        .cores => &co.cores,
+        .ip => &co.ip,
+        .gw => &co.gw,
+        .vlan => &co.vlan,
+        .tags => &co.tags,
+        .mp => {
+            const grown = try allocator.alloc([]const u8, co.mount_points.len + 1);
+            @memcpy(grown[0..co.mount_points.len], co.mount_points);
+            grown[co.mount_points.len] = value;
+            if (co.mount_points.len > 0) allocator.free(co.mount_points);
+            co.mount_points = grown;
+            return;
+        },
+    };
+    if (slot.*) |old| allocator.free(old);
+    slot.* = value;
+}
 
 fn updateFlag(arg: []const u8) ?UpdateFlag {
     for (update_flags) |f| if (std.mem.eql(u8, f.flag, arg)) return f;

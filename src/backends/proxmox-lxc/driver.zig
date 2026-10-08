@@ -302,6 +302,12 @@ pub const ProxmoxLxcDriver = struct {
                         return err;
                     };
                     oci_bundle_path = safe_path;
+                    // A bundle's mounts become mp entries after the create,
+                    // numbered from mp0, so --mp would be overwritten by them.
+                    if (config.pve.mount_points.len > 0) {
+                        if (self.logger) |log| log.err("--mp with an OCI bundle: the bundle's config.json carries the mounts, and they take pct's mp entries", .{}) catch {};
+                        return core.Error.InvalidInput;
+                    }
 
                     var bundle_parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
                     // BundleError is not part of core.Error, the set the
@@ -370,20 +376,36 @@ pub const ProxmoxLxcDriver = struct {
             try args_builder.appendSlice(&[_][]const u8{ "pct", "create", vmid, final_template, "--hostname", config.name });
         }
 
-        // Resources
+        // Resources. --memory and --cores replace the defaults rather than
+        // being given twice (#308); the other limits only add options.
+        const opts = config.pve;
         const mem_mb = if (bundle_config) |bc| (bc.memory_limit orelse (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES)) else (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES);
-        const mem_mb_str = try std.fmt.allocPrint(self.allocator, "{d}", .{mem_mb / (1024 * 1024)});
-        try allocated_args.append(mem_mb_str);
-        try args_builder.appendSlice(&[_][]const u8{ "--memory", mem_mb_str });
+        if (!hasLimit(opts.limits, "memory", "limit")) {
+            const mem_mb_str = try std.fmt.allocPrint(self.allocator, "{d}", .{mem_mb / (1024 * 1024)});
+            try allocated_args.append(mem_mb_str);
+            try args_builder.appendSlice(&[_][]const u8{ "--memory", mem_mb_str });
+        }
 
         const cores = if (bundle_config) |bc| @as(u32, @intFromFloat(if (bc.cpu_limit) |l| @max(1.0, l / 1024.0) else (if (config.resources) |r| r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES) else @as(f64, core.constants.DEFAULT_CPU_CORES)))) else @as(u32, @intFromFloat(if (config.resources) |r| r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES) else @as(f64, core.constants.DEFAULT_CPU_CORES)));
-        const cores_str = try std.fmt.allocPrint(self.allocator, "{d}", .{cores});
-        try allocated_args.append(cores_str);
-        try args_builder.appendSlice(&[_][]const u8{ "--cores", cores_str });
+        if (opts.cores) |c| {
+            try args_builder.appendSlice(&[_][]const u8{ "--cores", c });
+        } else {
+            const cores_str = try std.fmt.allocPrint(self.allocator, "{d}", .{cores});
+            try allocated_args.append(cores_str);
+            try args_builder.appendSlice(&[_][]const u8{ "--cores", cores_str });
+        }
 
         // Network
         const bridge = if (config.network) |net| net.bridge orelse self.config.default_bridge orelse core.constants.DEFAULT_BRIDGE_NAME else self.config.default_bridge orelse core.constants.DEFAULT_BRIDGE_NAME;
-        const net_val = try std.fmt.allocPrint(self.allocator, "name=eth0,bridge={s},ip=dhcp", .{bridge});
+        // net0 in pct's own syntax: --ip, --gw, --vlan and --firewall are its
+        // ip=, gw=, tag= and firewall=1. DHCP unless an address is given.
+        var net_buf = std.ArrayListUnmanaged(u8){};
+        defer net_buf.deinit(self.allocator);
+        try net_buf.writer(self.allocator).print("name=eth0,bridge={s},ip={s}", .{ bridge, opts.ip orelse "dhcp" });
+        if (opts.gw) |gw| try net_buf.writer(self.allocator).print(",gw={s}", .{gw});
+        if (opts.vlan) |tag| try net_buf.writer(self.allocator).print(",tag={s}", .{tag});
+        if (opts.firewall) try net_buf.appendSlice(self.allocator, ",firewall=1");
+        const net_val = try self.allocator.dupe(u8, net_buf.items);
         try allocated_args.append(net_val);
         try args_builder.appendSlice(&[_][]const u8{ "--net0", net_val });
 
@@ -415,6 +437,24 @@ pub const ProxmoxLxcDriver = struct {
             const rootfs = try std.fmt.allocPrint(self.allocator, "{s}:{d}", .{ storage, self.config.rootfs_size_gb orelse core.constants.DEFAULT_ROOTFS_SIZE_GB });
             try allocated_args.append(rootfs);
             try args_builder.appendSlice(&[_][]const u8{ "--rootfs", rootfs });
+        }
+
+        // The rest of what pct create is usually given (#308). The limits are
+        // said the way update says them; a swap needs the memory limit, which
+        // is the default when --memory was not given.
+        var limit_args = std.ArrayListUnmanaged([]const u8){};
+        defer {
+            for (limit_args.items) |a| self.allocator.free(a);
+            limit_args.deinit(self.allocator);
+        }
+        try self.pve_client.resourceOptions(opts.limits, @intCast(mem_mb), &limit_args);
+        try args_builder.appendSlice(limit_args.items);
+        if (opts.onboot) try args_builder.appendSlice(&[_][]const u8{ "--onboot", "1" });
+        if (opts.tags) |tags| try args_builder.appendSlice(&[_][]const u8{ "--tags", tags });
+        for (opts.mount_points, 0..) |spec, i| {
+            const flag = try std.fmt.allocPrint(self.allocator, "--mp{d}", .{i});
+            try allocated_args.append(flag);
+            try args_builder.appendSlice(&[_][]const u8{ flag, spec });
         }
 
         // 6. Execute create
@@ -457,6 +497,11 @@ pub const ProxmoxLxcDriver = struct {
         } else {
             if (self.logger) |log| log.info("Proxmox LXC container created: {s} (vmid {s})", .{ config.name, vmid }) catch {};
         }
+    }
+
+    fn hasLimit(limits: []const core.types.ResourceUpdate, section: []const u8, name: []const u8) bool {
+        for (limits) |v| if (std.mem.eql(u8, v.section, section) and std.mem.eql(u8, v.name, name)) return true;
+        return false;
     }
 
     fn persistRuntimeMetadata(

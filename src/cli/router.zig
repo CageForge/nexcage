@@ -58,6 +58,7 @@ pub const BackendRouter = struct {
                 .storage = null,
                 .node = create_config.node,
                 .template_storage = create_config.storage,
+                .pve = create_config.pve,
             },
             .run => |run_config| types.SandboxConfig{
                 .allocator = self.allocator,
@@ -254,6 +255,15 @@ pub const BackendRouter = struct {
             }
             return types.Error.UnsupportedOperation;
         }
+        // The same for pct's options (#308): a container engine sends its
+        // limits, network and mounts in the bundle's config.json, which libcrun
+        // reads, and nothing here would reach it.
+        if (operation == .create) if (operation.create.pve.firstGiven()) |which| {
+            if (self.logger) |log| {
+                log.err("{s} on create is for the Proxmox LXC backend; the crun backend takes the container's limits, network and mounts from the bundle's config.json", .{which}) catch {};
+            }
+            return types.Error.UnsupportedOperation;
+        };
 
         // Snapshots are Proxmox's: the node's storage takes one of the
         // container's volumes. libcrun has no storage of its own, so the
@@ -386,6 +396,8 @@ pub const CreateConfig = struct {
     /// `--storage <name>`: where a registry image is found or pulled to, as
     /// for `pull`. Meaningless for a template or a bundle.
     storage: ?[]const u8 = null,
+    /// What pct create is usually given (#308). Proxmox LXC only.
+    pve: types.ProxmoxCreateOptions = .{},
 };
 
 pub const RunConfig = struct {

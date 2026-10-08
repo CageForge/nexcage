@@ -16,6 +16,26 @@ const validation = @import("validation.zig");
 /// The file is read here, once, so both backends see the same thing: libcrun
 /// gets the document, which it reads itself; the Proxmox LXC backend gets the
 /// settings parsed out of it, since it has to say them to `pct set`.
+/// A value flag in the backend's terms: a size with a suffix becomes bytes, as
+/// runc accepts them for memory, and every other number has to be one. A typo
+/// is a usage error here rather than a backend's complaint. `create` takes the
+/// same limits (#308) and reads them the same way.
+pub fn normaliseValue(allocator: std.mem.Allocator, logger: ?*core.LogContext, u: types.ResourceUpdate) ![]u8 {
+    if (!u.numeric) return allocator.dupe(u8, u.value);
+    if (std.mem.eql(u8, u.section, "memory")) {
+        const bytes = core.resources.parseSize(u.value) catch {
+            if (logger) |log| log.err("'{s}' is not a size: bytes, or a number with K, M or G, or -1 for no limit", .{u.value}) catch {};
+            return types.Error.InvalidInput;
+        };
+        return std.fmt.allocPrint(allocator, "{d}", .{bytes});
+    }
+    _ = std.fmt.parseInt(i64, u.value, 10) catch {
+        if (logger) |log| log.err("'{s}' is not a number, and {s}.{s} takes one", .{ u.value, u.section, u.name }) catch {};
+        return types.Error.InvalidInput;
+    };
+    return allocator.dupe(u8, u.value);
+}
+
 pub const UpdateCommand = struct {
     const Self = @This();
 
@@ -77,7 +97,7 @@ pub const UpdateCommand = struct {
             // them; every other number has to be one. Checked here, so a
             // typo is a usage error and not a backend's complaint.
             for (options.resource_updates.?) |u| {
-                const value = try self.normalise(allocator, u);
+                const value = try normaliseValue(allocator, self.base.logger, u);
                 errdefer allocator.free(value);
                 try values.append(allocator, .{ .section = u.section, .name = u.name, .value = value, .numeric = u.numeric });
             }
@@ -86,22 +106,6 @@ pub const UpdateCommand = struct {
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
         const operation = router.Operation{ .update = router.UpdateConfig{ .resources_json = resources_json, .values = values.items } };
         try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
-    }
-
-    fn normalise(self: *Self, allocator: std.mem.Allocator, u: types.ResourceUpdate) ![]u8 {
-        if (!u.numeric) return allocator.dupe(u8, u.value);
-        if (std.mem.eql(u8, u.section, "memory")) {
-            const bytes = core.resources.parseSize(u.value) catch {
-                if (self.base.logger) |log| log.err("'{s}' is not a size: bytes, or a number with K, M or G, or -1 for no limit", .{u.value}) catch {};
-                return types.Error.InvalidInput;
-            };
-            return std.fmt.allocPrint(allocator, "{d}", .{bytes});
-        }
-        _ = std.fmt.parseInt(i64, u.value, 10) catch {
-            if (self.base.logger) |log| log.err("'{s}' is not a number, and {s}.{s} takes one", .{ u.value, u.section, u.name }) catch {};
-            return types.Error.InvalidInput;
-        };
-        return allocator.dupe(u8, u.value);
     }
 
     /// The document from a file, or from stdin for `-`. A resources document
