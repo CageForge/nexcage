@@ -89,9 +89,9 @@ Named rather than left for someone to discover:
 
 - [ ] **ADOPTERS.md** — there are none to list yet, and an empty file would say
       less than its absence.
-- [ ] **ROADMAP.md** — what is missing is tracked in the gap table of
-      `docs/KUBERNETES_INTEGRATION.md` and in each release's notes, not in a
-      roadmap of its own.
+- [x] **ROADMAP.md** — what comes next and why, without dates past the next
+      release; each item links its issue, and the release pull request moves
+      what shipped to the changelog.
 - [~] **OpenSSF Scorecards** — the workflow exists and GitHub disabled it for
       inactivity, so there is deliberately no Scorecard badge in the README: a
       badge for a check that does not run is worse than none.
