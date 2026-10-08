@@ -489,6 +489,14 @@ check "--pid-file on the LXC backend -> exit 1, refused rather than ignored" \
   all 'rc 1' 'err_has "--pid-file"' 'not_called_re "^pct create"'
 nx create plain-1 --bundle /tmp/nexcage-bundles/b1
 check "without either flag the bundle path is unaffected" all 'rc 0' 'called_re "^pct create [0-9]+ "'
+# run is create then start: the flags are refused as for create, before either
+# (#328: they used to be dropped, and the container made and started anyway).
+nx run sock-2 --bundle /tmp/nexcage-bundles/b1 --console-socket /run/x.sock
+check "run --console-socket on the LXC backend -> exit 1, nothing created or started" \
+  all 'rc 1' 'err_has "--console-socket"' 'not_called_re "^pct create"' 'not_called_re "^pct start"'
+nx run --name pidf-2 "$TPL" --pid-file /run/x.pid
+check "run --pid-file on the LXC backend -> exit 1, nothing created or started" \
+  all 'rc 1' 'err_has "--pid-file"' 'not_called_re "^pct create"' 'not_called_re "^pct start"'
 
 nx delete spec-1
 check "delete refuses a running container without --force" rc 1
@@ -843,9 +851,23 @@ nx create --name there-3 --node titan --bundle /tmp/nexcage-bundles/b1
 check "--node with a bundle is refused, not half-done" \
   all 'rc 1' 'err_has "packed into a template on this host"'
 
+# run --node makes the container there and starts it there, as create --node
+# then start would; it used to make it on this host without a word (#328).
+nx run --name there-r --node titan "$TPL"
+check "run --node creates through that node's API and starts it there" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc --vmid [0-9]+ .*--hostname there-r"' \
+      'called_re "^pvesh create /nodes/titan/lxc/[0-9]+/status/start$"' \
+      'not_called_re "^pct create"' 'not_called_re "^pct start"'
+nx run --name there-r2 --node otherhost "$TPL"
+check "run --node on a node without the template is refused, nothing started" \
+  all 'rc 1' 'err_has "does not have the template"' 'not_called_re "status/start"' 'not_called_re "^pct start"'
+
 nx --runtime crun create --node titan --bundle /tmp/nexcage-bundles/b1 there-4
 check "--node on the crun backend says it has nowhere to put it" \
   all 'rc 1' 'err_has "nowhere else to put it"'
+nx --runtime crun run --node titan --bundle /tmp/nexcage-bundles/b1 there-5
+check "run --node on the crun backend is refused by name" \
+  all 'rc 1' 'err_has "--node"' 'err_has "nowhere else to put it"'
 
 # Naming this host is not "another node": it is the ordinary local path.
 nx create --name here-2 --node "$(hostname)" "$TPL"

@@ -52,9 +52,18 @@ pub const RunCommand = struct {
         const image = validated.image;
 
         // Use router for backend selection and execution
-        var backend_router = router.BackendRouter.init(allocator, self.base.logger);
+        var backend_router = router.BackendRouter.initWithDebug(allocator, self.base.logger, options.debug);
 
-        const operation = router.Operation{ .run = router.RunConfig{ .image = image, .storage = options.storage_name } };
+        // Every option create takes, so the router can honour or refuse each
+        // one as it does for create; dropping them here was #328.
+        const operation = router.Operation{ .run = router.CreateConfig{
+            .image = image,
+            .console_socket = options.console_socket,
+            .pid_file = options.pid_file,
+            .systemd_cgroup = options.systemd_cgroup,
+            .node = options.node,
+            .storage = options.storage_name,
+        } };
         try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 
         try self.logOperation("Running container", container_id);
@@ -66,14 +75,16 @@ pub const RunCommand = struct {
         // Allocated because execute() frees it: returning the literal made
         // `nexcage run --help` abort with "Invalid free".
         return allocator.dupe(u8, "Usage: nexcage run --name <name> <image>\n\n" ++
-            "Create a container and start it, as create followed by start would, except\n" ++
-            "that --node is ignored, so the container is made on this node, and\n" ++
-            "--console-socket and --pid-file are ignored rather than refused. The crun\n" ++
-            "backend does not implement run.\n" ++
+            "Create a container and start it, as create followed by start would. On\n" ++
+            "Proxmox LXC --console-socket and --pid-file are refused, as for create. The\n" ++
+            "crun backend does not implement run.\n" ++
             "<image> takes the same forms as for create (see 'nexcage create --help').\n\n" ++
             "Options:\n" ++
             "  --name <name>   Container name, used as its hostname (required)\n" ++
             "  --storage <s>   Storage a registry image is found on or pulled to (default: local)\n" ++
+            "  --node <n>      Proxmox cluster node to create and start on (default: this one);\n" ++
+            "                  on another node the image must be a <storage>:vztmpl/ template\n" ++
+            "                  that node can read\n" ++
             "  --bundle <dir>  OCI bundle directory, an absolute path, in place of <image>;\n" ++
             "                  the first positional word is then the container name\n" ++
             "                  (run <name> --bundle <dir>)\n" ++

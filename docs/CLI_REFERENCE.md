@@ -233,10 +233,11 @@ added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
 nexcage run --name <name> <image>
 ```
 
-`create` followed by `start`, with these differences: `--node` is ignored, so
-the container is made on this host; `--console-socket` and `--pid-file` are
-ignored rather than refused as `create` refuses them; and the crun backend does
-not implement `run` (exit 1). `<image>`, `--bundle` and `--storage` work as for
+`create` followed by `start`. `<image>`, `--bundle`, `--storage` and `--node`
+work as for `create`: with `--node` the container is made on that node and
+started there. On Proxmox LXC `--console-socket` and `--pid-file` are refused
+as `create` refuses them, before anything is made. The crun backend does not
+implement `run` (exit 1), and refuses `--node` by name as it does for
 `create`.
 
 ### start

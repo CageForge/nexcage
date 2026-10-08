@@ -39,7 +39,8 @@ pub const BackendRouter = struct {
         const name_buf = try self.allocator.dupe(u8, container_id);
 
         return switch (operation) {
-            .create => |create_config| types.SandboxConfig{
+            // run is create followed by start, so it makes the same container
+            .create, .run => |create_config| types.SandboxConfig{
                 .allocator = self.allocator,
                 .name = name_buf,
                 .runtime_type = runtime_type,
@@ -58,17 +59,6 @@ pub const BackendRouter = struct {
                 .storage = null,
                 .node = create_config.node,
                 .template_storage = create_config.storage,
-            },
-            .run => |run_config| types.SandboxConfig{
-                .allocator = self.allocator,
-                .name = name_buf,
-                .runtime_type = runtime_type,
-                .image = try self.allocator.dupe(u8, run_config.image),
-                .resources = null,
-                .security = null,
-                .network = null,
-                .storage = null,
-                .template_storage = run_config.storage,
             },
             else => types.SandboxConfig{
                 .allocator = self.allocator,
@@ -138,16 +128,17 @@ pub const BackendRouter = struct {
         // them: create leaves the container's process alive on a pty, and the
         // runtime hands the master end over and writes the pid. `pct create`
         // starts nothing, so there is neither. Refusing is the point — a flag
-        // accepted and ignored is worse than one rejected.
-        if (operation == .create) {
-            const cc = operation.create;
-            if (cc.console_socket != null or cc.pid_file != null) {
+        // accepted and ignored is worse than one rejected. `run` is refused
+        // the same way: its start comes after create, too late for either.
+        switch (operation) {
+            .create, .run => |cc| if (cc.console_socket != null or cc.pid_file != null) {
                 const which = if (cc.console_socket != null) "--console-socket" else "--pid-file";
                 if (self.logger) |log| {
                     log.err("{s} is not possible on the Proxmox LXC backend: pct create starts no process, so there is no pty to hand over and no pid to write. Use --runtime crun", .{which}) catch {};
                 }
                 return types.Error.UnsupportedOperation;
-            }
+            },
+            else => {},
         }
 
         switch (operation) {
@@ -209,7 +200,11 @@ pub const BackendRouter = struct {
         // backend either way: a node is a Proxmox cluster's notion, and libcrun
         // makes the container in the kernel this process runs on. Answering
         // "rebuild with the backend" to it would send someone the wrong way.
-        if (operation == .create and operation.create.node != null) {
+        const node = switch (operation) {
+            .create, .run => |cc| cc.node,
+            else => null,
+        };
+        if (node != null) {
             if (self.logger) |log| {
                 log.err("--node is a Proxmox cluster option; the crun backend creates the container on this host and has nowhere else to put it", .{}) catch {};
             }
@@ -297,7 +292,8 @@ pub const Operation = union(enum) {
     start: void,
     stop: void,
     delete: DeleteConfig,
-    run: RunConfig,
+    /// create then start: the same options as create
+    run: CreateConfig,
     state: void,
     kill: KillConfig,
     exec: ExecConfig,
@@ -346,11 +342,6 @@ pub const CreateConfig = struct {
     systemd_cgroup: bool = false,
     /// `--storage <name>`: where a registry image is found or pulled to, as
     /// for `pull`. Meaningless for a template or a bundle.
-    storage: ?[]const u8 = null,
-};
-
-pub const RunConfig = struct {
-    image: []const u8,
     storage: ?[]const u8 = null,
 };
 
