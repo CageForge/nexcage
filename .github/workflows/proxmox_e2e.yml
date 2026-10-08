@@ -564,8 +564,20 @@ jobs:
         # container is gone. Freeing it keeps the host's template list to
         # system templates, which is what the detection above looks for.
         before=$(vztmpl_list)
+        # Root's registry auth file, which the login check below replaces for a
+        # moment; whatever the node has there is put back.
+        AUTH=/root/.config/containers/auth.json
+        AUTH_SAVED=$(mktemp -d)
+        if $SUDO test -f "$AUTH"; then $SUDO cp -p "$AUTH" "$AUTH_SAVED/auth.json"; fi
+        restore_auth() {
+          $SUDO rm -f "$AUTH"
+          [ -f "$AUTH_SAVED/auth.json" ] && $SUDO cp -p "$AUTH_SAVED/auth.json" "$AUTH"
+          return 0
+        }
         cleanup() {
           set +e
+          restore_auth
+          $SUDO rm -rf "$AUTH_SAVED"
           for n in "$NAME" "$NAME-2"; do
             id=$(vmid_of "$n")
             [ -z "$id" ] && continue
@@ -608,6 +620,26 @@ jobs:
 
         nx stop "$NAME"
         nx delete "$NAME"
+
+        # A private registry's login is root's auth file on the node that
+        # pulls: Proxmox runs skopeo with no --authfile (#309). Wrong
+        # credentials for docker.io there must turn a pull of a public image
+        # away, and nexcage must say why and where the login goes. pvesh
+        # exits 0 on such a failure, which is why the reason has to be read
+        # from its output at all.
+        echo "[E2E] a pull reads $AUTH, and a refused login says so"
+        $SUDO mkdir -p "$(dirname "$AUTH")"
+        printf '{"auths":{"docker.io":{"auth":"%s"}}}\n' "$(printf 'nexcage-e2e:wrong' | base64)" | $SUDO tee "$AUTH" >/dev/null
+        if nx pull docker.io/library/busybox:1.36 2>pull.err; then
+          echo "::error::a pull with wrong credentials in $AUTH went through: the file was not read"; exit 1
+        fi
+        restore_auth
+        grep -q "incorrect username or password" pull.err && grep -q "skopeo login --authfile $AUTH docker.io" pull.err || {
+          cat pull.err
+          echo "::error::the refused pull did not report the registry's reason and the skopeo login line"; exit 1
+        }
+        echo "[E2E] refused, with the reason: $(grep -o 'unauthorized[^"]*' pull.err | head -1)"
+
         cleanup
         trap - EXIT
         echo "[E2E] registry path passed"

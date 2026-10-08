@@ -201,6 +201,27 @@ pveam available --section system
 pveam download local debian-12-standard_12.7-1_amd64.tar.zst
 ```
 
+### Images from a private registry
+
+`pull`, `create <reference>` and `run <reference>` have Proxmox pull the image,
+and Proxmox runs `skopeo copy` with no credentials of its own. skopeo finds
+them in root's auth file on the node that pulls, so log in there once:
+
+```bash
+skopeo login --authfile /root/.config/containers/auth.json registry.example.com
+```
+
+- Give `--authfile`. skopeo's default for root is `/run/containers/0/auth.json`,
+  which is on tmpfs and gone after a reboot.
+- Log in on every node that pulls. With `--node titan` the pull runs on titan,
+  and titan's file is the one read.
+- The file holds the credentials encoded, not encrypted. Use a token that can
+  only read.
+
+A refused login comes back from nexcage with the registry's reason and the
+`skopeo login` line for that node. The Proxmox E2E checks on every run that a
+pull reads this file (#309).
+
 ## Verify
 
 ```bash
