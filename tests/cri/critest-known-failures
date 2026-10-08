@@ -1,0 +1,6 @@
+# critest's specs that fail against containerd with nexcage as the runtime
+# handler: the spec's full name on one line, as critest_check.py prints it,
+# then why on the indented lines after it. A failure not listed here turns
+# crun_build.yml red; so does a listed spec that does not fail. A spec written
+# `~name` is run and its result printed, but not checked: it passes or fails by
+# chance. docs/KUBERNETES_INTEGRATION.md has the results and what they mean.
