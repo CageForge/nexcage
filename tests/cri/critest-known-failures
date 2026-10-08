@@ -42,3 +42,8 @@
     The runner has AppArmor, so these run rather than skip, and each one
     first loads critest's test profiles with `sudo apparmor_parser`
     (apparmor_linux.go:86). The image has neither.
+[k8s.io] PodSandbox runtime should support metrics operations runtime should support listing pod sandbox metrics [Conformance]
+    containerd reads a sandbox's metrics from the pod's cgroup parent, and
+    critest gives the pod none when the engine uses cgroupfs, as here
+    (common.GetCgroupParent). containerd logs "cgroupPath is empty" and leaves
+    the pod out. A kubelet always sets one.
