@@ -179,7 +179,7 @@ means by them.
 ### create
 
 ```bash
-nexcage create --name <name> [--storage <name>] <image>
+nexcage create --name <name> [--storage <name>] [pct options] <image>
 nexcage create <container-id> --bundle <dir> [--console-socket <path>] [--pid-file <path>]
 ```
 
@@ -216,7 +216,7 @@ image, which is the form the runtime-spec defines and a container engine sends:
 working.
 
 The container gets `eth0` on `network.bridge` with DHCP, 512 MiB of memory and
-one core unless the OCI bundle sets limits. Its root filesystem goes to
+one core unless the options below or the OCI bundle set them. Its root filesystem goes to
 `proxmox.storage` (`<storage>:<rootfs_size_gb>`) when that is configured. It is
 unprivileged unless `proxmox.unprivileged` is `false`; images from a registry
 always run unprivileged.
@@ -226,6 +226,41 @@ For an OCI bundle, nexcage packs `rootfs/` with tar into
 template and deletes the archive. The rootfs is used as it is, so it must boot
 as a system container: an image without an init will not start. Mounts are
 added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
+
+#### pct options
+
+What `pct create` is usually given, on the Proxmox LXC backend. Each maps onto
+one pct option, through `pct create` here and the node's API with `--node`, so
+`pct config <vmid>` shows it afterwards. Nothing given means pct's default (or
+nexcage's, for memory, cores and the network).
+
+| Option | pct | Notes |
+|---|---|---|
+| `--memory <size>` | `memory` | As for `update`: bytes, or with K, M or G. MiB, rounded up |
+| `--memory-swap <size>` | `swap` | As for `update`, runc's meaning: memory plus swap. pct's `swap` is the difference, so it cannot be less than the memory |
+| `--cpu-quota <us>`, `--cpu-period <us>` | `cpulimit` | Quota over period, in cores; the period defaults to 100000 |
+| `--cpu-share <n>` | `cpuunits` | cgroup v1 shares converted to the v2 weight, as runc converts them |
+| `--cores <n>` | `cores` | The cores the container sees |
+| `--ip <cidr>` | `net0` `ip=` | `dhcp` by default; `manual` leaves it unset |
+| `--gw <address>` | `net0` `gw=` | |
+| `--vlan <tag>` | `net0` `tag=` | 1 to 4094 |
+| `--firewall` | `net0` `firewall=1` | |
+| `--onboot` | `onboot 1` | |
+| `--tags <a;b>` | `tags` | |
+| `--mp <spec>` | `mp0`, `mp1`, ... | pct's own syntax, e.g. `local-lvm:8,mp=/data` (a new 8 GiB volume) or `/srv/data,mp=/data` (a bind mount). Each `--mp` takes the next index |
+
+A limit Proxmox has no setting for (`--pids-limit`, `--cpuset-cpus`, ...) is
+refused by name, as `update` refuses it. `--ip` and `--gw` cannot contain `,` or
+`=`, which would add a `net0` key nobody asked for (exit 2). `--mp` with an OCI
+bundle is refused: the bundle's mounts take the `mp` entries. On the crun
+backend every one of these is refused; it takes the limits, network and mounts
+from the bundle's `config.json`.
+
+```bash
+nexcage create --name web-1 --memory 2G --cores 2 --ip 10.0.0.5/24 --gw 10.0.0.1 \
+  --vlan 20 --onboot --tags 'web;prod' --mp local-lvm:8,mp=/srv/data \
+  local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst
+```
 
 ### run
 

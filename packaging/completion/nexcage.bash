@@ -73,7 +73,7 @@ _nexcage() {
             ;;
         create|run)
             local extra="--bundle --storage"
-            [ "$cmd" = create ] && extra="--bundle --console-socket --pid-file --node --storage"
+            [ "$cmd" = create ] && extra="--bundle --console-socket --pid-file --node --storage --memory --memory-swap --cpu-quota --cpu-period --cpu-share --cores --ip --gw --vlan --firewall --onboot --tags --mp"
             COMPREPLY=( $(compgen -W "--name --help $extra" -- "$cur") )
             ;;
         pull)

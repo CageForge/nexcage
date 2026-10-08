@@ -47,6 +47,11 @@ default local; the root filesystem goes on \fBproxmox.storage\fR.
 the Proxmox LXC backend refuses them, because \fBpct create\fR starts no
 process. The crun backend is not built into this package's binary; it is in
 the separate \-crun release binary.
+What \fBpct create\fR is usually given: \fB\-\-memory\fR, \fB\-\-memory\-swap\fR,
+\fB\-\-cpu\-quota\fR, \fB\-\-cpu\-period\fR and \fB\-\-cpu\-share\fR as for
+\fBupdate\fR; \fB\-\-cores\fR; \fB\-\-ip\fR, \fB\-\-gw\fR, \fB\-\-vlan\fR and
+\fB\-\-firewall\fR, net0's ip=, gw=, tag= and firewall=1; \fB\-\-onboot\fR;
+\fB\-\-tags\fR; and \fB\-\-mp\fR \fIspec\fR, repeatable, in pct's syntax.
 .TP
 \fBrun \-\-name\fR \fIname\fR \fIimage\fR
 Create a container on this node and start it. \fB\-\-node\fR,

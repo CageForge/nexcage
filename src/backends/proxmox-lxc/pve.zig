@@ -1148,69 +1148,18 @@ pub const PveClient = struct {
     /// another node through `pvesh set /nodes/<node>/lxc/<vmid>/config`, which
     /// takes the same options.
     pub fn setResources(self: *const Self, vmid: []const u8, values: []const core.types.ResourceUpdate, node: ?[]const u8) !void {
-        const res = core.resources;
         var args = std.ArrayListUnmanaged([]const u8){};
         defer {
             for (args.items) |a| self.allocator.free(a);
             args.deinit(self.allocator);
         }
-
-        var memory_bytes: ?i64 = null;
-        var swap_total: ?i64 = null;
-        var quota: ?i64 = null;
-        var period: ?i64 = null;
-        for (values) |v| {
-            const num: i64 = if (v.numeric) std.fmt.parseInt(i64, v.value, 10) catch {
-                if (self.logger) |log| log.err("{s}.{s}: '{s}' is not a number", .{ v.section, v.name, v.value }) catch {};
-                return core.Error.InvalidInput;
-            } else 0;
-            if (isSetting(v, "memory", "limit")) {
-                if (num < 0) {
-                    if (self.logger) |log| log.err("--memory -1: Proxmox has no unlimited memory for a container; give a size", .{}) catch {};
-                    return core.Error.UnsupportedOperation;
-                }
-                memory_bytes = num;
-                try pushOption(self.allocator, &args, "--memory", "{d}", .{res.mibCeil(num)});
-            } else if (isSetting(v, "memory", "swap")) {
-                if (num < 0) {
-                    if (self.logger) |log| log.err("--memory-swap -1: Proxmox has no unlimited swap for a container; give a size", .{}) catch {};
-                    return core.Error.UnsupportedOperation;
-                }
-                swap_total = num;
-            } else if (isSetting(v, "cpu", "quota")) {
-                quota = num;
-            } else if (isSetting(v, "cpu", "period")) {
-                period = num;
-            } else if (isSetting(v, "cpu", "shares")) {
-                try pushOption(self.allocator, &args, "--cpuunits", "{d}", .{res.sharesToWeight(num)});
-            } else {
-                if (self.logger) |log| log.err("{s}.{s} has no Proxmox setting for a container: pct set knows memory, swap, cpulimit and cpuunits, so this backend takes --memory, --memory-swap, --cpu-quota/--cpu-period and --cpu-share", .{ v.section, v.name }) catch {};
-                return core.Error.UnsupportedOperation;
-            }
+        // pct's --swap is swap alone and runc's --memory-swap memory plus
+        // swap, so a swap without a memory limit needs the container's own.
+        var current_memory: ?i64 = null;
+        if (hasSetting(values, "memory", "swap") and !hasSetting(values, "memory", "limit")) {
+            current_memory = try self.currentMemoryBytes(vmid, node);
         }
-
-        if (swap_total) |total| {
-            // runc's --memory-swap is memory plus swap; pct's --swap is swap
-            // alone. The difference needs the memory limit, from this call or
-            // from the container's config.
-            const limit = memory_bytes orelse (try self.currentMemoryBytes(vmid, node));
-            if (total < limit) {
-                if (self.logger) |log| log.err("--memory-swap is memory plus swap, as runc means it, and {d} is less than the memory limit of {d}", .{ total, limit }) catch {};
-                return core.Error.InvalidInput;
-            }
-            try pushOption(self.allocator, &args, "--swap", "{d}", .{@divFloor(total - limit + (1024 * 1024 - 1), 1024 * 1024)});
-        }
-        if (quota) |q| {
-            var buf: [32]u8 = undefined;
-            const cores = res.cpulimit(&buf, q, period orelse 100000) catch {
-                if (self.logger) |log| log.err("--cpu-period must be positive", .{}) catch {};
-                return core.Error.InvalidInput;
-            };
-            try pushOption(self.allocator, &args, "--cpulimit", "{s}", .{cores});
-        } else if (period != null) {
-            if (self.logger) |log| log.err("--cpu-period on its own changes nothing here: Proxmox has a CPU limit in cores, which is quota over period, so give --cpu-quota too", .{}) catch {};
-            return core.Error.InvalidInput;
-        }
+        try self.resourceOptions(values, current_memory, &args);
         if (args.items.len == 0) return;
 
         if (node) |n| return self.nodeApi(n, vmid, "set", "/config", args.items);
@@ -1228,6 +1177,75 @@ pub const PveClient = struct {
             if (self.logger) |log| log.err("pct set {s} failed: {s}", .{ vmid, std.mem.trim(u8, out.stderr, " \t\r\n") }) catch {};
             return self.mapPctError(out.stderr);
         }
+    }
+
+    /// The limits in pct's options, appended to `args` (each string owned by
+    /// it): what `update` says to `pct set` and `create` to `pct create`
+    /// (#308). `memory_fallback` is the memory limit in bytes when `values`
+    /// has a swap but no memory of its own.
+    pub fn resourceOptions(self: *const Self, values: []const core.types.ResourceUpdate, memory_fallback: ?i64, args: *std.ArrayListUnmanaged([]const u8)) !void {
+        const res = core.resources;
+        var memory_bytes: ?i64 = null;
+        var swap_total: ?i64 = null;
+        var quota: ?i64 = null;
+        var period: ?i64 = null;
+        for (values) |v| {
+            const num: i64 = if (v.numeric) std.fmt.parseInt(i64, v.value, 10) catch {
+                if (self.logger) |log| log.err("{s}.{s}: '{s}' is not a number", .{ v.section, v.name, v.value }) catch {};
+                return core.Error.InvalidInput;
+            } else 0;
+            if (isSetting(v, "memory", "limit")) {
+                if (num < 0) {
+                    if (self.logger) |log| log.err("--memory -1: Proxmox has no unlimited memory for a container; give a size", .{}) catch {};
+                    return core.Error.UnsupportedOperation;
+                }
+                memory_bytes = num;
+                try pushOption(self.allocator, args, "--memory", "{d}", .{res.mibCeil(num)});
+            } else if (isSetting(v, "memory", "swap")) {
+                if (num < 0) {
+                    if (self.logger) |log| log.err("--memory-swap -1: Proxmox has no unlimited swap for a container; give a size", .{}) catch {};
+                    return core.Error.UnsupportedOperation;
+                }
+                swap_total = num;
+            } else if (isSetting(v, "cpu", "quota")) {
+                quota = num;
+            } else if (isSetting(v, "cpu", "period")) {
+                period = num;
+            } else if (isSetting(v, "cpu", "shares")) {
+                try pushOption(self.allocator, args, "--cpuunits", "{d}", .{res.sharesToWeight(num)});
+            } else {
+                if (self.logger) |log| log.err("{s}.{s} has no Proxmox setting for a container: Proxmox knows memory, swap, cpulimit and cpuunits, so this backend takes --memory, --memory-swap, --cpu-quota/--cpu-period and --cpu-share", .{ v.section, v.name }) catch {};
+                return core.Error.UnsupportedOperation;
+            }
+        }
+
+        if (swap_total) |total| {
+            // runc's --memory-swap is memory plus swap; pct's --swap is swap
+            // alone. The difference needs the memory limit, from this call or
+            // from the caller: the container's config, or create's default.
+            const limit = memory_bytes orelse memory_fallback orelse return core.Error.InvalidInput;
+            if (total < limit) {
+                if (self.logger) |log| log.err("--memory-swap is memory plus swap, as runc means it, and {d} is less than the memory limit of {d}", .{ total, limit }) catch {};
+                return core.Error.InvalidInput;
+            }
+            try pushOption(self.allocator, args, "--swap", "{d}", .{@divFloor(total - limit + (1024 * 1024 - 1), 1024 * 1024)});
+        }
+        if (quota) |q| {
+            var buf: [32]u8 = undefined;
+            const cores = res.cpulimit(&buf, q, period orelse 100000) catch {
+                if (self.logger) |log| log.err("--cpu-period must be positive", .{}) catch {};
+                return core.Error.InvalidInput;
+            };
+            try pushOption(self.allocator, args, "--cpulimit", "{s}", .{cores});
+        } else if (period != null) {
+            if (self.logger) |log| log.err("--cpu-period on its own changes nothing here: Proxmox has a CPU limit in cores, which is quota over period, so give --cpu-quota too", .{}) catch {};
+            return core.Error.InvalidInput;
+        }
+    }
+
+    fn hasSetting(values: []const core.types.ResourceUpdate, section: []const u8, name: []const u8) bool {
+        for (values) |v| if (isSetting(v, section, name)) return true;
+        return false;
     }
 
     fn isSetting(v: core.types.ResourceUpdate, section: []const u8, name: []const u8) bool {
