@@ -16,6 +16,16 @@
 | `scorecards.yml`, `pages.yml`, `docs_mike.yml` | ubuntu-latest | various | OpenSSF Scorecards, documentation site |
 | `buildagent.yml` | self-hosted, `buildagent`, `nexcage` | push/PR to `main`, daily | On Debian 13: Debug build, `zig build test`, `tests/sim/run.sh`, `make deb` and what the `.deb` carries |
 
+## Self-hosted runners and forks
+
+The jobs on self-hosted runners (`proxmox_e2e.yml`, `buildagent.yml`,
+`k8s_e2e.yml`'s node job) skip a pull request from a fork: the job shows as
+skipped and the GitHub-hosted checks run as usual. On the E2E node the runner
+user has sudo for everything, so a fork's code there would run as root, and
+GitHub's approval for first-time contributors stops applying once someone has
+had a contribution merged. To run them on such code, push it to a branch in
+this repository.
+
 ## Self-hosted Proxmox runner
 
 `proxmox_e2e.yml` needs a GitHub Actions runner with the `pve9` label on a
