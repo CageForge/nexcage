@@ -4,7 +4,7 @@
 
 - Linux, amd64
 - Zig 0.15.1
-- A Proxmox VE 8.x/9.x host to run containers; building and unit tests work
+- A Proxmox VE 9.x host to run containers; building and unit tests work
   anywhere
 
 The default build links only libc. `oci-spec-zig` is vendored in

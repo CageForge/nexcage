@@ -1,7 +1,12 @@
 # Installing nexcage
 
-nexcage runs on the Proxmox VE host (8.x or 9.x, amd64) as root. It needs
+nexcage runs on the Proxmox VE host (9.x, amd64) as root. It needs
 `pct`, `pvesh` and `pveversion`, which Proxmox VE provides.
+
+Proxmox VE 8.x is not supported. Releases before 0.14.0 ran on it, but no
+test ever did — the E2E suite runs on 9.x — and Proxmox ended support for 8.x
+in August 2026, with Debian 12. nexcage does not refuse an 8.x host; it no
+longer promises anything there.
 
 ## From a release
 
