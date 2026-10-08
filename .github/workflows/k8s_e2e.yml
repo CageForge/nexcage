@@ -1,0 +1,86 @@
+name: Kubernetes pod on nexcage (self-hosted)
+
+# tests/k8s/pod_on_node.sh on the E2E node (#312): k3s with nexcage as a
+# runtime, and a pod with runtimeClassName: nexcage that has to be Ready, give
+# its logs, run an exec and be deleted, all through the -crun binary built
+# from the commit under test. It was run by hand from 0.10.0 on.
+#
+# Not on every push: it installs k3s and removes it again, which takes a few
+# minutes and changes the node the lifecycle E2E shares. It runs on release
+# tags, on demand, and on a pull request that changes the test itself.
+
+on:
+  push:
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'tests/k8s/**'
+      - '.github/workflows/k8s_e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time, and never cancelled halfway: a cancelled run can leave k3s
+# installed on the node.
+concurrency:
+  group: k8s-e2e
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the -crun binary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # As release.yml builds it: the Dockerfile brings the submodules and
+      # libcrun's generated headers, and -Dcpu=baseline keeps it from dying
+      # with SIGILL on a node older than a GitHub runner.
+      - name: Build
+        run: |
+          set -eux
+          docker build \
+            --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" \
+            -t nexcage:k8s-e2e .
+          mkdir -p dist
+          cid=$(docker create nexcage:k8s-e2e)
+          docker cp "$cid:/usr/local/bin/nexcage" dist/nexcage
+          docker rm "$cid"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexcage-crun-k8s-e2e
+          path: dist/nexcage
+          retention-days: 3
+
+  pod:
+    name: A pod on nexcage through k3s
+    needs: build
+    # A pull request from a fork must not run code as root on the node: the
+    # runner user there has sudo for everything.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, pve9]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download the binary
+        uses: actions/download-artifact@v4
+        with:
+          name: nexcage-crun-k8s-e2e
+          path: dist
+
+      # The script needs root: it installs k3s, writes containerd's template
+      # and restarts the service. It removes what it installed on the way out.
+      - name: tests/k8s/pod_on_node.sh
+        run: |
+          set -eu
+          chmod +x dist/nexcage
+          if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
+          $SUDO env NEXCAGE="$PWD/dist/nexcage" sh tests/k8s/pod_on_node.sh

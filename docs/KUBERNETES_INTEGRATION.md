@@ -514,15 +514,18 @@ with Kubernetes, and both would have looked like runtime bugs:
   nexcage needs.
 
 The script removes the k3s it installed unless `--keep` is passed (or
-`KEEP=1`), because that node is the E2E runner. It does not undo everything.
-`/etc/nexcage/config.json` routing everything to crun is read by any nexcage on
-that node that finds no `./config.json` first, and a default build has no crun
-backend. The E2E workflow writes its own `./config.json` in its workspace and is
-not affected, but a command run by hand is. So the file is written only when
-absent, but it is not removed after: if the script wrote it (it says so),
-delete it by hand when the run is done. On a node that already had k3s, the
-containerd template with the `nexcage` runtime (pointing at `/nexcage-traced`,
-which is removed) and `RuntimeClass/nexcage` are left in place as well.
+`KEEP=1`), because that node is the E2E runner. `/etc/nexcage/config.json`,
+which routes everything to crun, is written only when absent and removed again
+by the run that wrote it. Any nexcage on that node that finds no
+`./config.json` first reads that file, and a default build has no crun
+backend. On a node that already had k3s, the containerd template with the
+`nexcage` runtime (pointing at `/nexcage-traced`, which is removed) and
+`RuntimeClass/nexcage` are left in place.
+
+`k8s_e2e.yml` runs the script on the E2E node (#312) on release tags, on
+demand, and on a pull request that changes `tests/k8s/`. It builds the `-crun`
+binary from the commit under test, as the release does, and the node job never
+runs a fork's pull request: the runner user there has sudo for everything.
 
 ## critest: what Kubernetes checks of a runtime
 

@@ -46,9 +46,11 @@ echo "ok: nexcage runs here, with the crun backend"
 
 # An engine never passes --runtime, so the configuration must route to crun.
 mkdir -p /etc/nexcage
+wrote_config=no
 if [ ! -f /etc/nexcage/config.json ]; then
     printf '{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }' \
         > /etc/nexcage/config.json
+    wrote_config=yes
     echo "ok: wrote /etc/nexcage/config.json routing to crun"
 else
     grep -q '"crun"' /etc/nexcage/config.json \
@@ -66,23 +68,10 @@ EOT
 chmod +x /nexcage-traced
 : > "$TRACE"
 
+# Set before anything is installed, so that an install that fails halfway is
+# removed as well: the uninstall script is there as soon as k3s's installer has
+# got that far.
 installed_here=no
-if ! command -v k3s >/dev/null 2>&1; then
-    echo "installing k3s (it was not here)"
-    # The extras a runtime test has no use for stay off, so less of the node
-    # changes: no ingress controller, no load balancer, no metrics server.
-    curl -sfL https://get.k3s.io | \
-        INSTALL_K3S_VERSION="$K3S_VERSION" \
-        INSTALL_K3S_EXEC="--disable=traefik --disable=servicelb --disable=metrics-server --write-kubeconfig-mode=644" \
-        sh - >/tmp/k3s-install.log 2>&1 || {
-            tail -20 /tmp/k3s-install.log >&2
-            fail "k3s would not install"
-        }
-    installed_here=yes
-else
-    echo "k3s is already here; leaving the installation alone"
-fi
-
 cleanup() {
     k delete pod nexcage-pod --ignore-not-found --wait=false >/dev/null 2>&1 || true
     if [ "$KEEP" = 1 ]; then
@@ -94,9 +83,33 @@ cleanup() {
         /usr/local/bin/k3s-uninstall.sh >/tmp/k3s-uninstall.log 2>&1 || true
         rm -f /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl 2>/dev/null || true
     fi
+    # Routing everything to crun is wrong for any other nexcage on the node --
+    # the lifecycle E2E's default build has no crun backend -- so the file goes
+    # with the run that wrote it. One that was here before is left alone.
+    if [ "$wrote_config" = yes ]; then
+        echo "removing the /etc/nexcage/config.json this script wrote"
+        rm -f /etc/nexcage/config.json
+    fi
     rm -f /nexcage-traced 2>/dev/null || true
 }
 trap cleanup EXIT
+
+if ! command -v k3s >/dev/null 2>&1; then
+    echo "installing k3s (it was not here)"
+    installed_here=yes
+    # The extras a runtime test has no use for stay off, so less of the node
+    # changes: no ingress controller, no load balancer, no metrics server.
+    curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION="$K3S_VERSION" \
+        INSTALL_K3S_EXEC="--disable=traefik --disable=servicelb --disable=metrics-server --write-kubeconfig-mode=644" \
+        sh - >/tmp/k3s-install.log 2>&1 || {
+            tail -20 /tmp/k3s-install.log >&2
+            fail "k3s would not install"
+        }
+else
+    echo "k3s is already here; leaving the installation alone"
+fi
+echo "ok: $(k3s --version | head -1)"
 
 # k3s builds its containerd configuration from a template; this adds one
 # runtime to whatever it would have written, rather than replacing it.
