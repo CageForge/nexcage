@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-08
+
+Snapshots, `create --node` on a stock Proxmox VE host, and a project that says
+true things: the Proxmox VM stub and two build options that could not work are
+gone, and the documentation, ownership and review rules were checked against
+what the code and the project do. **A configuration naming `vm` or `proxmox`
+as a runtime is now refused by every command.**
+
 ### Added
 - **`ROADMAP.md`**: what comes next and why, release by release up to the criteria for 1.0, and what is not planned. No dates past the next release; each item links its issue.
 - **Snapshots through Proxmox**: `snapshot`, `snapshots`, `rollback` and `delsnapshot`, with pct's names, for the Proxmox LXC backend (#299). Proxmox takes the snapshot, so `snapshot`, `rollback` and `delsnapshot` are each one `pct` call for a container here and one call to its node's API for a container elsewhere, and `snapshots` reads the node's API for both; nexcage adds the container by name on any node, a plain line when the storage cannot snapshot, and `--format json` for the list. The crun backend refuses them: libcrun has no storage of its own to snapshot. The successor of #116, #117, #118 and #163, which asked for this through libzfs.
