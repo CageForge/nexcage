@@ -30,6 +30,10 @@ concurrency:
 jobs:
   package:
     name: Build, simulate and package on Debian 13
+    # A pull request from a fork must not run code on this machine, a build
+    # agent shared with other projects (#362). A maintainer runs the job on
+    # such code by pushing it to a branch here.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, buildagent, nexcage]
     timeout-minutes: 30
 

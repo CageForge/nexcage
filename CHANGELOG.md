@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **The self-hosted jobs no longer run a pull request from a fork** (#362). `proxmox_e2e.yml` and `buildagent.yml` ran any pull request's code on their machines, and on the E2E node the runner user has sudo for everything, so that code ran as root. They now skip a fork's pull request, as `k8s_e2e.yml` does from the start.
+
 ### Added
 - **The runtime-spec validation suite runs against the crun backend in CI** (#310). `crun_build.yml` runs opencontainers/runtime-tools (runtime-spec 1.3.0) against the `-crun` build routed to crun, and the image's crun for reference. nexcage passes 33 of 58 tests; each of the 25 that fail is named in `tests/runtime-tools/known-failures` with the reason, and fails with crun run directly too: tests that cannot read cgroup v2, cgroup v1 settings libcrun refuses by name, and tests that contradict runtime-spec 1.3.0 or themselves. A failure not on the list turns the job red, and so does a listed test that passes. `docs/RUNTIME_SPEC_VALIDATION.md` has the results.
 - **critest, the CRI validation suite, runs against nexcage in CI** (#311). `crun_build.yml` runs cri-tools' critest (v1.37.0, 142 specs) against containerd with nexcage as the runtime handler, and again through the image's crun for reference. 110 pass, 10 fail and 22 are skipped, the same spec for spec as through crun. The 10 that fail are AppArmor specs that need `sudo apparmor_parser` in the image, and pod sandbox metrics, which containerd reads from a cgroup parent that critest does not set under cgroupfs. Each is named in `tests/cri/critest-known-failures` with the reason. Its first run found #361. `docs/KUBERNETES_INTEGRATION.md` has the results.

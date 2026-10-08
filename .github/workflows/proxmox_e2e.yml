@@ -21,6 +21,10 @@ jobs:
     # nexcage-pve-tpl-v0-2 (deploy/kubernetes/tenant-nexcage). Naming it
     # rather than plain "proxmox" keeps this job on a Proxmox VE 9.x host,
     # which is what the OCI registry step below needs.
+    # A pull request from a fork must not run code on this machine: the
+    # runner user has sudo for everything (#362). A maintainer runs the job on
+    # such code by pushing it to a branch here.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, pve9]
     timeout-minutes: 30
 
