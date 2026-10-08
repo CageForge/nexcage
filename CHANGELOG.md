@@ -7,11 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-08
+
+The OCI runtime is measured by the suites that define it: runtime-spec
+validation (33 of 58) and critest (110 of 142) run in CI, and every test that
+fails also fails with crun run directly. A Kubernetes node on Proxmox VE is
+installed from files the release ships, and a private registry needs one
+`skopeo login` per node. Nothing a script or an engine sends is read
+differently.
+
 ### Security
 - **The self-hosted jobs no longer run a pull request from a fork** (#362). `proxmox_e2e.yml` and `buildagent.yml` ran any pull request's code on their machines, and on the E2E node the runner user has sudo for everything, so that code ran as root. They now skip a fork's pull request, as `k8s_e2e.yml` does from the start.
 
 ### Added
-- **Images from a private registry** (#309). Proxmox's pull runs skopeo with no `--authfile`, and on the E2E node skopeo was shown to read root's `/root/.config/containers/auth.json`, through `pvesh` and in the empty environment `pvedaemon` runs in. `skopeo login --authfile /root/.config/containers/auth.json <registry>` on each node that pulls is all a private registry needs; `docs/INSTALL.md` says so. The Proxmox E2E now checks that wrong credentials in that file turn a pull away and that nexcage reports why.
+- **Images from a private registry** (#309). Proxmox's pull runs skopeo with no `--authfile`, and on the E2E node skopeo was shown to read root's `/root/.config/containers/auth.json`, through `pvesh`, and through `pvesh` with the environment emptied as `pvedaemon`'s is (the API path itself was not run). `skopeo login --authfile /root/.config/containers/auth.json <registry>` on each node that pulls is all a private registry needs; `docs/INSTALL.md` says so. The Proxmox E2E now checks that wrong credentials in that file turn a pull away and that nexcage reports why.
 - **The runtime-spec validation suite runs against the crun backend in CI** (#310). `crun_build.yml` runs opencontainers/runtime-tools (runtime-spec 1.3.0) against the `-crun` build routed to crun, and the image's crun for reference. nexcage passes 33 of 58 tests; each of the 25 that fail is named in `tests/runtime-tools/known-failures` with the reason, and fails with crun run directly too: tests that cannot read cgroup v2, cgroup v1 settings libcrun refuses by name, and tests that contradict runtime-spec 1.3.0 or themselves. A failure not on the list turns the job red, and so does a listed test that passes. `docs/RUNTIME_SPEC_VALIDATION.md` has the results.
 - **critest, the CRI validation suite, runs against nexcage in CI** (#311). `crun_build.yml` runs cri-tools' critest (v1.37.0, 142 specs) against containerd with nexcage as the runtime handler, and again through the image's crun for reference. 110 pass, 10 fail and 22 are skipped, the same spec for spec as through crun. The 10 that fail are AppArmor specs that need `sudo apparmor_parser` in the image, and pod sandbox metrics, which containerd reads from a cgroup parent that critest does not set under cgroupfs. Each is named in `tests/cri/critest-known-failures` with the reason. Its first run found #361. `docs/KUBERNETES_INTEGRATION.md` has the results.
 - **The k3s pod test runs from a workflow** (#312). `k8s_e2e.yml` builds the `-crun` binary from the commit under test, as the release does, and runs `tests/k8s/pod_on_node.sh` on the E2E node. That is k3s, a pod with `runtimeClassName: nexcage` that has to be Ready, `kubectl logs`, `kubectl exec` and a delete, all checked against what nexcage was asked. It runs on release tags, on demand, and on a pull request that changes the test, never on a fork's. The script now removes the `/etc/nexcage/config.json` it wrote, which used to stay behind and route every nexcage on the node to crun.
