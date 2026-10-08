@@ -1,8 +1,8 @@
 # CODEOWNERS
 # Order matters; last match wins.
+#
+# One maintainer owns everything (MAINTAINERS.md). An owner must be a person
+# or a team with write access; an organization name is not one, and GitHub
+# ignores such a line without saying so outside `codeowners/errors`.
 
-* @CageForge
-
-/docs/ @CageForge
-/src/** @CageForge
-/.github/workflows/** @moriarti
+* @themoriarti

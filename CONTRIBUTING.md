@@ -25,7 +25,7 @@ If you find a bug or have a suggestion for improvement, please create an issue o
 
 ### Code Review
 
-All pull requests must go through code review before merging. Please:
+A maintainer reviews your pull request before it merges, and the CI checks must pass; [MAINTAINERS.md](MAINTAINERS.md) says how changes are reviewed. Please:
 
 1. Ensure your code follows the project's style
 2. Respond to reviewer comments
