@@ -14,8 +14,6 @@
 | `dependency_check.yml` | ubuntu-latest | weekly | New OCI spec / crun releases; at most one open issue per dependency |
 | `scorecards.yml`, `pages.yml`, `docs_mike.yml` | ubuntu-latest | various | OpenSSF Scorecards, documentation site |
 | `buildagent.yml` | self-hosted, `buildagent`, `nexcage` | push/PR to `main`, daily | On Debian 13: Debug build, `zig build test`, `tests/sim/run.sh`, `make deb` and what the `.deb` carries |
-| `crun_vendor_sync.yml` | ubuntu-latest | weekly | Copies the latest upstream crun release into `deps/crun` and asks for a pull request; `deps/crun` is a submodule, so git sees no change and no pull request is opened |
-| `crun_headers_generate.yml` | ubuntu-latest | manual | Writes `config.h` and `git-version.h` into `deps/crun` and asks for a pull request; `deps/crun` is a submodule, so git sees no change and no pull request is opened |
 
 ## Self-hosted Proxmox runner
 
