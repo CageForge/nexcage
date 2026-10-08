@@ -90,10 +90,12 @@ in the `created` state, without `--force`, to fail. libcrun and runc delete it.
 
 ## What it does not show
 
-Whether a limit in `config.json`, or one `nexcage update` sets, reaches the
-container's cgroup on a cgroup v2 host: the 16 tests that would say are the
-ones above that cannot read v2 or ask for v1. Nothing else in CI checks it
-either.
+Whether the limits in `config.json` reach the container's cgroup on a cgroup
+v2 host: the 16 tests that would say are the ones above that cannot read v2 or
+ask for v1. The pod test through containerd's CRI checks one limit, from the
+other side: `crictl update --memory` lands in the container's `memory.max`.
+`nexcage update`'s own flags on the crun backend (`--memory`, `--cpu-quota`,
+...) are not checked against a cgroup anywhere yet (#359).
 
 ## Running it
 
