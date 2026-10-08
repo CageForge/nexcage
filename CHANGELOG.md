@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-08
+
+`create` takes what `pct create` is usually given -- limits, cores, a static
+address, a VLAN, mount points, `onboot`, tags -- and an option nexcage does not
+know is refused by name instead of skipped. **A script with a misspelt or
+unsupported option now fails with exit 2 where it used to carry on.**
+
 ### Fixed
 - **An unknown option was skipped without a word, and its value taken for the next positional word** (#355). `create --memroy 2G` answered "OCI bundle '2G' must be an absolute path", and an unknown flag without a value simply vanished, so `kill --al` signalled the init alone. An option no command takes now exits 2 naming it, and a value option given last without its value says it needs one. Every option an engine was seen sending already has its own branch, so their command lines are unchanged; runc options nexcage does not implement (`--no-pivot`, `--preserve-fds`, ...) are refused rather than dropped. `create --image <image>`, the form `create --help` shows, had only worked because `--image` was skipped and its value taken for the image; it is parsed now.
 

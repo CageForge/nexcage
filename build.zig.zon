@@ -1,6 +1,6 @@
 .{
     .name = .nexcage,
-    .version = "0.14.1",
+    .version = "0.15.0",
     .fingerprint = 0xa09c4c6c27fa78dc,
     .minimum_zig_version = "0.15.1",
     .paths = .{
