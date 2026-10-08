@@ -134,8 +134,8 @@ jobs:
           #
           # What the repository pins is the submodule commit, so report that.
           # The release it is based on is what the fork's .upstream_tag
-          # declares, the marker scripts/gen_crun_headers_local.sh and
-          # crun_vendor_sync.yml read, checked against the newest NEWS entry:
+          # declares, the marker scripts/gen_crun_headers_local.sh reads,
+          # checked against the newest NEWS entry:
           # crun's release commit adds "* crun-N.N" there and is the commit
           # that gets tagged. A pin without the marker falls back to NEWS.
           if ! HEAD_SHORT=$(git rev-parse --short HEAD 2>/dev/null); then
