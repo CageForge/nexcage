@@ -1,4 +1,5 @@
 #!/bin/bash
-# Fake zpool: not available, so nexcage never reaches a real pool.
+# Fake zpool: the zfs tools are installed (see zfs), but this host has no
+# pool, so nexcage never reaches a real one.
 echo "zpool $*" >> "${SIM:?}/calls"
 exit 1

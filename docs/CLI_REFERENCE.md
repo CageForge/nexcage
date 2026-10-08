@@ -96,13 +96,16 @@ called `local` is a different directory on every node unless it is shared, so a
 volid that exists here may simply not be there. The message names the node and
 the storage rather than leaving the API to say "volume does not exist".
 
-Three things `--node` will not do, and refuses rather than half-does:
+Two things `--node` will not do, and refuses rather than half-does:
 
 | | why |
 |---|---|
 | an OCI bundle (`--bundle`) | its rootfs is packed into a template on **this** host's storage, which the other node cannot read unless that storage is shared |
 | a registry image (`docker.io/...`) | the pull lands on this host, for the same reason |
-| a ZFS rootfs | the dataset would be created in this host's pool, and the container there could not reach it |
+
+A rootfs on a ZFS storage goes through: `proxmox.storage` reaches that node's
+API as `--rootfs <storage>:<size>`, and Proxmox makes the volume there, so name
+a storage the target node has.
 
 `--node` naming the host nexcage is running on is not "another node": it takes
 the ordinary local path, `pct` and all.

@@ -220,11 +220,18 @@ pub const ProxmoxLxcDriver = struct {
                 return core.Error.UnsupportedOperation;
             }
 
-            // A ZFS rootfs is a dataset in this host's pool. The container
-            // would be created there with a rootfs it cannot reach.
-            if (self.zfs_mgr.isZFSAvailable()) {
+            // A dataset nexcage makes itself, in the pool createContainerDataset
+            // is given, is in this host's pool, and the container would be
+            // created elsewhere with a rootfs it cannot reach. No configuration
+            // key sets that pool today, so this does not fire with a shipped
+            // config. It used to ask whether `zfs version` works, which says
+            // only that the tools are installed -- and Proxmox VE installs them,
+            // so --node was refused on every stock host (#327). A rootfs on a
+            // ZFS storage is not this case: proxmox.storage reaches the node's
+            // API as --rootfs, and Proxmox makes the volume there.
+            if (self.zfs_mgr.pool_config != null) {
                 if (self.logger) |log| {
-                    log.err("--node {s} cannot be used with a ZFS rootfs: the dataset would be created in this host's pool. Configure a storage both nodes can use", .{node}) catch {};
+                    log.err("--node {s} cannot be used with a ZFS pool of nexcage's own: the dataset would be made in this host's pool, which {s} cannot reach. Name a storage {s} has in proxmox.storage instead; Proxmox makes the volume there", .{ node, node, node }) catch {};
                 }
                 return core.Error.UnsupportedOperation;
             }
