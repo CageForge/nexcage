@@ -24,7 +24,7 @@ run containers on nexcage. Everything the plain binary does, it does too.
 ### .deb
 
 ```bash
-VERSION=0.14.1
+VERSION=0.15.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
@@ -37,7 +37,7 @@ example configuration at `/usr/share/doc/nexcage/examples/config.json`.
 ### Binary
 
 ```bash
-VERSION=0.14.1
+VERSION=0.15.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
@@ -47,7 +47,7 @@ install -m 0755 nexcage-$VERSION-amd64 /usr/local/bin/nexcage
 ### The binary with the crun backend (since 0.11.2)
 
 ```bash
-VERSION=0.14.1
+VERSION=0.15.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64-crun
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt

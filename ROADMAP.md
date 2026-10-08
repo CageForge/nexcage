@@ -1,6 +1,6 @@
 # Roadmap
 
-Where nexcage goes after 0.14.1, and what it deliberately will not do.
+Where nexcage goes after 0.15.0, and what it deliberately will not do.
 Reviewed against `main` on 2026-10-08.
 
 This file says what comes next and why, not when. The `Roadmap/` directory it
@@ -25,7 +25,8 @@ nexcage is one binary with two faces
 
 - **A command line for LXC containers on a Proxmox VE cluster**: the
   lifecycle, `exec`, templates (`images`, `pull`, `rmi`), `pause` and
-  `resume`, `update` and snapshots, on any node of the cluster.
+  `resume`, `update` and snapshots, on any node of the cluster, created with the
+  options `pct create` takes.
 - **An OCI runtime that container engines drive**: podman, `ctr`,
   containerd's CRI, CRI-O and a kubelet run containers on the crun backend,
   and a pod with `runtimeClassName: nexcage` runs on a node.
@@ -42,17 +43,7 @@ required checks of `ci.yml` and `crun_build.yml`, no force push or deletion,
 and no approving review while there is one maintainer
 ([MAINTAINERS.md](MAINTAINERS.md)). [#305]
 
-## Next: 0.15.0 — the Proxmox command line, deeper
-
-The Proxmox face is where nexcage is more than crun under another name, and it
-is the face with the fewest options.
-
-| Item | Why | Issue |
-|---|---|---|
-| `create` takes what `pct create` is usually given | The storage, root filesystem size and bridge come from the config file, and the network is always DHCP. Memory, cores, a static address and gateway, a VLAN tag, mount points, `onboot` and tags need a `pct set` afterwards, outside nexcage. `update` already turns limits into pct's terms; `create` should accept the same | [#308] |
-| Private registries | `oci-registry-pull` takes no credentials, so `pull` and `create` cannot reach a private registry. Ask Proxmox for a credentials parameter first; a registry client inside a binary that runs as root is the fallback, and wants an ADR before code | [#309] |
-
-## 0.16.0 — the OCI runtime, measured by the suites that define it
+## Next: 0.16.0 — the OCI runtime, measured by the suites that define it
 
 Every engine-facing defect in 0.10.0 was found by running an engine, and none
 was on the list of what was thought to be missing. The conformance suites ask
@@ -64,6 +55,7 @@ everything, not only what one engine happened to ask.
 | `critest` ([cri-tools]) against containerd with nexcage as the runtime handler | What Kubernetes checks of a CRI runtime. `tests/cri/pod_on_nexcage.sh` is one pod | [#311] |
 | The k3s pod test from a workflow | `tests/k8s/pod_on_node.sh` runs on `nexcage-e2e-1` by hand today | [#312] |
 | An install for a Kubernetes node on Proxmox VE | The routing config, containerd and CRI-O drop-ins and a `RuntimeClass` shipped with the `-crun` package and in `deploy/`, rather than assembled from `KUBERNETES_INTEGRATION.md`. [#301] starts on the config | [#313] |
+| Private registries | `oci-registry-pull` takes no credentials, so `pull` and `create` cannot reach a private registry. Proxmox pulls with `skopeo copy` as root, and skopeo reads the containers auth file, so a `skopeo login` on each node may be enough: to be checked on the E2E node before anything else is built. A registry client in nexcage is the last resort and wants an ADR. Moved from 0.15.0 | [#309] |
 | `events` | Only once an engine sends it. The trace will say | — |
 
 ## 0.17.0 — isolation profiles
@@ -154,7 +146,6 @@ asks" needs a place to be asked.
 [#299]: https://github.com/CageForge/nexcage/issues/299
 [#301]: https://github.com/CageForge/nexcage/pull/301
 [#305]: https://github.com/CageForge/nexcage/issues/305
-[#308]: https://github.com/CageForge/nexcage/issues/308
 [#309]: https://github.com/CageForge/nexcage/issues/309
 [#310]: https://github.com/CageForge/nexcage/issues/310
 [#311]: https://github.com/CageForge/nexcage/issues/311
