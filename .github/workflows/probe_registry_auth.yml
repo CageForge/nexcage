@@ -37,6 +37,17 @@ jobs:
           TOKEN=probe309
 
           echo "== $($SUDO pveversion); $(skopeo --version 2>&1)"
+          $SUDO pveversion -v | grep -E 'storage|pve-manager' || true
+          echo "== how this Proxmox runs skopeo"
+          $SUDO grep -rn -B2 -A8 "skopeo" /usr/share/perl5/PVE/ 2>/dev/null | grep -v '^--$' | head -80
+
+          # The control: wrong credentials for docker.io handed to skopeo
+          # directly must be refused, or wrong credentials prove nothing below.
+          CTL=$(mktemp); printf '{"auths":{"docker.io":{"auth":"%s"}}}\n' "$(printf 'nexcage-probe:wrong' | base64)" > "$CTL"
+          echo "== control: skopeo inspect with wrong credentials (must fail)"
+          skopeo inspect --authfile "$CTL" "docker://$IMG" >/dev/null 2>/tmp/ctl.err && echo "control: ACCEPTED -- this method cannot tell anything" || echo "control: refused: $(tail -1 /tmp/ctl.err | cut -c1-200)"
+          echo "== control: skopeo inspect anonymously (must work)"
+          skopeo inspect --authfile /dev/null "docker://$IMG" >/dev/null 2>/tmp/ctl.err && echo "control: anonymous works" || echo "control: anonymous FAILED: $(tail -1 /tmp/ctl.err | cut -c1-200)"
           echo "== pvedaemon's environment"
           $SUDO cat "/proc/$(pgrep -o pvedaemon)/environ" | tr '\0' '\n' \
             | grep -E '^(HOME|USER|XDG_[A-Z_]*|REGISTRY_AUTH_FILE)=' || echo "(none of HOME, USER, XDG_*, REGISTRY_AUTH_FILE)"
@@ -77,13 +88,20 @@ jobs:
             | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
           CA=$(mktemp); $SUDO cat /etc/pve/pve-root-ca.pem > "$CA"
 
+          # skopeo itself, as root through sudo and with no --authfile: what
+          # Proxmox's call would find if it passed nothing and kept HOME.
+          via_skopeo() {
+            $SUDO skopeo inspect "docker://$IMG" >/dev/null 2>/tmp/sk.err && echo "pulled" \
+              || echo "FAILED: $(tail -1 /tmp/sk.err | cut -c1-200)"
+          }
           via_pvesh() {
             out=$($SUDO pvesh create "/nodes/$NODE/storage/local/oci-registry-pull" --reference "$IMG" 2>&1); rc=$?
             free_new
+            echo "$out" | grep -iE 'skopeo|authfile|creds' | head -3 | sed 's/^/    | /' >&2
             [ $rc -eq 0 ] && echo "pulled" || echo "FAILED: $(echo "$out" | grep -iE 'unauthor|denied|incorrect|error' | tail -1 | cut -c1-200)"
           }
           via_pvedaemon() {
-            resp=$(curl -sS --cacert "$CA" --resolve "$NODE:8006:127.0.0.1" -X POST \
+            resp=$(curl -sS --connect-timeout 10 --max-time 60 --cacert "$CA" -X POST \
               -H "Authorization: PVEAPIToken=root@pam!$TOKEN=$SECRET" \
               --data-urlencode "reference=$IMG" \
               "https://$NODE:8006/api2/json/nodes/$NODE/storage/local/oci-registry-pull" 2>&1)
@@ -107,13 +125,15 @@ jobs:
           put() { $SUDO mkdir -p "$(dirname "$1")"; printf '{"auths":{"docker.io":{"auth":"%s"},"https://index.docker.io/v1/":{"auth":"%s"}}}\n' "$WRONG" "$WRONG" | $SUDO tee "$1" >/dev/null; }
 
           echo
-          echo "== no auth file anywhere (the baseline: both must pull)"
+          echo "== no auth file anywhere (the baseline: all must pull)"
+          echo "skopeo:    $(via_skopeo)"
           echo "pvesh:     $(via_pvesh)"
           echo "pvedaemon: $(via_pvedaemon)"
           for f in $CANDIDATES; do
             echo
             echo "== wrong credentials in $f only (FAILED means that path reads it)"
             put "$f"
+            echo "skopeo:    $(via_skopeo)"
             echo "pvesh:     $(via_pvesh)"
             echo "pvedaemon: $(via_pvedaemon)"
             $SUDO rm -f "$f"
