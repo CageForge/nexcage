@@ -262,7 +262,7 @@ jobs:
           ref: ${{ github.event.inputs.version || github.ref }}
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
 
