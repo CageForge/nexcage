@@ -1,0 +1,9 @@
+# The runtime-spec validation suite's tests that fail against nexcage routed to
+# crun, one per line: the test, then why. Each one is also checked against the
+# image's own crun, and the job prints whether crun fails it too. A failure not
+# listed here turns crun_build.yml red; so does a listed test that passes.
+# docs/RUNTIME_SPEC_VALIDATION.md has the full results.
+
+delete  libcrun deletes a container in the `created` state without --force, as runc does; the spec reads "not stopped" as an error
+pidfile  the test's process is `true`, which has exited when the harness signals it before delete, and a runtime must refuse to signal a container that is not running
+delete_only_create_resources  reads cgroup v1 paths (/sys/fs/cgroup/pids/...), which a cgroup v2 host does not have
