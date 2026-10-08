@@ -984,6 +984,19 @@ check "pull --node --storage puts it where create --node can read it" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/storage/shared-rdma/oci-registry-pull"' \
       'grep -q "^shared-rdma:vztmpl/nginx_1.27.tar$" "$S/out"'
 
+# Proxmox's pvesh exits 0 when its pull task fails, with skopeo's reason on
+# stdout (#309). A refused login is reported with that reason, and with where
+# the login goes: root's auth file on the node that pulls.
+touch "$S/pull_refused"
+nx pull ghcr.io/acme/private:1
+check "a refused login gives skopeo's reason and the skopeo login line" \
+  all 'rc 1' 'err_has "incorrect username or password"' \
+      'err_has "skopeo login --authfile /root/.config/containers/auth.json ghcr.io"'
+nx pull docker.io/acme/private:1 --node titan
+check "with --node, the login goes on that node" \
+  all 'rc 1' 'err_has "run as root on titan"'
+rm -f "$S/pull_refused"
+
 # An older Proxmox has no such endpoint, and the version is why -- not an
 # obscure API failure.
 echo 8.4.1 > "$S/pvever"
