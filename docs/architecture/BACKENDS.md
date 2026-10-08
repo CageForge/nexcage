@@ -1,16 +1,14 @@
 # Backends
 
-`src/backends/mod.zig` imports each backend only when its build option (declared in
-`build.zig`) is on, but only crun can be left out: the CLI calls the Proxmox LXC
-driver without checking `-Denable-backend-proxmox-lxc`, so a build with it set
-to false does not compile.
+`src/backends/mod.zig` always imports the Proxmox LXC backend, and the crun
+backend only when its build option (declared in `build.zig`) is on.
 The CLI router (`src/cli/router.zig`) sends a command to a backend according
 to the routing rules in the config file; without rules everything goes to
 Proxmox LXC.
 
 | Backend | Build option | Default | State |
 |---|---|---|---|
-| Proxmox LXC | `-Denable-backend-proxmox-lxc` | on | Supported; exercised by the Proxmox E2E job |
+| Proxmox LXC | — | always | Supported; exercised by the Proxmox E2E job |
 | crun | `-Denable-backend-crun` | off | Supported for the OCI runtime-spec command line; links vendored libcrun from `deps/crun`. Verified with podman, `ctr`, containerd's CRI, CRI-O and a kubelet; ships as the `-crun` release binary |
 
 A command routed to a backend that is compiled out fails with

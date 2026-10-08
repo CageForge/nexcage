@@ -48,13 +48,11 @@ paths:
 
 | Option | Default | Effect |
 |---|---|---|
-| `-Denable-backend-proxmox-lxc` | `true` | Proxmox LXC backend |
 | `-Denable-backend-crun` | `false` | crun backend; links vendored libcrun |
 | `-Denable-libcrun-abi` | follows crun | Compile `deps/crun`; needs the submodules and generated headers |
 
-A compiled-out crun backend is refused at run time with
-`UnsupportedOperation`. The Proxmox LXC backend cannot be compiled out:
-`-Denable-backend-proxmox-lxc=false` fails to build.
+The Proxmox LXC backend is always built. A compiled-out crun backend is
+refused at run time with `UnsupportedOperation`.
 
 ### crun backend
 
