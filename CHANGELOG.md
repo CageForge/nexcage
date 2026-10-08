@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A Kubernetes node on Proxmox VE, from what a release ships** (#313). `docs/INSTALL.md` has the steps in order: the `-crun` binary, the routing configuration (`packaging/config/config.oci.example.json`), nexcage as a runtime of k3s, containerd or CRI-O (examples in `deploy/kubernetes/node/`, which nothing enables for you), the `RuntimeClass`, and a pod to check it with. `tests/k8s/pod_on_node.sh` installs the same files, so `k8s_e2e.yml` checks what an administrator is told to install. The `-crun` build stays a bare binary; a package for it belongs to the APT repository work in 1.0.0.
 
+- **`update`'s flags are checked against the container's cgroup** (#359). On the crun backend nexcage maps each flag to crun's section and field itself, and nothing ran that against a kernel. `tests/crun/update.sh`, a `crun_build.yml` step, reads the container's cgroup after each update:
+  - `--memory`, `--memory-reservation`, `--memory-swap`, `--pids-limit`, `--cpu-quota`/`--cpu-period` and `--cpuset-cpus` against `memory.max`, `memory.low`, `memory.swap.max`, `pids.max`, `cpu.max` and `cpuset.cpus`;
+  - `--cpu-share` against the `cpu.weight` libcrun writes for the same shares in a `linux.resources` document;
+  - `--kernel-memory`, which cgroup v2 has no file for, must be refused.
+
 ### Fixed
 - **containerd could not stop a pod whose container had just exited** (#361), found by critest. containerd's shim decides what a failed `kill` means from the command's output: "no such process" means the process has already exited, which is fine for a stop. With `--log <file>`, which every engine passes, nexcage wrote libcrun's reason to the file only, and stderr said `operation failed`. StopContainer then failed, and StopPodSandbox with it. An error now goes to stderr as well, as runc and crun print theirs. Without `--log` nothing changes.
 
