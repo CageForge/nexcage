@@ -253,6 +253,16 @@ check "exec --process is refused on the LXC backend, not ignored" \
 nx exec web-1 -d echo hi
 check "exec --detach is refused on the LXC backend" \
   all 'rc 1' 'err_has "--detach"' 'not_called_re "^pct exec"'
+# The rest of exec's options are crun's too: pct exec runs the command as root,
+# wherever it likes, with no terminal or pid handed over (#329). Each is refused
+# by name before pct runs, rather than quietly answered with something else.
+for flag in "--user 1000" "--cwd /srv" "--workdir /srv" "--tty" "-t" "--console-socket /run/x.sock" "--pid-file /run/x.pid"; do
+  name=${flag%% *}; [ "$name" = --workdir ] && name=--cwd; [ "$name" = -t ] && name=--tty
+  # shellcheck disable=SC2086 # the flag and its value are two words
+  nx exec web-1 $flag echo hi
+  check "exec $flag is refused on the LXC backend, by name" \
+    all 'rc 1' "err_has \"$name\"" 'err_has "--runtime crun"' 'not_called_re "^pct exec"'
+done
 nx exec web-1 --process /tmp/sim-process.json ls
 # 2, not 1: giving both is a usage error, and nexcage keeps that distinction.
 check "exec takes a command or --process, not both" all 'rc 2' 'err_has "not both"'

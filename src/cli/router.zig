@@ -174,11 +174,14 @@ pub const BackendRouter = struct {
                 // `pct exec` takes a command and nothing else, so honouring the
                 // file is not possible and ignoring it would run the command
                 // with the wrong identity. --detach has no meaning there
-                // either: pct exec returns when the command does.
-                if (exec_cfg.process_file != null or exec_cfg.detach) {
-                    const which = if (exec_cfg.process_file != null) "--process" else "--detach";
+                // either: pct exec returns when the command does. The rest
+                // are the same case: pct exec runs the command as root, in a
+                // directory nexcage does not choose, with no pty to hand over
+                // and no pid of its own to write. `--user 1000` quietly
+                // becoming root is the one that matters most (#329).
+                if (pctExecRefuses(exec_cfg)) |which| {
                     if (self.logger) |log| {
-                        log.err("{s} is not possible on the Proxmox LXC backend: pct exec takes a command and returns when it ends. Use --runtime crun", .{which}) catch {};
+                        log.err("{s} is not possible on the Proxmox LXC backend: pct exec runs a command as root and returns when it ends. Use --runtime crun", .{which}) catch {};
                     }
                     return types.Error.UnsupportedOperation;
                 }
@@ -267,6 +270,18 @@ pub const BackendRouter = struct {
                 // State operation handled by command
             },
         }
+    }
+
+    /// The first exec option `pct exec` cannot honour, by its flag name.
+    fn pctExecRefuses(e: ExecConfig) ?[]const u8 {
+        if (e.process_file != null) return "--process";
+        if (e.detach) return "--detach";
+        if (e.user != null) return "--user";
+        if (e.cwd != null) return "--cwd";
+        if (e.tty) return "--tty";
+        if (e.console_socket != null) return "--console-socket";
+        if (e.pid_file != null) return "--pid-file";
+        return null;
     }
 
     /// The error must belong to core.types.Error: the command registry

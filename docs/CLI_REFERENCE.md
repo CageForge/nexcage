@@ -307,7 +307,7 @@ nexcage exec --process <file> <name>
 | `-d`, `--detach` | Return once the command is started, rather than waiting for it |
 | `--cwd <dir>` | Working directory inside the container (`--workdir` is the same flag) |
 | `--user <uid[:gid]>` | Identity to run as. On the crun backend an unparsable value is an error rather than a silent root |
-| `--console-socket <path>`, `--pid-file <path>` | Where to send the master end of the pty and where to write the pid; crun backend only |
+| `--console-socket <path>`, `--pid-file <path>` | Where to send the master end of the pty and where to write the pid |
 
 Runs `<command>` inside a running container and exits with its status: `nexcage
 exec web-1 false` exits 1, and `nexcage exec web-1 sh -c 'exit 7'` exits 7. A
@@ -328,12 +328,12 @@ command has to exist in the container's image — an image without a shell has n
 as is one that does not exist; `exec` without a command is a usage error
 (exit 2).
 
-`--process` and `--detach` are refused there rather than ignored: `pct exec`
-takes a command and returns when it ends, so there is no identity to apply from
-a spec and nothing to detach from. Same rule as `--console-socket` on `create`,
-though `exec` does not apply it to its own `--console-socket`: that,
-`--pid-file`, `--tty`, `--cwd` and `--user` reach the crun backend only, and
-Proxmox LXC ignores them. With `--process` even crun takes the terminal,
+Every option in the table is refused there rather than ignored, with exit 1
+and the flag named: `pct exec` runs the command as root, in a directory nexcage
+does not choose, and returns when it ends, so there is no identity to apply
+from a spec or `--user`, no directory for `--cwd`, no terminal for `--tty` or
+`--console-socket`, no pid of its own for `--pid-file` and nothing to detach
+from. Same rule as `--console-socket` on `create`. With `--process` even crun takes the terminal,
 working directory and user from the file, not from `--tty`, `--cwd` and
 `--user`.
 
