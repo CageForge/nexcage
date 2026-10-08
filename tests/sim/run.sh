@@ -253,6 +253,19 @@ check "exec --process is refused on the LXC backend, not ignored" \
 nx exec web-1 -d echo hi
 check "exec --detach is refused on the LXC backend" \
   all 'rc 1' 'err_has "--detach"' 'not_called_re "^pct exec"'
+# pct exec runs the command as root, where nexcage does not choose, and hands
+# back no pty or pid: these used to be dropped, so `--user 1000` ran as root.
+for flag in "--user 1000" "--cwd /srv" "--console-socket /tmp/sim-console.sock" "--pid-file /tmp/sim-exec.pid"; do
+  # shellcheck disable=SC2086 # the flag and its value are two words
+  nx exec $flag web-1 id
+  check "exec ${flag%% *} is refused on the LXC backend, not ignored" \
+    all 'rc 1' "err_has '${flag%% *}'" 'not_called_re "^pct exec"'
+done
+# lxc-attach, which pct exec runs, gives the command a terminal when one of the
+# caller's standard descriptors is one. With none, --tty cannot be honoured.
+nx exec -t web-1 echo hi < /dev/null
+check "exec --tty with no terminal is refused on the LXC backend" \
+  all 'rc 1' 'err_has "--tty"' 'not_called_re "^pct exec"'
 nx exec web-1 --process /tmp/sim-process.json ls
 # 2, not 1: giving both is a usage error, and nexcage keeps that distinction.
 check "exec takes a command or --process, not both" all 'rc 2' 'err_has "not both"'
@@ -312,6 +325,14 @@ check "run: rootfs/bridge from config" called_re "bridge=vmbr50,ip=dhcp .*--root
 check "run: state reports running" status_is app-1 running
 nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start" all 'rc 1' 'not_called_re "^pct start"'
 nx run --name app-2;        check "run without image -> exit 2" rc 2
+# run used to accept these and drop them: --node made the container on this
+# host, and a caller passing --console-socket waited for a pty that never came.
+for flag in "--node titan" "--console-socket /tmp/sim-console.sock" "--pid-file /tmp/sim-run.pid"; do
+  # shellcheck disable=SC2086 # the flag and its value are two words
+  nx run --name app-3 $flag "$TPL"
+  check "run ${flag%% *} is refused, nothing created" \
+    all 'rc 1' "err_has '${flag%% *}'" 'not_called_re "^pct create"' 'not_called_re "^pvesh create"'
+done
 
 echo "=== option parsing ==="
 nx start --log-level debug web-3
@@ -948,8 +969,17 @@ check "rmi on the crun backend says templates are not its business" \
   all 'rc 1' 'err_has "already there"'
 
 echo "=== health ==="
-# Its checks look at the host, so only the absence of leaks is checked here
+# Most of its checks look at the host, so only what does not depend on the host
+# is checked here: which configuration it reports, and that it asks no outside
+# host. It used to look at /etc/nexcage/config.json, then ./config.json,
+# whatever the commands read, and to run `nslookup google.com`.
+cfg '{"proxmox":{"storage":"local-lvm"}}'
 nx health
+check "health reports the config file the commands read" err_has "Config file in use: ./config.json"
+check "health resolves no outside name" all '! grep -qiE "dns|google" "$S/err"'
+printf '{}\n' > "$S/work/alt.json"
+nx --config alt.json health
+check "health reports the file --config names" err_has "Config file in use: alt.json"
 
 echo
 check "no leaks, panics or invalid frees in any run" all '[ "$LEAKS" = 0 ]'

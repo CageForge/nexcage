@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **CI installs Zig with `mlugg/setup-zig`**, pinned to v2.2.1 by commit, instead of `goto-bus-stop/setup-zig`, which its README calls unmaintained (#338). The Proxmox E2E on `main` failed in that step, timing out on the download before any test ran; on the self-hosted runners the new action keeps Zig in the runner's tool cache rather than fetching it every run. The release workflow builds without the Zig cache, from the tagged tree alone.
+
+### Fixed
+- **`--log-level info` and `NEXCAGE_LOG_LEVEL=info` could not override a configuration file's level** (#330): an `info` from the command line or the environment was taken for "not set", so a file saying `debug` could not be turned back to `info` for one command. A level that is named now wins over the file's, `info` included, and takes the debug mode the file's `debug` level turned on with it; `--debug` and `NEXCAGE_DEBUG` still keep debug mode on. A level nexcage does not know is ignored, as before.
+- **`exec --user 1000` on Proxmox LXC ran the command as root** (#329). `--user`, `--cwd`, `--console-socket` and `--pid-file` reached the crun backend only, and Proxmox LXC dropped them: `pct exec` runs a command as root, in a directory nexcage does not choose, and hands back no pty or pid. They are refused there now, as `--process` and `--detach` already were. `--tty` is honoured when nexcage runs on a terminal, because `lxc-attach` gives the command one whenever a standard descriptor is a terminal, and refused when none is.
+- **`run` dropped `--node`, `--console-socket` and `--pid-file`** (#328): `run --node titan` made the container on this host without a word, and a caller passing `--console-socket` waited for a pty that never came. All three are refused, before anything is created; `create --node`, then `start`, makes a container on another node.
+- **`health` checked a configuration nothing reads, and looked up google.com** (#334). It looked at `/etc/nexcage/config.json`, then `./config.json`, whatever `--config` said, while every command reads the file `--config` names or else `./config.json`, `/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json`; so it could pass a file nothing used and miss the one in use. It reports that file now, from the same search. Its JSON check went with it: the file is loaded before any command runs, so a bad one never reached the check. And `nslookup google.com` is gone: nexcage resolves no names itself, and a root tool on an air-gapped cluster should not send a lookup to an outside name to warn about nothing.
+
 ## [0.14.0] - 2026-10-08
 
 Snapshots, `create --node` on a stock Proxmox VE host, and a project that says

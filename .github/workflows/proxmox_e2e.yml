@@ -49,7 +49,7 @@ jobs:
         command -v zig && zig version || true
 
     - name: Setup Zig
-      uses: goto-bus-stop/setup-zig@v2
+      uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
       with:
         version: 0.15.1
 

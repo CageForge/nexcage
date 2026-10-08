@@ -11,6 +11,10 @@ pub const LoggingConfig = struct {
     /// --log: where the runtime's own log goes instead of stderr
     runtime_log_path: ?[]const u8 = null,
     log_level: LogLevel = .info,
+    /// The level was asked for (--log-level, --verbose, NEXCAGE_LOG_LEVEL)
+    /// rather than left at the default, so it overrides the file's even when
+    /// it is info.
+    log_level_set: bool = false,
     enable_file_logging: bool = false,
     enable_console_logging: bool = true,
     enable_performance_tracking: bool = false,
@@ -40,7 +44,10 @@ pub const LoggingConfig = struct {
         // Check for log level
         if (std.process.getEnvVarOwned(allocator, "NEXCAGE_LOG_LEVEL")) |level_str| {
             defer allocator.free(level_str);
-            config.log_level = parseLogLevel(level_str) orelse .info;
+            if (parseLogLevel(level_str)) |level| {
+                config.log_level = level;
+                config.log_level_set = true;
+            }
         } else |_| {}
 
         // Check for performance tracking
@@ -71,6 +78,7 @@ pub const LoggingConfig = struct {
                 config.log_level = .debug;
             } else if (std.mem.eql(u8, arg, "--verbose")) {
                 config.log_level = .debug;
+                config.log_level_set = true;
             } else if (std.mem.eql(u8, arg, "--log-file")) {
                 if (i + 1 < args.len) {
                     config.log_file_path = try allocator.dupe(u8, args[i + 1]);
@@ -93,7 +101,10 @@ pub const LoggingConfig = struct {
                 }
             } else if (std.mem.eql(u8, arg, "--log-level")) {
                 if (i + 1 < args.len) {
-                    config.log_level = parseLogLevel(args[i + 1]) orelse .info;
+                    if (parseLogLevel(args[i + 1])) |level| {
+                        config.log_level = level;
+                        config.log_level_set = true;
+                    }
                     i += 1; // Skip next argument as it's the log level
                 }
             } else if (std.mem.eql(u8, arg, "--perf-tracking")) {
@@ -160,7 +171,7 @@ pub const LoggingConfig = struct {
             logging_config.log_file_path = log_file;
             logging_config.enable_file_logging = true;
         }
-        if (env_config.log_level != .info) { // Only override if not default
+        if (env_config.log_level_set) {
             logging_config.log_level = env_config.log_level;
         }
         if (env_config.enable_performance_tracking) {
@@ -184,7 +195,7 @@ pub const LoggingConfig = struct {
             logging_config.log_file_path = log_file;
             logging_config.enable_file_logging = true;
         }
-        if (args_config.log_level != .info) { // Only override if not default
+        if (args_config.log_level_set) {
             logging_config.log_level = args_config.log_level;
         }
         if (args_config.enable_performance_tracking) {
@@ -192,6 +203,15 @@ pub const LoggingConfig = struct {
         }
         if (args_config.enable_memory_tracking) {
             logging_config.enable_memory_tracking = true;
+        }
+        // A file's debug level turns debug mode on as well. A level asked for
+        // on the command line or in the environment replaces the file's, and
+        // with it that debug mode; --debug and NEXCAGE_DEBUG keep it on.
+        if ((env_config.log_level_set or args_config.log_level_set) and
+            logging_config.log_level != .debug and
+            !env_config.debug_mode and !args_config.debug_mode)
+        {
+            logging_config.debug_mode = false;
         }
         // --log and --log-format come only from the command line. Merging them
         // here rather than leaving them behind in args_config is also what
@@ -246,3 +266,32 @@ pub const LoggingConfig = struct {
 
 /// Re-export LogLevel
 pub const LogLevel = @import("logging.zig").LogLevel;
+
+test "an explicit info overrides a file's debug" {
+    const allocator = std.testing.allocator;
+    var config = try @import("config.zig").Config.init(allocator, .lxc);
+    defer config.deinit();
+    config.log_level = .debug;
+
+    var from_args = try LoggingConfig.loadWithPriority(allocator, &.{ "nexcage", "--log-level", "info", "list" }, &config);
+    defer from_args.deinit(allocator);
+    try std.testing.expectEqual(LogLevel.info, from_args.log_level);
+    try std.testing.expect(!from_args.debug_mode);
+
+    // Without a level on the command line the file's stands.
+    var from_file = try LoggingConfig.loadWithPriority(allocator, &.{ "nexcage", "list" }, &config);
+    defer from_file.deinit(allocator);
+    try std.testing.expectEqual(LogLevel.debug, from_file.log_level);
+    try std.testing.expect(from_file.debug_mode);
+
+    // --debug keeps debug mode on whatever level is asked for.
+    var forced = try LoggingConfig.loadWithPriority(allocator, &.{ "nexcage", "--debug", "--log-level", "info", "list" }, &config);
+    defer forced.deinit(allocator);
+    try std.testing.expectEqual(LogLevel.info, forced.log_level);
+    try std.testing.expect(forced.debug_mode);
+
+    // A level nexcage does not know overrides nothing, as before.
+    var unknown = try LoggingConfig.loadWithPriority(allocator, &.{ "nexcage", "--log-level", "loud", "list" }, &config);
+    defer unknown.deinit(allocator);
+    try std.testing.expectEqual(LogLevel.debug, unknown.log_level);
+}

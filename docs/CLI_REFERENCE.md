@@ -233,10 +233,11 @@ added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
 nexcage run --name <name> <image>
 ```
 
-`create` followed by `start`, with these differences: `--node` is ignored, so
-the container is made on this host; `--console-socket` and `--pid-file` are
-ignored rather than refused as `create` refuses them; and the crun backend does
-not implement `run` (exit 1). `<image>`, `--bundle` and `--storage` work as for
+`create` followed by `start`, on this host. `--node` is refused (exit 1): to
+make the container on another node, `create --node`, then `start`.
+`--console-socket` and `--pid-file` are refused as `create` refuses them, since
+`pct start` runs the container's init itself; and the crun backend does not
+implement `run` (exit 1). `<image>`, `--bundle` and `--storage` work as for
 `create`.
 
 ### start
@@ -327,14 +328,16 @@ command has to exist in the container's image — an image without a shell has n
 as is one that does not exist; `exec` without a command is a usage error
 (exit 2).
 
-`--process` and `--detach` are refused there rather than ignored: `pct exec`
-takes a command and returns when it ends, so there is no identity to apply from
-a spec and nothing to detach from. Same rule as `--console-socket` on `create`,
-though `exec` does not apply it to its own `--console-socket`: that,
-`--pid-file`, `--tty`, `--cwd` and `--user` reach the crun backend only, and
-Proxmox LXC ignores them. With `--process` even crun takes the terminal,
-working directory and user from the file, not from `--tty`, `--cwd` and
-`--user`.
+`--process`, `--detach`, `--user`, `--cwd`, `--console-socket` and
+`--pid-file` are refused there rather than ignored (exit 1): `pct exec` takes a
+command, runs it as root in a directory nexcage does not choose, and returns
+when it ends, so there is no identity or directory to apply, nothing to detach
+from and no pty or pid to hand back. Same rule as `--console-socket` on
+`create`. `--tty` is honoured when nexcage runs on a terminal: `pct exec` runs
+`lxc-attach`, which gives the command a terminal whenever one of its standard
+descriptors is one. With none, `--tty` is refused. With `--process` even crun
+takes the terminal, working directory and user from the file, not from
+`--tty`, `--cwd` and `--user`.
 
 On the crun backend both forms go to `libcrun_container_exec_process_file`,
 which takes the path of a file holding the process spec. `--process` hands the
@@ -706,17 +709,16 @@ check. It exits 1 if any check failed and 0 otherwise; warnings do not fail.
 These are failures: `pct version` missing or failing; any of
 `/var/lib/nexcage`, `/var/cache/nexcage`, `/tmp/nexcage` and `/etc/pve/lxc` not
 existing (fixed paths, not read from the configuration, and nexcage creates
-none of them); and a config file that is present but not valid JSON. These are
-only warnings: the Proxmox API line, which always warns because that check is
-not implemented; `zpool status`; `ip link show`; `nslookup google.com`; no
-config file; `pgrep nexcage`; and `df -h /`.
+none of them). These are only warnings: the Proxmox API line, which always warns
+because that check is not implemented; `zpool status`; `ip link show`; no
+config file; `pgrep nexcage`; and `df -h /`. It resolves no names and asks no
+host outside this one.
 
-The config file it looks at is `/etc/nexcage/config.json`, else
-`./config.json`. That is not the search order the other commands use, and
-`--config` does not change it. Either file being valid JSON passes the JSON
-check, and that check can fail only when `--config` names another file: like
-every command, `health` loads its configuration first, and a file that is not
-valid JSON stops it there with exit 1, before any check runs.
+It reports the config file the other commands read: the one `--config` names,
+else the first of `./config.json`, `/etc/nexcage/config.json` and
+`/etc/nexcage/nexcage.json` that exists. Like every command, `health` loads
+that file first, and one that is not valid stops it there with exit 1, before
+any check runs.
 
 `nexcage health --help` prints help and runs no checks.
 
