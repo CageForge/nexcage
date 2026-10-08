@@ -63,7 +63,7 @@ jobs:
         ./zig-out/bin/nexcage version
 
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: nexcage-selfhosted-amd64
         path: zig-out/bin/nexcage
@@ -679,7 +679,7 @@ jobs:
 
     - name: Upload E2E logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: proxmox-e2e-logs
         # Every step's log, not just the first: the registry step has written
