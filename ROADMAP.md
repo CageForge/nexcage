@@ -1,6 +1,6 @@
 # Roadmap
 
-Where nexcage goes after 0.14.0, and what it deliberately will not do.
+Where nexcage goes after 0.14.1, and what it deliberately will not do.
 Reviewed against `main` on 2026-10-08.
 
 This file says what comes next and why, not when. The `Roadmap/` directory it
@@ -34,23 +34,15 @@ Everything a kubelet's containerd asks a runtime is answered. What is left is
 less about missing verbs than about proof, depth on the Proxmox side, and what
 makes a 1.0 a promise rather than a number.
 
-## Next: 0.14.1 — refused rather than ignored, and CI that can be believed
+## Not code: protect `main`
 
-0.14.0's documentation pass found flags that are accepted and then dropped.
-nexcage's rule since 0.10.0 is that a flag it cannot honour is refused by
-name, and `exec --user 1000` running the command as root is the sharpest
-breach of it. These are bug fixes and should not wait for 0.15.0's features.
+Carried since 0.14.0, and in no release: it is a repository setting, which no
+pull request can make. The `main` ruleset exists, disabled; it needs the three
+required checks of `ci.yml` and `crun_build.yml`, no force push or deletion,
+and no approving review while there is one maintainer
+([MAINTAINERS.md](MAINTAINERS.md)). [#305]
 
-| Item | Why now | Issue |
-|---|---|---|
-| `exec` on Proxmox LXC refuses `--user`, `--cwd`, `--console-socket`, `--pid-file`, and `--tty` without a terminal | `pct exec` runs the command as root, in a directory nexcage does not choose; the flags were dropped | [#329] |
-| `run` refuses `--node`, `--console-socket` and `--pid-file` | `run --node` made the container on this host without a word | [#328] |
-| `--log-level info` overrides the configuration file | An explicit `info` was taken for "not set" | [#330] |
-| `health` checks the configuration the commands read, and asks no outside host | It read its own pair of files and ran `nslookup google.com` | [#334] |
-| Install Zig in CI with a maintained action, from the runner's cache on the self-hosted ones | `goto-bus-stop/setup-zig` is unmaintained, and the E2E on `main` failed downloading Zig before any test ran | [#338] |
-| Protect `main` | Carried over from 0.14.0: it needs an administrator's hand in the repository settings, which no pull request can give | [#305] |
-
-## 0.15.0 — the Proxmox command line, deeper
+## Next: 0.15.0 — the Proxmox command line, deeper
 
 The Proxmox face is where nexcage is more than crun under another name, and it
 is the face with the fewest options.
@@ -179,10 +171,5 @@ asks" needs a place to be asked.
 [#322]: https://github.com/CageForge/nexcage/issues/322
 [#323]: https://github.com/CageForge/nexcage/issues/323
 [#324]: https://github.com/CageForge/nexcage/issues/324
-[#328]: https://github.com/CageForge/nexcage/issues/328
-[#329]: https://github.com/CageForge/nexcage/issues/329
-[#330]: https://github.com/CageForge/nexcage/issues/330
-[#334]: https://github.com/CageForge/nexcage/issues/334
-[#338]: https://github.com/CageForge/nexcage/issues/338
 [opencontainers/runtime-tools]: https://github.com/opencontainers/runtime-tools
 [cri-tools]: https://github.com/kubernetes-sigs/cri-tools

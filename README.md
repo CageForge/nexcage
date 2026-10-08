@@ -18,7 +18,7 @@ binary:
 
 ## Status
 
-As of **0.14.0**, on amd64, running on the Proxmox VE host as root:
+As of **0.14.1**, on amd64, running on the Proxmox VE host as root:
 
 | | |
 |---|---|
@@ -36,7 +36,7 @@ Proxmox ended its own support for 8.x in August 2026.
 ## Install
 
 ```bash
-VERSION=0.14.0
+VERSION=0.14.1
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
