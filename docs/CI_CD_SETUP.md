@@ -7,6 +7,7 @@
 | `ci.yml` | ubuntu-24.04 | push/PR to `main` | Debug and ReleaseSafe builds, `zig build test`, smoke tests of exit codes; every command against fake Proxmox tools (`tests/sim/run.sh`). **The required check.** |
 | `proxmox_e2e.yml` | self-hosted, `pve9` | push/PR to `main`/`develop` | Through the built binary on Proxmox VE: create → state → start → stop → delete, `pct config` against the config file, exit codes, `kill`, `run`, create from an OCI bundle |
 | `crun_build.yml` | ubuntu-24.04 | push/PR to `main` | Docker build with `-Denable-backend-crun=true`; the features document against libcrun's; `ps` against crun; a pod through containerd's CRI; the runtime-spec validation suite ([RUNTIME_SPEC_VALIDATION.md](RUNTIME_SPEC_VALIDATION.md)); critest, the CRI validation suite ([KUBERNETES_INTEGRATION.md](KUBERNETES_INTEGRATION.md#critest-what-kubernetes-checks-of-a-runtime)) |
+| `k8s_e2e.yml` | ubuntu-24.04, then self-hosted `pve9` | tag `v*`, dispatch, PR touching `tests/k8s/` | `tests/k8s/pod_on_node.sh` with the `-crun` binary built from the commit: k3s, `runtimeClassName: nexcage`, the pod Ready, `kubectl logs`, `kubectl exec`, delete, all through nexcage |
 | `memory_leak_check.yml` | ubuntu-22.04 | push/PR | Valgrind over basic commands |
 | `security.yml` | ubuntu-latest | push/PR to `main`, weekly | Semgrep, Trivy, Gitleaks (non-blocking) |
 | `version-check.yml` | ubuntu-22.04 | push/PR | `VERSION` is semver, matches `build.zig.zon` and appears in `nexcage --help` |
