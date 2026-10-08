@@ -41,6 +41,10 @@ pub const ConfigLoader = struct {
     /// main once there is a logger: the rule routes to crun, and the file
     /// should say so itself.
     saw_runc: bool = false,
+    /// A runtime naming the Proxmox VM backend, removed in 0.14.0, as the
+    /// file wrote it. A string literal, not a slice of the parsed document,
+    /// which is gone by the time main reads it.
+    removed_vm_runtime: ?[]const u8 = null,
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
@@ -591,6 +595,7 @@ pub const ConfigLoader = struct {
         }
 
         config.legacy_runc_runtime = self.saw_runc;
+        config.removed_vm_runtime = self.removed_vm_runtime;
         return config;
     }
 
@@ -605,8 +610,16 @@ pub const ConfigLoader = struct {
             // rule keeps working, and main says what it now means.
             self.saw_runc = true;
             return .crun;
+        } else if (std.mem.eql(u8, runtime_str, "vm")) {
+            // The Proxmox VM backend was removed in 0.14.0, and "proxmox" was
+            // mapped to it. The default backend is not a substitute: it would
+            // make a container where a VM was asked for, so main refuses the
+            // file and this value is never routed on.
+            self.removed_vm_runtime = "vm";
+            return .lxc;
         } else if (std.mem.eql(u8, runtime_str, "proxmox")) {
-            return .vm; // proxmox maps to vm
+            self.removed_vm_runtime = "proxmox";
+            return .lxc;
         }
         return .lxc; // default
     }
@@ -634,7 +647,9 @@ pub const ConfigLoader = struct {
             self.saw_runc = true;
             return .crun;
         } else if (std.mem.eql(u8, type_str, "vm")) {
-            return .vm;
+            // Removed in 0.14.0; main refuses the file, as for a runtime.
+            self.removed_vm_runtime = "vm";
+            return .lxc;
         } else if (std.mem.eql(u8, type_str, "proxmox-lxc")) {
             return .proxmox_lxc;
         }
@@ -726,6 +741,10 @@ pub const Config = struct {
     /// The file names "runc" as a runtime. The backend was removed in 0.13.0;
     /// such a rule routes to crun, and main says so once it can.
     legacy_runc_runtime: bool = false,
+    /// The file names the Proxmox VM backend, removed in 0.14.0, as a
+    /// runtime: "vm", or "proxmox", which was mapped to it. No backend runs
+    /// what such a rule describes, so main refuses the file.
+    removed_vm_runtime: ?[]const u8 = null,
 
     pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) !Config {
         return Config{
@@ -769,9 +788,7 @@ pub const Config = struct {
         return switch (runtime_type) {
             .lxc => .lxc,
             .crun => .crun,
-            .vm => .vm,
             .proxmox_lxc => .proxmox_lxc,
-            else => self.container_config.default_container_type,
         };
     }
 
@@ -1062,4 +1079,31 @@ test "a rule naming runc routes to crun and is flagged: the backend is gone, the
 
     try std.testing.expectEqual(types.RuntimeType.crun, cfg.getRoutedRuntime("anything"));
     try std.testing.expect(cfg.legacy_runc_runtime);
+}
+
+test "a file naming the removed VM backend is flagged, however it names it, so main can refuse it" {
+    const files = [_][]const u8{
+        \\{ "runtime": { "routing": [ { "pattern": "vm-*", "runtime": "vm" } ] } }
+        ,
+        \\{ "container_config": { "routing": [ { "pattern": "*", "runtime": "proxmox" } ] } }
+        ,
+        \\{ "container_config": { "default_runtime": "vm" } }
+        ,
+        \\{ "container_config": { "default_container_type": "vm" } }
+        ,
+        \\{ "runtime_type": "proxmox" }
+    };
+    for (files) |file| {
+        var loader = ConfigLoader.init(std.testing.allocator);
+        var cfg = try loader.loadFromString(file);
+        defer cfg.deinit();
+        try std.testing.expect(cfg.removed_vm_runtime != null);
+    }
+
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadFromString(
+        \\{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }
+    );
+    defer cfg.deinit();
+    try std.testing.expect(cfg.removed_vm_runtime == null);
 }

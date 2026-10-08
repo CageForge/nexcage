@@ -277,10 +277,6 @@ pub const SnapshotsCommand = struct {
                 if (self.base.logger) |log| log.err("snapshots is a Proxmox VE operation: the node's storage takes a snapshot of the container's volumes, and the crun backend has no storage of its own to snapshot. It is for containers on the Proxmox LXC backend", .{}) catch {};
                 return types.Error.UnsupportedOperation;
             },
-            .vm => {
-                if (self.base.logger) |log| log.err("snapshots is not implemented for the Proxmox VM backend", .{}) catch {};
-                return types.Error.UnsupportedOperation;
-            },
             else => {},
         }
 

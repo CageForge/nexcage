@@ -24,7 +24,6 @@ flowchart TD
   router --> lxc["Proxmox LXC backend"]
   router -->|routing rules| crun["crun backend<br/>vendored libcrun"]
   crun --> kernel[("containers in this kernel")]
-  router -.->|opt-in build| other["VM backend (stub)"]
   lxc -->|pct, pvesh| pve[("Proxmox VE")]
 ```
 

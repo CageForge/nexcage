@@ -26,6 +26,15 @@ pub const AppContext = struct {
         var config = try config_loader.loadDefault();
         errdefer config.deinit();
 
+        // Not a warning, as for runc: no backend is left that runs what such
+        // a rule describes, and the default one would make a container where
+        // a VM was asked for. The file has to say something nexcage can do.
+        if (config.removed_vm_runtime) |name| {
+            printError("the configuration names '{s}' as a runtime, and the Proxmox VM backend was removed in 0.14.0; nexcage runs containers -- name lxc or crun", .{name});
+            failure_reported = true;
+            return error.InvalidConfig;
+        }
+
         // Priority: command line args > environment > config file > defaults
         var logging_cfg = try core.logging_config.LoggingConfig.loadWithPriority(allocator, args, &config);
         errdefer logging_cfg.deinit(allocator);
@@ -676,20 +685,21 @@ fn parseCommand(command_str: []const u8) core.Command {
 /// Parse a --runtime value; null for one nexcage does not know
 fn parseRuntimeType(runtime_str: []const u8) ?core.RuntimeType {
     if (std.mem.eql(u8, runtime_str, "lxc") or std.mem.eql(u8, runtime_str, "proxmox-lxc")) return .lxc;
-    // The router sends only .vm to the VM backend; .qemu went to LXC
-    if (std.mem.eql(u8, runtime_str, "vm") or std.mem.eql(u8, runtime_str, "qemu")) return .vm;
     if (std.mem.eql(u8, runtime_str, "crun")) return .crun;
     return null;
 }
 
-/// `--runtime runc` gets the reason and the replacement, not a list that
-/// merely no longer contains it: the backend was removed in 0.13.0, and crun
-/// runs the same OCI containers.
+/// A removed backend gets the reason and what to use instead, not a list that
+/// merely no longer contains it: runc went in 0.13.0, and crun runs the same
+/// OCI containers; the Proxmox VM backend went in 0.14.0, and nexcage runs
+/// containers only.
 fn reportUnknownRuntime(value: []const u8) void {
     if (std.mem.eql(u8, value, "runc")) {
         printError("runc is not a backend since 0.13.0; the crun backend runs OCI containers -- use --runtime crun", .{});
+    } else if (std.mem.eql(u8, value, "vm") or std.mem.eql(u8, value, "qemu")) {
+        printError("the Proxmox VM backend was removed in 0.14.0; nexcage runs containers -- use --runtime lxc or crun", .{});
     } else {
-        printError("unknown runtime '{s}'; expected lxc, crun or vm", .{value});
+        printError("unknown runtime '{s}'; expected lxc or crun", .{value});
     }
 }
 

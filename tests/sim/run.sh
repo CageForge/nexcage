@@ -327,7 +327,7 @@ check "--runtime lxc creates through pct" all 'rc 0' 'called_re "^pct create [0-
 nx create --runtime crun --name rt-1 "$TPL"
 check "--runtime crun on a build without crun -> exit 1, nothing created" all 'rc 1' 'err_has "not built"' 'not_called_re "^pct create"'
 nx start --runtime vm rt-0
-check "--runtime vm -> exit 1 (not implemented), not a silent success" all 'rc 1' 'err_has "not implemented"' 'not_called_re "^pct start"'
+check "--runtime vm after the command -> exit 2, the backend was removed in 0.14.0" all 'rc 2' 'err_has "removed in 0.14.0"' 'not_called_re "^pct start"'
 nx create --name rt-2 --runtime bogus "$TPL"
 check "unknown --runtime -> exit 2, nothing run" all 'rc 2' 'err_has "unknown runtime"' 'not_called_re "^pct"'
 nx state --runtime crun rt-0
@@ -447,6 +447,24 @@ rm -f "$S/work/config.json"
 nx --runtime runc state from-tpl
 check "--runtime runc is refused with the replacement named, not a shorter list" \
   all 'rc 2' 'err_has "use --runtime crun"' 'not_called_re "^pct"'
+
+# No Proxmox VM backend since 0.14.0, and nothing that could stand in for it:
+# the default backend would make a container where a VM was asked for. A file
+# naming it is refused before anything runs, and --runtime vm says why.
+cfg '{"runtime":{"routing":[{"pattern":"vm-*","runtime":"vm"},{"pattern":"*","runtime":"lxc"}]}}'
+nx list
+check "a routing rule naming vm refuses the file, even for a command it does not route" \
+  all 'rc 1' 'err_has "Proxmox VM backend was removed"' 'err_has "name lxc or crun"' 'not_called_re "^(pct|pvesh)"'
+cfg '{"container_config":{"routing":[{"pattern":"*","runtime":"proxmox"}]}}'
+nx create --name vm-1 "$TPL"
+check "\"proxmox\", which named the VM backend, is refused too rather than read as lxc" \
+  all 'rc 1' "err_has \"names 'proxmox'\"" 'not_called_re "^(pct|pvesh)"'
+rm -f "$S/work/config.json"
+nx --runtime vm state from-tpl
+check "--runtime vm is refused, saying the backend was removed and what runs instead" \
+  all 'rc 2' 'err_has "removed in 0.14.0"' 'err_has "use --runtime lxc or crun"' 'not_called_re "^pct"'
+nx --runtime qemu state from-tpl
+check "--runtime qemu likewise" all 'rc 2' 'err_has "removed in 0.14.0"'
 
 nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup list
 check "the options containerd sends are accepted, not read as a command" \
