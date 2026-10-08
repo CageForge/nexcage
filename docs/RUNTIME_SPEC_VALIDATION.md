@@ -29,10 +29,13 @@ The list is for that host. On a host without AppArmor,
 
 ## Results
 
-**nexcage passes 33 of 58 tests.** Ubuntu's crun 1.21 passes 32: it accepts
-a capability name that does not exist, and `process_capabilities_fail` expects
-it to be refused. Run locally against the crun the vendored libcrun comes from,
-1.30.1, the results were nexcage's test for test.
+**nexcage passes 33 of 58 tests.** Run locally against crun 1.30.1, the
+release the vendored libcrun comes from, the results were nexcage's test for
+test. Ubuntu's crun 1.21, which the job runs for reference, passed 34. It
+differs on three: it accepts a capability name that does not exist
+(`process_capabilities_fail` fails), it logs a failing poststart hook and
+carries on, as runtime-spec 1.0 said (`poststart_fail` passes), and `poststart`
+is a race either way.
 
 Passing: `config_updates_without_affect`, `create`, `default`, `hooks_stdin`,
 `hostname`, `kill`, `kill_no_effect`, `killsig`, `linux_devices`,
@@ -46,8 +49,8 @@ Passing: `config_updates_without_affect`, `create`, `default`, `hooks_stdin`,
 
 ## The 25 that fail, and why
 
-None of them is nexcage's code: every one fails with crun as well. Each test's
-own reason is in `tests/runtime-tools/known-failures`.
+None of them is nexcage's code: each fails with crun run directly, 1.30.1 or
+1.21. Each test's own reason is in `tests/runtime-tools/known-failures`.
 
 **The suite cannot read cgroup v2 (10).** Its cgroup v2 reader is
 unimplemented (`cgroups/cgroups_v2.go` answers "unimplemented yet"), and

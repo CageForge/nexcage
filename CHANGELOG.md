@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **The runtime-spec validation suite runs against the crun backend in CI** (#310). `crun_build.yml` runs opencontainers/runtime-tools (runtime-spec 1.3.0) against the `-crun` build routed to crun, and the image's crun for reference. nexcage passes 33 of 58 tests; each of the 25 that fail is named in `tests/runtime-tools/known-failures` with the reason, and fails with crun too: tests that cannot read cgroup v2, cgroup v1 settings libcrun refuses by name, and tests that contradict runtime-spec 1.3.0 or themselves. A failure not on the list turns the job red, and so does a listed test that passes. `docs/RUNTIME_SPEC_VALIDATION.md` has the results.
+- **The runtime-spec validation suite runs against the crun backend in CI** (#310). `crun_build.yml` runs opencontainers/runtime-tools (runtime-spec 1.3.0) against the `-crun` build routed to crun, and the image's crun for reference. nexcage passes 33 of 58 tests; each of the 25 that fail is named in `tests/runtime-tools/known-failures` with the reason, and fails with crun run directly too: tests that cannot read cgroup v2, cgroup v1 settings libcrun refuses by name, and tests that contradict runtime-spec 1.3.0 or themselves. A failure not on the list turns the job red, and so does a listed test that passes. `docs/RUNTIME_SPEC_VALIDATION.md` has the results.
 
 ## [0.15.0] - 2026-10-08
 
