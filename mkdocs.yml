@@ -49,6 +49,7 @@ nav:
       - Mermaid Architecture Docs: architecture/ADR-004-Mermaid-Architecture-Docs.md
       - ADR Template: architecture/ADR-000-Template.md
   - CI/CD: CI_CD_SETUP.md
+  - Runtime-spec Validation: RUNTIME_SPEC_VALIDATION.md
   - Compliance: COMPLIANCE_CNCF_CHECKLIST.md
   - Releases:
     - v0.15.0: releases/NOTES_v0.15.0.md

@@ -21,6 +21,11 @@ if [ -w /sys/fs/cgroup/cgroup.subtree_control ]; then
     done
 fi
 
+# The harness makes its bundles under /tmp, and two tests make a character
+# device 0:0 in one. That is overlayfs's whiteout, which overlayfs refuses to
+# create (EPERM), and /tmp in a container image is overlayfs.
+mount -t tmpfs tmpfs /tmp
+
 mkdir -p /etc/nexcage
 printf '{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }' \
     > /etc/nexcage/config.json
