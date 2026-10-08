@@ -102,6 +102,9 @@ podman --runtime /usr/local/bin/nexcage run --rm docker.io/library/alpine:3 echo
 kubectl apply -f pod.yaml     # runtimeClassName: nexcage
 ```
 
+A Kubernetes node on Proxmox VE, step by step, from the files a release
+ships (routing, k3s, containerd and CRI-O examples, the `RuntimeClass`):
+[docs/INSTALL.md](docs/INSTALL.md#a-kubernetes-node-on-proxmox-ve-since-0160).
 How it was verified, engine by engine, and what Kubernetes asks a runtime:
 [docs/KUBERNETES_INTEGRATION.md](docs/KUBERNETES_INTEGRATION.md).
 

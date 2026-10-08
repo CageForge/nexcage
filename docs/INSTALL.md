@@ -79,6 +79,96 @@ JSON
 A routing pattern is a regular expression only when it starts with `^` or ends
 with `$`; `".*"` is read as a wildcard and matches nothing. Use `"*"`.
 
+## A Kubernetes node on Proxmox VE (since 0.16.0)
+
+A node whose kubelet runs pods on nexcage needs four things:
+
+1. the `-crun` binary as `/usr/local/bin/nexcage`, with its libraries (above);
+2. the routing configuration;
+3. nexcage as a runtime of the node's container engine;
+4. a `RuntimeClass` in the cluster, which a pod names.
+
+The files for 2 to 4 are in the release's tag. The engine's configuration is
+yours: they are examples, and nothing installs them for you. A pod runs on
+nexcage only when it names the class; the node's default runtime is unchanged.
+`k8s_e2e.yml` builds a node this way on every release tag, from these same
+files, and runs a pod on it.
+
+```bash
+VERSION=0.16.0
+SRC=https://raw.githubusercontent.com/CageForge/nexcage/v$VERSION
+```
+
+**Routing.** A container engine never passes `--runtime`, so every container
+nexcage is asked about goes to crun:
+
+```bash
+mkdir -p /etc/nexcage
+curl -fsSLo /etc/nexcage/config.json "$SRC/packaging/config/config.oci.example.json"
+```
+
+If the node already has a configuration for its LXC containers, add the
+`runtime.routing` rule to that file instead of replacing it. A command typed
+by hand then goes to crun as well; give it `--runtime lxc` for an LXC
+container.
+
+**The engine.** One of:
+
+```bash
+# k3s, whose containerd is 2.x: it writes containerd's configuration from this
+# template when it starts, so put it in place before installing k3s, or
+# restart k3s after.
+mkdir -p /var/lib/rancher/k3s/agent/etc/containerd
+curl -fsSLo /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl \
+  "$SRC/deploy/kubernetes/node/k3s-config-v3.toml.tmpl"
+systemctl restart k3s
+
+# containerd 2.x: merge this into /etc/containerd/config.toml, then
+curl -fsSL "$SRC/deploy/kubernetes/node/containerd.toml"
+systemctl restart containerd
+
+# CRI-O
+curl -fsSLo /etc/crio/crio.conf.d/10-nexcage.conf "$SRC/deploy/kubernetes/node/crio.conf"
+systemctl restart crio
+```
+
+**The RuntimeClass**, once per cluster (on k3s, `kubectl` reads
+`/etc/rancher/k3s/k3s.yaml`):
+
+```bash
+kubectl apply -f "$SRC/deploy/kubernetes/node/runtimeclass.yaml"
+```
+
+**A pod on it:**
+
+```bash
+kubectl apply -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata: { name: nexcage-hello }
+spec:
+  runtimeClassName: nexcage
+  restartPolicy: Never
+  containers:
+  - name: hello
+    image: registry.k8s.io/e2e-test-images/busybox:1.29-4
+    command: ["/bin/sh", "-c", "echo hello from nexcage; sleep 3600"]
+YAML
+kubectl wait --for=condition=Ready pod/nexcage-hello --timeout=180s
+kubectl logs nexcage-hello
+kubectl exec nexcage-hello -- uname -r
+crictl pods --name nexcage-hello      # the RUNTIME column says nexcage; k3s crictl on k3s
+kubectl delete pod nexcage-hello
+```
+
+A pod that stays `ContainerCreating` says why in `kubectl describe pod`. The
+two usual causes are a binary without the crun backend (`nexcage --runtime
+crun features` fails) and a missing library (`nexcage version` fails).
+
+To take it off the node: delete the `RuntimeClass` once no pod names it, remove
+the template, the `containerd.toml` entry or the CRI-O drop-in, restart the
+engine, and remove `/etc/nexcage/config.json` and the binary.
+
 ## From source
 
 ```bash

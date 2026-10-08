@@ -1,0 +1,8 @@
+# The runtime handler a pod names with `runtimeClassName: nexcage`. The handler
+# is the runtime's name in the node's engine configuration (containerd.toml,
+# k3s-config-v3.toml.tmpl or crio.conf here); the class is what a pod asks for.
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: nexcage
+handler: nexcage

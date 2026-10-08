@@ -7,7 +7,8 @@ name: Kubernetes pod on nexcage (self-hosted)
 #
 # Not on every push: it installs k3s and removes it again, which takes a few
 # minutes and changes the node the lifecycle E2E shares. It runs on release
-# tags, on demand, and on a pull request that changes the test itself.
+# tags, on demand, and on a pull request that changes the test or the node
+# configuration a release ships, which the test installs.
 
 on:
   push:
@@ -16,16 +17,21 @@ on:
     branches: [ main ]
     paths:
       - 'tests/k8s/**'
+      - 'deploy/kubernetes/node/**'
+      - 'packaging/config/config.oci.example.json'
       - '.github/workflows/k8s_e2e.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# One at a time, and never cancelled halfway: a cancelled run can leave k3s
-# installed on the node.
+# Never cancelled halfway: a cancelled run can leave k3s installed on the
+# node. Grouped per ref, because a group keeps one pending run and cancels the
+# one before it: with a single group, a dependabot pull request that touched
+# this file cancelled another pull request's run. One at a time on the node is
+# the single pve9 runner's doing.
 concurrency:
-  group: k8s-e2e
+  group: k8s-e2e-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:

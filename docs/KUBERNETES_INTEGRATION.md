@@ -523,9 +523,19 @@ backend. On a node that already had k3s, the containerd template with the
 `RuntimeClass/nexcage` are left in place.
 
 `k8s_e2e.yml` runs the script on the E2E node (#312) on release tags, on
-demand, and on a pull request that changes `tests/k8s/`. It builds the `-crun`
-binary from the commit under test, as the release does, and the node job never
-runs a fork's pull request: the runner user there has sudo for everything.
+demand, and on a pull request that changes `tests/k8s/` or the node files
+below. It builds the `-crun` binary from the commit under test, as the release
+does. Its node job never runs a fork's pull request, because the runner user
+there has sudo for everything.
+
+The script installs what a release ships for a node (#313):
+`packaging/config/config.oci.example.json`, and the k3s template and
+`RuntimeClass` in `deploy/kubernetes/node/`, the files
+[INSTALL.md](INSTALL.md#a-kubernetes-node-on-proxmox-ve-since-0160) tells an
+administrator to install. A run checks those files and not a copy of them. The
+only difference is that the template's `BinaryName` points at the trace
+wrapper. The containerd and CRI-O examples in the same directory are the
+configurations stage 4 verified, and no workflow installs them.
 
 ## critest: what Kubernetes checks of a runtime
 
