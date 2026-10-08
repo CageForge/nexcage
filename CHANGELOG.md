@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **An unknown option was skipped without a word, and its value taken for the next positional word** (#355). `create --memroy 2G` answered "OCI bundle '2G' must be an absolute path", and an unknown flag without a value simply vanished, so `kill --al` signalled the init alone. An option no command takes now exits 2 naming it, and a value option given last without its value says it needs one. Every option an engine was seen sending already has its own branch, so their command lines are unchanged; runc options nexcage does not implement (`--no-pivot`, `--preserve-fds`, ...) are refused rather than dropped. `create --image <image>`, the form `create --help` shows, had only worked because `--image` was skipped and its value taken for the image; it is parsed now.
+
 ### Added
 - **`create` takes what `pct create` is usually given** (#308): `--memory`, `--memory-swap`, `--cpu-quota`, `--cpu-period` and `--cpu-share` under `update`'s names and said to pct the way `update` says them (one conversion, shared); `--cores`; `--ip`, `--gw`, `--vlan` and `--firewall`, which are `net0`'s `ip=`, `gw=`, `tag=` and `firewall=1`; `--onboot`; `--tags`; and `--mp <spec>`, repeatable, in pct's own syntax as `mp0`, `mp1`, .... They go through `pct create` for a container here and the node's API for one made with `--node`, so nothing needs a `pct set` by VMID afterwards. A limit Proxmox cannot express is refused by name, as `update` refuses it; an address containing `,` or `=`, which would add a `net0` key, and a VLAN tag outside 1-4094 are usage errors; `--mp` with an OCI bundle is refused, because the bundle's mounts take the `mp` entries; and the crun backend refuses all of them, since it takes limits, network and mounts from the bundle's `config.json`. The Proxmox E2E creates a container with every option and reads each one back from `pct config`.
 

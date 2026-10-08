@@ -439,6 +439,11 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         } else if (std.mem.eql(u8, arg, "--pid-file") and i + 1 < args.len) {
             options.pid_file = try allocator.dupe(u8, args[i + 1]);
             i += 2;
+        } else if (std.mem.eql(u8, arg, "--image") and i + 1 < args.len) {
+            // The form 'create --help' shows. It used to work only because an
+            // unknown option was skipped and its value taken for the image.
+            if (options.image == null) options.image = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
         } else if (std.mem.eql(u8, arg, "--bundle") and i + 1 < args.len) {
             // An OCI bundle directory: config.json plus rootfs/. The backend
             // takes it where the image goes.
@@ -606,8 +611,23 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
                 break;
             }
             i += 1;
-        } else {
+        } else if (std.mem.eql(u8, arg, "-")) {
+            // Not an option: stdin, where a command reads it
             i += 1;
+        } else {
+            // An option no branch above claimed. It used to be skipped, so a
+            // misspelling vanished and its value became the next positional
+            // word: `create --memroy 2G` answered "OCI bundle '2G' must be an
+            // absolute path", and `kill --al` signalled the init alone (#355).
+            // Every option an engine was seen sending has a branch above. A
+            // value flag lands here too when it is the last word: its branch
+            // wants the value after it.
+            if (i + 1 >= args.len) {
+                printError("'{s}' is not an option of '{s}', or it needs a value; see 'nexcage {s} --help'", .{ arg, command_name, command_name });
+            } else {
+                printError("unknown option '{s}' for '{s}'; see 'nexcage {s} --help'", .{ arg, command_name, command_name });
+            }
+            return error.InvalidInput;
         }
     }
 

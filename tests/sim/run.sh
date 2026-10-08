@@ -365,6 +365,19 @@ for flag in "--node titan" "--console-socket /tmp/sim-console.sock" "--pid-file 
 done
 
 echo "=== option parsing ==="
+# An option no command takes is refused by name (#355). It used to be skipped,
+# and its value taken for the next positional word.
+nx create --name typo-1 --memroy 2G "$TPL"
+check "a misspelt option is refused by name, not read as the image" \
+  all 'rc 2' "err_has \"unknown option '--memroy' for 'create'\"" '! err_has "OCI bundle"' 'not_called_re "^pct create"'
+nx kill --al web-1
+check "an unknown flag without a value is refused, not dropped" \
+  all 'rc 2' "err_has \"unknown option '--al'\"" 'not_called_re "^(pct|pvesh|kill)"'
+nx run --name r-9 --memory 1G "$TPL"
+check "an option of another command is unknown here: run does not take --memory" \
+  all 'rc 2' "err_has \"unknown option '--memory' for 'run'\"" 'not_called_re "^pct create"'
+nx state --name
+check "a value flag with nothing after it says so" all 'rc 2' 'err_has "needs a value"'
 nx start --log-level debug web-3
 check "start --log-level debug <name> starts <name>" all 'rc 0' 'called "pct start 102"'
 nx stop web-3 --log-file /dev/null
