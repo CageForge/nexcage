@@ -677,7 +677,7 @@ annotations being strings rather than booleans.
   },
   "annotations": {
     "run.oci.crun.version": "1.30.1",
-    "io.cageforge.nexcage.version": "0.13.0",
+    "io.cageforge.nexcage.version": "0.14.0",
     "io.cageforge.nexcage.backend": "crun"
   }
 }

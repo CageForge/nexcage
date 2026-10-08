@@ -1,7 +1,7 @@
 # Roadmap
 
-Where nexcage goes after 0.13.0, and what it deliberately will not do.
-Reviewed against `main` at `a57feb48` on 2026-10-05.
+Where nexcage goes after 0.14.0, and what it deliberately will not do.
+Reviewed against `main` on 2026-10-08.
 
 This file says what comes next and why, not when. The `Roadmap/` directory it
 replaces was removed in September 2026 because it held a sprint plan due in
@@ -25,8 +25,7 @@ nexcage is one binary with two faces
 
 - **A command line for LXC containers on a Proxmox VE cluster**: the
   lifecycle, `exec`, templates (`images`, `pull`, `rmi`), `pause` and
-  `resume`, `update`, on any node of the cluster — and snapshots, merged
-  after 0.13.0.
+  `resume`, `update` and snapshots, on any node of the cluster.
 - **An OCI runtime that container engines drive**: podman, `ctr`,
   containerd's CRI, CRI-O and a kubelet run containers on the crun backend,
   and a pod with `runtimeClassName: nexcage` runs on a node.
@@ -35,22 +34,21 @@ Everything a kubelet's containerd asks a runtime is answered. What is left is
 less about missing verbs than about proof, depth on the Proxmox side, and what
 makes a 1.0 a promise rather than a number.
 
-## Next: 0.14.0 — ship what is merged, and make the project say true things
+## Next: 0.14.1 — refused rather than ignored, and CI that can be believed
 
-Snapshots, `scripts/dev.sh`, the perf suites and `ociVersion` 1.3.0 have been
-on `main` since 2026-10-02 (*Unreleased* in the changelog). They should not
-wait for anything else in this section, which is small, overdue, and mostly
-not code.
+0.14.0's documentation pass found flags that are accepted and then dropped.
+nexcage's rule since 0.10.0 is that a flag it cannot honour is refused by
+name, and `exec --user 1000` running the command as root is the sharpest
+breach of it. These are bug fixes and should not wait for 0.15.0's features.
 
 | Item | Why now | Issue |
 |---|---|---|
-| Release snapshots: `snapshot`, `snapshots`, `rollback`, `delsnapshot` | Merged in [#300] and exercised by the E2E suite on a real host | [#299] |
-| Remove the Proxmox VM backend | 267 lines, compiled out by default and built by no workflow. The router refuses every operation routed to it without calling the driver, and the driver imports a module the build does not define: the state the runc backend was in when 0.13.0 removed it. `qm` can come back with a test behind it | [#306] |
-| Fix `CODEOWNERS` and `MAINTAINERS.md` | GitHub reports every owner in `CODEOWNERS` as unknown: `@CageForge` is the organization, which cannot own code except through a team, and `@moriarti` is a different account from the maintainer's, `@themoriarti`. The file has never requested a review | [#303] |
-| Protect `main` | It has no branch protection. Require `CI` and `crun backend build` to pass before a merge | [#305] |
-| Make the review rule the one practised | `GOVERNANCE.md` and `MAINTAINERS.md` ask for two LGTMs on non-trivial changes, with one active maintainer to give them | [#304] |
-| Answer [#301] | An outside documentation contribution, open since 2026-10-04 | [#301] |
-| Docs that disagree with the code | `CLI_REFERENCE.md` says a bundle must sit under `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/`, which 0.10.0 stopped requiring. Rows 6 and 8 of the gap table in `KUBERNETES_INTEGRATION.md` read as open, though logs and sandboxes are the engine's, as row 7 already says of CNI; row 5 is *Not planned* below. The changelog's *Support Policy* is about v0.3.x | [#307] |
+| `exec` on Proxmox LXC refuses `--user`, `--cwd`, `--console-socket`, `--pid-file`, and `--tty` without a terminal | `pct exec` runs the command as root, in a directory nexcage does not choose; the flags were dropped | [#329] |
+| `run` refuses `--node`, `--console-socket` and `--pid-file` | `run --node` made the container on this host without a word | [#328] |
+| `--log-level info` overrides the configuration file | An explicit `info` was taken for "not set" | [#330] |
+| `health` checks the configuration the commands read, and asks no outside host | It read its own pair of files and ran `nslookup google.com` | [#334] |
+| Install Zig in CI with a maintained action, from the runner's cache on the self-hosted ones | `goto-bus-stop/setup-zig` is unmaintained, and the E2E on `main` failed downloading Zig before any test ran | [#338] |
+| Protect `main` | Carried over from 0.14.0: it needs an administrator's hand in the repository settings, which no pull request can give | [#305] |
 
 ## 0.15.0 — the Proxmox command line, deeper
 
@@ -146,7 +144,7 @@ asks" needs a place to be asked.
 | | Why |
 |---|---|
 | A runc backend, or a fallback between backends | [ADR-001](docs/architecture/ADR-001-Container-Runtime-Selection.md): libcrun answers the same interface, and a container is one thing on one backend |
-| Virtual machines through `qm` | The stub backend goes in 0.14.0. It can come back with a test behind it and someone who needs it |
+| Virtual machines through `qm` | The stub backend went in 0.14.0. It can come back with a test behind it and someone who needs it |
 | Proxmox VE 8 | Earlier releases ran on it, but no test ever did, and Proxmox ended its own support for 8.x in August 2026. nexcage does not refuse an 8.x host; it no longer promises anything there |
 | A daemon or a remote API | nexcage is an OCI runtime. A kubelet runs on each node and calls the binary there, as it calls runc |
 | An image service for Kubernetes | containerd and CRI-O implement `ImageService` and hand the runtime an unpacked bundle |
@@ -162,13 +160,8 @@ asks" needs a place to be asked.
 [#118]: https://github.com/CageForge/nexcage/issues/118
 [#163]: https://github.com/CageForge/nexcage/issues/163
 [#299]: https://github.com/CageForge/nexcage/issues/299
-[#300]: https://github.com/CageForge/nexcage/pull/300
 [#301]: https://github.com/CageForge/nexcage/pull/301
-[#303]: https://github.com/CageForge/nexcage/issues/303
-[#304]: https://github.com/CageForge/nexcage/issues/304
 [#305]: https://github.com/CageForge/nexcage/issues/305
-[#306]: https://github.com/CageForge/nexcage/issues/306
-[#307]: https://github.com/CageForge/nexcage/issues/307
 [#308]: https://github.com/CageForge/nexcage/issues/308
 [#309]: https://github.com/CageForge/nexcage/issues/309
 [#310]: https://github.com/CageForge/nexcage/issues/310
@@ -186,5 +179,10 @@ asks" needs a place to be asked.
 [#322]: https://github.com/CageForge/nexcage/issues/322
 [#323]: https://github.com/CageForge/nexcage/issues/323
 [#324]: https://github.com/CageForge/nexcage/issues/324
+[#328]: https://github.com/CageForge/nexcage/issues/328
+[#329]: https://github.com/CageForge/nexcage/issues/329
+[#330]: https://github.com/CageForge/nexcage/issues/330
+[#334]: https://github.com/CageForge/nexcage/issues/334
+[#338]: https://github.com/CageForge/nexcage/issues/338
 [opencontainers/runtime-tools]: https://github.com/opencontainers/runtime-tools
 [cri-tools]: https://github.com/kubernetes-sigs/cri-tools
