@@ -498,8 +498,13 @@ settled on.
 Needs **Proxmox VE 9.1 or later** on the target node, which is where
 `oci-registry-pull` arrived. nexcage checks the version of the host it runs on,
 not of the `--node` it pulls on: an older host is told which version it needs
-rather than left with an API error. The endpoint takes **no credentials**, so a
-private registry cannot be authenticated through it.
+rather than left with an API error.
+
+The endpoint takes **no credentials**. Proxmox pulls with `skopeo copy` as
+root, and skopeo reads root's auth file on the node that pulls, so a private
+registry needs `skopeo login --authfile /root/.config/containers/auth.json
+<registry>` on that node ([INSTALL.md](INSTALL.md#images-from-a-private-registry)).
+A refused login is reported with the registry's reason and that line.
 
 ### rmi
 

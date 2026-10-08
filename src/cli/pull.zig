@@ -107,8 +107,9 @@ pub const PullCommand = struct {
             "  nexcage pull docker.io/library/redis:7 --storage shared-rdma\n" ++
             "  nexcage create --name r1 --node titan shared-rdma:vztmpl/redis_7.tar\n\n" ++
             "Needs Proxmox VE 9.1 or later, which is where oci-registry-pull\n" ++
-            "arrived. The endpoint takes no credentials, so a private registry\n" ++
-            "cannot be authenticated through it.\n\n" ++
+            "arrived. For a private registry, log in as root on the node that\n" ++
+            "pulls, into the file Proxmox's pull reads:\n\n" ++
+            "  skopeo login --authfile /root/.config/containers/auth.json <registry>\n\n" ++
             "Examples:\n" ++
             "  nexcage pull docker.io/library/alpine:3.20\n" ++
             "  nexcage pull docker.io/library/redis:7 --node titan --storage shared-rdma\n");
