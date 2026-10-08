@@ -29,6 +29,11 @@ inside the container keeps its `=`.
 | `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
 | `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
 
+An option no command takes is refused with exit 2, naming it, and so is a
+value option with nothing after it. That includes runc options nexcage does not
+implement, such as `--no-pivot` or `--preserve-fds`: dropping one would run the
+container differently from what was asked.
+
 Logs go to stderr. stdout carries only command output (`list`, `state`,
 help text).
 
