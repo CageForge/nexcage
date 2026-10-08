@@ -1,5 +1,6 @@
 const std = @import("std");
 const logging = @import("logging.zig");
+const config = @import("config.zig");
 
 /// System integrity checker for monitoring critical components
 pub const IntegrityChecker = struct {
@@ -102,48 +103,32 @@ pub const IntegrityChecker = struct {
             try report.addCheck("network_interfaces", .warn, "Network interface issues detected", .{});
         }
 
-        // Check DNS resolution
-        const dns_check = self.checkDnsResolution();
-        if (dns_check) {
-            try report.addCheck("dns_resolution", .pass, "DNS resolution working", .{});
+        // A resolver is configured. Nothing is looked up: a lookup needs a
+        // name, and any name outside the cluster is one an air-gapped host
+        // cannot resolve and a root tool has no business asking about.
+        if (self.checkResolverConfigured()) {
+            try report.addCheck("dns_resolver", .pass, "A nameserver is configured in /etc/resolv.conf", .{});
         } else {
-            try report.addCheck("dns_resolution", .warn, "DNS resolution issues", .{});
+            try report.addCheck("dns_resolver", .warn, "No nameserver in /etc/resolv.conf", .{});
         }
     }
 
-    /// Check configuration integrity
+    /// Check configuration integrity: the file every other command would
+    /// load, --config included, through the same loader.
     fn checkConfigurationIntegrity(self: *IntegrityChecker, report: *IntegrityReport) !void {
         if (self.logger) |log| try log.info("Checking configuration integrity...", .{});
 
-        // Check if config file exists and is readable
-        const config_paths = [_][]const u8{
-            "/etc/nexcage/config.json",
-            "config.json",
+        const path = config.resolvedPath() orelse {
+            try report.addCheck("config_file", .warn, "No config file at ./config.json, /etc/nexcage/config.json or /etc/nexcage/nexcage.json; the built-in defaults are in use", .{});
+            return;
         };
-
-        var config_found = false;
-        for (config_paths) |path| {
-            if (self.checkPathAccess(path)) {
-                try report.addCheck("config_file", .pass, "Config file found: {s}", .{path});
-                config_found = true;
-                break;
-            } else |_| {
-                // Path not accessible, continue to next
-            }
-        }
-
-        if (!config_found) {
-            try report.addCheck("config_file", .warn, "No config file found in standard locations", .{});
-        }
-
-        // Check if config is valid JSON
-        if (config_found) {
-            const json_check = self.validateConfigJson();
-            if (json_check) {
-                try report.addCheck("config_json_valid", .pass, "Config file contains valid JSON", .{});
-            } else {
-                try report.addCheck("config_json_valid", .fail, "Config file contains invalid JSON", .{});
-            }
+        var loader = config.ConfigLoader.init(self.allocator);
+        if (loader.loadFromFile(path)) |loaded| {
+            var cfg = loaded;
+            cfg.deinit();
+            try report.addCheck("config_file", .pass, "Config file loads: {s}", .{path});
+        } else |err| {
+            try report.addCheck("config_file", .fail, "Config file does not load: {s} ({s})", .{ path, @errorName(err) });
         }
     }
 
@@ -247,42 +232,14 @@ pub const IntegrityChecker = struct {
         return result.exit_code == 0;
     }
 
-    /// Check DNS resolution
-    fn checkDnsResolution(self: *IntegrityChecker) bool {
-        const result = self.runCommand(&[_][]const u8{ "nslookup", "google.com" }) catch return false;
-        defer {
-            self.allocator.free(result.stdout);
-            self.allocator.free(result.stderr);
+    /// /etc/resolv.conf names at least one nameserver
+    fn checkResolverConfigured(self: *IntegrityChecker) bool {
+        const content = std.fs.cwd().readFileAlloc(self.allocator, "/etc/resolv.conf", 64 * 1024) catch return false;
+        defer self.allocator.free(content);
+        var lines = std.mem.splitScalar(u8, content, '\n');
+        while (lines.next()) |line| {
+            if (std.mem.startsWith(u8, std.mem.trimLeft(u8, line, " \t"), "nameserver")) return true;
         }
-
-        return result.exit_code == 0;
-    }
-
-    /// Validate config JSON
-    fn validateConfigJson(self: *IntegrityChecker) bool {
-        const config_paths = [_][]const u8{
-            "/etc/nexcage/config.json",
-            "config.json",
-        };
-
-        for (config_paths) |path| {
-            // Check if path is absolute
-            const file = if (std.fs.path.isAbsolute(path))
-                std.fs.openFileAbsolute(path, .{}) catch continue
-            else
-                std.fs.cwd().openFile(path, .{}) catch continue;
-
-            defer file.close();
-
-            const content = file.readToEndAlloc(self.allocator, 1024 * 1024) catch continue;
-            defer self.allocator.free(content);
-
-            var parsed = std.json.parseFromSlice(std.json.Value, self.allocator, content, .{}) catch continue;
-            defer parsed.deinit();
-
-            return true;
-        }
-
         return false;
     }
 

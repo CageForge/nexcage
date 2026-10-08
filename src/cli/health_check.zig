@@ -39,8 +39,10 @@ pub const HealthCommand = struct {
             \\The health check verifies:
             \\  - Proxmox connectivity (pct command; the API check always warns)
             \\  - Storage integrity (directories, ZFS pools)
-            \\  - Network integrity (interfaces, DNS)
-            \\  - Configuration integrity (config files, JSON validity)
+            \\  - Network integrity (interfaces, a nameserver in /etc/resolv.conf;
+            \\    nothing is looked up)
+            \\  - Configuration: the file the other commands load (--config, else
+            \\    ./config.json, /etc/nexcage/config.json, /etc/nexcage/nexcage.json)
             \\  - Process integrity (nexcage process, system resources)
             \\
             \\Exit codes:

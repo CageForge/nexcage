@@ -707,17 +707,20 @@ check. It exits 1 if any check failed and 0 otherwise; warnings do not fail.
 These are failures: `pct version` missing or failing; any of
 `/var/lib/nexcage`, `/var/cache/nexcage`, `/tmp/nexcage` and `/etc/pve/lxc` not
 existing (fixed paths, not read from the configuration, and nexcage creates
-none of them); and a config file that is present but not valid JSON. These are
-only warnings: the Proxmox API line, which always warns because that check is
-not implemented; `zpool status`; `ip link show`; `nslookup google.com`; no
-config file; `pgrep nexcage`; and `df -h /`.
+none of them); and a config file that does not load. These are only warnings:
+the Proxmox API line, which always warns because that check is not
+implemented; `zpool status`; `ip link show`; no `nameserver` line in
+`/etc/resolv.conf`; no config file; `pgrep nexcage`; and `df -h /`.
 
-The config file it looks at is `/etc/nexcage/config.json`, else
-`./config.json`. That is not the search order the other commands use, and
-`--config` does not change it. Either file being valid JSON passes the JSON
-check, and that check can fail only when `--config` names another file: like
-every command, `health` loads its configuration first, and a file that is not
-valid JSON stops it there with exit 1, before any check runs.
+The config file it checks is the one every other command loads: the file
+`--config` names, else the first of `./config.json`, `/etc/nexcage/config.json`
+and `/etc/nexcage/nexcage.json` that exists. It is read by the same loader, so
+a pass means the commands can use it. Like every command, `health` loads its
+configuration first, so a file that does not load usually stops it there with
+exit 1, before any check runs.
+
+The network check looks up no name: an air-gapped cluster, or one with its own
+resolver policy, has no outside host to ask, and a root tool should not ask one.
 
 `nexcage health --help` prints help and runs no checks.
 

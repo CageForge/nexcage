@@ -14,6 +14,24 @@ pub fn setExplicitPath(path: ?[]const u8) void {
     explicit_path = path;
 }
 
+/// Where loadDefault looks when --config names no file, in order
+pub const default_paths = [_][]const u8{
+    "./config.json",
+    "/etc/nexcage/config.json",
+    "/etc/nexcage/nexcage.json",
+};
+
+/// The file loadDefault reads: the one --config names, else the first of
+/// default_paths that exists. Null when it would use the built-in defaults.
+pub fn resolvedPath() ?[]const u8 {
+    if (explicit_path) |path| return path;
+    for (default_paths) |path| {
+        std.fs.cwd().access(path, .{}) catch continue;
+        return path;
+    }
+    return null;
+}
+
 test "an explicit path replaces the default search, and must exist" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -70,12 +88,6 @@ pub const ConfigLoader = struct {
         }
 
         // Try to load from default locations in order
-        const default_paths = [_][]const u8{
-            "./config.json",
-            "/etc/nexcage/config.json",
-            "/etc/nexcage/nexcage.json",
-        };
-
         for (default_paths) |path| {
             if (self.loadFromFile(path)) |config| {
                 return config;
@@ -1009,6 +1021,12 @@ fn matchesAnywhere(name: []const u8, pattern: []const u8) bool {
         pos += 1;
     }
     return false;
+}
+
+test "resolvedPath is the file --config names, whether or not it exists" {
+    setExplicitPath("/nonexistent/nexcage.json");
+    defer setExplicitPath(null);
+    try std.testing.expectEqualStrings("/nonexistent/nexcage.json", resolvedPath().?);
 }
 
 test "the proxmox section and bridge reach Config" {

@@ -980,8 +980,17 @@ check "rmi on the crun backend says templates are not its business" \
   all 'rc 1' 'err_has "already there"'
 
 echo "=== health ==="
-# Its checks look at the host, so only the absence of leaks is checked here
+# Most of its checks look at the host, so they are not asserted here. The
+# configuration it checks is the one the commands load, --config included, and
+# the network check asks no host outside the cluster (#334).
+cfg '{"network":{"bridge":"vmbr0"}}'
 nx health
+check "health checks the file the commands load: ./config.json first" \
+  all 'err_has "Config file loads: ./config.json"' '! err_has "google"' 'err_has "dns_resolver"'
+printf '{"network":{"bridge":"vmbr7"}}\n' > "$S/work/alt.json"
+nx --config alt.json health
+check "health --config checks that file instead" \
+  all 'err_has "Config file loads: alt.json"' '! err_has "./config.json"'
 
 echo
 check "no leaks, panics or invalid frees in any run" all '[ "$LEAKS" = 0 ]'
