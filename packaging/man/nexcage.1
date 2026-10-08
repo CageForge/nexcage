@@ -49,7 +49,9 @@ process. The crun backend is not built into this package's binary; it is in
 the separate \-crun release binary.
 .TP
 \fBrun \-\-name\fR \fIname\fR \fIimage\fR
-Create a container and start it.
+Create a container on this node and start it. \fB\-\-node\fR,
+\fB\-\-console\-socket\fR and \fB\-\-pid\-file\fR are refused; to make the
+container on another node, use \fBcreate \-\-node\fR, then \fBstart\fR.
 .TP
 \fBstart\fR \fIname\fR
 Start a container.
@@ -71,7 +73,10 @@ compatibility and does not walk the cgroup: only SIGKILL reaches every process.
 \fBexec\fR \fIname\fR \fIcommand\fR [\fIargs\fR...], \fBexec\fR \fIname\fR \fB\-\-\fR \fIcommand\fR [\fIargs\fR...]
 Run a command inside a running container and exit with its status, as an OCI
 runtime does. Use \-\- where the command starts with a dash. The container must
-be running and the command must exist in its image.
+be running and the command must exist in its image. It runs as root through
+\fBpct exec\fR, so \fB\-\-user\fR, \fB\-\-cwd\fR, \fB\-\-console\-socket\fR,
+\fB\-\-pid\-file\fR, \fB\-\-process\fR and \fB\-\-detach\fR are refused, and
+\fB\-\-tty\fR is refused unless nexcage runs on a terminal.
 .TP
 \fBlist\fR
 List containers, tab-separated: ID, IMAGE, COMMAND, CREATED, STATUS, BACKEND, NODE, NAMES.

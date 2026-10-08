@@ -89,12 +89,13 @@ pub const ExecCommand = struct {
             \\                     Where to send the master end of the pty and
             \\                     where to write the pid, as with create
             \\
-            \\--process and --detach need the crun backend. They are refused on
-            \\Proxmox LXC rather than ignored: 'pct exec' takes a command and
-            \\returns when it ends, so there is no identity to apply from a spec
-            \\and nothing to detach from. --console-socket, --pid-file, --tty,
-            \\--cwd and --user reach the crun backend only; Proxmox LXC ignores
-            \\them.
+            \\--process, --detach, --user, --cwd, --console-socket and --pid-file
+            \\need the crun backend. They are refused on Proxmox LXC rather than
+            \\ignored: 'pct exec' takes a command, runs it as root and returns
+            \\when it ends, so there is no identity or directory to apply, nothing
+            \\to detach from and no pty or pid to hand back. There, --tty is
+            \\honoured when nexcage runs on a terminal, which pct passes on, and
+            \\refused when it does not.
             \\
             \\Exit status:
             \\  nexcage exits with the status of the command it ran, as an OCI

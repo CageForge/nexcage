@@ -149,6 +149,25 @@ pub const BackendRouter = struct {
                 return types.Error.UnsupportedOperation;
             }
         }
+        // run is create and start, and refuses what either would. pct start
+        // runs the container's init itself, so there is still no pty to hand
+        // over; and the crun backend has no run to send the caller to.
+        if (operation == .run) {
+            const rc = operation.run;
+            if (rc.node != null) {
+                if (self.logger) |log| {
+                    log.err("--node is not taken by run, which makes the container on this node: use create --node <node>, then start", .{}) catch {};
+                }
+                return types.Error.UnsupportedOperation;
+            }
+            if (rc.console_socket != null or rc.pid_file != null) {
+                const which = if (rc.console_socket != null) "--console-socket" else "--pid-file";
+                if (self.logger) |log| {
+                    log.err("{s} is not possible with run on the Proxmox LXC backend: pct starts the container's init itself, so there is no pty to hand over and no pid of nexcage's to write", .{which}) catch {};
+                }
+                return types.Error.UnsupportedOperation;
+            }
+        }
 
         switch (operation) {
             .create => try proxmox_backend.create(sandbox_config),
@@ -188,6 +207,26 @@ pub const BackendRouter = struct {
                     const which = if (exec_cfg.process_file != null) "--process" else "--detach";
                     if (self.logger) |log| {
                         log.err("{s} is not possible on the Proxmox LXC backend: pct exec takes a command and returns when it ends. Use --runtime crun", .{which}) catch {};
+                    }
+                    return types.Error.UnsupportedOperation;
+                }
+                // The command runs as root, in a directory nexcage does not
+                // choose, and pct hands back neither a pty nor a pid, so these
+                // are refused rather than dropped: `--user 1000` would
+                // otherwise run the command as root.
+                const unsupported: ?[]const u8 = if (exec_cfg.user != null) "--user" else if (exec_cfg.cwd != null) "--cwd" else if (exec_cfg.console_socket != null) "--console-socket" else if (exec_cfg.pid_file != null) "--pid-file" else null;
+                if (unsupported) |which| {
+                    if (self.logger) |log| {
+                        log.err("{s} is not possible on the Proxmox LXC backend: pct exec takes a command and nothing else, and runs it as root. Use --runtime crun", .{which}) catch {};
+                    }
+                    return types.Error.UnsupportedOperation;
+                }
+                // pct exec runs lxc-attach, which gives the command a terminal
+                // whenever one of nexcage's standard descriptors is a terminal,
+                // and cannot be asked for one otherwise.
+                if (exec_cfg.tty and !(std.posix.isatty(0) or std.posix.isatty(1) or std.posix.isatty(2))) {
+                    if (self.logger) |log| {
+                        log.err("--tty is not possible here on the Proxmox LXC backend: pct exec gives the command a terminal only when nexcage's stdin, stdout or stderr is one, and none is", .{}) catch {};
                     }
                     return types.Error.UnsupportedOperation;
                 }
@@ -352,6 +391,12 @@ pub const CreateConfig = struct {
 pub const RunConfig = struct {
     image: []const u8,
     storage: ?[]const u8 = null,
+    /// Carried so they can be refused by name: run makes the container on
+    /// this node, and on Proxmox LXC there is no pty or pid of nexcage's to
+    /// hand over. Accepted and dropped, they did something other than asked.
+    node: ?[]const u8 = null,
+    console_socket: ?[]const u8 = null,
+    pid_file: ?[]const u8 = null,
 };
 
 pub const KillConfig = struct {

@@ -233,10 +233,11 @@ added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
 nexcage run --name <name> <image>
 ```
 
-`create` followed by `start`, with these differences: `--node` is ignored, so
-the container is made on this host; `--console-socket` and `--pid-file` are
-ignored rather than refused as `create` refuses them; and the crun backend does
-not implement `run` (exit 1). `<image>`, `--bundle` and `--storage` work as for
+`create` followed by `start`, on this host. `--node` is refused (exit 1): to
+make the container on another node, `create --node`, then `start`.
+`--console-socket` and `--pid-file` are refused as `create` refuses them, since
+`pct start` runs the container's init itself; and the crun backend does not
+implement `run` (exit 1). `<image>`, `--bundle` and `--storage` work as for
 `create`.
 
 ### start
@@ -327,14 +328,16 @@ command has to exist in the container's image — an image without a shell has n
 as is one that does not exist; `exec` without a command is a usage error
 (exit 2).
 
-`--process` and `--detach` are refused there rather than ignored: `pct exec`
-takes a command and returns when it ends, so there is no identity to apply from
-a spec and nothing to detach from. Same rule as `--console-socket` on `create`,
-though `exec` does not apply it to its own `--console-socket`: that,
-`--pid-file`, `--tty`, `--cwd` and `--user` reach the crun backend only, and
-Proxmox LXC ignores them. With `--process` even crun takes the terminal,
-working directory and user from the file, not from `--tty`, `--cwd` and
-`--user`.
+`--process`, `--detach`, `--user`, `--cwd`, `--console-socket` and
+`--pid-file` are refused there rather than ignored (exit 1): `pct exec` takes a
+command, runs it as root in a directory nexcage does not choose, and returns
+when it ends, so there is no identity or directory to apply, nothing to detach
+from and no pty or pid to hand back. Same rule as `--console-socket` on
+`create`. `--tty` is honoured when nexcage runs on a terminal: `pct exec` runs
+`lxc-attach`, which gives the command a terminal whenever one of its standard
+descriptors is one. With none, `--tty` is refused. With `--process` even crun
+takes the terminal, working directory and user from the file, not from
+`--tty`, `--cwd` and `--user`.
 
 On the crun backend both forms go to `libcrun_container_exec_process_file`,
 which takes the path of a file holding the process spec. `--process` hands the
