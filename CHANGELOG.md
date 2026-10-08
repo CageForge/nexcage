@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`--log-level info` and `NEXCAGE_LOG_LEVEL=info` could not override a configuration file's level** (#330): an `info` from the command line or the environment was taken for "not set", so a file saying `debug` could not be turned back to `info` for one command. A level that is named now wins over the file's, `info` included, and takes the debug mode the file's `debug` level turned on with it; `--debug` and `NEXCAGE_DEBUG` still keep debug mode on. A level nexcage does not know is ignored, as before.
+
 ## [0.14.0] - 2026-10-08
 
 Snapshots, `create --node` on a stock Proxmox VE host, and a project that says
