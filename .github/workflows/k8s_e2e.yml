@@ -25,10 +25,13 @@ on:
 permissions:
   contents: read
 
-# One at a time, and never cancelled halfway: a cancelled run can leave k3s
-# installed on the node.
+# Never cancelled halfway: a cancelled run can leave k3s installed on the
+# node. Grouped per ref, because a group keeps one pending run and cancels the
+# one before it: with a single group, a dependabot pull request that touched
+# this file cancelled another pull request's run. One at a time on the node is
+# the single pve9 runner's doing.
 concurrency:
-  group: k8s-e2e
+  group: k8s-e2e-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
