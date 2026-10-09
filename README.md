@@ -36,6 +36,28 @@ Proxmox VE 9.x. Pulling from a registry needs 9.1 or later. Proxmox VE 8.x is
 not supported: earlier releases ran on it, but the E2E suite never did, and
 Proxmox ended its own support for 8.x in August 2026.
 
+## System Requirements & Prerequisites
+
+`nexcage` runs directly on the Proxmox VE host as `root`.
+
+### Host Environment
+* **OS:** Proxmox VE 9.x (amd64 architecture).
+* **Privileges:** `root` access on the host.
+* **Base Proxmox Tooling:** `pct`, `pvesh`, and `pveversion` (included by default with Proxmox VE).
+
+### System Dependencies
+
+  * Required runtime libraries (must be installed on the host for `containerd`/`CRI-O`/ Kubernetes integration):
+  * 
+    ```bash
+    apt install -y libjson-c5 libseccomp2 libcap2
+    ```
+
+### Build Dependencies (Source builds only)
+* **Zig Compiler:** Version `0.15.1` (or newer compatible toolchain).
+* **Packaging Utilities:** `dpkg-deb`, `gzip`, `du`, `cut`, `tr` (for building `.deb` packages via `scripts/build_deb_local.sh`).
+* **Container Engine:** Docker or Podman (optional, required only for building the `-crun` embedded binary from source).
+
 ## Install
 
 ```bash
@@ -112,6 +134,17 @@ How it was verified, engine by engine, and what Kubernetes asks a runtime:
 [docs/KUBERNETES_INTEGRATION.md](docs/KUBERNETES_INTEGRATION.md).
 
 ## Configure
+
+For standard Proxmox LXC management:
+```bash
+sudo mkdir -p /etc/nexcage
+sudo cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json
+```
+For OCI runtime mode (containerd / CRI-O / Kubernetes with -crun binary):
+```bash
+sudo mkdir -p /etc/nexcage
+sudo cp /usr/share/doc/nexcage/examples/config.oci.example.json /etc/nexcage/config.json
+```
 
 nexcage reads the file given with `--config <path>`, or else the first of
 `./config.json`, `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
