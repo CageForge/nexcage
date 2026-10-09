@@ -246,9 +246,12 @@ mkdir -p /etc/nexcage
 cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json   # .deb install
 # or: cp packaging/config/config.json /etc/nexcage/config.json            # source tree
 ```
-2. **For OCI Runtime mode (containerd / CRI-O / Kubernetes using the -crun binary):**
+2. **For a container engine (containerd, CRI-O, a kubelet):**
 
-The OCI backend requires explicit routing rules to forward container operations to crun:
+A container engine never passes `--runtime`, so routing has to put the
+containers it creates on the crun backend. On a host that already has a
+configuration, add the example's `runtime.routing` and `profiles` to it instead,
+as "For a container engine" above describes.
 
 ```bash
 mkdir -p /etc/nexcage

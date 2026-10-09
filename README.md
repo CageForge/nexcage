@@ -47,16 +47,18 @@ Proxmox ended its own support for 8.x in August 2026.
 
 ### System Dependencies
 
-  * Required runtime libraries (must be installed on the host for `containerd`/`CRI-O`/ Kubernetes integration):
-  * 
-    ```bash
-    apt install -y libjson-c5 libseccomp2 libcap2
-    ```
+The release's binary links the crun backend's libraries dynamically and does
+not start without them. The `.deb` pulls them through its `Depends`; for the
+bare binary:
+
+```bash
+apt install libjson-c5 libseccomp2 libcap2 libsystemd0
+```
 
 ### Build Dependencies (Source builds only)
-* **Zig Compiler:** Version `0.15.1` (or newer compatible toolchain).
-* **Packaging Utilities:** `dpkg-deb`, `gzip`, `du`, `cut`, `tr` (for building `.deb` packages via `scripts/build_deb_local.sh`).
-* **Container Engine:** Docker or Podman (optional, required only for building the `-crun` embedded binary from source).
+* **Zig Compiler:** Version `0.15.1` exactly: `build.zig.zon` and CI pin it.
+* **Packaging Utilities:** `dpkg-deb`, `objdump`, `gzip`, `du`, `cut`, `tr` (for building `.deb` packages via `scripts/build_deb_local.sh`).
+* **Docker:** builds the binary with the crun backend, through the Dockerfile. `scripts/build_deb_local.sh` needs it unless given a built binary as `NEXCAGE_BIN`.
 
 ## Install
 
@@ -137,14 +139,16 @@ How it was verified, engine by engine, and what Kubernetes asks a runtime:
 
 For standard Proxmox LXC management:
 ```bash
-sudo mkdir -p /etc/nexcage
-sudo cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json
+mkdir -p /etc/nexcage
+cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json
 ```
-For OCI runtime mode (containerd / CRI-O / Kubernetes with -crun binary):
+For a container engine (containerd, CRI-O, a kubelet):
 ```bash
-sudo mkdir -p /etc/nexcage
-sudo cp /usr/share/doc/nexcage/examples/config.oci.example.json /etc/nexcage/config.json
+mkdir -p /etc/nexcage
+cp /usr/share/doc/nexcage/examples/config.oci.example.json /etc/nexcage/config.json
 ```
+On a host that already has a configuration, add the example's `runtime.routing`
+and `profiles` to that file instead of replacing it.
 
 nexcage reads the file given with `--config <path>`, or else the first of
 `./config.json`, `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
