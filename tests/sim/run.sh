@@ -272,6 +272,12 @@ nx exec web-1 -- env FOO=bar
 check "an = after -- survives untouched" \
   all 'rc 0' 'called "pct exec 100 -- env FOO=bar"'
 
+# Nor does nexcage read its own flags there: --config used to make it load
+# the command's argument as its configuration.
+nx exec web-1 -- echo --config /nonexistent --runtime bogus --profile nope --root /x
+check "nexcage's flags after -- belong to the command, not to nexcage" \
+  all 'rc 0' 'called "pct exec 100 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
+
 # `exec --process <file>` hands over an OCI process spec: an identity to become,
 # an environment, a terminal. `pct exec` takes a command and returns when it
 # ends, so the spec cannot be honoured and ignoring it would run the command as
@@ -495,25 +501,65 @@ rm -f "$S/work/config.json"
 # Routing by name (ADR-001). A glob under runtime.routing is the matcher
 # crun_name_patterns used to be, so the proof is both directions of one rule:
 # a matching name reaches the crun backend and a non-matching one reaches pct.
+# Routing picks the backend of a new container; every other command goes to
+# the container itself (#372), so the proof is create.
 cfg '{"runtime":{"routing":[{"pattern":"kube-ovn-*","runtime":"crun"}]}}'
-nx state kube-ovn-1
+nx create --name kube-ovn-1 "$TPL"
 check "a glob under runtime.routing sends a matching name to crun" \
   all 'rc 1' 'err_has "not built into this binary"' 'not_called_re "^pct"'
-nx state from-tpl
+nx create --name rt-lxc-1 "$TPL"
 check "and a name it does not match goes to Proxmox LXC" \
-  all 'rc 0' 'called_re "^pct"'
-# The removed key is ignored -- and says so, because a container it used to
-# send to crun now lands on the default backend.
+  all 'rc 0' 'called_re "^pct create"'
+# A container created under one rule is still found after the rule changes
+# (#372). Every command used to route again, so the rule below sent state and
+# delete to a backend that does not have the container.
+cfg '{"runtime":{"routing":[{"pattern":"*","runtime":"crun"}]}}'
+nx state rt-lxc-1
+check "after create, the rules no longer decide: state still reaches the container" \
+  all 'rc 0' 'called_re "^pct"' '! err_has "not built into this binary"'
+nx delete rt-lxc-1
+check "and so does delete" all 'rc 0' 'called_re "^pct destroy"'
+# The removed key is refused, naming its replacement: a container it used to
+# send to crun would otherwise land on the default backend.
 cfg '{"container_config":{"crun_name_patterns":["kube-ovn-*"]}}'
 nx state kube-ovn-1
-check "crun_name_patterns no longer routes, and the warning names runtime.routing" \
-  all 'rc 1' 'called_re "^pct"' 'err_has "crun_name_patterns is ignored"' 'err_has "runtime.routing"'
+check "crun_name_patterns refuses the file, and the message names runtime.routing" \
+  all 'rc 1' 'not_called_re "^(pct|pvesh)"' 'err_has "crun_name_patterns"' 'err_has "is not read since 0.13.0"' 'err_has "runtime.routing"'
 rm -f "$S/work/config.json"
+
+# The file fails closed (#371). A misspelt runtime routed to LXC, a section
+# of the wrong type panicked, and a key nexcage does not read did nothing --
+# security.seccomp included. Each now refuses the file, naming the key and
+# the file, before anything runs.
+cfg '{"runtime":{"routing":[{"pattern":"*","runtime":"crn"}]}}'
+nx state kube-ovn-1
+check "a misspelt runtime refuses the file instead of routing to LXC" \
+  all 'rc 1' 'err_has "runtime.routing[0].runtime"' 'err_has "which is not a runtime"' 'err_has "config.json"' 'not_called_re "^(pct|pvesh)"'
+cfg '{"runtime": 5}'
+nx list
+check "a section of the wrong type is refused, not a panic" \
+  all 'rc 1' "err_has \"'runtime' must be an object\"" '! err_has "panic"'
+cfg '{"network":{"bridge":"vmbr0"},"routnig":[]}'
+nx list
+check "a misspelt key refuses the file, naming it" \
+  all 'rc 1' "err_has \"'routnig' is not a key nexcage reads\"" 'not_called_re "^(pct|pvesh)"'
+cfg '{"security":{"seccomp":true}}'
+nx list
+check "a key that was parsed and never used is refused too" \
+  all 'rc 1' "err_has \"'security' is not a key nexcage reads\""
+rm -f "$S/work/config.json"
+
+# What the project ships, and what INSTALL.md tells an administrator to
+# install, still loads.
+for f in packaging/config/config.json packaging/config/config.oci.example.json config.json.example; do
+  nx --config "$REPO/$f" version
+  check "$f loads" all 'rc 0' '! err_has "invalid configuration"'
+done
 
 # No runc backend since 0.13.0. A rule that still names it describes an OCI
 # container, so it goes to crun -- and is said, since the file should change.
 cfg '{"runtime":{"routing":[{"pattern":"*","runtime":"runc"}]}}'
-nx state from-tpl
+nx create --name runc-rule-1 "$TPL"
 check "a routing rule naming runc goes to crun, with a warning that says so" \
   all 'rc 1' 'err_has "not built into this binary"' 'err_has "runc is not a backend"' 'not_called_re "^pct"'
 rm -f "$S/work/config.json"
@@ -538,6 +584,43 @@ check "--runtime vm is refused, saying the backend was removed and what runs ins
   all 'rc 2' 'err_has "removed in 0.14.0"' 'err_has "use --runtime lxc or crun"' 'not_called_re "^pct"'
 nx --runtime qemu state from-tpl
 check "--runtime qemu likewise" all 'rc 2' 'err_has "removed in 0.14.0"'
+
+# Isolation profiles (ADR-005). What a profile does to a container is checked
+# against the kernel in tests/crun/profile.sh; here, how one is named and
+# what happens when the name is wrong. An engine names one by the program
+# name, so the checks run nexcage through a symlink, as BinaryName would.
+cfg '{"profiles":{"hardened":{"runtime":"crun","crun":{"limits":{"pids":50}}}}}'
+for p in hardened nope ""; do ln -sfn "$NEXCAGE" "$S/nexcage@$p"; done
+NEXCAGE=$S/nexcage@hardened nx create --name prof-1 "$TPL"
+check "nexcage@hardened creates on the profile's backend, ahead of routing" \
+  all 'rc 1' 'err_has "not built into this binary"' 'not_called_re "^pct"'
+nx --profile hardened create --name prof-1 "$TPL"
+check "--profile names it the same way" \
+  all 'rc 1' 'err_has "not built into this binary"' 'not_called_re "^pct"'
+NEXCAGE=$S/nexcage@hardened nx state from-tpl
+check "only create reads the profile: state under nexcage@hardened reaches an LXC container" \
+  all 'rc 0' 'called_re "^pct"'
+NEXCAGE=$S/nexcage@nope nx create --name prof-2 "$TPL"
+check "a profile the file does not define -> exit 2, naming the ones it does, nothing created" \
+  all 'rc 2' "err_has \"profile 'nope' is not defined\"" 'err_has "hardened"' 'not_called_re "^(pct|pvesh)"'
+NEXCAGE=$S/nexcage@ nx create --name prof-3 "$TPL"
+check "nexcage@ with no profile after it -> exit 2" all 'rc 2' "err_has \"no profile after it\"" 'not_called_re "^(pct|pvesh)"'
+NEXCAGE=$S/nexcage@hardened nx --profile nope create --name prof-4 "$TPL"
+check "--profile and the program name disagreeing -> exit 2" all 'rc 2' 'err_has "name different profiles"' 'not_called_re "^(pct|pvesh)"'
+nx --profile hardened --runtime lxc create --name prof-5 "$TPL"
+check "--runtime that disagrees with the profile -> exit 2, not a quiet override" all 'rc 2' 'not_called_re "^(pct|pvesh)"'
+nx --profile hardened run --name prof-6 "$TPL"
+check "run refuses a profile instead of running without it" \
+  all 'rc 2' 'err_has "run takes no profile"' 'not_called_re "^(pct|pvesh)"'
+cfg '{"profiles":{"lxc-hardened":{"runtime":"lxc"}}}'
+nx list
+check "a profile on the LXC backend refuses the file: not there yet" \
+  all 'rc 1' 'err_has "profiles.lxc-hardened.runtime"' 'err_has "#316"'
+cfg '{"profiles":{"x":{"runtime":"crun","crun":{"capabilities":{"drop":["NET_RAW"]}}}}}'
+nx list
+check "a capability not spelt as the spec spells it refuses the file" \
+  all 'rc 1' 'err_has "profiles.x.crun.capabilities.drop"' 'err_has "such as \"CAP_NET_RAW\""'
+rm -f "$S/work/config.json" "$S"/nexcage@*
 
 nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup list
 check "the options containerd sends are accepted, not read as a command" \

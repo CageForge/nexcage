@@ -95,22 +95,59 @@ pub const BackendRouter = struct {
         self.allocator.free(sandbox_config.name);
     }
 
-    /// `runtime` is an explicit --runtime. Without one, the routing rules in
-    /// the config file (which support regex patterns) pick the backend.
+    /// `runtime` is an explicit --runtime. Without one, a new container goes
+    /// where the routing rules in the config file send it, and any other
+    /// command goes where the container is (backendOf).
     pub fn routeAndExecute(self: *Self, operation: Operation, container_id: []const u8, runtime: ?types.RuntimeType, config: ?Config) !void {
         var config_loader = config_module.ConfigLoader.init(self.allocator);
         var cfg = try config_loader.loadDefault();
         defer cfg.deinit();
 
-        const runtime_type = runtime orelse cfg.getRoutedRuntime(container_id);
+        // A profile decides the backend of a new container, ahead of routing
+        // (ADR-005); it is resolved here, against the file in use.
+        const profile: ?*const core.profile.Profile = switch (operation) {
+            .create => |c| if (c.profile) |name| try self.findProfile(&cfg, name, runtime) else null,
+            else => null,
+        };
+        const runtime_type = switch (operation) {
+            .create, .run => if (profile) |p| p.runtime else runtime orelse cfg.getRoutedRuntime(container_id),
+            else => try backendOf(container_id, runtime, self.logger),
+        };
         if (self.logger) |log| {
             log.debug("Routing container '{s}' to runtime: {s}", .{ container_id, @tagName(runtime_type) }) catch {};
         }
 
         switch (runtime_type) {
             .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
-            .crun => try self.executeCrun(operation, container_id, config),
+            .crun => try self.executeCrun(operation, container_id, config, profile),
         }
+    }
+
+    /// The profile `name` names in the file in use. Named but not defined is
+    /// an error, never a fallback to weaker isolation, and so is a --runtime
+    /// that disagrees with it.
+    fn findProfile(self: *Self, cfg: *const config_module.Config, name: []const u8, runtime: ?types.RuntimeType) types.Error!*const core.profile.Profile {
+        const p = cfg.findProfile(name) orelse {
+            if (self.logger) |log| {
+                var buf: [256]u8 = undefined;
+                var w = std.Io.Writer.fixed(&buf);
+                for (cfg.profiles, 0..) |defined, i| w.print("{s}{s}", .{ if (i == 0) "" else ", ", defined.name }) catch break;
+                if (cfg.profiles.len == 0) {
+                    log.err("profile '{s}' is not defined: the configuration file has no profiles", .{name}) catch {};
+                } else {
+                    log.err("profile '{s}' is not defined; the configuration file has: {s}", .{ name, w.buffered() }) catch {};
+                }
+            }
+            return types.Error.InvalidInput;
+        };
+        if (runtime) |rt| {
+            const same = (rt == .crun) == (p.runtime == .crun);
+            if (!same) {
+                if (self.logger) |log| log.err("--runtime {s} disagrees with profile '{s}', which is on {s}", .{ @tagName(rt), name, @tagName(p.runtime) }) catch {};
+                return types.Error.InvalidInput;
+            }
+        }
+        return p;
     }
 
     fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config, cfg: *const config_module.Config) !void {
@@ -244,7 +281,7 @@ pub const BackendRouter = struct {
         }
     }
 
-    fn executeCrun(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
+    fn executeCrun(self: *Self, operation: Operation, container_id: []const u8, config: ?Config, profile: ?*const core.profile.Profile) !void {
         // Before the "is it built" check, because --node is wrong for this
         // backend either way: a node is a Proxmox cluster's notion, and libcrun
         // makes the container in the kernel this process runs on. Answering
@@ -291,6 +328,7 @@ pub const BackendRouter = struct {
 
         switch (operation) {
             .create => |create_cfg| {
+                crun_backend.profile = profile;
                 crun_backend.console_socket = create_cfg.console_socket;
                 crun_backend.pid_file = create_cfg.pid_file;
                 crun_backend.systemd_cgroup = create_cfg.systemd_cgroup;
@@ -340,6 +378,36 @@ pub const BackendRouter = struct {
         return types.Error.UnsupportedOperation;
     }
 };
+
+/// The backend an existing container is on (#372, ADR-005 decision 3). The
+/// container decides, not the configuration: routing is read only when a
+/// container is created, so a rule changed since then cannot send `kill` or
+/// `delete` to the other backend. libcrun keeps a directory per container
+/// under its state root, which costs a stat to look for; anything not there
+/// is the Proxmox backend's to find, or to report missing. An explicit
+/// --runtime naming the other backend for a container libcrun has is
+/// refused rather than obeyed.
+pub fn backendOf(container_id: []const u8, explicit: ?types.RuntimeType, logger: ?*core.LogContext) types.Error!types.RuntimeType {
+    const on_crun = backends.isCrunEnabled() and hasCrunState(container_id);
+    if (explicit) |rt| {
+        if (on_crun and rt != .crun) {
+            if (logger) |log| log.err("'{s}' is a container on the crun backend (its state is in {s}); --runtime {s} does not reach it", .{ container_id, core.state_root.crun(), @tagName(rt) }) catch {};
+            return types.Error.InvalidInput;
+        }
+        return rt;
+    }
+    return if (on_crun) .crun else .proxmox_lxc;
+}
+
+fn hasCrunState(container_id: []const u8) bool {
+    // An id is one path component; anything else is not libcrun's.
+    if (container_id.len == 0 or std.mem.indexOfScalar(u8, container_id, '/') != null) return false;
+    if (std.mem.eql(u8, container_id, ".") or std.mem.eql(u8, container_id, "..")) return false;
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path = std.fmt.bufPrint(&buf, "{s}/{s}", .{ core.state_root.crun(), container_id }) catch return false;
+    std.fs.cwd().access(path, .{}) catch return false;
+    return true;
+}
 
 pub const Operation = union(enum) {
     create: CreateConfig,
@@ -398,6 +466,8 @@ pub const CreateConfig = struct {
     storage: ?[]const u8 = null,
     /// What pct create is usually given (#308). Proxmox LXC only.
     pve: types.ProxmoxCreateOptions = .{},
+    /// The isolation profile's name (ADR-005), resolved against the config.
+    profile: ?[]const u8 = null,
 };
 
 pub const RunConfig = struct {

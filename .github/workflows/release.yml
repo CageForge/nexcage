@@ -113,13 +113,13 @@ jobs:
           EOF
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ steps.get_version.outputs.version }}-amd64
           path: dist/nexcage-${{ steps.get_version.outputs.version }}-amd64
 
       - name: Upload SBOMs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom
           path: |
@@ -150,7 +150,7 @@ jobs:
           EOF
 
       - name: Upload provenance
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ steps.get_version.outputs.version }}-amd64.provenance
           path: dist/provenance.json
@@ -206,7 +206,7 @@ jobs:
             -c 'ldd /usr/local/bin/nexcage' || true
 
       - name: Upload the crun binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ needs.build.outputs.version }}-amd64-crun
           path: dist/nexcage-${{ needs.build.outputs.version }}-amd64-crun
@@ -245,7 +245,7 @@ jobs:
           dpkg -L nexcage | grep -qx '/usr/share/bash-completion/completions/nexcage'
 
       - name: Upload .deb
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ needs.build.outputs.version }}-amd64.deb
           path: dist/*.deb
@@ -285,9 +285,15 @@ jobs:
             echo "::error::$NOTES is missing"
             exit 1
           fi
+          # The notes become the release page, where a link relative to
+          # docs/releases/ points nowhere.
+          if grep -nE '\]\((\.\./|\./)?[A-Za-z0-9_./-]+\.md(#[^)]*)?\)' "$NOTES"; then
+            echo "::error::$NOTES links a file by a relative path; link it on github.com instead"
+            exit 1
+          fi
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.build.outputs.version }}
           files: release/*

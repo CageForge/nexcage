@@ -72,7 +72,7 @@ jobs:
           ignore-unfixed: true
       - name: Upload Trivy SARIF
         if: false  # Disabled: Advanced Security not enabled in repo
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
         continue-on-error: true
@@ -93,7 +93,7 @@ jobs:
           gitleaks detect --no-git --redact --report-format sarif --report-path gitleaks.sarif || true
       - name: Upload Gitleaks SARIF
         if: false  # Disabled: Advanced Security not enabled in repo
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: gitleaks.sarif
         continue-on-error: true

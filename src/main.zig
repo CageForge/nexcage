@@ -23,7 +23,13 @@ pub const AppContext = struct {
     /// is the "logger allocator" segfault the CLI worked around by not logging.
     pub fn init(self: *AppContext, allocator: std.mem.Allocator, args: []const []const u8) !void {
         var config_loader = core.ConfigLoader.init(allocator);
-        var config = try config_loader.loadDefault();
+        var config = config_loader.loadDefault() catch |err| {
+            if (config_loader.problem()) |why| {
+                printError("invalid configuration file {s}: {s}", .{ core.config.activePath() orelse "", why });
+                failure_reported = true;
+            }
+            return err;
+        };
         errdefer config.deinit();
 
         // Not a warning, as for runc: no backend is left that runs what such
@@ -77,11 +83,6 @@ pub const AppContext = struct {
         runtime_logger.format = logging_cfg.log_format;
         if (log_sink.handle != std.fs.File.stderr().handle) runtime_logger.echo = std.fs.File.stderr();
 
-        // A config that still routes with the removed key would otherwise
-        // send those containers to the default backend without a word.
-        if (config.legacy_crun_name_patterns) {
-            runtime_logger.warn("container_config.crun_name_patterns is ignored since 0.13.0; put each glob under runtime.routing as {{\"pattern\": \"<glob>\", \"runtime\": \"crun\"}} -- it is the same matcher", .{}) catch {};
-        }
         if (config.legacy_runc_runtime) {
             runtime_logger.warn("runc is not a backend since 0.13.0; a rule naming it routes to crun, the OCI backend. Change the rule to say crun", .{}) catch {};
         }
@@ -225,6 +226,10 @@ fn run() !void {
             i += 2; // Skip --runtime and its value; parseRuntimeOptions reads it
             continue;
         }
+        if (std.mem.eql(u8, args[i], "--profile") and i + 1 < args.len) {
+            i += 2; // Skip --profile and its value, read below
+            continue;
+        }
         // What a container engine puts before the command. Without these,
         // `--log` was taken for the command name and containerd got
         // "unknown command '--log'" on its very first call.
@@ -275,6 +280,24 @@ fn run() !void {
                 return error.InvalidInput;
             };
         }
+    }
+
+    // An isolation profile (ADR-005): --profile, before or after the command,
+    // or the program name, nexcage@<profile>, which is how a container
+    // engine's runtime handler names one. Only create reads it.
+    if (options.profile == null) options.profile = try flagValueFromArgs(args, "--profile", "profile name");
+    if (core.profile.fromProgramName(args[0])) |named| {
+        if (named.len == 0) {
+            printError("the program name '{s}' ends in '@' with no profile after it", .{args[0]});
+            failure_reported = true;
+            return error.InvalidInput;
+        }
+        if (options.profile) |flag| if (!std.mem.eql(u8, flag, named)) {
+            printError("--profile {s} and the program name '{s}' name different profiles", .{ flag, args[0] });
+            failure_reported = true;
+            return error.InvalidInput;
+        };
+        options.profile = named;
     }
 
     // Check if help was requested
@@ -457,6 +480,9 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
                 failure_reported = true;
                 return error.InvalidInput;
             };
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--profile") and i + 1 < args.len) {
+            options.profile = args[i + 1];
             i += 2;
         } else if (std.mem.eql(u8, arg, "--systemd-cgroup")) {
             // cgroup management is libcrun's; accepted so an engine that sends
@@ -679,6 +705,8 @@ fn splitEqualsFlags(allocator: std.mem.Allocator, args: []const []const u8) ![][
 fn flagValueFromArgs(args: []const []const u8, flag: []const u8, noun: []const u8) !?[]const u8 {
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
+        // After a bare --, the words are the command exec runs, not nexcage's.
+        if (std.mem.eql(u8, args[i], "--")) break;
         if (!std.mem.eql(u8, args[i], flag)) continue;
         if (i + 1 >= args.len) {
             printError("{s} needs a {s}", .{ flag, noun });

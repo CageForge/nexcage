@@ -25,3 +25,9 @@ pub fn isDefault() bool {
     const std = @import("std");
     return std.mem.eql(u8, current, default_root);
 }
+
+/// Where libcrun keeps a container's state: --root when given, else crun's
+/// own default rather than nexcage's, because the state there is libcrun's.
+pub fn crun() []const u8 {
+    return if (isDefault()) "/run/crun" else current;
+}

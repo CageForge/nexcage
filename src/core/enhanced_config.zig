@@ -178,7 +178,6 @@ test "enhanced configuration loader basic operations" {
     // Test loading basic configuration without plugins
     const test_config =
         \\{
-        \\  "runtime_type": "lxc",
         \\  "log_level": "info"
         \\}
     ;

@@ -110,6 +110,13 @@ pub const Libcrun = struct {
         err: *?*Error,
     ) ?*Container;
 
+    /// Load container from a spec held in memory. libcrun keeps the text and
+    /// writes it to the state directory as the container's config.json.
+    pub extern fn libcrun_container_load_from_memory(
+        json: [*c]const u8,
+        err: *?*Error,
+    ) ?*Container;
+
     /// Free container
     pub extern fn libcrun_container_free(container: *Container) void;
 

@@ -5,6 +5,7 @@ const validation = @import("validation.zig");
 const types = core.types;
 const config_module = core.config;
 const base_command = @import("base_command.zig");
+const router = @import("router.zig");
 
 /// `ps`: the host PIDs of the processes in a container.
 ///
@@ -58,17 +59,9 @@ pub const PsCommand = struct {
             return types.Error.InvalidInput;
         }
 
-        // --runtime wins; otherwise the routing rules, with the container's own
-        // name as the key, the way every other command resolves it.
-        var runtime_type: types.RuntimeType = .proxmox_lxc;
-        if (options.runtime_type) |rt| {
-            runtime_type = rt;
-        } else {
-            var config_loader = config_module.ConfigLoader.init(allocator);
-            var cfg = try config_loader.loadDefault();
-            defer cfg.deinit();
-            runtime_type = cfg.getRoutedRuntime(container_id);
-        }
+        // The backend that has the container, the way every other command
+        // after create resolves it
+        const runtime_type = try router.backendOf(container_id, options.runtime_type, self.base.logger);
 
         if (runtime_type != .crun) {
             // `pct` has no equivalent, and the two questions are not the same

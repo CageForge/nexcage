@@ -153,6 +153,11 @@ that exists. A file that does not parse is an error; a file declaring
 `ociVersion` is skipped in that search, and refused when named with
 `--config`, because that is an OCI runtime spec and not a configuration.
 
+The table below is every key there is. **Since 0.17.0 anything else refuses the
+file**: a key nexcage does not read, a value of the wrong type, a runtime or
+log level it does not know. The message names the file and the key, and
+nothing runs.
+
 ```json
 {
   "network": { "bridge": "vmbr0" },
@@ -172,7 +177,8 @@ that exists. A file that does not parse is an error; a file declaring
 | `proxmox.unprivileged` | `true` | Create unprivileged containers, as the Proxmox VE web UI does. Images from a registry always run unprivileged |
 | `proxmox.ostype` | detected by pct | `--ostype` for new containers |
 | `runtime.routing` | Proxmox LXC | Which backend a container goes to. A pattern is a regular expression only when it starts with `^` or ends with `$`, so `".*"` matches nothing — use `"*"` |
-| `runtime.log_level` (or top-level `log_level`, which wins) | `info` | `debug`, `info`, `warn` or `error`; any other value means `info`. `debug` also turns on the lines `--debug` writes to stderr. `NEXCAGE_LOG_LEVEL`, then `--log-level`, override it, `info` included |
+| `profiles` | none | Isolation profiles `create` applies on the crun backend, named by `nexcage@<profile>` or `--profile`; see [CLI_REFERENCE.md](docs/CLI_REFERENCE.md#isolation-profiles) |
+| `runtime.log_level` (or top-level `log_level`, which wins) | `info` | `debug`, `info`, `warn` or `error`; since 0.17.0 any other value refuses the file (it used to mean `info`). `debug` also turns on the lines `--debug` writes to stderr. `NEXCAGE_LOG_LEVEL`, then `--log-level`, override it, `info` included |
 | `runtime.log_path` (or top-level `log_file`, which wins) | unset | The same as `--log-file`: the startup line, each command's start line and, when the command succeeds, its completion lines go to this file as well as to stderr. The command's own log lines do not, and this is not the runtime log a container engine passes with `--log` |
 
 ## Documentation

@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Isolation profiles on the crun backend** (#315, ADR-005). A profile under `profiles` in the configuration file can:
+  - require a user namespace or a seccomp filter;
+  - drop capabilities;
+  - lower memory and pids limits.
+
+  `create` applies the profile to the bundle before libcrun sees it. A profile only takes away: it never adds a capability or raises a limit.
+
+  `exec --process` into a container made under a profile gets no capability the container lacks. containerd builds `kubectl exec`'s process from its own copy of the spec, from before the profile narrowed it.
+
+  An engine names a profile by the program name `nexcage@<profile>`: a symlink to the binary, used as containerd's `BinaryName` or CRI-O's `runtime_path`. A person uses `--profile`.
+
+  These exit 2: a profile that is not defined, a bundle the profile refuses, and `run` given a profile.
+
+  `state` reports the profile as the annotation `io.cageforge.nexcage.profile`, and a bundle that carries that annotation itself is refused.
+
+  In CI, `tests/crun/profile.sh` reads the result from the container's `/proc/<pid>/status` and cgroup, and from an exec'd process. Nothing has checked a profile through an engine yet: two pods under two profiles on one node is #315's next step.
+
+### Changed
+- **The configuration file fails closed** (#371). **A file that loaded until now may stop loading**: nexcage refuses it, naming the file and the key, and runs nothing. That happens on:
+  - a key it does not read;
+  - a value of the wrong type;
+  - a runtime or log level it does not know.
+
+  Keys nexcage used to parse and never used are refused like misspelt ones. Those are `runtime_type`, `default_runtime`, `runtime.root_path`, `data_dir`, `cache_dir`, `temp_dir`, `network.ip`, `network.gateway`, `security`, `resources`, `container_config.default_container_type`, and `pct_path`, `node` and `legacy_api` under `proxmox`. `"security": {"seccomp": true}` turned nothing on. `container_config.crun_name_patterns`, ignored with a warning since 0.13.0, is refused with the same message. Remove what the message names; the keys that remain are the README's table. `"proxmox-lxc"`, as `--runtime` spells it, is read as `lxc`.
+
+### Fixed
+- **`--config`, `--root` and `--runtime` were read after `--`** (#315). Those words belong to the command `exec` runs, as the splitting of `--flag=value` already treated them. Before this fix, `nexcage exec web-1 -- grep --config x` loaded `x` as nexcage's configuration and failed.
+- **A container's backend followed the configuration file, not the container** (#372). Every command chose its backend from the routing rules again, so a rule changed, added or removed after `create` sent `state`, `kill` or `delete` to the other backend, which answered "no such container" while the container ran on. Routing now decides only for `create` and `run`. Every other command goes to the backend that has the container: the crun backend when libcrun's state directory has it, the Proxmox backend otherwise. `--runtime lxc` for a container on the crun backend exits 2 instead of being obeyed.
+- **A misspelt runtime in a routing rule sent containers to LXC** (#371). `"runtime": "crn"` routed every container the rule matched to the Proxmox LXC backend, with no warning. It now refuses the file.
+- **A configuration section of the wrong type crashed nexcage** (#371). `{"runtime": 5}` panicked with "access of union field 'object'" on every command, `--help` included. It is now an error naming the key.
+
 ## [0.16.0] - 2026-10-08
 
 The OCI runtime is measured by the suites that define it: runtime-spec

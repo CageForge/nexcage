@@ -5,6 +5,7 @@ const validation = @import("validation.zig");
 const types = core.types;
 const config_module = core.config;
 const base_command = @import("base_command.zig");
+const router = @import("router.zig");
 
 /// OCI-compatible state command implementation
 /// Prints container state in an OCI-like JSON object
@@ -40,16 +41,8 @@ pub const StateCommand = struct {
 
         const container_id = try validation.ValidationUtils.requireContainerId(options, self.base.logger, "state");
 
-        // --runtime wins; otherwise the routing rules in the config file
-        var runtime_type: types.RuntimeType = .proxmox_lxc;
-        if (options.runtime_type) |rt| {
-            runtime_type = rt;
-        } else {
-            var config_loader = config_module.ConfigLoader.init(allocator);
-            var cfg = try config_loader.loadDefault();
-            defer cfg.deinit();
-            runtime_type = cfg.getRoutedRuntime(container_id);
-        }
+        // The backend that has the container, not the one routing would pick
+        const runtime_type = try router.backendOf(container_id, options.runtime_type, self.base.logger);
 
         // crun prints its own state: libcrun writes the JSON the spec defines,
         // so what comes out is what `crun state` would give. Composing a

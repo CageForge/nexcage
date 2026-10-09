@@ -26,6 +26,9 @@ pub const CrunDriver = struct {
     /// --systemd-cgroup: libcrun's context has the field; containerd sends the
     /// flag when it is configured with SystemdCgroup.
     systemd_cgroup: bool = false,
+    /// The isolation profile create applies (ADR-005): the bundle's spec is
+    /// narrowed and marked with its name before libcrun sees it.
+    profile: ?*const core.profile.Profile = null,
     /// `exec --detach`: libcrun returns once the process is started instead of
     /// waiting for it. An engine sends it together with --console-socket.
     detach: bool = false,
@@ -47,9 +50,7 @@ pub const CrunDriver = struct {
         return Self{
             .allocator = allocator,
             .logger = logger,
-            // An explicit --root wins; without one this stays crun's default
-            // rather than nexcage's, because the state here is libcrun's.
-            .state_root = if (core.state_root.isDefault()) "/run/crun" else core.state_root.get(),
+            .state_root = core.state_root.crun(),
         };
     }
 
@@ -197,13 +198,13 @@ pub const CrunDriver = struct {
         const config_path = try validation.PathSecurity.secureJoin(self.allocator, bundle_path, "config.json");
         defer self.allocator.free(config_path);
 
-        const config_file = std.fs.cwd().openFile(config_path, .{}) catch |err| {
+        const spec = std.fs.cwd().readFileAlloc(self.allocator, config_path, 16 * 1024 * 1024) catch |err| {
             if (self.logger) |log| {
                 try log.err("config.json not found for {s}: {}", .{ config.name, err });
             }
             return core.Error.FileNotFound;
         };
-        config_file.close();
+        defer self.allocator.free(spec);
 
         const config_path_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{config_path}, 0);
         defer self.allocator.free(config_path_c);
@@ -211,8 +212,29 @@ pub const CrunDriver = struct {
         // Allocate error structure
         var err_ptr: ?*ffi.Libcrun.Error = null;
 
-        // Load container from config file
-        const container = ffi.Libcrun.libcrun_container_load_from_file(config_path_c.ptr, &err_ptr) orelse {
+        // Without a profile libcrun reads the file. With one, it is given the
+        // spec the profile narrowed, which it keeps as the container's
+        // config.json, so `state` reports the profile from it. Either way a
+        // bundle that claims a profile is refused (ADR-005).
+        var why: core.profile.Refusal = .{};
+        const narrowed = core.profile.prepare(self.allocator, spec, self.profile, &why) catch |err| switch (err) {
+            // The bundle, not the command line: "invalid input", not a
+            // pointer to --help.
+            error.ProfileRefused => {
+                if (self.logger) |log| log.err("{s}", .{why.text()}) catch {};
+                return core.Error.ValidationError;
+            },
+            else => return err,
+        };
+        defer if (narrowed) |n| self.allocator.free(n);
+        const container = if (narrowed) |n| blk: {
+            const narrowed_z = try self.allocator.dupeZ(u8, n);
+            defer self.allocator.free(narrowed_z);
+            break :blk ffi.Libcrun.libcrun_container_load_from_memory(narrowed_z.ptr, &err_ptr) orelse {
+                try self.handleError(&err_ptr, "container_load_from_memory");
+                return;
+            };
+        } else ffi.Libcrun.libcrun_container_load_from_file(config_path_c.ptr, &err_ptr) orelse {
             try self.handleError(&err_ptr, "container_load_from_file");
             return;
         };
@@ -637,7 +659,11 @@ pub const CrunDriver = struct {
             self.allocator.free(path);
         };
 
-        const spec_path = if (process_file) |given| given else blk: {
+        const spec_path = if (process_file) |given| blk: {
+            const bounded = try self.boundProcessFile(container_id, given) orelse break :blk given;
+            written = bounded;
+            break :blk @as([]const u8, bounded);
+        } else blk: {
             if (argv.len == 0) {
                 if (self.logger) |log| {
                     try log.err("exec needs a command, or --process <file> with the process spec", .{});
@@ -669,16 +695,63 @@ pub const CrunDriver = struct {
         core.exit_status.propagated = if (ret > 255) 255 else @intCast(ret);
     }
 
-    /// The OCI process spec for a command given on the command line, written
-    /// where libcrun can read it. The caller owns and removes the path.
-    fn writeProcessSpec(self: *Self, argv: []const []const u8) ![]u8 {
+    /// An engine's process file, cut to the bounding set of a container made
+    /// under a profile (core.profile.boundExec) and written where libcrun can
+    /// read it; null to hand the file over as it is. The caller owns and
+    /// removes the path.
+    fn boundProcessFile(self: *Self, container_id: []const u8, given: []const u8) !?[]u8 {
+        const stored_path = try std.fs.path.join(self.allocator, &.{ self.state_root, container_id, "config.json" });
+        defer self.allocator.free(stored_path);
+        // Either file missing is libcrun's to report, as it does today.
+        const stored = std.fs.cwd().readFileAlloc(self.allocator, stored_path, 16 * 1024 * 1024) catch |err| switch (err) {
+            error.FileNotFound => return null,
+            else => return err,
+        };
+        defer self.allocator.free(stored);
+        const process = std.fs.cwd().readFileAlloc(self.allocator, given, 16 * 1024 * 1024) catch |err| switch (err) {
+            error.FileNotFound => return null,
+            else => return err,
+        };
+        defer self.allocator.free(process);
+
+        var why: core.profile.Refusal = .{};
+        const bounded = core.profile.boundExec(self.allocator, process, stored, &why) catch |err| switch (err) {
+            error.ProfileRefused => {
+                if (self.logger) |log| log.err("{s}", .{why.text()}) catch {};
+                return core.Error.ValidationError;
+            },
+            else => return err,
+        } orelse return null;
+        defer self.allocator.free(bounded);
+        return try self.writeTemp(bounded);
+    }
+
+    /// `bytes` in a file of this process's own, where libcrun can read it.
+    /// The name is predictable, so the file is created, never opened: a
+    /// symlink left there is removed rather than followed. The caller owns
+    /// and removes the path.
+    fn writeTemp(self: *Self, bytes: []const u8) ![]u8 {
         const path = try std.fmt.allocPrint(
             self.allocator,
             "/tmp/nexcage-exec-{d}.json",
             .{std.os.linux.getpid()},
         );
         errdefer self.allocator.free(path);
+        const file = std.fs.cwd().createFile(path, .{ .exclusive = true, .mode = 0o600 }) catch |err| switch (err) {
+            error.PathAlreadyExists => blk: {
+                try std.fs.cwd().deleteFile(path);
+                break :blk try std.fs.cwd().createFile(path, .{ .exclusive = true, .mode = 0o600 });
+            },
+            else => return err,
+        };
+        defer file.close();
+        try file.writeAll(bytes);
+        return path;
+    }
 
+    /// The OCI process spec for a command given on the command line, written
+    /// where libcrun can read it. The caller owns and removes the path.
+    fn writeProcessSpec(self: *Self, argv: []const []const u8) ![]u8 {
         var out = std.ArrayListUnmanaged(u8){};
         defer out.deinit(self.allocator);
         const w = out.writer(self.allocator);
@@ -725,11 +798,7 @@ pub const CrunDriver = struct {
         try core.json.writeString(w, self.exec_cwd orelse "/");
         try w.writeAll("}\n");
 
-        const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
-        defer file.close();
-        try file.writeAll(out.items);
-
-        return path;
+        return self.writeTemp(out.items);
     }
 
     /// Generate basic OCI config.json

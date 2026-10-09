@@ -1,5 +1,6 @@
 #!/bin/sh
-# `update`'s value flags reach the container's cgroup on the crun backend (#359).
+# `update`'s value flags reach the container's cgroup on the crun backend (#359),
+# and a command after create finds that backend without --runtime (#372).
 #
 # The flags are nexcage's own code: src/main.zig maps each one to crun's
 # section and field, src/cli/update.zig turns a size into bytes, and
@@ -107,5 +108,16 @@ if nx update --kernel-memory 64M "$ID" >/dev/null 2>/tmp/update.err; then
     fail "--kernel-memory was accepted on cgroup v2, where there is nothing to set"
 fi
 echo "ok: --kernel-memory is refused on cgroup v2: $(tail -1 /tmp/update.err)"
+
+# After create the container decides its backend, not the configuration
+# (#372). This image routes nothing to crun, so without --runtime these went
+# to the Proxmox backend, which does not have the container.
+"$NEXCAGE" state "$ID" >/dev/null 2>/tmp/state.err || fail "state without --runtime missed the crun container: $(tail -1 /tmp/state.err)"
+echo "ok: state without --runtime finds the crun container"
+if "$NEXCAGE" --runtime lxc state "$ID" >/dev/null 2>/tmp/state.err; then
+    fail "--runtime lxc was obeyed for a container on the crun backend"
+fi
+grep -q "is a container on the crun backend" /tmp/state.err || fail "--runtime lxc was refused without saying why: $(tail -1 /tmp/state.err)"
+echo "ok: --runtime lxc on a crun container is refused"
 
 echo "PASS: update's flags reach the container's cgroup"
