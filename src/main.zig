@@ -23,7 +23,13 @@ pub const AppContext = struct {
     /// is the "logger allocator" segfault the CLI worked around by not logging.
     pub fn init(self: *AppContext, allocator: std.mem.Allocator, args: []const []const u8) !void {
         var config_loader = core.ConfigLoader.init(allocator);
-        var config = try config_loader.loadDefault();
+        var config = config_loader.loadDefault() catch |err| {
+            if (config_loader.problem()) |why| {
+                printError("invalid configuration file {s}: {s}", .{ core.config.activePath() orelse "", why });
+                failure_reported = true;
+            }
+            return err;
+        };
         errdefer config.deinit();
 
         // Not a warning, as for runc: no backend is left that runs what such
@@ -77,11 +83,6 @@ pub const AppContext = struct {
         runtime_logger.format = logging_cfg.log_format;
         if (log_sink.handle != std.fs.File.stderr().handle) runtime_logger.echo = std.fs.File.stderr();
 
-        // A config that still routes with the removed key would otherwise
-        // send those containers to the default backend without a word.
-        if (config.legacy_crun_name_patterns) {
-            runtime_logger.warn("container_config.crun_name_patterns is ignored since 0.13.0; put each glob under runtime.routing as {{\"pattern\": \"<glob>\", \"runtime\": \"crun\"}} -- it is the same matcher", .{}) catch {};
-        }
         if (config.legacy_runc_runtime) {
             runtime_logger.warn("runc is not a backend since 0.13.0; a rule naming it routes to crun, the OCI backend. Change the rule to say crun", .{}) catch {};
         }

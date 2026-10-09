@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The configuration file fails closed** (#371). **A file that loaded until now may stop loading**: nexcage refuses it, naming the file and the key, and runs nothing. That happens on:
+  - a key it does not read;
+  - a value of the wrong type;
+  - a runtime or log level it does not know.
+
+  Keys nexcage used to parse and never used are refused like misspelt ones. Those are `runtime_type`, `default_runtime`, `runtime.root_path`, `data_dir`, `cache_dir`, `temp_dir`, `network.ip`, `network.gateway`, `security`, `resources`, `container_config.default_container_type`, and `pct_path`, `node` and `legacy_api` under `proxmox`. `"security": {"seccomp": true}` turned nothing on. `container_config.crun_name_patterns`, ignored with a warning since 0.13.0, is refused with the same message. Remove what the message names; the keys that remain are the README's table. `"proxmox-lxc"`, as `--runtime` spells it, is read as `lxc`.
+
+### Fixed
+- **A misspelt runtime in a routing rule sent containers to LXC** (#371). `"runtime": "crn"` routed every container the rule matched to the Proxmox LXC backend, with no warning. It now refuses the file.
+- **A configuration section of the wrong type crashed nexcage** (#371). `{"runtime": 5}` panicked with "access of union field 'object'" on every command, `--help` included. It is now an error naming the key.
+
 ## [0.16.0] - 2026-10-08
 
 The OCI runtime is measured by the suites that define it: runtime-spec

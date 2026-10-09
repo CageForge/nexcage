@@ -502,13 +502,42 @@ check "a glob under runtime.routing sends a matching name to crun" \
 nx state from-tpl
 check "and a name it does not match goes to Proxmox LXC" \
   all 'rc 0' 'called_re "^pct"'
-# The removed key is ignored -- and says so, because a container it used to
-# send to crun now lands on the default backend.
+# The removed key is refused, naming its replacement: a container it used to
+# send to crun would otherwise land on the default backend.
 cfg '{"container_config":{"crun_name_patterns":["kube-ovn-*"]}}'
 nx state kube-ovn-1
-check "crun_name_patterns no longer routes, and the warning names runtime.routing" \
-  all 'rc 1' 'called_re "^pct"' 'err_has "crun_name_patterns is ignored"' 'err_has "runtime.routing"'
+check "crun_name_patterns refuses the file, and the message names runtime.routing" \
+  all 'rc 1' 'not_called_re "^(pct|pvesh)"' 'err_has "crun_name_patterns"' 'err_has "is not read since 0.13.0"' 'err_has "runtime.routing"'
 rm -f "$S/work/config.json"
+
+# The file fails closed (#371). A misspelt runtime routed to LXC, a section
+# of the wrong type panicked, and a key nexcage does not read did nothing --
+# security.seccomp included. Each now refuses the file, naming the key and
+# the file, before anything runs.
+cfg '{"runtime":{"routing":[{"pattern":"*","runtime":"crn"}]}}'
+nx state kube-ovn-1
+check "a misspelt runtime refuses the file instead of routing to LXC" \
+  all 'rc 1' 'err_has "runtime.routing[0].runtime"' 'err_has "which is not a runtime"' 'err_has "config.json"' 'not_called_re "^(pct|pvesh)"'
+cfg '{"runtime": 5}'
+nx list
+check "a section of the wrong type is refused, not a panic" \
+  all 'rc 1' "err_has \"'runtime' must be an object\"" '! err_has "panic"'
+cfg '{"network":{"bridge":"vmbr0"},"routnig":[]}'
+nx list
+check "a misspelt key refuses the file, naming it" \
+  all 'rc 1' "err_has \"'routnig' is not a key nexcage reads\"" 'not_called_re "^(pct|pvesh)"'
+cfg '{"security":{"seccomp":true}}'
+nx list
+check "a key that was parsed and never used is refused too" \
+  all 'rc 1' "err_has \"'security' is not a key nexcage reads\""
+rm -f "$S/work/config.json"
+
+# What the project ships, and what INSTALL.md tells an administrator to
+# install, still loads.
+for f in packaging/config/config.json packaging/config/config.oci.example.json config.json.example; do
+  nx --config "$REPO/$f" version
+  check "$f loads" all 'rc 0' '! err_has "invalid configuration"'
+done
 
 # No runc backend since 0.13.0. A rule that still names it describes an OCI
 # container, so it goes to crun -- and is said, since the file should change.
