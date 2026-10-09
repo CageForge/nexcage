@@ -21,7 +21,6 @@ Tests that exercise real code live next to it:
 | `src/core/resources.zig` | `update`'s sizes, a `linux.resources` document, and their conversion to pct's memory, cpulimit and CPU weight |
 | `src/core/signals.zig` | Signal names and numbers `kill` accepts |
 | `src/core/rfc3339.zig` | Timestamps in the JSON log |
-| `src/core/enhanced_config.zig` | Loading a JSON config through `core.config` with the `config_integration` wrapper, which no command uses |
 | `tests/oci/*_simple_test.zig`, `tests/simple_*.zig`, `tests/backends/proxmox-lxc/simple_test.zig` | Self-contained checks that import only `std` |
 
 ## Running against fake Proxmox tools

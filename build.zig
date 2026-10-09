@@ -135,14 +135,6 @@ pub fn build(b: *std.Build) void {
     backends_mod.addImport("build_options", build_options_mod);
     backends_mod.addOptions("feature_options", feature_options);
 
-    // Config integration module
-    const config_integration_mod = b.addModule("config_integration", .{
-        .root_source_file = b.path("src/core/enhanced_config.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-        },
-    });
-
     // CLI module
     const cli_mod = b.addModule("cli", .{
         .root_source_file = b.path("src/cli/mod.zig"),
@@ -150,7 +142,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "core", .module = core_mod },
             .{ .name = "backends", .module = backends_mod },
             .{ .name = "utils", .module = utils_mod },
-            .{ .name = "config_integration", .module = config_integration_mod },
         },
     });
 
