@@ -155,8 +155,9 @@ routing to the OCI backend in the configuration file:
 { "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }
 ```
 
-- `crun` works only in a binary built with `-Denable-backend-crun=true`;
-  otherwise the command fails with exit 1. It has no `run`, and refuses the
+- `crun` works only in a binary built with `-Denable-backend-crun=true`, as
+  every release's binary is since 0.17.0. A plain `zig build` is not, and there
+  the command fails with exit 1. It has no `run`, and refuses the
   snapshot commands, which are Proxmox's (exit 1 for both).
 - The crun backend creates the container from the bundle given with
   `--bundle`, and keeps its state under `--root` when one is given, or
@@ -205,7 +206,7 @@ containerd runs a runtime's `BinaryName`, and conmon a CRI-O handler's
 symlink is enough:
 
 ```bash
-ln -s /usr/local/bin/nexcage /usr/local/bin/nexcage@hardened
+ln -s /usr/bin/nexcage /usr/local/bin/nexcage@hardened
 ```
 
 A program name with no `@` names no profile, so the release files'

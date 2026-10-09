@@ -441,9 +441,10 @@ pod that names the class.
 
 `/nexcage-traced` is a small shell wrapper the script writes. It appends each
 call's arguments to `/tmp/nexcage-node-trace.log`, then execs the nexcage
-binary (`$NEXCAGE`, by default `/usr/local/bin/nexcage`); that log is where
-the list of what Kubernetes asks a runtime, below, comes from. Outside the
-test, a plain setup points `BinaryName` straight at `/usr/local/bin/nexcage`.
+binary (`$NEXCAGE`, by default `/usr/bin/nexcage`, where the `.deb` puts it);
+that log is where the list of what Kubernetes asks a runtime, below, comes
+from. Outside the test, a plain setup points `BinaryName` straight at
+`/usr/bin/nexcage`.
 
 ```yaml
 apiVersion: node.k8s.io/v1
@@ -524,9 +525,10 @@ backend. On a node that already had k3s, the containerd template with the
 
 `k8s_e2e.yml` runs the script on the E2E node (#312) on release tags, on
 demand, and on a pull request that changes `tests/k8s/` or the node files
-below. It builds the `-crun` binary from the commit under test, as the release
-does. Its node job never runs a fork's pull request, because the runner user
-there has sudo for everything.
+below, or `scripts/build_deb_local.sh`. It builds the `.deb` from the commit
+under test, as the release does, and installs it on the node with apt (#380),
+then removes it. Its node job never runs a fork's pull request, because the
+runner user there has sudo for everything.
 
 The script installs what a release ships for a node (#313):
 `packaging/config/config.oci.example.json`, and the k3s template and

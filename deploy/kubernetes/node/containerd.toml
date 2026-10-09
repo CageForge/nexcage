@@ -4,4 +4,4 @@
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
   runtime_type = 'io.containerd.runc.v2'
   [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
-    BinaryName = '/usr/local/bin/nexcage'
+    BinaryName = '/usr/bin/nexcage'

@@ -2,8 +2,10 @@ name: Kubernetes pod on nexcage (self-hosted)
 
 # tests/k8s/pod_on_node.sh on the E2E node (#312): k3s with nexcage as a
 # runtime, and a pod with runtimeClassName: nexcage that has to be Ready, give
-# its logs, run an exec and be deleted, all through the -crun binary built
-# from the commit under test. It was run by hand from 0.10.0 on.
+# its logs, run an exec and be deleted, and a pod under each of two isolation
+# profiles. nexcage is the .deb built from the commit under test, as a release
+# builds it (#380), installed on the node with apt. It was run by hand from
+# 0.10.0 on.
 #
 # Not on every push: it installs k3s and removes it again, which takes a few
 # minutes and changes the node the lifecycle E2E shares. It runs on release
@@ -19,6 +21,7 @@ on:
       - 'tests/k8s/**'
       - 'deploy/kubernetes/node/**'
       - 'packaging/config/config.oci.example.json'
+      - 'scripts/build_deb_local.sh'
       - '.github/workflows/k8s_e2e.yml'
   workflow_dispatch:
 
@@ -36,7 +39,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build the -crun binary
+    name: Build the .deb
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -44,24 +47,25 @@ jobs:
         uses: actions/checkout@v4
 
       # As release.yml builds it: the Dockerfile brings the submodules and
-      # libcrun's generated headers, and -Dcpu=baseline keeps it from dying
-      # with SIGILL on a node older than a GitHub runner.
+      # libcrun's generated headers, -Dcpu=baseline keeps the binary from
+      # dying with SIGILL on a node older than a GitHub runner, and the .deb
+      # packs that binary.
       - name: Build
         run: |
           set -eux
           docker build \
             --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" \
             -t nexcage:k8s-e2e .
-          mkdir -p dist
           cid=$(docker create nexcage:k8s-e2e)
-          docker cp "$cid:/usr/local/bin/nexcage" dist/nexcage
+          docker cp "$cid:/usr/local/bin/nexcage" nexcage.bin
           docker rm "$cid"
+          NEXCAGE_BIN=nexcage.bin bash scripts/build_deb_local.sh
 
       - name: Upload
         uses: actions/upload-artifact@v6
         with:
-          name: nexcage-crun-k8s-e2e
-          path: dist/nexcage
+          name: nexcage-deb-k8s-e2e
+          path: dist/nexcage-*-amd64.deb
           retention-days: 3
 
   pod:
@@ -76,17 +80,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download the binary
+      - name: Download the .deb
         uses: actions/download-artifact@v4
         with:
-          name: nexcage-crun-k8s-e2e
+          name: nexcage-deb-k8s-e2e
           path: dist
+
+      # The test installs the package, so a node that has nexcage installed
+      # as a package already is left alone rather than overwritten.
+      - name: The node has no nexcage package of its own
+        id: precheck
+        run: |
+          if dpkg-query -W -f='${Status}' nexcage 2>/dev/null | grep -q 'install ok installed'; then
+            echo "::error::nexcage is installed as a package on this node; the test would replace it"
+            exit 1
+          fi
+
+      - name: Install the .deb
+        id: install
+        run: |
+          set -eu
+          if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
+          $SUDO apt-get install -y ./dist/nexcage-*-amd64.deb
+          nexcage version
 
       # The script needs root: it installs k3s, writes containerd's template
       # and restarts the service. It removes what it installed on the way out.
       - name: tests/k8s/pod_on_node.sh
         run: |
           set -eu
-          chmod +x dist/nexcage
           if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
-          $SUDO env NEXCAGE="$PWD/dist/nexcage" sh tests/k8s/pod_on_node.sh
+          $SUDO env NEXCAGE=/usr/bin/nexcage sh tests/k8s/pod_on_node.sh
+
+      - name: Remove the .deb
+        if: always() && steps.precheck.outcome == 'success' && steps.install.outcome != 'skipped'
+        run: |
+          if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
+          $SUDO dpkg -r nexcage || true

@@ -42,6 +42,20 @@ jobs:
       - name: Run the binary
         run: docker run --rm nexcage:ci version
 
+      # A release packs this binary into the .deb (#380). The .deb is built
+      # and installed on Debian 13 here, on every pull request, so that a
+      # packaging mistake shows before a tag does: the Depends line has to
+      # bring in what the binary links, and the crun backend has to answer.
+      - name: The .deb packs it and installs on Debian 13
+        run: |
+          set -eux
+          cid=$(docker create nexcage:ci)
+          docker cp "$cid:/usr/local/bin/nexcage" nexcage.bin
+          docker rm "$cid"
+          NEXCAGE_BIN=nexcage.bin bash scripts/build_deb_local.sh
+          sh scripts/ci/check_deb.sh "dist/nexcage-$(cat VERSION)-amd64.deb"
+          rm -rf dist nexcage.bin
+
       # The features document is read through a hand-written Zig mirror of two
       # crun structs, and the vendored crun is a fork that moves -- it already
       # carries a field upstream does not. A wrong layout compiles fine and

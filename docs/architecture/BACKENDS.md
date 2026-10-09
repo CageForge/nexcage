@@ -9,7 +9,7 @@ Proxmox LXC.
 | Backend | Build option | Default | State |
 |---|---|---|---|
 | Proxmox LXC | — | always | Supported; exercised by the Proxmox E2E job |
-| crun | `-Denable-backend-crun` | off | Supported for the OCI runtime-spec command line; links vendored libcrun from `deps/crun`. Verified with podman, `ctr`, containerd's CRI, CRI-O and a kubelet; ships as the `-crun` release binary |
+| crun | `-Denable-backend-crun` | off in `zig build`; on in every release binary since 0.17.0 | Supported for the OCI runtime-spec command line; links vendored libcrun from `deps/crun`. Verified with podman, `ctr`, containerd's CRI, CRI-O and a kubelet. A release's one binary and its `.deb` carry it next to Proxmox LXC (#380) |
 
 A command routed to a backend that is compiled out fails with
 `UnsupportedOperation`.

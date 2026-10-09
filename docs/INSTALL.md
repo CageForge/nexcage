@@ -10,16 +10,15 @@ longer promises anything there.
 
 ## From a release
 
-Each GitHub release carries the binary `nexcage-<version>-amd64`, the package
-`nexcage-<version>-amd64.deb`, SBOMs, `provenance.json` and `checksums.txt`.
-**Since 0.11.2** there is a second binary, `nexcage-<version>-amd64-crun`, with
-the OCI runtime backend built in; for 0.11.1 and earlier that build has to be
-made from source.
+Each GitHub release carries one binary, `nexcage-<version>-amd64`, the package
+`nexcage-<version>-amd64.deb` that installs it, SBOMs, `provenance.json` and
+`checksums.txt`.
 
-**Which binary you want.** The plain one manages LXC containers on Proxmox VE
-and is what most uses need. The `-crun` one adds the backend a container engine
-drives: it is the binary to install when containerd, CRI-O or a kubelet is to
-run containers on nexcage. Everything the plain binary does, it does too.
+**Since 0.17.0 the binary has both backends** (#380). It manages LXC
+containers on Proxmox VE, and it is the OCI runtime a container engine drives,
+with the crun backend built in. Releases 0.11.2 to 0.16.0 carried that backend
+in a second binary, `nexcage-<version>-amd64-crun`, and the `.deb` held the
+binary without it. There is no `-crun` asset any more.
 
 ### .deb
 
@@ -31,8 +30,15 @@ sha256sum --ignore-missing -c checksums.txt
 apt install ./nexcage-$VERSION-amd64.deb
 ```
 
-The package installs `/usr/bin/nexcage`, a man page, bash completion and an
-example configuration at `/usr/share/doc/nexcage/examples/config.json`.
+The package installs:
+- `/usr/bin/nexcage`;
+- a man page and bash completion;
+- two example configurations in `/usr/share/doc/nexcage/examples/`:
+  `config.json` for the command line, and `config.oci.example.json` for a
+  container engine.
+
+Its `Depends` brings in the libraries the crun backend links: `libjson-c5`,
+`libseccomp2`, `libcap2` and `libsystemd0`.
 
 ### Binary
 
@@ -41,40 +47,30 @@ VERSION=0.16.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
+apt install libjson-c5 libseccomp2 libcap2 libsystemd0
 install -m 0755 nexcage-$VERSION-amd64 /usr/local/bin/nexcage
 ```
 
-### The binary with the crun backend (since 0.11.2)
+The binary links libcrun's dependencies dynamically. Without one of them it
+does not start at all, with `error while loading shared libraries:
+libjson-c.so.5`. That is why the `apt install` line is there.
 
-```bash
-VERSION=0.16.0
-wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64-crun
-wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
-sha256sum --ignore-missing -c checksums.txt
-install -m 0755 nexcage-$VERSION-amd64-crun /usr/local/bin/nexcage
-```
-
-It links libcrun's dependencies dynamically, and a Proxmox VE host does not
-have all of them:
-
-```bash
-apt install libjson-c5 libseccomp2 libcap2 libsystemd0
-```
-
-Without one of them the binary does not start at all —
-`error while loading shared libraries: libjson-c.so.5`. A Proxmox VE 9 host
-has `libjson-c5` already; releases before 0.13.0 linked `libyajl2` instead,
-which it does not. The plain binary needs none of this.
+### For a container engine
 
 A container engine never passes `--runtime`, so the configuration has to send
-containers to that backend:
+the containers it creates to the crun backend. `config.oci.example.json` does
+that, and defines two isolation profiles:
 
 ```bash
 mkdir -p /etc/nexcage
-cat > /etc/nexcage/config.json <<'JSON'
-{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }
-JSON
+cp /usr/share/doc/nexcage/examples/config.oci.example.json /etc/nexcage/config.json
 ```
+
+If the host already has a configuration for its LXC containers, add the
+example's `runtime.routing` and `profiles` to that file instead of replacing
+it. Routing decides only where `create` and `run` put a new container, so a
+`create` typed by hand then makes a crun container too. Give it
+`--runtime lxc` for an LXC one.
 
 A routing pattern is a regular expression only when it starts with `^` or ends
 with `$`; `".*"` is read as a wildcard and matches nothing. Use `"*"`.
@@ -83,7 +79,7 @@ with `$`; `".*"` is read as a wildcard and matches nothing. Use `"*"`.
 
 A node whose kubelet runs pods on nexcage needs four things:
 
-1. the `-crun` binary as `/usr/local/bin/nexcage`, with its libraries (above);
+1. nexcage, from the `.deb` (above), at `/usr/bin/nexcage`;
 2. the routing configuration;
 3. nexcage as a runtime of the node's container engine;
 4. a `RuntimeClass` in the cluster, which a pod names.
@@ -99,18 +95,13 @@ VERSION=0.16.0
 SRC=https://raw.githubusercontent.com/CageForge/nexcage/v$VERSION
 ```
 
-**Routing.** A container engine never passes `--runtime`, so every container
-nexcage is asked about goes to crun:
+**Routing.** The routing and the profiles from the `.deb`'s example, as
+under *For a container engine* above:
 
 ```bash
 mkdir -p /etc/nexcage
-curl -fsSLo /etc/nexcage/config.json "$SRC/packaging/config/config.oci.example.json"
+cp /usr/share/doc/nexcage/examples/config.oci.example.json /etc/nexcage/config.json
 ```
-
-If the node already has a configuration for its LXC containers, add the
-`runtime.routing` rule to that file instead of replacing it. A command typed
-by hand then goes to crun as well; give it `--runtime lxc` for an LXC
-container.
 
 **The engine.** One of:
 
@@ -185,7 +176,7 @@ The engine names a profile by the program it runs, so each profile is one more
 runtime handler whose binary is `nexcage@<profile>`:
 
 ```bash
-ln -s /usr/local/bin/nexcage /usr/local/bin/nexcage@hardened
+ln -s /usr/bin/nexcage /usr/local/bin/nexcage@hardened
 
 # k3s: append to the template above, then restart k3s
 cat >> /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl <<'EOF'
@@ -235,8 +226,14 @@ zig build -Doptimize=ReleaseSafe          # Zig 0.15.1
 install -m 0755 zig-out/bin/nexcage /usr/local/bin/nexcage
 ```
 
-To build a `.deb` yourself: `bash scripts/build_deb_local.sh` (needs
-`dpkg-deb`), which writes `dist/nexcage-<version>-amd64.deb`.
+A plain `zig build` has the Proxmox LXC backend only; the crun backend needs
+libcrun's sources and generated headers, which the Dockerfile brings:
+`docker build --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" .`
+
+To build the `.deb` yourself, run `bash scripts/build_deb_local.sh`. It needs
+`dpkg-deb`, `objdump` and docker, and writes
+`dist/nexcage-<version>-amd64.deb`. To pack a binary you built with the crun
+backend already, pass it as `NEXCAGE_BIN=<path>`.
 
 ## Configure
 
