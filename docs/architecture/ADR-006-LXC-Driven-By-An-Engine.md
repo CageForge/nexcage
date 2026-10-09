@@ -1,6 +1,6 @@
 # ADR-006: The Proxmox LXC backend driven by a container engine
 
-- Status: **Proposed** 2026-10-09. It needs the maintainer's answers to the questions under *For review*.
+- Status: **Accepted** 2026-10-09. The answers are under *Decided on review*: alternative D, and `runtime: lxc` stays refused.
 - Date: 2026-10-09
 - Issue: [#316](https://github.com/CageForge/nexcage/issues/316)
 - Builds on: [ADR-005](ADR-005-Isolation-Profiles.md), Isolation profiles
@@ -150,6 +150,19 @@ If the maintainer names the need, A is built in these steps, each with its own c
 2. If A: is a **privileged** container acceptable for the first version, with `hostUsers: false` refused? Or does A wait until an idmapped rootfs is proven on 9.2?
 3. If A: is depending on Proxmox's **perl internals** (`update_lxc_config`, `create_and_lock_config`) acceptable, pinned to tested versions? The alternative is nexcage writing LXC's configuration itself, which bypasses Proxmox's generation (AppArmor, cgroups, hooks).
 4. **0.17.0**: release it with profiles on crun and move #316 to a later milestone?
+
+## Decided on review
+
+1. **The only gain wanted is visibility** in `pct list` and Proxmox's UI. That
+   does not pay for A's costs, so A is not built. Nothing named calls for C
+   either.
+2. and 3. fall away with 1.
+4. **0.17.0 ships with profiles on crun.** #316 leaves 0.17.0 without a
+   milestone. It comes back only with a need that only a Proxmox container
+   meets, and then starts from this ADR's evidence and its six steps.
+
+A profile that names `"runtime": "lxc"` keeps refusing the configuration file,
+as #371 made it do. ADR-005's `lxc` keys are not implemented.
 
 ## Verification of this ADR
 
