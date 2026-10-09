@@ -1,0 +1,182 @@
+name: Probe - an engine-driven Proxmox LXC container (#316)
+
+# A one-off probe, not a test. It answers ADR-006's open questions on the E2E
+# node and is removed again in the same pull request, as the #309 probe was.
+#
+# ADR-006 needs facts about this node's Proxmox VE and LXC that source code
+# alone does not settle: whether a container whose rootfs is a host directory
+# can be made with pct and started by `lxc-execute` from a process that is not
+# systemd, with that process's stdio as the container's; what lxc-execute exits
+# with; whether --share-net takes a netns path; what `pct status` says while
+# that runs; where the cgroups land; what `pct destroy` does to the directory;
+# and what lxc-attach does with stdio, cwd and exit codes.
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ '.github/workflows/probe_lxc_engine.yml' ]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, pve9]
+    timeout-minutes: 20
+    steps:
+      - name: An engine-driven Proxmox LXC container
+        run: |
+          # Failures are answers here, not a reason to stop.
+          set +e -u
+          export PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH
+          if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
+          P=/var/lib/nexcage-probe316
+          NS=nexcage-probe316
+          HN=nexcage-probe316
+          VMID=
+          say() { echo; echo "== $*"; }
+          t() { $SUDO timeout 60 "$@"; }
+
+          ours() { $SUDO pct list 2>/dev/null | awk -v h="$HN" 'NR>1 && $NF==h {print $1}'; }
+          drop() {
+            for v in $(ours); do
+              $SUDO pct stop "$v" >/dev/null 2>&1
+              $SUDO pct destroy "$v" --purge >/dev/null 2>&1 || $SUDO rm -f "/etc/pve/lxc/$v.conf"
+            done
+            $SUDO ip netns del "$NS" >/dev/null 2>&1
+            [ "$P" = /var/lib/nexcage-probe316 ] && $SUDO rm -rf "$P"
+          }
+          trap drop EXIT
+          drop
+
+          say "P0 versions"
+          $SUDO pveversion -v | grep -E '^(proxmox-ve|pve-manager|pve-container|lxc-pve|lxcfs|proxmox-kernel-[0-9]|pve-kernel)' | head
+          uname -r
+          echo "lxc $(lxc-start --version 2>&1)"
+          echo "cgroup fs: $(stat -fc %T /sys/fs/cgroup)"
+          echo "lxc-execute: $(command -v lxc-execute || echo missing)"
+
+          SYSTEM_TEMPLATE_RE='vztmpl/(alpine|debian|ubuntu)-'
+          TPL=$($SUDO pvesm list local --content vztmpl 2>/dev/null | awk 'NR>1 && $1 ~ /vztmpl\/alpine-/ {print $1; exit}')
+          [ -n "$TPL" ] || TPL=$($SUDO pvesm list local --content vztmpl 2>/dev/null | awk -v re="$SYSTEM_TEMPLATE_RE" 'NR>1 && $1 ~ re {print $1; exit}')
+          echo "template: ${TPL:-none}"
+          [ -n "$TPL" ] || { echo "PROBE BROKEN: no system template"; exit 1; }
+
+          say "P1 pct create with a host directory as rootfs"
+          $SUDO mkdir -p "$P/rootfs"
+          VMID=$($SUDO pvesh get /cluster/nextid)
+          echo "vmid $VMID"
+          t pct create "$VMID" "$TPL" --rootfs "$P/rootfs" --hostname "$HN" \
+            --ostype unmanaged --unprivileged 0 --console 0 2>&1 | tail -5
+          echo "-> rc=${PIPESTATUS[0]}"
+          if ! $SUDO test -f "/etc/pve/lxc/$VMID.conf"; then
+            say "P1b fallback: template unpacked by hand, configuration written directly"
+            f=$($SUDO pvesm path "$TPL")
+            $SUDO tar -xf "$f" -C "$P/rootfs"; echo "tar rc=$?"
+            printf 'arch: amd64\nhostname: %s\nostype: unmanaged\nrootfs: %s\nconsole: 0\n' "$HN" "$P/rootfs" \
+              | $SUDO tee "/etc/pve/lxc/$VMID.conf" >/dev/null
+          fi
+          $SUDO cat "/etc/pve/lxc/$VMID.conf"
+          echo "rootfs has: $($SUDO ls "$P/rootfs" | tr '\n' ' ')"
+          $SUDO touch "$P/rootfs/MARKER"
+
+          say "P2 /var/lib/lxc/$VMID/config without pct start (PVE::LXC::update_lxc_config)"
+          $SUDO perl -e 'use strict; use warnings; use PVE::LXC; use PVE::LXC::Config;
+            my $v = shift; my $c = PVE::LXC::Config->load_config($v);
+            PVE::LXC::update_lxc_config($v, $c); print "update_lxc_config ok\n"' "$VMID"
+          $SUDO grep -vE '^\s*#|^\s*$' "/var/lib/lxc/$VMID/config"
+
+          say "P3 lxc-execute: stdio and exit status (expect OUT on stdout, ERR on stderr, rc 7)"
+          O=$(mktemp); E=$(mktemp)
+          ( exec $SUDO timeout 60 lxc-execute -n "$VMID" -- /bin/sh -c 'echo OUT; echo ERR >&2; exit 7' ) >"$O" 2>"$E"
+          echo "rc=$?"; echo "stdout: $(tr '\n' '|' < "$O")"; echo "stderr: $(tr '\n' '|' < "$E" | cut -c1-400)"
+          ( exec $SUDO timeout 60 lxc-execute -n "$VMID" -- /bin/sh -c 'kill -TERM $$' ) >"$O" 2>"$E"
+          echo "killed by SIGTERM inside: rc=$?"
+
+          say "P4 lxc-start -F with argv: stdio and exit status, for comparison"
+          ( exec $SUDO timeout 60 lxc-start -F -n "$VMID" -- /bin/sh -c 'echo OUT; echo ERR >&2; exit 7' ) >"$O" 2>"$E"
+          echo "rc=$?"; echo "stdout: $(tr '\n' '|' < "$O")"; echo "stderr: $(tr '\n' '|' < "$E" | cut -c1-400)"
+
+          say "P5 --share-net with a netns path (expect 10.255.31.6 inside)"
+          $SUDO ip netns add "$NS"
+          $SUDO ip -n "$NS" link add d0 type dummy
+          $SUDO ip -n "$NS" addr add 10.255.31.6/32 dev d0
+          $SUDO ip -n "$NS" link set d0 up
+          ( exec $SUDO timeout 60 lxc-execute -n "$VMID" --share-net "/var/run/netns/$NS" -- /bin/sh -c 'ip -4 -o addr' ) >"$O" 2>"$E"
+          echo "rc=$?"; echo "inside: $(tr '\n' '|' < "$O")"; echo "stderr: $(tr '\n' '|' < "$E" | cut -c1-300)"
+
+          say "P6 while it runs: pct status, pids, namespaces, cgroups"
+          ( exec $SUDO lxc-execute -n "$VMID" --share-net "/var/run/netns/$NS" -- /bin/sh -c 'echo started; exec sleep 300' ) >"$O" 2>"$E" &
+          MON=$!
+          sleep 5
+          echo "pct status: $($SUDO pct status "$VMID" 2>&1)"
+          echo "pct list: $($SUDO pct list 2>/dev/null | awk -v v="$VMID" '$1==v')"
+          INIT=$($SUDO lxc-info -n "$VMID" -p -H 2>&1)
+          echo "background pid $MON; lxc-info init pid $INIT"
+          echo "process tree:"; ps -eo pid,ppid,user,cmd --forest | grep -B2 -A4 '[l]xc-execute' | cut -c1-160
+          for p in $MON $(pgrep -P "$MON") $INIT; do
+            echo "pid $p ($(cat /proc/$p/comm 2>/dev/null)): ppid $(awk '{print $4}' /proc/$p/stat 2>/dev/null)," \
+              "net $($SUDO readlink /proc/$p/ns/net)," \
+              "pid ns $($SUDO readlink /proc/$p/ns/pid)," \
+              "cgroup $($SUDO cat /proc/$p/cgroup 2>/dev/null | tr '\n' ' ')"
+          done
+          echo "netns file: $($SUDO stat -L -c 'net:[%i]' "/var/run/netns/$NS")"
+          echo "stdout so far: $(tr '\n' '|' < "$O")"
+
+          say "P7 lxc-attach: stdio, cwd and exit status (expect ATTACH, cwd /tmp, rc 5)"
+          ( cd /tmp && exec $SUDO timeout 60 lxc-attach -n "$VMID" --clear-env -v PATH=/usr/sbin:/usr/bin:/sbin:/bin -- /bin/sh -c 'echo ATTACH; pwd; exit 5' ) >"$O.a" 2>"$E.a"
+          echo "rc=$?"; echo "stdout: $(tr '\n' '|' < "$O.a")"; echo "stderr: $(tr '\n' '|' < "$E.a" | cut -c1-300)"
+
+          say "P7b SIGTERM to an lxc-attach process (the shim kills exec processes with kill(2))"
+          ( exec $SUDO lxc-attach -n "$VMID" --clear-env -v PATH=/bin:/usr/bin -- /bin/sh -c 'trap "echo GOT_TERM; exit 3" TERM; sleep 300 & wait' ) >"$O.b" 2>"$E.b" &
+          ATT=$!
+          sleep 3
+          ATTPID=$(pgrep -f 'lxc-attach -n '"$VMID" | head -1)
+          echo "lxc-attach pid $ATTPID"
+          $SUDO kill -TERM "$ATTPID"
+          for _ in $(seq 1 10); do kill -0 "$ATT" 2>/dev/null || break; sleep 1; done
+          kill -0 "$ATT" 2>/dev/null && { echo "lxc-attach still running after 10s"; $SUDO kill -KILL "$ATTPID"; }
+          wait "$ATT"; echo "rc=$?; stdout: $(tr '\n' '|' < "$O.b"); inside after: $($SUDO lxc-attach -n "$VMID" -- /bin/sh -c 'pgrep -c sleep || true' 2>/dev/null)"
+
+          say "P8 SIGTERM to the lxc-execute process (does the container stop, and with what status?)"
+          $SUDO kill -TERM "$MON" 2>/dev/null || $SUDO kill -TERM "$(pgrep -P "$MON" | head -1)"
+          for _ in $(seq 1 20); do kill -0 "$MON" 2>/dev/null || break; sleep 1; done
+          if kill -0 "$MON" 2>/dev/null; then
+            echo "still running after 20s; pct stop"
+            $SUDO pct stop "$VMID"; wait "$MON"; echo "after pct stop: rc=$?"
+          else
+            wait "$MON"; echo "exited: rc=$?"
+          fi
+          echo "pct status: $($SUDO pct status "$VMID" 2>&1)"
+
+          say "P9 pct stop while lxc-execute runs (what lxc-execute exits with)"
+          ( exec $SUDO lxc-execute -n "$VMID" -- /bin/sh -c 'exec sleep 300' ) >"$O" 2>"$E" &
+          MON=$!
+          sleep 5
+          $SUDO pct stop "$VMID" 2>&1 | tail -2
+          wait "$MON"; echo "lxc-execute rc=$?"
+
+          say "P10 lxc.cgroup.dir.* as raw keys (are they kept, and where does the container land?)"
+          printf 'lxc.cgroup.dir.container: nexcage-probe316/ct\nlxc.cgroup.dir.monitor: nexcage-probe316/mon\n' \
+            | $SUDO tee -a "/etc/pve/lxc/$VMID.conf" >/dev/null
+          $SUDO perl -e 'use PVE::LXC; use PVE::LXC::Config; my $v = shift;
+            PVE::LXC::update_lxc_config($v, PVE::LXC::Config->load_config($v)); print "ok\n"' "$VMID" 2>&1 | tail -2
+          $SUDO grep -n 'cgroup' "/var/lib/lxc/$VMID/config"
+          ( exec $SUDO timeout 60 lxc-execute -n "$VMID" -- /bin/sh -c 'cat /proc/self/cgroup' ) >"$O" 2>"$E"
+          echo "rc=$?; inside: $(tr '\n' '|' < "$O"); stderr: $(tr '\n' '|' < "$E" | cut -c1-300)"
+          $SUDO sed -i '/^lxc.cgroup.dir/d' "/etc/pve/lxc/$VMID.conf"
+
+          say "P12 Proxmox's perl API: what nexcage would call, and how long it takes"
+          $SUDO perl -MPVE::LXC::Config -e 'for my $m (qw(create_and_lock_config write_config load_config destroy_config lock_config)) { printf "%s: %s\n", $m, PVE::LXC::Config->can($m) ? "yes" : "no" }'
+          s=$(date +%s%N)
+          $SUDO perl -e 'use PVE::LXC; use PVE::LXC::Config; my $v = shift;
+            PVE::LXC::update_lxc_config($v, PVE::LXC::Config->load_config($v))' "$VMID"
+          echo "update_lxc_config, perl start included: $(( ($(date +%s%N) - s) / 1000000 )) ms"
+          s=$(date +%s%N); $SUDO pct config "$VMID" >/dev/null; echo "pct config: $(( ($(date +%s%N) - s) / 1000000 )) ms"
+          s=$(date +%s%N); $SUDO pvesh get /cluster/nextid >/dev/null; echo "pvesh nextid: $(( ($(date +%s%N) - s) / 1000000 )) ms"
+
+          say "P11 pct destroy: what happens to the host directory"
+          $SUDO pct destroy "$VMID" 2>&1 | tail -3
+          echo "conf: $($SUDO test -f "/etc/pve/lxc/$VMID.conf" && echo kept || echo gone)"
+          echo "dir: $($SUDO test -d "$P/rootfs" && echo kept || echo gone); marker: $($SUDO test -f "$P/rootfs/MARKER" && echo kept || echo gone); entries: $($SUDO ls "$P/rootfs" 2>/dev/null | wc -l)"
