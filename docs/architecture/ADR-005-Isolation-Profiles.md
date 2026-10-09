@@ -1,6 +1,6 @@
 # ADR-005: Isolation profiles
 
-- Status: **Proposed** — for the maintainer's review; nothing is built on it yet
+- Status: **Accepted** 2026-10-09 — the maintainer's answers are under *Decided on review*
 - Date: 2026-10-09
 - Issue: [#314](https://github.com/CageForge/nexcage/issues/314); implementation in
   [#315](https://github.com/CageForge/nexcage/issues/315) (crun) and
@@ -270,8 +270,9 @@ Negative and costs:
   profile is named.
 - The program name is a convention an intermediary can break (the wrapper
   failure mode).
-- The configuration file gets stricter. #371 decides whether an unknown key
-  outside `profiles` is an error at once or a warning for one release.
+- The configuration file gets stricter: from 0.17.0 an unknown key anywhere in
+  it is an error (#371). A file that carried a misspelt or obsolete key and
+  loaded until now stops loading, and says which key.
 
 ## Verification
 
@@ -296,15 +297,13 @@ Negative and costs:
   path is tested in #315 if the CI image can run CRI-O; otherwise that remains
   the one engine path proved only by reading its source, and the docs say so.
 
-## Questions for the maintainer
+## Decided on review
 
-1. `nexcage@<profile>` as the program-name form (decision 2), or another
-   separator?
-2. `seccomp: "require"` refuses a bundle without a filter. The alternative is
-   to apply the runtime default filter to it, which edits more of the bundle
-   and needs a filter shipped with nexcage. Refusing is proposed.
-3. Unknown keys outside `profiles`: an error from 0.17.0, or a warning for one
-   release first (#371)?
+1. **The program-name form is `nexcage@<profile>`.**
+2. **`seccomp: "require"` refuses** a bundle without a filter. nexcage does not
+   apply a filter of its own.
+3. **An unknown key anywhere in the configuration file is an error from
+   0.17.0**, with no release of warnings first (#371).
 
 ## Links
 

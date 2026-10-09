@@ -47,7 +47,7 @@ nav:
       - Memory Management: architecture/ADR-002-Memory-Management-Strategy.md
       - Security Architecture: architecture/ADR-003-Security-Architecture.md
       - Mermaid Architecture Docs: architecture/ADR-004-Mermaid-Architecture-Docs.md
-      - Isolation Profiles (proposed): architecture/ADR-005-Isolation-Profiles.md
+      - Isolation Profiles: architecture/ADR-005-Isolation-Profiles.md
       - ADR Template: architecture/ADR-000-Template.md
   - CI/CD: CI_CD_SETUP.md
   - Runtime-spec Validation: RUNTIME_SPEC_VALIDATION.md
