@@ -1,31 +1,7 @@
 # Kubernetes integration
 
-## Prerequisites on Kubernetes Worker Nodes
-
-Before configuring `containerd` to use `nexcage`, ensure that each worker node has:
-
-1. The `nexcage-amd64-crun` binary installed at `/usr/local/bin/nexcage` (or via `.deb` package).
-2. Required runtime libraries installed:
-
-```bash
-   apt install -y libjson-c5 libseccomp2 libcap2
-```
-3. A valid routing configuration at /etc/nexcage/config.json that forwards OCI requests to crun:
-
-```JSON
-{
-  "runtime": {
-    "routing": [
-      { "pattern": "*", "runtime": "crun" }
-    ]
-  }
-}
-```
-Note: Without "pattern": "*" configured in /etc/nexcage/config.json, containerd will fail to route OCI commands to the inner crun backend.
-
-## What nexcage would need to run containers for Kubernetes
-
-and how the work is staged in the `tenant-nexcage` tenant of the Cozystack cluster `pskep`.
+What nexcage would need to run containers for Kubernetes, and how the work is
+staged in the `tenant-nexcage` tenant of the Cozystack cluster `pskep`.
 
 **Status as of 0.16.0: Kubernetes schedules pods onto nexcage.** A pod with
 `runtimeClassName: nexcage` runs on a node, with an address from the cluster's
