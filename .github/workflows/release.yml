@@ -285,6 +285,12 @@ jobs:
             echo "::error::$NOTES is missing"
             exit 1
           fi
+          # The notes become the release page, where a link relative to
+          # docs/releases/ points nowhere.
+          if grep -nE '\]\((\.\./|\./)?[A-Za-z0-9_./-]+\.md(#[^)]*)?\)' "$NOTES"; then
+            echo "::error::$NOTES links a file by a relative path; link it on github.com instead"
+            exit 1
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
