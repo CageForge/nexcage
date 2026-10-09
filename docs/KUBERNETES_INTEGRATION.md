@@ -537,6 +537,21 @@ only difference is that the template's `BinaryName` points at the trace
 wrapper. The containerd and CRI-O examples in the same directory are the
 configurations stage 4 verified, and no workflow installs them.
 
+Then it does the same for isolation profiles (#315). It adds the two handlers
+[INSTALL.md](INSTALL.md#an-isolation-profile-per-runtimeclass-since-0170)
+describes, `nexcage-hardened` and `nexcage-small`, whose `BinaryName` runs
+nexcage as `nexcage@<profile>`, and a `RuntimeClass` for each. It then runs
+one pod under each, and reads from inside each pod:
+
+- its `uid_map`: hardened is in a user namespace, small in the host's;
+- `Seccomp: 2`;
+- the `CapBnd` of pid 1 and of a process `kubectl exec` starts;
+- `memory.max`: 1G for hardened, which asked for 2Gi, and 256M for small;
+- `pids.max`.
+
+A third pod under `nexcage-hardened` without `hostUsers: false` must stay
+uncreated, with "requires a user namespace" in its events.
+
 ## critest: what Kubernetes checks of a runtime
 
 `crun_build.yml` runs critest, the CRI validation suite from cri-tools

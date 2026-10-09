@@ -23,7 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   `state` reports the profile as the annotation `io.cageforge.nexcage.profile`, and a bundle that carries that annotation itself is refused.
 
-  In CI, `tests/crun/profile.sh` reads the result from the container's `/proc/<pid>/status` and cgroup, and from an exec'd process. Nothing has checked a profile through an engine yet: two pods under two profiles on one node is #315's next step.
+  In CI, `tests/crun/profile.sh` reads the result from the container's `/proc/<pid>/status` and cgroup, and from an exec'd process.
+
+  Through an engine, `tests/k8s/pod_on_node.sh` runs one pod under each of two `RuntimeClass`es on k3s. It reads from inside each pod its `uid_map`, seccomp mode, capabilities (of pid 1 and of a `kubectl exec`) and cgroup limits. A pod the profile refuses must say why in its events.
+
+  `config.oci.example.json` defines two profiles, `hardened` and `small`. `docs/INSTALL.md` shows a handler and a `RuntimeClass` per profile.
 
 ### Changed
 - **The configuration file fails closed** (#371). **A file that loaded until now may stop loading**: nexcage refuses it, naming the file and the key, and runs nothing. That happens on:

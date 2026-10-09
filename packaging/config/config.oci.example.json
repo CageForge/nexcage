@@ -1,1 +1,14 @@
-{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }
+{
+  "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] },
+  "profiles": {
+    "hardened": { "runtime": "crun", "crun": {
+      "user_namespace": "require",
+      "seccomp": "require",
+      "capabilities": { "drop": ["CAP_NET_RAW", "CAP_MKNOD", "CAP_SYS_CHROOT"] },
+      "limits": { "memory": "1G", "pids": 1024 } } },
+    "small": { "runtime": "crun", "crun": {
+      "seccomp": "require",
+      "capabilities": { "drop": ["CAP_NET_RAW"] },
+      "limits": { "memory": "256M", "pids": 256 } } }
+  }
+}
