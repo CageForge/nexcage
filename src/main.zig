@@ -226,6 +226,10 @@ fn run() !void {
             i += 2; // Skip --runtime and its value; parseRuntimeOptions reads it
             continue;
         }
+        if (std.mem.eql(u8, args[i], "--profile") and i + 1 < args.len) {
+            i += 2; // Skip --profile and its value, read below
+            continue;
+        }
         // What a container engine puts before the command. Without these,
         // `--log` was taken for the command name and containerd got
         // "unknown command '--log'" on its very first call.
@@ -276,6 +280,24 @@ fn run() !void {
                 return error.InvalidInput;
             };
         }
+    }
+
+    // An isolation profile (ADR-005): --profile, before or after the command,
+    // or the program name, nexcage@<profile>, which is how a container
+    // engine's runtime handler names one. Only create reads it.
+    if (options.profile == null) options.profile = try flagValueFromArgs(args, "--profile", "profile name");
+    if (core.profile.fromProgramName(args[0])) |named| {
+        if (named.len == 0) {
+            printError("the program name '{s}' ends in '@' with no profile after it", .{args[0]});
+            failure_reported = true;
+            return error.InvalidInput;
+        }
+        if (options.profile) |flag| if (!std.mem.eql(u8, flag, named)) {
+            printError("--profile {s} and the program name '{s}' name different profiles", .{ flag, args[0] });
+            failure_reported = true;
+            return error.InvalidInput;
+        };
+        options.profile = named;
     }
 
     // Check if help was requested
@@ -458,6 +480,9 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
                 failure_reported = true;
                 return error.InvalidInput;
             };
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--profile") and i + 1 < args.len) {
+            options.profile = args[i + 1];
             i += 2;
         } else if (std.mem.eql(u8, arg, "--systemd-cgroup")) {
             // cgroup management is libcrun's; accepted so an engine that sends
@@ -680,6 +705,8 @@ fn splitEqualsFlags(allocator: std.mem.Allocator, args: []const []const u8) ![][
 fn flagValueFromArgs(args: []const []const u8, flag: []const u8, noun: []const u8) !?[]const u8 {
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
+        // After a bare --, the words are the command exec runs, not nexcage's.
+        if (std.mem.eql(u8, args[i], "--")) break;
         if (!std.mem.eql(u8, args[i], flag)) continue;
         if (i + 1 >= args.len) {
             printError("{s} needs a {s}", .{ flag, noun });

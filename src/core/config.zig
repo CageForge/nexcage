@@ -1,6 +1,8 @@
 const std = @import("std");
 const types = @import("types.zig");
 const logging = @import("logging.zig");
+const profile_mod = @import("profile.zig");
+const resources_mod = @import("resources.zig");
 const constants = @import("constants.zig");
 const ArrayList = std.ArrayList;
 
@@ -196,16 +198,68 @@ pub const ConfigLoader = struct {
             if (obj.get("default_runtime")) |v| config.container_config.default_runtime = self.runtimeOf(v.string);
         }
 
+        if (root.get("profiles")) |section| try self.setProfiles(&config, section.object);
+
         config.legacy_runc_runtime = self.saw_runc;
         config.removed_vm_runtime = self.removed_vm_runtime;
         return config;
+    }
+
+    /// The profiles section, which validate checked (ADR-005).
+    fn setProfiles(self: *Self, config: *Config, obj: std.json.ObjectMap) !void {
+        const profiles = try self.allocator.alloc(profile_mod.Profile, obj.count());
+        var made: usize = 0;
+        errdefer {
+            for (profiles[0..made]) |*p| p.deinit(self.allocator);
+            self.allocator.free(profiles);
+        }
+        var it = obj.iterator();
+        while (it.next()) |entry| {
+            var p = profile_mod.Profile{ .name = try self.allocator.dupe(u8, entry.key_ptr.*) };
+            errdefer self.allocator.free(p.name);
+            if (entry.value_ptr.object.get("crun")) |crun| {
+                const c = crun.object;
+                p.require_user_namespace = c.get("user_namespace") != null;
+                p.require_seccomp = c.get("seccomp") != null;
+                if (c.get("capabilities")) |caps| if (caps.object.get("drop")) |drop| {
+                    const names = try self.allocator.alloc([]const u8, drop.array.items.len);
+                    var copied: usize = 0;
+                    errdefer {
+                        for (names[0..copied]) |n| self.allocator.free(n);
+                        self.allocator.free(names);
+                    }
+                    for (drop.array.items) |item| {
+                        names[copied] = try self.allocator.dupe(u8, item.string);
+                        copied += 1;
+                    }
+                    p.drop_capabilities = names;
+                };
+                if (c.get("limits")) |limits| {
+                    if (limits.object.get("memory")) |m| p.memory_limit = sizeOf(m).?;
+                    if (limits.object.get("pids")) |n| p.pids_limit = n.integer;
+                }
+            }
+            profiles[made] = p;
+            made += 1;
+        }
+        config.profiles = profiles;
+    }
+
+    /// Bytes from "2G" or a number of bytes; null for anything else.
+    fn sizeOf(value: std.json.Value) ?i64 {
+        const n: i64 = switch (value) {
+            .integer => |i| i,
+            .string => |str| resources_mod.parseSize(str) catch return null,
+            else => return null,
+        };
+        return if (n >= 1) n else null;
     }
 
     /// The keys nexcage reads, and what each must hold. A key not here is
     /// refused rather than skipped: a misspelt key did nothing without a word,
     /// and so did keys that were parsed and never used -- `security.seccomp:
     /// true` turned nothing on (#371).
-    const Kind = enum { section, string, boolean, size_gb, log_level, runtime, rules };
+    const Kind = enum { section, string, boolean, size_gb, log_level, runtime, rules, profiles, profile_runtime, require, capabilities, size, count };
     const Key = struct { name: []const u8, kind: Kind, keys: []const Key = &.{} };
 
     const rule_keys = [_]Key{
@@ -233,6 +287,24 @@ pub const ConfigLoader = struct {
         .{ .name = "container_config", .kind = .section, .keys = &.{
             .{ .name = "routing", .kind = .rules },
             .{ .name = "default_runtime", .kind = .runtime },
+        } },
+        .{ .name = "profiles", .kind = .profiles },
+    };
+
+    /// One profile under `profiles` (ADR-005). Every crun parameter only
+    /// narrows what the engine's bundle grants.
+    const profile_keys = [_]Key{
+        .{ .name = "runtime", .kind = .profile_runtime },
+        .{ .name = "crun", .kind = .section, .keys = &.{
+            .{ .name = "user_namespace", .kind = .require },
+            .{ .name = "seccomp", .kind = .require },
+            .{ .name = "capabilities", .kind = .section, .keys = &.{
+                .{ .name = "drop", .kind = .capabilities },
+            } },
+            .{ .name = "limits", .kind = .section, .keys = &.{
+                .{ .name = "memory", .kind = .size },
+                .{ .name = "pids", .kind = .count },
+            } },
         } },
     };
 
@@ -289,6 +361,51 @@ pub const ConfigLoader = struct {
                 } else return self.refuse("'{s}' is \"{s}\", which is not a runtime; name lxc or crun", .{ path, s }),
                 else => return self.refuse("'{s}' must be a runtime name, lxc or crun", .{path}),
             },
+            .profiles => switch (value) {
+                .object => |obj| {
+                    var it = obj.iterator();
+                    while (it.next()) |entry| {
+                        const name = entry.key_ptr.*;
+                        var buf: [160]u8 = undefined;
+                        const sub = std.fmt.bufPrint(&buf, "{s}.{s}", .{ path, name }) catch path;
+                        if (!profile_mod.isValidName(name))
+                            return self.refuse("'{s}': a profile name is lower-case letters, digits and '-', at most 32, as a RuntimeClass handler's is", .{sub});
+                        switch (entry.value_ptr.*) {
+                            .object => |p| {
+                                try self.validateObject(p, &profile_keys, sub);
+                                if (p.get("runtime") == null) return self.refuse("'{s}' has no \"runtime\"", .{sub});
+                            },
+                            else => return self.refuse("'{s}' must be an object", .{sub}),
+                        }
+                    }
+                },
+                else => return self.refuse("'{s}' must be an object of profiles by name", .{path}),
+            },
+            .profile_runtime => switch (value) {
+                .string => |s| {
+                    if (std.mem.eql(u8, s, "crun")) return;
+                    if (std.mem.eql(u8, s, "lxc"))
+                        return self.refuse("'{s}': profiles on the Proxmox LXC backend are not there yet (#316); a profile names crun", .{path});
+                    return self.refuse("'{s}' is \"{s}\"; a profile names crun", .{ path, s });
+                },
+                else => return self.refuse("'{s}' must be \"crun\"", .{path}),
+            },
+            .require => switch (value) {
+                .string => |s| if (!std.mem.eql(u8, s, "require")) return self.refuse("'{s}' is \"{s}\"; the only value is \"require\"", .{ path, s }),
+                else => return self.refuse("'{s}' must be \"require\"", .{path}),
+            },
+            .capabilities => switch (value) {
+                .array => |items| for (items.items) |item| {
+                    if (item != .string or !isCapabilityName(item.string))
+                        return self.refuse("'{s}' must list capability names, such as \"CAP_NET_RAW\"", .{path});
+                },
+                else => return self.refuse("'{s}' must be a list of capability names", .{path}),
+            },
+            .size => if (sizeOf(value) == null) return self.refuse("'{s}' must be a size, such as \"512M\" or \"2G\"", .{path}),
+            .count => switch (value) {
+                .integer => |n| if (n < 1) return self.refuse("'{s}' must be a whole number, 1 or more", .{path}),
+                else => return self.refuse("'{s}' must be a whole number, 1 or more", .{path}),
+            },
             .rules => switch (value) {
                 .array => |items| for (items.items, 0..) |item, i| {
                     var buf: [160]u8 = undefined;
@@ -306,6 +423,14 @@ pub const ConfigLoader = struct {
                 else => return self.refuse("'{s}' must be a list of rules", .{path}),
             },
         }
+    }
+
+    fn isCapabilityName(name: []const u8) bool {
+        if (!std.mem.startsWith(u8, name, "CAP_") or name.len == 4) return false;
+        for (name[4..]) |c| {
+            if (!((c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_')) return false;
+        }
+        return true;
     }
 
     /// Records why the file is refused, for main to print, and returns the
@@ -402,6 +527,8 @@ pub const Config = struct {
     /// runtime: "vm", or "proxmox", which was mapped to it. No backend runs
     /// what such a rule describes, so main refuses the file.
     removed_vm_runtime: ?[]const u8 = null,
+    /// Isolation profiles by name (ADR-005); only create reads them.
+    profiles: []profile_mod.Profile = &.{},
 
     pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) !Config {
         return Config{
@@ -512,6 +639,15 @@ pub const Config = struct {
         self.resources.deinit();
         self.container_config.deinit(self.allocator);
         self.proxmox.deinit(self.allocator);
+        for (self.profiles) |*p| p.deinit(self.allocator);
+        self.allocator.free(self.profiles);
+    }
+
+    pub fn findProfile(self: *const Self, name: []const u8) ?*const profile_mod.Profile {
+        for (self.profiles) |*p| {
+            if (std.mem.eql(u8, p.name, name)) return p;
+        }
+        return null;
     }
 };
 
@@ -784,4 +920,48 @@ test "a file naming the removed VM backend is flagged, however it names it, so m
     );
     defer cfg.deinit();
     try std.testing.expect(cfg.removed_vm_runtime == null);
+}
+
+test "a profile is read with its crun parameters" {
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadFromString(
+        \\{ "profiles": { "hardened": { "runtime": "crun", "crun": {
+        \\    "user_namespace": "require", "seccomp": "require",
+        \\    "capabilities": { "drop": ["CAP_NET_RAW", "CAP_MKNOD"] },
+        \\    "limits": { "memory": "64M", "pids": 128 } } },
+        \\  "plain": { "runtime": "crun" } } }
+    );
+    defer cfg.deinit();
+
+    const h = cfg.findProfile("hardened").?;
+    try std.testing.expect(h.require_user_namespace and h.require_seccomp);
+    try std.testing.expectEqual(@as(usize, 2), h.drop_capabilities.len);
+    try std.testing.expectEqualStrings("CAP_MKNOD", h.drop_capabilities[1]);
+    try std.testing.expectEqual(@as(?i64, 64 * 1024 * 1024), h.memory_limit);
+    try std.testing.expectEqual(@as(?i64, 128), h.pids_limit);
+    const p = cfg.findProfile("plain").?;
+    try std.testing.expect(!p.require_seccomp and p.memory_limit == null);
+    try std.testing.expect(cfg.findProfile("missing") == null);
+}
+
+test "a profile that is misspelt, mis-named or names what it cannot do refuses the file" {
+    const cases = [_]struct { file: []const u8, says: []const u8 }{
+        .{ .file = "{ \"profiles\": { \"Hardened\": { \"runtime\": \"crun\" } } }", .says = "a profile name is lower-case letters" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"crun\": {} } } }", .says = "'profiles.h' has no \"runtime\"" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\" } } }", .says = "not there yet (#316)" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"seccomp\": \"yes\" } } } }", .says = "the only value is \"require\"" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"user_namspace\": \"require\" } } } }", .says = "'profiles.h.crun.user_namspace' is not a key nexcage reads" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"capabilities\": { \"drop\": [\"NET_RAW\"] } } } } }", .says = "capability names, such as" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"limits\": { \"memory\": \"lots\" } } } } }", .says = "must be a size" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"limits\": { \"pids\": 0 } } } } }", .says = "1 or more" },
+    };
+    for (cases) |case| {
+        var loader = ConfigLoader.init(std.testing.allocator);
+        try std.testing.expectError(types.Error.InvalidConfig, loader.loadFromString(case.file));
+        const why = loader.problem() orelse return error.TestExpectedProblem;
+        if (std.mem.indexOf(u8, why, case.says) == null) {
+            std.debug.print("for {s}: got \"{s}\"\n", .{ case.file, why });
+            return error.TestUnexpectedProblem;
+        }
+    }
 }

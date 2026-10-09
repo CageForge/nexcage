@@ -55,6 +55,8 @@ pub const FeaturesCommand = struct {
             return;
         }
 
+        // --runtime, else the backend a profile names -- CRI-O asks each
+        // runtime handler, and a handler is nexcage@<profile> -- else routing.
         var runtime_type: types.RuntimeType = .proxmox_lxc;
         if (options.runtime_type) |rt| {
             runtime_type = rt;
@@ -62,7 +64,10 @@ pub const FeaturesCommand = struct {
             var config_loader = config_module.ConfigLoader.init(allocator);
             var cfg = try config_loader.loadDefault();
             defer cfg.deinit();
-            runtime_type = cfg.getRoutedRuntime("");
+            runtime_type = if (options.profile) |name|
+                (if (cfg.findProfile(name)) |p| p.runtime else cfg.getRoutedRuntime(""))
+            else
+                cfg.getRoutedRuntime("");
         }
 
         if (runtime_type != .crun) {

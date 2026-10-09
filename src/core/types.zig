@@ -270,6 +270,9 @@ pub const RuntimeOptions = struct {
     container_id: ?[]const u8 = null,
     image: ?[]const u8 = null,
     runtime_type: ?RuntimeType = null,
+    /// The isolation profile `create` applies (ADR-005): --profile, or the
+    /// program name nexcage@<profile>. Borrowed from argv.
+    profile: ?[]const u8 = null,
     config_file: ?[]const u8 = null,
     verbose: bool = false,
     debug: bool = false,

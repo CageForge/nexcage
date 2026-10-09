@@ -99,6 +99,21 @@ jobs:
             -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
             --entrypoint /bin/sh nexcage:ci /t/update.sh
 
+      # An isolation profile narrows the bundle create hands libcrun (#315,
+      # ADR-005). The check names the profile by the program name, as an
+      # engine's BinaryName does, and reads the result from the container's
+      # /proc status and cgroup, not from nexcage.
+      - name: an isolation profile narrows the container
+        run: |
+          set -eux
+          mkdir -p bundle/rootfs
+          docker create --name bbprof busybox:1.36 >/dev/null
+          docker export bbprof | tar -x -C bundle/rootfs
+          docker rm bbprof >/dev/null
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
+            --entrypoint /bin/sh nexcage:ci /t/profile.sh
+
       # The checks around this one are unit-sized. This is the interface a
       # kubelet drives: a pod sandbox and a container in it, through
       # containerd's CRI with nexcage as the runtime handler, on a CNI bridge.

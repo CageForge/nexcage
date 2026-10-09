@@ -272,6 +272,12 @@ nx exec web-1 -- env FOO=bar
 check "an = after -- survives untouched" \
   all 'rc 0' 'called "pct exec 100 -- env FOO=bar"'
 
+# Nor does nexcage read its own flags there: --config used to make it load
+# the command's argument as its configuration.
+nx exec web-1 -- echo --config /nonexistent --runtime bogus --profile nope --root /x
+check "nexcage's flags after -- belong to the command, not to nexcage" \
+  all 'rc 0' 'called "pct exec 100 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
+
 # `exec --process <file>` hands over an OCI process spec: an identity to become,
 # an environment, a terminal. `pct exec` takes a command and returns when it
 # ends, so the spec cannot be honoured and ignoring it would run the command as
@@ -578,6 +584,43 @@ check "--runtime vm is refused, saying the backend was removed and what runs ins
   all 'rc 2' 'err_has "removed in 0.14.0"' 'err_has "use --runtime lxc or crun"' 'not_called_re "^pct"'
 nx --runtime qemu state from-tpl
 check "--runtime qemu likewise" all 'rc 2' 'err_has "removed in 0.14.0"'
+
+# Isolation profiles (ADR-005). What a profile does to a container is checked
+# against the kernel in tests/crun/profile.sh; here, how one is named and
+# what happens when the name is wrong. An engine names one by the program
+# name, so the checks run nexcage through a symlink, as BinaryName would.
+cfg '{"profiles":{"hardened":{"runtime":"crun","crun":{"limits":{"pids":50}}}}}'
+for p in hardened nope ""; do ln -sfn "$NEXCAGE" "$S/nexcage@$p"; done
+NEXCAGE=$S/nexcage@hardened nx create --name prof-1 "$TPL"
+check "nexcage@hardened creates on the profile's backend, ahead of routing" \
+  all 'rc 1' 'err_has "not built into this binary"' 'not_called_re "^pct"'
+nx --profile hardened create --name prof-1 "$TPL"
+check "--profile names it the same way" \
+  all 'rc 1' 'err_has "not built into this binary"' 'not_called_re "^pct"'
+NEXCAGE=$S/nexcage@hardened nx state from-tpl
+check "only create reads the profile: state under nexcage@hardened reaches an LXC container" \
+  all 'rc 0' 'called_re "^pct"'
+NEXCAGE=$S/nexcage@nope nx create --name prof-2 "$TPL"
+check "a profile the file does not define -> exit 2, naming the ones it does, nothing created" \
+  all 'rc 2' "err_has \"profile 'nope' is not defined\"" 'err_has "hardened"' 'not_called_re "^(pct|pvesh)"'
+NEXCAGE=$S/nexcage@ nx create --name prof-3 "$TPL"
+check "nexcage@ with no profile after it -> exit 2" all 'rc 2' "err_has \"no profile after it\"" 'not_called_re "^(pct|pvesh)"'
+NEXCAGE=$S/nexcage@hardened nx --profile nope create --name prof-4 "$TPL"
+check "--profile and the program name disagreeing -> exit 2" all 'rc 2' 'err_has "name different profiles"' 'not_called_re "^(pct|pvesh)"'
+nx --profile hardened --runtime lxc create --name prof-5 "$TPL"
+check "--runtime that disagrees with the profile -> exit 2, not a quiet override" all 'rc 2' 'not_called_re "^(pct|pvesh)"'
+nx --profile hardened run --name prof-6 "$TPL"
+check "run refuses a profile instead of running without it" \
+  all 'rc 2' 'err_has "run takes no profile"' 'not_called_re "^(pct|pvesh)"'
+cfg '{"profiles":{"lxc-hardened":{"runtime":"lxc"}}}'
+nx list
+check "a profile on the LXC backend refuses the file: not there yet" \
+  all 'rc 1' 'err_has "profiles.lxc-hardened.runtime"' 'err_has "#316"'
+cfg '{"profiles":{"x":{"runtime":"crun","crun":{"capabilities":{"drop":["NET_RAW"]}}}}}'
+nx list
+check "a capability not spelt as the spec spells it refuses the file" \
+  all 'rc 1' 'err_has "profiles.x.crun.capabilities.drop"' 'err_has "such as \"CAP_NET_RAW\""'
+rm -f "$S/work/config.json" "$S"/nexcage@*
 
 nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup list
 check "the options containerd sends are accepted, not read as a command" \
