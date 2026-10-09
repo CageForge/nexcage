@@ -48,6 +48,7 @@ nav:
       - Security Architecture: architecture/ADR-003-Security-Architecture.md
       - Mermaid Architecture Docs: architecture/ADR-004-Mermaid-Architecture-Docs.md
       - Isolation Profiles: architecture/ADR-005-Isolation-Profiles.md
+      - LXC Driven by an Engine: architecture/ADR-006-LXC-Driven-By-An-Engine.md
       - ADR Template: architecture/ADR-000-Template.md
   - CI/CD: CI_CD_SETUP.md
   - Runtime-spec Validation: RUNTIME_SPEC_VALIDATION.md
