@@ -103,8 +103,14 @@ pub const BackendRouter = struct {
         var cfg = try config_loader.loadDefault();
         defer cfg.deinit();
 
+        // A profile decides the backend of a new container, ahead of routing
+        // (ADR-005); it is resolved here, against the file in use.
+        const profile: ?*const core.profile.Profile = switch (operation) {
+            .create => |c| if (c.profile) |name| try self.findProfile(&cfg, name, runtime) else null,
+            else => null,
+        };
         const runtime_type = switch (operation) {
-            .create, .run => runtime orelse cfg.getRoutedRuntime(container_id),
+            .create, .run => if (profile) |p| p.runtime else runtime orelse cfg.getRoutedRuntime(container_id),
             else => try backendOf(container_id, runtime, self.logger),
         };
         if (self.logger) |log| {
@@ -113,8 +119,35 @@ pub const BackendRouter = struct {
 
         switch (runtime_type) {
             .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
-            .crun => try self.executeCrun(operation, container_id, config),
+            .crun => try self.executeCrun(operation, container_id, config, profile),
         }
+    }
+
+    /// The profile `name` names in the file in use. Named but not defined is
+    /// an error, never a fallback to weaker isolation, and so is a --runtime
+    /// that disagrees with it.
+    fn findProfile(self: *Self, cfg: *const config_module.Config, name: []const u8, runtime: ?types.RuntimeType) types.Error!*const core.profile.Profile {
+        const p = cfg.findProfile(name) orelse {
+            if (self.logger) |log| {
+                var buf: [256]u8 = undefined;
+                var w = std.Io.Writer.fixed(&buf);
+                for (cfg.profiles, 0..) |defined, i| w.print("{s}{s}", .{ if (i == 0) "" else ", ", defined.name }) catch break;
+                if (cfg.profiles.len == 0) {
+                    log.err("profile '{s}' is not defined: the configuration file has no profiles", .{name}) catch {};
+                } else {
+                    log.err("profile '{s}' is not defined; the configuration file has: {s}", .{ name, w.buffered() }) catch {};
+                }
+            }
+            return types.Error.InvalidInput;
+        };
+        if (runtime) |rt| {
+            const same = (rt == .crun) == (p.runtime == .crun);
+            if (!same) {
+                if (self.logger) |log| log.err("--runtime {s} disagrees with profile '{s}', which is on {s}", .{ @tagName(rt), name, @tagName(p.runtime) }) catch {};
+                return types.Error.InvalidInput;
+            }
+        }
+        return p;
     }
 
     fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config, cfg: *const config_module.Config) !void {
@@ -248,7 +281,7 @@ pub const BackendRouter = struct {
         }
     }
 
-    fn executeCrun(self: *Self, operation: Operation, container_id: []const u8, config: ?Config) !void {
+    fn executeCrun(self: *Self, operation: Operation, container_id: []const u8, config: ?Config, profile: ?*const core.profile.Profile) !void {
         // Before the "is it built" check, because --node is wrong for this
         // backend either way: a node is a Proxmox cluster's notion, and libcrun
         // makes the container in the kernel this process runs on. Answering
@@ -295,6 +328,7 @@ pub const BackendRouter = struct {
 
         switch (operation) {
             .create => |create_cfg| {
+                crun_backend.profile = profile;
                 crun_backend.console_socket = create_cfg.console_socket;
                 crun_backend.pid_file = create_cfg.pid_file;
                 crun_backend.systemd_cgroup = create_cfg.systemd_cgroup;
@@ -432,6 +466,8 @@ pub const CreateConfig = struct {
     storage: ?[]const u8 = null,
     /// What pct create is usually given (#308). Proxmox LXC only.
     pve: types.ProxmoxCreateOptions = .{},
+    /// The isolation profile's name (ADR-005), resolved against the config.
+    profile: ?[]const u8 = null,
 };
 
 pub const RunConfig = struct {

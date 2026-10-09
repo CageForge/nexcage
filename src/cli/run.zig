@@ -46,6 +46,13 @@ pub const RunCommand = struct {
 
         try self.logCommandStart("run");
 
+        // Only create reads a profile (ADR-005), and run does not reach crun:
+        // taken here and ignored, it would make the container without it.
+        if (options.profile) |name| {
+            if (self.base.logger) |log| log.err("run takes no profile ('{s}'): a profile applies to create; use create, then start", .{name}) catch {};
+            return types.Error.InvalidInput;
+        }
+
         // Validate required options using validation utility
         const validated = try validation.ValidationUtils.requireContainerIdAndImage(options, self.base.logger, "run");
         const container_id = validated.container_id;

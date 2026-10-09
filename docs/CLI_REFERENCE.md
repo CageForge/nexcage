@@ -27,6 +27,7 @@ inside the container keeps its `=`.
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
 | `--systemd-cgroup` | Accepted anywhere, so that an engine sending it is not refused. Only after `create`, on the crun backend, does it reach libcrun's context; anywhere else it has no effect |
 | `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
+| `--profile <name>` | Create the container under the isolation profile `<name>` from the configuration file; see [Isolation profiles](#isolation-profiles). Only `create` reads it, and `run` refuses it |
 | `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
 
 An option no command takes is refused with exit 2, naming it, and so is a
@@ -166,6 +167,60 @@ routing to the OCI backend in the configuration file:
   backend is left to run what it describes, and the default one would make
   a container where a VM was asked for.
 - Any other value is a usage error (exit 2).
+
+## Isolation profiles
+
+A profile is a name in the configuration file for what a container on this
+node may not exceed (since 0.17.0; [ADR-005](architecture/ADR-005-Isolation-Profiles.md)).
+`create` applies it to the bundle, and only `create`: the container keeps what
+it was made with, and every later command finds it without the profile.
+
+```json
+{ "profiles": {
+    "hardened": { "runtime": "crun", "crun": {
+      "user_namespace": "require",
+      "seccomp": "require",
+      "capabilities": { "drop": ["CAP_NET_RAW", "CAP_MKNOD"] },
+      "limits": { "memory": "512M", "pids": 256 } } } } }
+```
+
+| Key | What it does to the bundle |
+|---|---|
+| `runtime` | The backend: `crun`. `lxc` refuses the file until profiles reach that backend (#316) |
+| `crun.user_namespace: "require"` | Refuses a bundle without a user namespace with uid and gid mappings. In Kubernetes, `hostUsers: false` on the pod |
+| `crun.seccomp: "require"` | Refuses a bundle without `linux.seccomp`. In Kubernetes, `securityContext.seccompProfile.type: RuntimeDefault` |
+| `crun.capabilities.drop` | Removes these from every capability set of the process. Spelt as the spec spells them: `CAP_NET_RAW` |
+| `crun.limits.memory`, `crun.limits.pids` | Lowers the bundle's limit to this, and sets it when the bundle has none. Memory takes bytes or `64M`, `1G`. The bundle's `memory.swap`, which is memory plus swap, is lowered by the same amount, so the bundle gets no more swap than it asked for. containerd sets it equal to the limit, which means none |
+
+A profile only takes away: it never adds a capability or raises a limit.
+It holds for `exec` too. An engine builds the process for `exec --process`
+from its own copy of the spec, from before the profile narrowed it, so in a
+container made under a profile every capability set of that process is cut
+to the container's bounding set.
+
+It is named by the **program name**, `nexcage@<profile>`, or by
+`--profile <profile>`. The program name is how a container engine names one:
+containerd runs a runtime's `BinaryName`, and conmon a CRI-O handler's
+`runtime_path`, as argv[0], and neither has a field for an extra argument. A
+symlink is enough:
+
+```bash
+ln -s /usr/local/bin/nexcage /usr/local/bin/nexcage@hardened
+```
+
+A program name with no `@` names no profile, so the release files'
+names are not read as one.
+
+- A profile the configuration file does not define exits 2, naming the
+  ones it does. It never falls back to no profile.
+- So do the program name and `--profile` naming different profiles, a
+  `--runtime` the profile disagrees with, and `run` given a profile.
+- A bundle the profile refuses exits 2 with the reason, and nothing is
+  created.
+- `state` reports the profile as the annotation
+  `io.cageforge.nexcage.profile`. A bundle that carries that annotation
+  itself is refused, with a profile or without one: `state` would report a
+  profile nothing applied.
 
 ## Exit status
 
