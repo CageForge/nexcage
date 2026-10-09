@@ -20,7 +20,7 @@ updates:
       github-actions:
         patterns:
           - "actions/*"
-          - "goto-bus-stop/*"
+          - "mlugg/*"
           - "anchore/*"
           - "cyclonedx/*"
           - "ossf/*"

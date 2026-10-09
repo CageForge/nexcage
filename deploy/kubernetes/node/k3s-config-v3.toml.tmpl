@@ -1,0 +1,12 @@
+{{ template "base" . }}
+
+# k3s writes containerd's configuration from this template when it starts:
+# the base it would have written, plus nexcage as one more runtime. Put it at
+# /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl and restart
+# k3s. A k3s whose containerd is 1.x reads config.toml.tmpl instead, in a
+# different format, and is not covered here.
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
+  runtime_type = "io.containerd.runc.v2"
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
+  BinaryName = "/usr/local/bin/nexcage"

@@ -21,6 +21,10 @@ jobs:
     # nexcage-pve-tpl-v0-2 (deploy/kubernetes/tenant-nexcage). Naming it
     # rather than plain "proxmox" keeps this job on a Proxmox VE 9.x host,
     # which is what the OCI registry step below needs.
+    # A pull request from a fork must not run code on this machine: the
+    # runner user has sudo for everything (#362). A maintainer runs the job on
+    # such code by pushing it to a branch here.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, pve9]
     timeout-minutes: 30
 
@@ -37,7 +41,7 @@ jobs:
         fi
 
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Print environment info
       run: |
@@ -49,7 +53,7 @@ jobs:
         command -v zig && zig version || true
 
     - name: Setup Zig
-      uses: goto-bus-stop/setup-zig@v2
+      uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
       with:
         version: 0.15.1
 
@@ -148,12 +152,13 @@ jobs:
         RUN_NAME="$NAME-run"
         OCI_NAME="$NAME-oci"
         SNAP_NAME="$NAME-snap"
+        OPT_NAME="$NAME-opt"
         BUNDLE="/var/lib/nexcage/bundles/$OCI_NAME"
 
         vmid_of() { $SUDO pct list 2>/dev/null | awk -v n="$1" 'NR>1 && $NF==n {print $1}'; }
         cleanup() {
           set +e
-          for n in "$NAME" "$RUN_NAME" "$OCI_NAME" "$SNAP_NAME"; do
+          for n in "$NAME" "$RUN_NAME" "$OCI_NAME" "$SNAP_NAME" "$OPT_NAME"; do
             id=$(vmid_of "$n")
             [ -z "$id" ] && continue
             echo "[E2E] Cleanup $n vmid=$id"
@@ -201,6 +206,29 @@ jobs:
         conf_has "$ID" "^net0: .*bridge=$BRIDGE(,|\$)"
         conf_has "$ID" "^rootfs: $ROOTFS:.*size=2G"
         conf_has "$ID" "^unprivileged: 1\$"
+
+        # What pct create is usually given (#308), read back from the
+        # container's configuration rather than trusted from create's exit
+        # status. Proxmox orders net0's keys itself, so each is matched alone.
+        echo "[E2E] create takes pct's options: limits as update says them, net0, onboot, tags, a mount point"
+        nx create --name "$OPT_NAME" --memory 768M --memory-swap 1G --cores 2 --cpu-quota 50000 --cpu-share 512 \
+          --ip 192.0.2.10/24 --gw 192.0.2.1 --vlan 20 --firewall --onboot --tags 'nexcage;e2e' \
+          --mp "$ROOTFS:1,mp=/mnt/e2e" "$TPL"
+        OID=$(vmid_of "$OPT_NAME")
+        conf_has "$OID" "^memory: 768\$"
+        conf_has "$OID" "^swap: 256\$"
+        conf_has "$OID" "^cores: 2\$"
+        conf_has "$OID" "^cpulimit: 0\.5\$"
+        conf_has "$OID" "^cpuunits: 20\$"
+        conf_has "$OID" "^net0: (.*,)?ip=192\.0\.2\.10/24(,|\$)"
+        conf_has "$OID" "^net0: (.*,)?gw=192\.0\.2\.1(,|\$)"
+        conf_has "$OID" "^net0: (.*,)?tag=20(,|\$)"
+        conf_has "$OID" "^net0: (.*,)?firewall=1(,|\$)"
+        conf_has "$OID" "^onboot: 1\$"
+        conf_has "$OID" "^tags: .*e2e"
+        conf_has "$OID" "^tags: .*nexcage"
+        conf_has "$OID" "^mp0: $ROOTFS:.*mp=/mnt/e2e"
+        nx delete "$OPT_NAME"
 
         echo "[E2E] exit codes: a duplicate name fails, bad usage is 2"
         expect_exit 1 nx create --name "$NAME" "$TPL"
@@ -536,8 +564,23 @@ jobs:
         # container is gone. Freeing it keeps the host's template list to
         # system templates, which is what the detection above looks for.
         before=$(vztmpl_list)
+        # Root's registry auth file, which the login check below replaces for a
+        # moment; whatever the node has there is put back. The copy is kept
+        # beside it, not under /tmp, so that a run cut short -- the runner was
+        # once stopped in this step -- is put right by the next run: wrong
+        # docker.io credentials left there would refuse every pull on the node.
+        AUTH=/root/.config/containers/auth.json
+        AUTH_SAVED=$AUTH.nexcage-e2e
+        WRONG=$(printf 'nexcage-e2e:wrong' | base64)
+        restore_auth() {
+          if $SUDO test -f "$AUTH_SAVED"; then $SUDO mv -f "$AUTH_SAVED" "$AUTH"
+          elif $SUDO grep -qs "$WRONG" "$AUTH"; then $SUDO rm -f "$AUTH"; fi
+          return 0
+        }
+        restore_auth
         cleanup() {
           set +e
+          restore_auth
           for n in "$NAME" "$NAME-2"; do
             id=$(vmid_of "$n")
             [ -z "$id" ] && continue
@@ -580,6 +623,27 @@ jobs:
 
         nx stop "$NAME"
         nx delete "$NAME"
+
+        # A private registry's login is root's auth file on the node that
+        # pulls: Proxmox runs skopeo with no --authfile (#309). Wrong
+        # credentials for docker.io there must turn a pull of a public image
+        # away, and nexcage must say why and where the login goes. pvesh
+        # exits 0 on such a failure, which is why the reason has to be read
+        # from its output at all.
+        echo "[E2E] a pull reads $AUTH, and a refused login says so"
+        if $SUDO test -f "$AUTH"; then $SUDO cp -p "$AUTH" "$AUTH_SAVED"; fi
+        $SUDO mkdir -p "$(dirname "$AUTH")"
+        printf '{"auths":{"docker.io":{"auth":"%s"}}}\n' "$WRONG" | $SUDO tee "$AUTH" >/dev/null
+        if nx pull docker.io/library/busybox:1.36 2>pull.err; then
+          echo "::error::a pull with wrong credentials in $AUTH went through: the file was not read"; exit 1
+        fi
+        restore_auth
+        grep -q "incorrect username or password" pull.err && grep -q "skopeo login --authfile $AUTH docker.io" pull.err || {
+          cat pull.err
+          echo "::error::the refused pull did not report the registry's reason and the skopeo login line"; exit 1
+        }
+        echo "[E2E] refused, with the reason: $(grep -o 'unauthorized[^"]*' pull.err | head -1)"
+
         cleanup
         trap - EXIT
         echo "[E2E] registry path passed"

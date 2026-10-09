@@ -67,6 +67,16 @@ decided for a container whose caller never says.
    describes is an OCI container either way — and `--runtime runc` is refused
    with the replacement named.
 
+6. **There is no VM backend.** `src/backends/proxmox-vm` was compiled out by
+   default and built by no workflow; the router refused every operation
+   routed to it without calling the driver, and the driver imported a module
+   the build did not define. It was removed in 0.14.0
+   ([#306](https://github.com/CageForge/nexcage/issues/306)). Unlike runc,
+   nothing can stand in for it — the default backend would make a container
+   where a VM was asked for — so a configuration naming `vm` (or `proxmox`,
+   which was mapped to it) is refused as a whole, and `--runtime vm` exits 2
+   saying why. `qm` can come back with a test behind it.
+
 ## Consequences
 
 Positive:
@@ -81,14 +91,17 @@ Positive:
 
 Negative:
 
-- Linking libcrun couples nexcage to its ABI. The fork's `features` structs
-  differ from upstream's by a trailing field, which segfaulted `features`
-  once; `scripts/check_features_abi.sh` now compares the vendored header
-  against the Zig mirror in CI. A crun bump is a deliberate change, not a
-  version number ([#227](https://github.com/CageForge/nexcage/issues/227)).
-- The `-crun` binary needs `libjson-c5`, `libseccomp2` and `libcap2` on the
-  host. A Proxmox VE 9 install has all three; releases before 0.13.0 needed
-  `libyajl2` instead, which it lacks.
+- Linking libcrun couples nexcage to its ABI. The Zig mirror of the
+  `features` structs was first written against crun 1.23.1, without the
+  trailing field 1.24 added, and that segfaulted `features` once; in CI,
+  `scripts/check_features_abi.sh` now compares the field order in the vendored
+  header against the order the Zig mirror was written for, which the script
+  lists itself (it does not read the mirror, so the two have to be changed
+  together by hand). A crun bump is a deliberate change, not a version number
+  ([#227](https://github.com/CageForge/nexcage/issues/227)).
+- The `-crun` binary needs `libjson-c5`, `libseccomp2`, `libcap2` and
+  `libsystemd0` on the host, installed with `apt` where missing; releases
+  before 0.13.0 needed `libyajl2` instead, which a Proxmox VE 9 install lacks.
 
 ## What changed since 2024-12-01, and why
 

@@ -1,16 +1,1 @@
-{
-  "network": { "bridge": "vmbr0" },
-  "proxmox": {
-    "storage": "local-lvm",
-    "rootfs_size_gb": 8,
-    "unprivileged": true
-  },
-  "runtime": {
-    "routing": [
-      { 
-        "pattern": "*", 
-        "runtime": "crun" 
-      }
-    ]
-  }
-}
+{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }

@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build image
         run: docker build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t nexcage:ci .
@@ -84,6 +84,21 @@ jobs:
             -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
             --entrypoint /bin/sh nexcage:ci /t/ps.sh
 
+      # update's value flags are nexcage's own: each one is mapped to crun's
+      # section and field and handed to libcrun_container_update_from_values
+      # (#359). An engine's resize takes --resources, which the pod step below
+      # covers. The check reads the container's cgroup after each update.
+      - name: update's flags reach the container's cgroup
+        run: |
+          set -eux
+          mkdir -p bundle/rootfs
+          docker create --name bbupd busybox:1.36 >/dev/null
+          docker export bbupd | tar -x -C bundle/rootfs
+          docker rm bbupd >/dev/null
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
+            --entrypoint /bin/sh nexcage:ci /t/update.sh
+
       # The checks around this one are unit-sized. This is the interface a
       # kubelet drives: a pod sandbox and a container in it, through
       # containerd's CRI with nexcage as the runtime handler, on a CNI bridge.
@@ -95,6 +110,19 @@ jobs:
           docker build -f tests/cri/Dockerfile -t nexcage:cri-test tests/cri
           docker run --rm --privileged --cgroupns=private \
             -v "$PWD/tests/cri:/t:ro" nexcage:cri-test /t/pod_on_nexcage.sh
+
+      # The runtime-spec's own validation suite (#310), opencontainers/
+      # runtime-tools, against this build routed to crun, with the image's crun
+      # alongside for reference. It asks what the specification says, not only
+      # what one engine happened to ask. The step fails on a failure
+      # tests/runtime-tools/known-failures does not name, and on a named one
+      # that passes.
+      - name: The runtime-spec validation suite
+        run: |
+          set -eux
+          docker build -f tests/runtime-tools/Dockerfile -t nexcage:runtime-tools tests/runtime-tools
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/tests/runtime-tools:/t:ro" nexcage:runtime-tools /t/run.sh
 
       # A container engine does not run the runtime from the bundle it names:
       # containerd's shim serves a whole pod and runs it from the sandbox's
@@ -111,3 +139,15 @@ jobs:
           docker run --rm --privileged --cgroupns=private \
             -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
             --entrypoint /bin/sh nexcage:ci /t/foreign_cwd.sh
+
+      # critest (#311), the CRI validation suite from cri-tools: what
+      # Kubernetes checks of a runtime, through the same containerd and the
+      # image the pod step built. It runs last: it takes the longest, and a
+      # failure here should not hide the checks above. The step fails on a
+      # failure tests/cri/critest-known-failures does not name, and on a named
+      # one that does not fail.
+      - name: critest, the CRI validation suite
+        run: |
+          set -eux
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/tests/cri:/t:ro" nexcage:cri-test /t/critest.sh

@@ -190,15 +190,11 @@ pub const StateCommand = struct {
 
                 return types.Error.NotFound;
             },
-            .crun, .vm => {
-                // crun is handled above, by libcrun itself. The VM backend
-                // cannot report state. This used to print a made-up
-                // "unknown" state and exit 0, which looks like a real
-                // container.
+            .crun => {
+                // crun is handled above, by libcrun itself. This used to print
+                // a made-up "unknown" state and exit 0, which looks like a
+                // real container.
                 if (self.base.logger) |log| log.err("state is not implemented for the {s} backend", .{@tagName(runtime_type)}) catch {};
-                return types.Error.UnsupportedOperation;
-            },
-            else => {
                 return types.Error.UnsupportedOperation;
             },
         }
@@ -210,11 +206,18 @@ pub const StateCommand = struct {
             "Show container state in OCI-compatible JSON format.\n" ++
             "Exits with an error if the container does not exist.\n\n" ++
             "The output follows OCI runtime state specification:\n" ++
+            "  - ociVersion: Runtime-spec version the output follows\n" ++
             "  - id: Container identifier\n" ++
             "  - status: created (not started through nexcage yet), running, stopped or paused\n" ++
-            "  - pid: host PID of the container's init while it runs, 0 otherwise\n" ++
+            "  - pid: host PID of the container's init. On Proxmox LXC, while it is running or\n" ++
+            "    paused on this node; 0 when it is created or stopped, or on another node of\n" ++
+            "    the cluster. On crun, while it is created, running or paused; 0 once stopped\n" ++
             "  - bundle: Bundle path (null if unknown)\n" ++
-            "  - annotations: OCI annotations (empty object)\n\n" ++
+            "  - annotations: on Proxmox LXC, io.cageforge.nexcage.node, the cluster node\n" ++
+            "    the container is on (empty object when the node is not known); on crun,\n" ++
+            "    libcrun prints the bundle's own annotations\n\n" ++
+            "On the crun backend the JSON is libcrun's own, as 'crun state' prints it,\n" ++
+            "which also carries rootfs, created and owner.\n\n" ++
             "Examples:\n" ++
             "  nexcage state web-1\n" ++
             "  nexcage state 101        # a VMID works too\n");

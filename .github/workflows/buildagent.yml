@@ -30,12 +30,16 @@ concurrency:
 jobs:
   package:
     name: Build, simulate and package on Debian 13
+    # A pull request from a fork must not run code on this machine, a build
+    # agent shared with other projects (#362). A maintainer runs the job on
+    # such code by pushing it to a branch here.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, buildagent, nexcage]
     timeout-minutes: 30
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Print environment info
         run: |
@@ -47,7 +51,7 @@ jobs:
           df -h . | tail -1
 
       - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.15.1
 

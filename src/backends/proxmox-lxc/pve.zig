@@ -220,9 +220,7 @@ pub const PveClient = struct {
         const already_there = res.exit_code == 25 and
             std.mem.indexOf(u8, res.stderr, "refusing to override existing file") != null;
         if (res.exit_code != 0 and !already_there) {
-            if (self.logger) |log| {
-                log.err("pulling {s} into {s} on {s} failed: {s}", .{ reference, storage, node, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
-            }
+            if (self.logger) |log| reportPullFailure(log, reference, storage, node, pullFailureReason(res.stdout, res.stderr));
             return core.Error.OperationFailed;
         }
 
@@ -249,9 +247,9 @@ pub const PveClient = struct {
             if (try self.matchTemplate(allocator, after, reference, filename)) |match| return match;
         }
 
-        if (self.logger) |log| {
-            log.err("the pull of {s} reported success but {s} on {s} holds no new template", .{ reference, storage, node }) catch {};
-        }
+        // pvesh exits 0 when the pull task it ran failed (#309): the reason is
+        // in its output, and nothing reached the storage.
+        if (self.logger) |log| reportPullFailure(log, reference, storage, node, pullFailureReason(res.stdout, res.stderr));
         return core.Error.OperationFailed;
     }
 
@@ -1148,69 +1146,18 @@ pub const PveClient = struct {
     /// another node through `pvesh set /nodes/<node>/lxc/<vmid>/config`, which
     /// takes the same options.
     pub fn setResources(self: *const Self, vmid: []const u8, values: []const core.types.ResourceUpdate, node: ?[]const u8) !void {
-        const res = core.resources;
         var args = std.ArrayListUnmanaged([]const u8){};
         defer {
             for (args.items) |a| self.allocator.free(a);
             args.deinit(self.allocator);
         }
-
-        var memory_bytes: ?i64 = null;
-        var swap_total: ?i64 = null;
-        var quota: ?i64 = null;
-        var period: ?i64 = null;
-        for (values) |v| {
-            const num: i64 = if (v.numeric) std.fmt.parseInt(i64, v.value, 10) catch {
-                if (self.logger) |log| log.err("{s}.{s}: '{s}' is not a number", .{ v.section, v.name, v.value }) catch {};
-                return core.Error.InvalidInput;
-            } else 0;
-            if (isSetting(v, "memory", "limit")) {
-                if (num < 0) {
-                    if (self.logger) |log| log.err("--memory -1: Proxmox has no unlimited memory for a container; give a size", .{}) catch {};
-                    return core.Error.UnsupportedOperation;
-                }
-                memory_bytes = num;
-                try pushOption(self.allocator, &args, "--memory", "{d}", .{res.mibCeil(num)});
-            } else if (isSetting(v, "memory", "swap")) {
-                if (num < 0) {
-                    if (self.logger) |log| log.err("--memory-swap -1: Proxmox has no unlimited swap for a container; give a size", .{}) catch {};
-                    return core.Error.UnsupportedOperation;
-                }
-                swap_total = num;
-            } else if (isSetting(v, "cpu", "quota")) {
-                quota = num;
-            } else if (isSetting(v, "cpu", "period")) {
-                period = num;
-            } else if (isSetting(v, "cpu", "shares")) {
-                try pushOption(self.allocator, &args, "--cpuunits", "{d}", .{res.sharesToWeight(num)});
-            } else {
-                if (self.logger) |log| log.err("{s}.{s} has no Proxmox setting for a container: pct set knows memory, swap, cpulimit and cpuunits, so this backend takes --memory, --memory-swap, --cpu-quota/--cpu-period and --cpu-share", .{ v.section, v.name }) catch {};
-                return core.Error.UnsupportedOperation;
-            }
+        // pct's --swap is swap alone and runc's --memory-swap memory plus
+        // swap, so a swap without a memory limit needs the container's own.
+        var current_memory: ?i64 = null;
+        if (hasSetting(values, "memory", "swap") and !hasSetting(values, "memory", "limit")) {
+            current_memory = try self.currentMemoryBytes(vmid, node);
         }
-
-        if (swap_total) |total| {
-            // runc's --memory-swap is memory plus swap; pct's --swap is swap
-            // alone. The difference needs the memory limit, from this call or
-            // from the container's config.
-            const limit = memory_bytes orelse (try self.currentMemoryBytes(vmid, node));
-            if (total < limit) {
-                if (self.logger) |log| log.err("--memory-swap is memory plus swap, as runc means it, and {d} is less than the memory limit of {d}", .{ total, limit }) catch {};
-                return core.Error.InvalidInput;
-            }
-            try pushOption(self.allocator, &args, "--swap", "{d}", .{@divFloor(total - limit + (1024 * 1024 - 1), 1024 * 1024)});
-        }
-        if (quota) |q| {
-            var buf: [32]u8 = undefined;
-            const cores = res.cpulimit(&buf, q, period orelse 100000) catch {
-                if (self.logger) |log| log.err("--cpu-period must be positive", .{}) catch {};
-                return core.Error.InvalidInput;
-            };
-            try pushOption(self.allocator, &args, "--cpulimit", "{s}", .{cores});
-        } else if (period != null) {
-            if (self.logger) |log| log.err("--cpu-period on its own changes nothing here: Proxmox has a CPU limit in cores, which is quota over period, so give --cpu-quota too", .{}) catch {};
-            return core.Error.InvalidInput;
-        }
+        try self.resourceOptions(values, current_memory, &args);
         if (args.items.len == 0) return;
 
         if (node) |n| return self.nodeApi(n, vmid, "set", "/config", args.items);
@@ -1228,6 +1175,75 @@ pub const PveClient = struct {
             if (self.logger) |log| log.err("pct set {s} failed: {s}", .{ vmid, std.mem.trim(u8, out.stderr, " \t\r\n") }) catch {};
             return self.mapPctError(out.stderr);
         }
+    }
+
+    /// The limits in pct's options, appended to `args` (each string owned by
+    /// it): what `update` says to `pct set` and `create` to `pct create`
+    /// (#308). `memory_fallback` is the memory limit in bytes when `values`
+    /// has a swap but no memory of its own.
+    pub fn resourceOptions(self: *const Self, values: []const core.types.ResourceUpdate, memory_fallback: ?i64, args: *std.ArrayListUnmanaged([]const u8)) !void {
+        const res = core.resources;
+        var memory_bytes: ?i64 = null;
+        var swap_total: ?i64 = null;
+        var quota: ?i64 = null;
+        var period: ?i64 = null;
+        for (values) |v| {
+            const num: i64 = if (v.numeric) std.fmt.parseInt(i64, v.value, 10) catch {
+                if (self.logger) |log| log.err("{s}.{s}: '{s}' is not a number", .{ v.section, v.name, v.value }) catch {};
+                return core.Error.InvalidInput;
+            } else 0;
+            if (isSetting(v, "memory", "limit")) {
+                if (num < 0) {
+                    if (self.logger) |log| log.err("--memory -1: Proxmox has no unlimited memory for a container; give a size", .{}) catch {};
+                    return core.Error.UnsupportedOperation;
+                }
+                memory_bytes = num;
+                try pushOption(self.allocator, args, "--memory", "{d}", .{res.mibCeil(num)});
+            } else if (isSetting(v, "memory", "swap")) {
+                if (num < 0) {
+                    if (self.logger) |log| log.err("--memory-swap -1: Proxmox has no unlimited swap for a container; give a size", .{}) catch {};
+                    return core.Error.UnsupportedOperation;
+                }
+                swap_total = num;
+            } else if (isSetting(v, "cpu", "quota")) {
+                quota = num;
+            } else if (isSetting(v, "cpu", "period")) {
+                period = num;
+            } else if (isSetting(v, "cpu", "shares")) {
+                try pushOption(self.allocator, args, "--cpuunits", "{d}", .{res.sharesToWeight(num)});
+            } else {
+                if (self.logger) |log| log.err("{s}.{s} has no Proxmox setting for a container: Proxmox knows memory, swap, cpulimit and cpuunits, so this backend takes --memory, --memory-swap, --cpu-quota/--cpu-period and --cpu-share", .{ v.section, v.name }) catch {};
+                return core.Error.UnsupportedOperation;
+            }
+        }
+
+        if (swap_total) |total| {
+            // runc's --memory-swap is memory plus swap; pct's --swap is swap
+            // alone. The difference needs the memory limit, from this call or
+            // from the caller: the container's config, or create's default.
+            const limit = memory_bytes orelse memory_fallback orelse return core.Error.InvalidInput;
+            if (total < limit) {
+                if (self.logger) |log| log.err("--memory-swap is memory plus swap, as runc means it, and {d} is less than the memory limit of {d}", .{ total, limit }) catch {};
+                return core.Error.InvalidInput;
+            }
+            try pushOption(self.allocator, args, "--swap", "{d}", .{@divFloor(total - limit + (1024 * 1024 - 1), 1024 * 1024)});
+        }
+        if (quota) |q| {
+            var buf: [32]u8 = undefined;
+            const cores = res.cpulimit(&buf, q, period orelse 100000) catch {
+                if (self.logger) |log| log.err("--cpu-period must be positive", .{}) catch {};
+                return core.Error.InvalidInput;
+            };
+            try pushOption(self.allocator, args, "--cpulimit", "{s}", .{cores});
+        } else if (period != null) {
+            if (self.logger) |log| log.err("--cpu-period on its own changes nothing here: Proxmox has a CPU limit in cores, which is quota over period, so give --cpu-quota too", .{}) catch {};
+            return core.Error.InvalidInput;
+        }
+    }
+
+    fn hasSetting(values: []const core.types.ResourceUpdate, section: []const u8, name: []const u8) bool {
+        for (values) |v| if (isSetting(v, section, name)) return true;
+        return false;
     }
 
     fn isSetting(v: core.types.ResourceUpdate, section: []const u8, name: []const u8) bool {
@@ -1516,6 +1532,81 @@ pub const PveClient = struct {
 /// Formats a row exactly as pct does: printf "%-10s %-10s %-12s %-20s\n".
 fn pctRow(buf: []u8, vmid: []const u8, status: []const u8, lock: []const u8, name: []const u8) ![]const u8 {
     return std.fmt.bufPrint(buf, "{s: <10} {s: <10} {s: <12} {s: <20}", .{ vmid, status, lock, name });
+}
+
+/// Why a registry pull failed, from what pvesh printed. A pull task that
+/// fails still lets pvesh exit 0; skopeo's own message, `level=fatal
+/// msg="..."`, is on stdout, and stderr only says that `skopeo copy` failed.
+/// The message says why, so it comes first.
+fn pullFailureReason(stdout: []const u8, stderr: []const u8) ?[]const u8 {
+    const tag = "level=fatal msg=\"";
+    var lines = std.mem.splitBackwardsScalar(u8, stdout, '\n');
+    while (lines.next()) |line| {
+        const at = std.mem.indexOf(u8, line, tag) orelse continue;
+        const start = at + tag.len;
+        const end = std.mem.lastIndexOfScalar(u8, line, '"') orelse line.len;
+        if (end > start) return line[start..end];
+    }
+    const rest = std.mem.trim(u8, stderr, " \t\r\n");
+    return if (rest.len > 0) rest else null;
+}
+
+/// A registry that turned the request away for want of a login, in the words
+/// registries and skopeo use for it.
+fn isLoginRefusal(reason: []const u8) bool {
+    for ([_][]const u8{ "unauthorized", "authentication required", "denied" }) |word| {
+        if (std.ascii.indexOfIgnoreCase(reason, word) != null) return true;
+    }
+    return false;
+}
+
+/// The registry of a reference, as `skopeo login` names it: what comes before
+/// the first slash when that looks like a host, else docker.io.
+fn registryOf(reference: []const u8) []const u8 {
+    const slash = std.mem.indexOfScalar(u8, reference, '/') orelse return "docker.io";
+    const first = reference[0..slash];
+    if (std.mem.indexOfAny(u8, first, ".:") != null or std.mem.eql(u8, first, "localhost")) return first;
+    return "docker.io";
+}
+
+/// Proxmox's pull runs skopeo with no --authfile, and skopeo reads root's
+/// auth file on the node that pulls (#309). A refused login says where it
+/// goes; the file under /run is skopeo's default and gone after a reboot.
+fn reportPullFailure(log: *core.LogContext, reference: []const u8, storage: []const u8, node: []const u8, reason: ?[]const u8) void {
+    const why = reason orelse {
+        log.err("the pull of {s} reported success but {s} on {s} holds no new template", .{ reference, storage, node }) catch {};
+        return;
+    };
+    log.err("pulling {s} into {s} on {s} failed: {s}", .{ reference, storage, node, why }) catch {};
+    if (isLoginRefusal(why)) {
+        log.err("for a registry that needs a login, run as root on {s}: skopeo login --authfile /root/.config/containers/auth.json {s} (docs/INSTALL.md)", .{ node, registryOf(reference) }) catch {};
+    }
+}
+
+test "a failed pull's reason is skopeo's message from stdout, then stderr" {
+    const out =
+        \\time="2026-10-08T22:34:16Z" level=fatal msg="initializing source docker://busybox:1.36: unable to retrieve auth token: invalid username/password: unauthorized: incorrect username or password"
+        \\UPID:nexcage-e2e:000700FD:0057F07B:6AC81A67:ociregistrypull:busybox_1.36.tar:root@pam:
+        \\
+    ;
+    const err = "command 'skopeo copy docker://docker.io/library/busybox:1.36 oci-archive:/x.tmp' failed: exit code 1\n";
+    const why = pullFailureReason(out, err).?;
+    try std.testing.expect(std.mem.startsWith(u8, why, "initializing source docker://busybox:1.36:"));
+    try std.testing.expect(std.mem.endsWith(u8, why, "incorrect username or password"));
+    try std.testing.expect(isLoginRefusal(why));
+
+    try std.testing.expectEqualStrings("command 'skopeo copy x' failed: exit code 1", pullFailureReason("UPID:x\n", "command 'skopeo copy x' failed: exit code 1\n").?);
+    try std.testing.expect(pullFailureReason("UPID:x\n", " \n") == null);
+    try std.testing.expect(!isLoginRefusal("manifest unknown"));
+}
+
+test "the registry a login is for" {
+    try std.testing.expectEqualStrings("docker.io", registryOf("busybox:1.36"));
+    try std.testing.expectEqualStrings("docker.io", registryOf("library/busybox:1.36"));
+    try std.testing.expectEqualStrings("docker.io", registryOf("docker.io/acme/app:1"));
+    try std.testing.expectEqualStrings("ghcr.io", registryOf("ghcr.io/acme/app:1"));
+    try std.testing.expectEqualStrings("registry.local:5000", registryOf("registry.local:5000/app"));
+    try std.testing.expectEqualStrings("localhost", registryOf("localhost/app"));
 }
 
 test "parsePctListLine reads an unlocked container" {

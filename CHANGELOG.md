@@ -7,21 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-08
+
+The OCI runtime is measured by the suites that define it: runtime-spec
+validation (33 of 58) and critest (110 of 142) run in CI, and every test that
+fails also fails with crun run directly. A Kubernetes node on Proxmox VE is
+installed from files the release ships, and a private registry needs one
+`skopeo login` per node. Nothing a script or an engine sends is read
+differently.
+
+### Security
+- **The self-hosted jobs no longer run a pull request from a fork** (#362). `proxmox_e2e.yml` and `buildagent.yml` ran any pull request's code on their machines, and on the E2E node the runner user has sudo for everything, so that code ran as root. They now skip a fork's pull request, as `k8s_e2e.yml` does from the start.
+
 ### Added
-- **Snapshots through Proxmox**: `snapshot`, `snapshots`, `rollback` and `delsnapshot`, with pct's names, for the Proxmox LXC backend (#299). Proxmox takes the snapshot, so each is one `pct` call for a container here and one call to its node's API for a container elsewhere; nexcage adds the container by name on any node, a plain line when the storage cannot snapshot, and `--format json` for the list. The crun backend refuses them: libcrun has no storage of its own to snapshot. The successor of #116, #117, #118 and #163, which asked for this through libzfs.
-- **`scripts/dev.sh`, one entry point for local development**, with `make doctor`, `dev-setup`, `e2e`, `act`, `local-ci`, `perf` and `dev-shell`: a check of every tool with how to get what is missing; the unit tests and the simulator; the crun-backend image and the checks `crun_build.yml` runs on it; a pod through containerd's CRI; a shell with nexcage, crun, containerd and crictl (`shell [CMD]`); the GitHub-hosted CI jobs through act, with the repository's `.actrc` and runner image (`.github/act`); and `pve-e2e`, which dispatches the Proxmox E2E for the pushed branch and follows it. No root needed; rootless podman or Docker. [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
-- **Performance suites** in `tests/perf/`: the Proxmox LXC lifecycle against the simulator — wall time, peak memory and the number of `pct`/`pvesh`/`pvesm` runs per command — and the crun backend's lifecycle next to crun's own binary. `scripts/dev.sh perf --against <ref>` builds both revisions ReleaseSafe, runs them in alternating rounds and exits 1 on a regression: any extra Proxmox tool run, or a time shift most of the samples agree on.
+- **Images from a private registry** (#309). Proxmox's pull runs skopeo with no `--authfile`, and on the E2E node skopeo was shown to read root's `/root/.config/containers/auth.json`, through `pvesh`, and through `pvesh` with the environment emptied as `pvedaemon`'s is (the API path itself was not run). `skopeo login --authfile /root/.config/containers/auth.json <registry>` on each node that pulls is all a private registry needs; `docs/INSTALL.md` says so. The Proxmox E2E now checks that wrong credentials in that file turn a pull away and that nexcage reports why.
+- **The runtime-spec validation suite runs against the crun backend in CI** (#310). `crun_build.yml` runs opencontainers/runtime-tools (runtime-spec 1.3.0) against the `-crun` build routed to crun, and the image's crun for reference. nexcage passes 33 of 58 tests; each of the 25 that fail is named in `tests/runtime-tools/known-failures` with the reason, and fails with crun run directly too: tests that cannot read cgroup v2, cgroup v1 settings libcrun refuses by name, and tests that contradict runtime-spec 1.3.0 or themselves. A failure not on the list turns the job red, and so does a listed test that passes. `docs/RUNTIME_SPEC_VALIDATION.md` has the results.
+- **critest, the CRI validation suite, runs against nexcage in CI** (#311). `crun_build.yml` runs cri-tools' critest (v1.37.0, 142 specs) against containerd with nexcage as the runtime handler, and again through the image's crun for reference. 110 pass, 10 fail and 22 are skipped, the same spec for spec as through crun. The 10 that fail are AppArmor specs that need `sudo apparmor_parser` in the image, and pod sandbox metrics, which containerd reads from a cgroup parent that critest does not set under cgroupfs. Each is named in `tests/cri/critest-known-failures` with the reason. Its first run found #361. `docs/KUBERNETES_INTEGRATION.md` has the results.
+- **The k3s pod test runs from a workflow** (#312). `k8s_e2e.yml` builds the `-crun` binary from the commit under test, as the release does, and runs `tests/k8s/pod_on_node.sh` on the E2E node. That is k3s, a pod with `runtimeClassName: nexcage` that has to be Ready, `kubectl logs`, `kubectl exec` and a delete, all checked against what nexcage was asked. It runs on release tags, on demand, and on a pull request that changes the test, never on a fork's. The script now removes the `/etc/nexcage/config.json` it wrote, which used to stay behind and route every nexcage on the node to crun.
+- **A Kubernetes node on Proxmox VE, from what a release ships** (#313). `docs/INSTALL.md` has the steps in order: the `-crun` binary, the routing configuration (`packaging/config/config.oci.example.json`), nexcage as a runtime of k3s, containerd or CRI-O (examples in `deploy/kubernetes/node/`, which nothing enables for you), the `RuntimeClass`, and a pod to check it with. `tests/k8s/pod_on_node.sh` installs the same files, so `k8s_e2e.yml` checks what an administrator is told to install. The `-crun` build stays a bare binary; a package for it belongs to the APT repository work in 1.0.0.
+- **`update`'s flags are checked against the container's cgroup** (#359). On the crun backend nexcage maps each flag to crun's section and field itself, and nothing ran that against a kernel. `tests/crun/update.sh`, a `crun_build.yml` step, reads the container's cgroup after each update:
+  - `--memory`, `--memory-reservation`, `--memory-swap`, `--pids-limit`, `--cpu-quota`/`--cpu-period` and `--cpuset-cpus` against `memory.max`, `memory.low`, `memory.swap.max`, `pids.max`, `cpu.max` and `cpuset.cpus`;
+  - `--cpu-share` against the `cpu.weight` libcrun writes for the same shares in a `linux.resources` document;
+  - `--kernel-memory`, which cgroup v2 has no file for, must be refused.
+
+### Fixed
+- **A pull that Proxmox failed came back as "holds no new template"** (#309). `pvesh` exits 0 when its pull task fails, with skopeo's reason on stdout. nexcage now reports that reason, and for a refused login it gives the `skopeo login --authfile /root/.config/containers/auth.json <registry>` line for the node that pulls.
+- **containerd could not stop a pod whose container had just exited** (#361), found by critest. containerd's shim decides what a failed `kill` means from the command's output: "no such process" means the process has already exited, which is fine for a stop. With `--log <file>`, which every engine passes, nexcage wrote libcrun's reason to the file only, and stderr said `operation failed`. StopContainer then failed, and StopPodSandbox with it. An error now goes to stderr as well, as runc and crun print theirs. Without `--log` nothing changes.
+
+## [0.15.0] - 2026-10-08
+
+`create` takes what `pct create` is usually given -- limits, cores, a static
+address, a VLAN, mount points, `onboot`, tags -- and an option nexcage does not
+know is refused by name instead of skipped. **A script with a misspelt or
+unsupported option now fails with exit 2 where it used to carry on.**
+
+### Fixed
+- **An unknown option was skipped without a word, and its value taken for the next positional word** (#355). `create --memroy 2G` answered "OCI bundle '2G' must be an absolute path", and an unknown flag without a value simply vanished, so `kill --al` signalled the init alone. An option no command takes now exits 2 naming it, and a value option given last without its value says it needs one. Every option an engine was seen sending already has its own branch, so their command lines are unchanged; runc options nexcage does not implement (`--no-pivot`, `--preserve-fds`, ...) are refused rather than dropped. `create --image <image>`, the form `create --help` shows, had only worked because `--image` was skipped and its value taken for the image; it is parsed now.
+
+### Added
+- **`create` takes what `pct create` is usually given** (#308): `--memory`, `--memory-swap`, `--cpu-quota`, `--cpu-period` and `--cpu-share` under `update`'s names and said to pct the way `update` says them (one conversion, shared); `--cores`; `--ip`, `--gw`, `--vlan` and `--firewall`, which are `net0`'s `ip=`, `gw=`, `tag=` and `firewall=1`; `--onboot`; `--tags`; and `--mp <spec>`, repeatable, in pct's own syntax as `mp0`, `mp1`, .... They go through `pct create` for a container here and the node's API for one made with `--node`, so nothing needs a `pct set` by VMID afterwards. A limit Proxmox cannot express is refused by name, as `update` refuses it; an address containing `,` or `=`, which would add a `net0` key, and a VLAN tag outside 1-4094 are usage errors; `--mp` with an OCI bundle is refused, because the bundle's mounts take the `mp` entries; and the crun backend refuses all of them, since it takes limits, network and mounts from the bundle's `config.json`. The Proxmox E2E creates a container with every option and reads each one back from `pct config`.
+
+## [0.14.1] - 2026-10-08
+
+Flags that `run` and `exec` accepted on Proxmox LXC and then dropped are
+refused by name -- **`exec --user 1000` ran the command as root** -- and three
+smaller fixes: an explicit `--log-level info`, `health`'s idea of the
+configuration, and CI's Zig install.
 
 ### Changed
+- **CI installs Zig with `mlugg/setup-zig`**, pinned to v2.2.1 by commit, instead of `goto-bus-stop/setup-zig`, which its README calls unmaintained (#338). The Proxmox E2E on `main` failed in that step, timing out on the download before any test ran; on the self-hosted runners the new action keeps Zig in the runner's tool cache rather than fetching it every run. The release workflow builds without the Zig cache, from the tagged tree alone.
+
+### Fixed
+- **`--log-level info` and `NEXCAGE_LOG_LEVEL=info` could not override a configuration file's level** (#330): an `info` from the command line or the environment was taken for "not set", so a file saying `debug` could not be turned back to `info` for one command. A level that is named now wins over the file's, `info` included, and takes the debug mode the file's `debug` level turned on with it; `--debug` and `NEXCAGE_DEBUG` still keep debug mode on. A level nexcage does not know is ignored, as before.
+- **`exec --user 1000` on Proxmox LXC ran the command as root** (#329). `--user`, `--cwd`, `--console-socket` and `--pid-file` reached the crun backend only, and Proxmox LXC dropped them: `pct exec` runs a command as root, in a directory nexcage does not choose, and hands back no pty or pid. They are refused there now, as `--process` and `--detach` already were. `--tty` is honoured when nexcage runs on a terminal, because `lxc-attach` gives the command one whenever a standard descriptor is a terminal, and refused when none is.
+- **`run` dropped `--node`, `--console-socket` and `--pid-file`** (#328): `run --node titan` made the container on this host without a word, and a caller passing `--console-socket` waited for a pty that never came. All three are refused, before anything is created; `create --node`, then `start`, makes a container on another node.
+- **`health` checked a configuration nothing reads, and looked up google.com** (#334). It looked at `/etc/nexcage/config.json`, then `./config.json`, whatever `--config` said, while every command reads the file `--config` names or else `./config.json`, `/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json`; so it could pass a file nothing used and miss the one in use. It reports that file now, from the same search. Its JSON check went with it: the file is loaded before any command runs, so a bad one never reached the check. And `nslookup google.com` is gone: nexcage resolves no names itself, and a root tool on an air-gapped cluster should not send a lookup to an outside name to warn about nothing.
+
+## [0.14.0] - 2026-10-08
+
+Snapshots, `create --node` on a stock Proxmox VE host, and a project that says
+true things: the Proxmox VM stub and two build options that could not work are
+gone, and the documentation, ownership and review rules were checked against
+what the code and the project do. **A configuration naming `vm` or `proxmox`
+as a runtime is now refused by every command.**
+
+### Added
+- **`ROADMAP.md`**: what comes next and why, release by release up to the criteria for 1.0, and what is not planned. No dates past the next release; each item links its issue.
+- **Snapshots through Proxmox**: `snapshot`, `snapshots`, `rollback` and `delsnapshot`, with pct's names, for the Proxmox LXC backend (#299). Proxmox takes the snapshot, so `snapshot`, `rollback` and `delsnapshot` are each one `pct` call for a container here and one call to its node's API for a container elsewhere, and `snapshots` reads the node's API for both; nexcage adds the container by name on any node, a plain line when the storage cannot snapshot, and `--format json` for the list. The crun backend refuses them: libcrun has no storage of its own to snapshot. The successor of #116, #117, #118 and #163, which asked for this through libzfs.
+- **`scripts/dev.sh`, one entry point for local development**, with `make doctor`, `dev-setup`, `e2e`, `act`, `local-ci`, `perf` and `dev-shell`: a check of every tool with how to get what is missing; the unit tests and the simulator; the crun-backend image and the checks `crun_build.yml` runs on it; a pod through containerd's CRI; a shell with nexcage, crun, containerd and crictl (`shell [CMD]`); the GitHub-hosted CI jobs through act, with the repository's `.actrc` and runner image (`.github/act`); and `pve-e2e`, which dispatches the Proxmox E2E for the pushed branch and follows it. No root needed; rootless podman or Docker. [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
+- **Performance suites** in `tests/perf/`: the Proxmox LXC lifecycle against the simulator — wall time, peak memory and the number of Proxmox tool runs (`pct`, `pvesh`, `pvesm`, `pveam`, `pveversion`, `zfs`) per command — and the crun backend's lifecycle next to crun's own binary. `scripts/dev.sh perf --against <ref>` builds both revisions ReleaseSafe, runs them in alternating rounds and exits 1 on a regression: any extra Proxmox tool run, or a time shift most of the samples agree on.
+
+### Changed
+- **Proxmox VE 8.x is no longer supported.** nexcage ran on it, but the E2E suite only ever ran on 9.x, and Proxmox ended support for 8.x in August 2026 together with Debian 12. Nothing in the code refuses an 8.x host; the README, `docs/INSTALL.md` and `docs/DEV_QUICKSTART.md` stop promising it.
 - **`state` reports `ociVersion` 1.3.0**, the runtime-spec baseline since v0.7.4, from one constant, `OCI_RUNTIME_SPEC_VERSION`; both backends wrote a hand-written `1.0.0`, which the dependency check reported as #294. `features` is unchanged: it is libcrun's own claim about what the library implements.
 - **The crun job of `dependency_check.yml` keeps one open issue truthful.** It rewrites the issue's title and body when the pin or the latest release moves, and closes the issue once the pin is based on the latest release; `workflow_dispatch` gained `dry_run`, which prints what would be filed, edited or closed instead, and `scripts/dev.sh act` runs the job that way by default.
 - The simulator's fake host moved from `tests/sim/run.sh` into `tests/sim/lib.sh`, which the perf suite shares.
 - `crun_build.yml`'s features document check is `tests/crun/features_check.py`, so the local run and CI run the same one.
 - `.gitignore` covers what the GitHub-hosted jobs write into their checkout (`zig-out-release/`, `err.txt`, `features.json`, `bundle/`), because act runs them in this one; `.dockerignore` leaves out `.actrc`.
 
+### Removed
+- **The Proxmox VM backend**, with `-Denable-backend-proxmox-vm` (#306). It was compiled out by default and built by no workflow; the router answered every operation routed to it as not implemented without calling the driver, and the driver imported `integrations/proxmox-api`, a module `build.zig` does not define — a build with the option on succeeded only because nothing reached it. Unlike runc in 0.13.0 there is nothing to route such a container to instead: the default backend would make a container where a VM was asked for. So a configuration naming `vm` as a runtime, or `proxmox`, which was mapped to it, is now an error for every command, saying what to name instead; `--runtime vm` and `--runtime qemu` exit 2 saying the backend was removed. `qm` can come back with a test behind it.
+- **`-Denable-backend-proxmox-lxc`** (#331). Setting it to `false` never compiled: the CLI calls the Proxmox LXC driver directly in seven places, and only the crun backend is checked for at run time. Proxmox LXC is the backend nexcage exists for, and a build without it is crun under another name, so the backend is always built; `zig build` rejects the option as unknown.
+- **`crun_vendor_sync.yml`, `crun_headers_generate.yml` and `scripts/sync_crun_vendor.sh`** (#332). Both workflows changed files inside `deps/crun` and asked for a pull request, but `deps/crun` is a submodule: the parent repository records a commit id, so there was never a change to propose and neither ever opened one. The weekly sync had also been disabled by GitHub for inactivity, and its script copied an upstream tarball over the submodule's checkout, which is not how the pin moves. The pin moves by hand, as *Updating the vendored crun* in `docs/DEVELOPMENT_WORKFLOW.md` describes, `dependency_check.yml` says when it falls behind, and the Dockerfile generates the headers at build time.
+
 ### Fixed
+- `build.zig.zon` said version 0.9.0 through four releases, because nothing in the build reads it; `scripts/ci/check_version.sh` now fails when it differs from `VERSION`.
+- **`CODEOWNERS` never requested a review** (#303): GitHub reported every owner in it as unknown, because `@CageForge` is the organization, which cannot own code, and `@moriarti` is not the maintainer's account. It names `@themoriarti`, and `MAINTAINERS.md` names the one active maintainer instead of the organization and that account.
+- **`GOVERNANCE.md`, `MAINTAINERS.md` and `CONTRIBUTING.md` asked for two LGTMs** on non-trivial changes, with one active maintainer to give them (#304). They describe what is practised: every change goes through a pull request with green CI, the maintainer merges their own, anyone else's needs the maintainer's approval, and architecture needs an ADR. The two-reviewer rule starts with a second active maintainer.
+- **Documentation and `--help` that disagreed with the code** (#307), checked statement by statement against the source across the README, `docs/`, the architecture notes, the man page, the bash completion, `config.json.example` and every command's `--help`. Among what was wrong: a bundle had to sit under two directories (any absolute path has been accepted since 0.10.0); the crun backend had no `state` or `exec` (it has both); the Kubernetes gap table listed logs and sandboxes, which the engine provides, and `update` as missing; `--log-file` was said to receive the log, when it holds only start and completion lines and never an error; `pause` and `resume` were not among the things that stay local on a cluster; `list` was said to cover every backend (it lists Proxmox LXC only); the man page, the completion and `help` lacked a dozen commands; `config.json.example` carried keys nothing reads; and the CycloneDX SBOM was said to come from `cyclonedx-action`, when the release workflow writes a stub with no components. The changelog's *Support Policy* and *Upgrade Path* described v0.1 to v0.4 and say what is true now.
 - **The dependency check reported the vendored crun as 1.14.2** in #227, its 26 closed duplicates and #295, filed after the pin had reached 1.30.1. In a submodule checkout `.git` is a file, so the step's `[ -d .git ]` never matched and it took the first `N.N.N` on any line of NEWS containing "version", a changelog line from 2024. It now reports the pinned commit of the fork `.gitmodules` names and the release `.upstream_tag` declares, checked against the newest NEWS entry; the latest-release lookup is authenticated rather than turning a rate limit into "null"; and an update means the pin is version-older than the release, not merely different.
 - **The CRI test could not run under rootless podman.** It enabled cgroup controllers in one write naming `cpuset` and `io`, which a user's cgroup does not delegate, so the write failed as a whole and enabled none; and containerd in a user namespace was not told to leave `oom_score_adj` and AppArmor alone, so libcrun's `write to /proc/self/oom_score_adj` failed every sandbox. Controllers are enabled one at a time now, and the two containerd options are set when the test runs in a user namespace. CI's rootful Docker is unaffected.
+- **`create --node` was refused on any host with the zfs tools installed** (#327) — which is every stock Proxmox VE host: Proxmox VE installs them, and the E2E node has them without asking. The guard meant to stop nexcage making a ZFS dataset in this host's pool for a container on another node asked whether `zfs version` works, which says only that the tools are there. nexcage makes a dataset of its own only in a pool it is given, which no configuration key sets, and that is what the guard asks now; a rootfs on a ZFS storage, which Proxmox makes on the owning node, goes through. The simulator's fake `zfs` answered "not installed", so the `create --node` checks ran on a host Proxmox VE does not ship. It reports the tools installed now, as a real host does, and four of those checks fail on the previous binary, as does a new one with `proxmox.storage` on ZFS. The lxc-sim perf suite counts one more `zfs` call for `create`, `run` and a bundle `create`: on a host with the tools, nexcage asks `zfs version` twice per create, which the fake now shows.
 
 ## [0.13.0] - 2026-09-27
 
@@ -776,24 +852,16 @@ This release introduces a complete modular architecture following SOLID principl
 
 ---
 
-## Version History Summary
-
-- **v0.4.0**: Modular Architecture - Complete redesign with SOLID principles
-- **v0.3.0**: ZFS Checkpoint/Restore - Performance and snapshot improvements
-- **v0.2.0**: Proxmox Integration - Full Proxmox VE integration
-- **v0.1.0**: Initial Release - Basic functionality
-
 ## Support Policy
 
-- **v0.4.0+**: Active development and support
-- **v0.3.x**: Security updates only
-- **v0.2.x**: Critical bug fixes only
-- **v0.1.x**: Deprecated, no support
+Before 1.0, a fix lands in the next release; there are no maintenance
+branches. Which releases receive security fixes is in
+[SECURITY.md](SECURITY.md). The policy for 1.0 and after is not written yet.
 
 ## Upgrade Path
 
-- **From v0.3.x to v0.4.0**: Major upgrade required, see migration guide
-- **From v0.2.x to v0.4.0**: Major upgrade required, see migration guide
-- **From v0.1.x to v0.4.0**: Major upgrade required, see migration guide
-
-For detailed migration instructions, see `docs/MODULAR_ARCHITECTURE.md` as of the v0.4.0 tag.
+Every release since 0.8.0 has notes in `docs/releases/NOTES_v<version>.md`
+that say what changes for someone upgrading: a renamed column, a new shared
+library, a removed configuration key. Going from one release to a later one,
+read the notes of each release in between. 0.9.0 was prepared but never
+tagged; its changes ship in 0.9.1.

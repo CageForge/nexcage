@@ -237,6 +237,15 @@ case "$1 $2" in
     # which is what a storage's content listing answers from -- `pull` reads the
     # volid back from the storage rather than composing it.
     [ -e "$SIM/fail_pull" ] && { echo "pull failed" >&2; exit 1; }
+    # What Proxmox does when its pull task fails, a refused login among others
+    # (#309): skopeo's reason on stdout, the failed command on stderr, nothing
+    # on the storage, and exit 0.
+    if [ -e "$SIM/pull_refused" ]; then
+        echo "time=\"2026-10-08T22:34:16Z\" level=fatal msg=\"initializing source docker://$4: unable to retrieve auth token: invalid username/password: unauthorized: incorrect username or password\""
+        echo "UPID:sim:00000001:00000001:00000001:ociregistrypull:x.tar:root@pam:"
+        echo "command 'skopeo copy docker://$4 oci-archive:/var/lib/vz/template/cache/x.tar.tmp.1' failed: exit code 1" >&2
+        exit 0
+    fi
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
     store=$(echo "$2" | sed -n 's|/nodes/[^/]*/storage/\([^/]*\)/oci-registry-pull|\1|p')
     ref=$4; tag=${ref##*:}; img=${ref%:*}; img=${img##*/}

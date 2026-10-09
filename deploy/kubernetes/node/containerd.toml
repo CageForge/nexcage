@@ -1,0 +1,7 @@
+# nexcage as a runtime of containerd 2.x (configuration version 3). Merge it
+# into /etc/containerd/config.toml and restart containerd. The default runtime
+# stays what it was: a pod gets nexcage only by naming the RuntimeClass.
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
+  runtime_type = 'io.containerd.runc.v2'
+  [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
+    BinaryName = '/usr/local/bin/nexcage'

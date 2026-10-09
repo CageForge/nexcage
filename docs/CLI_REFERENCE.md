@@ -21,13 +21,18 @@ inside the container keeps its `=`.
 |---|---|
 | `--debug` | Log level `debug`, plus startup and system information |
 | `--log-level <level>` | `trace`, `debug`, `info` (default), `warn`, `error`, `fatal` |
-| `--log-file <path>` | Also write log lines to `<path>` |
+| `--log-file <path>` | Also write to `<path>` (and to stderr) a startup line naming the version, a line when the command starts, and two when it succeeds; with `--debug`, system information and the command's environment (debug mode, log file, timestamp) too. The command's own log lines, including the ones that explain a failure, are not written there: they go to stderr, or to `--log` |
 | `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1) |
 | `--log <path>` | The runtime's own log goes to `<path>` instead of stderr, as an OCI runtime's does. A container engine reads it back to report why the runtime failed |
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
-| `--systemd-cgroup` | Accepted; cgroup management is libcrun's, and this reaches its context |
+| `--systemd-cgroup` | Accepted anywhere, so that an engine sending it is not refused. Only after `create`, on the crun backend, does it reach libcrun's context; anywhere else it has no effect |
 | `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
 | `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
+
+An option no command takes is refused with exit 2, naming it, and so is a
+value option with nothing after it. That includes runc options nexcage does not
+implement, such as `--no-pivot` or `--preserve-fds`: dropping one would run the
+container differently from what was asked.
 
 Logs go to stderr. stdout carries only command output (`list`, `state`,
 help text).
@@ -69,14 +74,19 @@ host they run `pct`, and for one elsewhere they go through that node's API. The
   "annotations": { "io.cageforge.nexcage.node": "titan" }
 ```
 
-**Three things stay local**, and are refused with the node's name rather than
-answered wrongly:
+**Four things stay local.** `exec`, `kill`, `pause` and `resume` are refused
+with the node's name rather than answered wrongly; the `pid` in `state` is 0,
+and the `io.cageforge.nexcage.node` annotation names the node:
 
 | | why |
 |---|---|
 | `exec` | `pct exec` attaches to a container on the host it runs on, and the API has no exec |
 | `kill` | a signal goes to the container's init from the host, and the API has no call for that — `stop` and `delete` do work from here |
+| `pause`, `resume` | freezing writes the container's cgroup on the host it runs on, and the API has no call for that |
 | the `pid` in `state` | an init's PID belongs to its node's process table; reporting it here would name whatever holds that number on this host |
+
+`paused` is local too, and is not refused: `state` and `list` read it from this
+host's cgroup freezer, so a frozen container on another node shows as `running`.
 
 `create --node <name>` makes the container on another node:
 
@@ -91,13 +101,16 @@ called `local` is a different directory on every node unless it is shared, so a
 volid that exists here may simply not be there. The message names the node and
 the storage rather than leaving the API to say "volume does not exist".
 
-Three things `--node` will not do, and refuses rather than half-does:
+Two things `--node` will not do, and refuses rather than half-does:
 
 | | why |
 |---|---|
 | an OCI bundle (`--bundle`) | its rootfs is packed into a template on **this** host's storage, which the other node cannot read unless that storage is shared |
 | a registry image (`docker.io/...`) | the pull lands on this host, for the same reason |
-| a ZFS rootfs | the dataset would be created in this host's pool, and the container there could not reach it |
+
+A rootfs on a ZFS storage goes through: `proxmox.storage` reaches that node's
+API as `--rootfs <storage>:<size>`, and Proxmox makes the volume there, so name
+a storage the target node has.
 
 `--node` naming the host nexcage is running on is not "another node": it takes
 the ordinary local path, `pct` and all.
@@ -117,10 +130,11 @@ node a container elsewhere is on.
 
 ## Backend selection
 
-`create`, `run`, `start`, `stop`, `delete`, `kill`, `exec` and `state` go to
-the backend chosen by the routing rules in the config file, Proxmox LXC by
+`create`, `run`, `start`, `stop`, `delete`, `kill`, `exec`, `state`, `pause`,
+`resume`, `update`, `ps`, `features` and the snapshot commands go to the
+backend chosen by the routing rules in the config file, Proxmox LXC by
 default.
-`--runtime <lxc|crun|vm>` overrides that for one command, before or after
+`--runtime <lxc|crun>` overrides that for one command, before or after
 the command name.
 
 A routing rule's `pattern` is a **regular expression only when it starts with
@@ -138,13 +152,16 @@ routing to the OCI backend in the configuration file:
 ```
 
 - `crun` works only in a binary built with `-Denable-backend-crun=true`;
-  otherwise the
-  command fails with exit 1. They have no `run` or `state`, and neither has
-  `exec`: libcrun's exec entry point has no binding in nexcage's FFI.
+  otherwise the command fails with exit 1. It has no `run`, and refuses the
+  snapshot commands, which are Proxmox's (exit 1 for both).
 - The crun backend creates the container from the bundle given with
   `--bundle`, and keeps its state under `--root` when one is given, or
   `/run/crun` as crun itself does.
-- `vm` is not integrated yet: every command fails with "not implemented".
+- `vm` and `qemu` named the Proxmox VM backend, removed in 0.14.0, and exit 2
+  saying so. A routing rule naming `vm`, or `proxmox`, which meant the same,
+  makes the configuration file an error (exit 1) for every command: no
+  backend is left to run what it describes, and the default one would make
+  a container where a VM was asked for.
 - Any other value is a usage error (exit 2).
 
 ## Exit status
@@ -167,12 +184,12 @@ means by them.
 ### create
 
 ```bash
-nexcage create --name <name> [--storage <name>] <image>
+nexcage create --name <name> [--storage <name>] [pct options] <image>
 nexcage create <container-id> --bundle <dir> [--console-socket <path>] [--pid-file <path>]
 ```
 
 Creates a container named `<name>`; the name becomes its hostname and must be
-unique on the node. The VMID comes from `pvesh get /cluster/nextid`. `--image
+unique in the cluster. The VMID comes from `pvesh get /cluster/nextid`. `--image
 <image>` is accepted in place of the positional image.
 
 `<image>` can be:
@@ -182,13 +199,13 @@ unique on the node. The VMID comes from `pvesh get /cluster/nextid`. `--image
 | Proxmox template | `local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst` | Any `<storage>:vztmpl/…` volume |
 | Template file name | `debian-12-standard_12.7-1_amd64.tar.zst` | Looked up as `local:vztmpl/<file>` |
 | OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only. Found on `--storage` (default `local`) if already pulled, else pulled there through `oci-registry-pull`; the volid is read back from the storage, never guessed from the reference |
-| OCI bundle directory | `/var/lib/nexcage/bundles/web` | Under `/var/lib/nexcage/bundles/` or `/tmp/nexcage-bundles/`, containing `config.json` and `rootfs/` |
+| OCI bundle directory | `/var/lib/nexcage/bundles/web` | Any absolute path, containing `config.json` and `rootfs/`; a relative path is a usage error (exit 2) |
 
 `--console-socket <path>` is where the runtime sends the master end of the
 container's pty, over a Unix socket with `SCM_RIGHTS`, as the runtime-spec
-requires. A bundle whose `config.json` sets `process.terminal` cannot be
-created without it. `--pid-file <path>` is where the container process's pid is
-written.
+requires. On the crun backend, a bundle whose `config.json` sets
+`process.terminal` cannot be created without it. `--pid-file <path>` is where
+the container process's pid is written.
 
 Both need a backend that leaves a process running after `create`, which means
 `--runtime crun`. On the Proxmox LXC backend they fail with exit 1 and say so:
@@ -204,7 +221,7 @@ image, which is the form the runtime-spec defines and a container engine sends:
 working.
 
 The container gets `eth0` on `network.bridge` with DHCP, 512 MiB of memory and
-one core unless the OCI bundle sets limits. Its root filesystem goes to
+one core unless the options below or the OCI bundle set them. Its root filesystem goes to
 `proxmox.storage` (`<storage>:<rootfs_size_gb>`) when that is configured. It is
 unprivileged unless `proxmox.unprivileged` is `false`; images from a registry
 always run unprivileged.
@@ -215,13 +232,53 @@ template and deletes the archive. The rootfs is used as it is, so it must boot
 as a system container: an image without an init will not start. Mounts are
 added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
 
+#### pct options
+
+What `pct create` is usually given, on the Proxmox LXC backend. Each maps onto
+one pct option, through `pct create` here and the node's API with `--node`, so
+`pct config <vmid>` shows it afterwards. Nothing given means pct's default (or
+nexcage's, for memory, cores and the network).
+
+| Option | pct | Notes |
+|---|---|---|
+| `--memory <size>` | `memory` | As for `update`: bytes, or with K, M or G. MiB, rounded up |
+| `--memory-swap <size>` | `swap` | As for `update`, runc's meaning: memory plus swap. pct's `swap` is the difference, so it cannot be less than the memory |
+| `--cpu-quota <us>`, `--cpu-period <us>` | `cpulimit` | Quota over period, in cores; the period defaults to 100000 |
+| `--cpu-share <n>` | `cpuunits` | cgroup v1 shares converted to the v2 weight, as runc converts them |
+| `--cores <n>` | `cores` | The cores the container sees |
+| `--ip <cidr>` | `net0` `ip=` | `dhcp` by default; `manual` leaves it unset |
+| `--gw <address>` | `net0` `gw=` | |
+| `--vlan <tag>` | `net0` `tag=` | 1 to 4094 |
+| `--firewall` | `net0` `firewall=1` | |
+| `--onboot` | `onboot 1` | |
+| `--tags <a;b>` | `tags` | |
+| `--mp <spec>` | `mp0`, `mp1`, ... | pct's own syntax, e.g. `local-lvm:8,mp=/data` (a new 8 GiB volume) or `/srv/data,mp=/data` (a bind mount). Each `--mp` takes the next index |
+
+A limit Proxmox has no setting for (`--pids-limit`, `--cpuset-cpus`, ...) is
+refused by name, as `update` refuses it. `--ip` and `--gw` cannot contain `,` or
+`=`, which would add a `net0` key nobody asked for (exit 2). `--mp` with an OCI
+bundle is refused: the bundle's mounts take the `mp` entries. On the crun
+backend every one of these is refused; it takes the limits, network and mounts
+from the bundle's `config.json`.
+
+```bash
+nexcage create --name web-1 --memory 2G --cores 2 --ip 10.0.0.5/24 --gw 10.0.0.1 \
+  --vlan 20 --onboot --tags 'web;prod' --mp local-lvm:8,mp=/srv/data \
+  local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst
+```
+
 ### run
 
 ```bash
 nexcage run --name <name> <image>
 ```
 
-`create` followed by `start`.
+`create` followed by `start`, on this host. `--node` is refused (exit 1): to
+make the container on another node, `create --node`, then `start`.
+`--console-socket` and `--pid-file` are refused as `create` refuses them, since
+`pct start` runs the container's init itself; and the crun backend does not
+implement `run` (exit 1). `<image>`, `--bundle` and `--storage` work as for
+`create`.
 
 ### start
 
@@ -289,8 +346,8 @@ nexcage exec --process <file> <name>
 | `-t`, `--tty` | The command gets a terminal |
 | `-d`, `--detach` | Return once the command is started, rather than waiting for it |
 | `--cwd <dir>` | Working directory inside the container (`--workdir` is the same flag) |
-| `--user <uid[:gid]>` | Identity to run as; an unparsable value is an error rather than a silent root |
-| `--console-socket <path>`, `--pid-file <path>` | As with `create` |
+| `--user <uid[:gid]>` | Identity to run as. On the crun backend an unparsable value is an error rather than a silent root |
+| `--console-socket <path>`, `--pid-file <path>` | Where to send the master end of the pty and where to write the pid; crun backend only |
 
 Runs `<command>` inside a running container and exits with its status: `nexcage
 exec web-1 false` exits 1, and `nexcage exec web-1 sh -c 'exit 7'` exits 7. A
@@ -311,16 +368,23 @@ command has to exist in the container's image — an image without a shell has n
 as is one that does not exist; `exec` without a command is a usage error
 (exit 2).
 
-`--process` and `--detach` are refused there rather than ignored: `pct exec`
-takes a command and returns when it ends, so there is no identity to apply from
-a spec and nothing to detach from. Same rule as `--console-socket` on `create`.
+`--process`, `--detach`, `--user`, `--cwd`, `--console-socket` and
+`--pid-file` are refused there rather than ignored (exit 1): `pct exec` takes a
+command, runs it as root in a directory nexcage does not choose, and returns
+when it ends, so there is no identity or directory to apply, nothing to detach
+from and no pty or pid to hand back. Same rule as `--console-socket` on
+`create`. `--tty` is honoured when nexcage runs on a terminal: `pct exec` runs
+`lxc-attach`, which gives the command a terminal whenever one of its standard
+descriptors is one. With none, `--tty` is refused. With `--process` even crun
+takes the terminal, working directory and user from the file, not from
+`--tty`, `--cwd` and `--user`.
 
 On the crun backend both forms go to `libcrun_container_exec_process_file`,
 which takes the path of a file holding the process spec. `--process` hands the
 caller's file over untouched; a command typed on the command line is written to
 a temporary spec, which nexcage removes afterwards. That spec carries a default
-`PATH` when `--env` gives none, because a process with no `PATH` cannot find
-`ls` and nothing would say why.
+`PATH`, because a process with no `PATH` cannot find `ls` and nothing would say
+why. It carries no other environment: nexcage has no `--env`.
 
 ### list
 
@@ -330,7 +394,8 @@ nexcage list
 
 Tab-separated columns `ID IMAGE COMMAND CREATED STATUS BACKEND NODE NAMES`.
 `ID` is the VMID, `NODE` the cluster node the container is on, and `NAMES` the
-container name; every backend that is not Proxmox LXC shows `-` for the node.
+container name. Only Proxmox LXC containers are listed; the crun backend's are
+not.
 Containers on the other nodes of the cluster are listed too, which `pct list`
 on one host cannot do.
 
@@ -355,7 +420,9 @@ Prints OCI runtime state JSON:
   "status": "running",
   "pid": 48213,
   "bundle": "/var/lib/nexcage/bundles/web",
-  "annotations": {}
+  "annotations": {
+    "io.cageforge.nexcage.node": "prox-home"
+  }
 }
 ```
 
@@ -371,7 +438,9 @@ no such call:
 `status` is `created` for a container not yet started through nexcage, and
 otherwise `running` or `stopped` as pct reports it — or `paused`, which pct
 cannot report: that one is read from the container's cgroup freezer. `pid` is the host PID of the
-container's init while it runs, and 0 otherwise. `bundle` is the directory the
+container's init while it runs or is paused on this host, and 0 otherwise;
+`annotations` names the node it is on as `io.cageforge.nexcage.node`, and is
+`{}` when the node is not known. `bundle` is the directory the
 container was created from, and `null` for one created from a template or a
 registry image; `start` and `stop` keep it. A container that does not exist is
 an error (exit 1).
@@ -417,18 +486,25 @@ $ nexcage create --name r1 --node titan shared-rdma:vztmpl/redis_7.tar
 ```
 
 That pair is the point. `create` pulls too when given a registry reference, but
-only onto this host's `local` storage — and `local` is a different directory on
-every node, so the other node cannot read it. Pulling onto a shared storage is
-how `create --node` becomes usable.
+only on this host, onto `local` unless `--storage` names another, and `create
+--node` refuses a registry reference whatever `--storage` says. Pulling onto a
+shared storage with `pull`, then creating from the volid it prints, is how
+`create --node` gets a registry image.
 
 The volid is read back from the storage rather than composed from the reference:
 the endpoint normalises the file name, and only the storage knows what it
 settled on.
 
 Needs **Proxmox VE 9.1 or later** on the target node, which is where
-`oci-registry-pull` arrived; an older one is told which version it needs rather
-than left with an API error. The endpoint takes **no credentials**, so a private
-registry cannot be authenticated through it.
+`oci-registry-pull` arrived. nexcage checks the version of the host it runs on,
+not of the `--node` it pulls on: an older host is told which version it needs
+rather than left with an API error.
+
+The endpoint takes **no credentials**. Proxmox pulls with `skopeo copy` as
+root, and skopeo reads root's auth file on the node that pulls, so a private
+registry needs `skopeo login --authfile /root/.config/containers/auth.json
+<registry>` on that node ([INSTALL.md](INSTALL.md#images-from-a-private-registry)).
+A refused login is reported with the registry's reason and that line.
 
 ### rmi
 
@@ -503,11 +579,13 @@ nexcage update --resources <file|-> <name>
 
 Changes a running container's resource limits, as `runc update` and `crun
 update` do, with their flag names: `--memory`, `--memory-swap`,
-`--memory-reservation`, `--cpu-quota`, `--cpu-period`, `--cpu-share`,
+`--memory-reservation`, `--cpu-quota`, `--cpu-period`, `--cpu-share` (or
+`--cpu-shares`, the same setting),
 `--cpuset-cpus`, `--cpuset-mems`, `--pids-limit`, `--blkio-weight`,
 `--cpu-rt-period`, `--cpu-rt-runtime`, `--kernel-memory`,
 `--kernel-memory-tcp`. Memory sizes take a binary suffix (`512M`, `2G`) or
-`-1` for no limit; everything else is a number.
+`-1` for no limit; `--cpuset-cpus` and `--cpuset-mems` take a list (`0-1`);
+everything else is a number.
 
 `--resources <file>` is a runtime-spec `linux.resources` object, and `-` reads
 it from stdin. **That is how containerd sends an in-place resize**:
@@ -549,10 +627,10 @@ nexcage delsnapshot <name> <snapshot>
 ```
 
 Snapshots of a container's volumes, through Proxmox, with pct's verbs. Proxmox
-holds the volumes and knows how to snapshot each kind of storage, so each of
-these is one `pct` call for a container on this host and one call to the
-node's API for a container elsewhere; what nexcage adds is the container by
-name, found on any node of the cluster.
+holds the volumes and knows how to snapshot each kind of storage, so `snapshot`,
+`rollback` and `delsnapshot` are each one `pct` call for a container on this
+host and one call to the node's API for a container elsewhere; what nexcage
+adds is the container by name, found on any node of the cluster.
 
 The storage has to be one that can snapshot: zfs, lvm-thin, or a directory
 storage holding qcow2. A raw volume on a directory storage cannot, and the
@@ -646,8 +724,8 @@ annotations being strings rather than booleans.
     "mountExtensions": { "idmap": { "enabled": true } }
   },
   "annotations": {
-    "run.oci.crun.version": "1.24",
-    "io.cageforge.nexcage.version": "0.13.0",
+    "run.oci.crun.version": "1.30.1",
+    "io.cageforge.nexcage.version": "0.16.0",
     "io.cageforge.nexcage.backend": "crun"
   }
 }
@@ -663,6 +741,31 @@ implements the spec — which hooks it runs, whether it applies seccomp,
 AppArmor, capabilities, an idmapped mount — and `pct` creates the container
 there, so any document would be an assertion about `pct` dressed as this
 runtime's. Same reason `--console-socket` is refused there.
+
+### health
+
+```bash
+nexcage health
+```
+
+Checks the host and prints a report on stderr, one PASS, WARN or FAIL line per
+check. It exits 1 if any check failed and 0 otherwise; warnings do not fail.
+
+These are failures: `pct version` missing or failing; any of
+`/var/lib/nexcage`, `/var/cache/nexcage`, `/tmp/nexcage` and `/etc/pve/lxc` not
+existing (fixed paths, not read from the configuration, and nexcage creates
+none of them). These are only warnings: the Proxmox API line, which always warns
+because that check is not implemented; `zpool status`; `ip link show`; no
+config file; `pgrep nexcage`; and `df -h /`. It resolves no names and asks no
+host outside this one.
+
+It reports the config file the other commands read: the one `--config` names,
+else the first of `./config.json`, `/etc/nexcage/config.json` and
+`/etc/nexcage/nexcage.json` that exists. Like every command, `health` loads
+that file first, and one that is not valid stops it there with exit 1, before
+any check runs.
+
+`nexcage health --help` prints help and runs no checks.
 
 ### version, help
 

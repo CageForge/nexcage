@@ -70,7 +70,7 @@ Nexcage has an advanced logging system that allows detailed tracking of command 
 
 ### DEBUG Log Example
 ```
-[1760799760] INFO  nexcage: Starting nexcage v0.5.0
+[1760799760] INFO  nexcage: Starting nexcage v0.13.0
 [1760799760] DEBUG nexcage: System Information:
 [1760799760] DEBUG nexcage:   OS: linux
 [1760799760] DEBUG nexcage:   Architecture: x86_64
@@ -92,7 +92,7 @@ Nexcage has an advanced logging system that allows detailed tracking of command 
 #### Container Not Created
 ```bash
 # Enable DEBUG mode for detailed logging
-./nexcage --debug --log-file /tmp/create-debug.log create --name test-container --image ubuntu:20.04
+./nexcage --debug create --name test-container --image ubuntu:20.04 2> /tmp/create-debug.log
 
 # Check logs
 cat /tmp/create-debug.log
@@ -151,8 +151,8 @@ mkdir -p /var/log/nexcage
 # Check encoding
 file /tmp/nexcage-debug.log
 
-# View without colors
-cat /tmp/nexcage-debug.log | sed 's/\x1b\[[0-9;]*m//g'
+# The log file holds no color codes: they are written only to a terminal
+cat /tmp/nexcage-debug.log
 ```
 
 ## Usage Scenarios
@@ -182,14 +182,14 @@ export NEXCAGE_LOG_FILE=/tmp/dev.log
 ./nexcage --debug --log-file /tmp/perf-analysis.log start --name perf-test
 
 # Analyze results
-grep "completed in" /tmp/perf-analysis.log | sort -k3 -n
+grep "completed in" /tmp/perf-analysis.log | sort -k8 -n
 ```
 
 ### 4. Network Problem Diagnostics
 
 ```bash
 # Logging network operations
-./nexcage --debug --log-file /tmp/network-debug.log create --name net-test --image ubuntu:20.04
+./nexcage --debug create --name net-test --image ubuntu:20.04 2> /tmp/network-debug.log
 ```
 
 ## Configuration Priority
@@ -201,6 +201,8 @@ nexcage uses a priority system for logging configuration, where higher priority 
 2. **Environment Variables** - Medium priority  
 3. **Configuration File** - Low priority
 4. **Default Values** - Lowest priority
+
+A level named on the command line or in `NEXCAGE_LOG_LEVEL` overrides a lower priority source, `info` included; a level nexcage does not know is ignored. DEBUG mode that a configuration file's `debug` level turned on goes with that level when another one is asked for, but no source turns off DEBUG mode that `--debug` or `NEXCAGE_DEBUG` turned on.
 
 ### Command Line Arguments
 ```bash
@@ -221,11 +223,7 @@ export NEXCAGE_LOG_LEVEL=debug
 ```json
 {
   "log_level": "debug",
-  "log_file": "/var/log/nexcage/nexcage.log",
-  "runtime": {
-    "log_level": "debug",
-    "log_path": "/var/log/nexcage/runtime.log"
-  }
+  "log_file": "/var/log/nexcage/nexcage.log"
 }
 ```
 
@@ -238,22 +236,10 @@ nexcage searches for configuration files in the following order:
 #### Configuration File Example
 ```json
 {
-  "runtime_type": "proxmox-lxc",
-  "default_runtime": "proxmox-lxc",
   "log_level": "debug",
   "log_file": "/var/log/nexcage/nexcage.log",
-  "data_dir": "/var/lib/nexcage",
-  "cache_dir": "/var/cache/nexcage",
-  "temp_dir": "/tmp/nexcage",
-  "runtime": {
-    "log_level": "debug",
-    "log_path": "/var/log/nexcage/runtime.log",
-    "root_path": "/var/lib/nexcage"
-  },
   "network": {
-    "bridge": "vmbr0",
-    "ip": "10.0.0.1",
-    "gateway": "10.0.0.1"
+    "bridge": "vmbr0"
   }
 }
 ```
@@ -265,18 +251,18 @@ nexcage searches for configuration files in the following order:
 | `NEXCAGE_DEBUG` | Enable DEBUG mode | `1` or `true` |
 | `NEXCAGE_LOG_FILE` | Log file path | `/path/to/logfile` |
 | `NEXCAGE_LOG_LEVEL` | Logging level | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
-| `NEXCAGE_PERF_TRACKING` | Performance measurement | `1` or `true` |
-| `NEXCAGE_MEMORY_TRACKING` | Memory tracking | `1` or `true` |
+| `NEXCAGE_PERF_TRACKING` | Read, but has no effect: a command's time is logged whenever DEBUG mode or a log file is on, if the command succeeds | `1` or `true` |
+| `NEXCAGE_MEMORY_TRACKING` | Read, but has no effect: nothing tracks memory | `1` or `true` |
 
 ## Log Analysis Examples
 
 ### 1. Error Search
 ```bash
-# Find all errors
-grep "ERROR" /tmp/nexcage-debug.log
+# Find all errors (commands write them to stderr, not to the --log-file)
+./nexcage --debug list 2>&1 | grep "ERROR"
 
 # Find warnings
-grep "WARN" /tmp/nexcage-debug.log
+./nexcage --debug list 2>&1 | grep "WARN"
 ```
 
 ### 2. Performance Analysis
@@ -285,7 +271,7 @@ grep "WARN" /tmp/nexcage-debug.log
 grep "completed in" /tmp/nexcage-debug.log
 
 # Slowest operations
-grep "completed in" /tmp/nexcage-debug.log | sort -k3 -n -r | head -10
+grep "completed in" /tmp/nexcage-debug.log | sort -k8 -n -r | head -10
 ```
 
 ### 3. Operation Tracing
@@ -294,7 +280,7 @@ grep "completed in" /tmp/nexcage-debug.log | sort -k3 -n -r | head -10
 grep "test-container" /tmp/nexcage-debug.log
 
 # Create operations
-grep "Starting operation: create" /tmp/nexcage-debug.log
+grep "Starting command: create" /tmp/nexcage-debug.log
 ```
 
 ## Configuration for Different Environments
@@ -304,8 +290,6 @@ grep "Starting operation: create" /tmp/nexcage-debug.log
 # Maximum logging
 export NEXCAGE_DEBUG=1
 export NEXCAGE_LOG_LEVEL=trace
-export NEXCAGE_PERF_TRACKING=1
-export NEXCAGE_MEMORY_TRACKING=1
 ```
 
 ### Staging
@@ -341,20 +325,18 @@ export NEXCAGE_LOG_FILE=/var/log/nexcage/production.log
 
 ## Common Problems and Solutions
 
-### 1. "Command not found" Errors
+### 1. "not found in PATH" Errors
 ```bash
 # Check command availability
-./nexcage --debug list 2>&1 | grep -i "command not found"
+./nexcage --debug list 2>&1 | grep -i "not found in PATH"
 
-# Solution: install required dependencies
-sudo apt-get install lxc-utils
+# Solution: run nexcage on a Proxmox VE host, which provides pct and pvesh
 ```
 
 ### 2. Permission Problems
 ```bash
-# Check permissions
-ls -la /var/lib/lxc/
-sudo chown -R $USER:$USER /var/lib/lxc/
+# nexcage needs root on the Proxmox host
+sudo ./nexcage --debug list
 ```
 
 ### 3. Network Problems
@@ -363,20 +345,13 @@ sudo chown -R $USER:$USER /var/lib/lxc/
 ./nexcage --debug create --name net-test --image ubuntu:20.04 2>&1 | grep -i network
 ```
 
-### 4. Memory Problems
-```bash
-# Memory usage tracking
-export NEXCAGE_MEMORY_TRACKING=1
-./nexcage --debug --log-file /tmp/memory.log list
-```
-
 ## Monitoring System Integration
 
 ### 1. Prometheus
 ```bash
 # Export performance metrics
-grep "completed in" /var/log/nexcage/production.log | \
-  awk '{print "nexcage_command_duration_seconds{command=\""$4"\"} " $6/1000}' > /var/lib/prometheus/nexcage.prom
+grep "completed in" /var/log/nexcage/production.log | tr -d "'" | \
+  awk '{print "nexcage_command_duration_seconds{command=\""$5"\"} " $8/1000}' > /var/lib/prometheus/nexcage.prom
 ```
 
 ### 2. ELK Stack
@@ -445,7 +420,7 @@ NEXCAGE_LOG_FILE=/tmp/env-test.log NEXCAGE_LOG_LEVEL=warn ./nexcage list
 
 ### Memory Management
 
-**Note**: Some memory leaks were detected during testing, primarily related to configuration parsing. These are non-critical for functionality but should be addressed in future releases.
+Debug and ReleaseSafe builds (release binaries are ReleaseSafe) print an `error(gpa): memory address ... leaked` report to stderr when a command exits without freeing memory; the report does not change the exit status. The three scenarios above report none, and tests/sim/run.sh fails if any command it runs prints one. Giving `--log-file` or `--log` more than once still leaks the earlier path.
 
 ### Log File Verification
 

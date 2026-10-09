@@ -54,7 +54,13 @@ pub const RunCommand = struct {
         // Use router for backend selection and execution
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
-        const operation = router.Operation{ .run = router.RunConfig{ .image = image, .storage = options.storage_name } };
+        const operation = router.Operation{ .run = router.RunConfig{
+            .image = image,
+            .storage = options.storage_name,
+            .node = options.node,
+            .console_socket = options.console_socket,
+            .pid_file = options.pid_file,
+        } };
         try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 
         try self.logOperation("Running container", container_id);
@@ -66,10 +72,17 @@ pub const RunCommand = struct {
         // Allocated because execute() frees it: returning the literal made
         // `nexcage run --help` abort with "Invalid free".
         return allocator.dupe(u8, "Usage: nexcage run --name <name> <image>\n\n" ++
-            "Create a container and start it; the same as create followed by start.\n" ++
+            "Create a container on this node and start it, as create followed by start\n" ++
+            "would. --node, --console-socket and --pid-file are refused: to make the\n" ++
+            "container on another node, use create --node, then start. The crun\n" ++
+            "backend does not implement run.\n" ++
             "<image> takes the same forms as for create (see 'nexcage create --help').\n\n" ++
             "Options:\n" ++
             "  --name <name>   Container name, used as its hostname (required)\n" ++
+            "  --storage <s>   Storage a registry image is found on or pulled to (default: local)\n" ++
+            "  --bundle <dir>  OCI bundle directory, an absolute path, in place of <image>;\n" ++
+            "                  the first positional word is then the container name\n" ++
+            "                  (run <name> --bundle <dir>)\n" ++
             "  -h, --help      Show this help message\n");
     }
 

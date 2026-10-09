@@ -15,9 +15,9 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 - [x] CHANGELOG.md (Keep a Changelog format)
 - [x] Release notes (docs/releases/NOTES_vX.Y.Z.md)
 - [x] Issue templates (.github/ISSUE_TEMPLATE/*)
-- [x] Pull request template (docs/pull_request_template.md)
+- [ ] Pull request template
 - [x] CI/CD docs (docs/CI_CD_SETUP.md)
-- [x] SECURITY process (docs/SECURITY.md)
+- [x] SECURITY process (SECURITY.md)
 - [x] Contribution workflow (docs/DEVELOPMENT_WORKFLOW.md)
 - [x] Testing guide (TESTING.md, scripts/*)
 
@@ -30,7 +30,7 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 
 - [x] **SBOM/Provenance**
   - SPDX JSON SBOM (existing, via anchore/sbom-action)
-  - CycloneDX JSON SBOM (new, via cyclonedx-action)
+  - CycloneDX JSON SBOM (a stub the workflow writes itself: metadata, no components)
   - SLSA Provenance (basic implementation in release workflow)
   - All artifacts uploaded to GitHub Releases
 
@@ -62,7 +62,7 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 
 ### SBOM & Provenance (`.github/workflows/release.yml`)
 - **SPDX JSON**: Generated via `anchore/sbom-action@v0`
-- **CycloneDX JSON**: Generated via `cyclonedx/cyclonedx-action@v1`
+- **CycloneDX JSON**: Written by the workflow itself, with the name `nexcage`, the release version and an empty `components` list
 - **SLSA Provenance**: Basic in-toto statement with build metadata
 - All artifacts uploaded and included in GitHub Releases
 
@@ -76,7 +76,7 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
 
 **Overall Status**: [~] **Partial**
 
-- ✅ Required documentation files
+- ✅ Required documentation files, except a pull request template
 - ✅ Automated CI with mandatory gates
 - ✅ SBOM (SPDX + CycloneDX) generation
 - ✅ SLSA Provenance (basic)
@@ -89,9 +89,9 @@ Named rather than left for someone to discover:
 
 - [ ] **ADOPTERS.md** — there are none to list yet, and an empty file would say
       less than its absence.
-- [ ] **ROADMAP.md** — what is missing is tracked in the gap table of
-      `docs/KUBERNETES_INTEGRATION.md` and in each release's notes, not in a
-      roadmap of its own.
+- [x] **ROADMAP.md** — what comes next and why, without dates past the next
+      release; each item links its issue, and the release pull request moves
+      what shipped to the changelog.
 - [~] **OpenSSF Scorecards** — the workflow exists and GitHub disabled it for
       inactivity, so there is deliberately no Scorecard badge in the README: a
       badge for a check that does not run is worse than none.

@@ -26,6 +26,15 @@ pub const AppContext = struct {
         var config = try config_loader.loadDefault();
         errdefer config.deinit();
 
+        // Not a warning, as for runc: no backend is left that runs what such
+        // a rule describes, and the default one would make a container where
+        // a VM was asked for. The file has to say something nexcage can do.
+        if (config.removed_vm_runtime) |name| {
+            printError("the configuration names '{s}' as a runtime, and the Proxmox VM backend was removed in 0.14.0; nexcage runs containers -- name lxc or crun", .{name});
+            failure_reported = true;
+            return error.InvalidConfig;
+        }
+
         // Priority: command line args > environment > config file > defaults
         var logging_cfg = try core.logging_config.LoggingConfig.loadWithPriority(allocator, args, &config);
         errdefer logging_cfg.deinit(allocator);
@@ -66,6 +75,7 @@ pub const AppContext = struct {
         }
         var runtime_logger = core.LogContext.init(allocator, log_sink, logging_cfg.log_level, "nexcage");
         runtime_logger.format = logging_cfg.log_format;
+        if (log_sink.handle != std.fs.File.stderr().handle) runtime_logger.echo = std.fs.File.stderr();
 
         // A config that still routes with the removed key would otherwise
         // send those containers to the default backend without a word.
@@ -366,6 +376,7 @@ fn printUsage() !void {
         \\  rollback  Roll a container back to a snapshot
         \\  delsnapshot  Delete a snapshot
         \\  run       Create and start a container
+        \\  health    Check the host: pct, storage, network, configuration, processes
         \\  help      Show this help message
         \\  version   Show version information
         \\
@@ -428,6 +439,11 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             i += 2;
         } else if (std.mem.eql(u8, arg, "--pid-file") and i + 1 < args.len) {
             options.pid_file = try allocator.dupe(u8, args[i + 1]);
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--image") and i + 1 < args.len) {
+            // The form 'create --help' shows. It used to work only because an
+            // unknown option was skipped and its value taken for the image.
+            if (options.image == null) options.image = try allocator.dupe(u8, args[i + 1]);
             i += 2;
         } else if (std.mem.eql(u8, arg, "--bundle") and i + 1 < args.len) {
             // An OCI bundle directory: config.json plus rootfs/. The backend
@@ -507,13 +523,28 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             // linux.resources object in a file, "-" for stdin.
             options.resources_path = try allocator.dupe(u8, args[i + 1]);
             i += 2;
-        } else if (options.command == .update and updateFlag(arg) != null) {
+        } else if ((options.command == .update or options.command == .create) and updateFlag(arg) != null) {
+            // create takes update's limits under update's names (#308)
             if (i + 1 >= args.len) {
                 printError("{s} needs a value", .{arg});
                 return error.InvalidInput;
             }
             try addResourceUpdate(allocator, &options, updateFlag(arg).?, args[i + 1]);
             i += 2;
+        } else if (options.command == .create and createValueFlag(arg) != null) {
+            // What pct create is usually given (#308), under pct's names
+            if (i + 1 >= args.len) {
+                printError("{s} needs a value", .{arg});
+                return error.InvalidInput;
+            }
+            try setCreateOption(allocator, &options.create_options, createValueFlag(arg).?, args[i + 1]);
+            i += 2;
+        } else if (options.command == .create and std.mem.eql(u8, arg, "--firewall")) {
+            options.create_options.firewall = true;
+            i += 1;
+        } else if (options.command == .create and std.mem.eql(u8, arg, "--onboot")) {
+            options.create_options.onboot = true;
+            i += 1;
         } else if (std.mem.eql(u8, arg, "--filename") and i + 1 < args.len) {
             options.filename = try allocator.dupe(u8, args[i + 1]);
             i += 2;
@@ -581,8 +612,23 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
                 break;
             }
             i += 1;
-        } else {
+        } else if (std.mem.eql(u8, arg, "-")) {
+            // Not an option: stdin, where a command reads it
             i += 1;
+        } else {
+            // An option no branch above claimed. It used to be skipped, so a
+            // misspelling vanished and its value became the next positional
+            // word: `create --memroy 2G` answered "OCI bundle '2G' must be an
+            // absolute path", and `kill --al` signalled the init alone (#355).
+            // Every option an engine was seen sending has a branch above. A
+            // value flag lands here too when it is the last word: its branch
+            // wants the value after it.
+            if (i + 1 >= args.len) {
+                printError("'{s}' is not an option of '{s}', or it needs a value; see 'nexcage {s} --help'", .{ arg, command_name, command_name });
+            } else {
+                printError("unknown option '{s}' for '{s}'; see 'nexcage {s} --help'", .{ arg, command_name, command_name });
+            }
+            return error.InvalidInput;
         }
     }
 
@@ -676,20 +722,21 @@ fn parseCommand(command_str: []const u8) core.Command {
 /// Parse a --runtime value; null for one nexcage does not know
 fn parseRuntimeType(runtime_str: []const u8) ?core.RuntimeType {
     if (std.mem.eql(u8, runtime_str, "lxc") or std.mem.eql(u8, runtime_str, "proxmox-lxc")) return .lxc;
-    // The router sends only .vm to the VM backend; .qemu went to LXC
-    if (std.mem.eql(u8, runtime_str, "vm") or std.mem.eql(u8, runtime_str, "qemu")) return .vm;
     if (std.mem.eql(u8, runtime_str, "crun")) return .crun;
     return null;
 }
 
-/// `--runtime runc` gets the reason and the replacement, not a list that
-/// merely no longer contains it: the backend was removed in 0.13.0, and crun
-/// runs the same OCI containers.
+/// A removed backend gets the reason and what to use instead, not a list that
+/// merely no longer contains it: runc went in 0.13.0, and crun runs the same
+/// OCI containers; the Proxmox VM backend went in 0.14.0, and nexcage runs
+/// containers only.
 fn reportUnknownRuntime(value: []const u8) void {
     if (std.mem.eql(u8, value, "runc")) {
         printError("runc is not a backend since 0.13.0; the crun backend runs OCI containers -- use --runtime crun", .{});
+    } else if (std.mem.eql(u8, value, "vm") or std.mem.eql(u8, value, "qemu")) {
+        printError("the Proxmox VM backend was removed in 0.14.0; nexcage runs containers -- use --runtime lxc or crun", .{});
     } else {
-        printError("unknown runtime '{s}'; expected lxc, crun or vm", .{value});
+        printError("unknown runtime '{s}'; expected lxc or crun", .{value});
     }
 }
 
@@ -715,6 +762,40 @@ const update_flags = [_]UpdateFlag{
     .{ .flag = "--memory-swap", .section = "memory", .name = "swap", .numeric = true },
     .{ .flag = "--pids-limit", .section = "pids", .name = "limit", .numeric = true },
 };
+
+/// `create`'s pct options that take a value (#308). --mp may be given more
+/// than once; each of the others is the last one given.
+const CreateValueFlag = enum { cores, ip, gw, vlan, tags, mp };
+fn createValueFlag(arg: []const u8) ?CreateValueFlag {
+    const names = [_]struct { []const u8, CreateValueFlag }{
+        .{ "--cores", .cores }, .{ "--ip", .ip },     .{ "--gw", .gw },
+        .{ "--vlan", .vlan },   .{ "--tags", .tags }, .{ "--mp", .mp },
+    };
+    for (names) |n| if (std.mem.eql(u8, n[0], arg)) return n[1];
+    return null;
+}
+
+fn setCreateOption(allocator: std.mem.Allocator, co: *core.types.ProxmoxCreateOptions, which: CreateValueFlag, raw: []const u8) !void {
+    const value = try allocator.dupe(u8, raw);
+    errdefer allocator.free(value);
+    const slot: *?[]const u8 = switch (which) {
+        .cores => &co.cores,
+        .ip => &co.ip,
+        .gw => &co.gw,
+        .vlan => &co.vlan,
+        .tags => &co.tags,
+        .mp => {
+            const grown = try allocator.alloc([]const u8, co.mount_points.len + 1);
+            @memcpy(grown[0..co.mount_points.len], co.mount_points);
+            grown[co.mount_points.len] = value;
+            if (co.mount_points.len > 0) allocator.free(co.mount_points);
+            co.mount_points = grown;
+            return;
+        },
+    };
+    if (slot.*) |old| allocator.free(old);
+    slot.* = value;
+}
 
 fn updateFlag(arg: []const u8) ?UpdateFlag {
     for (update_flags) |f| if (std.mem.eql(u8, f.flag, arg)) return f;

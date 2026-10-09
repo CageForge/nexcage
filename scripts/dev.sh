@@ -61,7 +61,7 @@ CI
                     this branch (pushed first), and follow it
 
 Performance
-  perf [options]    time every command; see docs/LOCAL_DEVELOPMENT.md
+  perf [options]    time the lifecycle commands; see docs/LOCAL_DEVELOPMENT.md
     --against REF   also measure REF (e.g. main) and fail on a regression
     --suite S       lxc, crun or all (default all)
     -n N            measured passes per binary (default 20)

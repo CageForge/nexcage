@@ -154,6 +154,36 @@ rm -f "$S/work/config.json"
 nx create --name web-7 "$TPL"
 check "no config file -> default bridge, unprivileged, no --rootfs" all 'rc 0' 'called_re "bridge=vmbr0,ip=dhcp --unprivileged 1$"'
 
+# What pct create is usually given (#308): update's limits under update's
+# names and in pct's terms, pct's own names for the rest, net0 in its syntax.
+cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_size_gb":2}}'
+nx create --name opt-1 --memory 1G --memory-swap 1536M --cores 3 --cpu-quota 150000 --cpu-share 512 \
+  --ip 192.0.2.10/24 --gw 192.0.2.1 --vlan 20 --firewall --onboot --tags 'web;prod' \
+  --mp 'local-lvm:1,mp=/data' --mp '/srv/x,mp=/mnt/x,ro=1' "$TPL"
+check "create takes update's limits, said to pct as update says them" \
+  all 'rc 0' 'called_re "^pct create .* --memory 1024 "' 'called_re " --swap 512 "' \
+      'called_re " --cpulimit 1\.5 "' 'called_re " --cpuunits 20 "'
+check "--memory and --cores replace the defaults rather than doubling them" \
+  all 'called_re " --cores 3 "' '[ "$(grep -o -- " --memory " "$S/calls.last" | wc -l)" = 1 ]' \
+      '[ "$(grep -o -- " --cores " "$S/calls.last" | wc -l)" = 1 ]'
+check "--ip, --gw, --vlan and --firewall are net0's ip=, gw=, tag= and firewall=1" \
+  called_re " --net0 name=eth0,bridge=vmbr50,ip=192\.0\.2\.10/24,gw=192\.0\.2\.1,tag=20,firewall=1 "
+check "--onboot, --tags and each --mp reach pct as pct takes them" \
+  all 'called_re " --onboot 1 "' 'called_re " --tags web;prod "' \
+      'called_re " --mp0 local-lvm:1,mp=/data --mp1 /srv/x,mp=/mnt/x,ro=1$"'
+nx create --name opt-2 --memory-swap 256M "$TPL"
+check "--memory-swap is memory plus swap: below the default memory it is refused, before pct" \
+  all 'rc 2' 'err_has "memory plus swap"' 'not_called_re "^pct create"'
+nx create --name opt-2 --pids-limit 100 "$TPL"
+check "a limit Proxmox has no setting for is refused by name, as update refuses it" \
+  all 'rc 1' 'err_has "pids.limit has no Proxmox setting"' 'not_called_re "^pct create"'
+nx create --name opt-2 --vlan 5000 "$TPL"
+check "--vlan outside 1-4094 is a usage error" all 'rc 2' 'err_has "VLAN tag"' 'not_called_re "^pct create"'
+nx create --name opt-2 --ip 10.0.0.5/24,hwaddr=02:00:00:00:00:01 "$TPL"
+check "an address with ',' or '=' would add a net0 key: refused" all 'rc 2' 'err_has "without"' 'not_called_re "^pct create"'
+nx create --name opt-2 --cores 0 "$TPL"
+check "--cores 0 is a usage error" all 'rc 2' 'err_has "--cores"' 'not_called_re "^pct create"'
+
 echo "pct list: Permission denied" > "$S/fail_all"
 nx create --name web-8 "$TPL"
 check "the host unable to answer -> create refuses (not read as 'name free')" all 'rc 1' 'err_has "permission denied"' 'not_called_re "^pct create"'
@@ -253,6 +283,19 @@ check "exec --process is refused on the LXC backend, not ignored" \
 nx exec web-1 -d echo hi
 check "exec --detach is refused on the LXC backend" \
   all 'rc 1' 'err_has "--detach"' 'not_called_re "^pct exec"'
+# pct exec runs the command as root, where nexcage does not choose, and hands
+# back no pty or pid: these used to be dropped, so `--user 1000` ran as root.
+for flag in "--user 1000" "--cwd /srv" "--console-socket /tmp/sim-console.sock" "--pid-file /tmp/sim-exec.pid"; do
+  # shellcheck disable=SC2086 # the flag and its value are two words
+  nx exec $flag web-1 id
+  check "exec ${flag%% *} is refused on the LXC backend, not ignored" \
+    all 'rc 1' "err_has '${flag%% *}'" 'not_called_re "^pct exec"'
+done
+# lxc-attach, which pct exec runs, gives the command a terminal when one of the
+# caller's standard descriptors is one. With none, --tty cannot be honoured.
+nx exec -t web-1 echo hi < /dev/null
+check "exec --tty with no terminal is refused on the LXC backend" \
+  all 'rc 1' 'err_has "--tty"' 'not_called_re "^pct exec"'
 nx exec web-1 --process /tmp/sim-process.json ls
 # 2, not 1: giving both is a usage error, and nexcage keeps that distinction.
 check "exec takes a command or --process, not both" all 'rc 2' 'err_has "not both"'
@@ -263,9 +306,10 @@ check "exec takes a command or --process, not both" all 'rc 2' 'err_has "not bot
 nx ps web-1
 check "ps is refused on the LXC backend, where it would answer another question" \
   all 'rc 1' 'err_has "--runtime crun"' 'not_called_re "^pct"'
-# With --log the explanation goes to that file rather than to stderr, which is
-# what --log is for; only the terse summary line stays on stderr. Checking
-# stderr for it, as this did at first, fails on correct behaviour.
+# With --log the explanation goes to that file, and an error to stderr as
+# well, as runc and crun print theirs: containerd's shim reads the command's
+# output to tell one failure from another, and found only "operation failed"
+# there (#361).
 # The log goes under /run, which is bind-mounted from $S: the sandbox mounts a
 # fresh tmpfs on /tmp, so a file written there disappears with the namespace and
 # the check cannot see it.
@@ -273,6 +317,8 @@ rm -f "$S/run/nexcage-ps.log"
 nx --root /run/x --log /run/nexcage-ps.log --log-format json ps --format json web-1
 check "the shape containerd sends is read as ps, not as a command name" \
   all 'rc 1' '! err_has "unknown command"' 'grep -q "runtime crun" "$S/run/nexcage-ps.log"'
+check "and the reason is on stderr as well, where the engine reads it" \
+  all 'err_has "runtime crun"' '! err_has "\"level\""'
 nx --runtime crun ps --format yaml web-1
 check "ps --format takes json or table" all 'rc 2' 'err_has "json or table"'
 nx ps --help
@@ -312,8 +358,29 @@ check "run: rootfs/bridge from config" called_re "bridge=vmbr50,ip=dhcp .*--root
 check "run: state reports running" status_is app-1 running
 nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start" all 'rc 1' 'not_called_re "^pct start"'
 nx run --name app-2;        check "run without image -> exit 2" rc 2
+# run used to accept these and drop them: --node made the container on this
+# host, and a caller passing --console-socket waited for a pty that never came.
+for flag in "--node titan" "--console-socket /tmp/sim-console.sock" "--pid-file /tmp/sim-run.pid"; do
+  # shellcheck disable=SC2086 # the flag and its value are two words
+  nx run --name app-3 $flag "$TPL"
+  check "run ${flag%% *} is refused, nothing created" \
+    all 'rc 1' "err_has '${flag%% *}'" 'not_called_re "^pct create"' 'not_called_re "^pvesh create"'
+done
 
 echo "=== option parsing ==="
+# An option no command takes is refused by name (#355). It used to be skipped,
+# and its value taken for the next positional word.
+nx create --name typo-1 --memroy 2G "$TPL"
+check "a misspelt option is refused by name, not read as the image" \
+  all 'rc 2' "err_has \"unknown option '--memroy' for 'create'\"" '! err_has "OCI bundle"' 'not_called_re "^pct create"'
+nx kill --al web-1
+check "an unknown flag without a value is refused, not dropped" \
+  all 'rc 2' "err_has \"unknown option '--al'\"" 'not_called_re "^(pct|pvesh|kill)"'
+nx run --name r-9 --memory 1G "$TPL"
+check "an option of another command is unknown here: run does not take --memory" \
+  all 'rc 2' "err_has \"unknown option '--memory' for 'run'\"" 'not_called_re "^pct create"'
+nx state --name
+check "a value flag with nothing after it says so" all 'rc 2' 'err_has "needs a value"'
 nx start --log-level debug web-3
 check "start --log-level debug <name> starts <name>" all 'rc 0' 'called "pct start 102"'
 nx stop web-3 --log-file /dev/null
@@ -327,7 +394,7 @@ check "--runtime lxc creates through pct" all 'rc 0' 'called_re "^pct create [0-
 nx create --runtime crun --name rt-1 "$TPL"
 check "--runtime crun on a build without crun -> exit 1, nothing created" all 'rc 1' 'err_has "not built"' 'not_called_re "^pct create"'
 nx start --runtime vm rt-0
-check "--runtime vm -> exit 1 (not implemented), not a silent success" all 'rc 1' 'err_has "not implemented"' 'not_called_re "^pct start"'
+check "--runtime vm after the command -> exit 2, the backend was removed in 0.14.0" all 'rc 2' 'err_has "removed in 0.14.0"' 'not_called_re "^pct start"'
 nx create --name rt-2 --runtime bogus "$TPL"
 check "unknown --runtime -> exit 2, nothing run" all 'rc 2' 'err_has "unknown runtime"' 'not_called_re "^pct"'
 nx state --runtime crun rt-0
@@ -373,6 +440,12 @@ check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
 check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
 check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_re "^pct set [0-9]+ --features nesting=1,keyctl=1$"
+nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
+check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
+  all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
+nx --runtime crun create --memory 1G --bundle /tmp/nexcage-bundles/b1 crun-opt
+check "create's Proxmox options on the crun backend: refused, naming the bundle's config.json" \
+  all 'rc 1' 'err_has "is for the Proxmox LXC backend"' 'err_has "config.json"'
 
 echo "=== runtime-spec command line ==="
 # What a container engine sends: the id positionally, the bundle behind
@@ -447,6 +520,24 @@ rm -f "$S/work/config.json"
 nx --runtime runc state from-tpl
 check "--runtime runc is refused with the replacement named, not a shorter list" \
   all 'rc 2' 'err_has "use --runtime crun"' 'not_called_re "^pct"'
+
+# No Proxmox VM backend since 0.14.0, and nothing that could stand in for it:
+# the default backend would make a container where a VM was asked for. A file
+# naming it is refused before anything runs, and --runtime vm says why.
+cfg '{"runtime":{"routing":[{"pattern":"vm-*","runtime":"vm"},{"pattern":"*","runtime":"lxc"}]}}'
+nx list
+check "a routing rule naming vm refuses the file, even for a command it does not route" \
+  all 'rc 1' 'err_has "Proxmox VM backend was removed"' 'err_has "name lxc or crun"' 'not_called_re "^(pct|pvesh)"'
+cfg '{"container_config":{"routing":[{"pattern":"*","runtime":"proxmox"}]}}'
+nx create --name vm-1 "$TPL"
+check "\"proxmox\", which named the VM backend, is refused too rather than read as lxc" \
+  all 'rc 1' "err_has \"names 'proxmox'\"" 'not_called_re "^(pct|pvesh)"'
+rm -f "$S/work/config.json"
+nx --runtime vm state from-tpl
+check "--runtime vm is refused, saying the backend was removed and what runs instead" \
+  all 'rc 2' 'err_has "removed in 0.14.0"' 'err_has "use --runtime lxc or crun"' 'not_called_re "^pct"'
+nx --runtime qemu state from-tpl
+check "--runtime qemu likewise" all 'rc 2' 'err_has "removed in 0.14.0"'
 
 nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup list
 check "the options containerd sends are accepted, not read as a command" \
@@ -791,6 +882,8 @@ reset_sim
 echo "titan $TPL" >> "$S/node_templates"
 cfg '{"network":{"bridge":"vmbr0"}}'
 
+# The fake host has the zfs tools, as every stock Proxmox VE host does: --node
+# used to be refused wherever `zfs version` worked.
 nx create --name there-1 --node titan "$TPL"
 check "create --node makes the container through that node's API" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc --vmid [0-9]+ --ostemplate .* --hostname there-1"' \
@@ -809,6 +902,17 @@ check "and it is listed on that node" \
 nx create --name there-2 --node otherhost "$TPL"
 check "a node without the template is refused, with the node named" \
   all 'rc 1' 'err_has "does not have the template"' 'not_called_re "^pvesh create /nodes/otherhost/lxc"'
+
+# A rootfs on a ZFS storage is Proxmox's to make, on the node that owns the
+# container: the stock-host setup #327 refused.
+cfg '{"network":{"bridge":"vmbr0"},"proxmox":{"storage":"local-zfs","rootfs_size_gb":4}}'
+nx create --name there-zs --node titan "$TPL"
+check "create --node with a ZFS storage hands the rootfs to that node" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc --vmid [0-9]+ .*--hostname there-zs .*--rootfs local-zfs:4$"'
+nx create --name there-o --node titan --memory 1G --vlan 7 --onboot "$TPL"
+check "create --node says the same options to that node's API" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc .*--net0 name=eth0,bridge=vmbr0,ip=dhcp,tag=7 .*--memory 1024 --onboot 1"'
+cfg '{"network":{"bridge":"vmbr0"}}'
 
 # An OCI bundle is packed into a template on *this* host, so it cannot travel.
 nx create --name there-3 --node titan --bundle /tmp/nexcage-bundles/b1
@@ -880,6 +984,19 @@ check "pull --node --storage puts it where create --node can read it" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/storage/shared-rdma/oci-registry-pull"' \
       'grep -q "^shared-rdma:vztmpl/nginx_1.27.tar$" "$S/out"'
 
+# Proxmox's pvesh exits 0 when its pull task fails, with skopeo's reason on
+# stdout (#309). A refused login is reported with that reason, and with where
+# the login goes: root's auth file on the node that pulls.
+touch "$S/pull_refused"
+nx pull ghcr.io/acme/private:1
+check "a refused login gives skopeo's reason and the skopeo login line" \
+  all 'rc 1' 'err_has "incorrect username or password"' \
+      'err_has "skopeo login --authfile /root/.config/containers/auth.json ghcr.io"'
+nx pull docker.io/acme/private:1 --node titan
+check "with --node, the login goes on that node" \
+  all 'rc 1' 'err_has "run as root on titan"'
+rm -f "$S/pull_refused"
+
 # An older Proxmox has no such endpoint, and the version is why -- not an
 # obscure API failure.
 echo 8.4.1 > "$S/pvever"
@@ -920,8 +1037,17 @@ check "rmi on the crun backend says templates are not its business" \
   all 'rc 1' 'err_has "already there"'
 
 echo "=== health ==="
-# Its checks look at the host, so only the absence of leaks is checked here
+# Most of its checks look at the host, so only what does not depend on the host
+# is checked here: which configuration it reports, and that it asks no outside
+# host. It used to look at /etc/nexcage/config.json, then ./config.json,
+# whatever the commands read, and to run `nslookup google.com`.
+cfg '{"proxmox":{"storage":"local-lvm"}}'
 nx health
+check "health reports the config file the commands read" err_has "Config file in use: ./config.json"
+check "health resolves no outside name" all '! grep -qiE "dns|google" "$S/err"'
+printf '{}\n' > "$S/work/alt.json"
+nx --config alt.json health
+check "health reports the file --config names" err_has "Config file in use: alt.json"
 
 echo
 check "no leaks, panics or invalid frees in any run" all '[ "$LEAKS" = 0 ]'

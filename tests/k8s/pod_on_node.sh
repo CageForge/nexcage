@@ -13,6 +13,11 @@
 # why it is here rather than kubeadm: less of the node changes, and the change
 # is reversible with the uninstall script it ships.
 #
+# It installs what docs/INSTALL.md tells an administrator to install, from the
+# same files: packaging/config/config.oci.example.json, and the k3s template and
+# RuntimeClass in deploy/kubernetes/node/. Run it from a checkout, so that a
+# run checks those files and not a copy of them.
+#
 # The nexcage binary must already be on the node, with the crun backend built
 # in -- a container engine's containers go to that backend, and the default
 # build has only Proxmox LXC. Build it with
@@ -29,11 +34,14 @@ KEEP=${KEEP:-0}
 [ "${1:-}" = "--keep" ] && KEEP=1
 K3S_VERSION=${K3S_VERSION:-}
 TRACE=/tmp/nexcage-node-trace.log
+REPO=$(cd "$(dirname "$0")/../.." && pwd)
+NODE_FILES=$REPO/deploy/kubernetes/node
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 k() { /usr/local/bin/kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml "$@"; }
 
 [ "$(id -u)" = 0 ] || fail "run this as root on the node"
+[ -f "$NODE_FILES/runtimeclass.yaml" ] || fail "no $NODE_FILES: run this from a checkout"
 [ -x "$NEXCAGE" ] || fail "no nexcage at $NEXCAGE: copy a crun-enabled build over first"
 
 # The binary has to run here at all. A build tuned for a newer CPU dies with
@@ -46,9 +54,10 @@ echo "ok: nexcage runs here, with the crun backend"
 
 # An engine never passes --runtime, so the configuration must route to crun.
 mkdir -p /etc/nexcage
+wrote_config=no
 if [ ! -f /etc/nexcage/config.json ]; then
-    printf '{ "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }' \
-        > /etc/nexcage/config.json
+    cp "$REPO/packaging/config/config.oci.example.json" /etc/nexcage/config.json
+    wrote_config=yes
     echo "ok: wrote /etc/nexcage/config.json routing to crun"
 else
     grep -q '"crun"' /etc/nexcage/config.json \
@@ -66,23 +75,10 @@ EOT
 chmod +x /nexcage-traced
 : > "$TRACE"
 
+# Set before anything is installed, so that an install that fails halfway is
+# removed as well: the uninstall script is there as soon as k3s's installer has
+# got that far.
 installed_here=no
-if ! command -v k3s >/dev/null 2>&1; then
-    echo "installing k3s (it was not here)"
-    # The extras a runtime test has no use for stay off, so less of the node
-    # changes: no ingress controller, no load balancer, no metrics server.
-    curl -sfL https://get.k3s.io | \
-        INSTALL_K3S_VERSION="$K3S_VERSION" \
-        INSTALL_K3S_EXEC="--disable=traefik --disable=servicelb --disable=metrics-server --write-kubeconfig-mode=644" \
-        sh - >/tmp/k3s-install.log 2>&1 || {
-            tail -20 /tmp/k3s-install.log >&2
-            fail "k3s would not install"
-        }
-    installed_here=yes
-else
-    echo "k3s is already here; leaving the installation alone"
-fi
-
 cleanup() {
     k delete pod nexcage-pod --ignore-not-found --wait=false >/dev/null 2>&1 || true
     if [ "$KEEP" = 1 ]; then
@@ -94,22 +90,43 @@ cleanup() {
         /usr/local/bin/k3s-uninstall.sh >/tmp/k3s-uninstall.log 2>&1 || true
         rm -f /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl 2>/dev/null || true
     fi
+    # Routing everything to crun is wrong for any other nexcage on the node --
+    # the lifecycle E2E's default build has no crun backend -- so the file goes
+    # with the run that wrote it. One that was here before is left alone.
+    if [ "$wrote_config" = yes ]; then
+        echo "removing the /etc/nexcage/config.json this script wrote"
+        rm -f /etc/nexcage/config.json
+    fi
     rm -f /nexcage-traced 2>/dev/null || true
 }
 trap cleanup EXIT
 
-# k3s builds its containerd configuration from a template; this adds one
-# runtime to whatever it would have written, rather than replacing it.
-mkdir -p /var/lib/rancher/k3s/agent/etc/containerd
-cat > /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl <<'TOML'
-{{ template "base" . }}
+if ! command -v k3s >/dev/null 2>&1; then
+    echo "installing k3s (it was not here)"
+    installed_here=yes
+    # The extras a runtime test has no use for stay off, so less of the node
+    # changes: no ingress controller, no load balancer, no metrics server.
+    curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION="$K3S_VERSION" \
+        INSTALL_K3S_EXEC="--disable=traefik --disable=servicelb --disable=metrics-server --write-kubeconfig-mode=644" \
+        sh - >/tmp/k3s-install.log 2>&1 || {
+            tail -20 /tmp/k3s-install.log >&2
+            fail "k3s would not install"
+        }
+else
+    echo "k3s is already here; leaving the installation alone"
+fi
+echo "ok: $(k3s --version | head -1)"
 
-[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
-  runtime_type = "io.containerd.runc.v2"
-
-[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
-  BinaryName = "/nexcage-traced"
-TOML
+# k3s builds its containerd configuration from a template; the shipped one
+# adds one runtime to whatever it would have written, rather than replacing
+# it. Only the binary differs here: the trace wrapper instead of
+# /usr/local/bin/nexcage.
+TMPL=/var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl
+mkdir -p "$(dirname "$TMPL")"
+sed 's|"/usr/local/bin/nexcage"|"/nexcage-traced"|' "$NODE_FILES/k3s-config-v3.toml.tmpl" > "$TMPL"
+grep -q '"/nexcage-traced"' "$TMPL" \
+    || fail "$NODE_FILES/k3s-config-v3.toml.tmpl no longer names /usr/local/bin/nexcage"
 systemctl restart k3s
 echo "ok: k3s restarted with a nexcage runtime in its containerd"
 
@@ -140,13 +157,7 @@ done
 echo "ok: the default ServiceAccount exists"
 
 # The runtime handler, named the way a cluster names one.
-k apply -f - >/dev/null <<'YAML'
-apiVersion: node.k8s.io/v1
-kind: RuntimeClass
-metadata:
-  name: nexcage
-handler: nexcage
-YAML
+k apply -f "$NODE_FILES/runtimeclass.yaml" >/dev/null
 echo "ok: RuntimeClass/nexcage"
 
 k delete pod nexcage-pod --ignore-not-found --wait=true >/dev/null 2>&1 || true

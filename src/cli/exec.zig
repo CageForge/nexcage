@@ -89,10 +89,13 @@ pub const ExecCommand = struct {
             \\                     Where to send the master end of the pty and
             \\                     where to write the pid, as with create
             \\
-            \\--process, --detach, --console-socket and --pid-file need the crun
-            \\backend. They are refused on Proxmox LXC rather than ignored:
-            \\'pct exec' takes a command and returns when it ends, so there is
-            \\no identity to apply from a spec and nothing to detach from.
+            \\--process, --detach, --user, --cwd, --console-socket and --pid-file
+            \\need the crun backend. They are refused on Proxmox LXC rather than
+            \\ignored: 'pct exec' takes a command, runs it as root and returns
+            \\when it ends, so there is no identity or directory to apply, nothing
+            \\to detach from and no pty or pid to hand back. There, --tty is
+            \\honoured when nexcage runs on a terminal, which pct passes on, and
+            \\refused when it does not.
             \\
             \\Exit status:
             \\  nexcage exits with the status of the command it ran, as an OCI
@@ -105,8 +108,8 @@ pub const ExecCommand = struct {
             \\  - On the Proxmox LXC backend this runs 'pct exec', so the
             \\    command has to exist in the container's image.
             \\  - On the crun backend a command typed here is written out as a
-            \\    process spec for libcrun. Without --env it carries a default
-            \\    PATH, because a process with no PATH cannot find 'ls'.
+            \\    process spec for libcrun. It carries a default PATH, because
+            \\    a process with no PATH cannot find 'ls'.
             \\  - stdin, stdout and stderr are connected to the container's
             \\    process; output is not buffered by nexcage.
             \\

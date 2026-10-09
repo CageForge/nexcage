@@ -1,4 +1,4 @@
-.TH NEXCAGE 1 "September 2026" "nexcage 0.9.0" "User Commands"
+.TH NEXCAGE 1 "October 2026" "nexcage 0.13.0" "User Commands"
 .SH NAME
 nexcage \- manage LXC containers on a Proxmox VE host
 .SH SYNOPSIS
@@ -6,8 +6,11 @@ nexcage \- manage LXC containers on a Proxmox VE host
 [\fB\-\-debug\fR]
 [\fB\-\-log\-level\fR \fIlevel\fR]
 [\fB\-\-log\-file\fR \fIpath\fR]
+[\fB\-\-log\fR \fIpath\fR]
+[\fB\-\-log\-format\fR \fBtext\fR|\fBjson\fR]
 [\fB\-\-config\fR \fIpath\fR]
 [\fB\-\-root\fR \fIdir\fR]
+[\fB\-\-runtime\fR \fBlxc\fR|\fBcrun\fR]
 \fIcommand\fR [\fIoptions\fR]
 .SH DESCRIPTION
 .B nexcage
@@ -20,13 +23,13 @@ Containers are created from Proxmox templates, OCI bundle directories or, on
 Proxmox VE 9.1 and later, OCI registry images.
 .PP
 Containers are addressed by name, which becomes the container hostname and
-must be unique on the node. VMIDs are allocated with
+must be unique in the cluster. VMIDs are allocated with
 .BR "pvesh get /cluster/nextid" .
 .B nexcage
 must run as root.
 .SH COMMANDS
 .TP
-\fBcreate \-\-name\fR \fIname\fR \fIimage\fR, \fBcreate\fR \fIid\fR \fB\-\-bundle\fR \fIdir\fR [\fB\-\-console\-socket\fR \fIpath\fR] [\fB\-\-pid\-file\fR \fIpath\fR]
+\fBcreate \-\-name\fR \fIname\fR [\fB\-\-node\fR \fInode\fR] [\fB\-\-storage\fR \fIstorage\fR] \fIimage\fR, \fBcreate\fR \fIid\fR \fB\-\-bundle\fR \fIdir\fR [\fB\-\-console\-socket\fR \fIpath\fR] [\fB\-\-pid\-file\fR \fIpath\fR]
 Create a container.
 .I image
 is a template volume such as
@@ -35,9 +38,25 @@ a template file name, an absolute path to an OCI bundle directory, or an OCI
 registry reference such as
 .B docker.io/library/redis:7
 (Proxmox VE 9.1+).
+\fB\-\-node\fR creates the container on another node of the cluster, from a
+\fIstorage\fR:vztmpl/\fIfile\fR template that node can read (Proxmox LXC
+backend only).
+\fB\-\-storage\fR is the storage a registry image is found on or pulled to,
+default local; the root filesystem goes on \fBproxmox.storage\fR.
+\fB\-\-console\-socket\fR and \fB\-\-pid\-file\fR need the crun backend (\fB\-\-runtime crun\fR):
+the Proxmox LXC backend refuses them, because \fBpct create\fR starts no
+process. The crun backend is not built into this package's binary; it is in
+the separate \-crun release binary.
+What \fBpct create\fR is usually given: \fB\-\-memory\fR, \fB\-\-memory\-swap\fR,
+\fB\-\-cpu\-quota\fR, \fB\-\-cpu\-period\fR and \fB\-\-cpu\-share\fR as for
+\fBupdate\fR; \fB\-\-cores\fR; \fB\-\-ip\fR, \fB\-\-gw\fR, \fB\-\-vlan\fR and
+\fB\-\-firewall\fR, net0's ip=, gw=, tag= and firewall=1; \fB\-\-onboot\fR;
+\fB\-\-tags\fR; and \fB\-\-mp\fR \fIspec\fR, repeatable, in pct's syntax.
 .TP
 \fBrun \-\-name\fR \fIname\fR \fIimage\fR
-Create a container and start it.
+Create a container on this node and start it. \fB\-\-node\fR,
+\fB\-\-console\-socket\fR and \fB\-\-pid\-file\fR are refused; to make the
+container on another node, use \fBcreate \-\-node\fR, then \fBstart\fR.
 .TP
 \fBstart\fR \fIname\fR
 Start a container.
@@ -59,15 +78,83 @@ compatibility and does not walk the cgroup: only SIGKILL reaches every process.
 \fBexec\fR \fIname\fR \fIcommand\fR [\fIargs\fR...], \fBexec\fR \fIname\fR \fB\-\-\fR \fIcommand\fR [\fIargs\fR...]
 Run a command inside a running container and exit with its status, as an OCI
 runtime does. Use \-\- where the command starts with a dash. The container must
-be running and the command must exist in its image.
+be running and the command must exist in its image. It runs as root through
+\fBpct exec\fR, so \fB\-\-user\fR, \fB\-\-cwd\fR, \fB\-\-console\-socket\fR,
+\fB\-\-pid\-file\fR, \fB\-\-process\fR and \fB\-\-detach\fR are refused, and
+\fB\-\-tty\fR is refused unless nexcage runs on a terminal.
 .TP
 \fBlist\fR
-List containers, tab-separated: ID, IMAGE, COMMAND, CREATED, STATUS, BACKEND, NAMES.
+List containers, tab-separated: ID, IMAGE, COMMAND, CREATED, STATUS, BACKEND, NODE, NAMES.
 .TP
 \fBstate\fR \fIname\fR|\fIvmid\fR
 Print OCI runtime state as JSON: status created until the container is first
-started through nexcage, and the host PID of its init while it runs. Fails if
-the container does not exist.
+started through nexcage, and the host PID of its init while it is running or
+paused on this host; 0 otherwise, also for a container on another node of the
+cluster, which the io.cageforge.nexcage.node annotation names. Fails if the
+container does not exist.
+.TP
+\fBpause\fR \fIname\fR, \fBresume\fR \fIname\fR
+Freeze or thaw every process in a container through the cgroup freezer.
+Nothing is written to disk; this is not \fBpct suspend\fR. On the Proxmox LXC
+backend the container must be on this host. \fBstate\fR reports a frozen
+container as paused; \fBpct status\fR still says running.
+.TP
+\fBupdate\fR [\fIoptions\fR] \fIname\fR, \fBupdate \-\-resources\fR \fIfile\fR \fIname\fR
+Change a container's resource limits, with the options of \fBcrun update\fR,
+such as \fB\-\-memory\fR, \fB\-\-memory\-swap\fR, \fB\-\-cpu\-quota\fR,
+\fB\-\-cpu\-period\fR and \fB\-\-cpu\-share\fR, or with a runtime-spec
+linux.resources document in \fIfile\fR (\fB\-\fR for standard input). The
+Proxmox LXC backend applies only memory, swap, a CPU limit and a CPU weight,
+the settings \fBpct set\fR has, and refuses any other setting by name.
+.TP
+\fBsnapshot\fR \fIname\fR \fIsnapshot\fR [\fB\-\-description\fR \fItext\fR]
+Take a snapshot of a container's volumes through Proxmox VE. The storage must
+be one that can snapshot, such as zfs, lvm-thin or qcow2; a raw volume on a
+directory storage cannot. The crun backend refuses snapshot, snapshots,
+rollback and delsnapshot.
+.TP
+\fBsnapshots\fR [\fB\-\-format json\fR|\fBtable\fR] \fIname\fR
+List a container's snapshots, oldest first, tab-separated: NAME, CREATED (UTC),
+DESCRIPTION. \fB\-\-format json\fR prints an array of objects with name,
+created, description and parent.
+.TP
+\fBrollback\fR \fIname\fR \fIsnapshot\fR [\fB\-\-start\fR]
+Roll a container's volumes back to a snapshot. Proxmox stops a running
+container first; it stays stopped unless \fB\-\-start\fR is given.
+.TP
+\fBdelsnapshot\fR \fIname\fR \fIsnapshot\fR
+Delete a snapshot. A snapshot that does not exist is an error.
+.TP
+\fBimages\fR [\fB\-\-node\fR \fInode\fR]
+List the container templates the cluster can create from, tab-separated: NODE,
+STORAGE, SHARED, SIZE, TEMPLATE. A shared storage is listed once. With
+\fB\-\-node\fR, only the templates that node can see.
+.TP
+\fBpull\fR \fIreference\fR [\fB\-\-node\fR \fInode\fR] [\fB\-\-storage\fR \fIstorage\fR] [\fB\-\-filename\fR \fIfile\fR]
+Fetch an OCI image from a registry into a Proxmox storage as a container
+template and print its volid, which \fBcreate\fR takes. The default node is
+this host and the default storage is local. Needs Proxmox VE 9.1 or later.
+.TP
+\fBrmi\fR \fItemplate\fR [\fB\-\-node\fR \fInode\fR]
+Remove a container template, given as \fIstorage\fR:vztmpl/\fIfile\fR, from
+its storage on this host or on \fInode\fR. From a shared storage it is removed
+for every node. A template that does not exist is an error.
+.TP
+\fBfeatures\fR
+Print the OCI runtime features document.
+.TP
+\fBps\fR [\fB\-\-format json\fR|\fBtable\fR] \fIname\fR
+Print the host PIDs in a container's cgroup.
+.PP
+Only the crun backend answers \fBfeatures\fR and \fBps\fR; the Proxmox LXC
+backend refuses them.
+.TP
+\fBhealth\fR
+Check pct, storage, the network, the configuration file
+(\fI/etc/nexcage/config.json\fR, else \fI./config.json\fR) and the nexcage
+process, print a report on standard error, and exit 1 if any check failed;
+warnings do not fail. The Proxmox API is not checked: its line in the report
+is always a warning.
 .TP
 \fBversion\fR, \fBhelp\fR
 Print the version or the list of commands.
@@ -83,8 +170,26 @@ Log at debug level and print startup and system information.
 One of trace, debug, info (default), warn, error, fatal.
 .TP
 \fB\-\-log\-file\fR \fIpath\fR
-Also write log lines to
-.IR path .
+Also write to
+.I path
+(and to standard error) a startup line naming the version, a line when the
+command starts and two when it succeeds; with \fB\-\-debug\fR, system
+information and the command's environment (debug mode, log file, timestamp)
+too. The command's own log lines, including those that explain a failure, are
+not written there: they go to standard error, or to the file given with
+\fB\-\-log\fR. The NEXCAGE_LOG_FILE environment variable and the configuration
+keys \fBlog_file\fR and \fBruntime.log_path\fR do the same.
+.TP
+\fB\-\-log\fR \fIpath\fR
+Write the runtime's own log lines to
+.I path
+instead of standard error, as an OCI runtime does. The one-line failure
+summary still goes to standard error.
+.TP
+\fB\-\-log\-format\fR \fBtext\fR|\fBjson\fR
+The format of the runtime's own log lines, the ones \fB\-\-log\fR redirects:
+\fBjson\fR writes one object per line. Any value other than \fBjson\fR means
+\fBtext\fR. The \fB\-\-log\-file\fR lines are always text.
 .TP
 \fB\-\-config\fR \fIpath\fR
 Read configuration from
@@ -96,11 +201,25 @@ Keep per-container state under
 .I dir
 instead of /run/nexcage. An OCI runtime takes this from its caller, so that two
 callers on one host do not see each other's containers. Must be absolute.
+.TP
+\fB\-\-runtime\fR \fBlxc\fR|\fBcrun\fR
+The backend for this command, overriding the configuration's routing.
+\fBproxmox\-lxc\fR is the same as \fBlxc\fR. The crun backend is not built into
+this package's binary, so a command sent to it fails.
+.TP
+.B \-\-systemd\-cgroup
+Accepted so that a container engine is not refused. Given after \fBcreate\fR,
+it is passed to libcrun on the crun backend; anywhere else it has no effect.
+.TP
+.B \-\-version
+In place of a command, the same output as the \fBversion\fR command.
 .PP
-Log lines go to standard error; standard output carries only command output.
+Log lines go to standard error, or to the \fB\-\-log\fR file; standard output
+carries only command output.
 .SH CONFIGURATION
-Without \fB\-\-config\fR, the first of these files that exists is read; a file
-that does not parse is an error:
+Without \fB\-\-config\fR, the first of these files that exists and is not an
+OCI runtime spec (one with a top-level ociVersion) is read; a file that does
+not parse is an error:
 .IR ./config.json ,
 .IR /etc/nexcage/config.json ,
 .IR /etc/nexcage/nexcage.json .
@@ -123,6 +242,22 @@ run unprivileged.
 .TP
 .B proxmox.ostype
 OS type passed to pct. Default: detected from the template.
+.TP
+.BR log_level ", " runtime.log_level
+debug, info, warn or error; any other value is read as info. debug has the
+effect of \fB\-\-debug\fR. Where both keys are set, log_level wins.
+.TP
+.BR log_file ", " runtime.log_path
+The same as \fB\-\-log\-file\fR: not the runtime's log, which \fB\-\-log\fR
+sets. Where both keys are set, log_file wins.
+.TP
+.B runtime.routing
+Rules that pick a container's backend by its name, such as
+{"pattern": "web\-*", "runtime": "crun"}. The first rule that matches wins, and
+\fB\-\-runtime\fR overrides them. Default: the Proxmox LXC backend. A pattern
+is a glob unless it starts with ^ or ends with $, so \&.* matches nothing; use
+*. Those two make it a limited regular expression, and one that starts with ^
+must match the whole name: ^web\- matches web\- alone, ^web\-.* matches web\-1.
 .SH EXIT STATUS
 .TP
 .B 0
@@ -138,8 +273,9 @@ Invalid usage, such as an unknown command or a missing argument.
 .I /etc/nexcage/config.json
 Configuration.
 .TP
-.I /run/nexcage/<name>/state.json
-State written by create, start and stop.
+.I <root>/<name>/state.json
+State, under \fB\-\-root\fR (default /run/nexcage), written by create, start,
+stop, pause, resume and rollback, and removed by delete.
 .TP
 .I /usr/share/doc/nexcage/examples/config.json
 Example configuration.
