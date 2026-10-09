@@ -18,7 +18,7 @@ binary:
 
 ## Status
 
-As of **0.16.0**, on amd64, running on the Proxmox VE host as root:
+As of **0.17.0**, on amd64, running on the Proxmox VE host as root:
 
 | | |
 |---|---|
@@ -27,6 +27,7 @@ As of **0.16.0**, on amd64, running on the Proxmox VE host as root:
 | **Freezing, resizing** | `pause` and `resume`, the cgroup freezer, on both backends — on Proxmox LXC only on the host the container is on; `state` reports `paused`, which `pct status` cannot, for a container on this host (one frozen on another node shows as `running`). `update` changes a running container's limits — through libcrun, or `pct set` in its own terms |
 | **As an OCI runtime** | the runtime-spec command line — `create --bundle`, `start`, `state`, `kill`, `delete`, `exec`, `ps`, `features`, `update`, with `--root`, `--console-socket`, `--pid-file`, `--log`. Verified against podman, `ctr`, containerd's CRI, CRI-O and a kubelet |
 | **In Kubernetes** | a pod with `runtimeClassName: nexcage` runs on a node, with an address from the cluster's CNI, `kubectl logs` and `kubectl exec`; installed from the files a release ships ([INSTALL.md](docs/INSTALL.md#a-kubernetes-node-on-proxmox-ve-since-0160)) |
+| **Isolation profiles** | Named in the configuration file by the node's administrator. A profile can require a user namespace or seccomp, drop capabilities, and lower memory and pids limits. A `RuntimeClass` picks one by the handler's program name, `nexcage@<profile>`. A profile names the crun backend ([CLI_REFERENCE.md](docs/CLI_REFERENCE.md#isolation-profiles), [INSTALL.md](docs/INSTALL.md#an-isolation-profile-per-runtimeclass-since-0170)) |
 | **Conformance** | runtime-spec validation 33 of 58 and critest 110 of 142, in CI; every failure also fails with crun run directly ([release notes](docs/releases/NOTES_v0.16.0.md#conformance-on-record)) |
 | **Registries** | Images are pulled through Proxmox. A private registry takes a `skopeo login --authfile /root/.config/containers/auth.json` on each node that pulls ([INSTALL.md](docs/INSTALL.md#images-from-a-private-registry)) |
 | **Not there** | `events` — no engine has asked for it |
@@ -46,21 +47,23 @@ Proxmox ended its own support for 8.x in August 2026.
 
 ### System Dependencies
 
-  * Required runtime libraries (must be installed on the host for `containerd`/`CRI-O`/ Kubernetes integration):
-  * 
-    ```bash
-    apt install -y libjson-c5 libseccomp2 libcap2
-    ```
+The release's binary links the crun backend's libraries dynamically and does
+not start without them. The `.deb` pulls them through its `Depends`; for the
+bare binary:
+
+```bash
+apt install libjson-c5 libseccomp2 libcap2 libsystemd0
+```
 
 ### Build Dependencies (Source builds only)
-* **Zig Compiler:** Version `0.15.1` (or newer compatible toolchain).
-* **Packaging Utilities:** `dpkg-deb`, `gzip`, `du`, `cut`, `tr` (for building `.deb` packages via `scripts/build_deb_local.sh`).
-* **Container Engine:** Docker or Podman (optional, required only for building the `-crun` embedded binary from source).
+* **Zig Compiler:** Version `0.15.1` exactly: `build.zig.zon` and CI pin it.
+* **Packaging Utilities:** `dpkg-deb`, `objdump`, `gzip`, `du`, `cut`, `tr` (for building `.deb` packages via `scripts/build_deb_local.sh`).
+* **Docker:** builds the binary with the crun backend, through the Dockerfile. `scripts/build_deb_local.sh` needs it unless given a built binary as `NEXCAGE_BIN`.
 
 ## Install
 
 ```bash
-VERSION=0.16.0
+VERSION=0.17.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
@@ -136,14 +139,16 @@ How it was verified, engine by engine, and what Kubernetes asks a runtime:
 
 For standard Proxmox LXC management:
 ```bash
-sudo mkdir -p /etc/nexcage
-sudo cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json
+mkdir -p /etc/nexcage
+cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json
 ```
-For OCI runtime mode (containerd / CRI-O / Kubernetes with -crun binary):
+For a container engine (containerd, CRI-O, a kubelet):
 ```bash
-sudo mkdir -p /etc/nexcage
-sudo cp /usr/share/doc/nexcage/examples/config.oci.example.json /etc/nexcage/config.json
+mkdir -p /etc/nexcage
+cp /usr/share/doc/nexcage/examples/config.oci.example.json /etc/nexcage/config.json
 ```
+On a host that already has a configuration, add the example's `runtime.routing`
+and `profiles` to that file instead of replacing it.
 
 nexcage reads the file given with `--config <path>`, or else the first of
 `./config.json`, `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`

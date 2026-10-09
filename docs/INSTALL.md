@@ -23,7 +23,7 @@ binary without it. There is no `-crun` asset any more.
 ### .deb
 
 ```bash
-VERSION=0.16.0
+VERSION=0.17.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
@@ -43,7 +43,7 @@ Its `Depends` brings in the libraries the crun backend links: `libjson-c5`,
 ### Binary
 
 ```bash
-VERSION=0.16.0
+VERSION=0.17.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt
@@ -91,7 +91,7 @@ nexcage only when it names the class; the node's default runtime is unchanged.
 files, and runs a pod on it.
 
 ```bash
-VERSION=0.16.0
+VERSION=0.17.0
 SRC=https://raw.githubusercontent.com/CageForge/nexcage/v$VERSION
 ```
 
@@ -246,9 +246,12 @@ mkdir -p /etc/nexcage
 cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json   # .deb install
 # or: cp packaging/config/config.json /etc/nexcage/config.json            # source tree
 ```
-2. **For OCI Runtime mode (containerd / CRI-O / Kubernetes using the -crun binary):**
+2. **For a container engine (containerd, CRI-O, a kubelet):**
 
-The OCI backend requires explicit routing rules to forward container operations to crun:
+A container engine never passes `--runtime`, so routing has to put the
+containers it creates on the crun backend. On a host that already has a
+configuration, add the example's `runtime.routing` and `profiles` to it instead,
+as "For a container engine" above describes.
 
 ```bash
 mkdir -p /etc/nexcage

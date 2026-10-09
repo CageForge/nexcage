@@ -54,6 +54,7 @@ nav:
   - Runtime-spec Validation: RUNTIME_SPEC_VALIDATION.md
   - Compliance: COMPLIANCE_CNCF_CHECKLIST.md
   - Releases:
+    - v0.17.0: releases/NOTES_v0.17.0.md
     - v0.16.0: releases/NOTES_v0.16.0.md
     - v0.15.0: releases/NOTES_v0.15.0.md
     - v0.14.1: releases/NOTES_v0.14.1.md

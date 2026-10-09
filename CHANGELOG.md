@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-09
+
+A pod can run under an isolation profile.
+- The node's administrator names, in the configuration file, what a container may not exceed.
+- An engine's `RuntimeClass` picks a profile by the handler's program name, `nexcage@<profile>`.
+- On a k3s node, two pods under two profiles were checked from inside each pod.
+
+**One release: one binary with both backends, Proxmox LXC and crun, and one `.deb`** that installs it with the libraries it needs. The `-crun` asset is gone.
+
+**The configuration file fails closed**, so a file that loaded until now can be refused. A container's backend now comes from the container, not from the routing rules. A Proxmox LXC container driven by an engine was designed and not built (ADR-006).
+
+### Security
+- **`exec`'s temporary process file is created, not opened** (#315). `/tmp/nexcage-exec-<pid>.json` has a predictable name, and nexcage opened it with truncate. A symlink left there by another user would have been followed by a root process on a host where `fs.protected_symlinks` is off. The file is now created exclusively with mode 0600, after anything left at that path is removed.
+
 ### Added
 - **Isolation profiles on the crun backend** (#315, ADR-005). A profile under `profiles` in the configuration file can:
   - require a user namespace or a seccomp filter;
@@ -45,6 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - a runtime or log level it does not know.
 
   Keys nexcage used to parse and never used are refused like misspelt ones. Those are `runtime_type`, `default_runtime`, `runtime.root_path`, `data_dir`, `cache_dir`, `temp_dir`, `network.ip`, `network.gateway`, `security`, `resources`, `container_config.default_container_type`, and `pct_path`, `node` and `legacy_api` under `proxmox`. `"security": {"seccomp": true}` turned nothing on. `container_config.crun_name_patterns`, ignored with a warning since 0.13.0, is refused with the same message. Remove what the message names; the keys that remain are the README's table. `"proxmox-lxc"`, as `--runtime` spells it, is read as `lxc`.
+
+### Not built
+- **The Proxmox LXC backend driven by an engine** (#316, ADR-006). A probe on the E2E node showed it can be done.
+  - What it would add is visibility in `pct list`.
+  - Its costs fall on every pod: the sandbox stays on crun, every create goes through Proxmox's perl internals and pmxcfs, the container is privileged, and its cgroups are outside the kubelet's.
+  - A profile with `"runtime": "lxc"` keeps refusing the configuration file.
 
 ### Fixed
 - **`--config`, `--root` and `--runtime` were read after `--`** (#315). Those words belong to the command `exec` runs, as the splitting of `--flag=value` already treated them. Before this fix, `nexcage exec web-1 -- grep --config x` loaded `x` as nexcage's configuration and failed.
