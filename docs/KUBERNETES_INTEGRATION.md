@@ -3,11 +3,15 @@
 What nexcage would need to run containers for Kubernetes, and how the work is
 staged in the `tenant-nexcage` tenant of the Cozystack cluster `pskep`.
 
-**Status as of 0.16.0: Kubernetes schedules pods onto nexcage.** A pod with
-`runtimeClassName: nexcage` runs on a node, with an address from the cluster's
-CNI, `kubectl logs` and `kubectl exec`; podman, `ctr`, containerd's CRI and
-CRI-O all drive it as well. Everything a kubelet's containerd asks an OCI
-runtime is answered.
+**Status as of 0.17.0: Kubernetes schedules pods onto nexcage.**
+- A pod with `runtimeClassName: nexcage` runs on a node, with an address from
+  the cluster's CNI, `kubectl logs` and `kubectl exec`.
+- Since 0.17.0, a `RuntimeClass` can name an isolation profile instead. Its
+  handler runs nexcage as `nexcage@<profile>`, and one node runs pods under
+  different profiles.
+- podman, `ctr`, containerd's CRI and CRI-O drive it as well.
+
+Everything a kubelet's containerd asks an OCI runtime is answered.
 
 At 0.9.1 none of that was true: nexcage was a command-line lifecycle tool for
 LXC containers on one Proxmox VE host, and nothing in Kubernetes could schedule

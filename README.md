@@ -18,7 +18,7 @@ binary:
 
 ## Status
 
-As of **0.16.0**, on amd64, running on the Proxmox VE host as root:
+As of **0.17.0**, on amd64, running on the Proxmox VE host as root:
 
 | | |
 |---|---|
@@ -27,6 +27,7 @@ As of **0.16.0**, on amd64, running on the Proxmox VE host as root:
 | **Freezing, resizing** | `pause` and `resume`, the cgroup freezer, on both backends — on Proxmox LXC only on the host the container is on; `state` reports `paused`, which `pct status` cannot, for a container on this host (one frozen on another node shows as `running`). `update` changes a running container's limits — through libcrun, or `pct set` in its own terms |
 | **As an OCI runtime** | the runtime-spec command line — `create --bundle`, `start`, `state`, `kill`, `delete`, `exec`, `ps`, `features`, `update`, with `--root`, `--console-socket`, `--pid-file`, `--log`. Verified against podman, `ctr`, containerd's CRI, CRI-O and a kubelet |
 | **In Kubernetes** | a pod with `runtimeClassName: nexcage` runs on a node, with an address from the cluster's CNI, `kubectl logs` and `kubectl exec`; installed from the files a release ships ([INSTALL.md](docs/INSTALL.md#a-kubernetes-node-on-proxmox-ve-since-0160)) |
+| **Isolation profiles** | Named in the configuration file by the node's administrator. A profile can require a user namespace or seccomp, drop capabilities, and lower memory and pids limits. A `RuntimeClass` picks one by the handler's program name, `nexcage@<profile>`. A profile names the crun backend ([CLI_REFERENCE.md](docs/CLI_REFERENCE.md#isolation-profiles), [INSTALL.md](docs/INSTALL.md#an-isolation-profile-per-runtimeclass-since-0170)) |
 | **Conformance** | runtime-spec validation 33 of 58 and critest 110 of 142, in CI; every failure also fails with crun run directly ([release notes](docs/releases/NOTES_v0.16.0.md#conformance-on-record)) |
 | **Registries** | Images are pulled through Proxmox. A private registry takes a `skopeo login --authfile /root/.config/containers/auth.json` on each node that pulls ([INSTALL.md](docs/INSTALL.md#images-from-a-private-registry)) |
 | **Not there** | `events` — no engine has asked for it |
@@ -38,7 +39,7 @@ Proxmox ended its own support for 8.x in August 2026.
 ## Install
 
 ```bash
-VERSION=0.16.0
+VERSION=0.17.0
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/nexcage-$VERSION-amd64.deb
 wget https://github.com/CageForge/nexcage/releases/download/v$VERSION/checksums.txt
 sha256sum --ignore-missing -c checksums.txt

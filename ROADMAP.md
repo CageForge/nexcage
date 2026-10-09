@@ -1,7 +1,7 @@
 # Roadmap
 
-Where nexcage goes after 0.16.0, and what it deliberately will not do.
-Reviewed against `main` on 2026-10-08.
+Where nexcage goes after 0.17.0, and what it deliberately will not do.
+Reviewed against `main` on 2026-10-09.
 
 This file says what comes next and why, not when. The `Roadmap/` directory it
 replaces was removed in September 2026 because it held a sprint plan due in
@@ -32,11 +32,19 @@ nexcage is one binary with two faces
   and a pod with `runtimeClassName: nexcage` runs on a node installed from the
   files a release ships. The runtime-spec validation suite and `critest` run
   in CI, and every test they fail also fails with crun run directly.
+- **One release** (0.17.0): one binary with both backends, Proxmox LXC and
+  crun, and one `.deb` that installs it with the libraries it needs.
+- **Isolation profiles** (0.17.0): a `RuntimeClass` picks one by the
+  handler's program name, `nexcage@<profile>`, and one node runs pods under
+  different profiles. A profile only narrows what the engine asked for. It
+  names crun: a Proxmox LXC container driven by an engine was designed and not
+  built
+  ([ADR-006](docs/architecture/ADR-006-LXC-Driven-By-An-Engine.md)).
 
-Everything a kubelet's containerd asks a runtime is answered, and the suites
-that define a runtime have been asked. What is left is the choice of backend
-per pod, depth on the Proxmox side, and what makes a 1.0 a promise rather than
-a number.
+Everything a kubelet's containerd asks a runtime is answered, the suites
+that define a runtime have been asked, and a pod can be given less than the
+engine asked for. What is left is what makes a 1.0 a promise rather than a
+number.
 
 ## Not code: protect `main`
 
@@ -46,32 +54,7 @@ required checks of `ci.yml` and `crun_build.yml`, no force push or deletion,
 and no approving review while there is one maintainer
 ([MAINTAINERS.md](MAINTAINERS.md)). [#305]
 
-## Next: 0.17.0 — isolation profiles
-
-What a Kubernetes user gets from nexcage that crun does not give: **an
-isolation profile** — a named choice of which backend creates and runs a
-container, and with what parameters.
-
-Today a container's backend is a name lookup
-([ADR-001](docs/architecture/ADR-001-Container-Runtime-Selection.md)), and an
-engine addresses containers by a 64-character hex id, so the only rule a host
-that serves an engine can usefully write is `*`: one node, one backend, one set
-of parameters, and a pod on nexcage is a libcrun container that Proxmox VE does
-not see. A profile is something the engine can carry for each container, so
-one node can run a pod on crun with the engine's own settings next to a pod in
-an unprivileged Proxmox container on a chosen storage and bridge.
-
-It comes before 1.0 because 1.0 freezes the configuration it changes.
-
-| Item | Why | Issue |
-|---|---|---|
-| ADR-005: isolation profiles | What a profile holds — the backend, and that backend's parameters; how an engine names one — the handler a `RuntimeClass` names, or an annotation the engine copies into the bundle (containerd's `pod_annotations`, CRI-O's `allowed_annotations`); and what becomes of `runtime.routing`. Decided in [ADR-005](docs/architecture/ADR-005-Isolation-Profiles.md): the handler's program name, `nexcage@<profile>`, and a profile only narrows the bundle | [#314] |
-| The configuration file fails closed | A misspelt runtime in a routing rule routes to LXC without a word, and a section of the wrong type panics. A profile's parameters must not be misspelt into weaker isolation. An unknown key becomes an error | [#371] |
-| A container's backend comes from the container | Every command derives the backend from routing again, so a changed rule sends `delete` to the other backend. With profiles, a person's command and an engine's would disagree | [#372] |
-| Profiles on the crun backend | The backend engines already drive, so the first place a profile can be proved end to end. Its shape follows the ADR | [#315] |
-| The Proxmox LXC backend driven by an engine | **Not built.** [ADR-006](docs/architecture/ADR-006-LXC-Driven-By-An-Engine.md) shows it can be done. The costs fall on every pod: the sandbox stays on crun, every create goes through Proxmox's perl internals and pmxcfs, the container is privileged, and its cgroups are outside the kubelet's. All it would add is visibility in `pct list`. Out of 0.17.0 | [#316] |
-
-## 1.0 — what the number promises
+## Next: 1.0 — what the number promises
 
 1.0 is a compatibility promise, not a feature count. Proposed criteria:
 
@@ -109,6 +92,16 @@ It comes before 1.0 because 1.0 freezes the configuration it changes.
   say.
 - **Backup, restore and migration through pct** — `vzdump`, `pct restore`,
   `pct migrate` — by name on any node, the way snapshots went. [#324]
+- **A Proxmox LXC container driven by an engine.**
+  [ADR-006](docs/architecture/ADR-006-LXC-Driven-By-An-Engine.md) shows it can
+  be done. Its costs fall on every pod:
+  - the sandbox stays on crun;
+  - every create goes through Proxmox's perl internals and pmxcfs;
+  - the container is privileged;
+  - its cgroups are outside the kubelet's.
+
+  What it adds is visibility in `pct list`. It comes back with a need only a
+  Proxmox container meets. [#316]
 
 ## Open question
 
@@ -138,8 +131,6 @@ asks" needs a place to be asked.
 [#163]: https://github.com/CageForge/nexcage/issues/163
 [#299]: https://github.com/CageForge/nexcage/issues/299
 [#305]: https://github.com/CageForge/nexcage/issues/305
-[#314]: https://github.com/CageForge/nexcage/issues/314
-[#315]: https://github.com/CageForge/nexcage/issues/315
 [#316]: https://github.com/CageForge/nexcage/issues/316
 [#317]: https://github.com/CageForge/nexcage/issues/317
 [#318]: https://github.com/CageForge/nexcage/issues/318
@@ -149,5 +140,3 @@ asks" needs a place to be asked.
 [#322]: https://github.com/CageForge/nexcage/issues/322
 [#323]: https://github.com/CageForge/nexcage/issues/323
 [#324]: https://github.com/CageForge/nexcage/issues/324
-[#371]: https://github.com/CageForge/nexcage/issues/371
-[#372]: https://github.com/CageForge/nexcage/issues/372
