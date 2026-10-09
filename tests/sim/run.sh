@@ -495,13 +495,24 @@ rm -f "$S/work/config.json"
 # Routing by name (ADR-001). A glob under runtime.routing is the matcher
 # crun_name_patterns used to be, so the proof is both directions of one rule:
 # a matching name reaches the crun backend and a non-matching one reaches pct.
+# Routing picks the backend of a new container; every other command goes to
+# the container itself (#372), so the proof is create.
 cfg '{"runtime":{"routing":[{"pattern":"kube-ovn-*","runtime":"crun"}]}}'
-nx state kube-ovn-1
+nx create --name kube-ovn-1 "$TPL"
 check "a glob under runtime.routing sends a matching name to crun" \
   all 'rc 1' 'err_has "not built into this binary"' 'not_called_re "^pct"'
-nx state from-tpl
+nx create --name rt-lxc-1 "$TPL"
 check "and a name it does not match goes to Proxmox LXC" \
-  all 'rc 0' 'called_re "^pct"'
+  all 'rc 0' 'called_re "^pct create"'
+# A container created under one rule is still found after the rule changes
+# (#372). Every command used to route again, so the rule below sent state and
+# delete to a backend that does not have the container.
+cfg '{"runtime":{"routing":[{"pattern":"*","runtime":"crun"}]}}'
+nx state rt-lxc-1
+check "after create, the rules no longer decide: state still reaches the container" \
+  all 'rc 0' 'called_re "^pct"' '! err_has "not built into this binary"'
+nx delete rt-lxc-1
+check "and so does delete" all 'rc 0' 'called_re "^pct destroy"'
 # The removed key is refused, naming its replacement: a container it used to
 # send to crun would otherwise land on the default backend.
 cfg '{"container_config":{"crun_name_patterns":["kube-ovn-*"]}}'
@@ -542,7 +553,7 @@ done
 # No runc backend since 0.13.0. A rule that still names it describes an OCI
 # container, so it goes to crun -- and is said, since the file should change.
 cfg '{"runtime":{"routing":[{"pattern":"*","runtime":"runc"}]}}'
-nx state from-tpl
+nx create --name runc-rule-1 "$TPL"
 check "a routing rule naming runc goes to crun, with a warning that says so" \
   all 'rc 1' 'err_has "not built into this binary"' 'err_has "runc is not a backend"' 'not_called_re "^pct"'
 rm -f "$S/work/config.json"

@@ -130,12 +130,15 @@ node a container elsewhere is on.
 
 ## Backend selection
 
-`create`, `run`, `start`, `stop`, `delete`, `kill`, `exec`, `state`, `pause`,
-`resume`, `update`, `ps`, `features` and the snapshot commands go to the
-backend chosen by the routing rules in the config file, Proxmox LXC by
-default.
-`--runtime <lxc|crun>` overrides that for one command, before or after
-the command name.
+`create` and `run` send a new container to the backend chosen by the routing
+rules in the config file, Proxmox LXC by default; `features` asks that backend
+too. Every other command — `start`, `stop`, `delete`, `kill`, `exec`, `state`,
+`pause`, `resume`, `update`, `ps` and the snapshot commands — goes to the
+backend that has the container: the crun backend when libcrun's state
+directory (`--root`, else `/run/crun`) has it, Proxmox LXC otherwise. A rule
+changed after `create` does not move a container (since 0.17.0, #372).
+`--runtime <lxc|crun>` overrides that for one command, before or after the
+command name; `--runtime lxc` for a container the crun backend has exits 2.
 
 A routing rule's `pattern` is a **regular expression only when it starts with
 `^` or ends with `$`**; anything else is matched as a shell-style wildcard. So

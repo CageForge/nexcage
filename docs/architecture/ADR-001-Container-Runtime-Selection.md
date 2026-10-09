@@ -35,8 +35,12 @@ decided for a container whose caller never says.
    `runtime.routing` is a list of `{ "pattern", "runtime" }`; a pattern is a
    glob unless it starts with `^` or ends with `$`, in which case it is a
    regular expression. `*` is the catch-all. `--runtime` overrides it for one
-   command. An engine never passes `--runtime`, so a host that runs
-   containers for one is configured with a single rule:
+   command. Since 0.17.0 it decides only where a new container goes; every
+   later command goes to the backend that has the container
+   ([ADR-005](ADR-005-Isolation-Profiles.md),
+   [#372](https://github.com/CageForge/nexcage/issues/372)). An engine never
+   passes `--runtime`, so a host that runs containers for one is configured
+   with a single rule:
 
    ```json
    { "runtime": { "routing": [ { "pattern": "*", "runtime": "crun" } ] } }

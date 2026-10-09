@@ -261,17 +261,9 @@ pub const SnapshotsCommand = struct {
             return types.Error.InvalidInput;
         }
 
-        // --runtime wins; otherwise the routing rules, with the container's
-        // own name as the key, the way every other command resolves it.
-        var runtime_type: types.RuntimeType = .proxmox_lxc;
-        if (options.runtime_type) |rt| {
-            runtime_type = rt;
-        } else {
-            var config_loader = config_module.ConfigLoader.init(allocator);
-            var cfg = try config_loader.loadDefault();
-            defer cfg.deinit();
-            runtime_type = cfg.getRoutedRuntime(container_id);
-        }
+        // The backend that has the container, the way every other command
+        // after create resolves it
+        const runtime_type = try router.backendOf(container_id, options.runtime_type, self.base.logger);
         switch (runtime_type) {
             .crun => {
                 if (self.base.logger) |log| log.err("snapshots is a Proxmox VE operation: the node's storage takes a snapshot of the container's volumes, and the crun backend has no storage of its own to snapshot. It is for containers on the Proxmox LXC backend", .{}) catch {};
