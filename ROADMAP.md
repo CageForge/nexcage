@@ -1,6 +1,6 @@
 # Roadmap
 
-Where nexcage goes after 0.15.0, and what it deliberately will not do.
+Where nexcage goes after 0.16.0, and what it deliberately will not do.
 Reviewed against `main` on 2026-10-08.
 
 This file says what comes next and why, not when. The `Roadmap/` directory it
@@ -29,11 +29,14 @@ nexcage is one binary with two faces
   options `pct create` takes.
 - **An OCI runtime that container engines drive**: podman, `ctr`,
   containerd's CRI, CRI-O and a kubelet run containers on the crun backend,
-  and a pod with `runtimeClassName: nexcage` runs on a node.
+  and a pod with `runtimeClassName: nexcage` runs on a node installed from the
+  files a release ships. The runtime-spec validation suite and `critest` run
+  in CI, and every test they fail also fails with crun run directly.
 
-Everything a kubelet's containerd asks a runtime is answered. What is left is
-less about missing verbs than about proof, depth on the Proxmox side, and what
-makes a 1.0 a promise rather than a number.
+Everything a kubelet's containerd asks a runtime is answered, and the suites
+that define a runtime have been asked. What is left is the choice of backend
+per pod, depth on the Proxmox side, and what makes a 1.0 a promise rather than
+a number.
 
 ## Not code: protect `main`
 
@@ -43,22 +46,7 @@ required checks of `ci.yml` and `crun_build.yml`, no force push or deletion,
 and no approving review while there is one maintainer
 ([MAINTAINERS.md](MAINTAINERS.md)). [#305]
 
-## Next: 0.16.0 — the OCI runtime, measured by the suites that define it
-
-Every engine-facing defect in 0.10.0 was found by running an engine, and none
-was on the list of what was thought to be missing. The conformance suites ask
-everything, not only what one engine happened to ask.
-
-| Item | Why | Issue |
-|---|---|---|
-| The runtime-spec validation suite ([opencontainers/runtime-tools]) against the crun backend, in CI | The specification's own tests. Results recorded, known failures named | [#310] |
-| `critest` ([cri-tools]) against containerd with nexcage as the runtime handler | What Kubernetes checks of a CRI runtime. `tests/cri/pod_on_nexcage.sh` is one pod | [#311] |
-| The k3s pod test from a workflow | `tests/k8s/pod_on_node.sh` runs on `nexcage-e2e-1` by hand today | [#312] |
-| An install for a Kubernetes node on Proxmox VE | The routing config, containerd and CRI-O drop-ins and a `RuntimeClass` shipped with the `-crun` package and in `deploy/`, rather than assembled from `KUBERNETES_INTEGRATION.md`. [#301] starts on the config | [#313] |
-| Private registries | `oci-registry-pull` takes no credentials, so `pull` and `create` cannot reach a private registry. Proxmox pulls with `skopeo copy` as root, and skopeo reads the containers auth file, so a `skopeo login` on each node may be enough: to be checked on the E2E node before anything else is built. A registry client in nexcage is the last resort and wants an ADR. Moved from 0.15.0 | [#309] |
-| `events` | Only once an engine sends it. The trace will say | — |
-
-## 0.17.0 — isolation profiles
+## Next: 0.17.0 — isolation profiles
 
 What a Kubernetes user gets from nexcage that crun does not give: **an
 isolation profile** — a named choice of which backend creates and runs a
@@ -90,8 +78,8 @@ It comes before 1.0 because 1.0 freezes the configuration it changes.
    after a release that warns about it — as 0.13.0 did for
    `crun_name_patterns` and for a routing rule naming `runc`. [#317]
 2. **Conformance on record.** The runtime-spec validation suite and `critest`
-   run in CI, and their results ship with each release's notes. [#310],
-   [#311]
+   run in CI since 0.16.0. Their results ship with each release's notes, and
+   every test that fails is named with the reason.
 3. **Every Proxmox VE major the README names runs the E2E suite.**
 4. **Releases that can be verified.** Artifacts signed, and their provenance
    attested by the build (GitHub artifact attestations or Sigstore). Today
@@ -114,6 +102,9 @@ It comes before 1.0 because 1.0 freezes the configuration it changes.
   API reaches into a container's processes; the cluster's own root SSH between
   nodes does. That is a root binary opening root sessions on other hosts, so
   it needs an ADR, and a user who needs it. [#323]
+- **`events`.** No engine has sent it: podman, `ctr`, containerd's CRI,
+  CRI-O, critest and a kubelet all ran without it. If one does, the trace will
+  say.
 - **Backup, restore and migration through pct** — `vzdump`, `pct restore`,
   `pct migrate` — by name on any node, the way snapshots went. [#324]
 
@@ -144,13 +135,7 @@ asks" needs a place to be asked.
 [#118]: https://github.com/CageForge/nexcage/issues/118
 [#163]: https://github.com/CageForge/nexcage/issues/163
 [#299]: https://github.com/CageForge/nexcage/issues/299
-[#301]: https://github.com/CageForge/nexcage/pull/301
 [#305]: https://github.com/CageForge/nexcage/issues/305
-[#309]: https://github.com/CageForge/nexcage/issues/309
-[#310]: https://github.com/CageForge/nexcage/issues/310
-[#311]: https://github.com/CageForge/nexcage/issues/311
-[#312]: https://github.com/CageForge/nexcage/issues/312
-[#313]: https://github.com/CageForge/nexcage/issues/313
 [#314]: https://github.com/CageForge/nexcage/issues/314
 [#315]: https://github.com/CageForge/nexcage/issues/315
 [#316]: https://github.com/CageForge/nexcage/issues/316
@@ -162,5 +147,3 @@ asks" needs a place to be asked.
 [#322]: https://github.com/CageForge/nexcage/issues/322
 [#323]: https://github.com/CageForge/nexcage/issues/323
 [#324]: https://github.com/CageForge/nexcage/issues/324
-[opencontainers/runtime-tools]: https://github.com/opencontainers/runtime-tools
-[cri-tools]: https://github.com/kubernetes-sigs/cri-tools

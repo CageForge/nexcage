@@ -565,19 +565,22 @@ jobs:
         # system templates, which is what the detection above looks for.
         before=$(vztmpl_list)
         # Root's registry auth file, which the login check below replaces for a
-        # moment; whatever the node has there is put back.
+        # moment; whatever the node has there is put back. The copy is kept
+        # beside it, not under /tmp, so that a run cut short -- the runner was
+        # once stopped in this step -- is put right by the next run: wrong
+        # docker.io credentials left there would refuse every pull on the node.
         AUTH=/root/.config/containers/auth.json
-        AUTH_SAVED=$(mktemp -d)
-        if $SUDO test -f "$AUTH"; then $SUDO cp -p "$AUTH" "$AUTH_SAVED/auth.json"; fi
+        AUTH_SAVED=$AUTH.nexcage-e2e
+        WRONG=$(printf 'nexcage-e2e:wrong' | base64)
         restore_auth() {
-          $SUDO rm -f "$AUTH"
-          [ -f "$AUTH_SAVED/auth.json" ] && $SUDO cp -p "$AUTH_SAVED/auth.json" "$AUTH"
+          if $SUDO test -f "$AUTH_SAVED"; then $SUDO mv -f "$AUTH_SAVED" "$AUTH"
+          elif $SUDO grep -qs "$WRONG" "$AUTH"; then $SUDO rm -f "$AUTH"; fi
           return 0
         }
+        restore_auth
         cleanup() {
           set +e
           restore_auth
-          $SUDO rm -rf "$AUTH_SAVED"
           for n in "$NAME" "$NAME-2"; do
             id=$(vmid_of "$n")
             [ -z "$id" ] && continue
@@ -628,8 +631,9 @@ jobs:
         # exits 0 on such a failure, which is why the reason has to be read
         # from its output at all.
         echo "[E2E] a pull reads $AUTH, and a refused login says so"
+        if $SUDO test -f "$AUTH"; then $SUDO cp -p "$AUTH" "$AUTH_SAVED"; fi
         $SUDO mkdir -p "$(dirname "$AUTH")"
-        printf '{"auths":{"docker.io":{"auth":"%s"}}}\n' "$(printf 'nexcage-e2e:wrong' | base64)" | $SUDO tee "$AUTH" >/dev/null
+        printf '{"auths":{"docker.io":{"auth":"%s"}}}\n' "$WRONG" | $SUDO tee "$AUTH" >/dev/null
         if nx pull docker.io/library/busybox:1.36 2>pull.err; then
           echo "::error::a pull with wrong credentials in $AUTH went through: the file was not read"; exit 1
         fi
