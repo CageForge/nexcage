@@ -69,7 +69,7 @@ It comes before 1.0 because 1.0 freezes the configuration it changes.
 | The configuration file fails closed | A misspelt runtime in a routing rule routes to LXC without a word, and a section of the wrong type panics. A profile's parameters must not be misspelt into weaker isolation. An unknown key becomes an error | [#371] |
 | A container's backend comes from the container | Every command derives the backend from routing again, so a changed rule sends `delete` to the other backend. With profiles, a person's command and an engine's would disagree | [#372] |
 | Profiles on the crun backend | The backend engines already drive, so the first place a profile can be proved end to end. Its shape follows the ADR | [#315] |
-| The Proxmox LXC backend driven by an engine | For a profile to be able to choose it. `pct create` starts no process, which is why `--console-socket` and `--pid-file` are refused there today, and a bundle's rootfs is not a template. The largest item on this page | [#316] |
+| The Proxmox LXC backend driven by an engine | **Not built.** [ADR-006](docs/architecture/ADR-006-LXC-Driven-By-An-Engine.md) shows it can be done. The costs fall on every pod: the sandbox stays on crun, every create goes through Proxmox's perl internals and pmxcfs, the container is privileged, and its cgroups are outside the kubelet's. All it would add is visibility in `pct list`. Out of 0.17.0 | [#316] |
 
 ## 1.0 — what the number promises
 

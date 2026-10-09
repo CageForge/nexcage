@@ -1,6 +1,7 @@
 # ADR-005: Isolation profiles
 
-- Status: **Accepted** 2026-10-09 — the maintainer's answers are under *Decided on review*
+- Status: **Accepted** 2026-10-09 — the maintainer's answers are under *Decided on review*.
+  The Proxmox LXC side is not built: [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md)
 - Date: 2026-10-09
 - Issue: [#314](https://github.com/CageForge/nexcage/issues/314); implementation in
   [#315](https://github.com/CageForge/nexcage/issues/315) (crun) and
@@ -310,6 +311,8 @@ Negative and costs:
 
 - [ADR-001](ADR-001-Container-Runtime-Selection.md) — routing, and "a container
   is one thing on one backend"
+- [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md) — why a profile does not name
+  Proxmox LXC
 - [#314](https://github.com/CageForge/nexcage/issues/314),
   [#315](https://github.com/CageForge/nexcage/issues/315),
   [#316](https://github.com/CageForge/nexcage/issues/316),
