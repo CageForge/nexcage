@@ -40,16 +40,14 @@ Proxmox ended its own support for 8.x in August 2026.
 `nexcage` runs directly on the Proxmox VE host as `root`.
 
 ### Host Environment
-* **OS:** Proxmox VE 8.x or 9.x (amd64 architecture).
-  * *Note:* Pulling container images directly from a registry requires Proxmox VE 9.1 or later.
+* **OS:** Proxmox VE 9.x (amd64 architecture).
 * **Privileges:** `root` access on the host.
 * **Base Proxmox Tooling:** `pct`, `pvesh`, and `pveversion` (included by default with Proxmox VE).
 
 ### System Dependencies
-* **For Standard LXC CLI (`nexcage-*-amd64`):**
-  * No additional runtime dependencies required beyond stock Proxmox VE.
-* **For OCI Runtime Mode (`nexcage-*-amd64-crun`):**
-  * Required runtime libraries (must be installed on the host for `containerd`/`CRI-O`/Kubernetes integration):
+
+  * Required runtime libraries (must be installed on the host for `containerd`/`CRI-O`/ Kubernetes integration):
+  * 
     ```bash
     apt install -y libjson-c5 libseccomp2 libcap2
     ```
