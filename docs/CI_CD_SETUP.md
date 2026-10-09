@@ -6,12 +6,12 @@
 |---|---|---|---|
 | `ci.yml` | ubuntu-24.04 | push/PR to `main` | Debug and ReleaseSafe builds, `zig build test`, smoke tests of exit codes; every command against fake Proxmox tools (`tests/sim/run.sh`). **The required check.** |
 | `proxmox_e2e.yml` | self-hosted, `pve9` | push/PR to `main`/`develop` | Through the built binary on Proxmox VE: create → state → start → stop → delete, `pct config` against the config file, exit codes, `kill`, `run`, create from an OCI bundle |
-| `crun_build.yml` | ubuntu-24.04 | push/PR to `main` | Docker build with `-Denable-backend-crun=true`; the features document against libcrun's; `ps` against crun; a pod through containerd's CRI; the runtime-spec validation suite ([RUNTIME_SPEC_VALIDATION.md](RUNTIME_SPEC_VALIDATION.md)); critest, the CRI validation suite ([KUBERNETES_INTEGRATION.md](KUBERNETES_INTEGRATION.md#critest-what-kubernetes-checks-of-a-runtime)) |
-| `k8s_e2e.yml` | ubuntu-24.04, then self-hosted `pve9` | tag `v*`, dispatch, PR touching `tests/k8s/` | `tests/k8s/pod_on_node.sh` with the `-crun` binary built from the commit: k3s, `runtimeClassName: nexcage`, the pod Ready, `kubectl logs`, `kubectl exec`, delete, all through nexcage |
+| `crun_build.yml` | ubuntu-24.04 | push/PR to `main` | Docker build with `-Denable-backend-crun=true`; the `.deb` packs that binary and installs on Debian 13 (`scripts/ci/check_deb.sh`); the features document against libcrun's; `ps` against crun; a pod through containerd's CRI; the runtime-spec validation suite ([RUNTIME_SPEC_VALIDATION.md](RUNTIME_SPEC_VALIDATION.md)); critest, the CRI validation suite ([KUBERNETES_INTEGRATION.md](KUBERNETES_INTEGRATION.md#critest-what-kubernetes-checks-of-a-runtime)) |
+| `k8s_e2e.yml` | ubuntu-24.04, then self-hosted `pve9` | tag `v*`, dispatch, PR touching `tests/k8s/` | `tests/k8s/pod_on_node.sh` with the `.deb` built from the commit and installed with apt: k3s, `runtimeClassName: nexcage`, the pod Ready, `kubectl logs`, `kubectl exec`, delete, all through nexcage |
 | `memory_leak_check.yml` | ubuntu-22.04 | push/PR | Valgrind over basic commands |
 | `security.yml` | ubuntu-latest | push/PR to `main`, weekly | Semgrep, Trivy, Gitleaks (non-blocking) |
 | `version-check.yml` | ubuntu-22.04 | push/PR | `VERSION` is semver, matches `build.zig.zon` and appears in `nexcage --help` |
-| `release.yml` | ubuntu-24.04 | tag `v*` | Tests, ReleaseSafe binary, `-crun` binary, `.deb`, SBOMs, GitHub release |
+| `release.yml` | ubuntu-24.04 | tag `v*` | Tests; the one binary, with both backends; the `.deb` that packs it, installed on Debian 13; SBOMs; GitHub release |
 | `dependency_check.yml` | ubuntu-latest | weekly | New OCI spec / crun releases; at most one open issue per dependency |
 | `scorecards.yml`, `pages.yml`, `docs_mike.yml` | ubuntu-latest | various | OpenSSF Scorecards, documentation site |
 | `buildagent.yml` | self-hosted, `buildagent`, `nexcage` | push/PR to `main`, daily | On Debian 13: Debug build, `zig build test`, `tests/sim/run.sh`, `make deb` and what the `.deb` carries |
@@ -70,7 +70,8 @@ leftover `gh-e2e-*` container at the end, pass or fail.
 
 1. Update `VERSION`, `CHANGELOG.md` and `docs/releases/NOTES_v<version>.md`.
 2. Tag and push: `git tag -a v<version> -m "Release v<version>" && git push origin v<version>`.
-3. `release.yml` checks that the tag matches `VERSION`, runs the tests, builds
-   the binary, the `-crun` binary and the `.deb`, installs the `.deb` on the
-   runner as a smoke test, and publishes the release with the notes file as its
-   body.
+3. `release.yml` checks that the tag matches `VERSION` and runs the tests.
+   It builds the one binary, with both backends, through the Dockerfile, and
+   the `.deb` that packs it. It installs the `.deb` in a Debian 13 container
+   and checks that the crun backend answers. It then publishes the release,
+   with the notes file as its body.

@@ -59,7 +59,7 @@ id -u    # must print 0
 
 # 3. Check dependencies: nexcage runs pct, pvesh, pvesm, pveversion and hostname, and `tar --zstd` to pack an OCI bundle
 which pct pvesh pvesm pveversion hostname tar zstd
-# the -crun binary also needs the shared libraries libcrun is built against: libsystemd, libcap, libseccomp, libjson-c
+# the binary also needs the shared libraries libcrun is built against (the .deb pulls them): libsystemd, libcap, libseccomp, libjson-c
 ldd ./nexcage | grep 'not found'
 ```
 

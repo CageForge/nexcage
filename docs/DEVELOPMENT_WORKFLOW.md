@@ -142,10 +142,12 @@ its `config.h`. Everything else is upstream at a tag. To move to a new release:
    ```
 
    `crun_build.yml` repeats all of it in CI except the `ldd` line, plus
-   `tests/crun/ps.sh` and `foreign_cwd.sh`; the release's `build-crun` job runs
-   `ldd` and logs it. After the release, check the published `-crun` binary on
-   a Proxmox host: `ldd` there is what tells you which libraries the host
-   needs, and `docs/INSTALL.md` has to name them.
+   `tests/crun/ps.sh` and `foreign_cwd.sh`. It also builds the `.deb` from
+   that binary and installs it on Debian 13 (`scripts/ci/check_deb.sh`). That
+   is where a library the binary now links, and the `.deb`'s `Depends` lacks,
+   shows up. The release's `binary` job runs `ldd` and logs it.
+   `scripts/build_deb_local.sh` names the libraries in `Depends`, and
+   `docs/INSTALL.md` names them for a bare binary.
 
 ## Version Numbering
 - Major version (X): Breaking changes

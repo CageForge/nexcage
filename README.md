@@ -45,14 +45,14 @@ sha256sum --ignore-missing -c checksums.txt
 apt install ./nexcage-$VERSION-amd64.deb
 ```
 
-**A release carries two binaries** (since 0.11.2). The plain one manages LXC
-containers; the `-crun` one adds the backend a container engine drives, and is
-what to install when containerd, CRI-O or a kubelet is meant to run containers
-on nexcage. It needs `libjson-c5`, `libseccomp2`, `libcap2` and `libsystemd0` on
-the host.
+**One binary, both backends** (since 0.17.0). The binary manages LXC
+containers on Proxmox VE, and it is the OCI runtime that containerd, CRI-O,
+podman and a kubelet drive, with the crun backend built in. The `.deb` pulls
+the libraries that backend links: `libjson-c5`, `libseccomp2`, `libcap2` and
+`libsystemd0`. Releases 0.11.2 to 0.16.0 carried it in a separate `-crun`
+binary.
 
-Details, source builds and the shared-library requirements:
-[docs/INSTALL.md](docs/INSTALL.md).
+Details, the bare binary and source builds: [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Use it as a Proxmox command line
 
@@ -96,11 +96,11 @@ Then name it wherever the engine names a runtime:
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
   runtime_type = "io.containerd.runc.v2"
   [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
-    BinaryName = "/usr/local/bin/nexcage"
+    BinaryName = "/usr/bin/nexcage"
 ```
 
 ```bash
-podman --runtime /usr/local/bin/nexcage run --rm docker.io/library/alpine:3 echo hi
+podman --runtime /usr/bin/nexcage run --rm docker.io/library/alpine:3 echo hi
 kubectl apply -f pod.yaml     # runtimeClassName: nexcage
 ```
 
@@ -215,5 +215,5 @@ libocispec submodule (the OCI spec parsers, most of them generated at build
 time), which carries its own license in `libocispec/COPYING` (GPL-3.0 for the
 generator, with a special exception for its generated parser files). crun's
 repository as a whole is GPL-2.0 for its own command-line tool, which nexcage
-does not build. The released `-crun` binary is that build; the plain binary
-links none of it.
+does not build. Every released binary since 0.17.0, and the `.deb`, is that
+build. A plain `zig build` links none of it.

@@ -46,11 +46,13 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
     License 2.0 without a sign-off.
 
 - [x] Release artifacts (GitHub Releases with binaries, SBOMs, provenance)
-  - Two binaries since 0.11.2: the default one, and `-crun` with the OCI
-    runtime backend compiled in. The second is built through the Dockerfile,
-    because vendored libcrun needs the submodules and generated headers, and
-    the job checks the backend is really in it by asking the binary for
-    `features` -- an answer only libcrun can give.
+  - One binary with both backends, Proxmox LXC and crun, since 0.17.0, and a
+    `.deb` that packs it (from 0.11.2 to 0.16.0, the crun backend was in a
+    second, `-crun` binary). It is built through the Dockerfile, because
+    vendored libcrun needs the submodules and generated headers. The job checks
+    that the backend is really in it by asking the binary for `features`, an
+    answer only libcrun can give. The `.deb` is installed on Debian 13 to
+    check that its `Depends` brings in what the binary links.
 
 ## Implementation Details
 

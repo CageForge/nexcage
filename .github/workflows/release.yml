@@ -14,7 +14,11 @@ on:
 permissions:
   contents: write
 
-# Both builds run on GitHub-hosted runners: neither needs a Proxmox host, and
+# A release carries one binary with both backends, Proxmox LXC and crun, and
+# one .deb that packs that same binary (#380). The binary is built through the
+# Dockerfile, which brings libcrun's submodules and generated headers.
+#
+# The builds run on GitHub-hosted runners: none needs a Proxmox host, and
 # the self-hosted runner's workspace held a root-owned .cache that made every
 # checkout there fail. The .deb is assembled by scripts/build_deb_local.sh; the
 # dh-based packaging it replaces could not build (no debian/ at the root, a
@@ -23,7 +27,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Release Binary
+    name: Test, and check the tag against VERSION
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
@@ -61,22 +65,55 @@ jobs:
       - name: Test
         run: zig build test --summary all
 
-      - name: Build
-        # -Dcpu=baseline, not the runner's CPU. Without it Zig tunes the binary
-        # for whatever the GitHub runner happens to be, and the published
-        # binary dies with SIGILL on an older host — a Xeon E5 v2, say, which
-        # is ordinary hardware for a Proxmox node.
-        run: zig build -Doptimize=ReleaseSafe -Dcpu=baseline
+  binary:
+    name: The binary, with both backends (amd64)
+    runs-on: ubuntu-24.04
+    needs: build
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
 
-      - name: Create artifact
+      # The crun backend links vendored libcrun, which needs the submodules and
+      # two generated header sets. The Dockerfile does all of that from a clean
+      # clone, which is why this goes through Docker rather than `zig build`.
+      # -Dcpu=baseline, not the runner's CPU: without it Zig tunes the binary
+      # for whatever the GitHub runner happens to be, and it dies with SIGILL on
+      # an older host -- a Xeon E5 v2, say, which is ordinary hardware for a
+      # Proxmox node.
+      - name: Build the image
+        run: |
+          docker build \
+            --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" \
+            -t nexcage:release .
+
+      - name: It runs, and the crun backend is really in it
+        # Checked inside the image, where the shared libraries are. `features`
+        # is answered by libcrun itself, so it cannot succeed on a binary that
+        # was built without the backend.
+        run: |
+          set -eux
+          docker run --rm nexcage:release version
+          docker run --rm nexcage:release --runtime crun features \
+            | head -3
+
+      - name: Extract the binary
         id: build
         run: |
+          set -eux
           mkdir -p dist
-          BIN_NAME=nexcage-${{ steps.get_version.outputs.version }}-amd64
-          cp zig-out/bin/nexcage "dist/${BIN_NAME}"
+          BIN_NAME=nexcage-${{ needs.build.outputs.version }}-amd64
+          cid=$(docker create nexcage:release)
+          docker cp "$cid:/usr/local/bin/nexcage" "dist/${BIN_NAME}"
+          docker rm "$cid"
           chmod +x "dist/${BIN_NAME}"
-          "dist/${BIN_NAME}" version
-
+          file "dist/${BIN_NAME}"
+          # What a host has to have for it to start: libcrun's dependencies,
+          # which the .deb's Depends pulls and a bare download has to install.
+          docker run --rm --entrypoint /bin/sh nexcage:release \
+            -c 'ldd /usr/local/bin/nexcage' || true
           SHA256=$(sha256sum "dist/${BIN_NAME}" | cut -d' ' -f1)
           echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
           echo "artifact_path=dist/${BIN_NAME}" >> "$GITHUB_OUTPUT"
@@ -85,7 +122,7 @@ jobs:
         uses: anchore/sbom-action@v0
         with:
           path: dist
-          output-file: dist/nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom.spdx.json
+          output-file: dist/nexcage-${{ needs.build.outputs.version }}-amd64.sbom.spdx.json
           format: spdx-json
           # "Upload SBOMs" below uploads both SBOMs under one artifact name.
           # Letting this action upload as well made the v0.8.0 run fail with
@@ -95,7 +132,7 @@ jobs:
 
       - name: Generate SBOM (CycloneDX JSON)
         run: |
-          cat > dist/nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom.cdx.json << EOF
+          cat > dist/nexcage-${{ needs.build.outputs.version }}-amd64.sbom.cdx.json << EOF
           {
             "bomFormat": "CycloneDX",
             "specVersion": "1.4",
@@ -105,26 +142,26 @@ jobs:
               "component": {
                 "type": "application",
                 "name": "nexcage",
-                "version": "${{ steps.get_version.outputs.version }}"
+                "version": "${{ needs.build.outputs.version }}"
               }
             },
             "components": []
           }
           EOF
 
-      - name: Upload binary
+      - name: Upload the binary
         uses: actions/upload-artifact@v6
         with:
-          name: nexcage-${{ steps.get_version.outputs.version }}-amd64
-          path: dist/nexcage-${{ steps.get_version.outputs.version }}-amd64
+          name: nexcage-${{ needs.build.outputs.version }}-amd64
+          path: dist/nexcage-${{ needs.build.outputs.version }}-amd64
 
       - name: Upload SBOMs
         uses: actions/upload-artifact@v6
         with:
-          name: nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom
+          name: nexcage-${{ needs.build.outputs.version }}-amd64.sbom
           path: |
-            dist/nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom.spdx.json
-            dist/nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom.cdx.json
+            dist/nexcage-${{ needs.build.outputs.version }}-amd64.sbom.spdx.json
+            dist/nexcage-${{ needs.build.outputs.version }}-amd64.sbom.cdx.json
 
       - name: Generate SLSA provenance (basic)
         run: |
@@ -152,69 +189,13 @@ jobs:
       - name: Upload provenance
         uses: actions/upload-artifact@v6
         with:
-          name: nexcage-${{ steps.get_version.outputs.version }}-amd64.provenance
+          name: nexcage-${{ needs.build.outputs.version }}-amd64.provenance
           path: dist/provenance.json
-
-  build-crun:
-    name: Build with the crun backend (amd64)
-    runs-on: ubuntu-24.04
-    needs: build
-    timeout-minutes: 60
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.inputs.version || github.ref }}
-
-      # The crun backend links vendored libcrun, which needs the submodules and
-      # two generated header sets. The Dockerfile does all of that from a clean
-      # clone, which is why this goes through Docker rather than `zig build`.
-      # -Dcpu=baseline for the same reason as the default binary: a Proxmox node
-      # is often older than a GitHub runner.
-      - name: Build the image
-        run: |
-          docker build \
-            --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" \
-            -t nexcage:crun-release .
-
-      - name: It runs, and the backend is really in it
-        # Checked inside the image, where the shared libraries are. `features`
-        # is answered by libcrun itself, so it cannot succeed on a binary that
-        # was built without the backend.
-        run: |
-          set -eux
-          docker run --rm nexcage:crun-release version
-          docker run --rm nexcage:crun-release --runtime crun features \
-            | head -3
-
-      - name: Extract the binary
-        id: extract
-        run: |
-          set -eux
-          mkdir -p dist
-          BIN_NAME=nexcage-${{ needs.build.outputs.version }}-amd64-crun
-          cid=$(docker create nexcage:crun-release)
-          docker cp "$cid:/usr/local/bin/nexcage" "dist/${BIN_NAME}"
-          docker rm "$cid"
-          chmod +x "dist/${BIN_NAME}"
-          file "dist/${BIN_NAME}"
-          # What a host has to have for this one to start. Unlike the default
-          # binary it is dynamically linked against libcrun's dependencies, and
-          # a Proxmox node has libjson-c5 but not every library -- worth having in
-          # the job log when someone asks why it will not run.
-          docker run --rm --entrypoint /bin/sh nexcage:crun-release \
-            -c 'ldd /usr/local/bin/nexcage' || true
-
-      - name: Upload the crun binary
-        uses: actions/upload-artifact@v6
-        with:
-          name: nexcage-${{ needs.build.outputs.version }}-amd64-crun
-          path: dist/nexcage-${{ needs.build.outputs.version }}-amd64-crun
 
   build-deb:
     name: Build .deb (amd64)
     runs-on: ubuntu-24.04
-    needs: build
+    needs: [build, binary]
     timeout-minutes: 30
 
     steps:
@@ -223,26 +204,18 @@ jobs:
         with:
           ref: ${{ github.event.inputs.version || github.ref }}
 
-      - name: Setup Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+      - name: The binary the release publishes
+        uses: actions/download-artifact@v7
         with:
-          version: 0.15.1
-          # A release is built from nothing but the tagged tree.
-          use-cache: false
+          name: nexcage-${{ needs.build.outputs.version }}-amd64
+          path: bin
 
       - name: Build package
-        run: bash scripts/build_deb_local.sh
+        # The .deb packs that same binary: one release, one binary.
+        run: NEXCAGE_BIN=bin/nexcage-${{ needs.build.outputs.version }}-amd64 bash scripts/build_deb_local.sh
 
-      - name: Install and run it
-        run: |
-          DEB=dist/nexcage-${{ needs.build.outputs.version }}-amd64.deb
-          dpkg-deb --info "$DEB"
-          sudo apt-get install -y "./$DEB"
-          nexcage version
-          nexcage --help > /dev/null
-          # Check the package list, not `man`: the runner image need not ship man-db
-          dpkg -L nexcage | grep -qx '/usr/share/man/man1/nexcage.1.gz'
-          dpkg -L nexcage | grep -qx '/usr/share/bash-completion/completions/nexcage'
+      - name: Install it on Debian 13, as a Proxmox VE 9 node is, and run it
+        run: sh scripts/ci/check_deb.sh dist/nexcage-${{ needs.build.outputs.version }}-amd64.deb
 
       - name: Upload .deb
         uses: actions/upload-artifact@v6
@@ -253,7 +226,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build, build-crun, build-deb]
+    needs: [build, binary, build-deb]
 
     steps:
       - name: Checkout code

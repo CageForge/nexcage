@@ -66,6 +66,8 @@ jobs:
         run: tests/sim/run.sh
 
       - name: Build the .deb
+        # The binary with both backends comes from the Dockerfile (#380), so
+        # the agent needs docker for this step.
         run: make deb
 
       - name: Check what the .deb carries
@@ -81,11 +83,14 @@ jobs:
           for f in usr/bin/nexcage \
                    usr/share/man/man1/nexcage.1.gz \
                    usr/share/bash-completion/completions/nexcage \
-                   usr/share/doc/nexcage/examples/config.json; do
+                   usr/share/doc/nexcage/examples/config.json \
+                   usr/share/doc/nexcage/examples/config.oci.example.json; do
             test -e "$root/$f" || { echo "::error::$f missing from the package"; exit 1; }
           done
           test -x "$root/usr/bin/nexcage"
           "$root/usr/bin/nexcage" version
+          # Answered by libcrun itself: the package's binary has the backend.
+          "$root/usr/bin/nexcage" --runtime crun features | head -3
           rm -rf "$root"
 
       - name: Upload the .deb

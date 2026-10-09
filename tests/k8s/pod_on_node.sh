@@ -25,17 +25,15 @@
 # capabilities, its cgroup's limits -- not from nexcage's log. The profiles are
 # the two in config.oci.example.json.
 #
-# The nexcage binary must already be on the node, with the crun backend built
-# in -- a container engine's containers go to that backend, and the default
-# build has only Proxmox LXC. Build it with
-#   docker build --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" .
-# and copy it over; -Dcpu=baseline matters on an older host, where a
-# native-tuned build dies with SIGILL.
+# nexcage must already be on the node, as a release's .deb installs it: one
+# binary with both backends, at /usr/bin/nexcage (#380). A container engine's
+# containers go to the crun backend. k8s_e2e.yml builds the .deb from the
+# commit under test with scripts/build_deb_local.sh and installs it with apt.
 #
 # Usage: pod_on_node.sh [--keep]     (run as root on the node)
 set -eu
 
-NEXCAGE=${NEXCAGE:-/usr/local/bin/nexcage}
+NEXCAGE=${NEXCAGE:-/usr/bin/nexcage}
 POD_IMAGE=${POD_IMAGE:-registry.k8s.io/e2e-test-images/busybox:1.29-4}
 KEEP=${KEEP:-0}
 [ "${1:-}" = "--keep" ] && KEEP=1
@@ -144,12 +142,12 @@ echo "ok: $(k3s --version | head -1)"
 # k3s builds its containerd configuration from a template; the shipped one
 # adds one runtime to whatever it would have written, rather than replacing
 # it. Only the binary differs here: the trace wrapper instead of
-# /usr/local/bin/nexcage.
+# /usr/bin/nexcage.
 TMPL=/var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl
 mkdir -p "$(dirname "$TMPL")"
-sed 's|"/usr/local/bin/nexcage"|"/nexcage-traced"|' "$NODE_FILES/k3s-config-v3.toml.tmpl" > "$TMPL"
+sed 's|"/usr/bin/nexcage"|"/nexcage-traced"|' "$NODE_FILES/k3s-config-v3.toml.tmpl" > "$TMPL"
 grep -q '"/nexcage-traced"' "$TMPL" \
-    || fail "$NODE_FILES/k3s-config-v3.toml.tmpl no longer names /usr/local/bin/nexcage"
+    || fail "$NODE_FILES/k3s-config-v3.toml.tmpl no longer names /usr/bin/nexcage"
 # One handler per profile, as docs/INSTALL.md adds them.
 for p in hardened small; do
     cat >> "$TMPL" <<EOT

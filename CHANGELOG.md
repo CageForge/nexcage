@@ -30,6 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config.oci.example.json` defines two profiles, `hardened` and `small`. `docs/INSTALL.md` shows a handler and a `RuntimeClass` per profile.
 
 ### Changed
+- **One release: one binary with both backends, and one `.deb`** (#380, with #301 by @IhorTelepenko).
+  - The release binary, `nexcage-<version>-amd64`, has the Proxmox LXC backend and the crun backend.
+  - The `.deb` packs that binary. Its `Depends` pulls `libjson-c5`, `libseccomp2`, `libcap2` and `libsystemd0`, so `apt install ./nexcage-<version>-amd64.deb` is the whole setup, for the command line and for a container engine alike.
+  - The package also ships `config.oci.example.json` next to `config.json`. Its copyright file names libcrun's and libocispec's licenses.
+  - **The `-crun` asset is gone**: a script that downloads `nexcage-<version>-amd64-crun` by name has to drop the suffix.
+  - The node configurations in `deploy/kubernetes/node/` now name `/usr/bin/nexcage`, where the `.deb` puts it.
+  - Releases 0.11.2 to 0.16.0 carried crun in that second binary, and their `.deb` held the binary without it, so an engine configuration next to the `.deb` pointed at a backend it lacked.
+  - `release.yml` installs the `.deb` on Debian 13 and asks the crun backend for `features` before it publishes. `crun_build.yml` does the same on every pull request, and `k8s_e2e.yml` installs the `.deb` on the E2E node.
+  - A plain `zig build` still builds without crun.
 - **The configuration file fails closed** (#371). **A file that loaded until now may stop loading**: nexcage refuses it, naming the file and the key, and runs nothing. That happens on:
   - a key it does not read;
   - a value of the wrong type;
