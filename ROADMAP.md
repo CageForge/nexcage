@@ -68,6 +68,7 @@ It comes before 1.0 because 1.0 freezes the configuration it changes.
 | ADR-005: isolation profiles | What a profile holds — the backend, and that backend's parameters; how an engine names one — the handler a `RuntimeClass` names, or an annotation the engine copies into the bundle (containerd's `pod_annotations`, CRI-O's `allowed_annotations`); and what becomes of `runtime.routing`. Decided in [ADR-005](docs/architecture/ADR-005-Isolation-Profiles.md): the handler's program name, `nexcage@<profile>`, and a profile only narrows the bundle | [#314] |
 | The configuration file fails closed | A misspelt runtime in a routing rule routes to LXC without a word, and a section of the wrong type panics. A profile's parameters must not be misspelt into weaker isolation. An unknown key becomes an error | [#371] |
 | A container's backend comes from the container | Every command derives the backend from routing again, so a changed rule sends `delete` to the other backend. With profiles, a person's command and an engine's would disagree | [#372] |
+| One release: crun in the only binary and the `.deb` | A release carries two binaries, and the `.deb` holds the one without crun, so a profile on crun reaches no one who installed the package. One binary with both backends, one `.deb` whose `Depends` pulls libcrun's libraries, and the `-crun` asset goes | [#380] |
 | Profiles on the crun backend | The backend engines already drive, so the first place a profile can be proved end to end. Its shape follows the ADR | [#315] |
 | The Proxmox LXC backend driven by an engine | For a profile to be able to choose it. `pct create` starts no process, which is why `--console-socket` and `--pid-file` are refused there today, and a bundle's rootfs is not a template. The largest item on this page | [#316] |
 
@@ -151,3 +152,4 @@ asks" needs a place to be asked.
 [#324]: https://github.com/CageForge/nexcage/issues/324
 [#371]: https://github.com/CageForge/nexcage/issues/371
 [#372]: https://github.com/CageForge/nexcage/issues/372
+[#380]: https://github.com/CageForge/nexcage/issues/380
