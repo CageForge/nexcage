@@ -190,7 +190,7 @@ it was made with, and every later command finds it without the profile.
 | `crun.user_namespace: "require"` | Refuses a bundle without a user namespace with uid and gid mappings. In Kubernetes, `hostUsers: false` on the pod |
 | `crun.seccomp: "require"` | Refuses a bundle without `linux.seccomp`. In Kubernetes, `securityContext.seccompProfile.type: RuntimeDefault` |
 | `crun.capabilities.drop` | Removes these from every capability set of the process. Spelt as the spec spells them: `CAP_NET_RAW` |
-| `crun.limits.memory`, `crun.limits.pids` | Lowers the bundle's limit to this, and sets it when the bundle has none. Memory takes bytes or `64M`, `1G` |
+| `crun.limits.memory`, `crun.limits.pids` | Lowers the bundle's limit to this, and sets it when the bundle has none. Memory takes bytes or `64M`, `1G`. The bundle's `memory.swap`, which is memory plus swap, is lowered by the same amount, so the bundle gets no more swap than it asked for. containerd sets it equal to the limit, which means none |
 
 A profile only takes away: it never adds a capability or raises a limit.
 It holds for `exec` too. An engine builds the process for `exec --process`

@@ -41,8 +41,9 @@ cat > "$CFG" <<'JSON'
     "needs-userns": { "runtime": "crun", "crun": { "user_namespace": "require" } } } }
 JSON
 
-# What an engine would hand over: a 1 GiB limit the profile lowers, and the
-# capabilities a container usually gets, NET_RAW and MKNOD among them.
+# What an engine would hand over: a 1 GiB limit the profile lowers, with swap
+# (memory plus swap) equal to it, which is containerd's way of saying no swap,
+# and the capabilities a container usually gets, NET_RAW and MKNOD among them.
 spec() {
     cat > "$BUNDLE/config.json" <<JSON
 {
@@ -64,7 +65,7 @@ spec() {
   "mounts": [ { "destination": "/proc", "type": "proc", "source": "proc" } ],
   "linux": {
     "namespaces": [ { "type": "pid" }, { "type": "ipc" }, { "type": "uts" }, { "type": "mount" } ],
-    "resources": { "memory": { "limit": 1073741824 } }
+    "resources": { "memory": { "limit": 1073741824, "swap": 1073741824 } }
     $1
   }
   $2
@@ -119,6 +120,13 @@ cg=/sys/fs/cgroup$(sed -n 's/^0:://p' "/proc/$pid/cgroup")
 [ "$(cat "$cg/memory.max")" = 67108864 ] || fail "memory.max is $(cat "$cg/memory.max"), not the profile's 64M"
 [ "$(cat "$cg/pids.max")" = 50 ] || fail "pids.max is $(cat "$cg/pids.max"), not the profile's 50"
 echo "ok: memory.max 67108864 (the bundle asked 1G), pids.max 50 (the bundle set none)"
+# Lowering the limit alone would have made the other 960M swap.
+if [ -f "$cg/memory.swap.max" ]; then
+    [ "$(cat "$cg/memory.swap.max")" = 0 ] || fail "memory.swap.max is $(cat "$cg/memory.swap.max"), and the bundle allowed no swap"
+    echo "ok: memory.swap.max 0: no swap, as the bundle asked"
+else
+    echo "skipped: no memory.swap.max here (no swap accounting), so swap is not checked"
+fi
 
 # A requirement refuses a bundle without it, and leaves nothing behind.
 nx --profile needs-seccomp create --bundle "$BUNDLE" "$ID-s" 2>"$WORK/err" && fail "a bundle without seccomp passed a profile that requires it"

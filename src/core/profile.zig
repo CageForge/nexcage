@@ -116,7 +116,7 @@ fn narrow(allocator: std.mem.Allocator, spec_json: []const u8, profile: *const P
 
     if (profile.memory_limit != null or profile.pids_limit != null) {
         const resources = try child(arena, linux, "resources");
-        if (profile.memory_limit) |limit| try lowerTo(try child(arena, resources, "memory"), "limit", limit);
+        if (profile.memory_limit) |limit| try lowerMemory(try child(arena, resources, "memory"), limit);
         if (profile.pids_limit) |limit| try lowerTo(try child(arena, resources, "pids"), "limit", limit);
     }
 
@@ -252,6 +252,21 @@ fn lowerTo(obj: *std.json.ObjectMap, key: []const u8, limit: i64) !void {
     try obj.put(key, .{ .integer = limit });
 }
 
+/// lowerTo for memory.limit, keeping the swap the bundle allowed. OCI's
+/// memory.swap is memory plus swap, so lowering the limit alone would turn
+/// the difference into swap: containerd sets swap to the limit to mean none,
+/// and a 2Gi pod under a 1G profile could have swapped 1G.
+fn lowerMemory(memory: *std.json.ObjectMap, limit: i64) !void {
+    const before = memory.get("limit");
+    try lowerTo(memory, "limit", limit);
+    const old = before orelse return;
+    if (old != .integer or old.integer <= limit) return;
+    // Unlimited (-1), absent, or less than the limit, which libcrun refuses.
+    const swap = memory.get("swap") orelse return;
+    if (swap != .integer or swap.integer < old.integer) return;
+    try memory.put("swap", .{ .integer = swap.integer - (old.integer - limit) });
+}
+
 fn expectRefused(spec: []const u8, profile: Profile, says: []const u8) !void {
     var why: Refusal = .{};
     try std.testing.expectError(error.ProfileRefused, narrow(std.testing.allocator, spec, &profile, &why));
@@ -363,4 +378,30 @@ test "an exec into a container made under a profile gets no capability the conta
     try std.testing.expect(try boundExec(std.testing.allocator, "{\"args\":[\"sh\"]}", stored, &why) == null);
     try std.testing.expectError(error.ProfileRefused, boundExec(std.testing.allocator, "{\"capabilities\":", stored, &why));
     try std.testing.expect(std.mem.indexOf(u8, why.text(), "the process spec is not valid JSON") != null);
+}
+
+test "lowering the memory limit keeps the swap the bundle allowed, and no more" {
+    const profile = Profile{ .name = "p", .memory_limit = 1 << 30 };
+    const cases = [_]struct { spec: []const u8, limit: i64, swap: ?i64 }{
+        // containerd: swap equal to the limit, meaning none
+        .{ .spec = "{\"linux\":{\"resources\":{\"memory\":{\"limit\":2147483648,\"swap\":2147483648}}}}", .limit = 1 << 30, .swap = 1 << 30 },
+        // 1G of swap allowed stays 1G
+        .{ .spec = "{\"linux\":{\"resources\":{\"memory\":{\"limit\":2147483648,\"swap\":3221225472}}}}", .limit = 1 << 30, .swap = 2 << 30 },
+        .{ .spec = "{\"linux\":{\"resources\":{\"memory\":{\"limit\":2147483648,\"swap\":-1}}}}", .limit = 1 << 30, .swap = -1 },
+        // already under the profile: untouched
+        .{ .spec = "{\"linux\":{\"resources\":{\"memory\":{\"limit\":536870912,\"swap\":536870912}}}}", .limit = 536870912, .swap = 536870912 },
+        .{ .spec = "{\"linux\":{}}", .limit = 1 << 30, .swap = null },
+    };
+    for (cases) |c| {
+        var why: Refusal = .{};
+        const out = try narrow(std.testing.allocator, c.spec, &profile, &why);
+        defer std.testing.allocator.free(out);
+        var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, out, .{});
+        defer parsed.deinit();
+        const mem = parsed.value.object.get("linux").?.object.get("resources").?.object.get("memory").?.object;
+        try std.testing.expectEqual(c.limit, mem.get("limit").?.integer);
+        if (c.swap) |want| {
+            try std.testing.expectEqual(want, mem.get("swap").?.integer);
+        } else try std.testing.expect(mem.get("swap") == null);
+    }
 }
