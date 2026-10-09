@@ -113,13 +113,13 @@ jobs:
           EOF
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ steps.get_version.outputs.version }}-amd64
           path: dist/nexcage-${{ steps.get_version.outputs.version }}-amd64
 
       - name: Upload SBOMs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ steps.get_version.outputs.version }}-amd64.sbom
           path: |
@@ -150,7 +150,7 @@ jobs:
           EOF
 
       - name: Upload provenance
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ steps.get_version.outputs.version }}-amd64.provenance
           path: dist/provenance.json
@@ -206,7 +206,7 @@ jobs:
             -c 'ldd /usr/local/bin/nexcage' || true
 
       - name: Upload the crun binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ needs.build.outputs.version }}-amd64-crun
           path: dist/nexcage-${{ needs.build.outputs.version }}-amd64-crun
@@ -245,7 +245,7 @@ jobs:
           dpkg -L nexcage | grep -qx '/usr/share/bash-completion/completions/nexcage'
 
       - name: Upload .deb
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-${{ needs.build.outputs.version }}-amd64.deb
           path: dist/*.deb

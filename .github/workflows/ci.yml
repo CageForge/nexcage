@@ -71,7 +71,7 @@ jobs:
           [ "$rc" -eq 2 ] || fail "unknown command: expected exit 2, got $rc"
 
       - name: Upload binary (ReleaseSafe)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nexcage-linux-amd64
           path: zig-out-release/bin/nexcage
