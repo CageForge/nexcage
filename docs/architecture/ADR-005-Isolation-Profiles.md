@@ -111,8 +111,9 @@ the configuration file on the node. Nothing in a bundle defines or changes one.
   decides what more an engine-driven LXC container needs.
 - The `profiles` section is read **strictly**: an unknown key, backend or
   parameter, a value of the wrong type, or a name that is not a DNS label makes
-  nexcage refuse the whole file (exit 2, naming the key). A misspelt parameter
-  must not silently weaken isolation (#371).
+  nexcage refuse the whole file (exit 1, as for a file that is not JSON,
+  naming the key). A misspelt parameter must not silently weaken isolation
+  (#371).
 
 ### 2. How an engine names a profile: by the program name
 

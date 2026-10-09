@@ -48,7 +48,9 @@ decided for a container whose caller never says.
    glob list routing to crun that predates `routing`, is **removed** in this
    revision: a glob under `routing` is the same matcher, so each entry had a
    one-line equivalent. A file that still carries it gets a warning naming
-   the replacement.
+   the replacement — since 0.17.0 it refuses the file with that message, as
+   any key nexcage does not read does
+   ([#371](https://github.com/CageForge/nexcage/issues/371)).
 
 4. **There is no fallback between backends.** The 2024 design had
    `auto_fallback_enabled`: try the primary, use the other if it is

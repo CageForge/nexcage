@@ -75,6 +75,10 @@ pub const ConfigLoader = struct {
     /// file wrote it. A string literal, not a slice of the parsed document,
     /// which is gone by the time main reads it.
     removed_vm_runtime: ?[]const u8 = null,
+    /// What was wrong with the file when a load failed with InvalidConfig --
+    /// the key it stopped at, or that it is not JSON. main prints it.
+    problem_buf: [256]u8 = undefined,
+    problem_len: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
@@ -93,7 +97,7 @@ pub const ConfigLoader = struct {
                 types.Error.FileNotFound => blk: {
                     const content = std.fs.cwd().readFileAlloc(self.allocator, path, 1024 * 1024) catch break :blk types.Error.FileNotFound;
                     defer self.allocator.free(content);
-                    break :blk if (isOciSpec(content)) types.Error.InvalidConfig else types.Error.FileNotFound;
+                    break :blk if (isOciSpec(content)) self.refuse("it is an OCI runtime spec, not a nexcage configuration", .{}) else types.Error.FileNotFound;
                 },
                 else => err,
             };
@@ -145,10 +149,8 @@ pub const ConfigLoader = struct {
     /// Load configuration from string
     pub fn loadFromString(self: *Self, json_string: []const u8) !Config {
         var parsed = std.json.parseFromSlice(std.json.Value, self.allocator, json_string, .{}) catch |err| switch (err) {
-            error.InvalidCharacter => return types.Error.InvalidConfig,
-            error.InvalidNumber => return types.Error.InvalidConfig,
-            error.UnexpectedEndOfInput => return types.Error.InvalidConfig,
-            else => return err,
+            error.OutOfMemory => return err,
+            else => return self.refuse("it is not valid JSON ({s})", .{@errorName(err)}),
         };
         defer parsed.deinit();
 
@@ -157,465 +159,41 @@ pub const ConfigLoader = struct {
     }
 
     pub fn parseConfig(self: *Self, value: std.json.Value) !Config {
-        // Start with default config
+        // Everything below relies on the names and types validate checked.
+        try self.validate(value);
+
         var config = try Config.init(self.allocator, .lxc);
+        errdefer config.deinit();
+        const root = value.object;
 
-        // runtime_type
-        if (value.object.get("runtime_type")) |runtime_value| {
-            switch (runtime_value) {
-                .string => |runtime_str| {
-                    config.runtime_type = self.parseRuntimeType(runtime_str);
-                },
-                else => {},
-            }
+        if (root.get("runtime")) |section| {
+            const obj = section.object;
+            if (obj.get("log_level")) |v| config.log_level = logLevel(v.string).?;
+            if (obj.get("log_path")) |v| try self.replace(&config.log_file, v.string);
+            if (obj.get("routing")) |v| try self.setRouting(&config.container_config, v.array.items);
+        }
+        // The top-level spellings win over the runtime section's.
+        if (root.get("log_level")) |v| config.log_level = logLevel(v.string).?;
+        if (root.get("log_file")) |v| try self.replace(&config.log_file, v.string);
+
+        if (root.get("network")) |section| {
+            if (section.object.get("bridge")) |v| try self.replace(&config.network.bridge, v.string);
         }
 
-        // default_runtime
-        if (value.object.get("default_runtime")) |default_value| {
-            switch (default_value) {
-                .string => |default_str| {
-                    // Replace allocated string safely - always free old value since it's always allocated
-                    self.allocator.free(config.default_runtime);
-                    config.default_runtime = try self.allocator.dupe(u8, default_str);
-                },
-                else => {},
-            }
+        if (root.get("proxmox")) |section| {
+            const obj = section.object;
+            if (obj.get("storage")) |v| try self.replace(&config.proxmox.storage, v.string);
+            if (obj.get("rootfs_size_gb")) |v| config.proxmox.rootfs_size_gb = @intCast(v.integer);
+            if (obj.get("ostype")) |v| try self.replace(&config.proxmox.ostype, v.string);
+            if (obj.get("unprivileged")) |v| config.proxmox.unprivileged = v.bool;
         }
 
-        // runtime section with routing and other runtime-specific config
-        if (value.object.get("runtime")) |runtime_section| {
-            const runtime_obj = runtime_section.object;
-
-            // Parse log_level
-            if (runtime_obj.get("log_level")) |log_level_value| {
-                switch (log_level_value) {
-                    .string => |log_level_str| {
-                        config.log_level = self.parseLogLevel(log_level_str);
-                    },
-                    else => {},
-                }
-            }
-
-            // Parse log_path
-            if (runtime_obj.get("log_path")) |log_path_value| {
-                switch (log_path_value) {
-                    .string => |log_path_str| {
-                        if (config.log_file) |old_log_file| {
-                            self.allocator.free(old_log_file);
-                        }
-                        config.log_file = try self.allocator.dupe(u8, log_path_str);
-                    },
-                    else => {},
-                }
-            }
-
-            // Parse root_path (data_dir)
-            if (runtime_obj.get("root_path")) |root_path_value| {
-                switch (root_path_value) {
-                    .string => |root_path_str| {
-                        self.allocator.free(config.data_dir);
-                        config.data_dir = try self.allocator.dupe(u8, root_path_str);
-                    },
-                    else => {},
-                }
-            }
-
-            // Parse routing configuration from runtime section
-            if (runtime_obj.get("routing")) |routing_value| {
-                switch (routing_value) {
-                    .array => |routing_array| {
-                        var routing_rules = try self.allocator.alloc(types.RoutingRule, routing_array.items.len);
-                        errdefer {
-                            // Clean up routing rules if there's an error
-                            for (routing_rules) |*rule| {
-                                rule.deinit(self.allocator);
-                            }
-                            self.allocator.free(routing_rules);
-                        }
-
-                        for (routing_array.items, 0..) |rule_item, i| {
-                            switch (rule_item) {
-                                .object => |rule_obj| {
-                                    const pattern = if (rule_obj.get("pattern")) |p|
-                                        switch (p) {
-                                            .string => |s| s,
-                                            else => "",
-                                        }
-                                    else
-                                        "";
-                                    const runtime_str = if (rule_obj.get("runtime")) |r|
-                                        switch (r) {
-                                            .string => |s| s,
-                                            else => "lxc",
-                                        }
-                                    else
-                                        "lxc";
-
-                                    const pattern_dup = self.allocator.dupe(u8, pattern) catch |err| {
-                                        // Clean up already allocated rules
-                                        for (routing_rules[0..i]) |*rule| {
-                                            rule.deinit(self.allocator);
-                                        }
-                                        self.allocator.free(routing_rules);
-                                        return err;
-                                    };
-
-                                    routing_rules[i] = types.RoutingRule{
-                                        .pattern = pattern_dup,
-                                        .runtime = self.parseRuntimeType(runtime_str),
-                                    };
-                                },
-                                else => {
-                                    // Initialize with default values for invalid entries
-                                    const empty_pattern = self.allocator.dupe(u8, "") catch |err| {
-                                        // Clean up already allocated rules
-                                        for (routing_rules[0..i]) |*rule| {
-                                            rule.deinit(self.allocator);
-                                        }
-                                        self.allocator.free(routing_rules);
-                                        return err;
-                                    };
-
-                                    routing_rules[i] = types.RoutingRule{
-                                        .pattern = empty_pattern,
-                                        .runtime = .lxc,
-                                    };
-                                },
-                            }
-                        }
-
-                        // Update container config with new routing rules
-                        // Clean up existing routing rules if any
-                        for (config.container_config.routing) |rule| {
-                            rule.deinit(self.allocator);
-                        }
-                        self.allocator.free(config.container_config.routing);
-
-                        config.container_config.routing = routing_rules;
-                    },
-                    else => {},
-                }
-            }
-        }
-
-        // log_level
-        if (value.object.get("log_level")) |level_value| {
-            switch (level_value) {
-                .string => |level_str| {
-                    config.log_level = self.parseLogLevel(level_str);
-                },
-                else => {},
-            }
-        }
-
-        // log_file
-        if (value.object.get("log_file")) |file_value| {
-            switch (file_value) {
-                .string => |file_str| {
-                    if (config.log_file) |old| {
-                        // Always free old value since it's always allocated if present
-                        self.allocator.free(old);
-                    }
-                    config.log_file = try self.allocator.dupe(u8, file_str);
-                },
-                else => {},
-            }
-        }
-
-        // data_dir
-        if (value.object.get("data_dir")) |dir_value| {
-            switch (dir_value) {
-                .string => |dir_str| {
-                    self.allocator.free(config.data_dir);
-                    config.data_dir = try self.allocator.dupe(u8, dir_str);
-                },
-                else => {},
-            }
-        }
-
-        // cache_dir
-        if (value.object.get("cache_dir")) |dir_value| {
-            switch (dir_value) {
-                .string => |dir_str| {
-                    self.allocator.free(config.cache_dir);
-                    config.cache_dir = try self.allocator.dupe(u8, dir_str);
-                },
-                else => {},
-            }
-        }
-
-        // temp_dir
-        if (value.object.get("temp_dir")) |dir_value| {
-            switch (dir_value) {
-                .string => |dir_str| {
-                    self.allocator.free(config.temp_dir);
-                    config.temp_dir = try self.allocator.dupe(u8, dir_str);
-                },
-                else => {},
-            }
-        }
-
-        // network
-        if (value.object.get("network")) |network_value| {
-            // start from existing defaults
-            var net = config.network;
-            const obj = network_value.object;
-
-            if (obj.get("bridge")) |bridge_value| {
-                switch (bridge_value) {
-                    .string => |bridge_str| {
-                        if (net.bridge) |old_bridge| self.allocator.free(old_bridge);
-                        net.bridge = try self.allocator.dupe(u8, bridge_str);
-                    },
-                    else => {},
-                }
-            }
-
-            if (obj.get("ip")) |ip_value| {
-                switch (ip_value) {
-                    .string => |ip_str| {
-                        if (net.ip) |old_ip| self.allocator.free(old_ip);
-                        net.ip = try self.allocator.dupe(u8, ip_str);
-                    },
-                    else => {},
-                }
-            }
-
-            if (obj.get("gateway")) |gateway_value| {
-                switch (gateway_value) {
-                    .string => |gw_str| {
-                        if (net.gateway) |old_gw| self.allocator.free(old_gw);
-                        net.gateway = try self.allocator.dupe(u8, gw_str);
-                    },
-                    else => {},
-                }
-            }
-
-            config.network = net;
-        }
-
-        // proxmox: settings for the Proxmox LXC backend. Other keys in this
-        // section (pct_path, node, legacy_api) are not read.
-        if (value.object.get("proxmox")) |proxmox_value| {
-            switch (proxmox_value) {
-                .object => |obj| {
-                    if (obj.get("storage")) |v| {
-                        switch (v) {
-                            .string => |s| {
-                                if (config.proxmox.storage) |old| self.allocator.free(old);
-                                config.proxmox.storage = try self.allocator.dupe(u8, s);
-                            },
-                            else => {},
-                        }
-                    }
-                    if (obj.get("rootfs_size_gb")) |v| {
-                        switch (v) {
-                            .integer => |n| {
-                                // Zero or negative would reach pct as "<storage>:0"
-                                config.proxmox.rootfs_size_gb = if (n >= 1) std.math.cast(u32, n) else null;
-                                if (config.proxmox.rootfs_size_gb == null) {
-                                    config.deinit();
-                                    return types.Error.InvalidConfig;
-                                }
-                            },
-                            else => {},
-                        }
-                    }
-                    if (obj.get("ostype")) |v| {
-                        switch (v) {
-                            .string => |s| {
-                                if (config.proxmox.ostype) |old| self.allocator.free(old);
-                                config.proxmox.ostype = try self.allocator.dupe(u8, s);
-                            },
-                            else => {},
-                        }
-                    }
-                    if (obj.get("unprivileged")) |v| {
-                        switch (v) {
-                            .bool => |b| config.proxmox.unprivileged = b,
-                            else => {},
-                        }
-                    }
-                },
-                else => {},
-            }
-        }
-
-        // security
-        if (value.object.get("security")) |sec_value| {
-            const obj = sec_value.object;
-            var sec = config.security;
-
-            if (obj.get("seccomp")) |v| {
-                switch (v) {
-                    .bool => |b| sec.seccomp = b,
-                    else => {},
-                }
-            }
-            if (obj.get("apparmor")) |v| {
-                switch (v) {
-                    .bool => |b| sec.apparmor = b,
-                    else => {},
-                }
-            }
-            if (obj.get("read_only")) |v| {
-                switch (v) {
-                    .bool => |b| sec.read_only = b,
-                    else => {},
-                }
-            }
-
-            // capabilities: array of strings (by reference; not allocating here)
-            // If needed later, we can dupe each entry and manage lifetime
-
-            config.security = sec;
-        }
-
-        // resources
-        if (value.object.get("resources")) |res_value| {
-            const obj = res_value.object;
-            var res = config.resources;
-
-            if (obj.get("memory")) |v| {
-                switch (v) {
-                    .integer => |n| res.memory = @intCast(n),
-                    else => {},
-                }
-            }
-            if (obj.get("cpu")) |v| {
-                switch (v) {
-                    .float => |f| res.cpu = f,
-                    .integer => |n| res.cpu = @floatFromInt(n),
-                    else => {},
-                }
-            }
-            if (obj.get("disk")) |v| {
-                switch (v) {
-                    .integer => |n| res.disk = @intCast(n),
-                    else => {},
-                }
-            }
-            if (obj.get("network_bandwidth")) |v| {
-                switch (v) {
-                    .integer => |n| res.network_bandwidth = @intCast(n),
-                    else => {},
-                }
-            }
-
-            config.resources = res;
-        }
-
-        // container_config
-        if (value.object.get("container_config")) |container_value| {
-            const obj = container_value.object;
-            var container_cfg = config.container_config;
-
-            // `crun_name_patterns` routed names matching a glob to crun before
-            // `routing` existed, and was kept as a fallback long after every
-            // glob it could express had a one-line equivalent there. It is
-            // ignored now -- but not silently: a file that still relies on it
-            // would otherwise route those containers to the default backend
-            // without a word. main.zig logs the warning once the logger is up,
-            // because nothing here can.
-            if (obj.get("crun_name_patterns") != null) {
-                config.legacy_crun_name_patterns = true;
-            }
-
-            if (obj.get("default_container_type")) |type_value| {
-                switch (type_value) {
-                    .string => |type_str| {
-                        container_cfg.default_container_type = self.parseContainerType(type_str);
-                    },
-                    else => {},
-                }
-            }
-
-            // Parse new routing configuration
-            if (obj.get("routing")) |routing_value| {
-                switch (routing_value) {
-                    .array => |routing_array| {
-                        var routing_rules = try self.allocator.alloc(types.RoutingRule, routing_array.items.len);
-                        errdefer {
-                            // Clean up routing rules if there's an error
-                            for (routing_rules) |*rule| {
-                                rule.deinit(self.allocator);
-                            }
-                            self.allocator.free(routing_rules);
-                        }
-
-                        for (routing_array.items, 0..) |rule_item, i| {
-                            switch (rule_item) {
-                                .object => |rule_obj| {
-                                    const pattern = if (rule_obj.get("pattern")) |p|
-                                        switch (p) {
-                                            .string => |s| s,
-                                            else => "",
-                                        }
-                                    else
-                                        "";
-                                    const runtime_str = if (rule_obj.get("runtime")) |r|
-                                        switch (r) {
-                                            .string => |s| s,
-                                            else => "lxc",
-                                        }
-                                    else
-                                        "lxc";
-
-                                    const pattern_dup = self.allocator.dupe(u8, pattern) catch |err| {
-                                        // Clean up already allocated rules
-                                        for (routing_rules[0..i]) |*rule| {
-                                            rule.deinit(self.allocator);
-                                        }
-                                        self.allocator.free(routing_rules);
-                                        return err;
-                                    };
-
-                                    routing_rules[i] = types.RoutingRule{
-                                        .pattern = pattern_dup,
-                                        .runtime = self.parseRuntimeType(runtime_str),
-                                    };
-                                },
-                                else => {
-                                    // Initialize with default values for invalid entries
-                                    const empty_pattern = self.allocator.dupe(u8, "") catch |err| {
-                                        // Clean up already allocated rules
-                                        for (routing_rules[0..i]) |*rule| {
-                                            rule.deinit(self.allocator);
-                                        }
-                                        self.allocator.free(routing_rules);
-                                        return err;
-                                    };
-
-                                    routing_rules[i] = types.RoutingRule{
-                                        .pattern = empty_pattern,
-                                        .runtime = .lxc,
-                                    };
-                                },
-                            }
-                        }
-                        // Clean up existing routing rules if any
-                        for (config.container_config.routing) |rule| {
-                            rule.deinit(self.allocator);
-                        }
-                        self.allocator.free(config.container_config.routing);
-
-                        container_cfg.routing = routing_rules;
-                    },
-                    else => {},
-                }
-            }
-
-            // Parse default_runtime if specified
-            if (obj.get("default_runtime")) |runtime_value| {
-                switch (runtime_value) {
-                    .string => |runtime_str| {
-                        container_cfg.default_runtime = self.parseRuntimeType(runtime_str);
-                    },
-                    else => {},
-                }
-            }
-
-            config.container_config = container_cfg;
+        // Read for files written before runtime.routing; a list here replaces
+        // the one there wholesale.
+        if (root.get("container_config")) |section| {
+            const obj = section.object;
+            if (obj.get("routing")) |v| try self.setRouting(&config.container_config, v.array.items);
+            if (obj.get("default_runtime")) |v| config.container_config.default_runtime = self.runtimeOf(v.string);
         }
 
         config.legacy_runc_runtime = self.saw_runc;
@@ -623,121 +201,180 @@ pub const ConfigLoader = struct {
         return config;
     }
 
-    fn parseRuntimeType(self: *Self, runtime_str: []const u8) types.RuntimeType {
-        if (std.mem.eql(u8, runtime_str, "lxc")) {
-            return .lxc;
-        } else if (std.mem.eql(u8, runtime_str, "crun")) {
-            return .crun;
-        } else if (std.mem.eql(u8, runtime_str, "runc")) {
-            // The runc backend was removed in 0.13.0. A container a rule sent
-            // to it is an OCI container, and crun is the OCI backend -- so the
-            // rule keeps working, and main says what it now means.
+    /// The keys nexcage reads, and what each must hold. A key not here is
+    /// refused rather than skipped: a misspelt key did nothing without a word,
+    /// and so did keys that were parsed and never used -- `security.seccomp:
+    /// true` turned nothing on (#371).
+    const Kind = enum { section, string, boolean, size_gb, log_level, runtime, rules };
+    const Key = struct { name: []const u8, kind: Kind, keys: []const Key = &.{} };
+
+    const rule_keys = [_]Key{
+        .{ .name = "pattern", .kind = .string },
+        .{ .name = "runtime", .kind = .runtime },
+    };
+
+    const schema = [_]Key{
+        .{ .name = "runtime", .kind = .section, .keys = &.{
+            .{ .name = "log_level", .kind = .log_level },
+            .{ .name = "log_path", .kind = .string },
+            .{ .name = "routing", .kind = .rules },
+        } },
+        .{ .name = "log_level", .kind = .log_level },
+        .{ .name = "log_file", .kind = .string },
+        .{ .name = "network", .kind = .section, .keys = &.{
+            .{ .name = "bridge", .kind = .string },
+        } },
+        .{ .name = "proxmox", .kind = .section, .keys = &.{
+            .{ .name = "storage", .kind = .string },
+            .{ .name = "rootfs_size_gb", .kind = .size_gb },
+            .{ .name = "ostype", .kind = .string },
+            .{ .name = "unprivileged", .kind = .boolean },
+        } },
+        .{ .name = "container_config", .kind = .section, .keys = &.{
+            .{ .name = "routing", .kind = .rules },
+            .{ .name = "default_runtime", .kind = .runtime },
+        } },
+    };
+
+    /// Runtime names a routing rule may give. "runc" routes to crun with a
+    /// warning; "vm" and "proxmox" are let through so that main can refuse
+    /// the file saying the VM backend is gone.
+    const runtime_names = [_][]const u8{ "lxc", "proxmox-lxc", "crun", "runc", "vm", "proxmox" };
+
+    fn validate(self: *Self, value: std.json.Value) types.Error!void {
+        switch (value) {
+            .object => |obj| try self.validateObject(obj, &schema, ""),
+            else => return self.refuse("it must hold a JSON object", .{}),
+        }
+    }
+
+    fn validateObject(self: *Self, obj: std.json.ObjectMap, keys: []const Key, path: []const u8) types.Error!void {
+        var it = obj.iterator();
+        while (it.next()) |entry| {
+            const name = entry.key_ptr.*;
+            var buf: [160]u8 = undefined;
+            const sub = if (path.len == 0) name else std.fmt.bufPrint(&buf, "{s}.{s}", .{ path, name }) catch name;
+            const key = for (keys) |k| {
+                if (std.mem.eql(u8, k.name, name)) break k;
+            } else {
+                // Removed in 0.13.0, and its replacement is one line.
+                if (std.mem.eql(u8, sub, "container_config.crun_name_patterns"))
+                    return self.refuse("'{s}' is not read since 0.13.0; put each glob under runtime.routing as {{\"pattern\": \"<glob>\", \"runtime\": \"crun\"}}", .{sub});
+                return self.refuse("'{s}' is not a key nexcage reads", .{sub});
+            };
+            try self.validateValue(entry.value_ptr.*, key, sub);
+        }
+    }
+
+    fn validateValue(self: *Self, value: std.json.Value, key: Key, path: []const u8) types.Error!void {
+        switch (key.kind) {
+            .section => switch (value) {
+                .object => |obj| try self.validateObject(obj, key.keys, path),
+                else => return self.refuse("'{s}' must be an object", .{path}),
+            },
+            .string => if (value != .string) return self.refuse("'{s}' must be a string", .{path}),
+            .boolean => if (value != .bool) return self.refuse("'{s}' must be true or false", .{path}),
+            // Zero would reach pct as "<storage>:0".
+            .size_gb => switch (value) {
+                .integer => |n| if (n < 1 or n > std.math.maxInt(u32)) return self.refuse("'{s}' must be a whole number of GB, 1 or more", .{path}),
+                else => return self.refuse("'{s}' must be a whole number of GB, 1 or more", .{path}),
+            },
+            .log_level => switch (value) {
+                .string => |s| if (logLevel(s) == null) return self.refuse("'{s}' is \"{s}\"; it must be debug, info, warn or error", .{ path, s }),
+                else => return self.refuse("'{s}' must be debug, info, warn or error", .{path}),
+            },
+            .runtime => switch (value) {
+                .string => |s| for (runtime_names) |n| {
+                    if (std.mem.eql(u8, n, s)) break;
+                } else return self.refuse("'{s}' is \"{s}\", which is not a runtime; name lxc or crun", .{ path, s }),
+                else => return self.refuse("'{s}' must be a runtime name, lxc or crun", .{path}),
+            },
+            .rules => switch (value) {
+                .array => |items| for (items.items, 0..) |item, i| {
+                    var buf: [160]u8 = undefined;
+                    const sub = std.fmt.bufPrint(&buf, "{s}[{d}]", .{ path, i }) catch path;
+                    switch (item) {
+                        .object => |obj| {
+                            try self.validateObject(obj, &rule_keys, sub);
+                            for (rule_keys) |k| {
+                                if (obj.get(k.name) == null) return self.refuse("'{s}' has no \"{s}\"", .{ sub, k.name });
+                            }
+                        },
+                        else => return self.refuse("'{s}' must be an object with \"pattern\" and \"runtime\"", .{sub}),
+                    }
+                },
+                else => return self.refuse("'{s}' must be a list of rules", .{path}),
+            },
+        }
+    }
+
+    /// Records why the file is refused, for main to print, and returns the
+    /// error that says it was.
+    fn refuse(self: *Self, comptime format: []const u8, args: anytype) types.Error {
+        const msg = std.fmt.bufPrint(&self.problem_buf, format, args) catch self.problem_buf[0..];
+        self.problem_len = msg.len;
+        return types.Error.InvalidConfig;
+    }
+
+    /// Why the last load failed with InvalidConfig, or null.
+    pub fn problem(self: *const Self) ?[]const u8 {
+        return if (self.problem_len == 0) null else self.problem_buf[0..self.problem_len];
+    }
+
+    /// Puts a copy of `s` in `slot`, freeing what was there.
+    fn replace(self: *Self, slot: *?[]const u8, s: []const u8) !void {
+        const copy = try self.allocator.dupe(u8, s);
+        if (slot.*) |old| self.allocator.free(old);
+        slot.* = copy;
+    }
+
+    /// Replaces the routing rules with `items`, which validate checked.
+    fn setRouting(self: *Self, container_config: *types.ContainerConfig, items: []const std.json.Value) !void {
+        const rules = try self.allocator.alloc(types.RoutingRule, items.len);
+        var made: usize = 0;
+        errdefer {
+            for (rules[0..made]) |rule| rule.deinit(self.allocator);
+            self.allocator.free(rules);
+        }
+        for (items) |item| {
+            const obj = item.object;
+            rules[made] = .{
+                .pattern = try self.allocator.dupe(u8, obj.get("pattern").?.string),
+                .runtime = self.runtimeOf(obj.get("runtime").?.string),
+            };
+            made += 1;
+        }
+        container_config.deinit(self.allocator);
+        container_config.routing = rules;
+    }
+
+    /// The backend a runtime name routes to; validate let only runtime_names
+    /// through.
+    fn runtimeOf(self: *Self, name: []const u8) types.RuntimeType {
+        if (std.mem.eql(u8, name, "crun")) return .crun;
+        // The runc backend was removed in 0.13.0. A container a rule sent to
+        // it is an OCI container, and crun is the OCI backend -- so the rule
+        // keeps working, and main says what it now means.
+        if (std.mem.eql(u8, name, "runc")) {
             self.saw_runc = true;
             return .crun;
-        } else if (std.mem.eql(u8, runtime_str, "vm")) {
-            // The Proxmox VM backend was removed in 0.14.0, and "proxmox" was
-            // mapped to it. The default backend is not a substitute: it would
-            // make a container where a VM was asked for, so main refuses the
-            // file and this value is never routed on.
-            self.removed_vm_runtime = "vm";
-            return .lxc;
-        } else if (std.mem.eql(u8, runtime_str, "proxmox")) {
-            self.removed_vm_runtime = "proxmox";
+        }
+        // The Proxmox VM backend was removed in 0.14.0, and "proxmox" was
+        // mapped to it. The default backend is not a substitute, so main
+        // refuses the file and this value is never routed on.
+        if (std.mem.eql(u8, name, "vm") or std.mem.eql(u8, name, "proxmox")) {
+            self.removed_vm_runtime = if (std.mem.eql(u8, name, "vm")) "vm" else "proxmox";
             return .lxc;
         }
-        return .lxc; // default
+        return .lxc; // "lxc", or "proxmox-lxc" as --runtime spells it
     }
 
-    fn parseLogLevel(self: *Self, level_str: []const u8) logging.LogLevel {
-        _ = self;
-        if (std.mem.eql(u8, level_str, "debug")) {
-            return .debug;
-        } else if (std.mem.eql(u8, level_str, "info")) {
-            return .info;
-        } else if (std.mem.eql(u8, level_str, "warn")) {
-            return .warn;
-        } else if (std.mem.eql(u8, level_str, "error")) {
-            return logging.LogLevel.@"error";
-        }
-        return .info; // default
-    }
-
-    fn parseContainerType(self: *Self, type_str: []const u8) types.ContainerType {
-        if (std.mem.eql(u8, type_str, "lxc")) {
-            return .lxc;
-        } else if (std.mem.eql(u8, type_str, "crun")) {
-            return .crun;
-        } else if (std.mem.eql(u8, type_str, "runc")) {
-            self.saw_runc = true;
-            return .crun;
-        } else if (std.mem.eql(u8, type_str, "vm")) {
-            // Removed in 0.14.0; main refuses the file, as for a runtime.
-            self.removed_vm_runtime = "vm";
-            return .lxc;
-        } else if (std.mem.eql(u8, type_str, "proxmox-lxc")) {
-            return .proxmox_lxc;
-        }
-        return .lxc; // default
-    }
-
-    pub fn parseNetworkConfig(self: *Self, value: std.json.Value) !types.NetworkConfig {
-        var config = types.NetworkConfig{
-            .bridge = try self.allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
-            .ip = null,
-            .gateway = null,
-        };
-
-        if (value.object.get("bridge")) |bridge_value| {
-            switch (bridge_value) {
-                .string => |bridge_str| {
-                    self.allocator.free(config.bridge);
-                    config.bridge = try self.allocator.dupe(u8, bridge_str);
-                },
-                else => {},
-            }
-        }
-
-        if (value.object.get("ip")) |ip_value| {
-            switch (ip_value) {
-                .string => |ip_str| {
-                    config.ip = try self.allocator.dupe(u8, ip_str);
-                },
-                else => {},
-            }
-        }
-
-        if (value.object.get("gateway")) |gateway_value| {
-            switch (gateway_value) {
-                .string => |gateway_str| {
-                    config.gateway = try self.allocator.dupe(u8, gateway_str);
-                },
-                else => {},
-            }
-        }
-
-        return config;
-    }
-
-    fn parseSecurityConfig(self: *Self, value: std.json.Value) !types.SecurityConfig {
-        _ = self;
-        _ = value;
-        return types.SecurityConfig{
-            .seccomp = null,
-            .apparmor = null,
-            .capabilities = null,
-            .read_only = null,
-        };
-    }
-
-    fn parseResourceLimits(self: *Self, value: std.json.Value) !types.ResourceLimits {
-        _ = self;
-        _ = value;
-        return types.ResourceLimits{
-            .memory = null,
-            .cpu = null,
-            .disk = null,
-            .network_bandwidth = null,
-        };
+    fn logLevel(name: []const u8) ?logging.LogLevel {
+        if (std.mem.eql(u8, name, "debug")) return .debug;
+        if (std.mem.eql(u8, name, "info")) return .info;
+        if (std.mem.eql(u8, name, "warn")) return .warn;
+        if (std.mem.eql(u8, name, "error")) return .@"error";
+        return null;
     }
 };
 
@@ -758,10 +395,6 @@ pub const Config = struct {
     resources: types.ResourceLimits,
     container_config: types.ContainerConfig,
     proxmox: types.ProxmoxSettings = .{},
-    /// The file carried `container_config.crun_name_patterns`, which nothing
-    /// reads any more. Set by the parser, reported by main once there is a
-    /// logger to report it with.
-    legacy_crun_name_patterns: bool = false,
     /// The file names "runc" as a runtime. The backend was removed in 0.13.0;
     /// such a rule routes to crun, and main says so once it can.
     legacy_runc_runtime: bool = false,
@@ -1041,7 +674,7 @@ test "the proxmox section and bridge reach Config" {
         \\{
         \\  "network": { "bridge": "vmbr9" },
         \\  "proxmox": { "storage": "local-zfs", "rootfs_size_gb": 4, "ostype": "debian",
-        \\               "unprivileged": true, "pct_path": "/usr/bin/pct" }
+        \\               "unprivileged": true }
         \\}
     );
     defer cfg.deinit();
@@ -1078,20 +711,45 @@ test "routing is a name lookup: a glob under runtime.routing, first match wins" 
 
     try std.testing.expectEqual(types.RuntimeType.crun, cfg.getRoutedRuntime("kube-ovn-1"));
     try std.testing.expectEqual(cfg.container_config.default_runtime, cfg.getRoutedRuntime("web-1"));
-    try std.testing.expect(!cfg.legacy_crun_name_patterns);
 }
 
-test "crun_name_patterns is ignored, and the file is flagged so main can say so" {
+test "a file is refused at the first key nexcage does not read, which the message names" {
+    const cases = [_]struct { file: []const u8, says: []const u8 }{
+        // A misspelt key used to do nothing without a word.
+        .{ .file = "{ \"routnig\": [] }", .says = "'routnig' is not a key nexcage reads" },
+        // Keys that were parsed and never used: this one turned nothing on.
+        .{ .file = "{ \"security\": { \"seccomp\": true } }", .says = "'security' is not a key nexcage reads" },
+        .{ .file = "{ \"proxmox\": { \"pct_path\": \"/usr/sbin/pct\" } }", .says = "'proxmox.pct_path' is not a key nexcage reads" },
+        .{ .file = "{ \"container_config\": { \"crun_name_patterns\": [\"kube-ovn-*\"] } }", .says = "put each glob under runtime.routing" },
+        // A misspelt runtime routed to LXC.
+        .{ .file = "{ \"runtime\": { \"routing\": [ { \"pattern\": \"*\", \"runtime\": \"crn\" } ] } }", .says = "'runtime.routing[0].runtime' is \"crn\", which is not a runtime" },
+        .{ .file = "{ \"runtime\": { \"routing\": [ { \"pattern\": \"*\" } ] } }", .says = "'runtime.routing[0]' has no \"runtime\"" },
+        // A section of the wrong type panicked.
+        .{ .file = "{ \"runtime\": 5 }", .says = "'runtime' must be an object" },
+        .{ .file = "{ \"network\": [] }", .says = "'network' must be an object" },
+        .{ .file = "{ \"log_level\": \"verbose\" }", .says = "it must be debug, info, warn or error" },
+        .{ .file = "{ \"proxmox\": { \"unprivileged\": \"yes\" } }", .says = "'proxmox.unprivileged' must be true or false" },
+        .{ .file = "[ 1 ]", .says = "it must hold a JSON object" },
+        .{ .file = "{ \"network\":", .says = "it is not valid JSON" },
+    };
+    for (cases) |case| {
+        var loader = ConfigLoader.init(std.testing.allocator);
+        try std.testing.expectError(types.Error.InvalidConfig, loader.loadFromString(case.file));
+        const why = loader.problem() orelse return error.TestExpectedProblem;
+        if (std.mem.indexOf(u8, why, case.says) == null) {
+            std.debug.print("for {s}: got \"{s}\"\n", .{ case.file, why });
+            return error.TestUnexpectedProblem;
+        }
+    }
+}
+
+test "\"proxmox-lxc\", as --runtime spells it, is read as lxc" {
     var loader = ConfigLoader.init(std.testing.allocator);
     var cfg = try loader.loadFromString(
-        \\{ "container_config": { "crun_name_patterns": ["kube-ovn-*"] } }
+        \\{ "runtime": { "routing": [ { "pattern": "*", "runtime": "proxmox-lxc" } ] } }
     );
     defer cfg.deinit();
-
-    // The name the key used to send to crun lands on the default backend now;
-    // the flag is what turns that into a warning rather than a silence.
-    try std.testing.expectEqual(cfg.container_config.default_runtime, cfg.getRoutedRuntime("kube-ovn-1"));
-    try std.testing.expect(cfg.legacy_crun_name_patterns);
+    try std.testing.expectEqual(types.RuntimeType.lxc, cfg.getRoutedRuntime("web-1"));
 }
 
 test "a rule naming runc routes to crun and is flagged: the backend is gone, the container is still OCI" {
@@ -1112,10 +770,6 @@ test "a file naming the removed VM backend is flagged, however it names it, so m
         \\{ "container_config": { "routing": [ { "pattern": "*", "runtime": "proxmox" } ] } }
         ,
         \\{ "container_config": { "default_runtime": "vm" } }
-        ,
-        \\{ "container_config": { "default_container_type": "vm" } }
-        ,
-        \\{ "runtime_type": "proxmox" }
     };
     for (files) |file| {
         var loader = ConfigLoader.init(std.testing.allocator);
