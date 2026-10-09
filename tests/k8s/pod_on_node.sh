@@ -18,6 +18,13 @@
 # RuntimeClass in deploy/kubernetes/node/. Run it from a checkout, so that a
 # run checks those files and not a copy of them.
 #
+# Then the same for isolation profiles (#315, ADR-005): two more runtime
+# handlers, nexcage-hardened and nexcage-small, whose BinaryName is
+# nexcage@<profile>, a RuntimeClass for each, and one pod under each. What each
+# pod got is read from inside it -- its uid_map, its seccomp mode and
+# capabilities, its cgroup's limits -- not from nexcage's log. The profiles are
+# the two in config.oci.example.json.
+#
 # The nexcage binary must already be on the node, with the crun backend built
 # in -- a container engine's containers go to that backend, and the default
 # build has only Proxmox LXC. Build it with
@@ -64,15 +71,30 @@ else
         || fail "/etc/nexcage/config.json exists and does not route to crun"
     echo "ok: /etc/nexcage/config.json already routes to crun"
 fi
+for p in hardened small; do
+    grep -q "\"$p\"" /etc/nexcage/config.json \
+        || fail "/etc/nexcage/config.json has no profile '$p'; config.oci.example.json has it"
+done
 
-# What the kubelet's containerd asks the runtime, recorded. `exec` so that
-# conmon-style supervision sees one process.
-cat > /nexcage-traced <<EOT
+# What the kubelet's containerd asks the runtime, recorded, each line under
+# the handler it came through. `exec` so that conmon-style supervision sees
+# one process. A profile's handler runs nexcage by a nexcage@<profile> name,
+# which is all that names the profile.
+LINKS=/run/nexcage-k8s-e2e
+mkdir -p "$LINKS"
+traced() {  # traced <wrapper> <program it runs>
+    cat > "/$1" <<EOT
 #!/bin/sh
-echo "\$*" >> $TRACE
-exec $NEXCAGE "\$@"
+echo "$1 \$*" >> $TRACE
+exec $2 "\$@"
 EOT
-chmod +x /nexcage-traced
+    chmod +x "/$1"
+}
+traced nexcage-traced "$NEXCAGE"
+for p in hardened small; do
+    ln -sfn "$NEXCAGE" "$LINKS/nexcage@$p"
+    traced "nexcage-traced@$p" "$LINKS/nexcage@$p"
+done
 : > "$TRACE"
 
 # Set before anything is installed, so that an install that fails halfway is
@@ -80,7 +102,7 @@ chmod +x /nexcage-traced
 # got that far.
 installed_here=no
 cleanup() {
-    k delete pod nexcage-pod --ignore-not-found --wait=false >/dev/null 2>&1 || true
+    k delete pod nexcage-pod nexcage-hardened nexcage-small nexcage-refused --ignore-not-found --wait=false >/dev/null 2>&1 || true
     if [ "$KEEP" = 1 ]; then
         echo "KEEP=1: k3s and the RuntimeClass are left in place"
         return
@@ -97,7 +119,8 @@ cleanup() {
         echo "removing the /etc/nexcage/config.json this script wrote"
         rm -f /etc/nexcage/config.json
     fi
-    rm -f /nexcage-traced 2>/dev/null || true
+    k delete runtimeclass nexcage-hardened nexcage-small --ignore-not-found >/dev/null 2>&1 || true
+    rm -rf /nexcage-traced /nexcage-traced@hardened /nexcage-traced@small "$LINKS" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -127,6 +150,17 @@ mkdir -p "$(dirname "$TMPL")"
 sed 's|"/usr/local/bin/nexcage"|"/nexcage-traced"|' "$NODE_FILES/k3s-config-v3.toml.tmpl" > "$TMPL"
 grep -q '"/nexcage-traced"' "$TMPL" \
     || fail "$NODE_FILES/k3s-config-v3.toml.tmpl no longer names /usr/local/bin/nexcage"
+# One handler per profile, as docs/INSTALL.md adds them.
+for p in hardened small; do
+    cat >> "$TMPL" <<EOT
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage-$p]
+  runtime_type = "io.containerd.runc.v2"
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage-$p.options]
+  BinaryName = "/nexcage-traced@$p"
+EOT
+done
 systemctl restart k3s
 echo "ok: k3s restarted with a nexcage runtime in its containerd"
 
@@ -211,7 +245,7 @@ echo "ok: the pod was deleted"
 # not tell you.
 [ -s "$TRACE" ] || fail "nexcage was never called: the RuntimeClass did not reach it"
 for verb in create start exec delete; do
-    grep -qE "(^| )$verb( |$)" "$TRACE" || {
+    grep -E "^nexcage-traced " "$TRACE" | grep -qE " $verb( |$)" || {
         echo "what nexcage was asked:" >&2
         sed 's/[0-9a-f]\{64\}/<id>/g' "$TRACE" >&2
         fail "the kubelet's containerd never sent '$verb'"
@@ -219,9 +253,117 @@ for verb in create start exec delete; do
 done
 echo "ok: nexcage was asked create, start, exec and delete"
 
+# --- Isolation profiles ---------------------------------------------------
+# Two classes, one per profile handler. The pods differ the way the profiles
+# do; every value is read from inside the pod.
+k apply -f - >/dev/null <<YAML
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata: { name: nexcage-hardened }
+handler: nexcage-hardened
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata: { name: nexcage-small }
+handler: nexcage-small
+YAML
+echo "ok: RuntimeClass/nexcage-hardened and RuntimeClass/nexcage-small"
+
+# hardened requires a user namespace and a seccomp filter, so the pod asks for
+# both; its 2Gi limit is more than the profile's 1G. small requires seccomp
+# only and the pod sets no limit, so the profile's 256M is the limit.
+profile_pod() {  # profile_pod <name> <class> <extra spec line>
+    cat <<YAML
+apiVersion: v1
+kind: Pod
+metadata: { name: $1 }
+spec:
+  runtimeClassName: $2
+  restartPolicy: Never
+  $3
+  securityContext: { seccompProfile: { type: RuntimeDefault } }
+  containers:
+  - name: app
+    image: $POD_IMAGE
+    command: ["/bin/sh", "-c", "sleep 600"]
+YAML
+}
+{ profile_pod nexcage-hardened nexcage-hardened "hostUsers: false"
+  echo "    resources: { limits: { memory: 2Gi } }"; } | k apply -f - >/dev/null
+profile_pod nexcage-small nexcage-small "" | k apply -f - >/dev/null
+for pod in nexcage-hardened nexcage-small; do
+    if ! k wait --for=condition=Ready "pod/$pod" --timeout=180s >/dev/null 2>&1; then
+        k describe pod "$pod" 2>&1 | tail -25 >&2
+        fail "pod $pod never became Ready"
+    fi
+done
+echo "ok: a pod under each profile is Ready"
+
+in_pod() { k exec "pod/$1" -- sh -c "$2"; }
+status_field() { in_pod "$1" "sed -n 's/^$2:[[:space:]]*//p' /proc/$3/status"; }
+bit() { echo $(( (0x$1 >> $2) & 1 )); }
+# expect <pod> <what> <got> <want>
+expect() { [ "$3" = "$4" ] || fail "$1: $2 is '$3', not '$4'"; }
+
+# The user namespace: hardened maps root to an unprivileged host range,
+# small runs in the host's.
+set -- $(in_pod nexcage-hardened "head -1 /proc/self/uid_map")
+[ "${1:-}" = 0 ] && [ "${2:-0}" != 0 ] || fail "nexcage-hardened: uid_map '$*' maps root to the host's root"
+set -- $(in_pod nexcage-small "head -1 /proc/self/uid_map")
+expect nexcage-small uid_map "$*" "0 0 4294967295"
+echo "ok: uid_map: nexcage-hardened in a user namespace, nexcage-small in the host's"
+
+for pod in nexcage-hardened nexcage-small; do
+    expect $pod "Seccomp of pid 1" "$(status_field $pod Seccomp 1)" 2
+done
+echo "ok: both run under a seccomp filter (Seccomp: 2)"
+
+# Capabilities of the container's process and of a process kubectl exec
+# starts: containerd builds the second from its own copy of the spec, from
+# before the profile narrowed it, so it is checked separately.
+for pid in 1 self; do
+    c=$(status_field nexcage-hardened CapBnd $pid)
+    for b in 13 18 27; do  # NET_RAW, SYS_CHROOT, MKNOD
+        expect nexcage-hardened "bit $b of CapBnd of $pid ($c)" "$(bit "$c" $b)" 0
+    done
+    expect nexcage-hardened "CAP_KILL in CapBnd of $pid ($c)" "$(bit "$c" 5)" 1
+    c=$(status_field nexcage-small CapBnd $pid)
+    expect nexcage-small "CAP_NET_RAW in CapBnd of $pid ($c)" "$(bit "$c" 13)" 0
+    expect nexcage-small "CAP_MKNOD in CapBnd of $pid ($c)" "$(bit "$c" 27)" 1
+done
+echo "ok: capabilities: hardened lost NET_RAW, SYS_CHROOT and MKNOD, small only NET_RAW; kubectl exec gets no more"
+
+expect nexcage-hardened memory.max "$(in_pod nexcage-hardened 'cat /sys/fs/cgroup/memory.max')" 1073741824
+expect nexcage-hardened pids.max "$(in_pod nexcage-hardened 'cat /sys/fs/cgroup/pids.max')" 1024
+expect nexcage-small memory.max "$(in_pod nexcage-small 'cat /sys/fs/cgroup/memory.max')" 268435456
+expect nexcage-small pids.max "$(in_pod nexcage-small 'cat /sys/fs/cgroup/pids.max')" 256
+echo "ok: cgroup: hardened 1G (the pod asked 2Gi) and 1024 pids, small 256M and 256 pids"
+
+# A pod that does not give hardened what it requires is refused, and says so
+# where its author looks.
+profile_pod nexcage-refused nexcage-hardened "" | k apply -f - >/dev/null
+i=0
+until k get events --field-selector involvedObject.name=nexcage-refused \
+        -o jsonpath='{range .items[*]}{.message}{"\n"}{end}' 2>/dev/null \
+        | grep -q "requires a user namespace"; do
+    i=$((i + 1))
+    [ "$i" -gt 45 ] && { k describe pod nexcage-refused 2>&1 | tail -15 >&2; fail "nexcage-refused shows no 'requires a user namespace' event"; }
+    sleep 2
+done
+[ "$(k get pod nexcage-refused -o jsonpath='{.status.phase}')" != Running ] \
+    || fail "nexcage-refused is Running"
+echo "ok: a pod without hostUsers: false under nexcage-hardened is refused, and its events say why"
+
+k delete pod nexcage-hardened nexcage-small nexcage-refused --wait=true --timeout=120s >/dev/null 2>&1 \
+    || fail "the profile pods would not go away"
+for p in hardened small; do
+    grep -qE "^nexcage-traced@$p .* create( |$)" "$TRACE" || fail "nexcage@$p was never asked create"
+done
+echo "ok: the profile pods were deleted; each came through its nexcage@<profile> handler"
+
 echo
 echo "what Kubernetes asked the runtime, on this node:"
 sed 's/[0-9a-f]\{64\}/<id>/g; s|\(--bundle \)[^ ]*|\1<dir>|g; s|\(--pid-file \)[^ ]*|\1<file>|g; s|\(--log \)[^ ]*|\1<log>|g; s|\(--root \)[^ ]*|\1<root>|g' "$TRACE" | sort -u | head -10
 
 echo
-echo "PASS: Kubernetes scheduled a pod onto nexcage on $(hostname)"
+echo "PASS: Kubernetes scheduled a pod onto nexcage, and a pod under each of two profiles, on $(hostname)"

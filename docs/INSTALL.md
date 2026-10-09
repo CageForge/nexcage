@@ -169,6 +169,63 @@ To take it off the node: delete the `RuntimeClass` once no pod names it, remove
 the template, the `containerd.toml` entry or the CRI-O drop-in, restart the
 engine, and remove `/etc/nexcage/config.json` and the binary.
 
+### An isolation profile per RuntimeClass (since 0.17.0)
+
+A profile narrows what every pod of a class may have: it can require a user
+namespace and a seccomp filter, drop capabilities, and lower memory and pids
+limits. [CLI_REFERENCE.md](CLI_REFERENCE.md#isolation-profiles) describes the
+keys. `config.oci.example.json` defines two:
+
+| Profile | Requires | Drops | Memory | Pids |
+|---|---|---|---|---|
+| `hardened` | a user namespace and a seccomp filter | `CAP_NET_RAW`, `CAP_MKNOD`, `CAP_SYS_CHROOT` | 1G | 1024 |
+| `small` | a seccomp filter | `CAP_NET_RAW` | 256M | 256 |
+
+The engine names a profile by the program it runs, so each profile is one more
+runtime handler whose binary is `nexcage@<profile>`:
+
+```bash
+ln -s /usr/local/bin/nexcage /usr/local/bin/nexcage@hardened
+
+# k3s: append to the template above, then restart k3s
+cat >> /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl <<'EOF'
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage-hardened]
+  runtime_type = "io.containerd.runc.v2"
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage-hardened.options]
+  BinaryName = "/usr/local/bin/nexcage@hardened"
+EOF
+systemctl restart k3s
+
+kubectl apply -f - <<'YAML'
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata: { name: nexcage-hardened }
+handler: nexcage-hardened
+YAML
+```
+
+containerd 2.x takes the same two tables in `/etc/containerd/config.toml`. For
+CRI-O, add a `[crio.runtime.runtimes.nexcage-hardened]` table whose
+`runtime_path` is `/usr/local/bin/nexcage@hardened`. `k8s_e2e.yml` checks only
+the k3s way.
+
+A pod under `hardened` has to ask for what it requires:
+
+```yaml
+spec:
+  runtimeClassName: nexcage-hardened
+  hostUsers: false                                          # a user namespace
+  securityContext: { seccompProfile: { type: RuntimeDefault } }
+```
+
+Without them it stays `ContainerCreating`. `kubectl describe pod` gives the
+reason, for example "profile 'hardened' requires a user namespace … set
+hostUsers: false on the pod". A profile only takes away: a pod's 2Gi limit
+under `hardened` becomes 1G, while a 512M limit stays 512M. `kubectl exec`
+gets no capability the pod's container lacks.
+
 ## From source
 
 ```bash
