@@ -47,9 +47,7 @@ pub const CrunDriver = struct {
         return Self{
             .allocator = allocator,
             .logger = logger,
-            // An explicit --root wins; without one this stays crun's default
-            // rather than nexcage's, because the state here is libcrun's.
-            .state_root = if (core.state_root.isDefault()) "/run/crun" else core.state_root.get(),
+            .state_root = core.state_root.crun(),
         };
     }
 
