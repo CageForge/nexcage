@@ -54,19 +54,30 @@ pub fn skippedSpecPath() ?[]const u8 {
 test "a config.json in the working directory is not read" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "config.json", .data = "{\"network\":{\"bridge\":\"vmbr666\"},\"proxmox\":{\"unprivileged\":false}}" });
+    try tmp.dir.makeDir("empty");
+    try tmp.dir.makeDir("planted");
+    try tmp.dir.writeFile(.{ .sub_path = "planted/config.json", .data = "{\"network\":{\"bridge\":\"vmbr666\"},\"proxmox\":{\"unprivileged\":false}}" });
     var cwd = try std.fs.cwd().openDir(".", .{});
     defer cwd.close();
-    try tmp.dir.setAsCwd();
     defer cwd.setAsCwd() catch {};
-
     setExplicitPath(null);
     var loader = ConfigLoader.init(std.testing.allocator);
+
+    // From a directory without one: /etc/nexcage's, or the built-in defaults
+    var empty = try tmp.dir.openDir("empty", .{});
+    defer empty.close();
+    try empty.setAsCwd();
+    var expected = try loader.loadDefault();
+    defer expected.deinit();
+
+    var planted = try tmp.dir.openDir("planted", .{});
+    defer planted.close();
+    try planted.setAsCwd();
     var cfg = try loader.loadDefault();
     defer cfg.deinit();
     if (activePath()) |path| try std.testing.expect(std.fs.path.isAbsolute(path));
-    try std.testing.expect(cfg.proxmox.unprivileged orelse true);
-    if (cfg.network.bridge) |bridge| try std.testing.expect(!std.mem.eql(u8, bridge, "vmbr666"));
+    try std.testing.expectEqual(expected.proxmox.unprivileged, cfg.proxmox.unprivileged);
+    try std.testing.expectEqualStrings(expected.network.bridge orelse "", cfg.network.bridge orelse "");
 }
 
 test "an explicit path replaces the default search, and must exist" {
