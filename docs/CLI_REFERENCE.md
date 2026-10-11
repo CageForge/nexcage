@@ -279,6 +279,11 @@ process spec. The message names where in the document:
   `cap_net_raw` or `13`. libcrun reads names with libcap, which takes those
   for `CAP_NET_RAW`, while a profile compares names.
 
+A refusal quotes the bundle's keys and strings escaped as in a JSON string:
+a NUL is `\u0000`, a newline `\n`. That is how the message an engine decodes
+from a `json` log line reads; on stderr and in a text log line, where every
+backslash is written `\\`, the same key reads `process\\u0000`.
+
 Without a profile, a bundle carrying the annotation
 `io.cageforge.nexcage.profile`, or one under it such as its recorded caps, is
 refused.
