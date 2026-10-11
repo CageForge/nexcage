@@ -269,10 +269,19 @@ check "kill KILL: the init dies and the container stops" all 'rc 0' "eventually 
 
 echo "=== exec ==="
 nx exec web-1 echo hello;      check "exec runs the command and its output reaches stdout" \
-                                 all 'rc 0' 'out_has hello' 'called "pct exec 100 -- echo hello"'
+                                 all 'rc 0' 'out_has hello' 'called "pct exec 100 --keep-env 0 -- echo hello"'
 nx exec web-1 sh -c 'exit 7';  check "exec exits with the status of the command, as runc does" rc 7
+# The command gets LXC's clean environment, not the caller's: pct exec keeps
+# the environment unless told not to, and handed every variable of the shell
+# or job that ran nexcage -- API tokens, cloud keys -- to a binary from the
+# image. Fake pct records what the command starts with.
+SIM_EXEC_SECRET=from-the-callers-shell nx exec web-1 -- sh -c 'echo "env:[${SIM_EXEC_SECRET-}] path:[$PATH]"'
+check "exec: the caller's environment does not reach the command in the container" \
+  all 'rc 0' 'out_has "env:[] path:[/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin]"' \
+      'called_re "^pct exec 100 --keep-env 0 -- "' '! grep -q SIM_EXEC_SECRET "$S/exec_env.100"' \
+      'grep -qx container=lxc "$S/exec_env.100"'
 nx exec web-1 -- echo dashed;  check "exec <name> -- <cmd>: the separator is not passed to pct" \
-                                 all 'rc 0' 'out_has dashed' 'called "pct exec 100 -- echo dashed"'
+                                 all 'rc 0' 'out_has dashed' 'called "pct exec 100 --keep-env 0 -- echo dashed"'
 nx exec web-1 -- sh -c 'echo x 1>&2; exit 3'
                                check "exec: stderr passes through and a non-zero status survives it" all 'rc 3' 'err_has x'
 nx exec nope echo hi;          check "exec on a missing container -> exit 1, nothing run" \
@@ -289,13 +298,13 @@ check "--version, which is how CRI-O asks" all 'rc 0' 'out_has "nexcage version"
 # inside the container, where FOO=bar is an argument and not a flag.
 nx exec web-1 -- env FOO=bar
 check "an = after -- survives untouched" \
-  all 'rc 0' 'called "pct exec 100 -- env FOO=bar"'
+  all 'rc 0' 'called "pct exec 100 --keep-env 0 -- env FOO=bar"'
 
 # Nor does nexcage read its own flags there: --config used to make it load
 # the command's argument as its configuration.
 nx exec web-1 -- echo --config /nonexistent --runtime bogus --profile nope --root /x
 check "nexcage's flags after -- belong to the command, not to nexcage" \
-  all 'rc 0' 'called "pct exec 100 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
+  all 'rc 0' 'called "pct exec 100 --keep-env 0 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
 
 # `exec --process <file>` hands over an OCI process spec: an identity to become,
 # an environment, a terminal. `pct exec` takes a command and returns when it

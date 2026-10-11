@@ -429,11 +429,20 @@ untouched.
 stdin, stdout and stderr are connected straight to the process in the
 container; nexcage does not buffer the output.
 
-On the Proxmox LXC backend this runs `pct exec <vmid> -- <command>`, so the
-command has to exist in the container's image — an image without a shell has no
-`sh` for `exec` to call. A container that is not running is an error (exit 1),
-as is one that does not exist; `exec` without a command is a usage error
-(exit 2).
+On the Proxmox LXC backend this runs `pct exec <vmid> --keep-env 0 -- <command>`,
+so the command has to exist in the container's image — an image without a
+shell has no `sh` for `exec` to call. A container that is not running is an
+error (exit 1), as is one that does not exist; `exec` without a command is a
+usage error (exit 2).
+
+The command starts with LXC's clean environment there: `PATH` set to
+`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
+`container=lxc` and the container's own `lxc.environment`. The environment
+nexcage was run with does not reach it — `pct exec` would otherwise hand every
+variable of the caller's shell or CI job, tokens and keys included, to a binary
+from the image. `TERM` is not passed either, so a `--tty` session starts
+without it. To give the command a variable, say so on its command line:
+`nexcage exec web-1 -- env TERM=xterm FOO=1 <command>`.
 
 `--process`, `--detach`, `--user`, `--cwd`, `--console-socket` and
 `--pid-file` are refused there rather than ignored (exit 1): `pct exec` takes a

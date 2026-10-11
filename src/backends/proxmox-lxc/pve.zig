@@ -1360,9 +1360,16 @@ pub const PveClient = struct {
             return core.Error.OperationFailed;
         }
 
+        // --keep-env 0: lxc-attach --clear-env, so the command starts from
+        // LXC's default PATH, container=lxc and the container's own
+        // lxc.environment. pct's default is to keep the environment, which
+        // handed the command -- a binary from the image, running as the
+        // container's root -- every variable of the shell or job that ran
+        // nexcage: API tokens, cloud keys, SSH_AUTH_SOCK. Proxmox meant to
+        // change that default in PVE 9 and has not (pct.pm's FIXME).
         var args = std.ArrayListUnmanaged([]const u8){};
         defer args.deinit(self.allocator);
-        try args.appendSlice(self.allocator, &.{ "pct", "exec", vmid, "--" });
+        try args.appendSlice(self.allocator, &.{ "pct", "exec", vmid, "--keep-env", "0", "--" });
         try args.appendSlice(self.allocator, argv);
 
         var child = std.process.Child.init(args.items, self.allocator);

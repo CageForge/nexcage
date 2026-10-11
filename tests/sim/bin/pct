@@ -135,13 +135,36 @@ case "$cmd" in
     fi
     ;;
   exec)
-    vmid=$1; shift; [ "$1" = "--" ] && shift
+    vmid=$1; shift
+    # pct's options come before `--`. keep-env is a boolean that defaults to 1
+    # (pct.pm exec), which runs lxc-attach --keep-env: the command gets pct's
+    # own environment. 0 runs --clear-env: nothing but LXC's default PATH,
+    # container=lxc and the container's lxc.environment (lxc attach.c,
+    # lxc_attach_set_environment).
+    keep_env=1
+    while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+      case $1 in
+        --keep-env)
+          case ${2-} in
+            1|on|yes|true) keep_env=1 ;;
+            0|off|no|false) keep_env=0 ;;
+            *) echo "unable to parse boolean option" >&2; exit 255 ;;
+          esac
+          shift 2 ;;
+        *) echo "Unknown option: ${1#--}" >&2; exit 255 ;;
+      esac
+    done
+    [ "${1-}" = "--" ] && shift
     exists "$vmid" || missing "$vmid"
     [ "$(status_of "$vmid")" = running ] || { echo "CT $vmid not running" >&2; exit 255; }
+    attach=()
+    [ "$keep_env" = 0 ] && attach=(env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin container=lxc)
+    # The environment the command starts with, for the checks to read
+    "${attach[@]}" env > "$SIM/exec_env.$vmid"
     # Real pct runs the command in the container and exits with its status.
     # Running it here stands in for that, so the checks can see the output and
     # the status nexcage is supposed to pass through.
-    "$@"
+    "${attach[@]}" "$@"
     exit $?
     ;;
   config)
