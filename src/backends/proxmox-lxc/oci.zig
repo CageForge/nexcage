@@ -260,8 +260,9 @@ pub const OciProcessor = struct {
     pub const max_cpu_shares = 262144;
 
     /// The least memory Proxmox gives a container: 16 MiB, memory's minimum
-    /// in pve-container's PVE::LXC::Config
-    pub const min_memory = 16 * 1024 * 1024;
+    /// in pve-container's PVE::LXC::Config, and the least update and the
+    /// config's proxmox.limits may give it, in bytes
+    pub const min_memory = core.resources.min_memory_mib * 1024 * 1024;
 
     pub fn bundleResources(self: *const Self, cfg: *const bundle.OciBundleConfig) core.Error!Resources {
         var res = Resources{};
@@ -273,7 +274,7 @@ pub const OciProcessor = struct {
                 res.memory = @intCast(limit);
             } else if (limit > 0) {
                 // pct create refused it, once the rootfs had been packed
-                if (self.logger) |log| log.err("linux.resources.memory.limit {d} in the bundle is less than the 16 MiB Proxmox gives a container at least", .{limit}) catch {};
+                if (self.logger) |log| log.err("linux.resources.memory.limit {d} in the bundle is less than the {d} MiB Proxmox gives a container at least", .{ limit, core.resources.min_memory_mib }) catch {};
                 return core.Error.InvalidInput;
             } else if (limit < 0) {
                 if (self.logger) |log| log.err("linux.resources.memory.limit {d} in the bundle is not a limit: it is bytes, or -1 for none", .{limit}) catch {};
