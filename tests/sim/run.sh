@@ -177,9 +177,14 @@ check "--memory-swap is memory plus swap: below the default memory it is refused
 nx create --name opt-2 --pids-limit 100 "$TPL"
 check "a limit Proxmox has no setting for is refused by name, as update refuses it" \
   all 'rc 1' 'err_has "pids.limit has no Proxmox setting"' 'not_called_re "^pct create"'
-nx create --name opt-2 --memory 9223372036854775807 "$TPL"
+nx create --name opt-3 --memory 9223372036854775807 "$TPL"
 check "a memory limit past what Proxmox holds is a usage error naming it, not a trap" \
   all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct create"'
+nx create --name opt-4 --cpu-quota 50 "$TPL"
+check "a quota pct would say as cpulimit 0, no limit, is refused, as update refuses it" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct create"'
+nx create --name opt-5 --memory 0 "$TPL"
+check "and memory 0 is not made 16 MiB" all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct create"'
 nx create --name opt-2 --vlan 5000 "$TPL"
 check "--vlan outside 1-4094 is a usage error" all 'rc 2' 'err_has "VLAN tag"' 'not_called_re "^pct create"'
 nx create --name opt-2 --ip 10.0.0.5/24,hwaddr=02:00:00:00:00:01 "$TPL"
@@ -776,6 +781,27 @@ check "quota -1 lifts the limit: cpulimit 0" \
 nx update --cpu-share 1024 up-1
 check "shares become the cgroup v2 weight runc would set" \
   all 'rc 0' 'called "pct set 100 --cpuunits 39"'
+# A value pct cannot say faithfully is refused, not made a different limit:
+# cpulimit 0 is no limit at all, and 16 MiB is pct's least memory.
+nx update --cpu-quota 50 up-1
+check "a quota below a hundredth of a core is refused, not made cpulimit 0 (no limit)" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+nx update --cpu-quota 0 up-1
+check "so is a quota of 0" all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+nx update --cpu-quota 1000 up-1
+check "the kernel's 1 ms in pct's 100 ms period is still a limit: cpulimit 0.01" \
+  all 'rc 0' 'called "pct set 100 --cpulimit 0.01"'
+nx update --memory 0 up-1
+check "memory 0 is refused, not made a 16 MiB limit" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+nx update --memory 4M up-1
+check "so is a memory limit below pct's 16 MiB" \
+  all 'rc 2' 'err_has "16 MiB"' 'not_called_re "^pct set"'
+nx update --memory 16M up-1
+check "16 MiB itself is pct's least, and taken" all 'rc 0' 'called "pct set 100 --memory 16"'
+nx update --cpu-share 0 up-1
+check "shares 0 is refused, not made the lowest weight" \
+  all 'rc 2' 'err_has "cpu.shares"' 'not_called_re "^pct set"'
 nx update --pids-limit 100 up-1
 check "a limit Proxmox cannot express is refused by name, not dropped" \
   all 'rc 1' 'err_has "pids.limit has no Proxmox setting"' 'not_called_re "^pct set"'
@@ -832,6 +858,12 @@ check "and a fraction is not cut off into a limit" \
 resize '{"cpu":{"quota":9223372036854775807}}'
 check "a document's quota whose cores overflow is refused by name" \
   all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+resize '{"cpu":{"quota":500,"period":1000000}}'
+check "a document's quota below a hundredth of a core is refused, not made no limit" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+resize '{"memory":{"limit":0}}'
+check "and its memory 0 is not made a 16 MiB limit" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
 nx update --memory 1G no-such-up-$$
 check "update on a container that does not exist is an error" all 'rc 1' 'not_called_re "^pct set"'
 

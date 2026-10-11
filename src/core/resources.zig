@@ -36,7 +36,9 @@ pub fn mibCeil(bytes: i64) error{TooLarge}!i64 {
     return mib;
 }
 
-/// The least memory limit pct takes, in MiB.
+/// The least memory limit pct takes, in MiB. A smaller one is refused rather
+/// than raised to this: 16 MiB for a request of 0 or 4 MiB is a limit nobody
+/// asked for.
 pub const min_memory_mib = 16;
 
 /// cgroup v1 CPU shares to the cgroup v2 weight `pct set --cpuunits` takes on
@@ -53,12 +55,19 @@ pub fn sharesToWeight(shares: i64) i64 {
 /// quota over period as the cores `pct set --cpulimit` takes, formatted
 /// without trailing zeros: 150000/100000 is "1.5", 50000/100000 is "0.5", a
 /// quota of -1 is "0", which is pct's "no limit".
+///
+/// Because "0" is no limit, a quota of 0 or one below a hundredth of a core is
+/// an error rather than a number: printed, it was "0", and a request for a
+/// tight limit lifted the limit. A hundredth is also the least Proxmox can
+/// set, since it writes cpulimit times its 100 ms period to cpu.max and the
+/// kernel takes no quota under 1 ms.
 pub fn cpulimit(buf: []u8, quota: i64, period: i64) ![]const u8 {
     if (quota < 0) return "0";
     if (period <= 0) return error.InvalidPeriod;
     // Three decimals is more than pct keeps; enough not to lie by rounding.
     // A quota whose thousandths overflow is far more cores than pct takes.
     const milli = @divFloor(std.math.mul(i64, quota, 1000) catch return error.QuotaTooLarge, period);
+    if (milli < 10) return error.QuotaTooSmall;
     const whole = @divFloor(milli, 1000);
     var frac = @mod(milli, 1000);
     if (frac == 0) return std.fmt.bufPrint(buf, "{d}", .{whole});
@@ -167,6 +176,19 @@ test "quota over period as pct's cpulimit" {
     try std.testing.expectEqualStrings("2", try cpulimit(&buf, 200000, 100000));
     try std.testing.expectEqualStrings("0.25", try cpulimit(&buf, 25000, 100000));
     try std.testing.expectEqualStrings("0", try cpulimit(&buf, -1, 100000));
+}
+
+// pct's cpulimit 0 is no limit: a quota that printed as "0" lifted the limit
+// it asked to tighten.
+test "a quota below a hundredth of a core is refused, not made no limit" {
+    var buf: [32]u8 = undefined;
+    try std.testing.expectError(error.QuotaTooSmall, cpulimit(&buf, 0, 100000));
+    try std.testing.expectError(error.QuotaTooSmall, cpulimit(&buf, 50, 100000));
+    try std.testing.expectError(error.QuotaTooSmall, cpulimit(&buf, 999, 100000));
+    try std.testing.expectError(error.QuotaTooSmall, cpulimit(&buf, 9999, 1000000));
+    // The kernel's 1 ms in Proxmox's 100 ms period, however it is asked for
+    try std.testing.expectEqualStrings("0.01", try cpulimit(&buf, 1000, 100000));
+    try std.testing.expectEqualStrings("0.01", try cpulimit(&buf, 10000, 1000000));
 }
 
 // Values from an engine's document or the command line reach this arithmetic
