@@ -539,8 +539,9 @@ nexcage records the container as soon as `pct create` has made it. A create
 that fails after that point — the `pct set` that applies the bundle's mounts
 refused, the record not written — destroys the container it made, and that
 record, before it exits 1, as `runc create` does, so the same name can be
-created again. Should that `pct destroy` fail too, create says so, naming the
-CT, and keeps the record: `delete --force <name>`, which is how a container
+created again. It checks the VMID's hostname first, as `delete` does. Should
+that check or the `pct destroy` fail, create says so, naming the CT, and
+keeps the record: `delete --force <name>`, which is how a container
 engine cleans up a failed create, then destroys it. If nexcage itself is
 killed while `pct create` runs, pct gets `SIGTERM` and aborts the create;
 Proxmox removes what it had made.
@@ -590,7 +591,10 @@ nexcage run --name <name> <image>
 `create` made is destroyed again before `run` exits 1, as `runc run` does, so
 nothing is left under the name. `run` starts and destroys it by the VMID
 `create` made, never by the name, which another container may have taken in
-the meantime. `--node` is refused (exit 1): to
+the meantime; and as `stop` and `delete` do, it first checks that the VMID's
+hostname is still that name. A VMID that went to another container while
+`pct start` ran is left alone, and so is the record, which `delete --force
+<name>` then clears. `--node` is refused (exit 1): to
 make the container on another node, `create --node`, then `start`.
 `--console-socket` and `--pid-file` are refused as `create` refuses them, since
 `pct start` runs the container's init itself; and the crun backend does not
