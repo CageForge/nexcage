@@ -13,11 +13,6 @@ RUN git clone https://github.com/opencontainers/runtime-tools /runtime-tools \
     && make -C /runtime-tools runtimetest validation-executables
 
 FROM ${BASE}
-# The runtime-spec suite drives nexcage as root, privileged, in CI, and the
-# image is never published; .trivyignore.yaml accepts Trivy's DS-0002 here for
-# the same reason. Semgrep reads its exception from the line just above the
-# USER line.
-# nosemgrep: dockerfile.security.last-user-is-root.last-user-is-root -- root in this CI image is the point
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/*

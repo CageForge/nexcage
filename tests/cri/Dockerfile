@@ -7,11 +7,6 @@
 # mounted, because .dockerignore excludes tests/.
 ARG BASE=nexcage:ci
 FROM ${BASE}
-# containerd and the OCI runtime it drives run as root, privileged, in CI, and
-# the image is never published; .trivyignore.yaml accepts Trivy's DS-0002 here
-# for the same reason. Semgrep reads its exception from the line just above
-# the USER line.
-# nosemgrep: dockerfile.security.last-user-is-root.last-user-is-root -- root in this CI image is the point
 USER root
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

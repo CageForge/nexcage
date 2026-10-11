@@ -108,7 +108,9 @@ jobs:
           fi
 
       # ERROR (in newer rules HIGH and CRITICAL) fails the job; the rest is
-      # in the log.
+      # in the log. With no .semgrepignore at the root, Semgrep leaves out its
+      # built-in list, tests/ among them, so the test images and scripts are
+      # Trivy's and shellcheck's to check, not Semgrep's.
       - name: Semgrep
         run: |
           set -eu
