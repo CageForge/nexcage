@@ -742,11 +742,11 @@ The storage has to be one that can snapshot: zfs, lvm-thin, or a directory
 storage holding qcow2. A raw volume on a directory storage cannot, and the
 answer is then pct's refusal plus one line saying which storages can. The
 snapshot's name is Proxmox's: a letter, then letters, digits, `-` or `_`, 2 to
-40 characters, not `current`, and not one already used. nexcage checks the
-rule itself, for all four verbs, before it looks the container up or asks
-Proxmox anything, and anything else is a usage error (exit 2): for a container
-on another node the name goes into a pvesh path, and pvesh passes that path to
-the node's shell over ssh without quoting it.
+40 characters, not `current`, and not one already used. nexcage checks the rule
+itself, for `snapshot`, `rollback` and `delsnapshot`, before it looks the
+container up or asks Proxmox anything, and anything else is a usage error (exit
+2): for a container on another node the name goes into a pvesh path, and pvesh
+passes that path to the node's shell over ssh without quoting it.
 
 `rollback` of a running container stops it first: Proxmox kills it, as `pct
 rollback` does, and it stays stopped unless `--start`, which brings it up

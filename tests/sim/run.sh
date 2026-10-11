@@ -989,8 +989,10 @@ nx delsnapshot remote-1 s1
 check "delsnapshot on another node goes through that node's API" \
   all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200/snapshot/s1"' 'not_called_re "^pct delsnapshot"'
 # pvesh hands the path of a call for another node to that node's shell over
-# ssh, unquoted: a snapshot name there was a command run as root on titan.
-nx --runtime lxc rollback remote-1 'x;touch${IFS}/root/pwn;'
+# ssh, unquoted: a snapshot name there was a command run as root on titan. One
+# without '/', since a '/' splits the path and pvesh then finds no handler to
+# pass it to.
+nx --runtime lxc rollback remote-1 'x;touch${IFS}pwn;'
 check "a snapshot name that is a shell command never reaches another node's pvesh path" \
   all 'rc 2' 'err_has "not a snapshot name"' 'not_called_re "^pvesh create /nodes/.*/snapshot/"'
 nx --runtime lxc delsnapshot remote-1 '../../201/snapshot/s'
@@ -1176,10 +1178,13 @@ check "pull: a storage listing that fails is an error, not some template's volid
 nx pull docker.io/library/nginx:1.27 --node titan --storage 'x;id;'
 check "pull refuses a storage that is not a Proxmox storage ID, before pvesh" \
   all 'rc 2' 'err_has "storage name"' 'not_called_re "^pvesh"'
+# The first listing is this host's local: it is left out and named, and the
+# other storages are still shown.
 echo 1 > "$S/fail_list_in"
 nx images
 check "images leaves out a storage it cannot list, and says which" \
-  all 'rc 0' 'err_has "could not be listed"' 'out_has "TEMPLATE"'
+  all 'rc 0' "err_has 'storage local on $HOST could not be listed'" '! out_has "debian-13.tar.zst"' \
+      'out_has "local:vztmpl/alpine-3.22.tar.zst"' 'out_has "shared-rdma:vztmpl/redis_7.tar"'
 
 # Proxmox's pvesh exits 0 when its pull task fails, with skopeo's reason on
 # stdout (#309). A refused login is reported with that reason, and with where
