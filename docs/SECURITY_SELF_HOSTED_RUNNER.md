@@ -4,6 +4,19 @@
 **Status**: Best Practices Guide  
 **Target**: Public GitHub repositories with self-hosted runners
 
+## This repository
+
+What protects nexcage's own runners, and what an administrator still has to
+do, is in [CI_CD_SETUP.md](CI_CD_SETUP.md#self-hosted-runners-and-forks). In
+short: a pull request runs the workflow files of its own merge commit, so an
+`if:` in a workflow does not keep a fork off a runner -- the fork deletes the
+`if:`, or adds a workflow of its own. What does is GitHub's approval of every
+outside contributor's run (the repository's policy is
+`all_external_contributors`) and runners in an organization runner group
+restricted to selected workflows. The sections below were written as general
+guidance; where they show an `if:` as the defence, read them with that in
+mind.
+
 ## ⚠️ Security Considerations
 
 When running self-hosted runners for public repositories, you must protect against:
@@ -83,7 +96,10 @@ sudo iptables -A OUTPUT -m owner --uid-owner github-runner -d registry.npmjs.org
 
 #### Pull Request Security Settings
 
-**Critical**: Configure workflows to prevent secret access from forks:
+Configure workflows to prevent secret access from forks. This protects
+secrets in the workflows you wrote; it does not stop a pull request that
+brings its own workflow file (see [Blocking fork PRs from a self-hosted
+runner](#blocking-fork-prs-from-a-self-hosted-runner)):
 
 ```yaml
 # .github/workflows/security.yml example
@@ -115,25 +131,35 @@ jobs:
         # Only available if explicitly configured (NOT RECOMMENDED)
 ```
 
-#### Blocking Fork PRs from Self-Hosted Runner
+#### Blocking fork PRs from a self-hosted runner
+
+A job-level `if:` such as
 
 ```yaml
 jobs:
   build:
     runs-on: [self-hosted, proxmox]
-    # Only run on PRs from same repository
-    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
-    
-    steps:
-      - name: Verify PR source
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
-              echo "❌ Blocking PR from fork for security"
-              exit 1
-            fi
-          fi
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 ```
+
+keeps *this* workflow from running a fork's code on the runner. It does not
+keep the fork off the runner: for `pull_request`, GitHub runs the workflow
+files of the pull request's merge commit, so the fork can remove the `if:` or
+add a workflow with `runs-on: [self-hosted, proxmox]` of its own. A step that
+checks the source and exits is no better, for the same reason.
+
+What does keep a fork's code off the runner is not in the repository:
+
+- **Settings > Actions > General > Approval for running fork pull request
+  workflows**: "Require approval for all external contributors". The default,
+  first-time contributors only, stops asking after one merged pull request.
+  Whoever approves reads the pull request's `.github/` changes first.
+- **Runner groups restricted to selected workflows** (an organization
+  feature): the runner serves only, say,
+  `org/repo/.github/workflows/e2e.yml@refs/heads/main`. A workflow a pull
+  request adds or edits is not that one, so its jobs never get the runner.
+- **Ephemeral runners** (`config.sh --ephemeral`, the VM re-created per job),
+  so a job cannot leave something behind for the next one.
 
 ### 5. Secrets Management
 
@@ -246,23 +272,13 @@ permissions:
   # NO secrets access
 ```
 
-### 10. Pull Request Approval Workflow
+### 10. Pull Request Approval
 
-For maximum security, require manual approval before running workflows on self-hosted runner:
-
-```yaml
-jobs:
-  build:
-    runs-on: [self-hosted, proxmox]
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    
-    steps:
-      - name: Require approval for fork PRs
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-        run: |
-          echo "::error::PRs from forks cannot run on self-hosted runner for security"
-          exit 1
-```
+For maximum security, require manual approval before workflows run on a
+self-hosted runner. That is a repository setting, not workflow YAML: Settings
+> Actions > General > "Require approval for all external contributors". A
+step in the workflow that fails for forks protects nothing, because a fork's
+pull request runs its own copy of the workflow.
 
 ## 🔒 Recommended Security Checklist
 
@@ -274,7 +290,9 @@ jobs:
 - [ ] Audit logging enabled
 
 ### Workflow Configuration
-- [ ] PRs from forks are blocked or run on GitHub-hosted runners only
+- [ ] Fork pull requests need approval for every outside contributor (repository setting)
+- [ ] Self-hosted runners are in a runner group restricted to selected workflows, not registered to the repository
+- [ ] No repository secret that no workflow uses; credentials a job needs live in an environment with reviewers
 - [ ] Secrets are NOT accessible in PR workflows
 - [ ] Minimal permissions in workflow files
 - [ ] Code signing verification enabled (optional)
@@ -348,7 +366,9 @@ If you suspect a security breach:
 
 1. **Never use `pull_request_target`** with self-hosted runners for public repos
 2. **Never expose secrets** in PR workflows from forks
-3. **Always verify PR source** before allowing execution
+3. **Always verify PR source** before allowing execution -- in the
+   approval setting and the runner group, not in an `if:` the pull request
+   can edit
 4. **Consider using GitHub-hosted runners** for fork PRs
 5. **Use ephemeral runners** when possible (destroy after each run)
 
