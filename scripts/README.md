@@ -14,5 +14,5 @@
 | `setup_secure_runner.sh` | `docs/SECURITY_SELF_HOSTED_RUNNER.md` | Install a hardened self-hosted GitHub Actions runner |
 | `fix_runner_service.sh` | run by hand on the runner | Repair the runner's systemd service |
 | `manage_github_runner.sh` | run by hand | Start, stop or restart the runner on the Proxmox VE host `proxmox-runner` lived on, over SSH; `remove` deregisters it through the API (gh, as a repository admin) and deletes its service and directory |
-| `check_runner_exposure.sh` | run by hand, gh as an organization owner with `admin:org` | Check the GitHub settings that keep pull requests' code off the self-hosted runners, the runner groups among them, and stale secrets out of reach (docs/CI_CD_SETUP.md) |
+| `check_runner_exposure.sh` | run by hand, gh as an organization owner with `admin:org` | Check the GitHub settings that keep pull requests' code off the self-hosted runners, the runner groups among them, stale secrets out of reach and the workflow token read-only by default (docs/CI_CD_SETUP.md) |
 | `register_e2e_runner.sh` | run by hand on the E2E node (piped over ssh, token on stdin) | Register the GitHub Actions runner with labels `proxmox,pve9,nexcage-e2e` and install it as a service with `svc.sh` |
