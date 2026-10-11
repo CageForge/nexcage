@@ -375,9 +375,11 @@ nexcage kill [-s|--signal SIGNAL] [--all] <name>
 Sends `SIGNAL` to the container's init process from the host, as an OCI runtime
 does: nexcage reads the init's host PID from `pct status <vmid> --verbose` and
 calls `kill(2)`. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
-`SIGKILL`, `usr1`), or a number from 1 to 64; the default is `SIGTERM`. An
-unknown signal is a usage error (exit 2); a container that is not running is an
-error (exit 1).
+`SIGKILL`, `usr1`), or a number from 1 to 64 in decimal digits and nothing else
+(`1_5` is refused, as runc refuses it); the default is `SIGTERM`. On
+`--runtime crun` libcrun is given the number nexcage read, not the text, so
+both backends send the same signal for the same input. An unknown signal is a
+usage error (exit 2); a container that is not running is an error (exit 1).
 
 `--all` means every process in the container, not only its init. On
 `--runtime crun` it goes to `libcrun_container_killall`, which walks the

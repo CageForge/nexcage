@@ -332,7 +332,16 @@ pub const CrunDriver = struct {
         const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
         defer self.allocator.free(id_c);
 
-        const signal_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{signal}, 0);
+        // libcrun parses the text again, with rules of its own: names only in
+        // upper case, and numbers with strtol, which stops at the first
+        // character that is not a digit. So it is given the number nexcage
+        // validated, in decimal, which both read the same way; a name in any
+        // case, as the help promises, reaches it as that number.
+        const signo = core.signals.parse(signal) orelse {
+            if (self.logger) |log| log.err("unknown signal '{s}'; use a name such as TERM or SIGKILL, or a number from 1 to {d}", .{ signal, core.signals.max }) catch {};
+            return core.Error.InvalidInput;
+        };
+        const signal_c = try std.fmt.allocPrintSentinel(self.allocator, "{d}", .{signo}, 0);
         defer self.allocator.free(signal_c);
 
         // --all is libcrun_container_killall: every process in the cgroup
