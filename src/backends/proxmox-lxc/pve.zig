@@ -268,7 +268,16 @@ pub const PveClient = struct {
             // to a '/' goes). A name it would change is refused rather than
             // guessed at, because the volid has to be known exactly.
             if (!isPlainFileName(f)) {
-                if (self.logger) |log| log.err("--filename '{s}': letters, digits, '.', '_' and '-' only, not starting with '.' or '-', at most {d} characters; Proxmox adds .tar", .{ f, max_pull_name }) catch {};
+                if (self.logger) |log| log.err("--filename '{s}': letters, digits, '.', '_' and '-' only, not starting with '.' or '-', without '..', at most {d} characters; Proxmox adds .tar", .{ f, max_pull_name }) catch {};
+                return core.Error.InvalidInput;
+            }
+            // `create` takes the file under a reference's derived name for
+            // that reference, so a name of that shape is not given by hand:
+            // `pull ghcr.io/someone/redis:7 --filename <the name of
+            // docker.io/library/redis:7>` made `create docker.io/library/redis:7`
+            // start ghcr.io's image.
+            if (hasDerivedShape(f)) {
+                if (self.logger) |log| log.err("--filename '{s}' ends in '-' and 16 hex digits, the shape of the name nexcage gives a pull for its reference; leave --filename out to get that name, or choose another", .{f}) catch {};
                 return core.Error.InvalidInput;
             }
             return std.fmt.allocPrint(allocator, "{s}:vztmpl/{s}.tar", .{ storage, f });
@@ -1616,6 +1625,16 @@ fn pulledTemplateName(allocator: std.mem.Allocator, reference: []const u8) ![]u8
     return name;
 }
 
+/// Whether a file name ends the way pulledTemplateName ends one: '-' and 16
+/// lower-case hex digits.
+fn hasDerivedShape(name: []const u8) bool {
+    if (name.len < 17 or name[name.len - 17] != '-') return false;
+    for (name[name.len - 16 ..]) |c| {
+        if (!(std.ascii.isDigit(c) or (c >= 'a' and c <= 'f'))) return false;
+    }
+    return true;
+}
+
 /// What Proxmox keeps of a template's file name: normalize_content_filename
 /// turns every other character into '_'.
 fn isFileNameChar(c: u8) bool {
@@ -1804,6 +1823,15 @@ test "a --filename is one Proxmox leaves as it is" {
     try std.testing.expect(!isPlainFileName("a..b"));
     try std.testing.expect(isPlainFileName("x" ** max_pull_name));
     try std.testing.expect(!isPlainFileName("x" ** (max_pull_name + 1)));
+
+    // The shape of a derived name, which a --filename may not have
+    try std.testing.expect(hasDerivedShape("docker.io_library_redis_7-a0ed741ac6ba1c57"));
+    try std.testing.expect(hasDerivedShape("-0123456789abcdef"));
+    try std.testing.expect(!hasDerivedShape("redis-7"));
+    try std.testing.expect(!hasDerivedShape("app-0123456789abcde"));
+    try std.testing.expect(!hasDerivedShape("app-0123456789ABCDEF"));
+    try std.testing.expect(!hasDerivedShape("app_0123456789abcdef"));
+    try std.testing.expect(!hasDerivedShape("app-0123456789abcdefg"));
 }
 
 /// Why a registry pull failed, from what pvesh printed. A pull task that

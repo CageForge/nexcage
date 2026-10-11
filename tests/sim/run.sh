@@ -1154,6 +1154,14 @@ check "and so on a node whose name is as long as a hostname can be" \
 nx pull docker.io/library/nginx:1.27 --filename "$(printf 'x%.0s' {1..128})"
 check "pull --filename too long for a task's log on every node is refused before pvesh" \
   all 'rc 2' 'err_has "at most 127"' 'not_called_re "^pvesh create"'
+# `create` takes the file under a reference's derived name for that reference,
+# so a pull of another one must not be written there by name.
+nx pull ghcr.io/someone/redis:7 --filename "$(pulled docker.io/library/redis:7)"
+check "pull --filename with the name of another reference's pull is refused before pvesh" \
+  all 'rc 2' 'err_has "16 hex digits"' 'not_called_re "^pvesh create"'
+nx create --name redis-2 docker.io/library/redis:7
+check "and create of that reference pulls it, not ghcr.io's image" \
+  all 'rc 0' 'called_re "^pvesh create .*oci-registry-pull --reference docker.io/library/redis:7 --filename "'
 # Another pull's file landing meanwhile is not this one, and a listing that
 # fails is an error: the listing before the pull failing once used to make the
 # first template on the storage the answer.

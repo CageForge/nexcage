@@ -585,8 +585,11 @@ pvesh passes the path to that node's shell.
 takes letters, digits, `.`, `_` and `-`, not first a `.` or `-` and without
 `..`, so that Proxmox keeps it as it is and `rmi` takes it, and at most 127
 characters, which leaves room for the task's log; anything else is a usage error
-(exit 2). A file of that name already on the storage is an error (exit 1) rather
-than an answer: the name says nothing about which image it holds.
+(exit 2). So is a name ending in `-` and 16 lower-case hex digits, the shape of
+a name nexcage derives: `create` would take that file for the reference the name
+was derived from, whatever image was pulled into it. A file of that name already
+on the storage is an error (exit 1) rather than an answer: the name says nothing
+about which image it holds.
 
 Whoever can write templates to the storage (`Datastore.AllocateTemplate`) can
 put a file under any name, this one included, and Proxmox's upload writes over
