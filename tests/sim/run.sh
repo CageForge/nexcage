@@ -113,6 +113,25 @@ nx create --name web-5 "$TPL"
 check "pct create failing -> exit 1, no state dir left" all 'rc 1' '[ ! -e "$S/run/nexcage/web-5" ]'
 rm -f "$S/fail_create"
 
+# Nor does a create carry on once its caller is gone. nexcage installs no
+# signal handlers, and a wrapper that kills it -- a timeout in Python or Go, a
+# unit with KillMode=process -- kills it alone: pct used to finish the
+# container by itself, with no state, under a name a retry was then refused.
+# Its children get SIGTERM when it dies now; fake pct models what real pct
+# does with that, and with a KILL, which would not stop the create.
+echo 2 > "$S/slow_create"
+before=$(wc -l < "$S/calls")
+nexcage_ns create --name slow-1 "$TPL" > "$S/out" 2> "$S/err" &
+bg=$!
+for _ in $(seq 1 100); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
+kill -KILL "$(cat "$S/create_caller")"
+RC=0; wait "$bg" || RC=$?
+sleep 3
+tail -n +"$((before + 1))" "$S/calls" > "$S/calls.last"; LAST="nexcage create --name slow-1 $TPL, killed during pct create"
+check "nexcage killed during pct create: the create does not carry on without it" \
+  all 'rc 137' 'called_re "^pct create [0-9]+ .*--hostname slow-1 "' '! grep -q " slow-1$" "$S/db"'
+rm -f "$S/slow_create" "$S/create_caller"
+
 nx create --name nginx-1 docker.io/library/nginx:latest
 check "registry image on PVE 8.4 -> exit 1 with a version message, nothing pulled" \
   all 'rc 1' 'err_has "9.1"' 'not_called_re "^pvesh create"' 'not_called_re "^pct create"'
@@ -446,6 +465,18 @@ check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
 check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
 check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_re "^pct set [0-9]+ --features nesting=1,keyctl=1$"
+# A step after pct create that fails must not leave the container behind: it
+# had no state.json and none of the bundle's features, and a retry under the
+# same name was refused with "already exists".
+echo "CT is locked (backup)" > "$S/fail_set"
+nx create --name rb-1 /tmp/nexcage-bundles/b1
+rb_vmid=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "a failure after pct create destroys the container it made, and the packed rootfs" \
+  all 'rc 1' '[ -n "$rb_vmid" ]' 'called "pct destroy $rb_vmid"' '! grep -q " rb-1$" "$S/db"' \
+      '[ ! -e "$S/run/nexcage/rb-1" ]' '[ -z "$(ls -A "$S/cache")" ]'
+rm -f "$S/fail_set"
+nx create --name rb-1 /tmp/nexcage-bundles/b1
+check "and the same name can be created again" all 'rc 0' 'grep -q " rb-1$" "$S/db"'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'

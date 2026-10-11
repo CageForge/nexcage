@@ -44,3 +44,13 @@ flowchart LR
 | snapshots | `pvesh get /nodes/<node>/lxc/<vmid>/snapshot`, for a container here as well as elsewhere |
 | pull, images, rmi | `pvesh create /nodes/<node>/storage/<storage>/oci-registry-pull --reference <ref>`; `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` per template storage; `pvesh delete /nodes/<node>/storage/<storage>/content/<volid>` |
 | list, name to VMID | `pvesh get /cluster/resources --type vm` for every node, merged with `pct list` for this one (the cluster view is a cache) |
+
+A `create` step after `pct create` that fails — `pct set --features`
+refused, the state not written — destroys the container it made
+(`pct destroy <vmid>`, or the node's API with `--node`) and the state written
+for it, as runc and crun do, so the name is free for a retry. Every tool runs
+as a child that gets `SIGTERM` when nexcage dies (`PR_SET_PDEATHSIG`): a
+nexcage killed on its own, by a timeout in its caller, no longer leaves
+`pct create` finishing a container nobody asked for any more. TERM, not KILL,
+because `pct create` passes a TERM on to its task worker, which aborts and
+removes what it had made; a KILL stops only pct, and its worker carries on.

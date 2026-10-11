@@ -476,6 +476,14 @@ pub const ProxmoxLxcDriver = struct {
             return self.pve_client.mapPctError(result.stderr);
         }
 
+        // From here on there is a container. A step below that fails must not
+        // leave it behind: it would have no state.json, perhaps half its mp
+        // lines and none of its features, and its name would be taken -- a
+        // retry was refused with "already exists". runc and crun remove what
+        // a failed create made, and so does this. The archive packed from a
+        // bundle is removed by the defer above, after this has run.
+        errdefer self.undoCreate(config.name, vmid, target_node);
+
         // 7. Post-creation setup
         if (oci_bundle_path) |bp| {
             try self.applyMountsToLxcConfig(vmid, bp);
@@ -502,6 +510,27 @@ pub const ProxmoxLxcDriver = struct {
     fn hasLimit(limits: []const core.types.ResourceUpdate, section: []const u8, name: []const u8) bool {
         for (limits) |v| if (std.mem.eql(u8, v.section, section) and std.mem.eql(u8, v.name, name)) return true;
         return false;
+    }
+
+    /// Destroy a container that create made and then failed to finish, and
+    /// the state it had written for it. Create is already failing with the
+    /// error that matters, so this only reports what it cannot undo -- by
+    /// VMID, the one name a person can then find the container by.
+    fn undoCreate(self: *Self, name: []const u8, vmid: []const u8, node: ?[]const u8) void {
+        if (self.logger) |log| log.warn("create of {s} failed after pct create; destroying vmid {s}", .{ name, vmid }) catch {};
+        self.pve_client.delete(vmid, node) catch |err| {
+            if (self.logger) |log| log.err("vmid {s} ({s}) is left behind: destroying it failed ({s})", .{ vmid, name, @errorName(err) }) catch {};
+        };
+
+        // Only the files create writes, then the directory if that empties
+        // it: anything else there is not create's to remove. A file that is
+        // not there was never written.
+        const dir_path = std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ core.state_root.get(), name }) catch return;
+        defer self.allocator.free(dir_path);
+        var dir = std.fs.cwd().openDir(dir_path, .{}) catch return;
+        for ([_][]const u8{ "state.json", "runtime-metadata.json" }) |file| dir.deleteFile(file) catch {};
+        dir.close();
+        std.fs.cwd().deleteDir(dir_path) catch {};
     }
 
     fn persistRuntimeMetadata(

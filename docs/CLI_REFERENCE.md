@@ -291,6 +291,12 @@ template and deletes the archive. The rootfs is used as it is, so it must boot
 as a system container: an image without an init will not start. Mounts are
 added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
 
+A create that fails after `pct create` — a `pct set` refused, the state not
+written — destroys the container it made before it exits 1, as `runc create`
+does, so the same name can be created again. If nexcage itself is killed while
+`pct create` runs, pct gets `SIGTERM` and aborts the create; Proxmox removes
+what it had made.
+
 #### pct options
 
 What `pct create` is usually given, on the Proxmox LXC backend. Each maps onto
