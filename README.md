@@ -163,8 +163,11 @@ runtime spec and not a configuration.
 Whoever can change the file decides whether containers are privileged and what
 an isolation profile requires, so nexcage refuses one that is not owned by root
 (or by the user running nexcage), that group or others can write, or that sits
-in a directory they can write without the sticky bit. The message names the
-file and the reason; `chmod go-w` on the file or its directory puts it right.
+in a directory they can write without the sticky bit, or in one owned by
+anyone else. The message names the file and the reason; `chmod go-w` on the
+file or its directory puts it right. The file has to be a regular file, too:
+`--config <(...)` and `--config /dev/stdin` fed by a pipe, which 0.17.0 read,
+are refused.
 Ownership is judged by the uids nexcage's user namespace sees: under rootless
 podman a file host root owns shows as uid 65534, and is refused.
 

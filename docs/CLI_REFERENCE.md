@@ -22,7 +22,7 @@ inside the container keeps its `=`.
 | `--debug` | Log level `debug`, plus startup and system information |
 | `--log-level <level>` | `trace`, `debug`, `info` (default), `warn`, `error`, `fatal` |
 | `--log-file <path>` | Also write to `<path>` (and to stderr) a startup line naming the version, a line when the command starts, and two when it succeeds; with `--debug`, system information and the command's environment (debug mode, log file, timestamp) too. The command's own log lines, including the ones that explain a failure, are not written there: they go to stderr, or to `--log`. The file is opened as `--log`'s is: appended to, and not opened, with a warning, when it is a symlink or a FIFO that nothing reads |
-| `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1), and so is one that is not owned by root or by the user running nexcage, or that group or others can write, or whose directory they can write (unless it has the sticky bit, as `/tmp` does) |
+| `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1), and so is one that is not a regular file, or that someone other than root or the user running nexcage could have written, as described below the table |
 | `--log <path>` | The runtime's own log goes to `<path>` instead of stderr, as an OCI runtime's does. A container engine reads it back to report why the runtime failed. The file is appended to, so calls that share it keep each other's lines; if its last component is a symlink, or it is a FIFO that nothing reads, it is not opened and the log goes to stderr with a warning |
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
 | `--systemd-cgroup` | Accepted anywhere, so that an engine sending it is not refused. Only after `create`, on the crun backend, does it reach libcrun's context; anywhere else it has no effect |
@@ -50,6 +50,22 @@ A file that declares `ociVersion` is not a configuration but an OCI runtime
 spec, the `config.json` a bundle holds. Such a file is skipped in the search,
 whatever its size, and refused when named with `--config`. An error names the
 file that has it, and `health` names the file read and any spec it skipped.
+
+A configuration file, named with `--config` or found in `/etc/nexcage`, is
+refused with exit 1, and a message naming the file and the reason, when:
+
+- it is not a regular file. nexcage reads a configuration only from a regular
+  file, so that a FIFO left in its place cannot hold every call until
+  something writes to it; `--config <(...)`, and `--config /dev/stdin` fed by
+  a pipe, both of which 0.17.0 read, are refused. Write the configuration to
+  a file instead;
+- it is not owned by root or by the user running nexcage, or group or others
+  can write it;
+- its directory is owned by anyone but root or that user, or group or others
+  can write it without the sticky bit (`/tmp` has it): whoever can write the
+  directory can put another file in the file's place. `sudo nexcage --config
+  ~/nexcage/config.json` is refused for this when `~/nexcage` is yours and
+  not root's, even with a root-owned file in it.
 
 Who owns a configuration file is judged by the uids nexcage's user namespace
 sees. Rootless podman runs the runtime in a namespace of its own, where a file
