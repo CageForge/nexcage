@@ -245,6 +245,9 @@ caller's timeout, say — is cut short rather than finishing behind its back. A
 `pct create` cut short is removed by Proxmox, but `stop`, `delete` and `pull`
 stop where they were, and a `pct destroy` cut short can leave a container half
 removed. Run the command again (`delete --force` for a delete) to finish it.
+Work on another node — `create --node`, or any command on a container that
+lives there — is not cut short: `pvesh` hands it over ssh to that node's
+`pvesh`, which a `SIGTERM` here does not reach.
 
 ## Commands
 

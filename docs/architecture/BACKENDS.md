@@ -54,3 +54,6 @@ nexcage killed on its own, by a timeout in its caller, no longer leaves
 `pct create` finishing a container nobody asked for any more. TERM, not KILL,
 because `pct create` passes a TERM on to its task worker, which aborts and
 removes what it had made; a KILL stops only pct, and its worker carries on.
+Work on another node is not bound to nexcage's life: `pvesh` proxies a call
+for another node over ssh to that node's `pvesh` (pvesh.pm, `proxy_handler`),
+and the TERM reaches only the local one.
