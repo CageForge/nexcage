@@ -131,12 +131,12 @@ case "$cmd" in
       stat -c %a "$tpl" "$(dirname "$tpl")" | paste -sd' ' > "$SIM/tplmode.$vmid"
       tar --zstd -tvf "$tpl" > "$SIM/tarlist.$vmid" 2>&1 \
         || { echo "unable to create CT $vmid - broken archive '$tpl'" >&2; exit 255; }
-      # hang_create holds seconds to stand still, as an unpack does, so a
-      # check can signal nexcage meanwhile; hang_create.pid gets nexcage's PID
+      # fail_hang holds seconds to stand still, as an unpack does, so a
+      # check can signal nexcage meanwhile; fail_hang.pid gets nexcage's PID
       # and this one's
-      if [ -e "$SIM/hang_create" ]; then
-        echo "$PPID $$" > "$SIM/hang_create.pid"
-        exec sleep "$(cat "$SIM/hang_create")"
+      if [ -e "$SIM/fail_hang" ]; then
+        echo "$PPID $$" > "$SIM/fail_hang.pid"
+        exec sleep "$(cat "$SIM/fail_hang")"
       fi
     elif ! grep -qxF -- "$tpl" "$SIM/templates" 2>/dev/null; then
       echo "unable to create CT $vmid - volume '$tpl' does not exist" >&2; exit 255

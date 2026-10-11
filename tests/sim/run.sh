@@ -462,6 +462,10 @@ check "bundle: the archive is 0600, in a 0700 directory, while pct create reads 
 check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
 check "bundle: archive and its directory removed after pct create" all '[ -z "$(ls -A "$S/vartmp")" ]' '[ -z "$(ls -A "$S/cache")" ]'
+# A user namespace in the bundle turned on nesting=1,keyctl=1, and any other
+# namespace list keyctl=1: Proxmox's AppArmor profile loosened and its keyctl
+# filter lifted because a bundle asked for its own namespaces.
+check "bundle: a user namespace turns on no Proxmox features" not_called_re "--features"
 echo "unable to create CT - no space left" > "$S/fail_create"
 nx create --name bundle-f /tmp/nexcage-bundles/b1
 rm -f "$S/fail_create"
@@ -480,20 +484,16 @@ check "bundle: a sticky TMPDIR, as /var/tmp is -> used, and left empty" \
 rm -rf "$S/opentmp"
 # A signal ends nexcage without running its defers. SIGTERM goes to nexcage
 # itself -- the fake pct's parent -- while pct create stands still.
-echo 30 > "$S/hang_create"; rm -f "$S/hang_create.pid"
+echo 30 > "$S/fail_hang"; rm -f "$S/fail_hang.pid"
 nexcage_ns create --name bundle-sig /tmp/nexcage-bundles/b1 > "$S/out" 2> "$S/err" & bg=$!
 nexcage_pid=""; pct_pid=""
-if eventually '[ -s "$S/hang_create.pid" ]'; then read -r nexcage_pid pct_pid < "$S/hang_create.pid"; fi
+if eventually '[ -s "$S/fail_hang.pid" ]'; then read -r nexcage_pid pct_pid < "$S/fail_hang.pid"; fi
 [ -n "$nexcage_pid" ] && kill -TERM "$nexcage_pid"
 RC=0; wait "$bg" || RC=$?
 [ -n "$pct_pid" ] && kill "$pct_pid" 2>/dev/null
-rm -f "$S/hang_create" "$S/hang_create.pid"; LAST="nexcage create --name bundle-sig (SIGTERM during pct create)"
+rm -f "$S/fail_hang" "$S/fail_hang.pid"; LAST="nexcage create --name bundle-sig (SIGTERM during pct create)"
 check "bundle: SIGTERM during pct create removes the archive, and nexcage still dies of it" \
   all 'rc 143' '[ -z "$(ls -A "$S/vartmp")" ]'
-# A user namespace in the bundle turned on nesting=1,keyctl=1, and any other
-# namespace list keyctl=1: Proxmox's AppArmor profile loosened and its keyctl
-# filter lifted because a bundle asked for its own namespaces.
-check "bundle: a user namespace turns on no Proxmox features" not_called_re "--features"
 mkdir -p "$S/bundles/ns-pid"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/ns-pid/"
 printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"linux":{"namespaces":[{"type":"pid"},{"type":"mount"}]}}' > "$S/bundles/ns-pid/config.json"
 nx create --name ns-pid /tmp/nexcage-bundles/ns-pid
