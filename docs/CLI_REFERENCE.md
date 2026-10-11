@@ -14,16 +14,16 @@ These work before or after the command, and in either spelling: `--root <dir>`
 and `--root=<dir>` mean the same thing. Both are needed because an engine picks
 one without asking — containerd sends the two-word form, CRI-O sends `--root=`
 for `create` (through conmon) and the two-word form for everything after it.
-The split stops at a bare `--`, so an argument to the command `exec` runs
-inside the container keeps its `=`.
+For `exec`, they work up to the command it runs: that command's words are its
+own, and an argument there keeps its `=`.
 
 | Option | Effect |
 |---|---|
 | `--debug` | Log level `debug`, plus startup and system information |
 | `--log-level <level>` | `trace`, `debug`, `info` (default), `warn`, `error`, `fatal` |
-| `--log-file <path>` | Also write to `<path>` (and to stderr) a startup line naming the version, a line when the command starts, and two when it succeeds; with `--debug`, system information and the command's environment (debug mode, log file, timestamp) too. The command's own log lines, including the ones that explain a failure, are not written there: they go to stderr, or to `--log` |
-| `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1) |
-| `--log <path>` | The runtime's own log goes to `<path>` instead of stderr, as an OCI runtime's does. A container engine reads it back to report why the runtime failed |
+| `--log-file <path>` | Also write to `<path>` (and to stderr) a startup line naming the version, a line when the command starts, and two when it succeeds; with `--debug`, system information and the command's environment (debug mode, log file, timestamp) too. The command's own log lines, including the ones that explain a failure, are not written there: they go to stderr, or to `--log`. The file is opened as `--log`'s is: appended to, and not opened, with a warning, when it is a symlink or a FIFO that nothing reads |
+| `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1), and so is a directory, or a file that someone other than root or the user running nexcage could have written, as described below the table. A pipe is read too, once: see below |
+| `--log <path>` | The runtime's own log goes to `<path>` instead of stderr, as an OCI runtime's does. A container engine reads it back to report why the runtime failed. The file is appended to, so calls that share it keep each other's lines; if its last component is a symlink, or it is a FIFO that nothing reads, it is not opened and the log goes to stderr with a warning |
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
 | `--systemd-cgroup` | `create` on the crun backend has systemd place the container, as crun and runc do: libcrun asks systemd, over D-Bus, for a scope under the slice the bundle's `cgroupsPath` names (`<slice>:<prefix>:<name>`). containerd sends it for a handler with `SystemdCgroup = true`; CRI-O and podman send it whenever their cgroup manager is systemd, their default. It has to match the kubelet's cgroup driver: without it, a `cgroupsPath` in that form becomes a cgroup of that very name at the root of the hierarchy, outside the pod's. Where systemd cannot be reached, `create` fails with libcrun's `cannot open sd-bus`, as crun's does. Later commands follow the manager the container was created with; `delete --force` under it leaves `/sys/fs/cgroup/<id>` alone (see [delete](#delete)). On the Proxmox LXC backend it changes nothing: Proxmox puts the container's cgroup at `/lxc/<vmid>` |
 | `--rootless <value>` | Accepted and ignored, as crun does. go-runc sends `--rootless=<true\|false>` when its caller sets one, and to runc it means "ignore cgroup permission errors"; libcrun decides that for itself, and as root it ignores none |
@@ -39,15 +39,59 @@ container differently from what was asked.
 Logs go to stderr. stdout carries only command output (`list`, `state`,
 help text).
 
-Without `--config`, configuration comes from the first of `./config.json`,
-`/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json` that exists; see the
-README for the keys.
+A log message often carries text nexcage did not write, such as what `pct`
+printed, so in a text log line and in the error echoed to stderr each control
+character but tab is written as an escape: `\n`, `\r`, or `\xNN` for each
+byte, the C1 controls U+0080 to U+009F and the line separators U+2028 and
+U+2029 included, and so is any byte that is not valid UTF-8. A backslash is
+written `\\`. One message is always one line, and nothing in it acts on the
+terminal. A `json` line carries the message as a JSON string, with those
+characters escaped there too (`\n`, `\u009b`); a byte that is not valid
+UTF-8 is left as it is.
 
-A file that declares `ociVersion` is not one of them: an OCI bundle holds a
-`config.json` that is a runtime spec, and a container engine runs the runtime
-from the bundle directory, so it would otherwise replace the configuration —
-routing rules included — without saying so. Such a file is skipped in the
-search path, and refused when named with `--config`.
+Without `--config`, configuration comes from the first of
+`/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json` that exists; see the
+README for the keys. Nothing in the working directory is read: up to 0.17.0
+`./config.json` came first, and podman runs the runtime in its caller's
+directory, so a `config.json` another user left in `/tmp` became root's
+configuration — its profiles, `unprivileged: false`, a `log_file` of their
+choosing. Name such a file with `--config` instead.
+
+A file that declares `ociVersion` is not a configuration but an OCI runtime
+spec, the `config.json` a bundle holds. Such a file is skipped in the search,
+whatever its size, and refused when named with `--config`. An error names the
+file that has it, and `health` names the file read and any spec it skipped.
+
+A configuration file, named with `--config` or found in `/etc/nexcage`, is
+refused with exit 1, and a message naming the file and the reason, when:
+
+- it is not owned by root or by the user running nexcage, or group or others
+  can write it;
+- its directory is owned by anyone but root or that user, or group or others
+  can write it without the sticky bit (`/tmp` has it): whoever can write the
+  directory can put another file in the file's place. `sudo nexcage --config
+  ~/nexcage/config.json` is refused for this when `~/nexcage` is yours and
+  not root's, even with a root-owned file in it;
+- it is a symlink, and the directory holding the file it leads to is one of
+  those. A symlink is followed, and both directories count: the symlink's,
+  where it can be replaced, and the file's, however many links lie between;
+- it is a directory.
+
+A pipe is read as 0.17.0 read it: `--config <(...)`, or `--config /dev/stdin`
+fed by one. nexcage reads it once, up to the 1 MiB a configuration may hold,
+waiting for what the writer sends, and looks for `ociVersion` in what it read.
+A pipe is its maker's: `... | sudo nexcage --config /dev/stdin` hands root a
+pipe of the user's, which is refused as any file of theirs is. A FIFO in a
+file's place is read the same way, so one nothing writes to reads as empty, at
+once, and is refused as not JSON rather than waited on. A command that acts on
+a container (`create`, `start`, `exec`...), and `features` without
+`--runtime`, reads the configuration a second time and finds the pipe empty,
+as in 0.17.0: give those a file.
+
+Who owns a configuration file is judged by the uids nexcage's user namespace
+sees. Rootless podman runs the runtime in a namespace of its own, where a file
+host root owns shows as uid 65534, the kernel's overflow uid; such a file is
+refused there, and the message says what that uid means.
 
 `--root` is read before any command touches state, wherever it appears on the
 command line.
@@ -465,9 +509,20 @@ caller that watches the status — containerd, a readiness probe — reads the
 command's result rather than "the runtime succeeded", which is why this command
 does not follow the exit table above.
 
-`--` separates the command from nexcage's own options, and is needed when the
-command itself starts with a dash. Everything after it is passed through
-untouched.
+The command starts at the first word after `<name>` that is neither an
+option nor an option's value, or after `--`. nexcage reads its own options —
+`--config`, `--root`, `--log`, `--debug` and the rest — anywhere before it and
+none after: every word of the command is passed through untouched, `=`
+included, so `nexcage exec web-1 grep --config x` runs `grep --config x`, as
+`runc exec` would. `--` is needed only when the command itself starts with a
+dash.
+
+Before the command, `--option=value` is one word:
+`exec --config=/etc/nexcage/alt.json web-1 id` reads that file as nexcage's
+configuration, and `id` is the command. Written that way, an option `exec` does
+not have, or one that takes no value, is a usage error (exit 2) rather than
+guessed at: `exec web-1 --tty=false sh` asked for a terminal in 0.17.0, and took
+`false sh` for the command.
 
 stdin, stdout and stderr are connected straight to the process in the
 container; nexcage does not buffer the output.
@@ -869,17 +924,25 @@ nexcage health
 Checks the host and prints a report on stderr, one PASS, WARN or FAIL line per
 check. It exits 1 if any check failed and 0 otherwise; warnings do not fail.
 
-These are failures: `pct version` missing or failing; any of
-`/var/lib/nexcage`, `/var/cache/nexcage`, `/tmp/nexcage` and `/etc/pve/lxc` not
-existing (fixed paths, not read from the configuration, and nexcage creates
-none of them). These are only warnings: the Proxmox API line, which always warns
-because that check is not implemented; `zpool status`; `ip link show`; no
-config file; `pgrep nexcage`; and `df -h /`. It resolves no names and asks no
-host outside this one.
+These are failures: `pct list` missing or failing; the state directory
+(`/run/nexcage`, or `--root`) existing but not a directory nexcage can write;
+`/etc/pve/lxc` not existing. These are only warnings: a state directory not
+made yet, which the first `create` makes; a ZFS pool `zpool status -x` does not
+call healthy, no pool, or no `zpool`; no config file, or an OCI runtime spec
+passed over in the search. It resolves no names and asks no host outside this
+one.
+
+Every check can both pass and fail. In 0.17.0 and earlier `health` also ran
+`pct version`, which `pct` does not have, so it failed on every node; required
+`/var/lib/nexcage`, `/var/cache/nexcage` and `/tmp/nexcage`, which nothing
+creates; ran `pgrep nexcage`, which found `health` itself; and reported an API
+check that always warned, and `ip link show` and `df -h /` as checks of the
+network and of resources. Those are gone.
 
 It reports the config file the other commands read: the one `--config` names,
-else the first of `./config.json`, `/etc/nexcage/config.json` and
-`/etc/nexcage/nexcage.json` that exists. Like every command, `health` loads
+else the first of `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
+that holds a configuration. One of them that is an OCI runtime spec is skipped,
+and the report says so in a warning. Like every command, `health` loads
 that file first, and one that is not valid stops it there with exit 1, before
 any check runs.
 

@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const logging = @import("logging.zig");
 
 /// Simple advanced logging system with DEBUG mode and file output
 pub const SimpleAdvancedLogging = struct {
@@ -8,6 +9,7 @@ pub const SimpleAdvancedLogging = struct {
     file_logger: ?LogContext = null,
     debug_mode: bool = false,
     log_file_path: ?[]const u8 = null,
+    /// When the command started, in nanoseconds on the monotonic clock.
     command_start_time: ?u64 = null,
 
     const Self = @This();
@@ -19,14 +21,14 @@ pub const SimpleAdvancedLogging = struct {
         var file_logger: ?LogContext = null;
         if (log_file_path) |path| {
             // Every run shares the log file, so append to it; createFile's
-            // default truncated it on each invocation. Create the last
-            // directory if it is missing (e.g. /var/log/nexcage when running
-            // as root). One makeDir, not makePath: makePath retries while
-            // mkdir reports a missing parent, and on procfs it never stops.
+            // default truncated it on each invocation, and seeking to the end
+            // once let two runs overwrite each other (see openAppend). Create
+            // the last directory if it is missing (e.g. /var/log/nexcage when
+            // running as root). One makeDir, not makePath: makePath retries
+            // while mkdir reports a missing parent, and on procfs it never
+            // stops.
             if (std.fs.path.dirname(path)) |dir| std.fs.cwd().makeDir(dir) catch {};
-            const file = try std.fs.cwd().createFile(path, .{ .truncate = false });
-            errdefer file.close();
-            try file.seekFromEnd(0);
+            const file = try logging.openAppend(path);
             file_logger = LogContext.init(allocator, file, .debug, "nexcage");
         }
 
@@ -111,7 +113,7 @@ pub const SimpleAdvancedLogging = struct {
 
     /// Log command execution start
     pub fn logCommandStart(self: *Self, command_name: []const u8, args: []const []const u8) !void {
-        self.command_start_time = @intCast(std.time.nanoTimestamp());
+        self.command_start_time = monotonicNs();
 
         if (args.len > 0) {
             const joined_args = try std.mem.join(self.allocator, " ", args);
@@ -134,7 +136,7 @@ pub const SimpleAdvancedLogging = struct {
     /// Log command execution completion
     pub fn logCommandComplete(self: *Self, command_name: []const u8, success: bool) !void {
         if (self.command_start_time) |start_time| {
-            const duration_ms = (@as(u64, @intCast(std.time.nanoTimestamp())) - start_time) / 1_000_000;
+            const duration_ms = (monotonicNs() -| start_time) / std.time.ns_per_ms;
             try self.info("Command '{s}' completed in {d}ms", .{ command_name, duration_ms });
         }
 
@@ -195,6 +197,58 @@ pub const SimpleAdvancedLogging = struct {
         }
     }
 };
+
+/// Now, in nanoseconds on the monotonic clock. The duration of a command was
+/// taken from the wall clock, and in u64: NTP or `date -s` stepping it back
+/// while a command ran made the subtraction overflow, a panic after the
+/// command had already succeeded -- an engine saw a create that worked
+/// fail. The monotonic clock does not step, and the subtraction that uses it
+/// saturates anyway. 0 if the clock cannot be read, which gives no duration
+/// rather than a wrong one.
+fn monotonicNs() u64 {
+    const ts = std.posix.clock_gettime(.MONOTONIC) catch return 0;
+    return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
+}
+
+test "a command's duration cannot overflow, whatever the clock did meanwhile" {
+    var logger = try SimpleAdvancedLogging.init(std.testing.allocator, false, null);
+    defer logger.deinit();
+    const null_file = try std.fs.openFileAbsolute("/dev/null", .{ .mode = .write_only });
+    defer null_file.close();
+    logger.console_logger.file = null_file;
+    // A start later than now on any clock: what a wall clock stepped back
+    // during the command looked like.
+    logger.command_start_time = std.math.maxInt(u64);
+    try logger.logCommandComplete("create", true);
+}
+
+test "a --log-file is appended to by every call, and a symlink in its place is not followed" {
+    // The open behind --log-file, NEXCAGE_LOG_FILE and the configuration's
+    // log_file, which is not main's --log open and needs its own proof.
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(dir);
+
+    try tmp.dir.symLink("target.log", "link.log", .{});
+    const link = try std.fs.path.join(std.testing.allocator, &.{ dir, "link.log" });
+    defer std.testing.allocator.free(link);
+    try std.testing.expectError(error.SymLinkLoop, SimpleAdvancedLogging.init(std.testing.allocator, false, link));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access("target.log", .{}));
+
+    // Two calls sharing the file, both open before either writes.
+    const shared = try std.fs.path.join(std.testing.allocator, &.{ dir, "shared.log" });
+    defer std.testing.allocator.free(shared);
+    var a = try SimpleAdvancedLogging.init(std.testing.allocator, false, shared);
+    defer a.deinit();
+    var b = try SimpleAdvancedLogging.init(std.testing.allocator, false, shared);
+    defer b.deinit();
+    try a.file_logger.?.file.writeAll("A1\n");
+    try b.file_logger.?.file.writeAll("B1\n");
+    try a.file_logger.?.file.writeAll("A2\n");
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("A1\nB1\nA2\n", try tmp.dir.readFile("shared.log", &buf));
+}
 
 /// Re-export LogLevel and LogContext for compatibility
 pub const LogLevel = @import("logging.zig").LogLevel;

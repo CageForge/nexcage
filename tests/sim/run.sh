@@ -54,6 +54,15 @@ lines = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
 sys.exit(0 if any(o.get("level") == "error" for o in lines) else 1)
 PYEOF
 }
+# Some line of a JSON log is an error whose msg starts with $2 and ends with $3,
+# and every line is JSON.
+json_error_msg_is() {
+  python3 - "$@" <<'PYEOF' 2>/dev/null
+import json, sys
+lines = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+sys.exit(0 if any(o.get("level") == "error" and o["msg"].startswith(sys.argv[2]) and o["msg"].endswith(sys.argv[3]) for o in lines) else 1)
+PYEOF
+}
 json_get()  { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2" 2>/dev/null; }
 # NAMES is the last column, after NODE was added for the cluster.
 listed()    { awk -F'\t' -v n="$1" 'NR>1 && $8==n {f=1} END {exit !f}' "$S/out"; }
@@ -77,6 +86,12 @@ done
 nx version --help; check "version --help prints help, not the version" all 'rc 0' 'out_has "Usage: nexcage version"'
 nx health --help;  check "health --help prints help, runs no checks"   all 'rc 0' 'out_has "Usage: nexcage health"' '[ ! -s "$S/calls.last" ]'
 nx --debug list; check "--debug before command still runs list" all 'rc 0' 'out_has "NAMES"'
+# A command can fail with an error from outside nexcage's own set, as version
+# does writing to a full disk. That was a panic, "invalid error code" and exit
+# 134; it is an error exit naming the error.
+RC=0; nexcage_ns version > /dev/full 2> "$S/err" || RC=$?; LAST="nexcage version > /dev/full"; : > "$S/calls.last"
+check "an error from outside nexcage's set exits 1 naming it, not a panic" \
+  all 'rc 1' 'err_has "version: NoSpaceLeft"' '! err_has "panic"'
 
 echo "=== create ==="
 reset_sim
@@ -111,6 +126,24 @@ check ".tar.xz template passes through unchanged" all 'rc 0' 'called_re "^pct cr
 echo "unable to create CT 104 - some pct failure" > "$S/fail_create"
 nx create --name web-5 "$TPL"
 check "pct create failing -> exit 1, no state dir left" all 'rc 1' '[ ! -e "$S/run/nexcage/web-5" ]'
+# A long failure -- tar's warning for every device node, then the task error --
+# still reaches the file an engine reads: cut and marked, where a message over
+# the JSON line's limit used to be written as "msg":"".
+for i in $(seq 1 40); do echo "tar: ./dev/tty$i: Cannot mknod: Operation not permitted"; done > "$S/fail_create"
+echo "TASK ERROR: unable to create CT 104 - command failed: exit code 2" >> "$S/fail_create"
+nx --log /run/create-fail.json --log-format json create --name web-5 "$TPL"
+check "a long pct error keeps its message in the JSON log, cut and marked" \
+  all 'rc 1' 'json_error_msg_is "$S/run/create-fail.json" "pct command failed: tar: ./dev/tty1: " "..."'
+# What pct prints is not nexcage's to lay out: a newline in it made a line of
+# the log that nobody wrote, and an escape sequence reached the terminal. CSI
+# and NEL as UTF-8 (C2 9B, C2 85) are the same escape and the same new line
+# to xterm and VTE terminals.
+printf 'unable to create CT\n[1790000000] ERROR nexcage: forged\033]0;t\007\302\2332J\302\205[1790000000] ERROR nexcage: nel\n' > "$S/fail_create"
+nx create --name web-5 "$TPL"
+check "a text log line cannot be forged from what pct prints" \
+  all 'rc 1' '! grep -q "^\[1790000000\] ERROR nexcage: forged" "$S/err"' '! grep -q "$(printf "\033")" "$S/err"' \
+      '! grep -qF "$(printf "\302\233")" "$S/err"' '! grep -qF "$(printf "\302\205")" "$S/err"' \
+      'err_has "unable to create CT\n[1790000000] ERROR nexcage: forged\x1b]0;t\x07\xc2\x9b2J\xc2\x85[1790000000] ERROR nexcage: nel"'
 rm -f "$S/fail_create"
 
 nx create --name nginx-1 docker.io/library/nginx:latest
@@ -153,6 +186,15 @@ check "unprivileged=false in config -> --unprivileged 0" all 'rc 0' 'called_re "
 rm -f "$S/work/config.json"
 nx create --name web-7 "$TPL"
 check "no config file -> default bridge, unprivileged, no --rootfs" all 'rc 0' 'called_re "bridge=vmbr0,ip=dhcp --unprivileged 1$"'
+# A config.json in the directory nexcage runs from is not its configuration:
+# podman runs the runtime in its caller's directory, and one that another
+# user left in /tmp made root create privileged containers on their bridge
+# and append its log to a file of their choosing.
+printf '%s\n' '{"log_file":"/run/planted.log","network":{"bridge":"vmbr666"},"proxmox":{"unprivileged":false}}' > "$S/work/config.json"
+SIM_NO_CONFIG=1 nx create --name web-7b "$TPL"
+check "a config.json in the working directory is not read" \
+  all 'rc 0' 'called_re "--hostname web-7b .*bridge=vmbr0,ip=dhcp --unprivileged 1$"' 'not_called_re "vmbr666"' '[ ! -e "$S/run/planted.log" ]'
+rm -f "$S/work/config.json"
 
 # What pct create is usually given (#308): update's limits under update's
 # names and in pct's terms, pct's own names for the rest, net0 in its syntax.
@@ -279,6 +321,43 @@ check "an = after -- survives untouched" \
 nx exec web-1 -- echo --config /nonexistent --runtime bogus --profile nope --root /x
 check "nexcage's flags after -- belong to the command, not to nexcage" \
   all 'rc 0' 'called "pct exec 100 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
+# Its logging flags neither: root created the file the command named and wrote
+# nexcage's own log into it.
+nx exec web-1 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug
+check "nexcage's logging flags after -- belong to the command too" \
+  all 'rc 0' '[ ! -e "$S/run/exec-x.log" ]' '[ ! -e "$S/run/exec-y.log" ]' '! err_has "DEBUG"' \
+      'called "pct exec 100 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug"'
+# Nor without --, the form `exec --help` shows: the command starts at the word
+# after the container id, and every word of it is the command's, `=` and all.
+# Each of these failed the call, made root write its log into the file named,
+# or turned --color=auto into two words. nexcage_ns gives a call that names
+# --config no file of its own, and cannot tell this one from such a call, so an
+# empty /etc/nexcage stands in for the host's.
+mkdir -p "$S/etc/nexcage"
+nx exec web-1 echo --config /nonexistent --root rel --runtime bogus --profile nope --log /run/exec-z.log --debug --color=auto
+check "the command's words are its own without -- too" \
+  all 'rc 0' '[ ! -e "$S/run/exec-z.log" ]' '! err_has "DEBUG"' \
+      'called "pct exec 100 -- echo --config /nonexistent --root rel --runtime bogus --profile nope --log /run/exec-z.log --debug --color=auto"'
+rm -r "${S:?}/etc"
+# nexcage's own options before the command are still nexcage's, in either
+# spelling
+nx exec web-1 --log /run/exec-own.log echo hi
+check "and nexcage's options before the command are still read" \
+  all 'rc 0' '[ -e "$S/run/exec-own.log" ]' 'called "pct exec 100 -- echo hi"'
+nx exec web-1 --log=/run/exec-eq.log echo hi
+check "an option's value after = is the option's, not the command" \
+  all 'rc 0' '[ -e "$S/run/exec-eq.log" ]' 'called "pct exec 100 -- echo hi"'
+rm -f "$S/run/exec-own.log" "$S/run/exec-eq.log"
+# An option exec does not have, or one that takes no value, given a value
+# after =: what was meant cannot be told -- the `true` of --tty=true was run as
+# the command -- so it is a usage error. Each crashed nexcage once the command
+# was looked for.
+nx exec web-1 --foo=bar ls
+check "an option exec does not have, written with =, is a usage error" \
+  all 'rc 2' 'err_has "--foo"' 'not_called_re "^pct exec"'
+nx exec web-1 --tty=false echo hi
+check "and so is a value for one that takes none, not a command" \
+  all 'rc 2' "err_has \"'--tty=false': exec has no option '--tty' that takes a value\"" 'not_called_re "^pct exec"'
 
 # `exec --process <file>` hands over an OCI process spec: an identity to become,
 # an environment, a terminal. `pct exec` takes a command and returns when it
@@ -411,7 +490,7 @@ check "state --runtime crun -> exit 1, no made-up state" all 'rc 1' '[ ! -s "$S/
 echo "=== --config ==="
 printf '%s\n' '{"network":{"bridge":"vmbr77"},"proxmox":{"storage":"alt-store","rootfs_size_gb":3}}' > "$S/work/alt.json"
 nx create --config alt.json --name cf-1 "$TPL"
-check "--config <file> after the command wins over ./config.json" \
+check "--config <file> after the command is the file read" \
   all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname cf-1 .*bridge=vmbr77,ip=dhcp .*--rootfs alt-store:3$"'
 nx --config "$S/work/alt.json" create --name cf-2 "$TPL"
 check "--config before the command, absolute path" all 'rc 0' 'called_re "--hostname cf-2 .*bridge=vmbr77,ip=dhcp"'
@@ -422,6 +501,99 @@ nx list --config bad.json
 check "--config with invalid JSON -> exit 1" all 'rc 1' 'err_has "invalid configuration"' 'not_called_re "^pct"'
 nx list --config
 check "--config without a path -> exit 2" all 'rc 2' 'err_has "--config needs a path"'
+# The file decides whether containers are privileged and where root appends
+# its log, so only root (or the user running nexcage) may be able to write it.
+cfg '{"network":{"bridge":"vmbr666"},"proxmox":{"unprivileged":false}}'
+chmod 666 "$S/work/config.json"
+nx create --name ww-1 "$TPL"
+check "a config file others can write is refused, saying why" \
+  all 'rc 1' 'err_has "group or others can write it (mode 0666)"' 'not_called_re "^pct create"'
+chmod 644 "$S/work/config.json"; chmod 777 "$S/work"
+nx create --name ww-2 "$TPL"
+check "and so is one in a directory others can write" \
+  all 'rc 1' 'err_has "can write its directory (mode 0777)"' 'not_called_re "^pct create"'
+chmod 1777 "$S/work"
+nx create --name ww-3 "$TPL"
+check "a sticky directory, as /tmp is, lets nobody else replace it" \
+  all 'rc 0' 'called_re "--hostname ww-3 .*bridge=vmbr666"'
+chmod 755 "$S/work"; rm -f "$S/work/config.json"
+# A symlink is followed, and the directory holding the file it leads to is
+# checked as the symlink's own is: a link into a directory anyone can write
+# let whoever writes there choose root's configuration.
+mkdir "$S/work/open"; chmod 777 "$S/work/open"
+printf '%s\n' '{"network":{"bridge":"vmbr666"},"proxmox":{"unprivileged":false}}' > "$S/work/open/cfg.json"
+ln -s open/cfg.json "$S/work/link.json"
+nx --config link.json create --name sl-1 "$TPL"
+check "a symlink into a directory others can write is refused, naming the file it leads to" \
+  all 'rc 1' "err_has \"link.json: it leads to $S/work/open/cfg.json, in a directory group or others can write (mode 0777)\"" 'not_called_re "^pct create"'
+chmod 755 "$S/work/open"
+nx --config link.json create --name sl-2 "$TPL"
+check "and followed when only its owner can write that directory" all 'rc 0' 'called_re "--hostname sl-2 .*bridge=vmbr666"'
+rm -r "${S:?}/work/open" "$S/work/link.json"
+# Opening a FIFO waits for a writer. One in the file's place opens at once and,
+# with nothing writing to it, reads as an empty pipe does.
+mkfifo "$S/work/fifo.json"
+printf '#!/bin/sh\nexec timeout 10 %s "$@"\n' "$NEXCAGE" > "$S/timed-nexcage"; chmod +x "$S/timed-nexcage"
+NEXCAGE=$S/timed-nexcage nx --config fifo.json list
+check "a FIFO named as the config file is not waited on" \
+  all 'rc 1' 'err_has "fifo.json: it is not valid JSON (UnexpectedEndOfInput)"'
+rm -f "$S/work/fifo.json" "$S/timed-nexcage"
+# A pipe is read as 0.17.0 read it -- `--config <(...)`, or /dev/stdin fed by
+# one -- and once, since what a pipe held is gone once read: the spec check is
+# made on what was read. (Not /dev/stdin here: /dev is host root's, which is
+# nobody in this namespace, and a directory nobody owns is refused.)
+nx --config <(printf '%s\n' '{"log_level":"debug"}') list
+check "--config <(...) is read" all 'rc 0' 'err_has "DEBUG nexcage:"'
+nx --config <(printf '%s\n' '{"ociVersion":"1.0.0","root":{"path":"rootfs"}}') list
+check "an OCI spec in a pipe is refused as one" \
+  all 'rc 1' 'err_has ": it is an OCI runtime spec, not a nexcage configuration"' 'not_called_re "^(pct|pvesh)"'
+# A file owned by neither root nor the user running nexcage, as nexcage's
+# namespace sees it. That namespace maps the caller's uid alone, so anyone but
+# root finds one in /etc/passwd: host root's files are nobody's there, as they
+# are in rootless podman's. Root -- act runs the CI jobs as root -- finds only
+# files root owns in the namespace too, so it makes one, of a uid the
+# namespace does not map.
+foreign=/etc/passwd
+if [ "$(id -u)" = 0 ]; then
+  foreign=$S/work/foreign.json
+  printf '%s\n' '{"network":{"bridge":"vmbr666"},"proxmox":{"unprivileged":false}}' > "$foreign"
+  chown 4242 "$foreign" || echo "        cannot give $foreign to uid 4242: the next check cannot pass"
+fi
+owner=$(unshare -r stat -c %u "$foreign")
+# The kernel shows an owner it cannot map as its overflow uid, 65534, and the
+# message says that is what the number can mean.
+says="it is owned by uid $owner, not by root"
+[ "$owner" != "$(cat /proc/sys/kernel/overflowuid)" ] ||
+  says="it is owned by uid $owner (how the kernel shows an owner outside nexcage's user namespace, as host root is under rootless podman), not by root"
+nx --config "$foreign" create --name fo-1 "$TPL"
+check "a config file owned by somebody else is refused, naming the owner" \
+  all '[ -n "$owner" ] && [ "$owner" != 0 ]' 'rc 1' 'err_has "$says"' 'not_called_re "^(pct|pvesh)"'
+rm -f "$S/work/foreign.json"
+# /etc/nexcage, without --config. The simulator puts $S/etc/nexcage there for
+# nexcage alone, whoever runs it and whatever /etc is on.
+mkdir -p "$S/etc/nexcage"
+echo "the simulator's own" > "$S/etc/nexcage/probe"
+printf '#!/bin/sh\nexec cat /etc/nexcage/probe\n' > "$S/probe-nexcage"; chmod +x "$S/probe-nexcage"
+NEXCAGE=$S/probe-nexcage nx
+check "nexcage's /etc/nexcage is the simulator's" all 'rc 0' "out_has \"the simulator's own\""
+rm -f "$S/etc/nexcage/probe" "$S/probe-nexcage"
+# An OCI spec there is passed over whatever its size -- one over the 1 MiB a
+# configuration may hold failed every command with FileTooBig -- and an error
+# or `health` names the file actually read, not the first one that exists.
+python3 -I -c 'import json,sys; json.dump({"ociVersion":"1.0.0","process":{"args":["/bin/sh"],"env":["V%d=%s"%(i,"x"*1000) for i in range(1100)]},"root":{"path":"rootfs"}}, open(sys.argv[1],"w"))' "$S/etc/nexcage/config.json"
+nx list
+check "an OCI spec over 1 MiB in /etc/nexcage is passed over, not a FileTooBig" \
+  all 'rc 0' '! err_has "FileTooBig"' '! err_has "invalid configuration"'
+printf '{"ociVersion":"1.0.0","process":{"args":["/bin/sh"]},"root":{"path":"rootfs"}}\n' > "$S/etc/nexcage/config.json"
+printf '{"routnig":[]}\n' > "$S/etc/nexcage/nexcage.json"
+nx list
+check "an error behind a spec names the file that has it" \
+  all 'rc 1' 'err_has "invalid configuration file /etc/nexcage/nexcage.json"' 'not_called_re "^(pct|pvesh)"'
+printf '{"network":{"bridge":"vmbr1"}}\n' > "$S/etc/nexcage/nexcage.json"
+nx health
+check "health names the file read, and the spec passed over" \
+  all 'err_has "Config file in use: /etc/nexcage/nexcage.json"' 'err_has "/etc/nexcage/config.json is an OCI runtime spec"'
+rm -r "${S:?}/etc"
 
 echo "=== create from an OCI bundle ==="
 mkdir -p "$S/bundles/b1/rootfs/bin" "$S/bundles/nocfg/rootfs"
@@ -490,10 +662,11 @@ check "--runtime bogus before the command -> exit 2, no leak" rc 2
 # command name, so the engine's very first call answered "unknown command".
 # A container engine runs the runtime from the bundle directory, and a bundle
 # holds a config.json that is an OCI spec. It used to be read as nexcage's own
-# configuration, silently replacing it — routing rules included.
+# configuration, silently replacing it — routing rules included. Nothing in
+# the working directory is read now.
 printf '{"ociVersion":"1.0.0","process":{"args":["/bin/sh"]},"root":{"path":"rootfs"}}' > "$S/work/config.json"
-nx list
-check "an OCI spec in the search path is not read as nexcage's config" \
+SIM_NO_CONFIG=1 nx list
+check "an OCI spec in the working directory is not read as nexcage's config" \
   all 'rc 0' '! err_has "SyntaxError"' '! err_has "invalid configuration"'
 nx --config "$S/work/config.json" list
 check "an OCI spec named with --config is refused, not silently ignored" \
@@ -552,11 +725,14 @@ check "a key that was parsed and never used is refused too" \
 rm -f "$S/work/config.json"
 
 # What the project ships, and what INSTALL.md tells an administrator to
-# install, still loads.
+# install, still loads. Copied as `cp` puts it in /etc/nexcage: the checkout's
+# modes follow whoever cloned it, and nexcage refuses a file others can write.
 for f in packaging/config/config.json packaging/config/config.oci.example.json config.json.example; do
-  nx --config "$REPO/$f" version
+  install -m 644 "$REPO/$f" "$S/work/shipped.json"
+  nx --config "$S/work/shipped.json" version
   check "$f loads" all 'rc 0' '! err_has "invalid configuration"'
 done
+rm -f "$S/work/shipped.json"
 
 # No runc backend since 0.13.0. A rule that still names it describes an OCI
 # container, so it goes to crun -- and is said, since the file should change.
@@ -647,6 +823,31 @@ check "--log --log-format json: the error lands in the file containerd reads" \
 nx --log "$S/run/ct2.json" state no-such-container
 check "--log without a format writes text, not JSON" \
   all '[ -s "$S/run/ct2.json" ]' '! grep -q "level" "$S/run/ct2.json"'
+nx --log "$S/run/ct2.json" state no-such-container-2
+check "a second call appends to the --log file" \
+  all "grep -q \"'no-such-container'\" \"\$S/run/ct2.json\"" 'grep -q "no-such-container-2" "$S/run/ct2.json"'
+# An engine names a file in a directory of its own, which the runtime creates:
+# a symlink in its place is not followed, and the log goes to stderr instead.
+ln -sfn /run/ct-target.log "$S/run/ct-link.json"
+nx --log /run/ct-link.json --log-format json state no-such-container
+check "--log does not follow a symlink, and says where the log went" \
+  all 'rc 1' '[ ! -e "$S/run/ct-target.log" ]' 'err_has "cannot open --log file"' 'err_has "not found"'
+rm -f "$S/run/ct-link.json"
+# --log-file, NEXCAGE_LOG_FILE and the configuration's log_file are opened in
+# another place, the same way.
+ln -sfn /run/lf-target.log "$S/run/lf-link.log"
+nx --log-file /run/lf-link.log list
+check "--log-file does not follow a symlink either" \
+  all 'rc 0' '[ ! -e "$S/run/lf-target.log" ]' "err_has \"cannot open log file '/run/lf-link.log' (SymLinkLoop)\""
+rm -f "$S/run/lf-link.log" "$S/run/lf-target.log"
+# Opening a FIFO to write waits for a reader; one that nothing reads is refused
+# at once, for --log and --log-file alike, and the command still runs.
+mkfifo "$S/run/lf.fifo"
+printf '#!/bin/sh\nexec timeout 10 %s "$@"\n' "$NEXCAGE" > "$S/timed-nexcage"; chmod +x "$S/timed-nexcage"
+NEXCAGE=$S/timed-nexcage nx --log /run/lf.fifo --log-file /run/lf.fifo list
+check "a FIFO named as a log file is not waited on" \
+  all 'rc 0' "err_has \"cannot open --log file '/run/lf.fifo' (NoDevice)\"" "err_has \"cannot open log file '/run/lf.fifo' (NoDevice)\""
+rm -f "$S/run/lf.fifo" "$S/timed-nexcage"
 
 nx --runtime crun state some-id
 check "state on a crun binary that lacks the backend -> exit 1, says how to build it" \
@@ -1141,8 +1342,28 @@ echo "=== health ==="
 # whatever the commands read, and to run `nslookup google.com`.
 cfg '{"proxmox":{"storage":"local-lvm"}}'
 nx health
-check "health reports the config file the commands read" err_has "Config file in use: ./config.json"
+check "health reports the config file the commands read" err_has "Config file in use: $S/work/config.json"
 check "health resolves no outside name" all '! grep -qiE "dns|google" "$S/err"'
+# Only checks that can both pass and fail. Three directories nothing creates
+# failed every correct host, `pct version`, which pct does not have, failed
+# every node, and `pgrep nexcage` found health itself.
+check "health checks only what nexcage uses, with a command pct has" \
+  all 'err_has "PASS proxmox_pct_available: pct list works"' 'called "pct list"' 'not_called_re "^pct version"' \
+      '! err_has "/var/lib/nexcage"' '! err_has "/var/cache/nexcage"' '! err_has "/tmp/nexcage"' '! err_has "nexcage_process"'
+# It opened /tmp/nexcage as root with a blocking open, in a directory anyone can
+# write: a FIFO there hung it. And it read a tool's stdout to the end before
+# its stderr, so a tool that filled the stderr pipe first hung it too.
+mkdir -p "$S/noisy"
+printf '#!/bin/sh\nmkfifo /tmp/nexcage && exec timeout 10 %s "$@"\n' "$NEXCAGE" > "$S/noisy/fifo-nexcage"
+printf '#!/bin/sh\nhead -c 100000 /dev/zero | tr "\\000" x >&2\necho "all pools are healthy"\n' > "$S/noisy/zpool"
+printf '#!/bin/sh\nPATH=%s:$PATH exec timeout 10 %s "$@"\n' "$S/noisy" "$NEXCAGE" > "$S/noisy/noisy-nexcage"
+chmod +x "$S"/noisy/*
+NEXCAGE=$S/noisy/fifo-nexcage nx health
+check "a FIFO at /tmp/nexcage does not hang health" all '[ "$RC" != 124 ]' 'err_has "config_file"'
+NEXCAGE=$S/noisy/noisy-nexcage nx health
+check "a tool that fills its stderr pipe does not hang health" \
+  all '[ "$RC" != 124 ]' 'err_has "PASS zfs_pool_status: zpool status -x (exit 0): all pools are healthy"'
+rm -rf "$S/noisy"
 printf '{}\n' > "$S/work/alt.json"
 nx --config alt.json health
 check "health reports the file --config names" err_has "Config file in use: alt.json"

@@ -152,10 +152,27 @@ On a host that already has a configuration, add the example's `runtime.routing`
 and `profiles` to that file instead of replacing it.
 
 nexcage reads the file given with `--config <path>`, or else the first of
-`./config.json`, `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
-that exists. A file that does not parse is an error; a file declaring
-`ociVersion` is skipped in that search, and refused when named with
-`--config`, because that is an OCI runtime spec and not a configuration.
+`/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json` that exists. It
+does not read `./config.json` from the directory it runs in, as 0.17.0 and
+earlier did: podman runs the runtime in its caller's directory, so a file
+another user left there became root's configuration. Pass
+`--config ./config.json` to read one. A file
+that does not parse is an error; a file declaring `ociVersion` is skipped in
+that search, and refused when named with `--config`, because that is an OCI
+runtime spec and not a configuration.
+
+Whoever can change the file decides whether containers are privileged and what
+an isolation profile requires, so nexcage refuses one that is not owned by root
+(or by the user running nexcage), that group or others can write, or that sits
+in a directory they can write without the sticky bit, or in one owned by
+anyone else; for a symlink, that goes for the directory of the file it leads
+to as well. The message names the file and the reason; `chmod go-w` on the
+file or its directory puts it right. A pipe, `--config <(...)` or
+`--config /dev/stdin` fed by one, is read as 0.17.0 read it, once and up to
+1 MiB; a command that acts on a container reads the configuration again and
+finds it empty, as it did then, so give those a file.
+Ownership is judged by the uids nexcage's user namespace sees: under rootless
+podman a file host root owns shows as uid 65534, and is refused.
 
 The table below is every key there is. **Since 0.17.0 anything else refuses the
 file**: a key nexcage does not read, a value of the wrong type, a runtime or

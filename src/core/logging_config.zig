@@ -73,6 +73,11 @@ pub const LoggingConfig = struct {
         while (i < args.len) {
             const arg = args[i];
 
+            // After a bare --, the words are the command exec runs, as
+            // flagValueFromArgs in main already holds for --config and --root.
+            // `exec web -- app --log /etc/x` made root create /etc/x and write
+            // nexcage's own log into it.
+            if (std.mem.eql(u8, arg, "--")) break;
             if (std.mem.eql(u8, arg, "--debug")) {
                 config.debug_mode = true;
                 config.log_level = .debug;
@@ -294,4 +299,16 @@ test "an explicit info overrides a file's debug" {
     var unknown = try LoggingConfig.loadWithPriority(allocator, &.{ "nexcage", "--log-level", "loud", "list" }, &config);
     defer unknown.deinit(allocator);
     try std.testing.expectEqual(LogLevel.debug, unknown.log_level);
+}
+
+test "logging flags after a bare -- belong to the command exec runs" {
+    const a = std.testing.allocator;
+    var c = try LoggingConfig.loadFromArgs(a, &.{ "nexcage", "--log-format", "json", "exec", "web", "--", "app", "--log", "/etc/x", "--debug", "--log-file", "/etc/y", "--log-level", "error", "--verbose" });
+    defer c.deinit(a);
+    try std.testing.expect(c.runtime_log_path == null);
+    try std.testing.expect(c.log_file_path == null);
+    try std.testing.expect(!c.debug_mode);
+    try std.testing.expect(!c.log_level_set);
+    // Before the --, they are nexcage's.
+    try std.testing.expectEqual(logging.LogFormat.json, c.log_format);
 }
