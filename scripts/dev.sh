@@ -247,6 +247,8 @@ crun_checks() {
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/foreign_cwd.sh
   say "kill sends the signal nexcage validated"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/kill.sh
+  say "exec's process spec cannot be planted against"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/exec_spec.sh
 }
 
 # Always through crun_image: an image left from older sources would test them.

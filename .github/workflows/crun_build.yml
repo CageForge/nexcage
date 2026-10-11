@@ -183,6 +183,20 @@ jobs:
             -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
             --entrypoint /bin/sh nexcage:ci /t/kill.sh
 
+      # exec's process spec is a file libcrun reads. It was a predictable name
+      # in /tmp, where a local user's directories made every exec abort the
+      # root process; the check plants them as nobody and execs regardless.
+      - name: exec's process spec cannot be planted against
+        run: |
+          set -eux
+          mkdir -p bundle/rootfs
+          docker create --name bbexec busybox:1.36 >/dev/null
+          docker export bbexec | tar -x -C bundle/rootfs
+          docker rm bbexec >/dev/null
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
+            --entrypoint /bin/sh nexcage:ci /t/exec_spec.sh
+
       # critest (#311), the CRI validation suite from cri-tools: what
       # Kubernetes checks of a runtime, through the same containerd and the
       # image the pod step built. It runs last: it takes the longest, and a

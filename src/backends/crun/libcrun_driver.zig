@@ -661,8 +661,9 @@ pub const CrunDriver = struct {
     /// Both end in libcrun_container_exec_process_file, which takes the path of
     /// a file holding the OCI process spec. For `--process` that is the
     /// caller's own file, handed over untouched; for a command line nexcage
-    /// writes the same shape to a temporary file and removes it afterwards.
-    /// See the binding for why a path rather than the struct entry points.
+    /// writes the same shape to a file of its own in the container's state
+    /// directory and removes it afterwards (writeSpecFile). See the binding
+    /// for why a path rather than the struct entry points.
     pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8, process_file: ?[]const u8) !void {
         try validation.SecurityValidation.validateContainerId(container_id);
 
@@ -683,7 +684,7 @@ pub const CrunDriver = struct {
                 }
                 return core.Error.InvalidInput;
             }
-            const path = try self.writeProcessSpec(argv);
+            const path = try self.writeProcessSpec(container_id, argv);
             written = path;
             break :blk @as([]const u8, path);
         };
@@ -718,12 +719,12 @@ pub const CrunDriver = struct {
         // Either file missing is libcrun's to report, as it does today.
         const stored = std.fs.cwd().readFileAlloc(self.allocator, stored_path, 16 * 1024 * 1024) catch |err| switch (err) {
             error.FileNotFound => return null,
-            else => return err,
+            else => return self.cannotRead(stored_path, err),
         };
         defer self.allocator.free(stored);
         const process = std.fs.cwd().readFileAlloc(self.allocator, given, 16 * 1024 * 1024) catch |err| switch (err) {
             error.FileNotFound => return null,
-            else => return err,
+            else => return self.cannotRead(given, err),
         };
         defer self.allocator.free(process);
 
@@ -736,35 +737,83 @@ pub const CrunDriver = struct {
             else => return err,
         } orelse return null;
         defer self.allocator.free(bounded);
-        return try self.writeTemp(bounded);
+        return try self.writeSpecFile(container_id, bounded);
     }
 
-    /// `bytes` in a file of this process's own, where libcrun can read it.
-    /// The name is predictable, so the file is created, never opened: a
-    /// symlink left there is removed rather than followed. The caller owns
-    /// and removes the path.
-    fn writeTemp(self: *Self, bytes: []const u8) ![]u8 {
-        const path = try std.fmt.allocPrint(
-            self.allocator,
-            "/tmp/nexcage-exec-{d}.json",
-            .{std.os.linux.getpid()},
-        );
-        errdefer self.allocator.free(path);
-        const file = std.fs.cwd().createFile(path, .{ .exclusive = true, .mode = 0o600 }) catch |err| switch (err) {
-            error.PathAlreadyExists => blk: {
-                try std.fs.cwd().deleteFile(path);
-                break :blk try std.fs.cwd().createFile(path, .{ .exclusive = true, .mode = 0o600 });
+    /// A file that could not be read, as an error of the command's own set.
+    /// The command registry casts every error into core.types.Error, and one
+    /// outside it -- IsDir, AccessDenied -- aborted the process with "invalid
+    /// error code" instead of failing the command.
+    fn cannotRead(self: *Self, path: []const u8, err: anyerror) core.Error {
+        if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+        if (self.logger) |log| log.err("cannot read {s}: {s}", .{ path, @errorName(err) }) catch {};
+        return core.Error.OperationFailed;
+    }
+
+    /// `bytes` in a new file in the container's own libcrun state directory,
+    /// where libcrun reads it. The caller owns and removes the path.
+    ///
+    /// This used to be /tmp/nexcage-exec-<pid>.json. Anyone can make entries
+    /// in /tmp and the next pids are easy to guess, so a local user who left
+    /// directories under a few thousand of those names made every exec that
+    /// drew one fail -- by aborting the root process, as removing the
+    /// directory gave error.IsDir, which nothing expected. The state directory
+    /// is libcrun's, made 0700 by root, and goes with the container, so even
+    /// a file an exec killed half way leaves behind is removed with it. The
+    /// name is random besides, the file is made with O_EXCL and O_NOFOLLOW,
+    /// an entry that is already there is neither removed nor followed --
+    /// another name is drawn -- and every failure is an error of the command's
+    /// own set.
+    fn writeSpecFile(self: *Self, container_id: []const u8, bytes: []const u8) ![]u8 {
+        const dir_path = try std.fs.path.join(self.allocator, &.{ self.state_root, container_id });
+        defer self.allocator.free(dir_path);
+        var dir = std.fs.cwd().openDir(dir_path, .{ .no_follow = true }) catch |err| switch (err) {
+            error.FileNotFound => {
+                if (self.logger) |log| log.err("container '{s}' does not exist: there is no {s}", .{ container_id, dir_path }) catch {};
+                return core.Error.NotFound;
             },
-            else => return err,
+            else => {
+                if (self.logger) |log| log.err("cannot open the container's state directory {s}: {s}", .{ dir_path, @errorName(err) }) catch {};
+                return core.Error.OperationFailed;
+            },
         };
-        defer file.close();
-        try file.writeAll(bytes);
-        return path;
+        defer dir.close();
+
+        var attempt: usize = 0;
+        while (attempt < 16) : (attempt += 1) {
+            var random: [8]u8 = undefined;
+            std.crypto.random.bytes(&random);
+            const path = try std.fmt.allocPrint(self.allocator, "{s}/nexcage-exec-{s}.json", .{ dir_path, &std.fmt.bytesToHex(random, .lower) });
+            errdefer self.allocator.free(path);
+            const name = path[dir_path.len + 1 ..];
+            const flags: std.posix.O = .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true };
+            const fd = std.posix.openat(dir.fd, name, flags, 0o600) catch |err| switch (err) {
+                error.PathAlreadyExists => {
+                    self.allocator.free(path);
+                    continue;
+                },
+                else => {
+                    if (self.logger) |log| log.err("cannot create {s}: {s}", .{ path, @errorName(err) }) catch {};
+                    return core.Error.OperationFailed;
+                },
+            };
+            const file = std.fs.File{ .handle = fd };
+            defer file.close();
+            file.writeAll(bytes) catch |err| {
+                // O_EXCL made it, in a directory only root writes to: ours.
+                dir.deleteFile(name) catch {};
+                if (self.logger) |log| log.err("cannot write {s}: {s}", .{ path, @errorName(err) }) catch {};
+                return core.Error.OperationFailed;
+            };
+            return path;
+        }
+        if (self.logger) |log| log.err("no free name for the process spec in {s} after {d} tries", .{ dir_path, attempt }) catch {};
+        return core.Error.OperationFailed;
     }
 
     /// The OCI process spec for a command given on the command line, written
     /// where libcrun can read it. The caller owns and removes the path.
-    fn writeProcessSpec(self: *Self, argv: []const []const u8) ![]u8 {
+    fn writeProcessSpec(self: *Self, container_id: []const u8, argv: []const []const u8) ![]u8 {
         var out = std.ArrayListUnmanaged(u8){};
         defer out.deinit(self.allocator);
         const w = out.writer(self.allocator);
@@ -811,7 +860,7 @@ pub const CrunDriver = struct {
         try core.json.writeString(w, self.exec_cwd orelse "/");
         try w.writeAll("}\n");
 
-        return self.writeTemp(out.items);
+        return self.writeSpecFile(container_id, out.items);
     }
 
     /// Generate basic OCI config.json
@@ -895,4 +944,34 @@ fn freeCStrArray(arr: [*c][*c]u8) void {
     // The array itself is a double pointer, which does not coerce to the
     // anyopaque free() takes; each element above does.
     std.c.free(@ptrCast(arr));
+}
+
+test "exec's process spec is a new 0600 file in the container's own state directory" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makeDir("c1");
+    const root = try tmp.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(root);
+    var driver = CrunDriver{ .allocator = allocator, .state_root = root };
+    defer driver.deinit();
+
+    const a = try driver.writeSpecFile("c1", "{\"args\":[\"true\"]}");
+    defer allocator.free(a);
+    const b = try driver.writeSpecFile("c1", "{}");
+    defer allocator.free(b);
+    // Not a name anyone can work out in advance: two writes, two names.
+    try std.testing.expect(!std.mem.eql(u8, a, b));
+    const dir = try std.fs.path.join(allocator, &.{ root, "c1" });
+    defer allocator.free(dir);
+    try std.testing.expectEqualStrings(dir, std.fs.path.dirname(a).?);
+    const st = try std.fs.cwd().statFile(a);
+    try std.testing.expectEqual(@as(std.fs.File.Mode, 0o600), st.mode & 0o777);
+    const back = try std.fs.cwd().readFileAlloc(allocator, a, 1024);
+    defer allocator.free(back);
+    try std.testing.expectEqualStrings("{\"args\":[\"true\"]}", back);
+
+    // No container, no state directory: an error of the command's own set,
+    // and no file anywhere else.
+    try std.testing.expectError(core.Error.NotFound, driver.writeSpecFile("c2", "{}"));
 }
