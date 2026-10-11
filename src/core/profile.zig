@@ -136,8 +136,7 @@ fn narrow(allocator: std.mem.Allocator, spec_json: []const u8, profile: *const P
 
     if (profile.require_user_namespace) try checkUserNamespace(linux, profile, why);
 
-    if (profile.require_seccomp and !hasObject(linux, "seccomp"))
-        return why.set("profile '{s}' requires a seccomp filter, and the bundle has none; in Kubernetes, set securityContext.seccompProfile.type: RuntimeDefault", .{profile.name});
+    if (profile.require_seccomp) try checkSeccomp(linux, profile, why);
 
     if (profile.drop_capabilities.len > 0) dropCapabilities(root, profile.drop_capabilities);
 
@@ -365,9 +364,38 @@ fn child(arena: std.mem.Allocator, obj: *std.json.ObjectMap, key: []const u8) !*
     return &gop.value_ptr.object;
 }
 
-fn hasObject(obj: *std.json.ObjectMap, key: []const u8) bool {
-    const v = obj.get(key) orelse return false;
-    return v == .object;
+/// require_seccomp: a filter that refuses some system call by itself. One
+/// whose default action and every rule let calls through, or leave them to a
+/// process in user space, is no filter: SCMP_ACT_ALLOW and SCMP_ACT_LOG run
+/// the call, SCMP_ACT_NOTIFY asks whatever listens at listenerPath, and
+/// SCMP_ACT_TRACE a tracer, which can be a process in the container. Which
+/// calls a filter refuses is not judged: a rule naming no call this kernel
+/// has is skipped by libcrun, and still counts here.
+fn checkSeccomp(linux: *const std.json.ObjectMap, profile: *const Profile, why: *Refusal) error{ProfileRefused}!void {
+    const seccomp = linux.get("seccomp") orelse
+        return why.set("profile '{s}' requires a seccomp filter, and the bundle has none; in Kubernetes, set securityContext.seccompProfile.type: RuntimeDefault", .{profile.name});
+    if (seccomp != .object)
+        return why.set("profile '{s}' requires a seccomp filter, and the bundle has none; in Kubernetes, set securityContext.seccompProfile.type: RuntimeDefault", .{profile.name});
+    if (refuses(seccomp.object.get("defaultAction"))) return;
+    if (seccomp.object.get("syscalls")) |rules| if (rules == .array) for (rules.array.items) |rule| {
+        if (rule != .object or !refuses(rule.object.get("action"))) continue;
+        const names = rule.object.get("names") orelse continue;
+        if (names != .array) continue;
+        for (names.array.items) |name| {
+            if (name == .string) return;
+        }
+    };
+    return why.set("profile '{s}' requires a seccomp filter, and the bundle's refuses no system call: its default action and every rule let calls through or leave them to user space; in Kubernetes, set securityContext.seccompProfile.type: RuntimeDefault", .{profile.name});
+}
+
+/// Whether a seccomp action, by libcrun's names, stops the call in the kernel.
+fn refuses(action: ?std.json.Value) bool {
+    const a = action orelse return false;
+    if (a != .string) return false;
+    for ([_][]const u8{ "SCMP_ACT_KILL", "SCMP_ACT_KILL_PROCESS", "SCMP_ACT_KILL_THREAD", "SCMP_ACT_TRAP", "SCMP_ACT_ERRNO" }) |name| {
+        if (std.mem.eql(u8, a.string, name)) return true;
+    }
+    return false;
 }
 
 /// require_user_namespace: a user namespace that keeps the container's root
@@ -1048,4 +1076,46 @@ test "linux.resources.unified does not undo a profile's limits" {
     const memory_only = try narrow(std.testing.allocator, "{\"linux\":{\"resources\":{\"unified\":{\"pids.max\":\"max\"}}}}", &.{ .name = "p", .memory_limit = 64 << 20 }, &why);
     defer std.testing.allocator.free(memory_only);
     try std.testing.expect(std.mem.indexOf(u8, memory_only, "\"pids.max\":\"max\"") != null);
+}
+
+test "a seccomp filter that refuses no system call does not meet a profile that requires one" {
+    const profile = Profile{ .name = "h", .require_seccomp = true };
+    const none = [_][]const u8{
+        \\{"defaultAction":"SCMP_ACT_ALLOW"}
+        ,
+        \\{"defaultAction":"SCMP_ACT_LOG","syscalls":[{"names":["mount"],"action":"SCMP_ACT_ALLOW"}]}
+        ,
+        // A notifier decides in user space, whatever it listens with.
+        \\{"defaultAction":"SCMP_ACT_NOTIFY","listenerPath":"/run/agent.sock"}
+        ,
+        \\{"defaultAction":"SCMP_ACT_ALLOW","listenerPath":"/run/agent.sock","syscalls":[{"names":["mount"],"action":"SCMP_ACT_NOTIFY"}]}
+        ,
+        \\{"defaultAction":"SCMP_ACT_ALLOW","syscalls":[{"names":["ptrace"],"action":"SCMP_ACT_TRACE"}]}
+        ,
+        // A refusing rule that names no call, or names one as a number.
+        \\{"defaultAction":"SCMP_ACT_ALLOW","syscalls":[{"names":[],"action":"SCMP_ACT_ERRNO"},{"names":[165],"action":"SCMP_ACT_KILL"}]}
+        ,
+        \\{"defaultAction":"scmp_act_errno"}
+        ,
+        \\{"defaultAction":["SCMP_ACT_ERRNO"]}
+        ,
+    };
+    for (none) |given| {
+        var buf: [300]u8 = undefined;
+        try expectRefused(try std.fmt.bufPrint(&buf, "{{\"linux\":{{\"seccomp\":{s}}}}}", .{given}), profile, "the bundle's refuses no system call");
+    }
+    const real = [_][]const u8{
+        // RuntimeDefault, in short: refuse what is not allowed.
+        \\{"defaultAction":"SCMP_ACT_ERRNO","defaultErrnoRet":1,"syscalls":[{"names":["read","write"],"action":"SCMP_ACT_ALLOW"}]}
+        ,
+        \\{"defaultAction":"SCMP_ACT_ALLOW","syscalls":[{"names":["mount","umount2"],"action":"SCMP_ACT_ERRNO"}]}
+        ,
+        \\{"defaultAction":"SCMP_ACT_NOTIFY","listenerPath":"/run/agent.sock","syscalls":[{"names":["kexec_load"],"action":"SCMP_ACT_KILL_PROCESS"}]}
+        ,
+    };
+    for (real) |given| {
+        var buf: [300]u8 = undefined;
+        var why: Refusal = .{};
+        std.testing.allocator.free(try narrow(std.testing.allocator, try std.fmt.bufPrint(&buf, "{{\"linux\":{{\"seccomp\":{s}}}}}", .{given}), &profile, &why));
+    }
 }

@@ -82,7 +82,7 @@ ln -s "$NEXCAGE" "$WORK/nexcage@hardened"
 nx() { "$NEXCAGE" --config "$CFG" "$@"; }
 cleanup() {
     cd /
-    for id in "$ID" "$ID-s" "$ID-u" "$ID-a" "$ID-z" "$ID-c" "$ID-v" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
+    for id in "$ID" "$ID-s" "$ID-sa" "$ID-u" "$ID-a" "$ID-z" "$ID-c" "$ID-v" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
         nx delete --force "$id" >/dev/null 2>&1 || true
     done
     umount "$WORK/userns-pin" 2>/dev/null || true
@@ -213,6 +213,15 @@ nx --profile needs-seccomp create --bundle "$BUNDLE" "$ID-s" 2>"$WORK/err" && fa
 grep -q "seccompProfile.type: RuntimeDefault" "$WORK/err" || fail "the seccomp refusal does not say how to fix it: $(tail -1 "$WORK/err")"
 [ ! -e "/run/crun/$ID-s" ] || fail "a refused create left state behind"
 echo "ok: a profile requiring seccomp refuses a bundle without it"
+# A filter that lets every call through is a filter only to /proc, where it
+# shows as Seccomp: 2 like any other.
+spec ', "seccomp": { "defaultAction": "SCMP_ACT_ALLOW" }' ""
+rc=0; nx --profile needs-seccomp create --bundle "$BUNDLE" "$ID-sa" 2>"$WORK/err" || rc=$?
+[ "$rc" != 0 ] || fail "a seccomp filter that refuses no call passed a profile that requires one"
+grep -q "refuses no system call" "$WORK/err" || fail "the refusal does not say why: $(tail -1 "$WORK/err")"
+[ ! -e "/run/crun/$ID-sa" ] || fail "a refused create left state behind"
+echo "ok: a profile requiring seccomp refuses a filter that refuses no call"
+spec "" ""
 nx --profile needs-userns create --bundle "$BUNDLE" "$ID-u" 2>"$WORK/err" && fail "a bundle without a user namespace passed a profile that requires one"
 grep -q "hostUsers: false" "$WORK/err" || fail "the user namespace refusal does not say how to fix it: $(tail -1 "$WORK/err")"
 echo "ok: a profile requiring a user namespace refuses a bundle without one"
