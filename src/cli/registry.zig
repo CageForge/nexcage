@@ -131,6 +131,30 @@ var rollback_cmd = snapshot_cmd_mod.RollbackCommand{};
 var delsnapshot_cmd = snapshot_cmd_mod.DelsnapshotCommand{};
 // var template_cmd = template.TemplateCommand{};
 
+/// The error a command returned, in the set the command interface declares.
+/// A command returns whatever the standard library hands it -- NotDir when a
+/// state path is a file, NoSpaceLeft or BrokenPipe writing stdout -- and
+/// @errorCast of one outside core.types.Error was a checked panic: exit 134
+/// and a stack trace where one line naming the error was due. Such an error
+/// is logged by name, where the command logs its own, and the command fails
+/// with OperationFailed.
+fn narrow(logger: ?*core.LogContext, command: []const u8, err: anyerror) interfaces.Error {
+    inline for (@typeInfo(interfaces.Error).error_set.?) |e| {
+        if (err == @field(anyerror, e.name)) return @field(interfaces.Error, e.name);
+    }
+    if (logger) |log| {
+        log.err("{s}: {s}", .{ command, @errorName(err) }) catch {};
+    } else {
+        std.debug.print("nexcage: {s}: {s}\n", .{ command, @errorName(err) });
+    }
+    return interfaces.Error.OperationFailed;
+}
+
+/// The command's logger, set by registerCommandWithLogger, if it has one.
+fn loggerOf(comptime CommandType: type, cmd: *CommandType) ?*core.LogContext {
+    return if (@hasField(CommandType, "base")) cmd.base.logger else null;
+}
+
 /// Generic command registration helper
 fn registerCommand(
     registry: *CommandRegistry,
@@ -144,7 +168,7 @@ fn registerCommand(
         fn wrap(self_iface: *interfaces.CommandInterface, options: types.RuntimeOptions, allocator: std.mem.Allocator) interfaces.Error!void {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
             CommandType.execute(ctx_ptr, options, allocator) catch |err| {
-                return @as(interfaces.Error, @errorCast(err));
+                return narrow(loggerOf(CommandType, ctx_ptr), self_iface.name, err);
             };
         }
     }.wrap;
@@ -153,7 +177,7 @@ fn registerCommand(
         fn wrap(self_iface: *interfaces.CommandInterface, allocator: std.mem.Allocator) interfaces.Error![]const u8 {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
             return CommandType.help(ctx_ptr, allocator) catch |err| {
-                return @as(interfaces.Error, @errorCast(err));
+                return narrow(loggerOf(CommandType, ctx_ptr), self_iface.name, err);
             };
         }
     }.wrap;
@@ -162,7 +186,7 @@ fn registerCommand(
         fn wrap(self_iface: *interfaces.CommandInterface, args: []const []const u8) interfaces.Error!void {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
             CommandType.validate(ctx_ptr, args) catch |err| {
-                return @as(interfaces.Error, @errorCast(err));
+                return narrow(loggerOf(CommandType, ctx_ptr), self_iface.name, err);
             };
         }
     }.wrap;
@@ -196,7 +220,7 @@ fn registerCommandWithLogger(
         fn wrap(self_iface: *interfaces.CommandInterface, options: types.RuntimeOptions, allocator: std.mem.Allocator) interfaces.Error!void {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
             CommandType.execute(ctx_ptr, options, allocator) catch |err| {
-                return @as(interfaces.Error, @errorCast(err));
+                return narrow(loggerOf(CommandType, ctx_ptr), self_iface.name, err);
             };
         }
     }.wrap;
@@ -205,7 +229,7 @@ fn registerCommandWithLogger(
         fn wrap(self_iface: *interfaces.CommandInterface, allocator: std.mem.Allocator) interfaces.Error![]const u8 {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
             return CommandType.help(ctx_ptr, allocator) catch |err| {
-                return @as(interfaces.Error, @errorCast(err));
+                return narrow(loggerOf(CommandType, ctx_ptr), self_iface.name, err);
             };
         }
     }.wrap;
@@ -214,7 +238,7 @@ fn registerCommandWithLogger(
         fn wrap(self_iface: *interfaces.CommandInterface, args: []const []const u8) interfaces.Error!void {
             const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
             CommandType.validate(ctx_ptr, args) catch |err| {
-                return @as(interfaces.Error, @errorCast(err));
+                return narrow(loggerOf(CommandType, ctx_ptr), self_iface.name, err);
             };
         }
     }.wrap;
@@ -285,4 +309,65 @@ pub fn registerBuiltinCommandsWithLogger(registry: *CommandRegistry, logger: *co
     try registerCommandWithLogger(registry, &snapshots_cmd, snapshot_cmd_mod.SnapshotsCommand, logger);
     try registerCommandWithLogger(registry, &rollback_cmd, snapshot_cmd_mod.RollbackCommand, logger);
     try registerCommandWithLogger(registry, &delsnapshot_cmd, snapshot_cmd_mod.DelsnapshotCommand, logger);
+}
+
+/// A command that fails with errors outside core.types.Error, as a command
+/// writing state into a file where a directory belongs does.
+const FailingCommand = struct {
+    name: []const u8 = "failing",
+    description: []const u8 = "",
+    base: @import("base_command.zig").BaseCommand = .{},
+
+    pub fn setLogger(self: *FailingCommand, logger: *core.LogContext) void {
+        self.base.setLogger(logger);
+    }
+
+    pub fn execute(self: *FailingCommand, options: types.RuntimeOptions, allocator: std.mem.Allocator) !void {
+        _ = self;
+        _ = allocator;
+        // One error from core.types.Error as well: @errorCast refuses to
+        // compile a cast between sets with nothing in common.
+        if (options.help) return error.InvalidInput;
+        return error.NotDir;
+    }
+
+    pub fn help(self: *FailingCommand, allocator: std.mem.Allocator) ![]const u8 {
+        _ = allocator;
+        if (self.name.len == 0) return error.OutOfMemory;
+        return error.BrokenPipe;
+    }
+
+    pub fn validate(self: *FailingCommand, args: []const []const u8) !void {
+        _ = self;
+        if (args.len == 0) return error.InvalidInput;
+        return error.NoSpaceLeft;
+    }
+};
+
+test "a command error outside core.types.Error is an error exit naming it, not a panic" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const log_file = try tmp.dir.createFile("log", .{});
+    defer log_file.close();
+    var logger = core.LogContext.init(std.testing.allocator, log_file, .info, "nexcage");
+    logger.timestamp = false;
+
+    var registry = CommandRegistry.init(std.testing.allocator);
+    defer registry.deinit();
+    var cmd = FailingCommand{};
+    try registerCommandWithLogger(&registry, &cmd, FailingCommand, &logger);
+
+    const options = std.mem.zeroInit(types.RuntimeOptions, .{ .allocator = std.testing.allocator, .command = .create });
+    try std.testing.expectError(error.OperationFailed, registry.execute("failing", options, std.testing.allocator));
+    const iface = registry.get("failing").?;
+    try std.testing.expectError(error.OperationFailed, iface.help(iface, std.testing.allocator));
+    try std.testing.expectError(error.OperationFailed, iface.validate(iface, &.{"x"}));
+    // One in the set passes through as it is.
+    try std.testing.expectError(error.InvalidInput, iface.validate(iface, &.{}));
+
+    var buf: [256]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        "ERROR nexcage: failing: NotDir\nERROR nexcage: failing: BrokenPipe\nERROR nexcage: failing: NoSpaceLeft\n",
+        try tmp.dir.readFile("log", &buf),
+    );
 }

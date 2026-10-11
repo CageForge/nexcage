@@ -86,6 +86,12 @@ done
 nx version --help; check "version --help prints help, not the version" all 'rc 0' 'out_has "Usage: nexcage version"'
 nx health --help;  check "health --help prints help, runs no checks"   all 'rc 0' 'out_has "Usage: nexcage health"' '[ ! -s "$S/calls.last" ]'
 nx --debug list; check "--debug before command still runs list" all 'rc 0' 'out_has "NAMES"'
+# A command can fail with an error from outside nexcage's own set, as version
+# does writing to a full disk. That was a panic, "invalid error code" and exit
+# 134; it is an error exit naming the error.
+RC=0; nexcage_ns version > /dev/full 2> "$S/err" || RC=$?; LAST="nexcage version > /dev/full"; : > "$S/calls.last"
+check "an error from outside nexcage's set exits 1 naming it, not a panic" \
+  all 'rc 1' 'err_has "version: NoSpaceLeft"' '! err_has "panic"'
 
 echo "=== create ==="
 reset_sim
