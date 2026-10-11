@@ -540,6 +540,43 @@ test "a config.json with a mount, arg or env entry of the wrong type is refused,
     }
 }
 
+test "mounts, linux, resources, memory or cpu of the wrong kind are refused, not skipped" {
+    const cases = [_][]const u8{
+        \\{"root":{"path":"rootfs"},"mounts":{"destination":"/data","type":"bind","source":"/srv/data"}}
+        ,
+        \\{"root":{"path":"rootfs"},"mounts":"/srv/data:/data"}
+        ,
+        \\{"root":{"path":"rootfs"},"linux":[{"resources":{"memory":{"limit":1048576}}}]}
+        ,
+        \\{"root":{"path":"rootfs"},"linux":{"resources":"memory=1G"}}
+        ,
+        \\{"root":{"path":"rootfs"},"linux":{"resources":{"memory":1048576}}}
+        ,
+        \\{"root":{"path":"rootfs"},"linux":{"resources":{"cpu":[{"shares":1024}]}}}
+        ,
+    };
+    for (cases) |json| {
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        const path = try testBundle(&tmp, json);
+        defer std.testing.allocator.free(path);
+        var parser = bundle.OciBundleParser.init(std.testing.allocator, null);
+        try std.testing.expectError(error.InvalidConfigFormat, parser.parseBundle(path));
+    }
+
+    // null is no value, as it is for runc
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try testBundle(&tmp,
+        \\{"root":{"path":"rootfs"},"mounts":null,"linux":{"resources":{"memory":null,"cpu":null}}}
+    );
+    defer std.testing.allocator.free(path);
+    var parser = bundle.OciBundleParser.init(std.testing.allocator, null);
+    var cfg = try parser.parseBundle(path);
+    defer cfg.deinit();
+    try std.testing.expect(cfg.mounts == null and cfg.memory_limit == null and cfg.cpu_shares == null);
+}
+
 test "well-formed mounts still parse, and free what they hold" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

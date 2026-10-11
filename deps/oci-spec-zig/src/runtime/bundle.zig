@@ -205,6 +205,7 @@ pub const OciBundleParser = struct {
         // `"mounts": [1]`. A bundle like that is refused, as runc and crun
         // refuse it.
         if (obj.get("mounts")) |mounts_val| {
+            try expectKind(mounts_val, .array);
             if (mounts_val == .array) {
                 const mounts_array = mounts_val.array;
                 var mounts = try self.allocator.alloc(MountConfig, mounts_array.items.len);
@@ -237,11 +238,13 @@ pub const OciBundleParser = struct {
 
         // Parse Linux resources
         if (obj.get("linux")) |linux_val| {
+            try expectKind(linux_val, .object);
             if (linux_val == .object) {
                 const linux_obj = linux_val.object;
 
                 // Parse memory limit
                 if (linux_obj.get("resources")) |resources_val| {
+                    try expectKind(resources_val, .object);
                     if (resources_val == .object) {
                         const resources_obj = resources_val.object;
 
@@ -251,6 +254,7 @@ pub const OciBundleParser = struct {
                         // cast to u64 here, and -1 -- runc's "no limit" --
                         // took the process down.
                         if (resources_obj.get("memory")) |memory_val| {
+                            try expectKind(memory_val, .object);
                             if (memory_val == .object) {
                                 bundle_config.memory_limit = try optionalInt(i64, memory_val.object, "limit");
                             }
@@ -258,6 +262,7 @@ pub const OciBundleParser = struct {
 
                         // Parse CPU limit
                         if (resources_obj.get("cpu")) |cpu_val| {
+                            try expectKind(cpu_val, .object);
                             if (cpu_val == .object) {
                                 bundle_config.cpu_shares = try optionalInt(u64, cpu_val.object, "shares");
                             }
@@ -595,6 +600,15 @@ pub const OciBundleParser = struct {
         if (val == .null) return null;
         if (val != .string) return BundleError.InvalidConfigFormat;
         return try self.allocator.dupe(u8, val.string);
+    }
+
+    /// Checks that a value config.json holds where the runtime-spec has an
+    /// object or an array is one; null counts as absent. Anything else was
+    /// skipped with all it held -- `"mounts": {...}` created the container
+    /// with no mounts, and a memory or cpu that was not an object with no
+    /// limit -- and is refused, as runc and crun refuse it.
+    fn expectKind(value: std.json.Value, comptime kind: std.meta.Tag(std.json.Value)) BundleError!void {
+        if (value != kind and value != .null) return BundleError.InvalidConfigFormat;
     }
 
     /// An object's integer field as the runtime-spec types it, null when it

@@ -446,6 +446,13 @@ printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":[1,"/srv:/data"]
 nx create --name bundle-bad /tmp/nexcage-bundles/badmp
 check "bundle whose mounts hold a non-object -> exit 2 before pct create, no crash" \
   all 'rc 2' 'err_has "not a usable OCI bundle"' '! err_has "General protection"' 'not_called_re "^pct create"'
+# A "mounts" that is not a list was skipped with what it held, and the
+# container created without the mounts the bundle asked for.
+mkdir -p "$S/bundles/objmp/rootfs"
+printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":{"destination":"/data","type":"bind","source":"/srv/data"}}' > "$S/bundles/objmp/config.json"
+nx create --name bundle-objmp /tmp/nexcage-bundles/objmp
+check "bundle whose mounts is an object, not a list -> exit 2 before anything is packed" \
+  all 'rc 2' 'err_has "not a usable OCI bundle"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
 rm -f "$S"/tplmode.*
 nx create --name bundle-1 /tmp/nexcage-bundles/b1
 # The archive was written to storage local as nexcage-<name>-<time>.tar.zst
