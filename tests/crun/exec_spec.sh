@@ -98,9 +98,9 @@ echo "ok: nobody planted $planted directories ahead of the next pids"
 
 for round in 1 2 3; do
     rc=0; nx exec "$ID" --process "$WORK/process.json" >/dev/null 2>"$WORK/err" || rc=$?
-    [ "$rc" = 0 ] || fail "exec --process into a profiled container exited $rc with directories planted in /tmp: $(head -c 300 "$WORK/err" | tr '\n' ' ')"
+    [ "$rc" = 0 ] || fail "round $round: exec --process into a profiled container exited $rc with directories planted in /tmp: $(head -c 300 "$WORK/err" | tr '\n' ' ')"
     rc=0; nx exec "$ID" /bin/true 2>"$WORK/err" || rc=$?
-    [ "$rc" = 0 ] || fail "exec <id> /bin/true exited $rc with directories planted in /tmp: $(head -c 300 "$WORK/err" | tr '\n' ' ')"
+    [ "$rc" = 0 ] || fail "round $round: exec <id> /bin/true exited $rc with directories planted in /tmp: $(head -c 300 "$WORK/err" | tr '\n' ' ')"
 done
 echo "ok: exec --process and a command-line exec work regardless (3 rounds each)"
 
