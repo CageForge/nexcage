@@ -171,9 +171,11 @@ pub const CrunDriver = struct {
     /// every Proxmox LXC command needed /proc and open_tree, a bind mount or
     /// an executable memfd as well, and died without a word under a seccomp
     /// filter that kills on open_tree. build.zig compiles that constructor out
-    /// and this calls the same function, first, before the command has done
-    /// anything a second run would repeat. It does not return the first time;
-    /// the second, from the copy, it returns at once.
+    /// and this calls the same function, first, before the driver has done
+    /// anything a second run would repeat. The copy starts again from main,
+    /// so what the command logged before routing here is logged twice. It
+    /// does not return the first time; the second, from the copy, it returns
+    /// at once.
     fn runFromSealedCopy(self: *Self) core.Error!void {
         const ret = ffi.Libcrun.ensure_cloned_binary();
         if (ret >= 0) return;
