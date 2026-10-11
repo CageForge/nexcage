@@ -163,6 +163,14 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Create LXC container using pct command
     pub fn create(self: *Self, config: core.types.SandboxConfig) !void {
+        const vmid = try self.createVmid(config);
+        self.allocator.free(vmid);
+    }
+
+    /// create, handing back the VMID the container was made under. That names
+    /// this container and no other; its name may not, since another container
+    /// can take the same name while pct create runs.
+    fn createVmid(self: *Self, config: core.types.SandboxConfig) ![]u8 {
         if (self.logger) |log| {
             try log.info("Creating Proxmox LXC container: {s}", .{config.name});
         }
@@ -330,7 +338,7 @@ pub const ProxmoxLxcDriver = struct {
 
         // 2. Take the next free VMID from the cluster
         const vmid = try self.pve_client.nextVmid();
-        defer self.allocator.free(vmid);
+        errdefer self.allocator.free(vmid);
 
         // 3. Resolve final template string
         var final_template: []const u8 = undefined;
@@ -482,7 +490,10 @@ pub const ProxmoxLxcDriver = struct {
         // retry was refused with "already exists". runc and crun remove what
         // a failed create made, and so does this. The archive packed from a
         // bundle is removed by the defer above, after this has run.
-        errdefer self.undoCreate(config.name, vmid, target_node);
+        errdefer {
+            if (self.logger) |log| log.warn("create of {s} failed after pct create; destroying vmid {s}", .{ config.name, vmid }) catch {};
+            self.undoCreate(config.name, vmid, target_node);
+        }
 
         // 7. Post-creation setup
         if (oci_bundle_path) |bp| {
@@ -505,6 +516,42 @@ pub const ProxmoxLxcDriver = struct {
         } else {
             if (self.logger) |log| log.info("Proxmox LXC container created: {s} (vmid {s})", .{ config.name, vmid }) catch {};
         }
+        return vmid;
+    }
+
+    /// Create a container on this node and start it. `runc run` removes the
+    /// container it made when it cannot start it, and so does this: a start
+    /// that failed used to leave a created container behind, under a name the
+    /// next run was refused.
+    ///
+    /// The start and the undo go by the VMID create made, never by the name
+    /// again. A container of the same name can appear while pct create runs,
+    /// and the name then finds that one first: run used to start it, fail
+    /// with "already running", and stop and destroy it -- another caller's
+    /// running container -- while leaving its own behind.
+    pub fn run(self: *Self, config: core.types.SandboxConfig) !void {
+        // The router refuses --node for run, and the start and the undo
+        // below are this node's. A run that reaches here with one anyway is
+        // refused before anything is made.
+        if (config.node != null) return core.Error.UnsupportedOperation;
+
+        const vmid = try self.createVmid(config);
+        defer self.allocator.free(vmid);
+        errdefer {
+            if (self.logger) |log| log.warn("start of {s} failed; destroying vmid {s}, which run created", .{ config.name, vmid }) catch {};
+            // pct destroy refuses a running container, and a start can fail
+            // after the init is up. Stopped as delete --force stops one.
+            if ((self.pve_client.initPid(vmid, null) catch null) != null) {
+                self.pve_client.stop(vmid, null) catch |err| {
+                    if (self.logger) |log| log.warn("stop of vmid {s} before destroying it failed: {s}", .{ vmid, @errorName(err) }) catch {};
+                };
+            }
+            self.undoCreate(config.name, vmid, null);
+        }
+
+        // Not `try`: a log line that cannot be written is no reason to undo
+        if (self.logger) |log| log.info("Starting Proxmox LXC container: {s}", .{config.name}) catch {};
+        try self.startVmid(config.name, vmid, null);
     }
 
     fn hasLimit(limits: []const core.types.ResourceUpdate, section: []const u8, name: []const u8) bool {
@@ -512,12 +559,12 @@ pub const ProxmoxLxcDriver = struct {
         return false;
     }
 
-    /// Destroy a container that create made and then failed to finish, and
-    /// the state it had written for it. Create is already failing with the
-    /// error that matters, so this only reports what it cannot undo -- by
-    /// VMID, the one name a person can then find the container by.
+    /// Destroy a container that create made and that create or run then
+    /// failed to finish, and the state create had written for it. The caller
+    /// is already failing with the error that matters, so this only reports
+    /// what it cannot undo -- by VMID, the one name a person can then find the
+    /// container by.
     fn undoCreate(self: *Self, name: []const u8, vmid: []const u8, node: ?[]const u8) void {
-        if (self.logger) |log| log.warn("create of {s} failed after pct create; destroying vmid {s}", .{ name, vmid }) catch {};
         self.pve_client.delete(vmid, node) catch |err| {
             if (self.logger) |log| log.err("vmid {s} ({s}) is left behind: destroying it failed ({s})", .{ vmid, name, @errorName(err) }) catch {};
         };
@@ -681,13 +728,18 @@ pub const ProxmoxLxcDriver = struct {
 
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        try self.startVmid(container_id, loc.vmid, loc.remote());
+    }
 
-        try self.pve_client.start(loc.vmid, loc.remote());
+    /// Start the container `vmid` names, and record it as running under the
+    /// name its state is kept by.
+    fn startVmid(self: *Self, name: []const u8, vmid: []const u8, node: ?[]const u8) !void {
+        try self.pve_client.start(vmid, node);
 
-        const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
-        const kept_bundle = self.persistedBundle(container_id);
+        const init_pid = (self.pve_client.initPid(vmid, node) catch null) orelse 0;
+        const kept_bundle = self.persistedBundle(name);
         defer if (kept_bundle) |b| self.allocator.free(b);
-        self.writeOciState(container_id, "running", init_pid, kept_bundle) catch {};
+        self.writeOciState(name, "running", init_pid, kept_bundle) catch {};
     }
 
     /// Stop LXC container using pct command

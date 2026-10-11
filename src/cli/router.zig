@@ -270,18 +270,11 @@ pub const BackendRouter = struct {
                 }
                 core.exit_status.propagated = try proxmox_backend.exec(container_id, exec_cfg.argv);
             },
-            .run => {
-                try proxmox_backend.create(sandbox_config);
-                // `runc run` removes the container it made when it cannot
-                // start it, and so does this: a start that failed used to
-                // leave a created container behind, under a name the next run
-                // was refused. After create, never before it: create refuses
-                // a name that is taken, and that container is someone else's.
-                errdefer proxmox_backend.delete(container_id, true) catch |err| {
-                    if (self.logger) |log| log.err("{s} is left behind: removing it after the failed start failed too ({s})", .{ container_id, @errorName(err) }) catch {};
-                };
-                try proxmox_backend.start(container_id);
-            },
+            // Create, then start, and a start that fails removes the
+            // container again, as `runc run` does. The driver does both: only
+            // it knows the VMID create made, and the undo must go by that, not
+            // by the name, which another container can have taken meanwhile.
+            .run => try proxmox_backend.run(sandbox_config),
             .state => {
                 // State operation handled by command, backend returns info
                 // Router just ensures backend is initialized

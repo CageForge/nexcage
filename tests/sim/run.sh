@@ -455,6 +455,35 @@ check "run whose start fails -> exit 1, and the container it made is destroyed" 
       '! grep -q " app-f$" "$S/db"' '[ ! -e "$S/run/nexcage/app-f" ]'
 rm -f "$S/fail_start"
 nx run --name app-f "$TPL"; check "and a run of the same name then succeeds" all 'rc 0' 'status_is app-f running'
+# The undo goes by the VMID run made, not by the name again. Another caller's
+# container of the same name, made while pct create ran and listed first, used
+# to be the one run started -- "already running" -- then stopped and
+# destroyed, while run's own stayed behind. hold_create keeps pct create's
+# work waiting while that one appears, started as pct starts one and in a
+# namespace as nexcage's, so that its cgroup lands in $S/cgroup. Its calls are
+# not run's, and are left out of calls.last.
+pct_ns() { unshare -rm bash -c 'mount --bind "$SIM/cgroup" /sys/fs/cgroup && exec "$BIN/pct" "$@"' pct "$@" > /dev/null 2>&1; }
+echo 0 > "$S/slow_create"; touch "$S/hold_create"
+before=$(wc -l < "$S/calls")
+nexcage_ns run --name dup "$TPL" > "$S/out" 2> "$S/err" &
+bg=$!
+for _ in $(seq 1 100); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
+mid=$(wc -l < "$S/calls")
+echo "90 stopped dup" >> "$S/db"
+pct_ns start 90
+echo "startup for container failed" > "$S/fail_start"
+held=$(wc -l < "$S/calls")
+rm -f "$S/hold_create"
+RC=0; wait "$bg" || RC=$?
+{ sed -n "$((before + 1)),${mid}p" "$S/calls"; tail -n +"$((held + 1))" "$S/calls"; } > "$S/calls.last"
+LAST="nexcage run --name dup $TPL, while another dup is made and started"
+dup=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails destroys the VMID it made, not a container of the same name made meanwhile" \
+  all 'rc 1' '[ -n "$dup" ]' '[ "$dup" != 90 ]' 'called "pct start $dup"' 'called "pct destroy $dup"' \
+      '! grep -q "^$dup " "$S/db"' '[ ! -e "$S/run/nexcage/dup" ]' \
+      'not_called_re "^pct [a-z]+ 90( |$)"' 'grep -qx "90 running dup" "$S/db"' 'kill -0 "$(init_pid 90)"'
+rm -f "$S/fail_start" "$S/slow_create" "$S/create_caller" "$S/create_worker"
+pct_ns shutdown 90; pct_ns destroy 90
 nx run --name app-2;        check "run without image -> exit 2" rc 2
 # run used to accept these and drop them: --node made the container on this
 # host, and a caller passing --console-socket waited for a pty that never came.

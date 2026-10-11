@@ -348,7 +348,9 @@ nexcage run --name <name> <image>
 
 `create` followed by `start`, on this host. If `start` fails, the container
 `create` made is destroyed again before `run` exits 1, as `runc run` does, so
-nothing is left under the name. `--node` is refused (exit 1): to
+nothing is left under the name. `run` starts and destroys it by the VMID
+`create` made, never by the name, which another container may have taken in
+the meantime. `--node` is refused (exit 1): to
 make the container on another node, `create --node`, then `start`.
 `--console-socket` and `--pid-file` are refused as `create` refuses them, since
 `pct start` runs the container's init itself; and the crun backend does not
