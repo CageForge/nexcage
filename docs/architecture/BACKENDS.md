@@ -59,6 +59,11 @@ with the vendored header field by field. What nexcage does around libcrun:
   that are known to reach libcrun's int64 arithmetic are refused first, on
   `create` and on `update`: a limit, swap or reservation is `-1` or a number of
   bytes, and a swap minus limit that does not fit in 64 bits is refused too.
+- **`create` gives libcrun the spec it checked**, as bytes, never the
+  bundle's `config.json` to read for itself: libcrun read a file twice, to
+  parse it and to keep a copy in its state directory, and a bundle changed
+  after nexcage's checks, or between the two reads, went to libcrun
+  unchecked.
 - **`create` and `exec` run from a sealed copy of the binary** (the
   CVE-2019-5736 protection): the driver calls libcrun's
   `ensure_cloned_binary` before anything else. libcrun does that from a

@@ -10,6 +10,9 @@
 # --force then said 0 and left the cgroup, one per attempt. The same document
 # through update died after memory.max had been rewritten to max.
 #
+# The checks hold for what libcrun is given: it gets the bytes nexcage read,
+# not the bundle's file to read again.
+#
 # The kernel's files are the check: the cgroup directory, memory.max, and
 # the processes in a cgroup that must be left alone. cgroup v2 only.
 #
@@ -20,6 +23,7 @@ BUNDLE=${1:-/bundle}
 NEXCAGE=${NEXCAGE:-/usr/local/bin/nexcage}
 ID=memory-values-$$
 CG=/sys/fs/cgroup
+WORK=$(mktemp -d)
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -61,14 +65,17 @@ JSON
 
 nx() { "$NEXCAGE" --runtime crun "$@"; }
 busy=
+feeder=
 cleanup() {
     cd /
     [ -z "$busy" ] || kill "$busy" 2>/dev/null || true
-    for id in "$ID" "$ID-c" "$ID-u" "$ID-b" "$ID-p"; do
+    [ -z "$feeder" ] || kill "$feeder" 2>/dev/null || true
+    for id in "$ID" "$ID-c" "$ID-f" "$ID-u" "$ID-b" "$ID-p"; do
         nx delete --force "$id" >/dev/null 2>&1 || true
         rmdir "$CG/$id" 2>/dev/null || true
         rm -rf "/run/crun/$id"
     done
+    rm -rf "$WORK"
 }
 trap cleanup EXIT
 cd /
@@ -81,6 +88,34 @@ grep -q "memory.limit is -9223372036854775808" /tmp/memory.err || fail "the refu
 [ ! -e "/run/crun/$ID-c" ] || fail "a refused create left /run/crun/$ID-c"
 [ ! -e "$CG/$ID-c" ] || fail "a refused create left the cgroup $CG/$ID-c"
 echo "ok: create with memory.limit INT64_MIN exits 2 and leaves nothing"
+
+# ... and what passed the check is what libcrun creates from. A config.json
+# that is a FIFO answers the first read with a spec that passes, and every
+# later one with the spec above: handed the path, libcrun read it again, to
+# parse it and to copy it into its state, and died of the trap the check is
+# there to prevent. In a bundle of its own, so no other step or script ever
+# writes into a FIFO; the rootfs is the shared one, by its absolute path.
+mkdir "$WORK/fifo"
+as_own() { sed "s|\"path\": \"rootfs\"|\"path\": \"$BUNDLE/rootfs\"|" "$BUNDLE/config.json"; }
+checked=$(spec '{ "limit": 67108864 }'; as_own)
+swapped=$(spec '{ "limit": -9223372036854775808, "swap": 1 }'; as_own)
+mkfifo "$WORK/fifo/config.json"
+# printf is the shell's own, so the open that waits for a reader is in this
+# process, and killing it leaves nothing blocked. A reader that closes early
+# must not end it: SIGPIPE is ignored.
+sh -c 'trap "" PIPE; printf "%s" "$1" > "$3"; while :; do printf "%s" "$2" > "$3" 2>/dev/null; done' \
+    sh "$checked" "$swapped" "$WORK/fifo/config.json" &
+feeder=$!
+rc=0; nx create --bundle "$WORK/fifo" "$ID-f" 2>/tmp/memory.err || rc=$?
+kill "$feeder" 2>/dev/null || true; feeder=
+[ "$rc" = 0 ] || fail "create from a config.json that changed after nexcage read it exited $rc: libcrun read the file again and got what nexcage never checked: $(tr '\n' ' ' < /tmp/memory.err | head -c 300)"
+pid=$(nx state "$ID-f" | sed -n 's/.*"pid": *\([0-9][0-9]*\).*/\1/p')
+[ -n "$pid" ] || fail "state $ID-f names no pid after create"
+cg=$CG$(sed -n 's/^0:://p' "/proc/$pid/cgroup")
+[ "$(cat "$cg/memory.max")" = 67108864 ] || fail "the container from a FIFO config.json has memory.max $(cat "$cg/memory.max"), not the checked spec's 67108864"
+grep -q '"limit": *67108864' "/run/crun/$ID-f/config.json" || fail "libcrun kept a config other than the one nexcage checked: $(head -c 300 "/run/crun/$ID-f/config.json")"
+nx delete --force "$ID-f" >/dev/null 2>&1 || fail "delete --force $ID-f"
+echo "ok: create hands libcrun the spec it checked, and libcrun does not read the bundle's file again"
 
 # 2. update: refused, memory.max as it was.
 spec '{ "limit": 67108864 }'

@@ -212,7 +212,8 @@ jobs:
             --entrypoint /bin/sh nexcage:ci /t/profile_update.sh
 
       # libcrun is compiled with UBSan in trap mode, so memory values it would
-      # overflow on are refused before it sees them, and delete --force
+      # overflow on are refused before it sees them, libcrun is given the
+      # spec that was checked rather than the file, and delete --force
       # removes the cgroup a create killed half way left behind.
       - name: memory values are checked before libcrun
         run: |

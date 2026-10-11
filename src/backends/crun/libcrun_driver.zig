@@ -234,14 +234,16 @@ pub const CrunDriver = struct {
         };
         defer self.allocator.free(spec);
 
-        const config_path_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{config_path}, 0);
-        defer self.allocator.free(config_path_c);
-
         // Allocate error structure
         var err_ptr: ?*ffi.Libcrun.Error = null;
 
-        // Without a profile libcrun reads the file. With one, it is given the
-        // spec the profile narrowed, which it keeps as the container's
+        // libcrun is given the spec as bytes, the ones checked here, and never
+        // the file. Handed the path, it read the file twice, to parse it and
+        // again to copy it into the state directory, and whoever can write
+        // the bundle could change it after these checks or between the two
+        // reads: libcrun made a container from a spec nothing had checked and
+        // kept another as its config. With a profile the bytes are the spec
+        // the profile narrowed, which libcrun keeps as the container's
         // config.json, so `state` reports the profile from it. Either way a
         // bundle that claims a profile is refused (ADR-005).
         var why: core.profile.Refusal = .{};
@@ -255,19 +257,18 @@ pub const CrunDriver = struct {
             else => return err,
         };
         defer if (narrowed) |n| self.allocator.free(n);
+        const given = narrowed orelse spec;
         // The spec libcrun is about to be given, before it does arithmetic on
         // its memory values (checkMemory).
-        try self.checkMemoryJson("the bundle's config.json", narrowed orelse spec, .spec);
-        const container = if (narrowed) |n| blk: {
-            const narrowed_z = try self.allocator.dupeZ(u8, n);
-            defer self.allocator.free(narrowed_z);
-            break :blk ffi.Libcrun.libcrun_container_load_from_memory(narrowed_z.ptr, &err_ptr) orelse {
+        try self.checkMemoryJson("the bundle's config.json", given, .spec);
+        const container = blk: {
+            // libcrun keeps a copy of its own.
+            const given_z = try self.allocator.dupeZ(u8, given);
+            defer self.allocator.free(given_z);
+            break :blk ffi.Libcrun.libcrun_container_load_from_memory(given_z.ptr, &err_ptr) orelse {
                 try self.handleError(&err_ptr, "container_load_from_memory");
                 return;
             };
-        } else ffi.Libcrun.libcrun_container_load_from_file(config_path_c.ptr, &err_ptr) orelse {
-            try self.handleError(&err_ptr, "container_load_from_file");
-            return;
         };
         defer ffi.Libcrun.libcrun_container_free(container);
 
