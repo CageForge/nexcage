@@ -312,7 +312,7 @@ pub const OciProcessor = struct {
     /// newline in a destination added any line the bundle liked to the
     /// container's config -- lxc.* keys and `unprivileged: 0` included --
     /// and a comma added mp properties. A path now has to be absolute and
-    /// normalised, with no control character, ',' or '='.
+    /// normalised, with no control character, line separator, ',' or '='.
     ///
     /// A bind mount of a host directory is what Proxmox can express. The
     /// kernel filesystems a runtime-spec bundle mounts at their usual places
@@ -527,11 +527,17 @@ fn isContainerOwnMount(dest: []const u8) bool {
 /// Why `path` cannot go into a pct mount-point property string, or null
 /// when it can. It has to be absolute and normalised -- no empty, "." or
 /// ".." component and no trailing slash -- and free of control characters,
-/// and of ',' and '=', which separate the property string's keys.
+/// of U+2028 and U+2029, which end a line for some readers, and of ',' and
+/// '=', which separate the property string's keys.
 fn mountPathProblem(path: []const u8) ?[]const u8 {
     if (path.len == 0 or path[0] != '/') return "is not an absolute path";
-    for (path) |c| {
+    for (path, 0..) |c, i| {
         if (c < 0x20 or c == 0x7f) return "contains a control character";
+        // config.json is UTF-8, where the C1 controls (U+0080 to U+009F,
+        // NEL among them) are 0xc2 0x80 to 0xc2 0x9f. Proxmox splits its
+        // config on '\n' alone, but a path is shown and logged elsewhere too.
+        if (c == 0xc2 and i + 1 < path.len and path[i + 1] >= 0x80 and path[i + 1] <= 0x9f) return "contains a control character";
+        if (std.mem.startsWith(u8, path[i..], "\u{2028}") or std.mem.startsWith(u8, path[i..], "\u{2029}")) return "contains a line or paragraph separator";
         if (c == ',' or c == '=') return "contains ',' or '=', which pct would read as another property";
     }
     if (path.len == 1) return null;
@@ -722,6 +728,15 @@ test "a mount path goes into a pct property string only when absolute, normalise
     // A comma alone is enough: "/srv/a," would be read as the source /srv/a,
     // and "/a,/b" fails in pct set, once the container exists
     for ([_][]const u8{ "", "srv/data", "/srv/", "//srv", "/srv//data", "/srv/./data", "/srv/..", "/srv/../etc", "/x\nlxc.hook.pre-start: /bin/sh", "/x\r", "/x\x7f", "/srv/a,ro=0", "/srv/a,", "/srv/a,b", "/a,/b", "/srv/a=b" }) |bad| {
+        try std.testing.expect(mountPathProblem(bad) != null);
+    }
+    // config.json is UTF-8. Its C1 controls -- NEL, U+0085, among them --
+    // and U+2028 and U+2029 end a line for some readers; the characters on
+    // either side of them are ordinary
+    for ([_][]const u8{ "/srv/caf\u{e9}", "/srv/a\u{a0}b", "/srv/a\u{2027}b", "/srv/a\u{2030}b" }) |ok| {
+        try std.testing.expectEqual(@as(?[]const u8, null), mountPathProblem(ok));
+    }
+    for ([_][]const u8{ "/x\u{80}", "/x\u{85}lxc.x: y", "/x\u{9f}", "/x\u{2028}lxc.x: y", "/x\u{2029}" }) |bad| {
         try std.testing.expect(mountPathProblem(bad) != null);
     }
 }

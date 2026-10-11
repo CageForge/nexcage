@@ -318,7 +318,9 @@ The bundle's bind mounts become the container's mount points `mp0`, `mp1`, ...
 through one `pct set` after the create, which checks each as Proxmox's API
 does. A mount's source and destination must be absolute, normalised paths
 (no empty, `.` or `..` component, no trailing `/`) without control
-characters, `,` or `=`; the destination cannot be `/`, and a source under
+characters (ASCII's, or the C1 ones from U+0080 to U+009F), the line and
+paragraph separators U+2028 and U+2029, `,` or `=`; the destination cannot
+be `/`, and a source under
 `/dev/` is refused, since Proxmox would mount the filesystem on that device
 rather than bind it. Proxmox binds directories only: a source that is not a
 directory when the container starts makes the start fail. The kernel
