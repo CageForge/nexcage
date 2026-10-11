@@ -118,19 +118,24 @@ rm -f "$S/fail_create"
 # unit with KillMode=process -- kills it alone: pct used to finish the
 # container by itself, with no state, under a name a retry was then refused.
 # Its children get SIGTERM when it dies now; fake pct models what real pct
-# does with that, and with a KILL, which would not stop the create.
-echo 2 > "$S/slow_create"
+# does with that, and with a KILL, which would not stop the create. The work
+# is held until the check has looked, so a create that carries on is still
+# there to be seen however slowly anything runs. It used to be given two
+# seconds, and a loaded machine let it finish before the signal came.
+echo 0 > "$S/slow_create"; touch "$S/hold_create"
 before=$(wc -l < "$S/calls")
 nexcage_ns create --name slow-1 "$TPL" > "$S/out" 2> "$S/err" &
 bg=$!
 for _ in $(seq 1 100); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
+worker=$(cat "$S/create_worker" 2>/dev/null)
 kill -KILL "$(cat "$S/create_caller")"
 RC=0; wait "$bg" || RC=$?
-sleep 3
 tail -n +"$((before + 1))" "$S/calls" > "$S/calls.last"; LAST="nexcage create --name slow-1 $TPL, killed during pct create"
 check "nexcage killed during pct create: the create does not carry on without it" \
-  all 'rc 137' 'called_re "^pct create [0-9]+ .*--hostname slow-1 "' '! grep -q " slow-1$" "$S/db"'
-rm -f "$S/slow_create" "$S/create_caller"
+  all 'rc 137' 'called_re "^pct create [0-9]+ .*--hostname slow-1 "' '[ -n "$worker" ]' 'eventually "! kill -0 $worker 2>/dev/null"'
+# A create that carries on is stopped here, rather than let into the db
+[ -n "$worker" ] && kill -KILL -- "-$worker" 2>/dev/null
+rm -f "$S/hold_create" "$S/slow_create" "$S/create_caller" "$S/create_worker"
 
 nx create --name nginx-1 docker.io/library/nginx:latest
 check "registry image on PVE 8.4 -> exit 1 with a version message, nothing pulled" \

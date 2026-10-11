@@ -88,14 +88,20 @@ case "$cmd" in
     # for it (PVE::RESTEnvironment::fork_worker). A TERM to pct is passed on
     # to the worker's process group, and the worker aborts and removes what it
     # had made; nothing passes a KILL on, and the worker carries on alone.
-    # $SIM/slow_create holds how long the work takes, so that a check can
-    # signal pct in the middle of it; pct then names its caller's PID in
-    # $SIM/create_caller, once a TERM would be passed on.
+    # $SIM/slow_create holds how long the work takes, and the work also waits
+    # for as long as $SIM/hold_create exists, so that a check can signal pct,
+    # or change the cluster, while a create is under way, whatever the load.
+    # pct names its caller's PID in $SIM/create_caller and the worker's in
+    # $SIM/create_worker once a TERM would be passed on: once the worker leads
+    # a process group of its own. They were named before the worker had called
+    # setsid, and a TERM that came first found no group to pass on to.
     if [ -e "$SIM/slow_create" ]; then
-      setsid bash -c 'sleep "$1" && echo "$2 stopped $3" >> "$4" && echo "ostemplate: $5" > "$6"' \
-        worker "$(cat "$SIM/slow_create")" "$vmid" "$name" "$DB" "$tpl" "$SIM/conf.$vmid" &
+      setsid bash -c 'sleep "$1" && while [ -e "$7" ]; do sleep 0.1; done && echo "$2 stopped $3" >> "$4" && echo "ostemplate: $5" > "$6"' \
+        worker "$(cat "$SIM/slow_create")" "$vmid" "$name" "$DB" "$tpl" "$SIM/conf.$vmid" "$SIM/hold_create" &
       worker=$!
       trap 'kill -TERM -- "-$worker" 2>/dev/null; wait "$worker"; echo "received interrupt" >&2; exit 255' TERM
+      while kill -0 "$worker" 2>/dev/null && [ "$(awk '{print $5}' "/proc/$worker/stat" 2>/dev/null)" != "$worker" ]; do sleep 0.01; done
+      echo "$worker" > "$SIM/create_worker"
       echo "$PPID" > "$SIM/create_caller"
       wait "$worker" || exit 255
       exit 0
