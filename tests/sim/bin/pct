@@ -180,9 +180,16 @@ case "$cmd" in
     ;;
   start)
     exists "$1" || missing "$1"
+    # Something else on the cluster acting while the start runs, once:
+    # $SIM/meanwhile.start is a script, run and removed.
+    if [ -e "$SIM/meanwhile.start" ]; then bash "$SIM/meanwhile.start"; rm -f "$SIM/meanwhile.start"; fi
     [ "$(status_of "$1")" = running ] && { echo "CT $1 already running" >&2; exit 255; }
     [ -e "$SIM/fail_start" ] && { cat "$SIM/fail_start" >&2; exit 255; }
     start_ct "$1"
+    # A start that fails once the init is up, as one whose hook fails after
+    # lxc-start does: $SIM/fail_after_start holds what pct says. An `if`,
+    # since the arm's last status is the script's.
+    if [ -e "$SIM/fail_after_start" ]; then cat "$SIM/fail_after_start" >&2; exit 255; fi
     ;;
   shutdown|stop)
     exists "$1" || missing "$1"

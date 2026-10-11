@@ -630,6 +630,29 @@ check "run whose start fails destroys the VMID it made, not a container of the s
       'not_called_re "^pct [a-z]+ 90( |$)"' 'grep -qx "90 running dup" "$S/db"' 'kill -0 "$(init_pid 90)"'
 rm -f "$S/fail_start" "$S/slow_create" "$S/create_caller" "$S/create_worker"
 pct_ns shutdown 90; pct_ns destroy 90
+# A start can also fail once the init is up, and pct destroy refuses a
+# running container: run stops it first, by the VMID it made.
+echo "startup for container failed" > "$S/fail_after_start"
+nx run --name app-g "$TPL"
+app_g=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails with the init up stops, then destroys, the container it made" \
+  all 'rc 1' '[ -n "$app_g" ]' 'called "pct start $app_g"' 'called_re "^pct shutdown $app_g "' 'called "pct destroy $app_g"' \
+      '! grep -q "^$app_g " "$S/db"' '[ ! -e "$S/run/nexcage/app-g" ]' '! kill -0 "$(init_pid "$app_g")" 2>/dev/null'
+# The undo checks that the VMID is still the container run made, as stop and
+# delete check one they found: while pct start ran, the CT can have been
+# destroyed through its record and its VMID taken by the next container made,
+# which is neither stopped nor destroyed in its place.
+cat > "$S/meanwhile.start" <<'SH'
+# app-h is destroyed elsewhere and other-h takes its VMID
+awk '$3=="app-h" {$3="other-h"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx run --name app-h "$TPL"
+app_h=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails leaves alone a VMID that changed hands during the start" \
+  all 'rc 1' '[ -n "$app_h" ]' 'called "pct start $app_h"' 'err_has "no longer"' 'not_called_re "^pct (shutdown|destroy) "' \
+      'grep -qx "$app_h running other-h" "$S/db"' 'kill -0 "$(init_pid "$app_h")"'
+rm -f "$S/fail_after_start" "$S/meanwhile.start"
+pct_ns shutdown "$app_h"; pct_ns destroy "$app_h"; rm -rf "${S:?}/run/nexcage/app-h"
 nx run --name app-2;        check "run without image -> exit 2" rc 2
 # run used to accept these and drop them: --node made the container on this
 # host, and a caller passing --console-socket waited for a pty that never came.

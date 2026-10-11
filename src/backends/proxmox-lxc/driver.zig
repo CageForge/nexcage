@@ -593,11 +593,14 @@ pub const ProxmoxLxcDriver = struct {
         errdefer {
             if (self.logger) |log| log.warn("start of {s} failed; destroying vmid {s}, which run created", .{ config.name, vmid }) catch {};
             // pct destroy refuses a running container, and a start can fail
-            // after the init is up. Stopped as delete --force stops one.
+            // after the init is up. Stopped as delete --force stops one, once
+            // the VMID is checked to be still this container's.
             if ((self.pve_client.initPid(vmid, null) catch null) != null) {
-                self.pve_client.stop(vmid, null) catch |err| {
-                    if (self.logger) |log| log.warn("stop of vmid {s} before destroying it failed: {s}", .{ vmid, @errorName(err) }) catch {};
-                };
+                if (self.pve_client.confirmName(vmid, null, config.name)) {
+                    self.pve_client.stop(vmid, null) catch |err| {
+                        if (self.logger) |log| log.warn("stop of vmid {s} before destroying it failed: {s}", .{ vmid, @errorName(err) }) catch {};
+                    };
+                } else |_| {}
             }
             self.undoCreate(config.name, vmid, null);
         }
@@ -618,13 +621,23 @@ pub const ProxmoxLxcDriver = struct {
     /// what it cannot undo -- by VMID, and by the name delete --force then
     /// finds the container by, since its record is left in place.
     fn undoCreate(self: *Self, name: []const u8, vmid: []const u8, node: ?[]const u8) void {
-        self.pve_client.delete(vmid, node) catch |err| {
+        // The VMID is checked to be still this container's first, as stop
+        // and delete check one they found: run's start can take a while, and
+        // meanwhile the CT can have been destroyed through its record and its
+        // VMID taken by the next container created, which is not destroyed
+        // in its place.
+        const failed: ?anyerror = undo: {
+            self.pve_client.confirmName(vmid, node, name) catch |err| break :undo err;
+            self.pve_client.delete(vmid, node) catch |err| break :undo err;
+            break :undo null;
+        };
+        if (failed) |err| {
             // The record create wrote is kept: through it, delete --force --
             // what an engine runs to clean up a failed create -- finds the
             // CT by its name and destroys it.
             if (self.logger) |log| log.err("CT {s} was made as '{s}', but create did not finish and destroying it failed ({s}); `nexcage --runtime lxc delete --force {s}` removes it", .{ vmid, name, @errorName(err), name }) catch {};
             return;
-        };
+        }
 
         // Only the files create writes, then the directory if that empties
         // it: anything else there is not create's to remove. A file that is

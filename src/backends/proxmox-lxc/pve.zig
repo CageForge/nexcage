@@ -718,10 +718,17 @@ pub const PveClient = struct {
     /// Found by VMID with no name to compare, the VMID is what was asked for.
     pub fn confirm(self: *const Self, loc: *const Location) !void {
         const expected = loc.name orelse return;
-        const now = try self.hostnameOf(loc.vmid, loc.remote());
+        return self.confirmName(loc.vmid, loc.remote(), expected);
+    }
+
+    /// confirm, for a container known by its VMID and the name it was made
+    /// under rather than by a Location: the one a failed create or run is
+    /// undoing. Its VMID can change hands the same way while pct start runs.
+    pub fn confirmName(self: *const Self, vmid: []const u8, node: ?[]const u8, expected: []const u8) !void {
+        const now = try self.hostnameOf(vmid, node);
         defer self.allocator.free(now);
         if (std.mem.eql(u8, now, expected)) return;
-        if (self.logger) |log| log.err("CT {s} is no longer '{s}' but '{s}': the container was replaced after nexcage found it, and nothing was done to it", .{ loc.vmid, expected, now }) catch {};
+        if (self.logger) |log| log.err("CT {s} is no longer '{s}' but '{s}': the container was replaced after nexcage found it, and nothing was done to it", .{ vmid, expected, now }) catch {};
         return core.Error.NotFound;
     }
 
