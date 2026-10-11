@@ -74,5 +74,5 @@ with the vendored header field by field. What nexcage does around libcrun:
   [INSTALL.md](../INSTALL.md#for-a-container-engine).
 - **`delete --force` removes the cgroup an unfinished `create` left**: the
   default `/sys/fs/cgroup/<id>`, when libcrun's state for the id has no status
-  file, and with `rmdir` alone (see `delete` in the
-  [CLI reference](../CLI_REFERENCE.md#delete)).
+  file and `delete` was not given `--systemd-cgroup`, and with `rmdir` alone
+  (see `delete` in the [CLI reference](../CLI_REFERENCE.md#delete)).

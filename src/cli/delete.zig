@@ -52,7 +52,7 @@ pub const DeleteCommand = struct {
 
         // --force stops a running container first, as `runc delete --force`
         // does; without it pct refuses and the command fails.
-        const operation = router.Operation{ .delete = router.DeleteConfig{ .force = options.force } };
+        const operation = router.Operation{ .delete = router.DeleteConfig{ .force = options.force, .systemd_cgroup = options.systemd_cgroup } };
         try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 
         try self.logCommandComplete("delete");

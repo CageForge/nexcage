@@ -70,7 +70,7 @@ cleanup() {
     cd /
     [ -z "$busy" ] || kill "$busy" 2>/dev/null || true
     [ -z "$feeder" ] || kill "$feeder" 2>/dev/null || true
-    for id in "$ID" "$ID-c" "$ID-f" "$ID-u" "$ID-b" "$ID-p"; do
+    for id in "$ID" "$ID-c" "$ID-f" "$ID-u" "$ID-b" "$ID-p" "$ID-s"; do
         nx delete --force "$id" >/dev/null 2>&1 || true
         rmdir "$CG/$id" 2>/dev/null || true
         rm -rf "/run/crun/$id"
@@ -166,5 +166,14 @@ leftover "$ID-p" '{"cgroupsPath":"/elsewhere"}'
 nx delete --force "$ID-p" >/dev/null 2>&1 || fail "delete --force of an unfinished create with a cgroupsPath"
 [ -d "$CG/$ID-p" ] || fail "delete --force removed $CG/$ID-p, which the container's cgroupsPath does not name"
 echo "ok: with a cgroupsPath in the kept config, $CG/<id> is not touched"
+
+# ... nor under --systemd-cgroup, which an engine sends with every command:
+# libcrun then puts a container in a systemd scope and makes nothing at the
+# root, so $CG/<id> cannot be what the create left.
+leftover "$ID-s" '{}'
+nx delete --force --systemd-cgroup "$ID-s" >/dev/null 2>&1 || fail "delete --force --systemd-cgroup of an unfinished create"
+[ ! -e "/run/crun/$ID-s" ] || fail "delete --force --systemd-cgroup left /run/crun/$ID-s"
+[ -d "$CG/$ID-s" ] || fail "delete --force --systemd-cgroup removed $CG/$ID-s, which a create under systemd does not make"
+echo "ok: under --systemd-cgroup, $CG/<id> is not touched"
 
 echo "PASS: memory values are checked before libcrun, and an unfinished create is cleaned up"

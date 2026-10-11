@@ -25,7 +25,7 @@ inside the container keeps its `=`.
 | `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1) |
 | `--log <path>` | The runtime's own log goes to `<path>` instead of stderr, as an OCI runtime's does. A container engine reads it back to report why the runtime failed |
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
-| `--systemd-cgroup` | Accepted anywhere, so that an engine sending it is not refused. Only after `create`, on the crun backend, does it reach libcrun's context; anywhere else it has no effect |
+| `--systemd-cgroup` | Accepted anywhere, so that an engine sending it is not refused. Only after `create`, on the crun backend, does it reach libcrun's context, and after `delete` it keeps `--force` from removing `/sys/fs/cgroup/<id>` (see [delete](#delete)); anywhere else it has no effect |
 | `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
 | `--profile <name>` | Create the container under the isolation profile `<name>` from the configuration file; see [Isolation profiles](#isolation-profiles). Only `create` reads it, and `run` refuses it |
 | `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
@@ -384,9 +384,10 @@ On `--runtime crun`, `--force` also cleans up after a `create` that was killed
 half way: libcrun's state directory is there without its status file, and the
 cgroup create had made would otherwise stay behind, one per attempt. nexcage
 removes that cgroup only when it is the default one, `/sys/fs/cgroup/<id>`
-(the config libcrun kept names no `cgroupsPath`, and `--systemd-cgroup` was
-not given), and only with `rmdir`: a cgroup that still has processes or child
-cgroups is left in place and named in a warning.
+(the config libcrun kept names no `cgroupsPath`, and `delete` was not given
+`--systemd-cgroup`, under which libcrun puts a container in a systemd scope
+and makes nothing at the root), and only with `rmdir`: a cgroup that still
+has processes or child cgroups is left in place and named in a warning.
 
 ### kill
 

@@ -338,7 +338,10 @@ pub const BackendRouter = struct {
             },
             .start => try crun_backend.start(container_id),
             .stop => try crun_backend.stop(container_id),
-            .delete => |del| try crun_backend.delete(container_id, del.force),
+            .delete => |del| {
+                crun_backend.systemd_cgroup = del.systemd_cgroup;
+                try crun_backend.delete(container_id, del.force);
+            },
             .kill => |kill_cfg| try crun_backend.kill(container_id, kill_cfg.signal, kill_cfg.all),
             .exec => |exec_cfg| {
                 crun_backend.detach = exec_cfg.detach;
@@ -494,6 +497,11 @@ pub const DeleteConfig = struct {
     /// does the same, and a container engine relies on it when it gives up on
     /// a clean shutdown.
     force: bool = false,
+    /// An engine sends --systemd-cgroup with every command. On crun, delete
+    /// --force cleans up the cgroup of a create that never finished, and
+    /// under systemd that cgroup is a scope of systemd's, never
+    /// /sys/fs/cgroup/<id>.
+    systemd_cgroup: bool = false,
 };
 
 pub const ExecConfig = struct {

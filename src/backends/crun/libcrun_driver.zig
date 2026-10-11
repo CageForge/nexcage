@@ -431,8 +431,9 @@ pub const CrunDriver = struct {
     /// had made stayed, one per attempt. Only the cgroup that is certainly
     /// this container's is in question: the default one libcrun's cgroupfs
     /// manager makes, /sys/fs/cgroup/<id> on cgroup v2, which needs a
-    /// config.json kept in the state directory that names no cgroupsPath
-    /// and no --systemd-cgroup.
+    /// config.json kept in the state directory that names no cgroupsPath,
+    /// and a delete without --systemd-cgroup: under systemd, libcrun puts the
+    /// container in a scope, crun-<id>.scope, and nothing at the root.
     fn createDidNotFinish(self: *Self, container_id: []const u8) bool {
         if (self.systemd_cgroup) return false;
         var dir = std.fs.cwd().openDir(self.state_root, .{}) catch return false;
