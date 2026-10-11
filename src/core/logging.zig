@@ -90,6 +90,26 @@ fn cut(buf: []u8, comptime format: []const u8, args: anytype) []const u8 {
     return w.buffered();
 }
 
+/// Writes `msg` with each control character but tab as an escape: \n, \r or
+/// \xNN. A message carries text nexcage did not write -- pct's stderr, a
+/// libcrun error naming the bundle's process.args[0] -- and a newline in it
+/// made a second log line indistinguishable from a real one, while an escape
+/// sequence reached the terminal of whoever read the log or nexcage's stderr.
+fn writeEscaped(out: *std.Io.Writer, msg: []const u8) !void {
+    var start: usize = 0;
+    for (msg, 0..) |c, i| {
+        if ((c >= 0x20 and c != 0x7f) or c == '\t') continue;
+        try out.writeAll(msg[start..i]);
+        switch (c) {
+            '\n' => try out.writeAll("\\n"),
+            '\r' => try out.writeAll("\\r"),
+            else => try out.print("\\x{x:0>2}", .{c}),
+        }
+        start = i + 1;
+    }
+    try out.writeAll(msg[start..]);
+}
+
 pub const LogContext = struct {
     allocator: std.mem.Allocator,
     file: std.fs.File,
@@ -151,21 +171,27 @@ pub const LogContext = struct {
 
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
         if (@intFromEnum(level) < @intFromEnum(self.level)) return;
+        const echoed = self.echo != null and @intFromEnum(level) >= @intFromEnum(LogLevel.@"error");
 
-        if (self.echo) |echo| {
-            if (@intFromEnum(level) >= @intFromEnum(LogLevel.@"error")) {
-                var echo_buffer: [1024]u8 = undefined;
-                var echo_writer = echo.writerStreaming(&echo_buffer);
-                echo_writer.interface.print("{s}: " ++ format ++ "\n", .{self.component} ++ args) catch {};
-                echo_writer.interface.flush() catch {};
-            }
+        // A text line and the echo carry the whole message, escaped; should
+        // memory run out, as much of it as a JSON line would.
+        var whole: ?[]u8 = null;
+        defer if (whole) |m| self.allocator.free(m);
+        var fallback: [json_message_max]u8 = undefined;
+        const text: []const u8 = if (self.format == .text or echoed) blk: {
+            whole = std.fmt.allocPrint(self.allocator, format, args) catch null;
+            break :blk whole orelse cut(&fallback, format, args);
+        } else "";
+
+        if (echoed) {
+            var echo_buffer: [1024]u8 = undefined;
+            var echo_writer = self.echo.?.writerStreaming(&echo_buffer);
+            const out = &echo_writer.interface;
+            out.print("{s}: ", .{self.component}) catch {};
+            writeEscaped(out, text) catch {};
+            out.writeAll("\n") catch {};
+            out.flush() catch {};
         }
-
-        // Streaming rather than positional: a positional writer starts at
-        // offset 0, so each message would overwrite the last one in a log file.
-        var buffer: [1024]u8 = undefined;
-        var file_writer = self.file.writerStreaming(&buffer);
-        const out = &file_writer.interface;
 
         // A log line that cannot be written must not fail the operation it describes.
         if (self.format == .json) {
@@ -190,11 +216,19 @@ pub const LogContext = struct {
             return;
         }
 
+        // Streaming rather than positional: a positional writer starts at
+        // offset 0, so each message would overwrite the last one in a log file.
+        var buffer: [4096]u8 = undefined;
+        var file_writer = self.file.writerStreaming(&buffer);
+        const out = &file_writer.interface;
+
         const color = if (self.colorize) self.getLevelColor(level) else "";
         const reset = if (self.colorize) "\x1b[0m" else "";
 
         if (self.timestamp) out.print("[{d}] ", .{std.time.timestamp()}) catch return;
-        out.print("{s}{s}{s} {s}: " ++ format ++ "\n", .{ color, self.getLevelString(level), reset, self.component } ++ args) catch return;
+        out.print("{s}{s}{s} {s}: ", .{ color, self.getLevelString(level), reset, self.component }) catch return;
+        writeEscaped(out, text) catch return;
+        out.writeAll("\n") catch return;
         out.flush() catch return;
     }
 
@@ -284,6 +318,35 @@ test "a json message longer than the line allows keeps its start, and says it wa
     try std.testing.expect(std.mem.endsWith(u8, parsed.value.msg, "x..."));
     try std.testing.expect(parsed.value.msg.len <= json_message_max);
     try std.testing.expect(std.unicode.utf8ValidateSlice(parsed.value.msg));
+}
+
+test "a logged value cannot add a line or a terminal escape" {
+    const forged = "/x\n[1790000000] ERROR nexcage: forged\r\x1b]0;t\x07";
+    for ([_]LogFormat{ .text, .json }) |format| {
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        const log_file = try tmp.dir.createFile("log", .{});
+        defer log_file.close();
+        const echo_file = try tmp.dir.createFile("stderr", .{});
+        defer echo_file.close();
+
+        var logger = LogContext.init(std.testing.allocator, log_file, .info, "nexcage");
+        logger.timestamp = false;
+        logger.format = format;
+        logger.echo = echo_file;
+        try logger.err("libcrun container_create: executable file `{s}` not found", .{forged});
+
+        var buf: [512]u8 = undefined;
+        for ([_][]const u8{ "log", "stderr" }) |name| {
+            const got = try tmp.dir.readFile(name, &buf);
+            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, got, "\n"));
+            for ([_]u8{ '\r', 0x1b, 0x07 }) |c| try std.testing.expect(std.mem.indexOfScalar(u8, got, c) == null);
+        }
+        try std.testing.expectEqualStrings(
+            "nexcage: libcrun container_create: executable file `/x\\n[1790000000] ERROR nexcage: forged\\r\\x1b]0;t\\x07` not found\n",
+            try tmp.dir.readFile("stderr", &buf),
+        );
+    }
 }
 
 test "without echo an error goes to the log alone" {
