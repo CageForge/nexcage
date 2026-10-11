@@ -294,7 +294,9 @@ directory afterwards, also when SIGINT, SIGTERM or SIGHUP ends nexcage first
 a Proxmox storage, so it is not a template anyone else can see or use.
 `$TMPDIR` has to be an absolute path to a directory owned by root (or by the
 user nexcage runs as), and sticky if its group or anyone else can write to
-it, as `/var/tmp` is; another is refused before anything is packed. The
+it, as `/var/tmp` is; another is refused before anything is packed. A
+symlink in the path is resolved once, and the directory it leads to is the
+one checked and used; the directories above it are not checked. The
 rootfs is used as it is, so it must boot as a system container: an image
 without an init will not start. The bundle's namespaces turn on no Proxmox
 features: LXC gives the container its own namespaces, and a user namespace

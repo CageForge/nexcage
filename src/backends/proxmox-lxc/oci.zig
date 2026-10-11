@@ -116,7 +116,9 @@ pub const OciProcessor = struct {
     /// Before this, create logged "Successfully converted OCI bundle to
     /// template" and gave pct a template name that nothing had written.
     pub fn createTemplateFromBundle(self: *Self, rootfs_path: []const u8, container_name: []const u8) !BundleTemplate {
-        const dir = try self.makePrivateDir(try self.archiveBase(), container_name);
+        const base = try self.archiveBase();
+        defer self.allocator.free(base);
+        const dir = try self.makePrivateDir(base, container_name);
         errdefer self.allocator.free(dir);
         const path = try std.fs.path.join(self.allocator, &.{ dir, "rootfs.tar.zst" });
         errdefer self.allocator.free(path);
@@ -157,23 +159,37 @@ pub const OciProcessor = struct {
     /// Where the archive's directory is made: $TMPDIR, as tar and mktemp
     /// read it, else /var/tmp. Only a directory no one else can swap things
     /// in -- owned by root or by nexcage's user, and sticky if others may
-    /// write to it -- since root writes the archive there by path.
-    fn archiveBase(self: *const Self) ![]const u8 {
+    /// write to it -- since root writes the archive there by path. The path
+    /// is resolved once, and the directory it resolves to is the one checked
+    /// and used: a symlinked TMPDIR was checked through the link, which
+    /// could be pointed elsewhere before the directory was made in it. Its
+    /// parents are not checked. The caller frees the path.
+    fn archiveBase(self: *const Self) ![]u8 {
         const tmpdir = std.posix.getenv("TMPDIR") orelse "";
-        const base = if (tmpdir.len > 0) tmpdir else "/var/tmp";
-        const st = std.posix.fstatat(std.posix.AT.FDCWD, base, 0) catch |err| {
+        const named = if (tmpdir.len > 0) tmpdir else "/var/tmp";
+        const rule = "it has to be an absolute path to a directory owned by root or by the user nexcage runs as, and sticky if its group or anyone else can write to it (TMPDIR names another)";
+        if (!std.fs.path.isAbsolute(named)) {
+            if (self.logger) |log| log.err("{s} is not a safe place for the bundle's archive: " ++ rule, .{named}) catch {};
+            return core.Error.OperationFailed;
+        }
+        var buffer: [std.fs.max_path_bytes]u8 = undefined;
+        const base = std.posix.realpath(named, &buffer) catch |err| {
+            if (self.logger) |log| log.err("{s}, where the bundle's archive is packed, cannot be used ({s}); TMPDIR names another", .{ named, @errorName(err) }) catch {};
+            return core.Error.OperationFailed;
+        };
+        const st = std.posix.fstatat(std.posix.AT.FDCWD, base, std.posix.AT.SYMLINK_NOFOLLOW) catch |err| {
             if (self.logger) |log| log.err("{s}, where the bundle's archive is packed, cannot be used ({s}); TMPDIR names another", .{ base, @errorName(err) }) catch {};
             return core.Error.OperationFailed;
         };
         const others_write = st.mode & 0o022 != 0;
         const sticky = st.mode & 0o1000 != 0;
-        if (!std.fs.path.isAbsolute(base) or !std.posix.S.ISDIR(st.mode) or
+        if (!std.posix.S.ISDIR(st.mode) or
             (st.uid != 0 and st.uid != std.posix.geteuid()) or (others_write and !sticky))
         {
-            if (self.logger) |log| log.err("{s} is not a safe place for the bundle's archive: it has to be an absolute directory owned by root, and sticky if others can write to it (TMPDIR names another)", .{base}) catch {};
+            if (self.logger) |log| log.err("{s} is not a safe place for the bundle's archive: " ++ rule, .{base}) catch {};
             return core.Error.OperationFailed;
         }
-        return base;
+        return self.allocator.dupe(u8, base);
     }
 
     /// A new directory, 0700, under `base`, named for the container and 64

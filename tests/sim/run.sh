@@ -496,6 +496,15 @@ rm -rf "$S/opentmp"
 TMPDIR=/usr nx create --name bundle-owner /tmp/nexcage-bundles/b1
 check "bundle: a TMPDIR another user owns -> refused before packing" \
   all '[ "$(id -u)" != 0 ]' '! rc 0' 'err_has "not a safe place"' '! err_has "Packing"' 'not_called_re "^pct create"'
+# A symlinked TMPDIR is resolved once, and the directory it leads to is the
+# one checked and used: checked through the link, it could be pointed
+# elsewhere before nexcage made its directory there.
+ln -sfn vartmp "$S/linktmp"
+TMPDIR="$S/linktmp" nx create --name bundle-link /tmp/nexcage-bundles/b1
+check "bundle: a symlinked TMPDIR -> the directory it resolves to is checked and used" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/vartmp/nexcage-bundle-bundle-link-[0-9a-f]{16}/rootfs\.tar\.zst "' 'not_called_re "linktmp"' \
+      '[ -z "$(ls -A "$S/vartmp")" ]'
+rm -f "$S/linktmp"
 # A signal ends nexcage without running its defers. SIGTERM goes to nexcage
 # itself -- the fake pct's parent -- while pct create stands still.
 echo 30 > "$S/fail_hang"; rm -f "$S/fail_hang.pid"
