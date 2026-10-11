@@ -8,5 +8,14 @@
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
   runtime_type = "io.containerd.runc.v2"
 
+# SystemdCgroup is k3s's own value: the one it gives its runc, and the one it
+# sets the kubelet's cgroup driver from (systemd when k3s runs as a systemd
+# service, as its installer sets it up). With that driver containerd names
+# each pod's cgroup "<pod slice>:cri-containerd:<id>" whatever the runtime,
+# and only this option makes the shim pass --systemd-cgroup, so that systemd
+# places the container under the pod's slice. Without it the name becomes a
+# cgroup at the root of the hierarchy, outside kubepods.slice and every limit
+# the kubelet sets there.
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
   BinaryName = "/usr/bin/nexcage"
+  SystemdCgroup = {{ .SystemdCgroup }}

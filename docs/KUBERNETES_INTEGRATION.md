@@ -273,6 +273,10 @@ name, and `crictl` drives the same interface the kubelet drives:
   runtime_type = 'io.containerd.runc.v2'
   [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
     BinaryName = '/usr/local/bin/nexcage'
+    # As runc's handler has it. This run was in a container without systemd,
+    # so cgroupfs; a node whose kubelet uses systemd's driver sets true, as
+    # deploy/kubernetes/node/containerd.toml does.
+    SystemdCgroup = false
 ```
 
 ```
@@ -430,11 +434,12 @@ passes on this one.
 Of the gaps a pod needs, the CRI run settles three of them, and not because
 nexcage grew them: the shim captures the container's output to the file the
 kubelet reads, the sandbox holds the namespaces its containers join, and the
-cgroup comes from the spec containerd writes. That is the shape of this whole
-stage — the engine owns the pod, the runtime owns the container. What is left
-from that row is what a cluster adds on top of a plain CNI bridge:
-`NetworkPolicy` and service routing, which belong to a CNI plugin and kube-proxy,
-not to a runtime.
+cgroup comes from the spec containerd writes, made the way the handler's
+`SystemdCgroup` says, which has to be the kubelet's driver. That is the shape
+of this whole stage — the engine owns the pod, the runtime owns the container.
+What is left from that row is what a cluster adds on top of a plain CNI
+bridge: `NetworkPolicy` and service routing, which belong to a CNI plugin and
+kube-proxy, not to a runtime.
 
 ### Stage 5 — Kubernetes scheduling a pod onto nexcage
 
@@ -455,6 +460,7 @@ pod that names the class.
   runtime_type = "io.containerd.runc.v2"
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
   BinaryName = "/nexcage-traced"
+  SystemdCgroup = {{ .SystemdCgroup }}
 ```
 
 `/nexcage-traced` is a small shell wrapper the script writes. It appends each
@@ -463,6 +469,21 @@ binary (`$NEXCAGE`, by default `/usr/bin/nexcage`, where the `.deb` puts it);
 that log is where the list of what Kubernetes asks a runtime, below, comes
 from. Outside the test, a plain setup points `BinaryName` straight at
 `/usr/bin/nexcage`.
+
+`SystemdCgroup` came later, and a pod that is Ready does not show why it is
+needed. k3s run as a service gives its kubelet systemd's cgroup driver, and
+containerd then names every pod's cgroup
+`kubepods-<qos>-pod<uid>.slice:cri-containerd:<id>`, whatever the runtime.
+Only a handler with `SystemdCgroup` makes the shim pass `--systemd-cgroup`,
+which has systemd place the container under the pod's slice. The trace from
+that node has no `--systemd-cgroup` on any call, and nexcage dropped the flag
+before the command anyway, so libcrun's cgroupfs manager made that name a
+cgroup at the root of the hierarchy, beside `kubepods.slice`: no pod-level
+limit, QoS class or node-allocatable cap was over the pod, sandbox included.
+A pod's own limits still held, which is why the checks read from inside a pod
+could not see it. The script now reads each pod's container and sandbox from
+the host as well, `/proc/<pid>/cgroup` of the PID crictl reports, and fails
+unless both are in the pod's cgroup under `kubepods.slice`.
 
 ```yaml
 apiVersion: node.k8s.io/v1
@@ -555,7 +576,8 @@ The script installs what a release ships for a node (#313):
 administrator to install. A run checks those files and not a copy of them. The
 only difference is that the template's `BinaryName` points at the trace
 wrapper. The containerd and CRI-O examples in the same directory are the
-configurations stage 4 verified, and no workflow installs them.
+configurations stage 4 verified, since set for a systemd node's cgroup driver,
+and no workflow installs them.
 
 Then it does the same for isolation profiles (#315). It adds the two handlers
 [INSTALL.md](INSTALL.md#an-isolation-profile-per-runtimeclass-since-0170)
@@ -567,7 +589,10 @@ one pod under each, and reads from inside each pod:
 - `Seccomp: 2`;
 - the `CapBnd` of pid 1 and of a process `kubectl exec` starts;
 - `memory.max`: 1G for hardened, which asked for 2Gi, and 256M for small;
-- `pids.max`.
+- `pids.max`;
+
+and from the host, that each pod's container and sandbox are in its pod's
+cgroup under `kubepods.slice`, as for the first pod.
 
 A third pod under `nexcage-hardened` without `hostUsers: false` must stay
 uncreated, with "requires a user namespace" in its events.

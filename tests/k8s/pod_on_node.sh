@@ -148,7 +148,10 @@ mkdir -p "$(dirname "$TMPL")"
 sed 's|"/usr/bin/nexcage"|"/nexcage-traced"|' "$NODE_FILES/k3s-config-v3.toml.tmpl" > "$TMPL"
 grep -q '"/nexcage-traced"' "$TMPL" \
     || fail "$NODE_FILES/k3s-config-v3.toml.tmpl no longer names /usr/bin/nexcage"
-# One handler per profile, as docs/INSTALL.md adds them.
+grep -qx '  SystemdCgroup = {{ .SystemdCgroup }}' "$TMPL" \
+    || fail "$NODE_FILES/k3s-config-v3.toml.tmpl does not give nexcage k3s's cgroup driver"
+# One handler per profile, as docs/INSTALL.md adds them, with the cgroup driver
+# k3s gives its own runc.
 for p in hardened small; do
     cat >> "$TMPL" <<EOT
 
@@ -157,6 +160,7 @@ for p in hardened small; do
 
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage-$p.options]
   BinaryName = "/nexcage-traced@$p"
+  SystemdCgroup = {{ .SystemdCgroup }}
 EOT
 done
 systemctl restart k3s
@@ -192,6 +196,32 @@ echo "ok: the default ServiceAccount exists"
 k apply -f "$NODE_FILES/runtimeclass.yaml" >/dev/null
 echo "ok: RuntimeClass/nexcage"
 
+# Where a pod's processes are, read from the host: in the cgroup the kubelet
+# made for that pod, under kubepods. A pod's limits read from inside it look
+# the same wherever its cgroup is. With the systemd driver, which k3s gives
+# the kubelet when it runs under systemd, a container created without
+# --systemd-cgroup was put at /sys/fs/cgroup/<pod slice>:cri-containerd:<id>,
+# beside kubepods.slice and outside every limit the kubelet sets there.
+in_pod_cgroup() {  # in_pod_cgroup <pod>
+    uid=$(k get pod "$1" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)
+    ctr=$(k get pod "$1" -o jsonpath='{.status.containerStatuses[0].containerID}' 2>/dev/null || true)
+    sandbox=$(k3s crictl pods --name "^$1\$" --state ready -q 2>/dev/null | head -1)
+    [ -n "$uid" ] && [ -n "$ctr" ] && [ -n "$sandbox" ] || fail "$1: no uid, container or sandbox to look up"
+    cpid=$(k3s crictl inspect -o go-template --template '{{.info.pid}}' "${ctr#*://}" 2>/dev/null || true)
+    spid=$(k3s crictl inspectp -o go-template --template '{{.info.pid}}' "$sandbox" 2>/dev/null || true)
+    # The systemd driver writes the pod's uid with '_' for '-'
+    uid_=$(echo "$uid" | tr - _)
+    for pid in "${cpid:-none}" "${spid:-none}"; do
+        cg=$(sed -n 's/^0:://p' "/proc/$pid/cgroup" 2>/dev/null || true)
+        case "$cg" in
+            /kubepods.slice/*-pod"$uid_".slice/*) ;;              # the systemd driver
+            /kubepods/pod"$uid"/*|/kubepods/*/pod"$uid"/*) ;;     # cgroupfs
+            *) fail "$1: pid $pid (container $cpid, sandbox $spid) is in cgroup '$cg', not in the pod's under kubepods" ;;
+        esac
+    done
+    echo "ok: $1's container and sandbox are in the pod's cgroup: $(sed -n 's/^0:://p' "/proc/$cpid/cgroup")"
+}
+
 k delete pod nexcage-pod --ignore-not-found --wait=true >/dev/null 2>&1 || true
 k apply -f - >/dev/null <<YAML
 apiVersion: v1
@@ -214,6 +244,8 @@ if ! k wait --for=condition=Ready pod/nexcage-pod --timeout=180s >/dev/null 2>&1
     fail "the pod never became Ready"
 fi
 echo "ok: the pod is Ready"
+
+in_pod_cgroup nexcage-pod
 
 node_ip=$(k get pod nexcage-pod -o jsonpath='{.status.podIP}' 2>/dev/null || true)
 echo "ok: pod IP ${node_ip:-none}, from the cluster's CNI"
@@ -296,6 +328,7 @@ for pod in nexcage-hardened nexcage-small; do
     fi
 done
 echo "ok: a pod under each profile is Ready"
+for pod in nexcage-hardened nexcage-small; do in_pod_cgroup "$pod"; done
 
 in_pod() { k exec "pod/$1" -- sh -c "$2"; }
 status_field() { in_pod "$1" "sed -n 's/^$2:[[:space:]]*//p' /proc/$3/status"; }

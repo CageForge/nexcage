@@ -123,6 +123,26 @@ curl -fsSLo /etc/crio/crio.conf.d/10-nexcage.conf "$SRC/deploy/kubernetes/node/c
 systemctl restart crio
 ```
 
+**The cgroup driver** has to be the kubelet's. On a node whose kubelet uses
+systemd's driver, the engine names a pod's cgroup `<pod slice>:<prefix>:<id>`
+whatever the runtime. Only `--systemd-cgroup`, which the engine passes when it
+is set up for that driver, has nexcage ask systemd, over D-Bus, to place the
+container under the pod's slice, as runc and crun do. Without it, any runtime,
+nexcage included, makes that name a cgroup at the root of the hierarchy,
+outside the pod's cgroup and every limit the kubelet sets on it.
+
+- k3s run as a service gives its kubelet the systemd driver. The template
+  gives nexcage's handler k3s's own setting, `SystemdCgroup = {{ .SystemdCgroup }}`.
+- `containerd.toml` sets `SystemdCgroup = true`. Make it what the runc
+  handler has: `false` only where the kubelet uses cgroupfs.
+- CRI-O has one `cgroup_manager` for every handler, systemd by default, and
+  nexcage follows it like the others. The drop-in leaves it alone.
+
+Releases up to 0.17.0 dropped `--systemd-cgroup` before the command, which is
+where every engine puts it, and the files they shipped did not set it. A
+container created by one of them keeps its cgroup at the root until it is
+deleted, so restart the pods that run on nexcage after upgrading.
+
 **The RuntimeClass**, once per cluster (on k3s, `kubectl` reads
 `/etc/rancher/k3s/k3s.yaml`):
 
@@ -154,7 +174,10 @@ kubectl delete pod nexcage-hello
 
 A pod that stays `ContainerCreating` says why in `kubectl describe pod`. The
 two usual causes are a binary without the crun backend (`nexcage --runtime
-crun features` fails) and a missing library (`nexcage version` fails).
+crun features` fails) and a missing library (`nexcage version` fails). A third
+is `cannot open sd-bus`: the engine asked for systemd's cgroup driver, and
+nexcage could not reach systemd. Set the engine's driver to the kubelet's, as
+under *The cgroup driver* above.
 
 To take it off the node: delete the `RuntimeClass` once no pod names it, remove
 the template, the `containerd.toml` entry or the CRI-O drop-in, restart the
@@ -186,6 +209,7 @@ cat >> /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl <<'EOF'
 
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage-hardened.options]
   BinaryName = "/usr/local/bin/nexcage@hardened"
+  SystemdCgroup = {{ .SystemdCgroup }}
 EOF
 systemctl restart k3s
 
@@ -197,10 +221,11 @@ handler: nexcage-hardened
 YAML
 ```
 
-containerd 2.x takes the same two tables in `/etc/containerd/config.toml`. For
-CRI-O, add a `[crio.runtime.runtimes.nexcage-hardened]` table whose
-`runtime_path` is `/usr/local/bin/nexcage@hardened`. `k8s_e2e.yml` checks only
-the k3s way.
+containerd 2.x takes the same two tables in `/etc/containerd/config.toml`, with
+`SystemdCgroup` set as in `containerd.toml`: `{{ .SystemdCgroup }}` is k3s's
+template, which containerd does not read. For CRI-O, add a
+`[crio.runtime.runtimes.nexcage-hardened]` table whose `runtime_path` is
+`/usr/local/bin/nexcage@hardened`. `k8s_e2e.yml` checks only the k3s way.
 
 A pod under `hardened` has to ask for what it requires:
 
