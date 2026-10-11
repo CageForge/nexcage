@@ -251,6 +251,8 @@ crun_checks() {
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/exec_spec.sh
   say "an isolation profile's limits hold on update"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/profile_update.sh
+  say "memory values are checked before libcrun"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/memory_values.sh
 }
 
 # Always through crun_image: an image left from older sources would test them.

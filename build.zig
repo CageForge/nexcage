@@ -162,6 +162,16 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        // ReleaseSafe, which every release is built with, compiles this C
+        // with UBSan in trap mode: Zig's default for C in a safe build, and
+        // kept on purpose. Undefined behaviour in libcrun then stops the root
+        // process instead of carrying on with a value nobody chose -- built
+        // the usual way, crun turns a memory limit that overflows into "max",
+        // no limit at all. The cost is that it stops with SIGILL, and a
+        // SIGILL whose frames are in libcrun is such a trap, not a CPU
+        // without AVX2 (that one is -Dcpu=baseline). Values known to reach
+        // such arithmetic are refused before libcrun sees them
+        // (libcrun_driver.zig, checkMemory).
         libcrun_module.addCSourceFiles(.{
             .files = libcrun_sources,
             .flags = &[_][]const u8{

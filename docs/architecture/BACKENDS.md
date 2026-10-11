@@ -44,3 +44,22 @@ flowchart LR
 | snapshots | `pvesh get /nodes/<node>/lxc/<vmid>/snapshot`, for a container here as well as elsewhere |
 | pull, images, rmi | `pvesh create /nodes/<node>/storage/<storage>/oci-registry-pull --reference <ref>`; `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` per template storage; `pvesh delete /nodes/<node>/storage/<storage>/content/<volid>` |
 | list, name to VMID | `pvesh get /cluster/resources --type vm` for every node, merged with `pct list` for this one (the cluster view is a cache) |
+
+## crun
+
+The crun backend calls libcrun in the nexcage process, linked from the
+vendored `deps/crun`; `src/backends/crun/libcrun_driver.zig` is the driver and
+`libcrun_ffi.zig` the hand-written binding, whose structs the build compares
+with the vendored header field by field. What nexcage does around libcrun:
+
+- **libcrun is compiled with UBSan in trap mode**, which is what ReleaseSafe
+  does to C, and kept so on purpose: undefined behaviour in libcrun stops the
+  process rather than carrying on with a value nobody chose. A `SIGILL` whose
+  frames are in libcrun is such a trap, not a CPU without AVX2. Memory values
+  that are known to reach libcrun's int64 arithmetic are refused first, on
+  `create` and on `update`: a limit, swap or reservation is `-1` or a number of
+  bytes, and a swap minus limit that does not fit in 64 bits is refused too.
+- **`delete --force` removes the cgroup an unfinished `create` left**: the
+  default `/sys/fs/cgroup/<id>`, when libcrun's state for the id has no status
+  file, and with `rmdir` alone (see `delete` in the
+  [CLI reference](../CLI_REFERENCE.md#delete)).

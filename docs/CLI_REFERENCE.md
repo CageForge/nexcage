@@ -380,6 +380,14 @@ A running container must be stopped first, unless `--force` is given: that
 shuts it down and then destroys it, as `runc delete --force` does. A container
 engine sends `--force` once it has given up waiting for a clean shutdown.
 
+On `--runtime crun`, `--force` also cleans up after a `create` that was killed
+half way: libcrun's state directory is there without its status file, and the
+cgroup create had made would otherwise stay behind, one per attempt. nexcage
+removes that cgroup only when it is the default one, `/sys/fs/cgroup/<id>`
+(the config libcrun kept names no `cgroupsPath`, and `--systemd-cgroup` was
+not given), and only with `rmdir`: a cgroup that still has processes or child
+cgroups is left in place and named in a warning.
+
 ### kill
 
 ```bash
@@ -661,7 +669,11 @@ update` do, with their flag names: `--memory`, `--memory-swap`,
 `--cpu-rt-period`, `--cpu-rt-runtime`, `--kernel-memory`,
 `--kernel-memory-tcp`. Memory sizes take a binary suffix (`512M`, `2G`) or
 `-1` for no limit; `--cpuset-cpus` and `--cpuset-mems` take a list (`0-1`);
-everything else is a number.
+everything else is a number. On the crun backend a memory limit, swap or
+reservation, in a document or a bundle, is `-1` or a number of bytes: any
+other negative value, a value that is not a whole 64-bit number, and a swap
+and limit whose difference does not fit in 64 bits exit 2 before libcrun sees
+them (see [Backends](architecture/BACKENDS.md#crun)).
 
 `--resources <file>` is a runtime-spec `linux.resources` object, and `-` reads
 it from stdin. **That is how containerd sends an in-place resize**:

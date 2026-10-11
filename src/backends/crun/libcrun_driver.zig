@@ -227,6 +227,9 @@ pub const CrunDriver = struct {
             else => return err,
         };
         defer if (narrowed) |n| self.allocator.free(n);
+        // The spec libcrun is about to be given, before it does arithmetic on
+        // its memory values (checkMemory).
+        try self.checkMemoryJson("the bundle's config.json", narrowed orelse spec, .spec);
         const container = if (narrowed) |n| blk: {
             const narrowed_z = try self.allocator.dupeZ(u8, n);
             defer self.allocator.free(narrowed_z);
@@ -374,6 +377,10 @@ pub const CrunDriver = struct {
         const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
         defer self.allocator.free(id_c);
 
+        // Asked before libcrun removes the state directory, which is the only
+        // record of how far a create got.
+        const unfinished = force and self.createDidNotFinish(container_id);
+
         // force was hardcoded false, so `delete --force` was accepted and
         // then not forced. libcrun takes it as the fourth argument.
         const ret = ffi.Libcrun.libcrun_container_delete(ctx, null, id_c.ptr, force, &err_ptr);
@@ -381,10 +388,57 @@ pub const CrunDriver = struct {
             try self.handleError(&err_ptr, "container_delete");
             return;
         }
+        if (unfinished) self.removeLeftoverCgroup(container_id);
 
         if (self.logger) |log| {
             try log.info("Successfully deleted OCI container with libcrun: {s}", .{container_id});
         }
+    }
+
+    /// Whether libcrun began to create this container and never finished: a
+    /// create killed half way (SIGKILL, OOM, a UBSan trap) leaves the state
+    /// directory without the status file create writes last, and libcrun's
+    /// delete then removes the directory and nothing else, so the cgroup it
+    /// had made stayed, one per attempt. Only the cgroup that is certainly
+    /// this container's is in question: the default one libcrun's cgroupfs
+    /// manager makes, /sys/fs/cgroup/<id> on cgroup v2, which needs a
+    /// config.json kept in the state directory that names no cgroupsPath
+    /// and no --systemd-cgroup.
+    fn createDidNotFinish(self: *Self, container_id: []const u8) bool {
+        if (self.systemd_cgroup) return false;
+        var dir = std.fs.cwd().openDir(self.state_root, .{}) catch return false;
+        defer dir.close();
+        var kept_dir = dir.openDir(container_id, .{ .no_follow = true }) catch return false;
+        defer kept_dir.close();
+        // The status file is the last thing create writes.
+        if (kept_dir.access("status", .{})) |_| return false else |err| if (err != error.FileNotFound) return false;
+        const kept = kept_dir.readFileAlloc(self.allocator, "config.json", 16 * 1024 * 1024) catch return false;
+        defer self.allocator.free(kept);
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, kept, .{}) catch return false;
+        defer parsed.deinit();
+        if (parsed.value != .object) return false;
+        const linux = parsed.value.object.get("linux") orelse return true;
+        if (linux != .object) return false;
+        const path = linux.object.get("cgroupsPath") orelse return true;
+        return path == .null;
+    }
+
+    /// rmdir of the cgroup an unfinished create left, and nothing more: no
+    /// recursion and no kill. The kernel refuses to remove a cgroup that
+    /// still has processes or child cgroups, and that one is left in place
+    /// and named, since nothing here can prove they are this container's.
+    fn removeLeftoverCgroup(self: *Self, container_id: []const u8) void {
+        std.fs.cwd().access("/sys/fs/cgroup/cgroup.controllers", .{}) catch return;
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        const path = std.fmt.bufPrint(&buf, "/sys/fs/cgroup/{s}", .{container_id}) catch return;
+        std.posix.rmdir(path) catch |err| switch (err) {
+            error.FileNotFound => return,
+            else => {
+                if (self.logger) |log| log.warn("'{s}' was never fully created, and its cgroup {s} could not be removed ({s}); it is left in place", .{ container_id, path, @errorName(err) }) catch {};
+                return;
+            },
+        };
+        if (self.logger) |log| log.info("removed {s}, the cgroup an unfinished create of '{s}' left behind", .{ path, container_id }) catch {};
     }
 
     /// Execute a command in a running container (best-effort; may be limited by libcrun API)
@@ -555,6 +609,18 @@ pub const CrunDriver = struct {
     pub fn update(self: *Self, container_id: []const u8, resources_json: ?[]const u8, values: []const core.types.ResourceUpdate) !void {
         try validation.SecurityValidation.validateContainerId(container_id);
         try self.holdToProfile(container_id, resources_json, values);
+        if (resources_json) |doc| {
+            try self.checkMemoryJson("the resources document", doc, .resources);
+        } else {
+            var m: [3]MemoryValue = .{ .absent, .absent, .absent };
+            for (values) |v| {
+                if (!std.mem.eql(u8, v.section, "memory")) continue;
+                for (memory_fields, 0..) |name, i| {
+                    if (std.mem.eql(u8, v.name, name)) m[i] = MemoryValue.ofText(v.value);
+                }
+            }
+            try self.checkMemory("the update", m);
+        }
 
         const ctx = try self.initContext("", container_id);
         const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
@@ -620,6 +686,64 @@ pub const CrunDriver = struct {
             },
             else => return err,
         };
+    }
+
+    /// memory.limit, swap and reservation as libcrun is about to be given
+    /// them, checked before it does arithmetic on them. libcrun is compiled
+    /// with UBSan in trap mode (see build.zig), so an int64 overflow in it is
+    /// SIGILL in the root process, and write_memory_swap computes `swap -
+    /// limit` once swap is positive and no less than the limit: a bundle with
+    /// a limit of -9223372036854775808 and swap 1 killed create half way,
+    /// leaving a cgroup behind, and the same document killed update after
+    /// memory.max had been rewritten. -1 is no limit and 0 or more a number of
+    /// bytes; anything else is refused, and so is a limit and swap whose
+    /// difference does not fit in 64 bits, which -1 and the largest swap is.
+    /// `m` is limit, swap and reservation, in memory_fields' order.
+    fn checkMemory(self: *Self, what: []const u8, m: [3]MemoryValue) core.Error!void {
+        for (m, memory_fields) |v, name| switch (v) {
+            .absent => {},
+            .whole => |n| if (n < -1) {
+                if (self.logger) |log| log.err("{s}: memory.{s} is {d}; a memory value is a number of bytes, or -1 for no limit", .{ what, name, n }) catch {};
+                return core.Error.ValidationError;
+            },
+            .other => {
+                if (self.logger) |log| log.err("{s}: memory.{s} is not a whole number that fits in 64 bits", .{ what, name }) catch {};
+                return core.Error.ValidationError;
+            },
+        };
+        if (m[0] == .whole and m[1] == .whole) {
+            const limit = m[0].whole;
+            const swap = m[1].whole;
+            if (swap > 0 and swap >= limit) _ = std.math.sub(i64, swap, limit) catch {
+                if (self.logger) |log| log.err("{s}: memory.swap {d} less memory.limit {d} does not fit in 64 bits", .{ what, swap, limit }) catch {};
+                return core.Error.ValidationError;
+            };
+        }
+    }
+
+    /// checkMemory on a JSON document: the linux.resources object itself, as
+    /// update sends it, or a whole spec, as create hands it over.
+    fn checkMemoryJson(self: *Self, what: []const u8, json: []const u8, shape: enum { resources, spec }) core.Error!void {
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, json, .{}) catch |err| switch (err) {
+            error.OutOfMemory => return core.Error.OutOfMemory,
+            else => {
+                if (self.logger) |log| log.err("{s} is not valid JSON ({s})", .{ what, @errorName(err) }) catch {};
+                return core.Error.ValidationError;
+            },
+        };
+        defer parsed.deinit();
+        var resources = parsed.value;
+        if (shape == .spec) for ([_][]const u8{ "linux", "resources" }) |key| {
+            if (resources != .object) return;
+            resources = resources.object.get(key) orelse return;
+        };
+        if (resources != .object) return;
+        const memory = resources.object.get("memory") orelse return;
+        // Not an object: libcrun's parser refuses that itself.
+        if (memory != .object) return;
+        var m: [3]MemoryValue = undefined;
+        for (memory_fields, 0..) |name, i| m[i] = MemoryValue.ofJson(memory.object.get(name));
+        return self.checkMemory(what, m);
     }
 
     fn freeze(self: *Self, container_id: []const u8, on: bool) !void {
@@ -907,6 +1031,36 @@ pub const CrunDriver = struct {
     }
 };
 
+/// The memory fields checkMemory looks at, in the order it takes them.
+const memory_fields = [_][]const u8{ "limit", "swap", "reservation" };
+
+/// A memory value as libcrun would read it. Its parser takes only an integer
+/// that fits in 64 bits; json-c clamps a larger negative one to the smallest
+/// int64, so a value std.json cannot hold in an i64 is `other` and refused,
+/// never passed over.
+const MemoryValue = union(enum) {
+    absent,
+    whole: i64,
+    other,
+
+    fn ofJson(v: ?std.json.Value) MemoryValue {
+        const value = v orelse return .absent;
+        return switch (value) {
+            .null => .absent,
+            .integer => |n| .{ .whole = n },
+            else => .other,
+        };
+    }
+
+    /// A command line's value, which update.zig has already made decimal.
+    fn ofText(text: []const u8) MemoryValue {
+        const digits = if (text.len > 0 and text[0] == '-') text[1..] else text;
+        if (digits.len == 0) return .other;
+        for (digits) |c| if (!std.ascii.isDigit(c)) return .other;
+        return .{ .whole = std.fmt.parseInt(i64, text, 10) catch return .other };
+    }
+};
+
 /// A C string as a slice, or null when the pointer is null.
 fn cSpan(p: [*c]u8) ?[]const u8 {
     if (p == null) return null;
@@ -999,4 +1153,75 @@ test "exec's process spec is a new 0600 file in the container's own state direct
     // No container, no state directory: an error of the command's own set,
     // and no file anywhere else.
     try std.testing.expectError(core.Error.NotFound, driver.writeSpecFile("c2", "{}"));
+}
+
+test "memory values libcrun would overflow on are refused before it sees them" {
+    var driver = CrunDriver{ .allocator = std.testing.allocator };
+    const refused = [_][]const u8{
+        "{\"memory\":{\"limit\":-9223372036854775808,\"swap\":1}}",
+        // json-c clamps this one to the smallest int64; std.json cannot hold it
+        "{\"memory\":{\"limit\":-9223372036854775809,\"swap\":1}}",
+        "{\"memory\":{\"limit\":-2}}",
+        "{\"memory\":{\"reservation\":-5}}",
+        "{\"memory\":{\"limit\":-1,\"swap\":9223372036854775807}}",
+        "{\"memory\":{\"swap\":1.5}}",
+        "{\"memory\":{\"limit\":\"64M\"}}",
+    };
+    for (refused) |doc| {
+        driver.checkMemoryJson("t", doc, .resources) catch |err| {
+            try std.testing.expectEqual(core.Error.ValidationError, err);
+            continue;
+        };
+        std.debug.print("let through: {s}\n", .{doc});
+        return error.TestExpectedRefusal;
+    }
+    const ok = [_][]const u8{
+        "{\"memory\":{\"limit\":-1,\"swap\":-1}}",
+        "{\"memory\":{\"limit\":67108864,\"swap\":134217728,\"reservation\":0}}",
+        "{\"memory\":{\"limit\":null}}",
+        "{\"cpu\":{\"quota\":-1}}",
+        "{}",
+    };
+    for (ok) |doc| try driver.checkMemoryJson("t", doc, .resources);
+
+    // A whole spec, as create hands it over.
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemoryJson("t", "{\"linux\":{\"resources\":{\"memory\":{\"limit\":-9223372036854775808,\"swap\":1}}}}", .spec));
+    try driver.checkMemoryJson("t", "{\"ociVersion\":\"1.0.0\",\"linux\":{\"resources\":{\"memory\":{\"limit\":1073741824}}}}", .spec);
+    try driver.checkMemoryJson("t", "{\"ociVersion\":\"1.0.0\"}", .spec);
+
+    // The command line's values.
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemory("t", .{ MemoryValue.ofText("-1"), MemoryValue.ofText("9223372036854775807"), .absent }));
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemory("t", .{ MemoryValue.ofText("1_0"), .absent, .absent }));
+    try driver.checkMemory("t", .{ MemoryValue.ofText("67108864"), MemoryValue.ofText("201326592"), .absent });
+}
+
+test "an unfinished create has state without a status file and a config naming no cgroup path" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const cases = [_]struct { id: []const u8, config: ?[]const u8, status: bool, unfinished: bool }{
+        .{ .id = "plain", .config = "{\"linux\":{\"namespaces\":[]}}", .status = false, .unfinished = true },
+        .{ .id = "nulled", .config = "{\"linux\":{\"cgroupsPath\":null}}", .status = false, .unfinished = true },
+        .{ .id = "finished", .config = "{\"linux\":{}}", .status = true, .unfinished = false },
+        .{ .id = "elsewhere", .config = "{\"linux\":{\"cgroupsPath\":\"/kubepods/x\"}}", .status = false, .unfinished = false },
+        .{ .id = "noconfig", .config = null, .status = false, .unfinished = false },
+    };
+    for (cases) |c| {
+        var dir = try tmp.dir.makeOpenPath(c.id, .{});
+        defer dir.close();
+        if (c.config) |text| try dir.writeFile(.{ .sub_path = "config.json", .data = text });
+        if (c.status) try dir.writeFile(.{ .sub_path = "status", .data = "{}" });
+    }
+    const root = try tmp.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(root);
+    var driver = CrunDriver{ .allocator = allocator, .state_root = root };
+    for (cases) |c| {
+        if (driver.createDidNotFinish(c.id) != c.unfinished) {
+            std.debug.print("{s}: expected {}\n", .{ c.id, c.unfinished });
+            return error.TestUnexpectedResult;
+        }
+    }
+    try std.testing.expect(!driver.createDidNotFinish("missing"));
+    driver.systemd_cgroup = true;
+    try std.testing.expect(!driver.createDidNotFinish("plain"));
 }
