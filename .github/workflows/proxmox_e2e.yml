@@ -514,10 +514,16 @@ jobs:
         expect_status "$OCI_NAME" created
         got=$(nx state "$OCI_NAME" | sed -n 's/.*"bundle": "\(.*\)".*/\1/p')
         [ "$got" = "$BUNDLE" ] || { echo "::error::state reported bundle '$got', expected $BUNDLE"; exit 1; }
-        if $SUDO pvesm list local --content vztmpl | grep -q "vztmpl/nexcage-$OCI_NAME-"; then
-          echo "::error::the template packed from the bundle is still on storage local"
-          exit 1
-        fi
+        # The rootfs is packed into a private directory under $TMPDIR, which
+        # sudo clears, so /var/tmp, and pct create is given that file. It
+        # never goes to storage local, and is removed once pct create has
+        # read it.
+        for d in /var/tmp "${TMPDIR:-/var/tmp}"; do
+          if compgen -G "$d/nexcage-bundle-$OCI_NAME-*" >/dev/null; then
+            echo "::error::the archive packed from the bundle is still in $d"
+            exit 1
+          fi
+        done
         nx start "$OCI_NAME"
         expect_status "$OCI_NAME" running
         nx stop "$OCI_NAME"
