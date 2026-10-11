@@ -532,27 +532,21 @@ const Path = struct {
     }
 };
 
-/// A string from the bundle, as a refusal shows it with `{f}`: a control
-/// character is written escaped, a newline as \u000a, so that a bundle cannot
-/// start a line of its own, or move the cursor, in the log the engine keeps
-/// of the message. That is C0, DEL, and C1, which UTF-8 writes as 0xc2 then
-/// 0x80 to 0x9f: U+009B is a terminal's CSI, as ESC [ is. std.json refuses
-/// a document that is not UTF-8, so no other byte of 0x80 to 0x9f stands
-/// for one.
+/// A string from the bundle, as a refusal shows it with `{f}`: escaped as
+/// between the quotes of a JSON string, a newline as \n and a NUL as \u0000,
+/// so that a bundle cannot start a line of its own, or move the cursor, in
+/// the log the engine keeps of the message. That covers C0, DEL, and C1,
+/// which UTF-8 writes as 0xc2 then 0x80 to 0x9f: U+009B is a terminal's CSI,
+/// as ESC [ is; and U+2028 and U+2029, which some readers take for line
+/// breaks. A quote or a backslash is escaped too, so the bundle cannot close
+/// the quotes a refusal puts round it. json.writeStringContents is the one
+/// place that says which characters these are, for the state file and the
+/// JSON log as for this.
 const Shown = struct {
     s: []const u8,
 
     pub fn format(self: Shown, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        var i: usize = 0;
-        while (i < self.s.len) : (i += 1) {
-            const c = self.s[i];
-            if (c == 0xc2 and i + 1 < self.s.len and self.s[i + 1] >= 0x80 and self.s[i + 1] <= 0x9f) {
-                i += 1;
-                try w.print("\\u{x:0>4}", .{self.s[i]});
-            } else if (c < 0x20 or c == 0x7f) {
-                try w.print("\\u{x:0>4}", .{c});
-            } else try w.writeByte(c);
-        }
+        try @import("json.zig").writeStringContents(w, self.s);
     }
 };
 
@@ -1426,8 +1420,9 @@ test "a bundle that keeps nexcage's own groups does not meet a profile that requ
 
 test "a refusal shows the bundle's strings with control characters escaped: it writes no line of its own into a log" {
     // A newline, a forged log line, and the escape that erases a line,
-    // written as ESC [ and as the one character CSI; then DEL.
-    const forged = "\\n[INFO] nexcage: create completed\\u001b[2K\\u009b2K\\u007f";
+    // written as ESC [ and as the one character CSI; then DEL, and U+2028,
+    // which some readers take for a line break.
+    const forged = "\\n[INFO] nexcage: create completed\\u001b[2K\\u009b2K\\u007f\\u2028";
     const cases = [_]struct { []const u8, Profile }{
         .{ "{\"process\":{\"capabilities\":{\"bounding\":[\"CAP_X" ++ forged ++ "\"]}}}", .{ .name = "h" } },
         // A key, as a refusal's path shows it.
@@ -1458,7 +1453,8 @@ test "a refusal shows the bundle's strings with control characters escaped: it w
 fn expectEscaped(why: *const Refusal) !void {
     const text = why.text();
     if (std.mem.indexOfAny(u8, text, "\n\x1b\x7f") != null or std.mem.indexOf(u8, text, "\u{9b}") != null or
-        std.mem.indexOf(u8, text, "\\u000a[INFO] nexcage: create completed\\u001b[2K\\u009b2K\\u007f") == null)
+        std.mem.indexOf(u8, text, "\u{2028}") != null or
+        std.mem.indexOf(u8, text, "\\n[INFO] nexcage: create completed\\u001b[2K\\u009b2K\\u007f\\u2028") == null)
     {
         std.debug.print("got: {s}\n", .{text});
         return error.TestUnexpectedRefusal;

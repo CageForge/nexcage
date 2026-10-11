@@ -14,6 +14,15 @@ const std = @import("std");
 /// ESC [ and a newline.
 pub fn writeString(writer: anytype, value: []const u8) !void {
     try writer.writeByte('"');
+    try writeStringContents(writer, value);
+    try writer.writeByte('"');
+}
+
+/// What writeString writes between the quotes. A profile's refusal quotes
+/// the bundle's strings with it, so that one can neither close the quotes
+/// round it nor carry a control character into the message an engine reads
+/// back from the --log-format json log and decodes.
+pub fn writeStringContents(writer: anytype, value: []const u8) !void {
     var i: usize = 0;
     while (i < value.len) : (i += 1) {
         const c = value[i];
@@ -41,7 +50,6 @@ pub fn writeString(writer: anytype, value: []const u8) !void {
             },
         }
     }
-    try writer.writeByte('"');
 }
 
 /// Writes `\uXXXX` for the character `code`.
