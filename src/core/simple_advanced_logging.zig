@@ -222,6 +222,34 @@ test "a command's duration cannot overflow, whatever the clock did meanwhile" {
     try logger.logCommandComplete("create", true);
 }
 
+test "a --log-file is appended to by every call, and a symlink in its place is not followed" {
+    // The open behind --log-file, NEXCAGE_LOG_FILE and the configuration's
+    // log_file, which is not main's --log open and needs its own proof.
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(dir);
+
+    try tmp.dir.symLink("target.log", "link.log", .{});
+    const link = try std.fs.path.join(std.testing.allocator, &.{ dir, "link.log" });
+    defer std.testing.allocator.free(link);
+    try std.testing.expectError(error.SymLinkLoop, SimpleAdvancedLogging.init(std.testing.allocator, false, link));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access("target.log", .{}));
+
+    // Two calls sharing the file, both open before either writes.
+    const shared = try std.fs.path.join(std.testing.allocator, &.{ dir, "shared.log" });
+    defer std.testing.allocator.free(shared);
+    var a = try SimpleAdvancedLogging.init(std.testing.allocator, false, shared);
+    defer a.deinit();
+    var b = try SimpleAdvancedLogging.init(std.testing.allocator, false, shared);
+    defer b.deinit();
+    try a.file_logger.?.file.writeAll("A1\n");
+    try b.file_logger.?.file.writeAll("B1\n");
+    try a.file_logger.?.file.writeAll("A2\n");
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("A1\nB1\nA2\n", try tmp.dir.readFile("shared.log", &buf));
+}
+
 /// Re-export LogLevel and LogContext for compatibility
 pub const LogLevel = @import("logging.zig").LogLevel;
 pub const LogContext = @import("logging.zig").LogContext;

@@ -737,6 +737,13 @@ nx --log /run/ct-link.json --log-format json state no-such-container
 check "--log does not follow a symlink, and says where the log went" \
   all 'rc 1' '[ ! -e "$S/run/ct-target.log" ]' 'err_has "cannot open --log file"' 'err_has "not found"'
 rm -f "$S/run/ct-link.json"
+# --log-file, NEXCAGE_LOG_FILE and the configuration's log_file are opened in
+# another place, the same way.
+ln -sfn /run/lf-target.log "$S/run/lf-link.log"
+nx --log-file /run/lf-link.log list
+check "--log-file does not follow a symlink either" \
+  all 'rc 0' '[ ! -e "$S/run/lf-target.log" ]' "err_has \"cannot open log file '/run/lf-link.log' (SymLinkLoop)\""
+rm -f "$S/run/lf-link.log" "$S/run/lf-target.log"
 
 nx --runtime crun state some-id
 check "state on a crun binary that lacks the backend -> exit 1, says how to build it" \
