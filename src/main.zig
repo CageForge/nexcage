@@ -141,6 +141,10 @@ pub fn main() u8 {
 }
 
 fn run() !void {
+    // libcrun's protection sets this before it re-executes nexcage from a
+    // sealed copy, which then starts here again; see logging.rerun_from_copy.
+    core.logging.rerun_from_copy = std.posix.getenv("_LIBCONTAINER_CLONED_BINARY") != null;
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();

@@ -76,7 +76,8 @@ cat > "$BUNDLE/config.json" <<JSON
   }
 }
 JSON
-nx create --bundle "$BUNDLE" "$ID" 2>"$WORK/err" || fail "create: $(tr '\n' ' ' < "$WORK/err")"
+nx --log "$WORK/create.json" --log-format json create --bundle "$BUNDLE" "$ID" 2>"$WORK/err" || \
+    fail "create: $(tr '\n' ' ' < "$WORK/err") $(tr '\n' ' ' < "$WORK/create.json" 2>/dev/null)"
 # The init is a process create forked from nexcage. It waits there for start
 # and then executes the container's program in its place: until then it is
 # nexcage, in the container's namespaces, and its /proc/<pid>/exe is what a
@@ -87,6 +88,14 @@ initexe=$(readlink "/proc/$initpid/exe") || fail "cannot read /proc/$initpid/exe
 if [ -w "$real" ]; then
     [ "$initexe" != "$real" ] || fail "create left the container's init running from $real itself, not a sealed copy: the CVE-2019-5736 protection is gone"
     echo "ok: create's init runs from a sealed copy ($initexe), not from $real"
+    # The copy starts again from main, and what the first run logged before
+    # it re-executed came twice, in the engine's --log file too. What the
+    # copy logs after that point comes once, from the copy.
+    for line in "Executing create command" "Creating container $ID with image $BUNDLE" "Creating OCI container with libcrun: $ID"; do
+        n=$(grep -c "\"msg\":\"$line\"" "$WORK/create.json" || true)
+        [ "$n" = 1 ] || fail "create logged \"$line\" $n times: $(tr '\n' ' ' < "$WORK/create.json")"
+    done
+    echo "ok: create's log has each line once, from the first run or from the copy"
 fi
 nx start "$ID" 2>"$WORK/err" || fail "start: $(tr '\n' ' ' < "$WORK/err")"
 # The binary itself in the background, not the nx function: $! has to be
