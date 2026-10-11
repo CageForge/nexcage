@@ -106,19 +106,14 @@ pub const Setting = struct { section: []const u8, name: []const u8 };
 
 /// The settings in a `linux.resources` document, as `update` values. Fields
 /// the list above does not know are left to libcrun, which reads the document
-/// itself; this is what the Proxmox LXC backend, which cannot, works from.
-/// Every `value` is allocated with `allocator`. A value of the wrong kind is
-/// an error, and `refused` names its setting.
+/// itself; this is what the Proxmox LXC backend, which cannot, works from,
+/// and `firstUnread` names what it would leave out. Every `value` is
+/// allocated with `allocator`. A value of the wrong kind is an error, and
+/// `refused` names its setting.
 pub fn valuesFromResources(allocator: std.mem.Allocator, json: []const u8, out: *std.ArrayListUnmanaged(types.ResourceUpdate), refused: *?Setting) !void {
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, json, .{}) catch return error.InvalidResources;
     defer parsed.deinit();
-    if (parsed.value != .object) return error.InvalidResources;
-    // An engine sends the resources object itself; a hand-written file may
-    // wrap it the way config.json does.
-    var root = parsed.value.object;
-    if (root.get("linux")) |l| if (l == .object) if (l.object.get("resources")) |r| if (r == .object) {
-        root = r.object;
-    };
+    const root = resourcesOf(parsed.value) orelse return error.InvalidResources;
     for (known) |k| {
         const sec = root.get(k.section) orelse continue;
         if (sec != .object) continue;
@@ -143,6 +138,56 @@ pub fn valuesFromResources(allocator: std.mem.Allocator, json: []const u8, out: 
         errdefer allocator.free(text);
         try out.append(allocator, .{ .section = k.section, .name = k.name, .value = text, .numeric = k.numeric });
     }
+}
+
+/// The first setting in a `linux.resources` document that the list above does
+/// not know, as "unified" or "memory.swappiness", or null when there is none.
+/// libcrun reads those itself; a backend that works from `valuesFromResources`
+/// alone has to refuse them, or it reports success for a limit it never set.
+/// A null, an empty list or an empty object sets nothing, and passes. The
+/// name is allocated with `allocator`.
+pub fn firstUnread(allocator: std.mem.Allocator, json: []const u8) !?[]u8 {
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, json, .{}) catch return error.InvalidResources;
+    defer parsed.deinit();
+    const root = resourcesOf(parsed.value) orelse return error.InvalidResources;
+    var sections = root.iterator();
+    while (sections.next()) |sec| {
+        const section = sec.key_ptr.*;
+        if (setsNothing(sec.value_ptr.*)) continue;
+        // A list (devices, hugepageLimits) or a bare value is a setting of
+        // its own; an object's fields are each one.
+        if (sec.value_ptr.* != .object) return try allocator.dupe(u8, section);
+        var fields = sec.value_ptr.object.iterator();
+        while (fields.next()) |f| {
+            if (setsNothing(f.value_ptr.*) or isKnown(section, f.key_ptr.*)) continue;
+            return try std.fmt.allocPrint(allocator, "{s}.{s}", .{ section, f.key_ptr.* });
+        }
+    }
+    return null;
+}
+
+/// The resources object of a document. An engine sends the object itself; a
+/// hand-written file may wrap it the way config.json does.
+fn resourcesOf(doc: std.json.Value) ?std.json.ObjectMap {
+    if (doc != .object) return null;
+    if (doc.object.get("linux")) |l| if (l == .object) if (l.object.get("resources")) |r| if (r == .object) return r.object;
+    return doc.object;
+}
+
+fn setsNothing(v: std.json.Value) bool {
+    return switch (v) {
+        .null => true,
+        .array => |a| a.items.len == 0,
+        .object => |o| o.count() == 0,
+        else => false,
+    };
+}
+
+fn isKnown(section: []const u8, name: []const u8) bool {
+    for (known) |k| {
+        if (std.mem.eql(u8, k.section, section) and std.mem.eql(u8, k.name, name)) return true;
+    }
+    return false;
 }
 
 test "sizes as runc reads them" {
@@ -262,4 +307,41 @@ test "a linux.resources document becomes values, wrapped or bare" {
     try std.testing.expect(refused == null);
     try std.testing.expectEqual(@as(usize, 1), wrapped.items.len);
     try std.testing.expectEqualStrings("pids", wrapped.items[0].section);
+}
+
+// The Proxmox LXC backend works from the values above alone, and a setting
+// they leave out vanished: the update applied the rest and reported success.
+test "firstUnread names a setting the values leave out, and passes an empty one" {
+    const a = std.testing.allocator;
+    const cases = [_]struct { doc: []const u8, name: ?[]const u8 }{
+        .{ .doc = 
+        \\{"memory":{"limit":536870912,"swappiness":0}}
+        , .name = "memory.swappiness" },
+        .{ .doc = 
+        \\{"unified":{"memory.high":"536870912"}}
+        , .name = "unified.memory.high" },
+        .{ .doc = 
+        \\{"devices":[{"allow":false,"access":"rwm"}]}
+        , .name = "devices" },
+        .{ .doc = 
+        \\{"memory":536870912}
+        , .name = "memory" },
+        .{ .doc = 
+        \\{"linux":{"resources":{"cpu":{"quota":50000,"idle":1}}}}
+        , .name = "cpu.idle" },
+        .{ .doc = 
+        \\{"memory":{"limit":536870912,"swappiness":null},"cpu":{"shares":1024},"devices":[],"unified":{},"pids":null}
+        , .name = null },
+        .{ .doc = "{}", .name = null },
+    };
+    for (cases) |c| {
+        const got = try firstUnread(a, c.doc);
+        defer if (got) |g| a.free(g);
+        if (c.name) |want| {
+            try std.testing.expectEqualStrings(want, got orelse return error.TestExpectedName);
+        } else {
+            try std.testing.expect(got == null);
+        }
+    }
+    try std.testing.expectError(error.InvalidResources, firstUnread(a, "[]"));
 }

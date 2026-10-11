@@ -662,7 +662,13 @@ settings are said to `pct set`, in its terms:
 | `--memory-swap <bytes>` (memory plus swap) | `--swap <MiB>`, the difference from the memory limit — this call's, or the config's |
 | `--cpu-quota` / `--cpu-period` | `--cpulimit <cores>`, quota over period; a quota of `-1` is `0`, no limit. pct reads `0` as no limit, so a quota of `0`, or one below a hundredth of a core — the least Proxmox can set, 1 ms in its 100 ms period — is refused rather than said as `0`. So is a quota so large that its cores overflow |
 | `--cpu-share <shares>` | `--cpuunits <weight>`, converted the way runc converts cgroup v1 shares to a v2 weight (1024 → 39); 262144 and above are 10000. `0`, runc's "unchanged", and below are refused |
-| anything else | refused, naming the setting, because a limit asked for and silently not applied is the worst answer |
+| anything else | refused, naming the setting, because a limit asked for and silently not applied is the worst answer (exit 1) |
+
+"Anything else" includes every setting a `--resources` document gives besides
+the ones above — `memory.swappiness`, `unified`, a `devices` or
+`hugepageLimits` list — so the whole document is refused, and nothing in it is
+applied. A setting that is `null`, an empty list or an empty object sets
+nothing and is not refused.
 
 A value refused above is a usage error naming the setting (exit 2), before pct
 is asked: a limit pct cannot say as it was asked is not turned into a

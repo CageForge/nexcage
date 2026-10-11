@@ -864,6 +864,18 @@ check "a document's quota below a hundredth of a core is refused, not made no li
 resize '{"memory":{"limit":0}}'
 check "and its memory 0 is not made a 16 MiB limit" \
   all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+# What the values leave out of a document was dropped: the rest was applied
+# and the update reported success. Now it is refused by name, as pids.limit
+# is, and nothing is half-applied.
+resize '{"memory":{"swappiness":0}}'
+check "a document's setting Proxmox has no option for is refused by name, not dropped" \
+  all 'rc 1' 'err_has "memory.swappiness has no Proxmox setting"' 'not_called_re "^pct set"'
+resize '{"memory":{"limit":536870912},"unified":{"memory.high":"536870912"}}'
+check "beside one it applies too, so nothing is half-applied" \
+  all 'rc 1' 'err_has "unified.memory.high has no Proxmox setting"' 'not_called_re "^pct set"'
+resize '{"memory":{"limit":536870912,"swappiness":null},"devices":[],"unified":{}}'
+check "a setting that is null or empty sets nothing, and the rest applies" \
+  all 'rc 0' 'called "pct set 100 --memory 512"'
 nx update --memory 1G no-such-up-$$
 check "update on a container that does not exist is an error" all 'rc 1' 'not_called_re "^pct set"'
 
