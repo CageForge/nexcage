@@ -117,7 +117,9 @@ its `config.h`. Everything else is upstream at a tag. To move to a new release:
 2. In nexcage: point the submodule at that commit
    (`git update-index --cacheinfo 160000,<sha>,deps/crun` works without a
    checkout), and change the hash the `Dockerfile` checks out; the Dockerfile
-   clones by hash because `.dockerignore` excludes `.git`. If libocispec's
+   clones by hash because `.dockerignore` excludes `.git`, and
+   `scripts/ci/check_crun_pin.sh` fails CI and the release while the two
+   differ. If libocispec's
    submodules changed, the `submodule update --init` line there changes too.
    Add the release tarball's sha256, from the release's `CHECKSUMS`, to
    `tarball_sha256` in `scripts/gen_crun_headers_local.sh`: the script runs

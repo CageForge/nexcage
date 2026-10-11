@@ -4,6 +4,7 @@
 |---|---|---|
 | `dev.sh` | `make doctor`, `dev-setup`, `e2e`, `act`, `local-ci`, `perf`, `dev-shell` | Local development: tools, builds, the simulator, the crun and CRI tests, CI jobs through act, performance ([docs/LOCAL_DEVELOPMENT.md](../docs/LOCAL_DEVELOPMENT.md)) |
 | `build_deb_local.sh` | `release.yml`, `make deb` | Build `dist/nexcage-<version>-amd64.deb` with `dpkg-deb` |
+| `ci/check_crun_pin.sh` | `ci.yml`, `release.yml`, `dependency_check.yml` | Check that the crun commit the `Dockerfile` clones is the one `deps/crun` pins |
 | `ci/check_version.sh` | `version-check.yml` | Check that `VERSION` is semver, matches `build.zig.zon` and appears in `nexcage --help` |
 | `gen_crun_headers_local.sh` | Dockerfile, crun build notes | Generate vendored crun `config.h` and `git-version.h` |
 | `gen_crun_headers_docker.sh` | `make crun-headers` | The same, inside Docker |

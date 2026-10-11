@@ -46,6 +46,11 @@ jobs:
           # A release is built from nothing but the tagged tree.
           use-cache: false
 
+      # The binary job builds through the Dockerfile, which clones crun by a
+      # hash of its own: it has to be the commit deps/crun pins.
+      - name: The Dockerfile builds the crun deps/crun pins
+        run: sh scripts/ci/check_crun_pin.sh
+
       - name: Extract version from tag
         id: get_version
         run: |

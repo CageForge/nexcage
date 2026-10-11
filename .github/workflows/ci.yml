@@ -62,6 +62,11 @@ jobs:
           done
           exit "$bad"
 
+      - name: The Dockerfile builds the crun deps/crun pins
+        # Releases are built through the Dockerfile, which clones crun by a
+        # hash of its own; dependency_check.yml reports the submodule's.
+        run: sh scripts/ci/check_crun_pin.sh
+
       - name: Build (Debug)
         run: zig build --summary all
 

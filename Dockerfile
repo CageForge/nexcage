@@ -66,7 +66,9 @@ COPY . .
 # .dockerignore excludes .git and .gitmodules, so submodule commands can
 # never work inside this image — the previous `git init || true && git
 # submodule update` was a no-op that `|| true` made look harmless. Clone the
-# dependency explicitly at its pinned commit instead.
+# dependency explicitly at its pinned commit instead. The hash is the deps/crun
+# submodule's; scripts/ci/check_crun_pin.sh fails CI and the release when they
+# differ.
 RUN git clone https://github.com/CageForge/crun.git deps/crun && \
     git -C deps/crun checkout -q 7d6f69551c5ccc0cbc3bc67bfd6674847d75787b && \
     git -C deps/crun submodule update --init libocispec && \

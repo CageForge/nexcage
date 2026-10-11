@@ -190,6 +190,11 @@ jobs:
             echo "base_source=$SOURCE"
           } >> "$GITHUB_OUTPUT"
 
+      # The release binary is built from the commit the Dockerfile clones, so
+      # the pin reported above is what ships only if the two agree.
+      - name: The Dockerfile builds the crun deps/crun pins
+        run: sh scripts/ci/check_crun_pin.sh
+
       - name: Check latest crun release
         id: latest_crun
         env:
