@@ -69,6 +69,27 @@ test "a log path whose last component is a symlink is not followed" {
     try std.testing.expectError(error.FileNotFound, tmp.dir.access("target", .{}));
 }
 
+/// The most of a message a JSON log line carries, in bytes.
+const json_message_max = 2048;
+
+/// The message `format` makes, or as much of it as fits `buf` with "..."
+/// in place of the rest, cut on a UTF-8 character boundary so that the JSON
+/// line stays valid. bufPrint into a fixed buffer used to give up and leave
+/// the message empty, and an error longer than the buffer -- pct create's
+/// stderr, a libcrun message naming a long bundle path -- reached containerd
+/// as "msg":"".
+fn cut(buf: []u8, comptime format: []const u8, args: anytype) []const u8 {
+    const mark = "...";
+    var w = std.Io.Writer.fixed(buf);
+    w.print(format, args) catch {
+        var end = @min(w.end, buf.len - mark.len);
+        while (end > 0 and buf[end] & 0xC0 == 0x80) end -= 1;
+        @memcpy(buf[end..][0..mark.len], mark);
+        return buf[0 .. end + mark.len];
+    };
+    return w.buffered();
+}
+
 pub const LogContext = struct {
     allocator: std.mem.Allocator,
     file: std.fs.File,
@@ -150,17 +171,22 @@ pub const LogContext = struct {
         if (self.format == .json) {
             // One object per line, with the fields runc writes and containerd
             // reads back: it opens this file to report why the runtime failed.
-            var msg_buf: [2048]u8 = undefined;
-            const msg = std.fmt.bufPrint(&msg_buf, format, args) catch msg_buf[0..0];
-            out.writeAll("{\"level\":\"") catch return;
-            out.writeAll(self.getJsonLevel(level)) catch return;
-            out.writeAll("\",\"msg\":") catch return;
-            json.writeString(out, msg) catch return;
+            var msg_buf: [json_message_max]u8 = undefined;
+            const msg = cut(&msg_buf, format, args);
+            // Built whole and written with one write(): with O_APPEND, two
+            // calls sharing the file cannot interleave inside a line. Room
+            // for every byte of the message escaped as \u00XX.
+            var line_buf: [json_message_max * 6 + 96]u8 = undefined;
+            var line = std.Io.Writer.fixed(&line_buf);
+            line.writeAll("{\"level\":\"") catch return;
+            line.writeAll(self.getJsonLevel(level)) catch return;
+            line.writeAll("\",\"msg\":") catch return;
+            json.writeString(&line, msg) catch return;
             var ts_buf: [20]u8 = undefined;
-            out.writeAll(",\"time\":\"") catch return;
-            out.writeAll(rfc3339.format(&ts_buf, std.time.timestamp())) catch return;
-            out.writeAll("\"}\n") catch return;
-            out.flush() catch return;
+            line.writeAll(",\"time\":\"") catch return;
+            line.writeAll(rfc3339.format(&ts_buf, std.time.timestamp())) catch return;
+            line.writeAll("\"}\n") catch return;
+            self.file.writeAll(line.buffered()) catch return;
             return;
         }
 
@@ -233,6 +259,31 @@ test "an error is echoed as a plain line, and nothing below it is" {
     const logged = try tmp.dir.readFile("log.json", &buf);
     try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, logged, "\n"));
     try std.testing.expect(std.mem.indexOf(u8, logged, "\"level\":\"error\"") != null);
+}
+
+test "a json message longer than the line allows keeps its start, and says it was cut" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const log_file = try tmp.dir.createFile("log.json", .{});
+    defer log_file.close();
+
+    var logger = LogContext.init(std.testing.allocator, log_file, .info, "nexcage");
+    logger.format = .json;
+    // 20 + 2024 bytes, then two-byte characters: the cut, at 2045 bytes with
+    // room for "...", falls inside the first, which goes whole.
+    try logger.err("pct command failed: {s}", .{"x" ** 2024 ++ "\u{e9}" ** 600});
+
+    var buf: [16 * 1024]u8 = undefined;
+    const logged = try tmp.dir.readFile("log.json", &buf);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, logged, "\n"));
+    const Line = struct { level: []const u8, msg: []const u8, time: []const u8 };
+    const parsed = try std.json.parseFromSlice(Line, std.testing.allocator, logged, .{});
+    defer parsed.deinit();
+    try std.testing.expectEqualStrings("error", parsed.value.level);
+    try std.testing.expect(std.mem.startsWith(u8, parsed.value.msg, "pct command failed: xxxx"));
+    try std.testing.expect(std.mem.endsWith(u8, parsed.value.msg, "x..."));
+    try std.testing.expect(parsed.value.msg.len <= json_message_max);
+    try std.testing.expect(std.unicode.utf8ValidateSlice(parsed.value.msg));
 }
 
 test "without echo an error goes to the log alone" {

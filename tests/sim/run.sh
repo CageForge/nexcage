@@ -54,6 +54,15 @@ lines = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
 sys.exit(0 if any(o.get("level") == "error" for o in lines) else 1)
 PYEOF
 }
+# Some line of a JSON log is an error whose msg starts with $2 and ends with $3,
+# and every line is JSON.
+json_error_msg_is() {
+  python3 - "$@" <<'PYEOF' 2>/dev/null
+import json, sys
+lines = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+sys.exit(0 if any(o.get("level") == "error" and o["msg"].startswith(sys.argv[2]) and o["msg"].endswith(sys.argv[3]) for o in lines) else 1)
+PYEOF
+}
 json_get()  { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2" 2>/dev/null; }
 # NAMES is the last column, after NODE was added for the cluster.
 listed()    { awk -F'\t' -v n="$1" 'NR>1 && $8==n {f=1} END {exit !f}' "$S/out"; }
@@ -111,6 +120,14 @@ check ".tar.xz template passes through unchanged" all 'rc 0' 'called_re "^pct cr
 echo "unable to create CT 104 - some pct failure" > "$S/fail_create"
 nx create --name web-5 "$TPL"
 check "pct create failing -> exit 1, no state dir left" all 'rc 1' '[ ! -e "$S/run/nexcage/web-5" ]'
+# A long failure -- tar's warning for every device node, then the task error --
+# still reaches the file an engine reads: cut and marked, where a message over
+# the JSON line's limit used to be written as "msg":"".
+for i in $(seq 1 40); do echo "tar: ./dev/tty$i: Cannot mknod: Operation not permitted"; done > "$S/fail_create"
+echo "TASK ERROR: unable to create CT 104 - command failed: exit code 2" >> "$S/fail_create"
+nx --log /run/create-fail.json --log-format json create --name web-5 "$TPL"
+check "a long pct error keeps its message in the JSON log, cut and marked" \
+  all 'rc 1' 'json_error_msg_is "$S/run/create-fail.json" "pct command failed: tar: ./dev/tty1: " "..."'
 rm -f "$S/fail_create"
 
 nx create --name nginx-1 docker.io/library/nginx:latest
