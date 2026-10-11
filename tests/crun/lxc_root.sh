@@ -10,7 +10,8 @@
 # removed the directory, exited 0, and left the container in Proxmox. The
 # simulator builds without crun and could not see it; this image has both.
 # For the same reason the checks that one id is one backend's, both ways, are
-# here: neither backend is given an id the other has.
+# here: neither backend is given an id the other has, and the Proxmox backend
+# keeps no record of a CT under a name libcrun has.
 #
 # The Proxmox tools are tests/sim's fakes, mounted at /sim/bin; their call log
 # is the check.
@@ -75,6 +76,22 @@ rc=0; nx create --name ctr "$TPL" >/dev/null 2>"$SIM/err" || rc=$?
 [ "$rc" != 0 ] || fail "a Proxmox LXC create of ctr, which libcrun has, exited 0"
 grep -q "already exists on the crun backend" "$SIM/err" || fail "refused, but not for that: $(tail -1 "$SIM/err")"
 echo "ok: the Proxmox backend is not given an id libcrun has"
+
+# Nor is a record of a CT kept under a name libcrun has. CT 101, which
+# nexcage did not create, has the hostname ctr and is started by its VMID with
+# --runtime lxc. A record of it under ctr would send ctr to the Proxmox
+# backend once libcrun's container was gone, and an engine's second delete
+# --force of ctr would destroy the CT.
+echo "101 stopped ctr" >> "$SIM/db"
+nx --runtime lxc start 101 >/dev/null 2>"$SIM/err" || fail "--runtime lxc start 101: $(tail -1 "$SIM/err")"
+called "pct start 101" || fail "--runtime lxc start 101 did not reach pct"
+[ ! -e "$ROOT/.proxmox-lxc/ctr" ] || fail "CT 101 was recorded under ctr, an id libcrun has"
+nx delete --force ctr >/dev/null 2>"$SIM/err" || fail "delete --force ctr: $(tail -1 "$SIM/err")"
+[ ! -e "$ROOT/ctr" ] || fail "libcrun's ctr is still there after delete --force"
+nx delete --force ctr >/dev/null 2>"$SIM/err" || fail "a second delete --force ctr: $(tail -1 "$SIM/err")"
+! grep -q "^pct destroy 101$" "$SIM/calls" || fail "an engine's second delete --force of ctr destroyed CT 101"
+grep -q "^101 " "$SIM/db" || fail "CT 101 is gone: $(cat "$SIM/db")"
+echo "ok: no record of a CT is kept under an id libcrun has"
 
 rm -rf "$SIM" "$ROOT"
 echo "PASS: a Proxmox LXC container under --root stays the Proxmox backend's"

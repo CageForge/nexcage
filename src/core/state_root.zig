@@ -70,6 +70,30 @@ pub fn crun() []const u8 {
     return if (isDefault()) "/run/crun" else root;
 }
 
+/// Whether libcrun has a container `id` here: the `status` file it writes
+/// at create, not merely a directory with the id's name. A directory proved
+/// nothing -- under --root the Proxmox backend kept its state.json in one of
+/// the same name, and every command after an LXC create went to libcrun.
+pub fn crunHas(id: []const u8) bool {
+    return has(crun(), id, "status");
+}
+
+/// Whether the Proxmox LXC backend has a record of a container named `id`:
+/// the state.json it writes when it creates one.
+pub fn lxcHas(id: []const u8) bool {
+    return has(get(), id, "state.json");
+}
+
+fn has(dir: []const u8, id: []const u8, file: []const u8) bool {
+    // An id is one path component; anything else is no backend's.
+    if (id.len == 0 or std.mem.indexOfScalar(u8, id, '/') != null) return false;
+    if (std.mem.eql(u8, id, ".") or std.mem.eql(u8, id, "..")) return false;
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path = std.fmt.bufPrint(&buf, "{s}/{s}/{s}", .{ dir, id, file }) catch return false;
+    std.fs.cwd().access(path, .{}) catch return false;
+    return true;
+}
+
 test "a root that only looks different is still the default" {
     defer set(default_root) catch unreachable;
     for ([_][]const u8{ "/run/nexcage/", "/run//nexcage", "/run/x/../nexcage", "/run/./nexcage/" }) |given| {

@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("core");
+const build_options = @import("build_options");
 const zfs = @import("zfs.zig");
 const pve = @import("pve.zig");
 const oci = @import("oci.zig");
@@ -918,6 +919,15 @@ pub const ProxmoxLxcDriver = struct {
     fn record(self: *Self, loc: *const pve.PveClient.Location, status: []const u8, pid: i32) void {
         const name = loc.name orelse return;
         if (std.mem.indexOfScalar(u8, name, '/') != null or std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return;
+        // A name libcrun has a container of is the crun backend's. A record
+        // here too -- `--runtime lxc start <vmid>` of a CT with that hostname
+        // wrote one -- sent the id to this backend once libcrun's container
+        // was gone, and an engine's second delete --force of it destroyed
+        // the CT: the very thing records are there to prevent.
+        if (build_options.enable_backend_crun and core.state_root.crunHas(name)) {
+            if (self.logger) |log| log.warn("'{s}' is a container on the crun backend, so nexcage keeps no record of CT {s} under that name; reach the CT with --runtime lxc", .{ name, loc.vmid }) catch {};
+            return;
+        }
         const kept = self.persistedBundle(name);
         defer if (kept) |b| self.allocator.free(b);
         self.writeOciState(name, status, pid, kept) catch {};

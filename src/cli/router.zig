@@ -456,29 +456,11 @@ fn doesNotExist(container_id: []const u8, logger: ?*core.LogContext) types.Error
     return types.Error.NotFound;
 }
 
-/// libcrun's own record of the container: the `status` file it writes at
-/// create, not merely a directory with the id's name. A directory proved
-/// nothing -- under --root the Proxmox backend kept its state.json in one of
-/// the same name, and every command after an LXC create went to libcrun.
-fn hasCrunState(container_id: []const u8) bool {
-    return recordExists(core.state_root.crun(), container_id, "status");
-}
-
-/// The Proxmox LXC backend's own record: the state.json it writes when it
-/// creates a container, under the name the container was created with.
-fn hasLxcRecord(container_id: []const u8) bool {
-    return recordExists(core.state_root.get(), container_id, "state.json");
-}
-
-fn recordExists(dir: []const u8, container_id: []const u8, file: []const u8) bool {
-    // An id is one path component; anything else is no backend's.
-    if (container_id.len == 0 or std.mem.indexOfScalar(u8, container_id, '/') != null) return false;
-    if (std.mem.eql(u8, container_id, ".") or std.mem.eql(u8, container_id, "..")) return false;
-    var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = std.fmt.bufPrint(&buf, "{s}/{s}/{s}", .{ dir, container_id, file }) catch return false;
-    std.fs.cwd().access(path, .{}) catch return false;
-    return true;
-}
+/// libcrun's own record of the container, and the Proxmox LXC backend's.
+/// In core.state_root, because the Proxmox backend asks too, before it
+/// writes a record (ProxmoxLxcDriver.record).
+const hasCrunState = core.state_root.crunHas;
+const hasLxcRecord = core.state_root.lxcHas;
 
 pub const Operation = union(enum) {
     create: CreateConfig,

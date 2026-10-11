@@ -207,6 +207,9 @@ is not forgotten on a failed listing.
 other backend already has a record of, since every later command would reach
 only one of the two containers. In a binary built without crun, a `status`
 file under `/run/crun` is another runtime's container and holds nothing up.
+For the same reason a command run with `--runtime lxc` writes no record of a
+Proxmox container whose name libcrun has: it says so, and that container is
+reached with `--runtime lxc` from then on.
 
 `--runtime <lxc|crun>` overrides that for one command, before or after the
 command name; `--runtime lxc` for a container the crun backend has exits 2.
