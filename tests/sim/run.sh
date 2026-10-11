@@ -381,7 +381,18 @@ check "run: create then start the same VMID" all 'rc 0' 'called_re "^pct create 
   "grep -q \"^pct start \$(awk '\$3==\"app-1\" {print \$1}' \$S/db)\$\" \"\$S/calls.last\""
 check "run: rootfs/bridge from config" called_re "bridge=vmbr50,ip=dhcp .*--rootfs local-lvm:2$"
 check "run: state reports running" status_is app-1 running
-nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start" all 'rc 1' 'not_called_re "^pct start"'
+nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start, and the existing one is not destroyed" \
+  all 'rc 1' 'not_called_re "^pct start"' 'not_called_re "^pct destroy"' 'grep -q " app-1$" "$S/db"'
+# A start that fails takes the container run made with it, as `runc run` does;
+# it used to stay behind, created, and the next run of the name was refused.
+echo "startup for container failed" > "$S/fail_start"
+nx run --name app-f "$TPL"
+app_f=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails -> exit 1, and the container it made is destroyed" \
+  all 'rc 1' '[ -n "$app_f" ]' 'called "pct start $app_f"' 'called "pct destroy $app_f"' \
+      '! grep -q " app-f$" "$S/db"' '[ ! -e "$S/run/nexcage/app-f" ]'
+rm -f "$S/fail_start"
+nx run --name app-f "$TPL"; check "and a run of the same name then succeeds" all 'rc 0' 'status_is app-f running'
 nx run --name app-2;        check "run without image -> exit 2" rc 2
 # run used to accept these and drop them: --node made the container on this
 # host, and a caller passing --console-socket waited for a pty that never came.

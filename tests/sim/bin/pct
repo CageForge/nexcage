@@ -104,6 +104,7 @@ case "$cmd" in
   start)
     exists "$1" || missing "$1"
     [ "$(status_of "$1")" = running ] && { echo "CT $1 already running" >&2; exit 255; }
+    [ -e "$SIM/fail_start" ] && { cat "$SIM/fail_start" >&2; exit 255; }
     start_ct "$1"
     ;;
   shutdown|stop)

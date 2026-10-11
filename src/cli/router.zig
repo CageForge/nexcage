@@ -272,6 +272,14 @@ pub const BackendRouter = struct {
             },
             .run => {
                 try proxmox_backend.create(sandbox_config);
+                // `runc run` removes the container it made when it cannot
+                // start it, and so does this: a start that failed used to
+                // leave a created container behind, under a name the next run
+                // was refused. After create, never before it: create refuses
+                // a name that is taken, and that container is someone else's.
+                errdefer proxmox_backend.delete(container_id, true) catch |err| {
+                    if (self.logger) |log| log.err("{s} is left behind: removing it after the failed start failed too ({s})", .{ container_id, @errorName(err) }) catch {};
+                };
                 try proxmox_backend.start(container_id);
             },
             .state => {
