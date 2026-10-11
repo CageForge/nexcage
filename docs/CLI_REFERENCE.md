@@ -297,6 +297,10 @@ user nexcage runs as), and sticky if its group or anyone else can write to
 it, as `/var/tmp` is; another is refused before anything is packed. A
 symlink in the path is resolved once, and the directory it leads to is the
 one checked and used; the directories above it are not checked. The
+archive's path is 48 characters longer than that directory's and the name
+together, and `pct create` takes one of at most 255: under `/var/tmp` a
+name of up to 199 characters fits, and a longer path is refused (exit 2)
+before anything is packed. The
 rootfs is used as it is, so it must boot as a system container: an image
 without an init will not start. The bundle's namespaces turn on no Proxmox
 features: LXC gives the container its own namespaces, and a user namespace

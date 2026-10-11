@@ -118,9 +118,15 @@ pub const OciProcessor = struct {
     pub fn createTemplateFromBundle(self: *Self, rootfs_path: []const u8, container_name: []const u8) !BundleTemplate {
         const base = try self.archiveBase();
         defer self.allocator.free(base);
+        // pct create refused a longer path, once the rootfs had been packed
+        const path_len = archivePathLen(base, container_name);
+        if (path_len > max_template_path) {
+            if (self.logger) |log| log.err("the bundle's archive would be {s}/" ++ archive_dir_prefix ++ "{s}-<random>/" ++ archive_file ++ ", {d} characters, and pct create takes a template path of at most {d}: it needs a shorter name, or a TMPDIR with a shorter path", .{ base, container_name, path_len, max_template_path }) catch {};
+            return core.Error.InvalidInput;
+        }
         const dir = try self.makePrivateDir(base, container_name);
         errdefer self.allocator.free(dir);
-        const path = try std.fs.path.join(self.allocator, &.{ dir, "rootfs.tar.zst" });
+        const path = try std.fs.path.join(self.allocator, &.{ dir, archive_file });
         errdefer self.allocator.free(path);
         interrupt_cleanup.arm(dir, path) catch {
             removeArchive(dir, path, self.logger);
@@ -198,9 +204,9 @@ pub const OciProcessor = struct {
     fn makePrivateDir(self: *const Self, base: []const u8, container_name: []const u8) ![]u8 {
         var attempts: usize = 0;
         while (true) : (attempts += 1) {
-            var random: [8]u8 = undefined;
+            var random: [archive_random_bytes]u8 = undefined;
             std.crypto.random.bytes(&random);
-            const dir = try std.fmt.allocPrint(self.allocator, "{s}/nexcage-bundle-{s}-{s}", .{ base, container_name, std.fmt.bytesToHex(random, .lower) });
+            const dir = try std.fmt.allocPrint(self.allocator, "{s}/" ++ archive_dir_prefix ++ "{s}-{s}", .{ base, container_name, std.fmt.bytesToHex(random, .lower) });
             std.posix.mkdir(dir, 0o700) catch |err| {
                 self.allocator.free(dir);
                 if (err == error.PathAlreadyExists and attempts < 8) continue;
@@ -209,6 +215,21 @@ pub const OciProcessor = struct {
             };
             return dir;
         }
+    }
+
+    /// The longest template path pct create takes: ostemplate's maxLength
+    /// in pve-container's API2::LXC
+    const max_template_path = 255;
+
+    /// The archive is <base>/nexcage-bundle-<name>-<random, in hex>/rootfs.tar.zst
+    const archive_dir_prefix = "nexcage-bundle-";
+    const archive_random_bytes = 8;
+    const archive_file = "rootfs.tar.zst";
+
+    /// How long the archive's path will be: 48 characters more than the
+    /// base and the container's name
+    fn archivePathLen(base: []const u8, container_name: []const u8) usize {
+        return base.len + "/".len + archive_dir_prefix.len + container_name.len + "-".len + 2 * archive_random_bytes + "/".len + archive_file.len;
     }
 
     pub fn parseBundleImageFromConfig(self: *const Self, config: *const bundle.OciBundleConfig) !?[]const u8 {

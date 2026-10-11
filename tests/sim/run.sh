@@ -516,6 +516,20 @@ check "bundle: a symlinked TMPDIR -> the directory it resolves to is checked and
   all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/vartmp/nexcage-bundle-bundle-link-[0-9a-f]{16}/rootfs\.tar\.zst "' 'not_called_re "linktmp"' \
       '[ -z "$(ls -A "$S/vartmp")" ]'
 rm -f "$S/linktmp"
+# pct create takes a template path of at most 255 characters (ostemplate's
+# maxLength in pve-container) and refused a longer one, after the rootfs had
+# been packed. The archive's path is its directory, the name and 48 more.
+name_of_len() {  # a hostname of exactly $1 characters, in labels of at most 63
+  python3 -c 'import sys; s = ("a" * 62 + ".") * 5; s = s[:int(sys.argv[1])]; print(s[:-1] + "b" if s.endswith(".") else s)' "$1"
+}
+archive_base=$S/vartmp; fit=$((255 - ${#archive_base} - 48))
+nx create --name "$(name_of_len "$((fit + 1))")" /tmp/nexcage-bundles/b1
+check "bundle: a name that makes the archive's path longer than pct create takes -> refused before packing" \
+  all 'rc 2' 'err_has "pct create takes a template path of at most 255"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"' \
+      '[ -z "$(ls -A "$S/vartmp")" ]'
+nx create --name "$(name_of_len "$fit")" /tmp/nexcage-bundles/b1
+check "bundle: a name that makes the archive's path 255 characters -> used" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]{254} --hostname "' '[ -z "$(ls -A "$S/vartmp")" ]'
 # A signal ends nexcage without running its defers. SIGTERM goes to nexcage
 # itself -- the fake pct's parent -- while pct create stands still.
 echo 30 > "$S/fail_hang"; rm -f "$S/fail_hang.pid"
