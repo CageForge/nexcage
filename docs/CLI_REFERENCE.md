@@ -100,7 +100,10 @@ resolves a name and two containers sharing one would make that ambiguous. Then
 the template is checked **on the target node**, before a VMID is taken: a storage
 called `local` is a different directory on every node unless it is shared, so a
 volid that exists here may simply not be there. The message names the node and
-the storage rather than leaving the API to say "volume does not exist".
+the storage rather than leaving the API to say "volume does not exist". The
+template has to be a `<storage>:vztmpl/<file>` volid in the characters Proxmox
+names templates with, as for [`rmi`](#rmi); anything else is a usage error
+(exit 2) before that node is asked.
 
 Two things `--node` will not do, and refuses rather than half-does:
 
@@ -570,6 +573,11 @@ first. Templates an earlier nexcage pulled have Proxmox's short names
 (`redis_7.tar`): `create` pulls the image once more rather than guess what they
 hold, and `rmi` removes the old file.
 
+`--storage` has to be a Proxmox storage ID — a letter, then letters, digits,
+`-`, `_` or `.` — for `pull` and for `create`, or it is a usage error (exit 2)
+before Proxmox is asked anything: it goes into pvesh paths, and for another node
+pvesh passes the path to that node's shell.
+
 `--filename <name>` names the file instead, before the `.tar` Proxmox adds. It
 takes letters, digits, `.`, `_` and `-`, not first a `.` or `-`, so that
 Proxmox keeps it as it is; anything else is a usage error (exit 2). A file of
@@ -615,7 +623,12 @@ named, and the output says so rather than leaving someone to discover it.
 
 A template that is not there is an error (exit 1), not a no-op: a mistyped volid
 should not look like a successful removal. A malformed name is a usage error
-(exit 2).
+(exit 2), before Proxmox is asked anything: the volid has to be exactly
+`<storage>:vztmpl/<file>`, with a Proxmox storage ID and the file in letters,
+digits, `.`, `_` and `-`, without `..`. Proxmox gives every template it writes
+such a name; a file named otherwise was put on the storage by hand, and is
+removed on its node (`pveam remove`, or the file itself). The volid goes into
+the delete's pvesh path, which for another node reaches that node's shell.
 
 Removing a template does not affect containers created from it — a template is
 copied when a container is made, not referenced.
@@ -721,8 +734,12 @@ adds is the container by name, found on any node of the cluster.
 The storage has to be one that can snapshot: zfs, lvm-thin, or a directory
 storage holding qcow2. A raw volume on a directory storage cannot, and the
 answer is then pct's refusal plus one line saying which storages can. The
-snapshot's name is Proxmox's: letters, digits, `-` and `_`, not `current`, and
-not one already used.
+snapshot's name is Proxmox's: a letter, then letters, digits, `-` or `_`, 2 to
+40 characters, not `current`, and not one already used. nexcage checks the
+rule itself, for all four verbs, before it looks the container up or asks
+Proxmox anything, and anything else is a usage error (exit 2): for a container
+on another node the name goes into a pvesh path, and pvesh passes that path to
+the node's shell over ssh without quoting it.
 
 `rollback` of a running container stops it first: Proxmox kills it, as `pct
 rollback` does, and it stays stopped unless `--start`, which brings it up

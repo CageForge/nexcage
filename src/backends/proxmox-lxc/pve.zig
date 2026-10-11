@@ -255,8 +255,13 @@ pub const PveClient = struct {
 
     /// <storage>:vztmpl/<name>.tar, the volid a pull of `reference` writes:
     /// `filename` when one was given, else the name derived from the
-    /// reference.
+    /// reference. The storage goes into pvesh paths, so it is checked here,
+    /// before anything is asked of Proxmox (see templateVolidStorage).
     fn pullVolid(self: *const Self, allocator: std.mem.Allocator, storage: []const u8, reference: []const u8, filename: ?[]const u8) ![]u8 {
+        if (!isStorageId(storage)) {
+            if (self.logger) |log| log.err("'{s}' is not a Proxmox storage name: a letter, then letters, digits, '-', '_' or '.', and a letter or digit last", .{storage}) catch {};
+            return core.Error.InvalidInput;
+        }
         if (filename) |f| {
             // Proxmox normalises the name it is given (anything outside
             // letters, digits, '.', '_' and '-' becomes '_', and everything up
@@ -299,13 +304,13 @@ pub const PveClient = struct {
     /// the file goes for every node at once, and the caller should know that
     /// before it happens rather than after.
     pub fn removeTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, volid: []const u8) !bool {
-        const colon = std.mem.indexOfScalar(u8, volid, ':') orelse {
+        // Before any pvesh call: the volid goes into the delete's path whole.
+        const storage = templateVolidStorage(volid) orelse {
             if (self.logger) |log| {
-                log.err("a template is named <storage>:vztmpl/<file>, got '{s}'", .{volid}) catch {};
+                log.err("a template is named <storage>:vztmpl/<file>, the file in letters, digits, '.', '_' and '-' without '..', got '{s}'. Proxmox names every template it writes that way; a file named otherwise was put there by hand, and is removed on its node", .{volid}) catch {};
             }
             return core.Error.InvalidInput;
         };
-        const storage = volid[0..colon];
 
         // Is it there, and is that storage shared?
         var shared = false;
@@ -805,13 +810,13 @@ pub const PveClient = struct {
     /// the storages on that node which do hold templates, because the fix is
     /// usually to put the template on one of them.
     pub fn requireTemplateOnNode(self: *const Self, node: []const u8, volid: []const u8) !void {
-        const colon = std.mem.indexOfScalar(u8, volid, ':') orelse {
+        // The storage goes into a path on that node; see templateVolidStorage.
+        const storage = templateVolidStorage(volid) orelse {
             if (self.logger) |log| {
-                log.err("--node needs a template named as <storage>:vztmpl/<file>, got '{s}'", .{volid}) catch {};
+                log.err("--node needs a template named as <storage>:vztmpl/<file>, the file in letters, digits, '.', '_' and '-' without '..', got '{s}'", .{volid}) catch {};
             }
             return core.Error.InvalidInput;
         };
-        const storage = volid[0..colon];
 
         const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/content", .{ node, storage });
         defer self.allocator.free(path);
@@ -1440,6 +1445,7 @@ pub const PveClient = struct {
     /// snapshot -- a raw volume on a directory storage -- is pct's refusal,
     /// passed on with the one thing pct does not say: which storages can.
     pub fn snapshot(self: *const Self, vmid: []const u8, name: []const u8, description: ?[]const u8, node: ?[]const u8) !void {
+        try checkSnapshotName(self.logger, name);
         var args = std.ArrayListUnmanaged([]const u8){};
         defer args.deinit(self.allocator);
         var path: ?[]u8 = null;
@@ -1458,6 +1464,7 @@ pub const PveClient = struct {
     /// container itself first, with a kill, and `start_after` is pct's own
     /// --start: bring it up again afterwards.
     pub fn rollback(self: *const Self, vmid: []const u8, name: []const u8, start_after: bool, node: ?[]const u8) !void {
+        try checkSnapshotName(self.logger, name);
         var args = std.ArrayListUnmanaged([]const u8){};
         defer args.deinit(self.allocator);
         var path: ?[]u8 = null;
@@ -1474,6 +1481,7 @@ pub const PveClient = struct {
 
     /// Delete a snapshot. A name that is not there is pct's error, passed on.
     pub fn deleteSnapshot(self: *const Self, vmid: []const u8, name: []const u8, node: ?[]const u8) !void {
+        try checkSnapshotName(self.logger, name);
         if (node) |n| {
             const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}/snapshot/{s}", .{ n, vmid, name });
             defer self.allocator.free(path);
@@ -1606,6 +1614,108 @@ fn isPlainFileName(name: []const u8) bool {
         if (!isFileNameChar(c)) return false;
     }
     return true;
+}
+
+/// A storage ID as Proxmox's parse_id takes it: two characters at least, a
+/// letter first, a letter or digit last, and letters, digits, '-', '_' or '.'
+/// between.
+fn isStorageId(id: []const u8) bool {
+    if (id.len < 2) return false;
+    if (!std.ascii.isAlphabetic(id[0]) or !std.ascii.isAlphanumeric(id[id.len - 1])) return false;
+    for (id) |c| {
+        if (!(std.ascii.isAlphanumeric(c) or c == '-' or c == '_' or c == '.')) return false;
+    }
+    return true;
+}
+
+/// The storage of a volid that is exactly <storage>:vztmpl/<file>, or null:
+/// the storage a Proxmox storage ID, the file in the characters Proxmox gives
+/// a template's file name and without "..". The volid and its storage go
+/// into pvesh paths, and for a node other than this one pvesh passes the path
+/// to that node's shell over ssh without quoting it -- the options it quotes,
+/// the path it does not (pve-manager, PVE/CLI/pvesh.pm, proxy_handler).
+fn templateVolidStorage(volid: []const u8) ?[]const u8 {
+    const colon = std.mem.indexOfScalar(u8, volid, ':') orelse return null;
+    const storage = volid[0..colon];
+    const kind = ":vztmpl/";
+    if (!isStorageId(storage) or !std.mem.startsWith(u8, volid[colon..], kind)) return null;
+    const file = volid[colon + kind.len ..];
+    if (file.len == 0 or std.mem.indexOf(u8, file, "..") != null) return null;
+    for (file) |c| {
+        if (!isFileNameChar(c)) return null;
+    }
+    return storage;
+}
+
+/// Proxmox's rule for a snapshot name, pve-snapshot-name in pve-common: the
+/// pve-configid format, a letter and then letters, digits, '-' or '_', two to
+/// 40 characters. "current" fits it, and is refused too: it is the API's name
+/// for where the container is now, not a snapshot.
+pub fn isSnapshotName(name: []const u8) bool {
+    if (name.len < 2 or name.len > 40) return false;
+    if (!std.ascii.isAlphabetic(name[0])) return false;
+    for (name) |c| {
+        if (!(std.ascii.isAlphanumeric(c) or c == '-' or c == '_')) return false;
+    }
+    return !std.mem.eql(u8, name, "current");
+}
+
+/// Refuse a snapshot name Proxmox would not take, before it reaches pct or a
+/// pvesh path. Proxmox checks the name too, but on the way to another node
+/// pvesh hands the path to that node's shell first (see templateVolidStorage),
+/// so a name was a command there.
+pub fn checkSnapshotName(logger: ?*core.LogContext, name: []const u8) core.Error!void {
+    if (isSnapshotName(name)) return;
+    if (logger) |log| {
+        if (std.mem.eql(u8, name, "current")) {
+            log.err("'current' is reserved: it is Proxmox's name for where the container is now, not a snapshot", .{}) catch {};
+        } else {
+            log.err("'{s}' is not a snapshot name Proxmox takes: a letter, then letters, digits, '-' or '_', 2 to 40 characters", .{name}) catch {};
+        }
+    }
+    return core.Error.InvalidInput;
+}
+
+test "snapshot names as Proxmox takes them, and not 'current'" {
+    for ([_][]const u8{ "before-upgrade_1", "xx", "Snap2", "a" ++ "b" ** 39, "Current" }) |ok| {
+        try std.testing.expect(isSnapshotName(ok));
+    }
+    for ([_][]const u8{ "", "x", "current", "1abc", "-x", "_x", "a/b", "../a", "x;id;", "x y", "a.b", "a" ++ "b" ** 40 }) |bad| {
+        try std.testing.expect(!isSnapshotName(bad));
+    }
+    try std.testing.expectError(core.Error.InvalidInput, checkSnapshotName(null, "x;touch${IFS}/root/pwn;"));
+    try checkSnapshotName(null, "before");
+}
+
+test "a template volid is <storage>:vztmpl/<file> and nothing more" {
+    try std.testing.expectEqualStrings("local", templateVolidStorage("local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst").?);
+    try std.testing.expectEqualStrings("shared-rdma", templateVolidStorage("shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar").?);
+    for ([_][]const u8{
+        "not-a-volid",
+        "local:vztmpl/",
+        "local:iso/x.iso",
+        "local:vztmpl/../../x.tar",
+        "local:vztmpl/a/b.tar",
+        "local:vztmpl/x..tar",
+        "local:vztmpl/evil;id>pwn.tar.zst",
+        "local:vztmpl/a b.tar",
+        "x;id;:vztmpl/a.tar",
+        ":vztmpl/a.tar",
+    }) |bad| {
+        try std.testing.expect(templateVolidStorage(bad) == null);
+    }
+}
+
+test "storage IDs as Proxmox parses them" {
+    try std.testing.expect(isStorageId("local"));
+    try std.testing.expect(isStorageId("shared-rdma"));
+    try std.testing.expect(isStorageId("nfs.backup_2"));
+    try std.testing.expect(!isStorageId("l"));
+    try std.testing.expect(!isStorageId("2local"));
+    try std.testing.expect(!isStorageId("local-"));
+    try std.testing.expect(!isStorageId("x;id;"));
+    try std.testing.expect(!isStorageId("a/b"));
+    try std.testing.expect(!isStorageId(""));
 }
 
 test "a pulled template is named for the whole reference, and two references never share a name" {

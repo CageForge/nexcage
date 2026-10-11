@@ -863,7 +863,13 @@ check "snapshots --format takes json or table only" all 'rc 2' 'not_called_re "^
 nx snapshot sn-1 before
 check "a name already used is pct's refusal, passed on" all 'rc 1' 'err_has "already used"'
 nx snapshot sn-1 current
-check "'current' is Proxmox's reserved name, and the refusal is pct's" all 'rc 1' 'err_has reserved'
+check "'current' is Proxmox's reserved name: refused before pct" all 'rc 2' 'err_has reserved' 'not_called_re "^pct snapshot"'
+# Proxmox's rule for the name (pve-configid), checked by nexcage before any pct
+# or pvesh call: for a container on another node the name goes into a pvesh
+# path, and that path reaches the node's shell.
+nx snapshot sn-1 'a/b'
+check "a snapshot name outside Proxmox's rule is a usage error, before pct" \
+  all 'rc 2' 'err_has "not a snapshot name"' 'not_called_re "^pct snapshot"'
 nx snapshot sn-1
 check "snapshot without a name is a usage error, before any pct" all 'rc 2' 'not_called_re "^pct snapshot"'
 nx snapshot sn-1 two words
@@ -915,12 +921,12 @@ check "and the list no longer has it, while the other stays" \
 nx delsnapshot sn-1 before
 check "deleting it twice is an error" all 'rc 1' 'err_has "does not exist"'
 
-nx --runtime crun snapshot sn-1 x
+nx --runtime crun snapshot sn-1 xx
 check "snapshot on the crun backend is refused as a Proxmox operation, before any pct" \
   all 'rc 1' 'err_has "Proxmox VE operation"' 'not_called_re "^pct"'
 nx --runtime crun snapshots sn-1
 check "so is the listing" all 'rc 1' 'err_has "Proxmox VE operation"' 'not_called_re "^pvesh"'
-nx snapshot no-such-sn-$$ x
+nx snapshot no-such-sn-$$ xx
 check "snapshot of a container that does not exist is an error naming it" \
   all 'rc 1' 'err_has "not found"' 'not_called_re "^pct snapshot"'
 
@@ -981,6 +987,14 @@ check "rollback on another node goes through that node's API, with --start" \
 nx delsnapshot remote-1 s1
 check "delsnapshot on another node goes through that node's API" \
   all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200/snapshot/s1"' 'not_called_re "^pct delsnapshot"'
+# pvesh hands the path of a call for another node to that node's shell over
+# ssh, unquoted: a snapshot name there was a command run as root on titan.
+nx rollback remote-1 'x;touch${IFS}/root/pwn;'
+check "a snapshot name that is a shell command never reaches another node's pvesh path" \
+  all 'rc 2' 'err_has "not a snapshot name"' 'not_called_re "^pvesh create /nodes/.*/snapshot/"'
+nx delsnapshot remote-1 '../../201/snapshot/s'
+check "nor does one that climbs out of the container's snapshots" \
+  all 'rc 2' 'not_called_re "^pvesh delete"'
 
 nx create --name remote-1 "$TPL"
 check "a name taken on another node is not free" \
@@ -1015,6 +1029,13 @@ check "the template was checked on that node, and before the VMID was taken" \
 nx list
 check "and it is listed on that node" \
   all 'rc 0' 'awk -F"\t" '"'"'$8=="there-1" && $7=="titan" {f=1} END {exit !f}'"'"' "$S/out"'
+
+# The volid's storage goes into a pvesh path on that node, and that path
+# reaches the node's shell: only a <storage>:vztmpl/<file> in Proxmox's
+# characters gets that far.
+nx create --name there-x --node titan 'x;id;:vztmpl/a.tar'
+check "create --node refuses a template volid that is not one, before that node is asked" \
+  all 'rc 2' 'err_has "vztmpl"' 'not_called_re "^pvesh get /nodes/titan/storage/"'
 
 # The template check is the point: a node that cannot see it is told so, and
 # nothing is created.
@@ -1127,6 +1148,9 @@ echo 1 > "$S/fail_list_in"
 nx pull docker.io/library/nginx:1.23
 check "pull: a storage listing that fails is an error, not some template's volid" \
   all 'rc 1' 'err_has "could not be listed"' '[ ! -s "$S/out" ]'
+nx pull docker.io/library/nginx:1.27 --node titan --storage 'x;id;'
+check "pull refuses a storage that is not a Proxmox storage ID, before pvesh" \
+  all 'rc 2' 'err_has "storage name"' 'not_called_re "^pvesh"'
 echo 1 > "$S/fail_list_in"
 nx images
 check "images leaves out a storage it cannot list, and says which" \
@@ -1172,6 +1196,14 @@ nx rmi not-a-volid
 # 2, not 1: a malformed name is a usage error, and nexcage keeps that apart
 # from "the thing is not there", which is 1.
 check "rmi wants <storage>:vztmpl/<file>" all 'rc 2' 'err_has "vztmpl"'
+nx rmi "local:vztmpl/../../x.tar"
+check "rmi refuses a volid that climbs out of vztmpl/, before any pvesh" all 'rc 2' 'not_called_re "^pvesh"'
+# A file named by hand on a storage is listed as it is, and its volid went
+# into the delete's path: for another node, into that node's shell.
+echo "titan local:vztmpl/evil;id>pwn.tar.zst" >> "$S/node_templates"
+nx rmi "local:vztmpl/evil;id>pwn.tar.zst" --node titan
+check "rmi refuses a volid outside Proxmox's file name characters, before any pvesh" \
+  all 'rc 2' 'not_called_re "^pvesh"'
 
 # On a shared storage the file goes for every node, and that is said.
 nx rmi "shared-rdma:vztmpl/redis_7.tar" --node titan
