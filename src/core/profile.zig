@@ -1015,6 +1015,14 @@ test "a user namespace joined by path is read from inside it, and one that leave
         defer f.close();
         f.writeAll(w.text) catch return error.SkipZigTest;
     }
+    // Where a namespace can be made but not joined (a seccomp filter that
+    // allows unshare and not setns), there is nothing to check here.
+    {
+        const fd = try std.posix.open(try std.fmt.bufPrint(&name, "/proc/{d}/ns/user", .{pid}), .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
+        defer std.posix.close(fd);
+        const probe = Inside.join(fd) catch return error.SkipZigTest;
+        probe.leave();
+    }
 
     var spec: [400]u8 = undefined;
     const json = try std.fmt.bufPrint(&spec,
