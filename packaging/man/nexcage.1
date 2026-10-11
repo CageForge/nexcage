@@ -193,9 +193,9 @@ The format of the runtime's own log lines, the ones \fB\-\-log\fR redirects:
 \fB\-\-config\fR \fIpath\fR
 Read configuration from
 .I path
-only. A missing or invalid file is an error, and so is one that is not a
-regular file or that someone other than root or the user running nexcage
-could have written; see CONFIGURATION.
+only. A missing or invalid file is an error, and so is a directory or a file
+that someone other than root or the user running nexcage could have written;
+see CONFIGURATION.
 .TP
 \fB\-\-root\fR \fIdir\fR
 Keep per-container state under
@@ -227,9 +227,10 @@ The working directory is not searched; name a file there with
 \fB\-\-config\fR.
 A file that is not owned by root or by the user running nexcage, that group or
 others can write, or whose directory they can write without the sticky bit or
-anyone else owns, is refused. Anything but a regular file is refused too, so
-\fB\-\-config\fR <(...) and \fB\-\-config\fR /dev/stdin fed by a pipe,
-which 0.17.0 read, no longer work.
+anyone else owns, is refused. A pipe, as \fB\-\-config\fR <(...) or
+\fB\-\-config\fR /dev/stdin fed by one gives, is read once, up to 1 MiB; a
+command that acts on a container reads the configuration again and finds it
+empty, as in 0.17.0.
 .TP
 .B network.bridge
 Bridge for eth0, which uses DHCP. Default vmbr0.

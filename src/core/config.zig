@@ -245,7 +245,7 @@ test "a large file that is not a spec is refused, saying so" {
     try std.testing.expectEqualStrings(files.paths[0], activePath().?);
 }
 
-test "a FIFO where the configuration should be is refused, not waited on" {
+test "a FIFO where the configuration should be is not waited on" {
     var files = try TrustedFiles.init(&.{});
     defer files.deinit();
     const rc = std.os.linux.mknodat(files.tmp.dir.fd, "fifo.json", std.os.linux.S.IFIFO | 0o644, 0);
@@ -253,9 +253,50 @@ test "a FIFO where the configuration should be is refused, not waited on" {
     const path = try files.tmp.dir.realpathAlloc(std.testing.allocator, "fifo.json");
     defer std.testing.allocator.free(path);
 
+    // Nothing has it open to write: it is read as an empty pipe is, at once,
+    // and nothing is not a configuration.
     var loader = ConfigLoader.init(std.testing.allocator);
     try std.testing.expectError(types.Error.InvalidConfig, loader.search(&.{path}));
-    try std.testing.expectEqualStrings("it is not a regular file", loader.problem().?);
+    try std.testing.expectEqualStrings("it is not valid JSON (UnexpectedEndOfInput)", loader.problem().?);
+}
+
+/// Writes `data` to a pipe after a pause and closes it, as the process behind
+/// `--config <(...)` does whenever it gets to run.
+fn writeLate(fd: std.posix.fd_t, data: []const u8) void {
+    defer std.posix.close(fd);
+    std.Thread.sleep(50 * std.time.ns_per_ms);
+    var done: usize = 0;
+    // A reader that stopped at the limit closes its end: BrokenPipe, and the
+    // writer is done.
+    while (done < data.len) done += std.posix.write(fd, data[done..]) catch return;
+}
+
+test "a configuration in a pipe is read once, as --config <(...) and /dev/stdin give it" {
+    const cases = [_]struct { data: []const u8, bridge: ?[]const u8 = null, says: ?[]const u8 = null }{
+        .{ .data = "{\"network\":{\"bridge\":\"vmbr9\"}}", .bridge = "vmbr9" },
+        .{ .data = "{\"ociVersion\":\"1.0.0\",\"root\":{\"path\":\"rootfs\"}}", .says = "it is an OCI runtime spec, not a nexcage configuration" },
+        .{ .data = "{\"network\":{\"bridge\":\"" ++ "v" ** (1100 * 1024) ++ "\"}}", .says = "it is larger than 1024 KiB, and no configuration is" },
+    };
+    defer setExplicitPath(null);
+    for (cases) |case| {
+        const fds = try std.posix.pipe2(.{ .CLOEXEC = true });
+        const writer = try std.Thread.spawn(.{}, writeLate, .{ fds[1], case.data });
+        defer writer.join();
+        // Before the join: a writer the limit stopped waits for this end too.
+        defer std.posix.close(fds[0]);
+        var path_buf: [32]u8 = undefined;
+        setExplicitPath(try std.fmt.bufPrint(&path_buf, "/proc/self/fd/{d}", .{fds[0]}));
+
+        var loader = ConfigLoader.init(std.testing.allocator);
+        if (case.bridge) |bridge| {
+            var cfg = try loader.loadDefault();
+            defer cfg.deinit();
+            try std.testing.expectEqualStrings(bridge, cfg.network.bridge.?);
+        } else {
+            try std.testing.expectError(types.Error.InvalidConfig, loader.loadDefault());
+            try std.testing.expectEqualStrings(case.says.?, loader.problem().?);
+        }
+    }
 }
 
 test "a directory named as the configuration is refused as one, / as much as ." {
@@ -264,7 +305,7 @@ test "a directory named as the configuration is refused as one, / as much as ." 
     for ([_][]const u8{ "/", "." }) |path| {
         setExplicitPath(path);
         try std.testing.expectError(types.Error.InvalidConfig, loader.loadDefault());
-        try std.testing.expectEqualStrings("it is not a regular file", loader.problem().?);
+        try std.testing.expectEqualStrings("it is a directory", loader.problem().?);
     }
 }
 
@@ -357,8 +398,9 @@ pub const ConfigLoader = struct {
     /// Load configuration from file. error.OciSpec when it is an OCI runtime
     /// spec, which the caller passes over or refuses.
     pub fn loadFromFile(self: *Self, path: []const u8) !Config {
-        const file = try self.openTrusted(path);
-        defer file.close();
+        const opened = try self.openTrusted(path);
+        defer opened.file.close();
+        if (!opened.regular) return self.loadFromStream(opened.file);
 
         // An OCI bundle holds a config.json that is a runtime spec, not
         // nexcage's configuration. When ./config.json was in the search path,
@@ -366,9 +408,9 @@ pub const ConfigLoader = struct {
         // made the spec silently replace the real configuration, routing
         // rules and all. A file declaring ociVersion is not ours: the search
         // passes it over, and --config refuses it.
-        if (isOciSpec(file)) return error.OciSpec;
+        if (isOciSpec(opened.file)) return error.OciSpec;
 
-        const file_content = file.readToEndAlloc(self.allocator, max_file_bytes) catch |err| switch (err) {
+        const file_content = opened.file.readToEndAlloc(self.allocator, max_file_bytes) catch |err| switch (err) {
             error.OutOfMemory => return err,
             error.FileTooBig => return self.refuse("it is larger than {d} KiB, and no configuration is", .{max_file_bytes / 1024}),
             else => return self.refuse("cannot read it ({s})", .{@errorName(err)}),
@@ -376,6 +418,32 @@ pub const ConfigLoader = struct {
         defer self.allocator.free(file_content);
         return self.loadFromString(file_content);
     }
+
+    /// A configuration that is not a file on disk: `--config <(...)`, or
+    /// `--config /dev/stdin` fed by a pipe, as 0.17.0 read them, or a FIFO.
+    /// What a pipe holds can be read only once, so it is read whole, up to
+    /// the limit, and the spec check is made on what was read: the check
+    /// made on a file reads it first, and would leave nothing to load.
+    fn loadFromStream(self: *Self, file: std.fs.File) !Config {
+        // openTrusted opened it O_NONBLOCK, so that a FIFO no writer has open
+        // did not hold the open. The read waits for what a writer sends, as
+        // 0.17.0's did, and with no writer it finds the end at once.
+        const nonblock: usize = @as(u32, @bitCast(std.posix.O{ .NONBLOCK = true }));
+        const flags = std.posix.fcntl(file.handle, std.posix.F.GETFL, 0) catch |err| return self.refuse("cannot read it ({s})", .{@errorName(err)});
+        _ = std.posix.fcntl(file.handle, std.posix.F.SETFL, flags & ~nonblock) catch |err| return self.refuse("cannot read it ({s})", .{@errorName(err)});
+        const text = file.readToEndAlloc(self.allocator, max_file_bytes) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            error.FileTooBig => return self.refuse("it is larger than {d} KiB, and no configuration is", .{max_file_bytes / 1024}),
+            else => return self.refuse("cannot read it ({s})", .{@errorName(err)}),
+        };
+        defer self.allocator.free(text);
+        if (isOciSpecText(text)) return error.OciSpec;
+        return self.loadFromString(text);
+    }
+
+    /// A configuration file opened for reading, and whether it is a regular
+    /// file, which can be read twice, or a stream, which cannot.
+    const Opened = struct { file: std.fs.File, regular: bool };
 
     /// Opens a configuration file for reading, or refuses it when anyone but
     /// root or the user running nexcage could have written what it says. The
@@ -385,18 +453,18 @@ pub const ConfigLoader = struct {
     /// replace it in, handed all of that to them. The checks are made on the
     /// open descriptors, so the file checked is the file read. A symlink is
     /// followed, and the file it names is the one checked.
-    fn openTrusted(self: *Self, path: []const u8) !std.fs.File {
+    fn openTrusted(self: *Self, path: []const u8) !Opened {
         // "/" has no last component to open in a directory: openat with ""
         // came back as a bare FileNotFound for a path that is there.
         const name = std.fs.path.basename(path);
-        if (name.len == 0) return self.refuse("it is not a regular file", .{});
+        if (name.len == 0) return self.refuse("it is a directory", .{});
         var dir = std.fs.cwd().openDir(std.fs.path.dirname(path) orelse ".", .{}) catch |err| switch (err) {
             error.FileNotFound => return types.Error.FileNotFound,
             else => return self.refuse("cannot open its directory ({s})", .{@errorName(err)}),
         };
         defer dir.close();
-        // O_NONBLOCK: a FIFO in the file's place opens at once, to be refused
-        // below, rather than hanging every call until something writes to it.
+        // O_NONBLOCK: a FIFO in the file's place opens at once, rather than
+        // hanging every call until something opens it to write.
         const fd = std.posix.openat(dir.fd, name, .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NOCTTY = true, .NONBLOCK = true }, 0) catch |err| switch (err) {
             error.FileNotFound => return types.Error.FileNotFound,
             else => return self.refuse("cannot open it ({s})", .{@errorName(err)}),
@@ -406,7 +474,7 @@ pub const ConfigLoader = struct {
 
         const euid = std.posix.geteuid();
         const st = std.posix.fstat(file.handle) catch |err| return self.refuse("cannot stat it ({s})", .{@errorName(err)});
-        if (!std.posix.S.ISREG(st.mode)) return self.refuse("it is not a regular file", .{});
+        if (std.posix.S.ISDIR(st.mode)) return self.refuse("it is a directory", .{});
         switch (distrust(st, euid)) {
             .none => {},
             .owner => return self.refuse("it is owned by uid {d}{s}, not by root or by uid {d}, which runs nexcage", .{ st.uid, unmappedNote(st.uid), euid }),
@@ -418,7 +486,7 @@ pub const ConfigLoader = struct {
             .owner => return self.refuse("its directory is owned by uid {d}{s}, not by root or by uid {d}, and its owner can put another file in its place", .{ dir_st.uid, unmappedNote(dir_st.uid), euid }),
             .writable => return self.refuse("group or others can write its directory (mode {o:0>4}) and put another file in its place; run chmod go-w on the directory", .{dir_st.mode & 0o7777}),
         }
-        return file;
+        return .{ .file = file, .regular = std.posix.S.ISREG(st.mode) };
     }
 
     const Distrust = enum { none, owner, writable };
@@ -468,7 +536,16 @@ pub const ConfigLoader = struct {
         return declaresOciVersion(&reader) catch false;
     }
 
-    fn declaresOciVersion(reader: *std.json.Reader) !bool {
+    /// isOciSpec on text already read, as from a pipe.
+    fn isOciSpecText(text: []const u8) bool {
+        var scanner = std.json.Scanner.initCompleteInput(std.heap.page_allocator, text);
+        defer scanner.deinit();
+        return declaresOciVersion(&scanner) catch false;
+    }
+
+    /// `reader` is a std.json.Reader or a std.json.Scanner: the same tokens,
+    /// from a stream or from text in memory.
+    fn declaresOciVersion(reader: anytype) !bool {
         if (try reader.next() != .object_begin) return false;
         const key = "ociVersion";
         var declared = false;

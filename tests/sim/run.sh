@@ -484,13 +484,23 @@ nx create --name ww-3 "$TPL"
 check "a sticky directory, as /tmp is, lets nobody else replace it" \
   all 'rc 0' 'called_re "--hostname ww-3 .*bridge=vmbr666"'
 chmod 755 "$S/work"; rm -f "$S/work/config.json"
-# Opening a FIFO waits for a writer; one in the file's place is refused at once.
+# Opening a FIFO waits for a writer. One in the file's place opens at once and,
+# with nothing writing to it, reads as an empty pipe does.
 mkfifo "$S/work/fifo.json"
 printf '#!/bin/sh\nexec timeout 10 %s "$@"\n' "$NEXCAGE" > "$S/timed-nexcage"; chmod +x "$S/timed-nexcage"
 NEXCAGE=$S/timed-nexcage nx --config fifo.json list
-check "a FIFO named as the config file is refused, not waited on" \
-  all 'rc 1' 'err_has "fifo.json: it is not a regular file"'
+check "a FIFO named as the config file is not waited on" \
+  all 'rc 1' 'err_has "fifo.json: it is not valid JSON (UnexpectedEndOfInput)"'
 rm -f "$S/work/fifo.json" "$S/timed-nexcage"
+# A pipe is read as 0.17.0 read it -- `--config <(...)`, or /dev/stdin fed by
+# one -- and once, since what a pipe held is gone once read: the spec check is
+# made on what was read. (Not /dev/stdin here: /dev is host root's, which is
+# nobody in this namespace, and a directory nobody owns is refused.)
+nx --config <(printf '%s\n' '{"log_level":"debug"}') list
+check "--config <(...) is read" all 'rc 0' 'err_has "DEBUG nexcage:"'
+nx --config <(printf '%s\n' '{"ociVersion":"1.0.0","root":{"path":"rootfs"}}') list
+check "an OCI spec in a pipe is refused as one" \
+  all 'rc 1' 'err_has ": it is an OCI runtime spec, not a nexcage configuration"' 'not_called_re "^(pct|pvesh)"'
 # A file owned by neither root nor the user running nexcage, as nexcage's
 # namespace sees it. That namespace maps the caller's uid alone, so anyone but
 # root finds one in /etc/passwd: host root's files are nobody's there, as they
