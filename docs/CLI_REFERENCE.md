@@ -188,7 +188,7 @@ it was made with, and every later command finds it without the profile.
 | Key | What it does to the bundle |
 |---|---|
 | `runtime` | The backend: `crun`. `lxc` refuses the file until profiles reach that backend (#316) |
-| `crun.user_namespace: "require"` | Refuses a bundle without a user namespace with uid and gid mappings. In Kubernetes, `hostUsers: false` on the pod |
+| `crun.user_namespace: "require"` | Refuses a bundle without a user namespace with uid and gid mappings, or whose mappings include host uid or gid 0. A user namespace joined by path, as a pod's containers join the sandbox's (`/proc/<pid>/ns/user`, or CRI-O's bind mount), must not be nexcage's own and must leave host uid and gid 0 out: nexcage reads its maps from inside it, and refuses one it cannot read. In Kubernetes, `hostUsers: false` on the pod |
 | `crun.seccomp: "require"` | Refuses a bundle without `linux.seccomp`. In Kubernetes, `securityContext.seccompProfile.type: RuntimeDefault` |
 | `crun.capabilities.drop` | Removes these from every capability set of the process. Spelt as the kernel spells them, `CAP_NET_RAW`: a name the kernel does not have, such as `CAP_SYSADMIN`, refuses the file, since it would drop nothing |
 | `crun.limits.memory`, `crun.limits.pids` | Lowers the bundle's limit to this, and sets it when the bundle has none. Memory takes bytes or `64M`, `1G`. The bundle's `memory.swap`, which is memory plus swap, is lowered by the same amount, so the bundle gets no more swap than it asked for. containerd sets it equal to the limit, which means none |

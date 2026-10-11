@@ -9,6 +9,7 @@
 //! driven by an engine is #316.
 
 const std = @import("std");
+const os = std.os.linux;
 const types = @import("types.zig");
 
 /// The annotation `state` reports the profile under. nexcage writes it; a
@@ -133,8 +134,7 @@ fn narrow(allocator: std.mem.Allocator, spec_json: []const u8, profile: *const P
 
     const linux = try child(arena, root, "linux");
 
-    if (profile.require_user_namespace and !hasUserNamespace(linux))
-        return why.set("profile '{s}' requires a user namespace, and the bundle has none with uid and gid mappings; in Kubernetes, set hostUsers: false on the pod", .{profile.name});
+    if (profile.require_user_namespace) try checkUserNamespace(linux, profile, why);
 
     if (profile.require_seccomp and !hasObject(linux, "seccomp"))
         return why.set("profile '{s}' requires a seccomp filter, and the bundle has none; in Kubernetes, set securityContext.seccompProfile.type: RuntimeDefault", .{profile.name});
@@ -369,22 +369,191 @@ fn hasObject(obj: *std.json.ObjectMap, key: []const u8) bool {
     return v == .object;
 }
 
-fn hasUserNamespace(linux: *std.json.ObjectMap) bool {
-    const namespaces = linux.get("namespaces") orelse return false;
-    if (namespaces != .array) return false;
+/// require_user_namespace: a user namespace that keeps the container's root
+/// from being the host's. Either libcrun makes one from uidMappings and
+/// gidMappings, which must then leave host id 0 out, or it joins the one a
+/// namespace entry names by path, ignoring the mappings, and that namespace
+/// is checked instead. containerd and CRI-O do both for a pod's containers:
+/// the pod's namespace by path, and its mappings beside it.
+fn checkUserNamespace(linux: *const std.json.ObjectMap, profile: *const Profile, why: *Refusal) error{ProfileRefused}!void {
+    const none = "profile '{s}' requires a user namespace, and the bundle has none with uid and gid mappings; in Kubernetes, set hostUsers: false on the pod";
+    const namespaces = linux.get("namespaces") orelse return why.set(none, .{profile.name});
+    if (namespaces != .array) return why.set(none, .{profile.name});
     var has_user = false;
     for (namespaces.array.items) |ns| {
-        if (ns != .object) continue;
-        const t = ns.object.get("type") orelse continue;
-        if (t == .string and std.mem.eql(u8, t.string, "user")) has_user = true;
+        if (isUserNamespace(ns)) has_user = true;
     }
-    if (!has_user) return false;
+    if (!has_user) return why.set(none, .{profile.name});
+
     for ([_][]const u8{ "uidMappings", "gidMappings" }) |key| {
-        const m = linux.get(key) orelse return false;
-        if (m != .array or m.array.items.len == 0) return false;
+        const m = linux.get(key) orelse return why.set(none, .{profile.name});
+        if (m != .array or m.array.items.len == 0) return why.set(none, .{profile.name});
+        for (m.array.items, 0..) |range, i| {
+            const host = idOf(range, "hostID");
+            if (host == null or idOf(range, "containerID") == null or idOf(range, "size") == null)
+                return why.set("profile '{s}' requires a user namespace, and linux.{s}[{d}] is not a range of whole numbers containerID, hostID and size", .{ profile.name, key, i });
+            // A range starting anywhere else cannot reach 0. Kubernetes never
+            // maps it: the kubelet keeps its ranges clear of host root.
+            if (host.? == 0)
+                return why.set("profile '{s}' requires a user namespace that does not map host {s} 0, and linux.{s}[{d}] maps it: root in the container would be root on the host", .{ profile.name, idName(key), key, i });
+        }
     }
-    return true;
+
+    for (namespaces.array.items) |ns| {
+        if (!isUserNamespace(ns)) continue;
+        if (ns.object.get("path")) |path| try checkJoined(path, profile, why);
+    }
 }
+
+fn isUserNamespace(ns: std.json.Value) bool {
+    if (ns != .object) return false;
+    const t = ns.object.get("type") orelse return false;
+    return t == .string and std.mem.eql(u8, t.string, "user");
+}
+
+/// A uid or gid as libcrun reads one: a whole number in 32 bits. libcrun
+/// reads a field of another type as absent, and an absent hostID as 0.
+fn idOf(range: std.json.Value, key: []const u8) ?u32 {
+    if (range != .object) return null;
+    const v = range.object.get(key) orelse return null;
+    if (v != .integer or v.integer < 0 or v.integer > std.math.maxInt(u32)) return null;
+    return @intCast(v.integer);
+}
+
+fn idName(mappings: []const u8) []const u8 {
+    return if (mappings[0] == 'u') "uid" else "gid";
+}
+
+/// The user namespace a bundle joins by path. libcrun joins it as it is, so
+/// it is refused unless it is a user namespace other than nexcage's own, and
+/// its maps leave host uid and gid 0 out. containerd names a pod's as
+/// /proc/<sandbox pid>/ns/user, CRI-O as a bind mount that pins it; both are
+/// read the same way, from a child that joins it. What cannot be read is
+/// refused: the requirement is that the container is isolated, not that its
+/// bundle says so.
+///
+/// libcrun opens the path again later. A /proc/<pid> path could name another
+/// process by then only if the pid were reused in between, which takes a
+/// wrap of the whole pid space.
+fn checkJoined(path: std.json.Value, profile: *const Profile, why: *Refusal) error{ProfileRefused}!void {
+    // Relative to what? libcrun resolves it from the bundle, after this.
+    if (path != .string or path.string.len == 0 or path.string[0] != '/')
+        return why.set("profile '{s}' requires a user namespace nexcage can check, and the bundle joins one by a path that is not absolute", .{profile.name});
+    const p = path.string;
+    const own = std.posix.fstatat(std.posix.AT.FDCWD, "/proc/self/ns/user", 0) catch |err| return unchecked(profile, p, err, why);
+    const named = std.posix.fstatat(std.posix.AT.FDCWD, p, 0) catch |err| return unchecked(profile, p, err, why);
+    // Every namespace is a file of one filesystem, nsfs. Nothing off it is
+    // opened: a device or a FIFO could do something on open.
+    if (named.dev != own.dev)
+        return why.set("profile '{s}' requires a user namespace, and the bundle joins {s}, which is not a namespace", .{ profile.name, p });
+    if (named.ino == own.ino)
+        return why.set("profile '{s}' requires a user namespace of the container's own, and the bundle joins {s}, which is nexcage's", .{ profile.name, p });
+
+    const fd = std.posix.open(p, .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NONBLOCK = true }, 0) catch |err| return unchecked(profile, p, err, why);
+    defer std.posix.close(fd);
+    const opened = std.posix.fstat(fd) catch |err| return unchecked(profile, p, err, why);
+    if (opened.dev != named.dev or opened.ino != named.ino)
+        return why.set("profile '{s}' requires a user namespace nexcage can check, and {s} changed while it was checked", .{ profile.name, p });
+    if (os.ioctl(fd, ns_get_nstype, 0) != os.CLONE.NEWUSER)
+        return why.set("profile '{s}' requires a user namespace, and the bundle joins {s}, which is another kind of namespace", .{ profile.name, p });
+
+    const inside = Inside.join(fd) catch |err| return unchecked(profile, p, err, why);
+    defer inside.leave();
+    var file: [64]u8 = undefined;
+    const joined = std.posix.fstatat(std.posix.AT.FDCWD, std.fmt.bufPrint(&file, "/proc/{d}/ns/user", .{inside.pid}) catch unreachable, 0) catch |err| return unchecked(profile, p, err, why);
+    if (joined.dev != named.dev or joined.ino != named.ino)
+        return why.set("profile '{s}' requires a user namespace nexcage can check, and {s} changed while it was checked", .{ profile.name, p });
+    var buf: [16 * 1024]u8 = undefined;
+    for ([_][]const u8{ "uid_map", "gid_map" }) |name| {
+        const map = std.fs.cwd().readFile(std.fmt.bufPrint(&file, "/proc/{d}/{s}", .{ inside.pid, name }) catch unreachable, &buf) catch |err| return unchecked(profile, p, err, why);
+        const id = name[0..3];
+        // A full buffer may be a cut one; the kernel allows 340 lines.
+        const verdict = if (map.len == buf.len) null else mapsZero(map);
+        const zero = verdict orelse
+            return why.set("profile '{s}' requires a user namespace nexcage can check, and the {s} of the one the bundle joins, {s}, does not read as a map", .{ profile.name, name, p });
+        if (zero)
+            return why.set("profile '{s}' requires a user namespace that does not map host {s} 0, and the one the bundle joins, {s}, maps it: root in the container would be root on the host", .{ profile.name, id, p });
+    }
+}
+
+fn unchecked(profile: *const Profile, path: []const u8, err: anyerror, why: *Refusal) error{ProfileRefused} {
+    return why.set("profile '{s}' requires a user namespace nexcage can check, and it cannot read the one the bundle joins, {s} ({s})", .{ profile.name, path, @errorName(err) });
+}
+
+/// The ioctl that says which kind of namespace a file is (<linux/nsfs.h>).
+const ns_get_nstype = 0xb703;
+
+/// Whether a uid_map or gid_map maps id 0 of the namespace that reads it.
+/// Each line is "inside outside count", with outside in the reader's terms,
+/// and a line's range lies within one range of every namespace above it, so
+/// a range covering 0 starts at 0. Null for a map that maps nothing or does
+/// not read as one.
+fn mapsZero(map: []const u8) ?bool {
+    var lines = std.mem.tokenizeScalar(u8, map, '\n');
+    var any = false;
+    while (lines.next()) |line| {
+        var fields = std.mem.tokenizeAny(u8, line, " \t");
+        var n: [3]u32 = undefined;
+        for (&n) |*field| field.* = std.fmt.parseInt(u32, fields.next() orelse return null, 10) catch return null;
+        if (fields.next() != null or n[2] == 0) return null;
+        if (n[1] == 0) return true;
+        any = true;
+    }
+    return if (any) false else null;
+}
+
+/// A child of this process inside a user namespace, held there until leave.
+/// /proc/<child>/uid_map then shows that namespace's map in this process's
+/// terms, which is the only way to read one that a bind mount pins with no
+/// process of its own.
+const Inside = struct {
+    pid: std.posix.pid_t,
+    hold: std.posix.fd_t,
+
+    fn join(ns: std.posix.fd_t) !Inside {
+        const ready = try std.posix.pipe2(.{ .CLOEXEC = true });
+        defer std.posix.close(ready[0]);
+        const hold = std.posix.pipe2(.{ .CLOEXEC = true }) catch |err| {
+            std.posix.close(ready[1]);
+            return err;
+        };
+        const pid = std.posix.fork() catch |err| {
+            for ([_]std.posix.fd_t{ ready[1], hold[0], hold[1] }) |fd| std.posix.close(fd);
+            return err;
+        };
+        if (pid == 0) {
+            // The child: system calls only, and out through exit_group, so
+            // that nothing of the parent's runs twice. It waits for EOF on
+            // the hold pipe, which comes when the parent closes its end or
+            // dies.
+            _ = os.close(hold[1]);
+            if (os.syscall2(.setns, @intCast(ns), os.CLONE.NEWUSER) != 0) os.exit_group(1);
+            _ = os.write(ready[1], "j", 1);
+            var b: [1]u8 = undefined;
+            _ = os.read(hold[0], &b, 1);
+            os.exit_group(0);
+        }
+        std.posix.close(ready[1]);
+        std.posix.close(hold[0]);
+        const inside = Inside{ .pid = pid, .hold = hold[1] };
+        var b: [1]u8 = undefined;
+        const n = std.posix.read(ready[0], &b) catch 0;
+        if (n != 1) {
+            inside.leave();
+            return error.SetnsFailed;
+        }
+        return inside;
+    }
+
+    fn leave(self: Inside) void {
+        std.posix.close(self.hold);
+        var status: u32 = undefined;
+        while (true) {
+            const rc = os.wait4(self.pid, &status, 0, null);
+            if (os.E.init(rc) != .INTR) break;
+        }
+    }
+};
 
 fn dropCapabilities(root: *std.json.ObjectMap, drop: []const []const u8) void {
     const process = root.getPtr("process") orelse return;
@@ -681,4 +850,115 @@ test "a capability spelt otherwise than the kernel spells it is refused: libcap 
         \\{"args":["sh"],"capabilities":{"bounding":["CAP_KILL","cap_sys_admin"],"effective":["cap_sys_admin"]}}
     , stored, &why));
     try std.testing.expect(std.mem.indexOf(u8, why.text(), "the process spec's capabilities.bounding lists \"cap_sys_admin\"") != null);
+}
+
+test "a user namespace that leaves the container's root the host's is refused" {
+    const userns = Profile{ .name = "h", .require_user_namespace = true };
+    // Container root mapped to host root, the whole range or one id.
+    try expectRefused(
+        \\{"linux":{"namespaces":[{"type":"user"}],
+        \\ "uidMappings":[{"containerID":0,"hostID":0,"size":4294967295}],
+        \\ "gidMappings":[{"containerID":0,"hostID":100000,"size":65536}]}}
+    , userns, "requires a user namespace that does not map host uid 0, and linux.uidMappings[0] maps it");
+    try expectRefused(
+        \\{"linux":{"namespaces":[{"type":"user"}],
+        \\ "uidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
+        \\ "gidMappings":[{"containerID":0,"hostID":100000,"size":1},{"containerID":1,"hostID":0,"size":1}]}}
+    , userns, "does not map host gid 0, and linux.gidMappings[1] maps it");
+    // libcrun reads a hostID that is not a 32-bit number as absent, and an
+    // absent one as 0.
+    for ([_][]const u8{ "\"hostID\":\"100000\",", "", "\"hostID\":4294967296,", "\"hostID\":-1,", "\"hostID\":1e5," }) |host| {
+        var spec: [400]u8 = undefined;
+        const json = try std.fmt.bufPrint(&spec,
+            \\{{"linux":{{"namespaces":[{{"type":"user"}}],
+            \\ "uidMappings":[{{"containerID":0,{s}"size":65536}}],
+            \\ "gidMappings":[{{"containerID":0,"hostID":100000,"size":65536}}]}}}}
+        , .{host});
+        try expectRefused(json, userns, "linux.uidMappings[0] is not a range of whole numbers containerID, hostID and size");
+    }
+
+    // Joined by path, libcrun takes the namespace as it is and ignores the
+    // mappings, which are clear of 0 here.
+    const joined = .{
+        .{ .path = "\"/proc/self/ns/user\"", .says = "a user namespace of the container's own, and the bundle joins /proc/self/ns/user, which is nexcage's" },
+        .{ .path = "\"/proc/self/status\"", .says = "joins /proc/self/status, which is not a namespace" },
+        .{ .path = "\"/proc/self/ns/net\"", .says = "joins /proc/self/ns/net, which is another kind of namespace" },
+        .{ .path = "\"/proc/self/ns/nonesuch\"", .says = "cannot read the one the bundle joins, /proc/self/ns/nonesuch (FileNotFound)" },
+        .{ .path = "\"ns/user\"", .says = "by a path that is not absolute" },
+        .{ .path = "1", .says = "by a path that is not absolute" },
+    };
+    inline for (joined) |case| {
+        const json =
+            \\{"linux":{"namespaces":[{"type":"pid"},{"type":"user","path":
+        ++ case.path ++
+            \\}],
+            \\ "uidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
+            \\ "gidMappings":[{"containerID":0,"hostID":100000,"size":65536}]}}
+        ;
+        try expectRefused(json, userns, case.says);
+    }
+}
+
+test "a uid_map is read as the kernel writes it" {
+    try std.testing.expectEqual(@as(?bool, true), mapsZero("         0          0 4294967295\n"));
+    try std.testing.expectEqual(@as(?bool, true), mapsZero("0 100000 65536\n65536 0 1\n"));
+    try std.testing.expectEqual(@as(?bool, false), mapsZero("         0     100000      65536\n"));
+    try std.testing.expectEqual(@as(?bool, false), mapsZero("0 1000 1\n1 100000 65536\n"));
+    // Nothing mapped yet, or not a map: not something to pass.
+    try std.testing.expectEqual(@as(?bool, null), mapsZero(""));
+    try std.testing.expectEqual(@as(?bool, null), mapsZero("0 100000\n"));
+    try std.testing.expectEqual(@as(?bool, null), mapsZero("0 x 1\n"));
+    try std.testing.expectEqual(@as(?bool, null), mapsZero("0 100000 0\n"));
+}
+
+test "a user namespace joined by path is read from inside it, and one that leaves host root out passes" {
+    // A pod's sandbox, as any user can make one: a child in a user namespace
+    // of its own, mapping one id that is not host root. Skipped where user
+    // namespaces cannot be made, as in some CI containers.
+    const ready = try std.posix.pipe2(.{ .CLOEXEC = true });
+    defer std.posix.close(ready[0]);
+    const hold = try std.posix.pipe2(.{ .CLOEXEC = true });
+    const pid = try std.posix.fork();
+    if (pid == 0) {
+        _ = os.close(hold[1]);
+        if (os.unshare(os.CLONE.NEWUSER) != 0) os.exit_group(1);
+        _ = os.write(ready[1], "u", 1);
+        var b: [1]u8 = undefined;
+        _ = os.read(hold[0], &b, 1);
+        os.exit_group(0);
+    }
+    std.posix.close(ready[1]);
+    std.posix.close(hold[0]);
+    const holder = Inside{ .pid = pid, .hold = hold[1] };
+    defer holder.leave();
+    var b: [1]u8 = undefined;
+    if (try std.posix.read(ready[0], &b) != 1) return error.SkipZigTest;
+
+    var name: [64]u8 = undefined;
+    var line: [64]u8 = undefined;
+    const outside_uid = if (os.geteuid() == 0) 100000 else os.geteuid();
+    const outside_gid = if (os.getegid() == 0) 100000 else os.getegid();
+    const writes = [_]struct { file: []const u8, text: []const u8 }{
+        .{ .file = "setgroups", .text = "deny" },
+        .{ .file = "uid_map", .text = try std.fmt.bufPrint(line[0..32], "0 {d} 1", .{outside_uid}) },
+        .{ .file = "gid_map", .text = try std.fmt.bufPrint(line[32..], "0 {d} 1", .{outside_gid}) },
+    };
+    for (writes) |w| {
+        const f = std.fs.cwd().openFile(try std.fmt.bufPrint(&name, "/proc/{d}/{s}", .{ pid, w.file }), .{ .mode = .write_only }) catch return error.SkipZigTest;
+        defer f.close();
+        f.writeAll(w.text) catch return error.SkipZigTest;
+    }
+
+    var spec: [400]u8 = undefined;
+    const json = try std.fmt.bufPrint(&spec,
+        \\{{"linux":{{"namespaces":[{{"type":"user","path":"/proc/{d}/ns/user"}}],
+        \\ "uidMappings":[{{"containerID":0,"hostID":100000,"size":65536}}],
+        \\ "gidMappings":[{{"containerID":0,"hostID":100000,"size":65536}}]}}}}
+    , .{pid});
+    var why: Refusal = .{};
+    const out = narrow(std.testing.allocator, json, &.{ .name = "h", .require_user_namespace = true }, &why) catch |err| {
+        std.debug.print("refused: {s}\n", .{why.text()});
+        return err;
+    };
+    std.testing.allocator.free(out);
 }

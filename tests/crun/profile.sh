@@ -44,6 +44,9 @@ JSON
 # What an engine would hand over: a 1 GiB limit the profile lowers, with swap
 # (memory plus swap) equal to it, which is containerd's way of saying no swap,
 # and the capabilities a container usually gets, NET_RAW and MKNOD among them.
+# /dev is a tmpfs, as an engine mounts it: without one libcrun makes its
+# device files in the shared rootfs, where a container in a user namespace
+# that does not own it cannot replace them.
 spec() {
     cat > "$BUNDLE/config.json" <<JSON
 {
@@ -62,9 +65,10 @@ spec() {
   },
   "root": { "path": "rootfs", "readonly": false },
   "hostname": "profile-check",
-  "mounts": [ { "destination": "/proc", "type": "proc", "source": "proc" } ],
+  "mounts": [ { "destination": "/proc", "type": "proc", "source": "proc" },
+              { "destination": "/dev", "type": "tmpfs", "source": "tmpfs", "options": [ "nosuid", "mode=755" ] } ],
   "linux": {
-    "namespaces": [ { "type": "pid" }, { "type": "ipc" }, { "type": "uts" }, { "type": "mount" } ],
+    "namespaces": [ { "type": "pid" }, { "type": "ipc" }, { "type": "uts" }, { "type": "mount" }${3:-} ],
     "resources": { "memory": { "limit": 1073741824, "swap": 1073741824 } }
     $1
   }
@@ -76,7 +80,14 @@ JSON
 # The program name names the profile, as an engine's BinaryName does.
 ln -s "$NEXCAGE" "$WORK/nexcage@hardened"
 nx() { "$NEXCAGE" --config "$CFG" "$@"; }
-cleanup() { cd /; for id in "$ID" "$ID-s" "$ID-u" "$ID-a" "$ID-z" "$ID-c"; do nx delete --force "$id" >/dev/null 2>&1 || true; done; rm -rf "$WORK"; }
+cleanup() {
+    cd /
+    for id in "$ID" "$ID-s" "$ID-u" "$ID-a" "$ID-z" "$ID-c" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
+        nx delete --force "$id" >/dev/null 2>&1 || true
+    done
+    umount "$WORK/userns-pin" 2>/dev/null || true
+    rm -rf "$WORK"
+}
 # The pid of a started container, from its state.
 pid_of() { nx state "$1" | sed -n 's/.*"pid": *\([0-9][0-9]*\).*/\1/p'; }
 trap cleanup EXIT
@@ -192,6 +203,73 @@ echo "ok: a profile requiring seccomp refuses a bundle without it"
 nx --profile needs-userns create --bundle "$BUNDLE" "$ID-u" 2>"$WORK/err" && fail "a bundle without a user namespace passed a profile that requires one"
 grep -q "hostUsers: false" "$WORK/err" || fail "the user namespace refusal does not say how to fix it: $(tail -1 "$WORK/err")"
 echo "ok: a profile requiring a user namespace refuses a bundle without one"
+
+# A user namespace that leaves the container's root the host's does not
+# count: mappings that include host uid 0, or a namespace joined by path that
+# is nexcage's own or maps host uid 0. One joined by path that maps neither
+# passes, as a pod's containers join the sandbox's: by /proc/<pid>/ns/user
+# (containerd) or by a bind mount that pins it (CRI-O). uid_map is read from
+# the kernel, in this namespace's terms, where root is 0.
+mappings() { echo ", \"uidMappings\": [ { \"containerID\": 0, \"hostID\": $1, \"size\": $2 } ], \"gidMappings\": [ { \"containerID\": 0, \"hostID\": $1, \"size\": $2 } ]"; }
+maps_root() { awk '$2 == 0 { found = 1 } END { exit !found }' "/proc/$1/uid_map"; }
+uid_map() { tr -s ' \n' ' ' < "/proc/$1/uid_map"; }
+
+spec "$(mappings 0 1)" "" ', { "type": "user" }'
+rc=0; nx --profile needs-userns create --bundle "$BUNDLE" "$ID-m" 2>"$WORK/err" || rc=$?
+if [ "$rc" = 0 ]; then
+    nx start "$ID-m" 2>"$WORK/err" || fail "mappings of host uid 0 passed the profile, and start failed: $(tail -1 "$WORK/err")"
+    p=$(pid_of "$ID-m")
+    maps_root "$p" && fail "mappings of host uid 0 passed the profile: the container's uid_map is $(uid_map "$p")"
+    fail "mappings of host uid 0 passed the profile"
+fi
+grep -q 'does not map host uid 0, and linux.uidMappings\[0\] maps it' "$WORK/err" || fail "the refusal does not name the mapping: $(tail -1 "$WORK/err")"
+echo "ok: a user namespace whose mappings include host uid 0 is refused"
+
+# Two sandboxes made without a profile: one mapping host uid 0, one not.
+spec "$(mappings 0 1)" "" ', { "type": "user" }'
+nx --runtime crun create --bundle "$BUNDLE" "$ID-h0" 2>"$WORK/err" && nx start "$ID-h0" 2>>"$WORK/err" || fail "a sandbox mapping host uid 0: $(tail -1 "$WORK/err")"
+spec "$(mappings 1 65536)" "" ', { "type": "user" }'
+nx --runtime crun create --bundle "$BUNDLE" "$ID-h1" 2>"$WORK/err" && nx start "$ID-h1" 2>>"$WORK/err" || fail "a sandbox with a user namespace of its own: $(tail -1 "$WORK/err")"
+h0=$(pid_of "$ID-h0"); h1=$(pid_of "$ID-h1")
+maps_root "$h0" || fail "the sandbox meant to map host uid 0 does not: $(uid_map "$h0")"
+! maps_root "$h1" || fail "the sandbox meant to leave host uid 0 out maps it: $(uid_map "$h1")"
+joining() { spec "$(mappings 1 65536)" "" ", { \"type\": \"user\", \"path\": \"$1\" }"; }
+
+joining "/proc/$h0/ns/user"
+rc=0; nx --profile needs-userns create --bundle "$BUNDLE" "$ID-j0" 2>"$WORK/err" || rc=$?
+if [ "$rc" = 0 ]; then
+    nx start "$ID-j0" 2>"$WORK/err" || fail "joining a namespace that maps host uid 0 passed the profile, and start failed: $(tail -1 "$WORK/err")"
+    p=$(pid_of "$ID-j0")
+    maps_root "$p" && fail "joining a namespace that maps host uid 0 passed the profile: the container's uid_map is $(uid_map "$p")"
+    fail "joining a namespace that maps host uid 0 passed the profile"
+fi
+grep -q "the one the bundle joins, /proc/$h0/ns/user, maps it" "$WORK/err" || fail "the refusal does not say why: $(tail -1 "$WORK/err")"
+echo "ok: joining a user namespace that maps host uid 0 is refused"
+
+# pid 1 here shares nexcage's user namespace, as init does on a host.
+joining "/proc/1/ns/user"
+nx --profile needs-userns create --bundle "$BUNDLE" "$ID-o" 2>"$WORK/err" && fail "joining nexcage's own user namespace passed the profile"
+grep -q "which is nexcage's" "$WORK/err" || fail "the refusal does not say why: $(tail -1 "$WORK/err")"
+echo "ok: joining nexcage's own user namespace is refused"
+
+joined() {
+    nx --profile needs-userns create --bundle "$BUNDLE" "$1" 2>"$WORK/err" || fail "a container joining a sandbox's user namespace by $2 was refused: $(tail -1 "$WORK/err")"
+    nx start "$1" 2>"$WORK/err" || fail "start, joining by $2: $(tail -1 "$WORK/err")"
+    p=$(pid_of "$1")
+    [ "$(readlink "/proc/$p/ns/user")" = "$(readlink "/proc/$h1/ns/user")" ] || fail "the container joined by $2 is not in the sandbox's user namespace"
+    ! maps_root "$p" || fail "the container joined by $2 maps host uid 0: $(uid_map "$p")"
+    echo "ok: joining a sandbox's user namespace by $2 passes, uid_map $(uid_map "$p")"
+}
+joining "/proc/$h1/ns/user"
+joined "$ID-j1" "/proc/<pid>/ns/user"
+touch "$WORK/userns-pin"
+if mount --bind "/proc/$h1/ns/user" "$WORK/userns-pin" 2>/dev/null; then
+    joining "$WORK/userns-pin"
+    joined "$ID-jp" "a bind mount that pins it"
+else
+    echo "skipped: this container cannot bind-mount a namespace, so CRI-O's pinned form is not checked"
+fi
+spec "" ""
 
 # A profile that is not defined is an error, not the plain handler.
 rc=0; nx --profile nope create --bundle "$BUNDLE" "$ID-n" 2>"$WORK/err" || rc=$?
