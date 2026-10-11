@@ -36,6 +36,8 @@ start_ct() {
   mkdir -p "/sys/fs/cgroup/lxc/$1" 2>/dev/null && echo 0 > "/sys/fs/cgroup/lxc/$1/cgroup.freeze" 2>/dev/null
   python3 "$HERE/../fake_init.py" "$SIM/sig.$1" </dev/null >/dev/null 2>&1 &
   echo $! > "$SIM/pid.$1"
+  # Proxmox puts the init in lxc/<vmid>/ns, and kill looks for it there
+  mkdir -p "/sys/fs/cgroup/lxc/$1/ns" 2>/dev/null && echo $! > "/sys/fs/cgroup/lxc/$1/ns/cgroup.procs" 2>/dev/null
   for _ in $(seq 1 50); do
     grep -qx READY "$SIM/sig.$1" 2>/dev/null && break
     sleep 0.1
@@ -151,12 +153,35 @@ case "$cmd" in
       [ "$1" = "--hostname" ] && name=$2
       shift
     done
+    # Real pct does the work in a task worker of its own session and waits
+    # for it (PVE::RESTEnvironment::fork_worker). A TERM to pct is passed on
+    # to the worker's process group, and the worker aborts and removes what it
+    # had made; nothing passes a KILL on, and the worker carries on alone.
+    # $SIM/slow_create holds how long the work takes, and the work also waits
+    # for as long as $SIM/hold_create exists, so that a check can signal pct,
+    # or change the cluster, while a create is under way, whatever the load.
+    # pct names its caller's PID in $SIM/create_caller and the worker's in
+    # $SIM/create_worker once a TERM would be passed on: once the worker leads
+    # a process group of its own. They were named before the worker had called
+    # setsid, and a TERM that came first found no group to pass on to.
+    if [ -e "$SIM/slow_create" ]; then
+      setsid bash -c 'sleep "$1" && while [ -e "$7" ]; do sleep 0.1; done && echo "$2 stopped $3" >> "$4" && echo "ostemplate: $5" > "$6"' \
+        worker "$(cat "$SIM/slow_create")" "$vmid" "$name" "$DB" "$tpl" "$SIM/conf.$vmid" "$SIM/hold_create" &
+      worker=$!
+      trap 'kill -TERM -- "-$worker" 2>/dev/null; wait "$worker"; echo "received interrupt" >&2; exit 255' TERM
+      while kill -0 "$worker" 2>/dev/null && [ "$(awk '{print $5}' "/proc/$worker/stat" 2>/dev/null)" != "$worker" ]; do sleep 0.01; done
+      echo "$worker" > "$SIM/create_worker"
+      echo "$PPID" > "$SIM/create_caller"
+      wait "$worker" || exit 255
+      exit 0
+    fi
     echo "$vmid stopped $name" >> "$DB"
     echo "ostemplate: $tpl" > "$SIM/conf.$vmid"
     ;;
   start)
     exists "$1" || missing "$1"
     [ "$(status_of "$1")" = running ] && { echo "CT $1 already running" >&2; exit 255; }
+    [ -e "$SIM/fail_start" ] && { cat "$SIM/fail_start" >&2; exit 255; }
     start_ct "$1"
     ;;
   shutdown|stop)
@@ -181,7 +206,14 @@ case "$cmd" in
       echo "cpus: 1"
       echo "maxmem: 536870912"
       echo "name: $(awk -v v="$1" '$1==v {print $3}' "$DB")"
-      [ "$st" = running ] && [ -e "$SIM/pid.$1" ] && echo "pid: $(cat "$SIM/pid.$1")"
+      # $SIM/reused_pid.<vmid> is the race kill has to survive: pct read the
+      # init's PID, the init exited, and the PID now belongs to an unrelated
+      # process -- the one the file names.
+      if [ -e "$SIM/reused_pid.$1" ]; then
+        echo "pid: $(cat "$SIM/reused_pid.$1")"
+      elif [ "$st" = running ] && [ -e "$SIM/pid.$1" ]; then
+        echo "pid: $(cat "$SIM/pid.$1")"
+      fi
       echo "status: $st"
       echo "type: lxc"
       echo "vmid: $1"
@@ -190,13 +222,36 @@ case "$cmd" in
     fi
     ;;
   exec)
-    vmid=$1; shift; [ "$1" = "--" ] && shift
+    vmid=$1; shift
+    # pct's options come before `--`. keep-env is a boolean that defaults to 1
+    # (pct.pm exec), which runs lxc-attach --keep-env: the command gets pct's
+    # own environment. 0 runs --clear-env: nothing but LXC's default PATH,
+    # container=lxc and the container's lxc.environment (lxc attach.c,
+    # lxc_attach_set_environment).
+    keep_env=1
+    while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+      case $1 in
+        --keep-env)
+          case ${2-} in
+            1|on|yes|true) keep_env=1 ;;
+            0|off|no|false) keep_env=0 ;;
+            *) echo "unable to parse boolean option" >&2; exit 255 ;;
+          esac
+          shift 2 ;;
+        *) echo "Unknown option: ${1#--}" >&2; exit 255 ;;
+      esac
+    done
+    [ "${1-}" = "--" ] && shift
     exists "$vmid" || missing "$vmid"
     [ "$(status_of "$vmid")" = running ] || { echo "CT $vmid not running" >&2; exit 255; }
+    attach=()
+    [ "$keep_env" = 0 ] && attach=(env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin container=lxc)
+    # The environment the command starts with, for the checks to read
+    "${attach[@]}" env > "$SIM/exec_env.$vmid"
     # Real pct runs the command in the container and exits with its status.
     # Running it here stands in for that, so the checks can see the output and
     # the status nexcage is supposed to pass through.
-    "$@"
+    "${attach[@]}" "$@"
     exit $?
     ;;
   config)

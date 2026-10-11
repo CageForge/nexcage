@@ -169,6 +169,14 @@ pub const ProxmoxLxcDriver = struct {
 
     /// Create LXC container using pct command
     pub fn create(self: *Self, config: core.types.SandboxConfig) !void {
+        const vmid = try self.createVmid(config);
+        self.allocator.free(vmid);
+    }
+
+    /// create, handing back the VMID the container was made under. That names
+    /// this container and no other; its name may not, since another container
+    /// can take the same name while pct create runs.
+    fn createVmid(self: *Self, config: core.types.SandboxConfig) ![]u8 {
         if (self.logger) |log| {
             try log.info("Creating Proxmox LXC container: {s}", .{config.name});
         }
@@ -370,7 +378,7 @@ pub const ProxmoxLxcDriver = struct {
 
         // 2. Take the next free VMID from the cluster
         const vmid = try self.pve_client.nextVmid();
-        defer self.allocator.free(vmid);
+        errdefer self.allocator.free(vmid);
 
         // 3. Resolve final template string
         var final_template: []const u8 = undefined;
@@ -528,9 +536,20 @@ pub const ProxmoxLxcDriver = struct {
         // call of their own -- left a CT nexcage had no record of.
         // An engine cleans up a failed create with delete --force, which was
         // told there was nothing to delete: the CT stayed, and its name with
-        // it, so the engine's next create of the name failed too. With the
-        // record, delete --force finds the CT by its name and destroys it.
-        errdefer if (self.logger) |log| log.err("CT {s} was made as '{s}', but create did not finish; `nexcage --runtime lxc delete --force {s}` removes it", .{ vmid, config.name, config.name }) catch {};
+        // it, so the engine's next create of the name failed too.
+        //
+        // From here on a step that fails must not leave the container
+        // behind at all: it would have perhaps half its mp lines, and its
+        // name would be taken -- a retry was refused with "already exists".
+        // runc and crun remove what a failed create made, and so does this,
+        // record and all. Should the destroy fail too, the record stays, and
+        // through it delete --force finds the CT by its name and destroys it.
+        // The archive packed from a bundle is removed by the defer above,
+        // after this has run.
+        errdefer {
+            if (self.logger) |log| log.warn("create of {s} failed after pct create; destroying vmid {s}", .{ config.name, vmid }) catch {};
+            self.undoCreate(config.name, vmid, target_node);
+        }
         try self.writeOciState(config.name, "created", 0, oci_bundle_path);
 
         // 7. Post-creation setup
@@ -550,11 +569,72 @@ pub const ProxmoxLxcDriver = struct {
         } else {
             if (self.logger) |log| log.info("Proxmox LXC container created: {s} (vmid {s})", .{ config.name, vmid }) catch {};
         }
+        return vmid;
+    }
+
+    /// Create a container on this node and start it. `runc run` removes the
+    /// container it made when it cannot start it, and so does this: a start
+    /// that failed used to leave a created container behind, under a name the
+    /// next run was refused.
+    ///
+    /// The start and the undo go by the VMID create made, never by the name
+    /// again. A container of the same name can appear while pct create runs,
+    /// and the name then finds that one first: run used to start it, fail
+    /// with "already running", and stop and destroy it -- another caller's
+    /// running container -- while leaving its own behind.
+    pub fn run(self: *Self, config: core.types.SandboxConfig) !void {
+        // The router refuses --node for run, and the start and the undo
+        // below are this node's. A run that reaches here with one anyway is
+        // refused before anything is made.
+        if (config.node != null) return core.Error.UnsupportedOperation;
+
+        const vmid = try self.createVmid(config);
+        defer self.allocator.free(vmid);
+        errdefer {
+            if (self.logger) |log| log.warn("start of {s} failed; destroying vmid {s}, which run created", .{ config.name, vmid }) catch {};
+            // pct destroy refuses a running container, and a start can fail
+            // after the init is up. Stopped as delete --force stops one.
+            if ((self.pve_client.initPid(vmid, null) catch null) != null) {
+                self.pve_client.stop(vmid, null) catch |err| {
+                    if (self.logger) |log| log.warn("stop of vmid {s} before destroying it failed: {s}", .{ vmid, @errorName(err) }) catch {};
+                };
+            }
+            self.undoCreate(config.name, vmid, null);
+        }
+
+        // Not `try`: a log line that cannot be written is no reason to undo
+        if (self.logger) |log| log.info("Starting Proxmox LXC container: {s}", .{config.name}) catch {};
+        try self.startVmid(config.name, vmid, null);
     }
 
     fn hasLimit(limits: []const core.types.ResourceUpdate, section: []const u8, name: []const u8) bool {
         for (limits) |v| if (std.mem.eql(u8, v.section, section) and std.mem.eql(u8, v.name, name)) return true;
         return false;
+    }
+
+    /// Destroy a container that create made and that create or run then
+    /// failed to finish, and the state create had written for it. The caller
+    /// is already failing with the error that matters, so this only reports
+    /// what it cannot undo -- by VMID, and by the name delete --force then
+    /// finds the container by, since its record is left in place.
+    fn undoCreate(self: *Self, name: []const u8, vmid: []const u8, node: ?[]const u8) void {
+        self.pve_client.delete(vmid, node) catch |err| {
+            // The record create wrote is kept: through it, delete --force --
+            // what an engine runs to clean up a failed create -- finds the
+            // CT by its name and destroys it.
+            if (self.logger) |log| log.err("CT {s} was made as '{s}', but create did not finish and destroying it failed ({s}); `nexcage --runtime lxc delete --force {s}` removes it", .{ vmid, name, @errorName(err), name }) catch {};
+            return;
+        };
+
+        // Only the files create writes, then the directory if that empties
+        // it: anything else there is not create's to remove. A file that is
+        // not there was never written.
+        const dir_path = std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ core.state_root.get(), name }) catch return;
+        defer self.allocator.free(dir_path);
+        var dir = std.fs.cwd().openDir(dir_path, .{}) catch return;
+        for ([_][]const u8{ "state.json", "runtime-metadata.json" }) |file| dir.deleteFile(file) catch {};
+        dir.close();
+        std.fs.cwd().deleteDir(dir_path) catch {};
     }
 
     fn persistRuntimeMetadata(
@@ -587,9 +667,6 @@ pub const ProxmoxLxcDriver = struct {
 
         const metadata_path = try std.fmt.allocPrint(self.allocator, "{s}/runtime-metadata.json", .{container_dir});
         defer self.allocator.free(metadata_path);
-
-        const file = try std.fs.cwd().createFile(metadata_path, .{ .truncate = true });
-        defer file.close();
 
         var buffer = std.array_list.Managed(u8).init(self.allocator);
         defer buffer.deinit();
@@ -664,7 +741,8 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         try writer.writeAll("\n}\n");
-        try file.writeAll(buffer.items);
+        // Replaced as state.json is, rather than truncated and rewritten
+        try common.writeFileAtomic(container_dir, "runtime-metadata.json", buffer.items);
 
         if (self.logger) |log| log.debug("Persisted runtime metadata for {s} at {s}", .{ container_name, metadata_path }) catch {};
     }
@@ -677,11 +755,17 @@ pub const ProxmoxLxcDriver = struct {
 
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        try self.startVmid(loc.name, loc.vmid, loc.remote());
+    }
 
-        try self.pve_client.start(loc.vmid, loc.remote());
+    /// Start the container `vmid` names, and record it as running under
+    /// `name`, the name it was found by or made under; found by VMID with no
+    /// name, it is not recorded.
+    fn startVmid(self: *Self, name: ?[]const u8, vmid: []const u8, node: ?[]const u8) !void {
+        try self.pve_client.start(vmid, node);
 
-        const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
-        self.record(&loc, "running", init_pid);
+        const init_pid = (self.pve_client.initPid(vmid, node) catch null) orelse 0;
+        self.recordAs(name, vmid, "running", init_pid);
     }
 
     /// Stop LXC container using pct command
@@ -919,7 +1003,13 @@ pub const ProxmoxLxcDriver = struct {
     /// made a record named after whichever container holds that VMID next.
     /// Best effort, as it always was -- the container has already changed.
     fn record(self: *Self, loc: *const pve.PveClient.Location, status: []const u8, pid: i32) void {
-        const name = loc.name orelse return;
+        self.recordAs(loc.name, loc.vmid, status, pid);
+    }
+
+    /// record, for a container known by its name and VMID rather than a
+    /// Location: run's, which it made itself.
+    fn recordAs(self: *Self, found_name: ?[]const u8, vmid: []const u8, status: []const u8, pid: i32) void {
+        const name = found_name orelse return;
         if (std.mem.indexOfScalar(u8, name, '/') != null or std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return;
         // A name libcrun has a container of is the crun backend's. A record
         // here too -- `--runtime lxc start <vmid>` of a CT with that hostname
@@ -927,7 +1017,7 @@ pub const ProxmoxLxcDriver = struct {
         // was gone, and an engine's second delete --force of it destroyed
         // the CT: the very thing records are there to prevent.
         if (build_options.enable_backend_crun and core.state_root.crunHas(name)) {
-            if (self.logger) |log| log.warn("'{s}' is a container on the crun backend, so nexcage keeps no record of CT {s} under that name; reach the CT with --runtime lxc", .{ name, loc.vmid }) catch {};
+            if (self.logger) |log| log.warn("'{s}' is a container on the crun backend, so nexcage keeps no record of CT {s} under that name; reach the CT with --runtime lxc", .{ name, vmid }) catch {};
             return;
         }
         const kept = self.persistedBundle(name);
@@ -963,16 +1053,19 @@ pub const ProxmoxLxcDriver = struct {
         return self.allocator.dupe(u8, value.string) catch null;
     }
 
+    /// Record the container's OCI state in `<root>/<id>/state.json`. The
+    /// file is replaced, never rewritten in place: `state` reads it at any
+    /// moment, and start, stop and their kin carry `bundle` forward from it,
+    /// so one empty read used to lose the bundle path until the container was
+    /// deleted. Those callers go on when this fails -- Proxmox has done what
+    /// was asked -- so the failure is said here rather than dropped.
     fn writeOciState(self: *Self, container_id: []const u8, status: []const u8, pid: i32, bundle_path: ?[]const u8) !void {
         const state_dir = core.state_root.get();
+        errdefer |err| if (self.logger) |log| log.warn("state of {s} not recorded under {s}: {s}", .{ container_id, state_dir, @errorName(err) }) catch {};
         try std.fs.cwd().makePath(state_dir);
         const container_dir = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ state_dir, container_id });
         defer self.allocator.free(container_dir);
         try std.fs.cwd().makePath(container_dir);
-        const state_path = try std.fmt.allocPrint(self.allocator, "{s}/state.json", .{container_dir});
-        defer self.allocator.free(state_path);
-        const file = try std.fs.cwd().createFile(state_path, .{ .truncate = true, .read = false });
-        defer file.close();
 
         var json_buf = std.ArrayListUnmanaged(u8){};
         defer json_buf.deinit(self.allocator);
@@ -984,7 +1077,7 @@ pub const ProxmoxLxcDriver = struct {
         if (bundle_path) |bp| try core.json.writeString(writer, bp) else try writer.writeAll("null");
         try writer.writeAll(",\n  \"annotations\": {}\n}\n");
 
-        try file.writeAll(json_buf.items);
+        try common.writeFileAtomic(container_dir, "state.json", json_buf.items);
     }
 
     /// The node nexcage is running on. `state` needs it to tell a container

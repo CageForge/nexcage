@@ -403,6 +403,17 @@ line that explains it.
 way `runc exec` does, so 1 and 2 from that command mean whatever the command
 means by them.
 
+On the Proxmox LXC backend the tools nexcage runs (`pct`, `pvesh`, `pvesm`,
+`tar`, `zfs`; not `exec`'s `pct exec`) get `SIGTERM` when nexcage dies, and
+`pct` passes it on to its task. A command whose nexcage is killed — by a
+caller's timeout, say — is cut short rather than finishing behind its back. A
+`pct create` cut short is removed by Proxmox, but `stop`, `delete` and `pull`
+stop where they were, and a `pct destroy` cut short can leave a container half
+removed. Run the command again (`delete --force` for a delete) to finish it.
+Work on another node — `create --node`, or any command on a container that
+lives there — is not cut short: `pvesh` hands it over ssh to that node's
+`pvesh`, which a `SIGTERM` here does not reach.
+
 ## Commands
 
 ### create
@@ -529,6 +540,12 @@ that fails after that point, while applying the bundle's mounts or namespaces
 for instance, exits 1 naming the CT. `delete --force <name>`, which is how a
 container engine cleans up a failed create, then destroys it.
 
+A create that fails after `pct create` — a `pct set` refused, the state not
+written — destroys the container it made before it exits 1, as `runc create`
+does, so the same name can be created again. If nexcage itself is killed while
+`pct create` runs, pct gets `SIGTERM` and aborts the create; Proxmox removes
+what it had made.
+
 #### pct options
 
 What `pct create` is usually given, on the Proxmox LXC backend. Each maps onto
@@ -570,7 +587,11 @@ nexcage create --name web-1 --memory 2G --cores 2 --ip 10.0.0.5/24 --gw 10.0.0.1
 nexcage run --name <name> <image>
 ```
 
-`create` followed by `start`, on this host. `--node` is refused (exit 1): to
+`create` followed by `start`, on this host. If `start` fails, the container
+`create` made is destroyed again before `run` exits 1, as `runc run` does, so
+nothing is left under the name. `run` starts and destroys it by the VMID
+`create` made, never by the name, which another container may have taken in
+the meantime. `--node` is refused (exit 1): to
 make the container on another node, `create --node`, then `start`.
 `--console-socket` and `--pid-file` are refused as `create` refuses them, since
 `pct start` runs the container's init itself; and the crun backend does not
@@ -629,8 +650,15 @@ nexcage kill [-s|--signal SIGNAL] [--all] <name>
 ```
 
 Sends `SIGNAL` to the container's init process from the host, as an OCI runtime
-does: nexcage reads the init's host PID from `pct status <vmid> --verbose` and
-calls `kill(2)`. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
+does: nexcage reads the init's host PID from `pct status <vmid> --verbose`,
+opens a pidfd for it, checks that the process is in the container's cgroup
+(under `/sys/fs/cgroup/lxc/<vmid>/`) and sends the signal through the pidfd. A
+PID that is not the container's any more — the init exited after `pct status`
+read it, and the PID went to another process — is not signalled; the container
+is reported as not running (exit 1). A cgroup in that tree that cannot be read
+— a threaded cgroup made inside the container, one removed while nexcage looks
+— is passed over as one without the init, rather than failing the kill of a
+live container. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
 `SIGKILL`, `usr1`), or a number from 1 to 64 in decimal digits and nothing else
 (`1_5` is refused, as runc refuses it); the default is `SIGTERM`. On
 `--runtime crun` libcrun is given the number nexcage read, not the text, so
@@ -690,11 +718,20 @@ guessed at: `exec web-1 --tty=false sh` asked for a terminal in 0.17.0, and took
 stdin, stdout and stderr are connected straight to the process in the
 container; nexcage does not buffer the output.
 
-On the Proxmox LXC backend this runs `pct exec <vmid> -- <command>`, so the
-command has to exist in the container's image — an image without a shell has no
-`sh` for `exec` to call. A container that is not running is an error (exit 1),
-as is one that does not exist; `exec` without a command is a usage error
-(exit 2).
+On the Proxmox LXC backend this runs `pct exec <vmid> --keep-env 0 -- <command>`,
+so the command has to exist in the container's image — an image without a
+shell has no `sh` for `exec` to call. A container that is not running is an
+error (exit 1), as is one that does not exist; `exec` without a command is a
+usage error (exit 2).
+
+The command starts with LXC's clean environment there: `PATH` set to
+`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
+`container=lxc` and the container's own `lxc.environment`. The environment
+nexcage was run with does not reach it — `pct exec` would otherwise hand every
+variable of the caller's shell or CI job, tokens and keys included, to a binary
+from the image. `TERM` is not passed either, so a `--tty` session starts
+without it. To give the command a variable, say so on its command line:
+`nexcage exec web-1 -- env TERM=xterm FOO=1 <command>`.
 
 `--process`, `--detach`, `--user`, `--cwd`, `--console-socket` and
 `--pid-file` are refused there rather than ignored (exit 1): `pct exec` takes a

@@ -303,10 +303,11 @@ pub const BackendRouter = struct {
                 }
                 core.exit_status.propagated = try proxmox_backend.exec(container_id, exec_cfg.argv);
             },
-            .run => {
-                try proxmox_backend.create(sandbox_config);
-                try proxmox_backend.start(container_id);
-            },
+            // Create, then start, and a start that fails removes the
+            // container again, as `runc run` does. The driver does both: only
+            // it knows the VMID create made, and the undo must go by that, not
+            // by the name, which another container can have taken meanwhile.
+            .run => try proxmox_backend.run(sandbox_config),
             .state => {
                 // State operation handled by command, backend returns info
                 // Router just ensures backend is initialized

@@ -34,8 +34,8 @@ flowchart LR
 | start | `pct start <vmid>`; on another node `pvesh create /nodes/<node>/lxc/<vmid>/status/start` |
 | stop | `pct config <vmid>` to check the hostname is still the name resolved, then `pct shutdown <vmid> --timeout 60 --forceStop 1`; on another node `pvesh get /nodes/<node>/lxc/<vmid>/config`, then `pvesh create /nodes/<node>/lxc/<vmid>/status/shutdown --timeout 60 --forceStop 1` |
 | delete | the same hostname check, then `pct destroy <vmid>`; on another node `pvesh delete /nodes/<node>/lxc/<vmid>`. With `--force`, a running container is stopped first, and the check is made again before the destroy. `--force` of a container nexcage has a record of and no node has any more removes the record and runs nothing, unless the cluster lists a container it has no name for, which may be that one: then it exits 1 and keeps the record |
-| kill | the same hostname check, then `kill(2)` to the container's init from the host, with the PID from `pct status --verbose` — `pct exec` cannot deliver SIGKILL to a namespace's init; refused for a container on another node |
-| exec | `pct exec <vmid> -- <argv>`, stdio inherited; refused for a container on another node, and with `--process` or `--detach` |
+| kill | the same hostname check, then a signal to the container's init from the host, with the PID from `pct status --verbose`: a pidfd is opened for it, the PID must be in a `cgroup.procs` under `/sys/fs/cgroup/lxc/<vmid>/` (one that cannot be read, such as a threaded cgroup's, is passed over), and `pidfd_send_signal` sends it, so a PID reused since `pct status` read it is never signalled — `pct exec` cannot deliver SIGKILL to a namespace's init; refused for a container on another node |
+| exec | `pct exec <vmid> --keep-env 0 -- <argv>`, stdio inherited: the command gets LXC's clean environment, not the caller's; refused for a container on another node, and with `--process` or `--detach` |
 | pause, resume | writes `1` / `0` to `/sys/fs/cgroup/lxc/<vmid>/cgroup.freeze` (not `pct suspend`); refused for a container on another node |
 | update | `pct set <vmid>` with `--memory`/`--swap`/`--cpulimit`/`--cpuunits`; on another node `pvesh set /nodes/<node>/lxc/<vmid>/config` with the same options. Any other setting, in flags or a `--resources` document, and a value pct cannot say as asked (a quota under a hundredth of a core, memory under 16 MiB), is refused by name before pct is asked |
 | snapshot | `pct snapshot <vmid> <name> [--description ...]`; on another node `pvesh create /nodes/<node>/lxc/<vmid>/snapshot --snapname <name> [--description ...]` |
@@ -44,6 +44,19 @@ flowchart LR
 | snapshots | `pvesh get /nodes/<node>/lxc/<vmid>/snapshot`, for a container here as well as elsewhere |
 | pull, images, rmi | `pvesh create /nodes/<node>/storage/<storage>/oci-registry-pull --reference <ref> --filename <name>`, then `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` must list exactly `<storage>:vztmpl/<name>.tar` (a listing that fails is an error); for `images` the same listing per template storage, a storage that cannot be listed left out with a warning; `pvesh delete /nodes/<node>/storage/<storage>/content/<volid>` |
 | list, name to VMID | `pvesh get /cluster/resources --type vm` for every node, merged with `pct list` for this one (the cluster view is a cache). Either failing is an error, not a listing of this host alone, and never "no such container". An id is matched as a name; as a VMID too only with `--runtime lxc`, since nexcage's record of a container is of its name. A miss while the cluster lists a container without a name (one made seconds ago, or any on a node down for five minutes) is an error, not "no such container", except to `create` |
+
+A `create` step after `pct create` that fails — `pct set --features`
+refused, the state not written — destroys the container it made
+(`pct destroy <vmid>`, or the node's API with `--node`) and the state written
+for it, as runc and crun do, so the name is free for a retry. Every tool runs
+as a child that gets `SIGTERM` when nexcage dies (`PR_SET_PDEATHSIG`): a
+nexcage killed on its own, by a timeout in its caller, no longer leaves
+`pct create` finishing a container nobody asked for any more. TERM, not KILL,
+because `pct create` passes a TERM on to its task worker, which aborts and
+removes what it had made; a KILL stops only pct, and its worker carries on.
+Work on another node is not bound to nexcage's life: `pvesh` proxies a call
+for another node over ssh to that node's `pvesh` (pvesh.pm, `proxy_handler`),
+and the TERM reaches only the local one.
 
 ### A container from an OCI bundle
 

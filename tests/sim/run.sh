@@ -146,6 +146,30 @@ check "a text log line cannot be forged from what pct prints" \
       'err_has "unable to create CT\n[1790000000] ERROR nexcage: forged\x1b]0;t\x07\xc2\x9b2J\xc2\x85[1790000000] ERROR nexcage: nel"'
 rm -f "$S/fail_create"
 
+# Nor does a create carry on once its caller is gone. nexcage installs no
+# signal handlers, and a wrapper that kills it -- a timeout in Python or Go, a
+# unit with KillMode=process -- kills it alone: pct used to finish the
+# container by itself, with no state, under a name a retry was then refused.
+# Its children get SIGTERM when it dies now; fake pct models what real pct
+# does with that, and with a KILL, which would not stop the create. The work
+# is held until the check has looked, so a create that carries on is still
+# there to be seen however slowly anything runs. It used to be given two
+# seconds, and a loaded machine let it finish before the signal came.
+echo 0 > "$S/slow_create"; touch "$S/hold_create"
+before=$(wc -l < "$S/calls")
+nexcage_ns create --name slow-1 "$TPL" > "$S/out" 2> "$S/err" &
+bg=$!
+for _ in $(seq 1 100); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
+worker=$(cat "$S/create_worker" 2>/dev/null)
+kill -KILL "$(cat "$S/create_caller")"
+RC=0; wait "$bg" || RC=$?
+tail -n +"$((before + 1))" "$S/calls" > "$S/calls.last"; LAST="nexcage create --name slow-1 $TPL, killed during pct create"
+check "nexcage killed during pct create: the create does not carry on without it" \
+  all 'rc 137' 'called_re "^pct create [0-9]+ .*--hostname slow-1 "' '[ -n "$worker" ]' 'eventually "! kill -0 $worker 2>/dev/null"'
+# A create that carries on is stopped here, rather than let into the db
+[ -n "$worker" ] && kill -KILL -- "-$worker" 2>/dev/null
+rm -f "$S/hold_create" "$S/slow_create" "$S/create_caller" "$S/create_worker"
+
 nx create --name nginx-1 docker.io/library/nginx:latest
 check "registry image on PVE 8.4 -> exit 1 with a version message, nothing pulled" \
   all 'rc 1' 'err_has "9.1"' 'not_called_re "^pvesh create"' 'not_called_re "^pct create"'
@@ -329,7 +353,48 @@ nx kill web-1 10;              check "kill <name> 10 (runc form, a number)" all 
 nx kill web-1 --signal USR2;   check "kill <name> --signal USR2"      all 'rc 0' 'got_signal 100 SIGUSR2'
 check "kill never runs pct exec" all '! grep -q "^pct exec" "$S/calls"'
 check "the init survives the signals it handles" status_is web-1 running
-nx kill web-1 'TERM;id';       check "kill: bad signal -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
+# The PID comes from `pct status`, another process, a moment before the
+# signal: the init can exit in between and its PID go to an unrelated process,
+# which kill(2) as root used to hit, reporting success. The signal goes through
+# a pidfd now, and only to a process in the container's cgroup. A stand-in for
+# the unrelated process records what it is sent.
+python3 "$(dirname "$0")/fake_init.py" "$S/sig.stranger" </dev/null >/dev/null 2>&1 &
+stranger=$!
+eventually 'grep -qx READY "$S/sig.stranger" 2>/dev/null'
+echo "$stranger" > "$S/reused_pid.100"
+nx kill web-1 TERM
+check "kill: a PID that is not the container's any more is not signalled; the container is not running" \
+  all 'rc 1' 'err_has "not running"' '! got_signal stranger SIGTERM'
+nx kill web-1 KILL; sleep 0.3
+check "kill KILL: the unrelated process holding the PID lives on" \
+  all 'rc 1' 'st=$(awk "{print \$3}" "/proc/$stranger/stat" 2>/dev/null); [ -n "$st" ] && [ "$st" != Z ]'
+rm -f "$S/reused_pid.100" "$S/sig.stranger"; kill -9 "$stranger" 2>/dev/null; wait "$stranger" 2>/dev/null
+nx kill web-1 CONT
+check "and the container's own init is signalled as before" all 'rc 0' 'got_signal 100 SIGCONT'
+# The tree under lxc/<vmid>/ns is the container's: its root makes cgroups
+# there, and one that cannot be read -- a threaded cgroup's cgroup.procs
+# fails with EOPNOTSUPP, one systemd removes mid-walk with ENODEV -- made kill
+# fail on a live container, so an engine's TERM-then-KILL never landed. Here
+# the cgroup's list is longer than kill reads. It has to be met before the
+# init's, and the walk goes in directory order, which is not the same on any
+# two filesystems: names that happened to come first on one did not on ext4's
+# hash order. So two cgroups sit side by side. The one `ls -f` lists first
+# cannot be read, the init moves into the other -- leaving ns/ itself with an
+# empty list, as cgroup v2 has it -- and the walk is through the first before
+# it reaches the second.
+cg_ns=$S/cgroup/lxc/100/ns
+mkdir "$cg_ns/a" "$cg_ns/b"
+unread=$(ls -f "$cg_ns" | grep -Ex '[ab]' | head -1)
+init_cg=a; [ "$unread" = a ] && init_cg=b
+truncate -s 17M "$cg_ns/$unread/cgroup.procs"
+mv "$cg_ns/cgroup.procs" "$cg_ns/$init_cg/cgroup.procs" && : > "$cg_ns/cgroup.procs"
+: > "$S/sig.100"
+nx kill web-1 USR1
+check "kill: a cgroup in the container that cannot be read is passed over; the init is signalled" \
+  all '[ "$(stat -c %s "$cg_ns/$unread/cgroup.procs")" -gt 16777216 ]' '[ ! -s "$cg_ns/cgroup.procs" ]' \
+      'grep -qx "$(init_pid 100)" "$cg_ns/$init_cg/cgroup.procs"' 'rc 0' 'got_signal 100 SIGUSR1'
+mv "$cg_ns/$init_cg/cgroup.procs" "$cg_ns/cgroup.procs" && rm -rf "${cg_ns:?}/a" "${cg_ns:?}/b"
+nx kill web-1 'TERM;id';      check "kill: bad signal -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
 nx kill web-1 0;               check "kill: signal 0 -> exit 2"       all 'rc 2' 'not_called_re "^pct"'
 nx kill web-1 65;              check "kill: signal 65 -> exit 2"      all 'rc 2' 'not_called_re "^pct"'
 # Digits only: "1_5" read as 15 here and as 1 by libcrun's strtol on crun
@@ -343,10 +408,19 @@ check "kill KILL: the init dies and the container stops" all 'rc 0' "eventually 
 
 echo "=== exec ==="
 nx exec web-1 echo hello;      check "exec runs the command and its output reaches stdout" \
-                                 all 'rc 0' 'out_has hello' 'called "pct exec 100 -- echo hello"'
+                                 all 'rc 0' 'out_has hello' 'called "pct exec 100 --keep-env 0 -- echo hello"'
 nx exec web-1 sh -c 'exit 7';  check "exec exits with the status of the command, as runc does" rc 7
+# The command gets LXC's clean environment, not the caller's: pct exec keeps
+# the environment unless told not to, and handed every variable of the shell
+# or job that ran nexcage -- API tokens, cloud keys -- to a binary from the
+# image. Fake pct records what the command starts with.
+SIM_EXEC_SECRET=from-the-callers-shell nx exec web-1 -- sh -c 'echo "env:[${SIM_EXEC_SECRET-}] path:[$PATH]"'
+check "exec: the caller's environment does not reach the command in the container" \
+  all 'rc 0' 'out_has "env:[] path:[/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin]"' \
+      'called_re "^pct exec 100 --keep-env 0 -- "' '! grep -q SIM_EXEC_SECRET "$S/exec_env.100"' \
+      'grep -qx container=lxc "$S/exec_env.100"'
 nx exec web-1 -- echo dashed;  check "exec <name> -- <cmd>: the separator is not passed to pct" \
-                                 all 'rc 0' 'out_has dashed' 'called "pct exec 100 -- echo dashed"'
+                                 all 'rc 0' 'out_has dashed' 'called "pct exec 100 --keep-env 0 -- echo dashed"'
 nx exec web-1 -- sh -c 'echo x 1>&2; exit 3'
                                check "exec: stderr passes through and a non-zero status survives it" all 'rc 3' 'err_has x'
 nx exec nope echo hi;          check "exec on a missing container -> exit 1, nothing run" \
@@ -364,13 +438,13 @@ check "--version, which is how CRI-O asks" all 'rc 0' 'out_has "nexcage version"
 # inside the container, where FOO=bar is an argument and not a flag.
 nx exec web-1 -- env FOO=bar
 check "an = after -- survives untouched" \
-  all 'rc 0' 'called "pct exec 100 -- env FOO=bar"'
+  all 'rc 0' 'called "pct exec 100 --keep-env 0 -- env FOO=bar"'
 
 # Nor does nexcage read its own flags there: --config used to make it load
 # the command's argument as its configuration.
 nx exec web-1 -- echo --config /nonexistent --runtime bogus --profile nope --root /x
 check "nexcage's flags after -- belong to the command, not to nexcage" \
-  all 'rc 0' 'called "pct exec 100 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
+  all 'rc 0' 'called "pct exec 100 --keep-env 0 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
 # Its logging flags neither: root created the file the command named and wrote
 # nexcage's own log into it.
 nx exec web-1 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug
@@ -515,7 +589,47 @@ check "run: create then start the same VMID" all 'rc 0' 'called_re "^pct create 
   "grep -q \"^pct start \$(awk '\$3==\"app-1\" {print \$1}' \$S/db)\$\" \"\$S/calls.last\""
 check "run: rootfs/bridge from config" called_re "bridge=vmbr50,ip=dhcp .*--rootfs local-lvm:2$"
 check "run: state reports running" status_is app-1 running
-nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start" all 'rc 1' 'not_called_re "^pct start"'
+nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start, and the existing one is not destroyed" \
+  all 'rc 1' 'not_called_re "^pct start"' 'not_called_re "^pct destroy"' 'grep -q " app-1$" "$S/db"'
+# A start that fails takes the container run made with it, as `runc run` does;
+# it used to stay behind, created, and the next run of the name was refused.
+echo "startup for container failed" > "$S/fail_start"
+nx run --name app-f "$TPL"
+app_f=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails -> exit 1, and the container it made is destroyed" \
+  all 'rc 1' '[ -n "$app_f" ]' 'called "pct start $app_f"' 'called "pct destroy $app_f"' \
+      '! grep -q " app-f$" "$S/db"' '[ ! -e "$S/run/nexcage/app-f" ]'
+rm -f "$S/fail_start"
+nx run --name app-f "$TPL"; check "and a run of the same name then succeeds" all 'rc 0' 'status_is app-f running'
+# The undo goes by the VMID run made, not by the name again. Another caller's
+# container of the same name, made while pct create ran and listed first, used
+# to be the one run started -- "already running" -- then stopped and
+# destroyed, while run's own stayed behind. hold_create keeps pct create's
+# work waiting while that one appears, started as pct starts one and in a
+# namespace as nexcage's, so that its cgroup lands in $S/cgroup. Its calls are
+# not run's, and are left out of calls.last.
+pct_ns() { unshare -rm bash -c 'mount --bind "$SIM/cgroup" /sys/fs/cgroup && exec "$BIN/pct" "$@"' pct "$@" > /dev/null 2>&1; }
+echo 0 > "$S/slow_create"; touch "$S/hold_create"
+before=$(wc -l < "$S/calls")
+nexcage_ns run --name dup "$TPL" > "$S/out" 2> "$S/err" &
+bg=$!
+for _ in $(seq 1 100); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
+mid=$(wc -l < "$S/calls")
+echo "90 stopped dup" >> "$S/db"
+pct_ns start 90
+echo "startup for container failed" > "$S/fail_start"
+held=$(wc -l < "$S/calls")
+rm -f "$S/hold_create"
+RC=0; wait "$bg" || RC=$?
+{ sed -n "$((before + 1)),${mid}p" "$S/calls"; tail -n +"$((held + 1))" "$S/calls"; } > "$S/calls.last"
+LAST="nexcage run --name dup $TPL, while another dup is made and started"
+dup=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails destroys the VMID it made, not a container of the same name made meanwhile" \
+  all 'rc 1' '[ -n "$dup" ]' '[ "$dup" != 90 ]' 'called "pct start $dup"' 'called "pct destroy $dup"' \
+      '! grep -q "^$dup " "$S/db"' '[ ! -e "$S/run/nexcage/dup" ]' \
+      'not_called_re "^pct [a-z]+ 90( |$)"' 'grep -qx "90 running dup" "$S/db"' 'kill -0 "$(init_pid 90)"'
+rm -f "$S/fail_start" "$S/slow_create" "$S/create_caller" "$S/create_worker"
+pct_ns shutdown 90; pct_ns destroy 90
 nx run --name app-2;        check "run without image -> exit 2" rc 2
 # run used to accept these and drop them: --node made the container on this
 # host, and a caller passing --console-socket waited for a pty that never came.
@@ -843,6 +957,20 @@ check "bundle mount options LXC's own /dev/shm replaces: created, and named in t
       '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
       'err_has "nexcage: mounts[1] (/dev/shm) options in /tmp/nexcage-bundles/conf-mnt/config.json: not applied"' \
       '! err_has "mounts[0]"' '! err_has "mounts[2]"'
+# A step after pct create that fails must not leave the container behind: it
+# had no state.json and none of the bundle's features, and a retry under the
+# same name was refused with "already exists". The refusal is pct's own for
+# this `pct set --features`, and not a lock, which would refuse the undo's
+# pct destroy as well.
+echo "Permission check failed (changing feature flags (except nesting) is only allowed for root@pam)" > "$S/fail_set"
+nx create --name rb-1 /tmp/nexcage-bundles/b1
+rb_vmid=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "a failure after pct create destroys the container it made, and the packed rootfs" \
+  all 'rc 1' '[ -n "$rb_vmid" ]' 'called "pct destroy $rb_vmid"' '! grep -q " rb-1$" "$S/db"' \
+      '[ ! -e "$S/run/nexcage/rb-1" ]' '[ -z "$(ls -A "$S/cache")" ]'
+rm -f "$S/fail_set"
+nx create --name rb-1 /tmp/nexcage-bundles/b1
+check "and the same name can be created again" all 'rc 0' 'grep -q " rb-1$" "$S/db"'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
@@ -971,6 +1099,24 @@ check "state reports the bundle the container was created from" \
   all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'
 nx start spec-1; nx state spec-1
 check "start keeps the bundle in state" all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'
+# state.json is replaced, never rewritten in place: a write that fails part
+# way -- /run full, an I/O error -- leaves the record as it was. It used to be
+# truncated first, so one failed start lost the bundle path for good, and a
+# `state` reading in between found an empty file. A file size limit of 0 on
+# nexcage alone stands in for the full /run; the fake tools lift it again.
+W=$S/wrapbin; rm -rf "$W"; mkdir -p "$W"
+for t in "$BIN"/*; do
+  printf '#!/bin/bash\nulimit -S -f unlimited\nexec %q "$@"\n' "$t" > "$W/${t##*/}"; chmod +x "$W/${t##*/}"
+done
+printf '#!/bin/bash\ntrap "" XFSZ\nulimit -S -f 0\nexec %q "$@"\n' "$NEXCAGE" > "$W/nexcage"; chmod +x "$W/nexcage"
+nx create spec-w --bundle /tmp/nexcage-bundles/b1
+NEXCAGE=$W/nexcage BIN=$W nx start spec-w
+check "start with /run full: pct start runs, and start does not fail on the bookkeeping" all 'rc 0' 'called_re "^pct start [0-9]+$"'
+nx state spec-w
+check "a state write that fails keeps the record it was to replace: the bundle survives" \
+  all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]' \
+      '[ "$(ls -A "$S/run/nexcage/spec-w" | tr "\n" " ")" = "runtime-metadata.json state.json " ]'
+rm -rf "$W"
 nx create tpl-1 --bundle /tmp/nexcage-bundles/b1 >/dev/null 2>&1 || true
 nx create --name from-tpl "$TPL"; nx state from-tpl
 check "a container created from a template reports bundle null" \

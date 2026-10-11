@@ -80,7 +80,8 @@ pub const RunCommand = struct {
         // `nexcage run --help` abort with "Invalid free".
         return allocator.dupe(u8, "Usage: nexcage run --name <name> <image>\n\n" ++
             "Create a container on this node and start it, as create followed by start\n" ++
-            "would. --node, --console-socket and --pid-file are refused: to make the\n" ++
+            "would. If it cannot be started, the container is removed again, as runc run\n" ++
+            "does. --node, --console-socket and --pid-file are refused: to make the\n" ++
             "container on another node, use create --node, then start. The crun\n" ++
             "backend does not implement run.\n" ++
             "<image> takes the same forms as for create (see 'nexcage create --help').\n\n" ++
