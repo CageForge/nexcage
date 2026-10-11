@@ -445,9 +445,10 @@ pub const PveClient = struct {
 
     /// Find a container by name or VMID anywhere in the cluster.
     ///
-    /// Falls back to `pct list` when the cluster cannot be asked -- a host
-    /// where pvesh is unavailable keeps working exactly as it did, seeing its
-    /// own containers and nothing else.
+    /// A cluster that cannot be asked is an error that says why. It used to be
+    /// a quiet fallback to `pct list`, which answers for this host alone: a
+    /// container on another node was then "not found", and create's
+    /// cluster-wide check passed a name another node had.
     pub fn locate(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8) !Location {
         const here = self.getNodeName() catch null;
         defer if (here) |h| self.allocator.free(h);
@@ -463,13 +464,8 @@ pub const PveClient = struct {
         if (self.clusterLookup(allocator, name_or_vmid, here)) |found| {
             return found;
         } else |err| {
-            if (self.logger) |log| {
-                if (err == core.Error.NotFound) {
-                    log.debug("'{s}' is not in the cluster's listing yet; asking this host", .{name_or_vmid}) catch {};
-                } else {
-                    log.debug("the cluster could not be asked about '{s}' ({s}); asking this host", .{ name_or_vmid, @errorName(err) }) catch {};
-                }
-            }
+            if (err != core.Error.NotFound) return err;
+            if (self.logger) |log| log.debug("'{s}' is not in the cluster's listing yet; asking this host", .{name_or_vmid}) catch {};
         }
 
         // getVmidByName allocates with the client's allocator; the Location owns
@@ -501,19 +497,8 @@ pub const PveClient = struct {
         // container on this host and answers "not found" for one anywhere else,
         // the exact thing the cluster support was for. The simulator's fake
         // accepted the wrong flag, so the tests agreed with the mistake.
-        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json" };
-        const res = try common.runCommand(self.allocator, self.logger, &args);
-        defer {
-            self.allocator.free(res.stdout);
-            self.allocator.free(res.stderr);
-        }
-        if (res.exit_code != 0) return core.Error.OperationFailed;
-
-        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch {
-            return core.Error.OperationFailed;
-        };
+        const parsed = try self.clusterResources();
         defer parsed.deinit();
-        if (parsed.value != .array) return core.Error.OperationFailed;
 
         for (parsed.value.array.items) |item| {
             if (item != .object) continue;
@@ -548,6 +533,38 @@ pub const PveClient = struct {
         return core.Error.NotFound;
     }
 
+    /// /cluster/resources, parsed: every guest on every node. Whatever keeps
+    /// it from being read is an error naming the cause -- the listing is
+    /// read with a cap that fits a large cluster, and a failure is logged with
+    /// what pvesh said -- because every caller used to take any failure for
+    /// "ask this host instead".
+    fn clusterResources(self: *const Self) !std.json.Parsed(std.json.Value) {
+        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json" };
+        const res = common.runCommandMax(self.allocator, self.logger, &args, common.cluster_max_output) catch |err| {
+            if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) could not be read", .{}) catch {};
+            return err;
+        };
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) {
+            if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) failed: {s}", .{std.mem.trim(u8, res.stderr, " \t\r\n")}) catch {};
+            return errorFor(res.stderr);
+        }
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch |err| {
+            if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+            if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) is not JSON: {s}", .{@errorName(err)}) catch {};
+            return core.Error.OperationFailed;
+        };
+        if (parsed.value != .array) {
+            parsed.deinit();
+            if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) is not a list", .{}) catch {};
+            return core.Error.OperationFailed;
+        }
+        return parsed;
+    }
+
     /// A template as a storage lists it.
     pub const Template = struct {
         allocator: std.mem.Allocator,
@@ -568,44 +585,48 @@ pub const PveClient = struct {
         }
     };
 
-    /// The nodes of the cluster, or just this one when the cluster cannot be
-    /// asked. The caller frees each name and the slice.
+    /// The nodes of the cluster. The caller frees each name and the slice.
+    ///
+    /// A standalone host answers /nodes with itself, so a failure here is a
+    /// failure, reported with pvesh's words. It used to be answered with this
+    /// host alone, and `images` then listed one node's templates as if they
+    /// were the cluster's.
     pub fn nodes(self: *const Self, allocator: std.mem.Allocator) ![][]u8 {
         const args = [_][]const u8{ "pvesh", "get", "/nodes", "--output-format", "json" };
-        if (common.runCommand(self.allocator, self.logger, &args)) |res| {
-            defer {
-                self.allocator.free(res.stdout);
-                self.allocator.free(res.stderr);
-            }
-            if (res.exit_code == 0) {
-                if (std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{})) |parsed| {
-                    defer parsed.deinit();
-                    if (parsed.value == .array) {
-                        var out = std.ArrayListUnmanaged([]u8){};
-                        errdefer {
-                            for (out.items) |n| allocator.free(n);
-                            out.deinit(allocator);
-                        }
-                        for (parsed.value.array.items) |item| {
-                            if (item != .object) continue;
-                            const n = item.object.get("node") orelse continue;
-                            if (n != .string) continue;
-                            try out.append(allocator, try allocator.dupe(u8, n.string));
-                        }
-                        if (out.items.len > 0) return try out.toOwnedSlice(allocator);
-                        out.deinit(allocator);
-                    }
-                } else |_| {}
-            }
-        } else |_| {}
+        const res = try common.runCommand(self.allocator, self.logger, &args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) {
+            if (self.logger) |log| log.err("the cluster's list of nodes (pvesh get /nodes) failed: {s}", .{std.mem.trim(u8, res.stderr, " \t\r\n")}) catch {};
+            return errorFor(res.stderr);
+        }
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch |err| {
+            if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+            if (self.logger) |log| log.err("the cluster's list of nodes (pvesh get /nodes) is not JSON: {s}", .{@errorName(err)}) catch {};
+            return core.Error.OperationFailed;
+        };
+        defer parsed.deinit();
 
-        // No cluster to ask: this host is the whole of it.
-        const here = try self.getNodeName();
-        defer self.allocator.free(here);
-        var one = try allocator.alloc([]u8, 1);
-        errdefer allocator.free(one);
-        one[0] = try allocator.dupe(u8, here);
-        return one;
+        var out = std.ArrayListUnmanaged([]u8){};
+        errdefer {
+            for (out.items) |n| allocator.free(n);
+            out.deinit(allocator);
+        }
+        if (parsed.value == .array) {
+            for (parsed.value.array.items) |item| {
+                if (item != .object) continue;
+                const n = item.object.get("node") orelse continue;
+                if (n != .string) continue;
+                try out.append(allocator, try allocator.dupe(u8, n.string));
+            }
+        }
+        if (out.items.len == 0) {
+            if (self.logger) |log| log.err("the cluster's list of nodes (pvesh get /nodes) names none", .{}) catch {};
+            return core.Error.OperationFailed;
+        }
+        return try out.toOwnedSlice(allocator);
     }
 
     /// Every container template the cluster can see.
@@ -661,7 +682,15 @@ pub const PveClient = struct {
         for (node_names) |node| {
             if (only_node) |want| if (!std.mem.eql(u8, want, node)) continue;
 
-            const stores = try self.templateStorages(node);
+            // One node that cannot answer fails the listing, and the message
+            // names it: a listing without that node's templates would read as
+            // "it has none".
+            const stores = self.templateStorages(node) catch |err| {
+                if (only_node == null) {
+                    if (self.logger) |log| log.err("the cluster's templates cannot all be listed while node {s} does not answer; 'images --node <node>' lists the others one at a time", .{node}) catch {};
+                }
+                return err;
+            };
             defer {
                 for (stores) |st| {
                     self.allocator.free(st.name);
@@ -697,9 +726,18 @@ pub const PveClient = struct {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        if (res.exit_code != 0) return core.Error.OperationFailed;
+        if (res.exit_code != 0) {
+            if (self.logger) |log| log.err("node {s} could not be asked for its storages: {s}", .{ node, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
+            return errorFor(res.stderr);
+        }
 
-        const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{});
+        // A parse error is not one of core.Error's, and the command registry
+        // casts into that set: it would end the process with a panic.
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch |err| {
+            if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+            if (self.logger) |log| log.err("node {s} listed its storages in something other than JSON: {s}", .{ node, @errorName(err) }) catch {};
+            return core.Error.OperationFailed;
+        };
         defer parsed.deinit();
         if (parsed.value != .array) return core.Error.OperationFailed;
 
@@ -868,9 +906,14 @@ pub const PveClient = struct {
 
     /// Map pct command errors to core errors
     pub fn mapPctError(self: *const Self, stderr: []const u8) core.Error {
-        const s = stderr;
         if (self.logger) |log| log.err("pct command failed: {s}", .{std.mem.trim(u8, stderr, " \t\r\n")}) catch {};
+        return errorFor(stderr);
+    }
 
+    /// What a Proxmox tool's complaint means, for a caller that has already
+    /// said which call it was.
+    fn errorFor(stderr: []const u8) core.Error {
+        const s = stderr;
         if (std.mem.indexOf(u8, s, "already exists") != null) return core.Error.OperationFailed;
         if (std.mem.indexOf(u8, s, "No such file or directory") != null or
             std.mem.indexOf(u8, s, "does not exist") != null or
@@ -881,27 +924,26 @@ pub const PveClient = struct {
         return core.Error.OperationFailed;
     }
 
-    /// List containers across the cluster, falling back to this host.
+    /// List containers across the cluster.
     ///
     /// `pct list` answers for the node it runs on and nothing else, so on a
     /// cluster it showed a fraction of what was there without saying so. The
     /// cluster's own listing carries the node, which is the column a person
-    /// then needs to make sense of the rest.
+    /// then needs to make sense of the rest. A cluster that cannot be listed
+    /// is an error, not this host's list in its place: that was the same
+    /// fraction, still without saying so.
     pub fn list(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
-        const cluster = self.clusterList(allocator) catch |err| {
-            if (self.logger) |log| {
-                log.debug("the cluster could not be listed ({s}); listing this host", .{@errorName(err)}) catch {};
-            }
-            return self.localList(allocator);
-        };
+        const cluster = try self.clusterList(allocator);
 
         // The cluster's listing is a cached view: pvestatd refreshes it every
         // few seconds, so a container created a moment ago is in `pct list` and
         // not yet here. Returning only the cluster's answer made `nexcage list`
         // -- and `state`, which reads it -- miss a container that plainly
         // exists. This host's own containers are merged in, by VMID.
-        const local = self.localList(allocator) catch {
-            return cluster;
+        const local = self.localList(allocator) catch |err| {
+            for (cluster) |*c| c.deinit();
+            self.allocator.free(cluster);
+            return err;
         };
         defer {
             for (local) |*c| c.deinit();
@@ -944,17 +986,8 @@ pub const PveClient = struct {
 
     fn clusterList(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
         // `--type vm` and a filter, for the reason spelt out in clusterLookup.
-        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json" };
-        const res = try common.runCommand(self.allocator, self.logger, &args);
-        defer {
-            self.allocator.free(res.stdout);
-            self.allocator.free(res.stderr);
-        }
-        if (res.exit_code != 0) return core.Error.OperationFailed;
-
-        const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{});
+        const parsed = try self.clusterResources();
         defer parsed.deinit();
-        if (parsed.value != .array) return core.Error.OperationFailed;
 
         var containers = std.ArrayListUnmanaged(core.ContainerInfo){};
         errdefer {

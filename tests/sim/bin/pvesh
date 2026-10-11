@@ -14,6 +14,10 @@ HERE=${SIM_NODE:-$(hostname)}
 
 case "$1 $2" in
   "get /cluster/resources")
+    # $SIM/fail_resources holds what pvesh says when the cluster cannot answer
+    # -- pmxcfs down, this node out of quorum -- while `pct list`, which reads
+    # this host's configs, still works. Only both together were modelled.
+    [ -e "$SIM/fail_resources" ] && { cat "$SIM/fail_resources" >&2; exit 255; }
     # The real API's --type enumeration is vm, storage, node, sdn. It rejects
     # anything else, and nexcage asked for "lxc" for three releases: every
     # lookup failed and fell back to `pct list`, which is right for a container
@@ -73,6 +77,9 @@ case "$1 $2" in
   "get /nodes/"*/storage)
     # $SIM/node_storages holds "node storage shared" lines.
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage|\1|p')
+    # A node that does not answer: the API proxies the call to it, and its
+    # failure comes back. $SIM/fail_storage.<node> holds what was said.
+    [ -e "$SIM/fail_storage.$node" ] && { cat "$SIM/fail_storage.$node" >&2; exit 255; }
     printf '['
     sep=""
     if [ -s "$SIM/node_storages" ]; then

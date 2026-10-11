@@ -116,9 +116,16 @@ a storage the target node has.
 `--node` naming the host nexcage is running on is not "another node": it takes
 the ordinary local path, `pct` and all.
 
-On a host that is not in a cluster, or where `pvesh` cannot be reached, nexcage
-falls back to `pct` and behaves exactly as it did: this host's containers, and
-no others.
+A host that is not in a cluster answers `/cluster/resources` with its own
+containers, so nothing changes there. **A cluster listing that cannot be read is
+an error** (exit 1) naming the cause — `pvesh` failing, its output not being
+JSON, or more of it than nexcage reads (64 MiB, room for tens of thousands of
+guests). It used to be a quiet fallback to `pct`, which sees this host alone: a
+container on another node was then "not found", `list` was short without
+saying so, and `create`'s check that a name is free across the cluster passed a
+name another node had. `images` likewise fails, naming the node, when a node
+cannot be asked for its storages; `images --node <name>` lists the nodes that
+answer one at a time.
 
 **The cluster's listing is a cache**, refreshed by `pvestatd` every few seconds,
 and nexcage is built around that in two places. A container created a moment ago

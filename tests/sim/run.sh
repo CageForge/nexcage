@@ -201,7 +201,7 @@ echo "backup" > "$S/lock.100"
 nx state web-1; check "locked container still resolves by name" all 'rc 0' '[ "$(json_get "$S/out" id)" = web-1 ]'
 rm -f "$S/lock.100"
 echo "Permission denied" > "$S/fail_all"
-nx state web-1; check "state with the host failing -> exit 1, the tool's message logged" all 'rc 1' 'err_has "permission denied"' 'err_has "pct command failed"'
+nx state web-1; check "state with the host failing -> exit 1, the tool's message logged" all 'rc 1' 'err_has "permission denied"' 'err_has "/cluster/resources) failed"'
 rm -f "$S/fail_all"
 
 echo "=== list ==="
@@ -977,6 +977,45 @@ check "delete on another node goes through that node's API" \
 nx state remote-1
 check "and afterwards it is gone from the cluster" rc 1
 
+echo "--- the cluster's listing, large or failing ---"
+# /cluster/resources has an entry for every guest on every node. A few
+# thousand of them are more than the 1 MiB nexcage read from a tool, and what
+# did not fit was taken for "the cluster cannot be asked": lookups fell back
+# to this host's `pct list`, so a container on another node was "not found",
+# list was silently short, and create's cluster-wide check passed a name
+# another node had.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "200 running remote-1 titan" >> "$S/db"
+awk 'BEGIN { for (i = 1000; i < 3500; i++) printf "%d running filler-%d-%0440d titan\n", i, i, 0 }' >> "$S/db"
+nx list
+check "list on a cluster whose listing is over 1 MiB still shows the other node's container" \
+  all 'rc 0' 'listed remote-1'
+nx --runtime lxc stop remote-1
+check "and a container on another node is still found" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc/200/status/shutdown"'
+nx create --name remote-1 "$TPL"
+check "and a name another node has is still taken" \
+  all 'rc 1' 'err_has "already exists on node titan"' 'not_called_re "^pct create"'
+
+# A cluster that cannot answer at all is an error that says so. It was the
+# same quiet fallback to this host.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name here-9 "$TPL" >/dev/null 2>&1
+echo "200 stopped remote-9 titan" >> "$S/db"
+echo "ipcc_send_rec[1] failed: Connection refused" > "$S/fail_resources"
+nx list
+check "a cluster listing that fails is an error naming it, not this host's list in its place" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'err_has "connection refused"' '! out_has "here-9"'
+nx start here-9
+check "and so is a lookup, even of a container on this host" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct start"'
+nx create --name remote-9 "$TPL"
+check "create refuses a name it cannot check across the cluster" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct create"'
+rm -f "$S/fail_resources"
+
 echo "--- create --node ---"
 reset_sim
 : > "$S/node_templates"
@@ -1069,6 +1108,20 @@ check "images --node narrows it to that node" \
 nx images --node no-such-node
 check "images on a node the cluster does not have is an error, not an empty list" \
   all 'rc 1' 'err_has "no node called"' 'err_has "titan"'
+
+# A node that does not answer fails the listing and is named: a listing
+# without its templates would read as "it has none". It was a bare
+# "operation failed".
+echo "500 Can't connect to 192.0.2.7:8006 (No route to host)" > "$S/fail_storage.titan"
+nx images
+check "images with a node that does not answer is an error naming the node" \
+  all 'rc 1' 'err_has "node titan"' 'err_has "No route to host"'
+nx images --node "$HOST"
+check "and --node lists a node that does" all 'rc 0' 'out_has "local:vztmpl/debian-13.tar.zst"'
+nx images --node titan
+check "images --node on the node that does not answer names it too" \
+  all 'rc 1' 'err_has "node titan"'
+rm -f "$S/fail_storage.titan"
 
 nx --runtime crun images
 check "images on the crun backend says templates are not its business" \
