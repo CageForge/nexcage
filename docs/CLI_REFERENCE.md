@@ -649,16 +649,18 @@ everything else is a number.
 `--resources <file>` is a runtime-spec `linux.resources` object, and `-` reads
 it from stdin. **That is how containerd sends an in-place resize**:
 `update --resources=- <id>` with the document on stdin. It cannot be combined
-with the value flags.
+with the value flags. A number in it is a whole one of at most
+9223372036854775807, as libcrun reads it too: one with a fraction or an
+exponent (`1.5`, `1e9`) is refused, naming the setting (exit 2).
 
 On the crun backend everything reaches libcrun. On the Proxmox LXC backend the
 settings are said to `pct set`, in its terms:
 
 | runc's words | pct's |
 |---|---|
-| `--memory <bytes>` | `--memory <MiB>`, rounded up |
+| `--memory <bytes>` | `--memory <MiB>`, rounded up. Proxmox works the bytes out again from the MiB in 64 bits, so a size past that is refused (exit 2) |
 | `--memory-swap <bytes>` (memory plus swap) | `--swap <MiB>`, the difference from the memory limit — this call's, or the config's |
-| `--cpu-quota` / `--cpu-period` | `--cpulimit <cores>`, quota over period; a quota of `-1` is `0`, no limit |
+| `--cpu-quota` / `--cpu-period` | `--cpulimit <cores>`, quota over period; a quota of `-1` is `0`, no limit. A quota so large that its cores overflow is refused (exit 2) |
 | `--cpu-share <shares>` | `--cpuunits <weight>`, converted the way runc converts cgroup v1 shares to a v2 weight (1024 → 39) |
 | anything else | refused, naming the setting, because a limit asked for and silently not applied is the worst answer |
 

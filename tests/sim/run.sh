@@ -177,6 +177,9 @@ check "--memory-swap is memory plus swap: below the default memory it is refused
 nx create --name opt-2 --pids-limit 100 "$TPL"
 check "a limit Proxmox has no setting for is refused by name, as update refuses it" \
   all 'rc 1' 'err_has "pids.limit has no Proxmox setting"' 'not_called_re "^pct create"'
+nx create --name opt-2 --memory 9223372036854775807 "$TPL"
+check "a memory limit past what Proxmox holds is a usage error naming it, not a trap" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct create"'
 nx create --name opt-2 --vlan 5000 "$TPL"
 check "--vlan outside 1-4094 is a usage error" all 'rc 2' 'err_has "VLAN tag"' 'not_called_re "^pct create"'
 nx create --name opt-2 --ip 10.0.0.5/24,hwaddr=02:00:00:00:00:01 "$TPL"
@@ -782,6 +785,26 @@ check "a size that is not one is a usage error before any backend" \
 nx update up-1
 check "update with nothing to change is a usage error" all 'rc 2'
 
+# Values at the top of i64 overflowed the arithmetic into pct's terms, and
+# the root process died on the trap (exit 134). Each is now converted
+# exactly or refused, naming the setting, before pct is asked.
+nx update --memory 9223372036854775807 up-1
+check "a memory limit whose MiB Proxmox cannot turn back into bytes is a usage error" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+nx update --cpu-quota 9223372036854776 up-1
+check "a quota whose cores overflow is a usage error" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+nx update --cpu-share 1000000000000000 up-1
+check "shares past the kernel's most are its most: weight 10000, as before" \
+  all 'rc 0' 'called "pct set 100 --cpuunits 10000"'
+# pct keeps memory in MiB and the swap is worked out from it in bytes; a
+# config Proxmox holds can have more MiB than 64 bits of bytes.
+echo "memory: 8796093022208" >> "$S/conf.100"
+nx update --memory-swap 1G up-1
+check "a config's memory past 64 bits of bytes is an error, not a trap" \
+  all 'rc 1' 'err_has "8796093022208 MiB"' 'not_called_re "^pct set"'
+sed -i '/^memory: /d' "$S/conf.100"
+
 # The shape an engine sends: a linux.resources document. Applied through
 # the same arithmetic, and `-` is stdin, which is how containerd sends a
 # resize (`update --resources=- <id>`).
@@ -789,12 +812,26 @@ printf '{"memory":{"limit":536870912},"cpu":{"quota":50000,"period":100000}}' > 
 nx update --resources /run/res.json up-1
 check "--resources: the linux.resources document an engine sends, applied through pct" \
   all 'rc 0' 'called "pct set 100 --memory 512 --cpulimit 0.5"'
-printf '{"memory":{"limit":268435456}}' | nx update --resources=- up-1
+# A document on stdin through a redirect: `printf | nx` runs nx in a subshell,
+# and the RC a check reads is then the previous command's.
+resize() { printf '%s' "$1" > "$S/run/doc.json"; nx update --resources=- up-1 < "$S/run/doc.json"; }
+resize '{"memory":{"limit":268435456}}'
 check "--resources=- reads the document from stdin, as containerd sends it" \
   all 'rc 0' 'called "pct set 100 --memory 256"'
 nx update --memory 1G --resources /run/res.json up-1
 check "--resources together with value flags is a usage error" \
   all 'rc 2' 'not_called_re "^pct set"'
+# A number in a document is a whole one in 64 bits, as libcrun reads it too.
+# A float was cast: 1.5 became a limit of 1 byte, and 1e300 a trap.
+resize '{"memory":{"limit":1e300}}'
+check "a number in a document past i64 is refused by name, not cast" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+resize '{"memory":{"limit":1.5}}'
+check "and a fraction is not cut off into a limit" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+resize '{"cpu":{"quota":9223372036854775807}}'
+check "a document's quota whose cores overflow is refused by name" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
 nx update --memory 1G no-such-up-$$
 check "update on a container that does not exist is an error" all 'rc 1' 'not_called_re "^pct set"'
 
