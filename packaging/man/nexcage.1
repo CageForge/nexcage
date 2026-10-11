@@ -77,7 +77,9 @@ compatibility and does not walk the cgroup: only SIGKILL reaches every process.
 .TP
 \fBexec\fR \fIname\fR \fIcommand\fR [\fIargs\fR...], \fBexec\fR \fIname\fR \fB\-\-\fR \fIcommand\fR [\fIargs\fR...]
 Run a command inside a running container and exit with its status, as an OCI
-runtime does. Use \-\- where the command starts with a dash. The container must
+runtime does. The command starts at the first word after \fIname\fR that is
+not an option, and nexcage reads none of its own options from it; use \-\- where
+the command starts with a dash. The container must
 be running and the command must exist in its image. It runs as root through
 \fBpct exec\fR, so \fB\-\-user\fR, \fB\-\-cwd\fR, \fB\-\-console\-socket\fR,
 \fB\-\-pid\-file\fR, \fB\-\-process\fR and \fB\-\-detach\fR are refused, and

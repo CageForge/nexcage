@@ -14,8 +14,8 @@ These work before or after the command, and in either spelling: `--root <dir>`
 and `--root=<dir>` mean the same thing. Both are needed because an engine picks
 one without asking — containerd sends the two-word form, CRI-O sends `--root=`
 for `create` (through conmon) and the two-word form for everything after it.
-The split stops at a bare `--`, so an argument to the command `exec` runs
-inside the container keeps its `=`.
+For `exec`, they work up to the command it runs: that command's words are its
+own, and an argument there keeps its `=`.
 
 | Option | Effect |
 |---|---|
@@ -458,12 +458,13 @@ caller that watches the status — containerd, a readiness probe — reads the
 command's result rather than "the runtime succeeded", which is why this command
 does not follow the exit table above.
 
-`--` separates the command from nexcage's own options, and is needed when the
-command itself starts with a dash, or when one of its arguments is a word
-nexcage takes as its own option — `--config`, `--root`, `--runtime`,
-`--profile`, `--log`, `--log-file`, `--log-level`, `--log-format`, `--debug`,
-`--verbose`. nexcage reads those anywhere before `--` and nowhere after it;
-everything after it is passed through untouched.
+The command starts at the first word after `<name>` that is neither an
+option nor an option's value, or after `--`. nexcage reads its own options —
+`--config`, `--root`, `--log`, `--debug` and the rest — anywhere before it and
+none after: every word of the command is passed through untouched, `=`
+included, so `nexcage exec web-1 grep --config x` runs `grep --config x`, as
+`runc exec` would. `--` is needed only when the command itself starts with a
+dash.
 
 stdin, stdout and stderr are connected straight to the process in the
 container; nexcage does not buffer the output.

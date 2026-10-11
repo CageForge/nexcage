@@ -153,12 +153,23 @@ fn run() !void {
     // reads the two-word form only, so CRI-O's very first call came back as
     // `unknown command '--root=/run/nexcage-crio'`. One pass here, before
     // anything looks at the vector, and the rest is unchanged.
-    const args = try splitEqualsFlags(allocator, raw_args);
+    var args = try splitEqualsFlags(allocator, raw_args);
     defer allocator.free(args);
+
+    // The command, past the global options in front of it, and the end of
+    // nexcage's own words. What follows is the command `exec` runs in the
+    // container, which is the container's: every option below was read from
+    // it too, so `exec web grep --config x` loaded x as root's configuration,
+    // and `--log /x` there had root write its log into /x. It is handed over
+    // as it was given, `=` and all.
+    const found = findCommand(args);
+    const own_end = ownWordsEnd(args, found.index);
+    if (own_end < args.len) args = try restoreCommandWords(allocator, raw_args, args, own_end);
+    const own = args[0..own_end];
 
     // --config, before or after the command, has to be known before anything
     // loads the configuration. It used to be parsed and never read.
-    if (try configPathFromArgs(args)) |path| {
+    if (try configPathFromArgs(own)) |path| {
         std.fs.cwd().access(path, .{}) catch |err| {
             printError("cannot read config file '{s}': {s}", .{ path, @errorName(err) });
             failure_reported = true;
@@ -169,7 +180,7 @@ fn run() !void {
 
     // --root, likewise: every command that reads or writes per-container state
     // has to see it before it does so.
-    if (try flagValueFromArgs(args, "--root", "path")) |root| {
+    if (try flagValueFromArgs(own, "--root", "path")) |root| {
         if (root.len == 0 or root[0] != '/') {
             printError("--root needs an absolute path, got '{s}'", .{root});
             failure_reported = true;
@@ -180,7 +191,7 @@ fn run() !void {
 
     // Initialize application context in place: commands hold &app.logger
     var app: AppContext = undefined;
-    try app.init(allocator, args);
+    try app.init(allocator, own);
     defer app.deinit();
 
     // Log application startup
@@ -194,57 +205,8 @@ fn run() !void {
         return;
     }
 
-    // Find the actual command (skip flags)
-    var command_name = args[1];
-    var command_args = args[2..];
-
-    // Skip debug/verbose flags to find the actual command
-    var i: usize = 1;
-    while (i < args.len) {
-        if (std.mem.eql(u8, args[i], "--debug") or std.mem.eql(u8, args[i], "--verbose")) {
-            i += 1;
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--log-file") and i + 1 < args.len) {
-            i += 2; // Skip --log-file and its value
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--log-level") and i + 1 < args.len) {
-            i += 2; // Skip --log-level and its value
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
-            i += 2; // Skip --config and its value, applied above
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--root") and i + 1 < args.len) {
-            i += 2; // Skip --root and its value, applied above
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--runtime") and i + 1 < args.len) {
-            i += 2; // Skip --runtime and its value; parseRuntimeOptions reads it
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--profile") and i + 1 < args.len) {
-            i += 2; // Skip --profile and its value, read below
-            continue;
-        }
-        // What a container engine puts before the command. Without these,
-        // `--log` was taken for the command name and containerd got
-        // "unknown command '--log'" on its very first call.
-        if ((std.mem.eql(u8, args[i], "--log") or std.mem.eql(u8, args[i], "--log-format")) and i + 1 < args.len) {
-            i += 2;
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--systemd-cgroup")) {
-            i += 1;
-            continue;
-        }
-        // Found the actual command
-        command_name = args[i];
-        command_args = args[i + 1 ..];
-        break;
-    }
+    var command_name = args[found.index];
+    const command_args = args[found.index + 1 ..];
 
     // Log command execution start - safely handle logger errors
     if (app.advanced_logger) |*logger| {
@@ -262,17 +224,22 @@ fn run() !void {
     // the two spellings cannot print different things.
     if (std.mem.eql(u8, command_name, "--version")) command_name = "version";
 
-    // Parse runtime options
-    var options = try parseRuntimeOptions(allocator, command_name, command_args);
+    // Parse runtime options: nexcage's own words only. The command exec runs
+    // is handed to it whole.
+    var options = try parseRuntimeOptions(allocator, command_name, args[found.index + 1 .. own_end]);
     defer options.deinit();
+    if (own_end < args.len) {
+        const command = if (std.mem.eql(u8, args[own_end], "--")) args[own_end + 1 ..] else args[own_end..];
+        if (command.len > 0) options.args = command;
+    }
 
-    // A --runtime before the command never reached the parser: the loop above
+    // A --runtime before the command never reached the parser: findCommand
     // skips it to find the command, and command_args starts after the command,
     // so the flag was dropped and the routing silently stayed on the default.
     // After the defer, so an unknown value does not leak what is already
     // parsed on its way out.
     if (options.runtime_type == null) {
-        if (try flagValueFromArgs(args, "--runtime", "value")) |value| {
+        if (try flagValueFromArgs(own, "--runtime", "value")) |value| {
             options.runtime_type = parseRuntimeType(value) orelse {
                 reportUnknownRuntime(value);
                 failure_reported = true;
@@ -284,7 +251,7 @@ fn run() !void {
     // An isolation profile (ADR-005): --profile, before or after the command,
     // or the program name, nexcage@<profile>, which is how a container
     // engine's runtime handler names one. Only create reads it.
-    if (options.profile == null) options.profile = try flagValueFromArgs(args, "--profile", "profile name");
+    if (options.profile == null) options.profile = try flagValueFromArgs(own, "--profile", "profile name");
     if (core.profile.fromProgramName(args[0])) |named| {
         if (named.len == 0) {
             printError("the program name '{s}' ends in '@' with no profile after it", .{args[0]});
@@ -406,6 +373,64 @@ fn printUsage() !void {
         \\
     , .{core.version.getVersion()});
     try out.flush();
+}
+
+/// Where the command is on the command line.
+const CommandPosition = struct {
+    /// The command's index in argv. On a line of nothing but options it is 1,
+    /// so that the first option is the one reported as an unknown command.
+    index: usize,
+};
+
+/// Steps over the global options to the command. An engine puts its options
+/// there, the way runc's command line has them: containerd's shim (go-runc)
+/// sends `--root <dir> --log <file> --log-format json --systemd-cgroup create
+/// ...`. Each is read where it is used, wherever on the line it appears.
+fn findCommand(args: []const []const u8) CommandPosition {
+    var i: usize = 1;
+    while (i < args.len) {
+        if (std.mem.eql(u8, args[i], "--debug") or std.mem.eql(u8, args[i], "--verbose")) {
+            i += 1;
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--log-file") and i + 1 < args.len) {
+            i += 2; // Skip --log-file and its value
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--log-level") and i + 1 < args.len) {
+            i += 2; // Skip --log-level and its value
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
+            i += 2; // Skip --config and its value, applied in run()
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--root") and i + 1 < args.len) {
+            i += 2; // Skip --root and its value, applied in run()
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--runtime") and i + 1 < args.len) {
+            i += 2; // Skip --runtime and its value, read in run()
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--profile") and i + 1 < args.len) {
+            i += 2; // Skip --profile and its value, read in run()
+            continue;
+        }
+        // What a container engine puts before the command. Without these,
+        // `--log` was taken for the command name and containerd got
+        // "unknown command '--log'" on its very first call.
+        if ((std.mem.eql(u8, args[i], "--log") or std.mem.eql(u8, args[i], "--log-format")) and i + 1 < args.len) {
+            i += 2;
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--systemd-cgroup")) {
+            i += 1;
+            continue;
+        }
+        return .{ .index = i };
+    }
+    return .{ .index = 1 };
 }
 
 /// Parse runtime options from command line arguments
@@ -715,6 +740,164 @@ fn flagValueFromArgs(args: []const []const u8, flag: []const u8, noun: []const u
         return args[i + 1];
     }
     return null;
+}
+
+/// Where nexcage's own words end: at the command `exec` runs in the
+/// container, or at the end of the line for any other command. That command
+/// is the first word after the container id that is neither an option nor an
+/// option's value, or what follows a bare `--` after the id; the container id
+/// is the first such word after `exec`, or the value of --name, as
+/// parseRuntimeOptions reads them. runc and crun read none of their own
+/// options in the command either.
+fn ownWordsEnd(args: []const []const u8, command_index: usize) usize {
+    if (command_index >= args.len or !std.mem.eql(u8, args[command_index], "exec")) return args.len;
+    var id_seen = false;
+    var i = command_index + 1;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (id_seen and std.mem.eql(u8, arg, "--")) return i;
+        // An option, and its value if it takes one. A lone "-" is stdin,
+        // which parseRuntimeOptions passes over too.
+        if (std.mem.startsWith(u8, arg, "-")) {
+            if (!takesValue(arg)) continue;
+            if (std.mem.eql(u8, arg, "--name")) id_seen = true;
+            i += 1;
+            continue;
+        }
+        if (id_seen) return i;
+        id_seen = true;
+    }
+    return args.len;
+}
+
+/// The options parseRuntimeOptions reads the next word for, whatever the
+/// command. One missing here makes ownWordsEnd take its value for the
+/// container id, and exec then fails for want of one rather than misread the
+/// line; a test holds every name here to the parser.
+const value_options = [_][]const u8{
+    "--name",       "--console-socket", "--pid-file",  "--image",       "--bundle",
+    "--runtime",    "--profile",        "--log-level", "--log-file",    "--log",
+    "--log-format", "--config",         "--root",      "--user",        "--workdir",
+    "--cwd",        "--format",         "--storage",   "--resources",   "-r",
+    "--filename",   "--node",           "--process",   "--description", "--signal",
+    "-s",
+};
+
+fn takesValue(arg: []const u8) bool {
+    for (value_options) |o| if (std.mem.eql(u8, o, arg)) return true;
+    return false;
+}
+
+/// `args` with the command exec runs as the caller wrote it. splitEqualsFlags
+/// made `--color=auto` in it two words, which the command would have read as
+/// two. That command starts with a whole word of argv -- one with no dash, or
+/// the bare `--` -- so it is found there by its address. Frees `args`.
+fn restoreCommandWords(allocator: std.mem.Allocator, raw: []const []const u8, args: [][]const u8, own_end: usize) ![][]const u8 {
+    const first = args[own_end].ptr;
+    const from = for (raw, 0..) |word, k| {
+        if (word.ptr == first) break k;
+    } else unreachable;
+    const out = try allocator.alloc([]const u8, own_end + raw.len - from);
+    @memcpy(out[0..own_end], args[0..own_end]);
+    @memcpy(out[own_end..], raw[from..]);
+    allocator.free(args);
+    return out;
+}
+
+fn expectWords(expected: []const []const u8, actual: []const []const u8) !void {
+    try std.testing.expectEqual(expected.len, actual.len);
+    for (expected, actual) |e, a| try std.testing.expectEqualStrings(e, a);
+}
+
+/// What run() makes of a command line before anything reads it: nexcage's
+/// own words, then the command exec runs.
+fn expectOwnWords(raw: []const []const u8, own: []const []const u8, command: []const []const u8) !void {
+    const allocator = std.testing.allocator;
+    var args = try splitEqualsFlags(allocator, raw);
+    defer allocator.free(args);
+    const end = ownWordsEnd(args, findCommand(args).index);
+    if (end < args.len) args = try restoreCommandWords(allocator, raw, args, end);
+    try expectWords(own, args[0..end]);
+    try expectWords(command, args[end..]);
+}
+
+test "the command exec runs is the container's, flags, values and = included" {
+    // Without --: the command starts at the word after the container id
+    try expectOwnWords(
+        &.{ "nexcage", "exec", "web", "grep", "--config", "x", "--log", "/x", "--root", "rel", "--debug" },
+        &.{ "nexcage", "exec", "web" },
+        &.{ "grep", "--config", "x", "--log", "/x", "--root", "rel", "--debug" },
+    );
+    try expectOwnWords(
+        &.{ "nexcage", "exec", "web", "grep", "--color=auto", "--config=x" },
+        &.{ "nexcage", "exec", "web" },
+        &.{ "grep", "--color=auto", "--config=x" },
+    );
+    // --name names the container as the word after exec would
+    try expectOwnWords(
+        &.{ "nexcage", "exec", "--name", "web", "grep", "--config", "x" },
+        &.{ "nexcage", "exec", "--name", "web" },
+        &.{ "grep", "--config", "x" },
+    );
+    // With --
+    try expectOwnWords(
+        &.{ "nexcage", "exec", "web", "--", "env", "--log=/x" },
+        &.{ "nexcage", "exec", "web" },
+        &.{ "--", "env", "--log=/x" },
+    );
+    // nexcage's options before the container id and between it and the
+    // command stay nexcage's, values and all
+    try expectOwnWords(
+        &.{ "nexcage", "--config=c.json", "exec", "--user", "1000", "web", "--log", "/l", "-t", "-", "sh", "-c", "--root=x" },
+        &.{ "nexcage", "--config", "c.json", "exec", "--user", "1000", "web", "--log", "/l", "-t", "-" },
+        &.{ "sh", "-c", "--root=x" },
+    );
+}
+
+test "a command line with no command for exec to run is nexcage's to the end" {
+    // How containerd's shim sends an exec
+    try expectOwnWords(
+        &.{ "nexcage", "--root", "/r", "--log", "/l", "exec", "--process", "/p.json", "--detach", "--pid-file", "/pid", "abc" },
+        &.{ "nexcage", "--root", "/r", "--log", "/l", "exec", "--process", "/p.json", "--detach", "--pid-file", "/pid", "abc" },
+        &.{},
+    );
+    try expectOwnWords(&.{ "nexcage", "exec", "web" }, &.{ "nexcage", "exec", "web" }, &.{});
+    // Only exec runs a command: another command's words after its arguments
+    // are nexcage's options still
+    try expectOwnWords(&.{ "nexcage", "kill", "web", "KILL", "--root", "/x" }, &.{ "nexcage", "kill", "web", "KILL", "--root", "/x" }, &.{});
+    // "exec" as an option's value is not the command
+    try expectOwnWords(&.{ "nexcage", "--root", "exec", "list", "a", "b" }, &.{ "nexcage", "--root", "exec", "list", "a", "b" }, &.{});
+}
+
+/// exec's line `option [value] web ls`: parseRuntimeOptions finds the
+/// container id `id`, and ownWordsEnd starts the command at `command`.
+fn expectExecLine(option: []const u8, value: ?[]const u8, id: []const u8, command: []const []const u8) !void {
+    var line: [6][]const u8 = undefined;
+    var n: usize = 0;
+    for ([_]?[]const u8{ "nexcage", "exec", option, value, "web", "ls" }) |word| if (word) |w| {
+        line[n] = w;
+        n += 1;
+    };
+    var options = try parseRuntimeOptions(std.testing.allocator, "exec", line[2..n]);
+    defer options.deinit();
+    errdefer std.debug.print("exec {s}: ", .{option});
+    try std.testing.expectEqualStrings(id, options.container_id orelse "");
+    try expectWords(command, line[ownWordsEnd(line[0..n], 1)..n]);
+}
+
+test "ownWordsEnd reads exec's options as parseRuntimeOptions does" {
+    // Each option it steps over with its value is one the parser reads a
+    // value for: the word after is not the container id
+    for (value_options) |option| {
+        if (std.mem.eql(u8, option, "--name")) continue;
+        try expectExecLine(option, "lxc", "web", &.{"ls"});
+    }
+    // except --name's, which is the container id
+    try expectExecLine("--name", "lxc", "lxc", &.{ "web", "ls" });
+    // and options that take no value, the other way round
+    for ([_][]const u8{ "-t", "--tty", "-d", "--detach", "-i", "--interactive", "--debug", "-v", "--verbose", "-f", "--force", "-a", "--all", "--systemd-cgroup", "--start", "-" }) |option| {
+        try expectExecLine(option, null, "web", &.{"ls"});
+    }
 }
 
 /// Parse command from string

@@ -325,6 +325,19 @@ nx exec web-1 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug
 check "nexcage's logging flags after -- belong to the command too" \
   all 'rc 0' '[ ! -e "$S/run/exec-x.log" ]' '[ ! -e "$S/run/exec-y.log" ]' '! err_has "DEBUG"' \
       'called "pct exec 100 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug"'
+# Nor without --, the form `exec --help` shows: the command starts at the word
+# after the container id, and every word of it is the command's, `=` and all.
+# Each of these failed the call, made root write its log into the file named,
+# or turned --color=auto into two words.
+nx exec web-1 echo --config /nonexistent --root rel --runtime bogus --profile nope --log /run/exec-z.log --debug --color=auto
+check "the command's words are its own without -- too" \
+  all 'rc 0' '[ ! -e "$S/run/exec-z.log" ]' '! err_has "DEBUG"' \
+      'called "pct exec 100 -- echo --config /nonexistent --root rel --runtime bogus --profile nope --log /run/exec-z.log --debug --color=auto"'
+# nexcage's own options before the command are still nexcage's
+nx exec web-1 --log /run/exec-own.log echo hi
+check "and nexcage's options before the command are still read" \
+  all 'rc 0' '[ -e "$S/run/exec-own.log" ]' 'called "pct exec 100 -- echo hi"'
+rm -f "$S/run/exec-own.log"
 
 # `exec --process <file>` hands over an OCI process spec: an identity to become,
 # an environment, a terminal. `pct exec` takes a command and returns when it
