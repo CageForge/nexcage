@@ -479,7 +479,7 @@ The configuration priority system has been extensively tested to ensure proper b
 #   "log_level": "debug",
 #   "log_file": "/tmp/nexcage-logs/nexcage.log"
 # }
-./nexcage list
+./nexcage --config config.json list
 ```
 - **Expected**: DEBUG mode enabled, logs to config file path
 - **Actual**: ✅ DEBUG mode enabled, logs written to `/tmp/nexcage-logs/nexcage.log`

@@ -386,7 +386,7 @@ The configuration priority system has been thoroughly tested with the following 
 #### Test 1: Configuration File Priority
 ```bash
 # Test with config.json containing debug settings
-./nexcage list
+./nexcage --config config.json list
 ```
 **Result**: ✅ DEBUG mode enabled, logs written to `/tmp/nexcage-logs/nexcage.log`
 - System information logged
