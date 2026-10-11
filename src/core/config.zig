@@ -55,8 +55,15 @@ test "a config.json in the working directory is not read" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.makeDir("empty");
+    // Made as root makes them, 0755 and 0644 whatever the umask: the file
+    // would pass the ownership and mode checks, so that were the working
+    // directory searched, the assertions below are what would fail, on any
+    // machine. iterate: an O_PATH descriptor, the default, cannot be chmod'ed.
     try tmp.dir.makeDir("planted");
-    try tmp.dir.writeFile(.{ .sub_path = "planted/config.json", .data = "{\"network\":{\"bridge\":\"vmbr666\"},\"proxmox\":{\"unprivileged\":false}}" });
+    var planted = try tmp.dir.openDir("planted", .{ .iterate = true });
+    defer planted.close();
+    try planted.chmod(0o755);
+    try planted.writeFile(.{ .sub_path = "config.json", .data = "{\"network\":{\"bridge\":\"vmbr666\"},\"proxmox\":{\"unprivileged\":false}}", .flags = .{ .mode = 0o644 } });
     var cwd = try std.fs.cwd().openDir(".", .{});
     defer cwd.close();
     defer cwd.setAsCwd() catch {};
@@ -70,8 +77,6 @@ test "a config.json in the working directory is not read" {
     var expected = try loader.loadDefault();
     defer expected.deinit();
 
-    var planted = try tmp.dir.openDir("planted", .{});
-    defer planted.close();
     try planted.setAsCwd();
     var cfg = try loader.loadDefault();
     defer cfg.deinit();
