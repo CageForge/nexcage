@@ -155,6 +155,13 @@ doctor() {
   if [ -x /usr/bin/time ]; then ok "GNU time" "perf reports peak memory"
   else opt "GNU time" "optional: apt install time, for peak memory in perf"; fi
 
+  # tests/scripts: jq applies gh's --jq filters in the fake gh, dpkg-deb and
+  # readelf build and read the packages check_deb.sh is tried on.
+  echo "${B}check (the tests of scripts/)${N}"
+  for t in jq dpkg-deb readelf; do
+    if have "$t"; then ok "$t" "$(command -v "$t")"; else miss "$t" "install it with the system package manager (jq, dpkg, binutils)"; fi
+  done
+
   echo "${B}crun, cri, e2e, shell, perf --suite crun${N}"
   local e found=''
   for e in ${CONTAINER_ENGINE:-podman docker}; do

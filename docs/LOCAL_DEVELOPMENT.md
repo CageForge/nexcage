@@ -23,7 +23,7 @@ scripts/dev.sh all          # before a pull request: check, then every CI job th
 | `build` | `build` (Debug only) | Debug to `zig-out/bin`, ReleaseSafe to `zig-out/release/bin` | zig 0.15.1 | seconds |
 | `test` | `check` | `zig fmt --check`, unit tests | zig | 6 s |
 | `sim` | `sim` | Every command against fake `pct`/`pvesh`/`pvesm` ([TESTING.md](../TESTING.md#running-against-fake-proxmox-tools)) | zig, unshare, python3, tar, zstd | 12 s |
-| `check` | | `test` + `sim` + `tests/scripts/run.sh`, the tests of the shell scripts in `scripts/` | | 20 s |
+| `check` | | `test` + `sim` + `tests/scripts/run.sh`, the tests of the shell scripts in `scripts/` | jq, dpkg-deb, readelf for the script tests | 20 s |
 | `crun` | | The crun-backend image and what `crun_build.yml` checks on it: `version`, the features ABI, the features document, `ps` against crun, a bundle from a foreign working directory | a container engine | 3 min first, then seconds |
 | `cri` | | A pod through containerd's CRI with nexcage as the runtime handler: sandbox, CNI address, container, `exec`, `update`, removal | a container engine | 5 s, plus the images |
 | `e2e` | `e2e` | `sim` + `crun` + `cri` | | |
