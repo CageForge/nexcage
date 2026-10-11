@@ -523,8 +523,8 @@ pub const ProxmoxLxcDriver = struct {
 
         // There is a container now, and nexcage's record of it is written
         // before anything else can fail. It was written last, so a create
-        // that failed after pct create -- a bundle's mounts and namespaces
-        // are pct calls of their own -- left a CT nexcage had no record of.
+        // that failed after pct create -- a bundle's bind mounts are a pct
+        // call of their own -- left a CT nexcage had no record of.
         // An engine cleans up a failed create with delete --force, which was
         // told there was nothing to delete: the CT stayed, and its name with
         // it, so the engine's next create of the name failed too. With the

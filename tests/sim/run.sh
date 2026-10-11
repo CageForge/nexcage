@@ -806,22 +806,6 @@ check "bundle mount options LXC's own /dev/shm replaces: created, and named in t
       '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
       'err_has "nexcage: mounts[1] (/dev/shm) options in /tmp/nexcage-bundles/conf-mnt/config.json: not applied"' \
       '! err_has "mounts[0]"' '! err_has "mounts[2]"'
-# A create can fail after pct create has made the CT: a bundle's namespaces
-# are a `pct set` of their own ($SIM/fail_set). An engine cleans that up with
-# delete --force. nexcage's record was written last, so there was none, and
-# delete --force said there was nothing to delete: the CT stayed, and the
-# engine's next create of the name was refused.
-echo "can't lock file '/run/lock/lxc/pve-config-0.lock' - got timeout" > "$S/fail_set"
-nx create --name half-1 /tmp/nexcage-bundles/b1
-check "a create that fails after pct create exits 1 and says how to remove the CT" \
-  all 'rc 1' 'called_re "^pct create [0-9]+ .*--hostname half-1 "' 'err_has "delete --force half-1"'
-rm -f "$S/fail_set"
-half=$(awk '$3=="half-1" {print $1}' "$S/db")
-nx delete --force half-1
-check "and delete --force, as an engine cleans up, destroys that CT" \
-  all 'rc 0' "called 'pct destroy ${half:-none}'" '! grep -q " half-1$" "$S/db"' '[ ! -e "$S/run/nexcage/half-1" ]'
-nx create --name half-1 /tmp/nexcage-bundles/b1
-check "so the name can be created again" all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname half-1 "'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
@@ -852,6 +836,24 @@ mp_bundle mp-rbind '[{"destination":"/rw","type":"none","source":"/srv/rw","opti
 nx create --name mp-rbind /tmp/nexcage-bundles/mp-rbind
 check "bundle mount with rbind among its options is a bind mount" \
   all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/rw,mp=/rw$"'
+# A create can fail after pct create has made the CT: a bundle's bind mounts
+# are a `pct set` of their own ($SIM/fail_set). An engine cleans that up with
+# delete --force. nexcage's record was written last, so there was none, and
+# delete --force said there was nothing to delete: the CT stayed, and the
+# engine's next create of the name was refused.
+mp_bundle half-1 '[{"destination":"/data","type":"bind","source":"/srv/data"}]'
+echo "can't lock file '/run/lock/lxc/pve-config-0.lock' - got timeout" > "$S/fail_set"
+nx create --name half-1 /tmp/nexcage-bundles/half-1
+check "a create that fails after pct create exits 1 and says how to remove the CT" \
+  all 'rc 1' 'called_re "^pct create [0-9]+ .*--hostname half-1 "' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data$"' \
+      'err_has "delete --force half-1"'
+rm -f "$S/fail_set"
+half=$(awk '$3=="half-1" {print $1}' "$S/db")
+nx delete --force half-1
+check "and delete --force, as an engine cleans up, destroys that CT" \
+  all 'rc 0' "called 'pct destroy ${half:-none}'" '! grep -q " half-1$" "$S/db"' '[ ! -e "$S/run/nexcage/half-1" ]'
+nx create --name half-1 /tmp/nexcage-bundles/half-1
+check "so the name can be created again" all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname half-1 "'
 # The refusal quotes a path with Zig's escapes, \n or \xc2, and stderr writes
 # each backslash in a message as \\: the reasons below are as stderr has them.
 for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\\nlxc.apparmor.profile: unconfined" contains a control character' \
