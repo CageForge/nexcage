@@ -288,8 +288,21 @@ always run unprivileged.
 For an OCI bundle, nexcage packs `rootfs/` with tar into
 `local:vztmpl/nexcage-<name>-<time>.tar.zst`, creates the container from that
 template and deletes the archive. The rootfs is used as it is, so it must boot
-as a system container: an image without an init will not start. Mounts are
-added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
+as a system container: an image without an init will not start. The user
+namespace maps to `nesting=1,keyctl=1`.
+
+The bundle's bind mounts become the container's mount points `mp0`, `mp1`, ...
+through one `pct set` after the create, which checks each as Proxmox's API
+does. A mount's source and destination must be absolute, normalised paths
+(no empty, `.` or `..` component, no trailing `/`) without control
+characters, `,` or `=`; the destination cannot be `/`, and a source under
+`/dev/` is refused, since Proxmox would mount the filesystem on that device
+rather than bind it. The kernel filesystems a runtime-spec bundle mounts at
+`/proc`, `/sys`, `/sys/fs/cgroup`, `/dev`, `/dev/pts`, `/dev/shm` and
+`/dev/mqueue` are the container's own, set up by LXC and its init, and are
+left out; any other mount that is not a bind mount is refused. A refusal is
+exit 2, before anything is packed or created. What a bind mount can reach is
+in [BACKENDS.md](architecture/BACKENDS.md#a-container-from-an-oci-bundle).
 
 The bundle's `linux.resources.memory.limit`, in bytes, becomes `--memory`. `-1`,
 the runtime-spec's "no limit", leaves `--memory` out, so pct's default of 512

@@ -456,6 +456,35 @@ check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_r
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
+# The bundle's mounts become mp entries through `pct set`, which checks them as
+# Proxmox's API does. They were appended to /etc/pve/lxc/<vmid>.conf as raw
+# lines, so a newline in a destination added any config line the bundle liked,
+# and a comma added mp properties. The kernel filesystems a runtime-spec
+# bundle mounts at their usual places are the container's own and left out.
+mp_bundle() {  # <name> <the mounts array>
+  mkdir -p "$S/bundles/$1"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/$1/"
+  printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":%s}' "$2" > "$S/bundles/$1/config.json"
+}
+mp_bundle mp-ok '[{"destination":"/proc","type":"proc","source":"proc"},{"destination":"/dev","type":"tmpfs","source":"tmpfs","options":["nosuid","mode=755"]},
+  {"destination":"/data","type":"bind","source":"/srv/data"}]'
+nx create --name mp-ok /tmp/nexcage-bundles/mp-ok
+check "bundle bind mount -> pct set --mp0 after the create; proc and /dev are the container's own" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data$"' 'not_called_re "--mp1|mp=/proc|mp=/dev"' \
+      'grep -qx "mp0: /srv/data,mp=/data" "$S"/conf.*'
+for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\nlxc.apparmor.profile: unconfined" contains a control character' \
+           'mp-comma|{"destination":"/x","type":"bind","source":"/srv/a,ro=0"}|contains '"','"' or '"'='"'' \
+           'mp-rel|{"destination":"/x","type":"bind","source":"srv/a"}|source "srv/a" is not an absolute path' \
+           'mp-dots|{"destination":"/data/../etc","type":"bind","source":"/srv/a"}|is not a normalised path' \
+           'mp-root|{"destination":"/","type":"bind","source":"/srv/a"}|cover the container'"'"'s root' \
+           'mp-dev|{"destination":"/disk","type":"bind","source":"/dev/sda1"}|as a device'"'"'s filesystem' \
+           'mp-tmpfs|{"destination":"/data","type":"tmpfs","source":"tmpfs"}|can only bind-mount a host directory' \
+           'mp-nodest|{"type":"bind","source":"/srv/a"}|has no destination'; do
+  IFS='|' read -r name mount why <<< "$bad"
+  mp_bundle "$name" "[$mount]"
+  nx create --name "$name" "/tmp/nexcage-bundles/$name"
+  check "bundle mount refused before anything is packed: $why" \
+    all 'rc 2' 'err_has "$why"' '! err_has "Packing"' 'not_called_re "nextid|^pct (create|set)"'
+done
 # The bundle's linux.resources. memory.limit -1 is the runtime-spec's "no
 # limit", and Proxmox has none, so --memory is left out and pct's default
 # applies. Both values used to be cast unchecked: -1, or shares worth more

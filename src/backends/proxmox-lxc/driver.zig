@@ -249,6 +249,12 @@ pub const ProxmoxLxcDriver = struct {
         var bundle_config: ?bundle.OciBundleConfig = null;
         defer if (bundle_config) |*bc| bc.deinit();
         var bundle_resources = oci.OciProcessor.Resources{};
+        // The mp entries the bundle's mounts become, applied after pct create
+        var bundle_mounts: ?[][]u8 = null;
+        defer if (bundle_mounts) |specs| {
+            for (specs) |spec| self.allocator.free(spec);
+            self.allocator.free(specs);
+        };
         // The archive packed from a bundle's rootfs is needed only by pct create
         var bundle_template: ?oci.BundleTemplate = null;
         defer if (bundle_template) |*bt| bt.remove(self.allocator);
@@ -303,8 +309,8 @@ pub const ProxmoxLxcDriver = struct {
                         return err;
                     };
                     oci_bundle_path = safe_path;
-                    // A bundle's mounts become mp entries after the create,
-                    // numbered from mp0, so --mp would be overwritten by them.
+                    // A bundle's mounts take the mp entries from mp0, after
+                    // the create, so --mp would collide with them.
                     if (config.pve.mount_points.len > 0) {
                         if (self.logger) |log| log.err("--mp with an OCI bundle: the bundle's config.json carries the mounts, and they take pct's mp entries", .{}) catch {};
                         return core.Error.InvalidInput;
@@ -323,6 +329,7 @@ pub const ProxmoxLxcDriver = struct {
                         return core.Error.InvalidInput;
                     };
                     bundle_resources = try self.oci_processor.bundleResources(&bundle_config.?);
+                    bundle_mounts = try self.oci_processor.bundleMountPoints(bundle_config.?.mounts orelse &.{});
 
                     // pct creates containers only from templates. This used to
                     // hand pct a template name that nothing had written.
@@ -484,12 +491,8 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // 7. Post-creation setup
-        if (oci_bundle_path) |bp| {
-            try self.applyMountsToLxcConfig(vmid, bp);
-            // Only a bundle with mounts can have mp entries to look for; every
-            // other bundle logged "No mp entries visible" on create.
-            const has_mounts = if (bundle_config) |bc| (if (bc.mounts) |m| m.len > 0 else false) else false;
-            if (has_mounts) try self.verifyMountsInConfig(vmid);
+        if (oci_bundle_path != null) {
+            try self.oci_processor.applyMountPoints(vmid, bundle_mounts orelse &.{});
             if (bundle_config) |bc| {
                 if (bc.namespaces) |ns| try self.applyNamespacesToLxcConfig(vmid, ns);
             }
@@ -623,34 +626,11 @@ pub const ProxmoxLxcDriver = struct {
         if (self.logger) |log| log.debug("Persisted runtime metadata for {s} at {s}", .{ container_name, metadata_path }) catch {};
     }
 
-    /// Validate that mounts in bundle config point to existing host paths or valid Proxmox storage refs
-    fn validateBundleVolumes(self: *Self, bundle_path: []const u8) !void {
-        return self.oci_processor.validateBundleVolumes(bundle_path, &self.pve_client);
-    }
-
-    /// Append mounts from bundle config to /etc/pve/lxc/<vmid>.conf using mpX syntax
-    fn applyMountsToLxcConfig(self: *Self, vmid: []const u8, bundle_path: []const u8) !void {
-        return self.oci_processor.applyMountsToLxcConfig(vmid, bundle_path);
-    }
-
     /// Apply namespaces from OCI bundle to LXC container via pct set --features
     /// Maps OCI namespace types to LXC features where applicable
     /// Apply namespaces from OCI bundle to LXC container via pct set --features
     fn applyNamespacesToLxcConfig(self: *Self, vmid: []const u8, namespaces: []const oci_spec.runtime.bundle.NamespaceConfig) !void {
         return self.oci_processor.applyNamespacesToLxcConfig(vmid, namespaces);
-    }
-
-    /// Verify config contains mp entries via pct config
-    fn verifyMountsInConfig(self: *Self, vmid: []const u8) !void {
-        const args = [_][]const u8{ "pct", "config", vmid };
-        const res = try self.runCommand(&args);
-        defer self.allocator.free(res.stdout);
-        defer self.allocator.free(res.stderr);
-        if (res.exit_code != 0) return core.Error.OperationFailed;
-        // Presence of "mp" lines indicates success (best-effort)
-        if (std.mem.indexOf(u8, res.stdout, "mp0:") == null and std.mem.indexOf(u8, res.stdout, "mp1:") == null) {
-            if (self.logger) |log| log.warn("No mp entries visible in pct config after update", .{}) catch {};
-        }
     }
 
     /// Start LXC container using pct command

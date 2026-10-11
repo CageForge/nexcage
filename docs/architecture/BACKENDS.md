@@ -44,3 +44,26 @@ flowchart LR
 | snapshots | `pvesh get /nodes/<node>/lxc/<vmid>/snapshot`, for a container here as well as elsewhere |
 | pull, images, rmi | `pvesh create /nodes/<node>/storage/<storage>/oci-registry-pull --reference <ref>`; `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` per template storage; `pvesh delete /nodes/<node>/storage/<storage>/content/<volid>` |
 | list, name to VMID | `pvesh get /cluster/resources --type vm` for every node, merged with `pct list` for this one (the cluster view is a cache) |
+
+### A container from an OCI bundle
+
+`create` from a bundle makes a system container of the bundle's `rootfs/`:
+the rootfs is packed into a template archive for `pct create`, which takes
+nothing else from `config.json`. What the backend then takes from the bundle
+is listed in the [CLI reference](../CLI_REFERENCE.md#create); the rest of
+this section is what that means for the container's confinement.
+
+**Mounts.** Each bind mount becomes a Proxmox mount point, given with
+`pct set <vmid> --mpN <source>,mp=<destination>` once the container exists.
+At every start Proxmox bind-mounts the source directory, as root on the host,
+into the container. Any host directory can be named: like runc and crun,
+nexcage has no list of host paths a bundle may not mount, so whoever writes
+the bundle chooses what of the host the container sees, as `--mp` lets
+whoever runs nexcage choose. What the container can do there is the user
+namespace's to decide. In an unprivileged container (the default) container
+root is uid 100000 on the host, so through the mount it has the access any
+other unprivileged user has: it reads what is world-readable and writes
+nothing root owns, while files owned by the mapped uids are its own. In a
+privileged container (`proxmox.unprivileged: false`) container
+root is host root on whatever the mount shows. Read a bundle's mounts before
+creating a container from it.
