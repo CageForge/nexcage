@@ -231,7 +231,11 @@ sim()     { need_zig; "$ZIG" build && bash tests/sim/run.sh; }
 crun_image() { say "crun image $CRUN_IMAGE"; engine_build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t "$CRUN_IMAGE" .; }
 privileged() { "$ENGINE" run --rm --privileged --cgroupns=private "$@"; }
 
-# What crun_build.yml checks, in the same order, on the same scripts.
+# What crun_build.yml checks, in the same order, on the same scripts, but for
+# four of its steps: the .deb, the runtime-spec suite and critest, which only
+# `act crun_build.yml:docker` runs here, and the pod, which is `cri`. Under
+# rootless podman update.sh skips its cpuset check: no cpuset controller is
+# handed to the container (it prints a skip: line saying so).
 crun_checks() {
   engine; crun_image; fetch_bundle
   say "the binary runs";   "$ENGINE" run --rm "$CRUN_IMAGE" version
@@ -243,6 +247,14 @@ crun_checks() {
   python3 tests/crun/features_check.py "$DEV/features.json"
   say "ps reports the container's processes, and crun agrees"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/ps.sh
+  say "update's flags reach the container's cgroup"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/update.sh
+  say "a Proxmox LXC container under --root stays the Proxmox backend's"
+  privileged -v "$REPO/tests/sim/bin:/sim/bin:ro" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/lxc_root.sh
+  say "an isolation profile narrows the container"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/profile.sh
+  say "--systemd-cgroup before the command reaches libcrun"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/systemd_cgroup.sh
   say "a bundle is found from a working directory that is not it"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/foreign_cwd.sh
   say "kill sends the signal nexcage validated"
@@ -255,10 +267,6 @@ crun_checks() {
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/memory_values.sh
   say "the re-execution happens for containers only"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/rexec.sh
-  say "--systemd-cgroup before the command reaches libcrun"
-  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/systemd_cgroup.sh
-  say "a Proxmox LXC container under --root stays the Proxmox backend's"
-  privileged -v "$REPO/tests/sim/bin:/sim/bin:ro" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/lxc_root.sh
 }
 
 # Always through crun_image: an image left from older sources would test them.

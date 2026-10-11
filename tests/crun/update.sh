@@ -87,8 +87,16 @@ upd --pids-limit 123
 is pids.max 123 "--pids-limit 123"
 upd --cpu-quota 25000 --cpu-period 100000
 is cpu.max "25000 100000" "--cpu-quota 25000 --cpu-period 100000"
-upd --cpuset-cpus 0
-is cpuset.cpus 0 "--cpuset-cpus 0"
+# Only where the cpuset controller reaches this container. Rootless podman
+# hands one cpu, memory and pids alone, and there the update fails in libcrun,
+# as crun's own does: the check said so before every one after it, which the
+# local run of this job then never reached.
+if grep -qw cpuset /sys/fs/cgroup/cgroup.controllers; then
+    upd --cpuset-cpus 0
+    is cpuset.cpus 0 "--cpuset-cpus 0"
+else
+    echo "skip: --cpuset-cpus: no cpuset controller here (cgroup.controllers: $(cat /sys/fs/cgroup/cgroup.controllers)), as under rootless podman"
+fi
 
 # libcrun turns shares into cpu.weight by a formula of its own, so the
 # expected value is the one libcrun writes for the same shares in a
