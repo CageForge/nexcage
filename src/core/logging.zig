@@ -19,6 +19,56 @@ pub const LogLevel = enum(u8) {
 /// matters: one object per line, with the fields runc writes.
 pub const LogFormat = enum { text, json };
 
+/// Opens a log file that other nexcage processes share: --log, which an
+/// engine passes to every call on one container, and --log-file or the
+/// configuration's log_file, which every call on the host can share.
+///
+/// O_APPEND: each write lands at the end of the file as it is then. Opening
+/// and seeking to the end once fixed the offset, and of two calls writing
+/// to the same file the one that opened first overwrote the other's lines --
+/// the error line containerd reads back among them. O_NOFOLLOW: the last
+/// component is not followed if it is a symlink; an engine names a file in a
+/// directory of its own, which the runtime creates. O_CLOEXEC: no command
+/// nexcage runs inherits it.
+pub fn openAppend(path: []const u8) !std.fs.File {
+    const fd = try std.posix.open(path, .{ .ACCMODE = .WRONLY, .CREAT = true, .APPEND = true, .CLOEXEC = true, .NOFOLLOW = true }, 0o640);
+    return .{ .handle = fd };
+}
+
+test "two writers to one log file keep each other's lines" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    const log_path = try std.fs.path.join(std.testing.allocator, &.{ path, "log" });
+    defer std.testing.allocator.free(log_path);
+
+    // Both open before either writes, as two engine calls on one container do.
+    const a = try openAppend(log_path);
+    defer a.close();
+    const b = try openAppend(log_path);
+    defer b.close();
+    try a.writeAll("A1\n");
+    try b.writeAll("B1\n");
+    try a.writeAll("A2\n");
+
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("A1\nB1\nA2\n", try tmp.dir.readFile("log", &buf));
+}
+
+test "a log path whose last component is a symlink is not followed" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.symLink("target", "log", .{});
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    const log_path = try std.fs.path.join(std.testing.allocator, &.{ path, "log" });
+    defer std.testing.allocator.free(log_path);
+
+    try std.testing.expectError(error.SymLinkLoop, openAppend(log_path));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access("target", .{}));
+}
+
 pub const LogContext = struct {
     allocator: std.mem.Allocator,
     file: std.fs.File,

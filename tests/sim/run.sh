@@ -690,6 +690,16 @@ check "--log --log-format json: the error lands in the file containerd reads" \
 nx --log "$S/run/ct2.json" state no-such-container
 check "--log without a format writes text, not JSON" \
   all '[ -s "$S/run/ct2.json" ]' '! grep -q "level" "$S/run/ct2.json"'
+nx --log "$S/run/ct2.json" state no-such-container-2
+check "a second call appends to the --log file" \
+  all "grep -q \"'no-such-container'\" \"\$S/run/ct2.json\"" 'grep -q "no-such-container-2" "$S/run/ct2.json"'
+# An engine names a file in a directory of its own, which the runtime creates:
+# a symlink in its place is not followed, and the log goes to stderr instead.
+ln -sfn /run/ct-target.log "$S/run/ct-link.json"
+nx --log /run/ct-link.json --log-format json state no-such-container
+check "--log does not follow a symlink, and says where the log went" \
+  all 'rc 1' '[ ! -e "$S/run/ct-target.log" ]' 'err_has "cannot open --log file"' 'err_has "not found"'
+rm -f "$S/run/ct-link.json"
 
 nx --runtime crun state some-id
 check "state on a crun binary that lacks the backend -> exit 1, says how to build it" \

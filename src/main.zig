@@ -72,8 +72,7 @@ pub const AppContext = struct {
         // than failing the command.
         var log_sink = std.fs.File.stderr();
         if (logging_cfg.runtime_log_path) |path| {
-            if (std.fs.cwd().createFile(path, .{ .truncate = false })) |f| {
-                f.seekFromEnd(0) catch {};
+            if (core.logging.openAppend(path)) |f| {
                 log_sink = f;
             } else |err| {
                 printError("warning: cannot open --log file '{s}' ({s}); logging to stderr", .{ path, @errorName(err) });
