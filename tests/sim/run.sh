@@ -491,16 +491,39 @@ NEXCAGE=$S/timed-nexcage nx --config fifo.json list
 check "a FIFO named as the config file is refused, not waited on" \
   all 'rc 1' 'err_has "fifo.json: it is not a regular file"'
 rm -f "$S/work/fifo.json" "$S/timed-nexcage"
-# Host root's files are nobody's in the simulator's namespace, as they are in
-# rootless podman's, and the message says that is what 65534 can mean.
-nx --config /etc/passwd list
+# A file owned by neither root nor the user running nexcage, as nexcage's
+# namespace sees it. That namespace maps the caller's uid alone, so anyone but
+# root finds one in /etc/passwd: host root's files are nobody's there, as they
+# are in rootless podman's. Root -- act runs the CI jobs as root -- finds only
+# files root owns in the namespace too, so it makes one, of a uid the
+# namespace does not map.
+foreign=/etc/passwd
+if [ "$(id -u)" = 0 ]; then
+  foreign=$S/work/foreign.json
+  printf '%s\n' '{"network":{"bridge":"vmbr666"},"proxmox":{"unprivileged":false}}' > "$foreign"
+  chown 4242 "$foreign" || echo "        cannot give $foreign to uid 4242: the next check cannot pass"
+fi
+owner=$(unshare -r stat -c %u "$foreign")
+# The kernel shows an owner it cannot map as its overflow uid, 65534, and the
+# message says that is what the number can mean.
+says="it is owned by uid $owner, not by root"
+[ "$owner" != "$(cat /proc/sys/kernel/overflowuid)" ] ||
+  says="it is owned by uid $owner (how the kernel shows an owner outside nexcage's user namespace, as host root is under rootless podman), not by root"
+nx --config "$foreign" create --name fo-1 "$TPL"
 check "a config file owned by somebody else is refused, naming the owner" \
-  all 'rc 1' "err_has \"it is owned by uid 65534 (how the kernel shows an owner outside nexcage's user namespace\"" 'err_has "rootless podman), not by root"' 'not_called_re "^(pct|pvesh)"'
-# /etc/nexcage, without --config. An OCI spec there is passed over whatever its
-# size -- one over the 1 MiB a configuration may hold failed every command with
-# FileTooBig -- and an error or `health` names the file actually read, not the
-# first one that exists.
+  all '[ -n "$owner" ] && [ "$owner" != 0 ]' 'rc 1' 'err_has "$says"' 'not_called_re "^(pct|pvesh)"'
+rm -f "$S/work/foreign.json"
+# /etc/nexcage, without --config. The simulator puts $S/etc/nexcage there for
+# nexcage alone, whoever runs it and whatever /etc is on.
 mkdir -p "$S/etc/nexcage"
+echo "the simulator's own" > "$S/etc/nexcage/probe"
+printf '#!/bin/sh\nexec cat /etc/nexcage/probe\n' > "$S/probe-nexcage"; chmod +x "$S/probe-nexcage"
+NEXCAGE=$S/probe-nexcage nx
+check "nexcage's /etc/nexcage is the simulator's" all 'rc 0' "out_has \"the simulator's own\""
+rm -f "$S/etc/nexcage/probe" "$S/probe-nexcage"
+# An OCI spec there is passed over whatever its size -- one over the 1 MiB a
+# configuration may hold failed every command with FileTooBig -- and an error
+# or `health` names the file actually read, not the first one that exists.
 python3 -I -c 'import json,sys; json.dump({"ociVersion":"1.0.0","process":{"args":["/bin/sh"],"env":["V%d=%s"%(i,"x"*1000) for i in range(1100)]},"root":{"path":"rootfs"}}, open(sys.argv[1],"w"))' "$S/etc/nexcage/config.json"
 nx list
 check "an OCI spec over 1 MiB in /etc/nexcage is passed over, not a FileTooBig" \
@@ -514,7 +537,7 @@ printf '{"network":{"bridge":"vmbr1"}}\n' > "$S/etc/nexcage/nexcage.json"
 nx health
 check "health names the file read, and the spec passed over" \
   all 'err_has "Config file in use: /etc/nexcage/nexcage.json"' 'err_has "/etc/nexcage/config.json is an OCI runtime spec"'
-rm -rf "$S/etc"
+rm -r "${S:?}/etc"
 
 echo "=== create from an OCI bundle ==="
 mkdir -p "$S/bundles/b1/rootfs/bin" "$S/bundles/nocfg/rootfs"

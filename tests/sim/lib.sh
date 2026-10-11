@@ -83,13 +83,38 @@ nexcage_ns() {
   fi
   # /sys/fs/cgroup is bound from $SIM, not a fresh tmpfs: `pause` writes the
   # freezer and a later `state` has to read what it wrote, and every nx call is
-  # its own namespace. $SIM/etc, when a check makes one, is laid over /etc:
-  # that is where /etc/nexcage comes from.
-  unshare -rm bash -c '
-    { [ ! -d "$SIM/etc" ] || mount -t overlay overlay -o lowerdir="$SIM/etc":/etc /etc; } &&
-    mount --bind "$SIM/run" /run &&
+  # its own namespace. $SIM/etc/nexcage, when a check makes one, is what
+  # nexcage finds at /etc/nexcage; see etc_nexcage.
+  unshare -rm bash -c "$(declare -f etc_nexcage)"'
     mount -t tmpfs tmpfs /tmp &&
+    { [ ! -d "$SIM/etc/nexcage" ] || etc_nexcage; } &&
+    mount --bind "$SIM/run" /run &&
     mkdir /tmp/nexcage-bundles && mount --bind "$SIM/bundles" /tmp/nexcage-bundles &&
     mount --bind "$SIM/cgroup" /sys/fs/cgroup &&
     cd "$SIM/work" && exec env PATH="$BIN:/usr/bin:/bin" "$NEXCAGE" "$@"' nexcage "$@"
+}
+# Run inside nexcage_ns's namespace once /tmp is its own: puts $SIM/etc/nexcage
+# at /etc/nexcage without writing the real /etc. /etc becomes a tmpfs holding
+# a symlink to each of the host's entries, which stay reachable under /tmp,
+# and a bind mount of $SIM/etc/nexcage. An overlay of $SIM/etc on /etc did the
+# same where overlayfs allows it, which is neither in rootless podman's
+# containers -- where act runs the CI jobs, as root -- nor on an /etc that is
+# on overlayfs itself. A step that fails says so and nexcage does not run, so
+# a check that needs /etc/nexcage fails rather than passing on the host's.
+etc_nexcage() {
+  local e links=() others=()
+  {
+    mkdir /tmp/host-etc && mount --rbind /etc /tmp/host-etc &&
+    mount -t tmpfs -o mode=755 tmpfs /etc &&
+    shopt -s nullglob dotglob &&
+    for e in /tmp/host-etc/*; do
+      [ "${e##*/}" = nexcage ] && continue
+      # A relative symlink, as /etc/os-release often is, is copied as it is,
+      # so that it resolves from /etc as before
+      if [ -L "$e" ]; then links+=("$e"); else others+=("$e"); fi
+    done &&
+    { [ ${#others[@]} = 0 ] || ln -s "${others[@]}" /etc/; } &&
+    { [ ${#links[@]} = 0 ] || cp -P "${links[@]}" /etc/; } &&
+    mkdir /etc/nexcage && mount --bind "$SIM/etc/nexcage" /etc/nexcage
+  } || { echo "nexcage_ns: cannot put $SIM/etc/nexcage at /etc/nexcage; nexcage not run" >&2; return 125; }
 }
