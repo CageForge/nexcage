@@ -195,7 +195,8 @@ One of trace, debug, info (default), warn, error, fatal.
 Also write to
 .I path
 (and to standard error) a startup line naming the version, a line when the
-command starts and two when it succeeds; with \fB\-\-debug\fR, system
+command starts, with its words (for \fBexec\fR, nexcage's own and only the
+number of the command's), and two when it succeeds; with \fB\-\-debug\fR, system
 information and the command's environment (debug mode, log file, timestamp)
 too. The command's own log lines, including those that explain a failure, are
 not written there: they go to standard error, or to the file given with

@@ -111,18 +111,22 @@ pub const SimpleAdvancedLogging = struct {
         try self.log(.fatal, format, args);
     }
 
-    /// Log command execution start
-    pub fn logCommandStart(self: *Self, command_name: []const u8, args: []const []const u8) !void {
+    /// Log command execution start. `args` are nexcage's own words after the
+    /// command name. `unlogged` is how many words come after them: the
+    /// command `exec` runs, which is the container's, and which a caller is
+    /// told to give its variables, tokens included, since the caller's
+    /// environment does not reach it. Those words went into this line, and
+    /// so to the --log-file as root; only their number does now.
+    pub fn logCommandStart(self: *Self, command_name: []const u8, args: []const []const u8, unlogged: usize) !void {
         self.command_start_time = monotonicNs();
 
-        if (args.len > 0) {
-            const joined_args = try std.mem.join(self.allocator, " ", args);
-            defer self.allocator.free(joined_args);
-            const args_str = try std.fmt.allocPrint(self.allocator, " with args: {s}", .{joined_args});
-            defer self.allocator.free(args_str);
-            try self.info("Starting command: {s}{s}", .{ command_name, args_str });
+        const joined_args = try std.mem.join(self.allocator, " ", args);
+        defer self.allocator.free(joined_args);
+        const with: []const u8 = if (args.len > 0) " with args: " else "";
+        if (unlogged > 0) {
+            try self.info("Starting command: {s}{s}{s}, and a command of {d} word(s) for the container, not logged", .{ command_name, with, joined_args, unlogged });
         } else {
-            try self.info("Starting command: {s}", .{command_name});
+            try self.info("Starting command: {s}{s}{s}", .{ command_name, with, joined_args });
         }
 
         if (self.debug_mode) {

@@ -472,6 +472,18 @@ nx exec web-1 --log=/run/exec-eq.log echo hi
 check "an option's value after = is the option's, not the command" \
   all 'rc 0' '[ -e "$S/run/exec-eq.log" ]' 'called "pct exec 100 --keep-env 0 -- echo hi"'
 rm -f "$S/run/exec-own.log" "$S/run/exec-eq.log"
+# The command's words are the container's, and the line --log-file and
+# --debug write when a command starts named every one of them: the variables
+# a caller is told to give the command that way, tokens included, went into
+# root's log file. That line has nexcage's own words now, and a count.
+nx --log-file /run/exec-lf.log exec web-1 env TOKEN=s3cr3t true
+check "--log-file has exec's own words, and only how many the container's command has" \
+  all 'rc 0' 'called "pct exec 100 --keep-env 0 -- env TOKEN=s3cr3t true"' \
+      'grep -q "Starting command: exec with args: web-1, and a command of 3 word(s) for the container, not logged" "$S/run/exec-lf.log"' \
+      '! grep -q s3cr3t "$S/run/exec-lf.log"' '! err_has s3cr3t'
+nx --debug exec web-1 -- env TOKEN=s3cr3t true
+check "nor does --debug write them to stderr" all 'rc 0' 'err_has "a command of 3 word(s)"' '! err_has s3cr3t'
+rm -f "$S/run/exec-lf.log"
 # An option exec does not have, or one that takes no value, given a value
 # after =: what was meant cannot be told -- the `true` of --tty=true was run as
 # the command -- so it is a usage error. Each crashed nexcage once the command

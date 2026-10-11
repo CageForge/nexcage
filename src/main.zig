@@ -223,11 +223,15 @@ fn run() !void {
     }
 
     var command_name = args[found.index];
-    const command_args = args[found.index + 1 ..];
+    const command_args = args[found.index + 1 .. own_end];
+    // What exec runs, after nexcage's own words and the `--` that can end them
+    const container_command = if (own_end < args.len and std.mem.eql(u8, args[own_end], "--")) args[own_end + 1 ..] else args[own_end..];
 
-    // Log command execution start - safely handle logger errors
+    // Log command execution start - safely handle logger errors. nexcage's
+    // own words only: the command exec runs is the container's, and is
+    // counted, not written down.
     if (app.advanced_logger) |*logger| {
-        logger.logCommandStart(command_name, command_args) catch {};
+        logger.logCommandStart(command_name, command_args, container_command.len) catch {};
     }
 
     // Handle help command
@@ -245,10 +249,7 @@ fn run() !void {
     // is handed to it whole.
     var options = try parseRuntimeOptions(allocator, command_name, args[found.index + 1 .. own_end]);
     defer options.deinit();
-    if (own_end < args.len) {
-        const command = if (std.mem.eql(u8, args[own_end], "--")) args[own_end + 1 ..] else args[own_end..];
-        if (command.len > 0) options.args = command;
-    }
+    if (container_command.len > 0) options.args = container_command;
 
     // Every engine sends --systemd-cgroup before the command, and the parser
     // only sees the words after it. Dropped there, the flag left libcrun on
