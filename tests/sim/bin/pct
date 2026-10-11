@@ -195,6 +195,9 @@ case "$cmd" in
     ;;
   destroy)
     exists "$1" || missing "$1"
+    # $SIM/fail_destroy holds what pct says when it cannot destroy one, a
+    # config lock it cannot take, say
+    [ -e "$SIM/fail_destroy" ] && { cat "$SIM/fail_destroy" >&2; exit 255; }
     [ "$(status_of "$1")" = running ] && { echo "CT $1 is running - destroy failed" >&2; exit 255; }
     awk -v v="$1" '$1!=v' "$DB" > "$DB.tmp" && mv "$DB.tmp" "$DB"
     ;;

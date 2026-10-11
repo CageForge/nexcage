@@ -957,20 +957,6 @@ check "bundle mount options LXC's own /dev/shm replaces: created, and named in t
       '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
       'err_has "nexcage: mounts[1] (/dev/shm) options in /tmp/nexcage-bundles/conf-mnt/config.json: not applied"' \
       '! err_has "mounts[0]"' '! err_has "mounts[2]"'
-# A step after pct create that fails must not leave the container behind: it
-# had no state.json and none of the bundle's features, and a retry under the
-# same name was refused with "already exists". The refusal is pct's own for
-# this `pct set --features`, and not a lock, which would refuse the undo's
-# pct destroy as well.
-echo "Permission check failed (changing feature flags (except nesting) is only allowed for root@pam)" > "$S/fail_set"
-nx create --name rb-1 /tmp/nexcage-bundles/b1
-rb_vmid=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
-check "a failure after pct create destroys the container it made, and the packed rootfs" \
-  all 'rc 1' '[ -n "$rb_vmid" ]' 'called "pct destroy $rb_vmid"' '! grep -q " rb-1$" "$S/db"' \
-      '[ ! -e "$S/run/nexcage/rb-1" ]' '[ -z "$(ls -A "$S/cache")" ]'
-rm -f "$S/fail_set"
-nx create --name rb-1 /tmp/nexcage-bundles/b1
-check "and the same name can be created again" all 'rc 0' 'grep -q " rb-1$" "$S/db"'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
@@ -1002,17 +988,37 @@ nx create --name mp-rbind /tmp/nexcage-bundles/mp-rbind
 check "bundle mount with rbind among its options is a bind mount" \
   all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/rw,mp=/rw$"'
 # A create can fail after pct create has made the CT: a bundle's bind mounts
-# are a `pct set` of their own ($SIM/fail_set). An engine cleans that up with
-# delete --force. nexcage's record was written last, so there was none, and
-# delete --force said there was nothing to delete: the CT stayed, and the
+# are a `pct set` of their own ($SIM/fail_set). The CT stayed behind, with
+# perhaps half its mount points, and a retry under the same name was refused
+# with "already exists". create now destroys it, with nexcage's record of it
+# and the packed rootfs, before it exits 1. The refusal is pct's own for a
+# bind mount asked for by someone other than root@pam, and not a lock, which
+# would refuse the undo's pct destroy as well.
+mp_bundle rb-1 '[{"destination":"/data","type":"bind","source":"/srv/data"}]'
+echo "Permission check failed (mount point type bind is only allowed for root@pam)" > "$S/fail_set"
+nx create --name rb-1 /tmp/nexcage-bundles/rb-1
+rb_vmid=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "a failure after pct create destroys the container it made, its record and the packed rootfs" \
+  all 'rc 1' '[ -n "$rb_vmid" ]' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data$"' 'called "pct destroy $rb_vmid"' \
+      '! grep -q " rb-1$" "$S/db"' '[ ! -e "$S/run/nexcage/rb-1" ]' '[ -z "$(ls -A "$S/vartmp")" ]'
+rm -f "$S/fail_set"
+nx create --name rb-1 /tmp/nexcage-bundles/rb-1
+check "and the same name can be created again" all 'rc 0' 'grep -q " rb-1$" "$S/db"'
+# A lock pct set cannot take refuses the undo's pct destroy too
+# ($SIM/fail_destroy). Then nexcage's record of the CT, written as soon as
+# pct create made it, is kept: an engine cleans up a failed create with
+# delete --force, and with the record written last, or removed with the
+# CT still there, delete --force said there was nothing to delete and the
 # engine's next create of the name was refused.
 mp_bundle half-1 '[{"destination":"/data","type":"bind","source":"/srv/data"}]'
 echo "can't lock file '/run/lock/lxc/pve-config-0.lock' - got timeout" > "$S/fail_set"
+cp "$S/fail_set" "$S/fail_destroy"
 nx create --name half-1 /tmp/nexcage-bundles/half-1
-check "a create that fails after pct create exits 1 and says how to remove the CT" \
+check "a create whose undo cannot destroy the CT exits 1, keeps its record and says how to remove it" \
   all 'rc 1' 'called_re "^pct create [0-9]+ .*--hostname half-1 "' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data$"' \
-      'err_has "delete --force half-1"'
-rm -f "$S/fail_set"
+      'called_re "^pct destroy [0-9]+$"' 'grep -q " half-1$" "$S/db"' '[ -e "$S/run/nexcage/half-1/state.json" ]' \
+      'err_has "delete --force half-1"' '[ -z "$(ls -A "$S/vartmp")" ]'
+rm -f "$S/fail_set" "$S/fail_destroy"
 half=$(awk '$3=="half-1" {print $1}' "$S/db")
 nx delete --force half-1
 check "and delete --force, as an engine cleans up, destroys that CT" \
