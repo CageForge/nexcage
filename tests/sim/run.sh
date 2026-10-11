@@ -496,13 +496,17 @@ check "bundle: a sticky TMPDIR, as /var/tmp is -> used, and left empty" \
 rm -rf "$S/opentmp"
 # Nor one another user owns, as a TMPDIR kept through pam_tmpdir or `sudo -E`
 # can be: its owner could rename the private directory and put another
-# archive where pct create reads as root. In the namespace the host's /usr
-# belongs to the overflow uid, and neither its group nor others can write to
-# it, so only its owner is wrong -- unless the suite runs as root, which the
-# first condition says rather than pass.
-TMPDIR=/usr nx create --name bundle-owner /tmp/nexcage-bundles/b1
+# archive where pct create reads as root. Only its owner is wrong here:
+# neither its group nor others can write to it. The namespace maps only the
+# uid the suite runs as, so for a user the host's /usr belongs to the
+# overflow uid. For root -- act runs the suite as root -- /usr is its own,
+# and a directory given to nobody stands in.
+othertmp=/usr
+if [ "$(id -u)" = 0 ]; then othertmp=$S/othertmp; mkdir -p -m 755 "$othertmp"; chown 65534:65534 "$othertmp"; fi
+TMPDIR=$othertmp nx create --name bundle-owner /tmp/nexcage-bundles/b1
 check "bundle: a TMPDIR another user owns -> refused before packing" \
-  all '[ "$(id -u)" != 0 ]' '! rc 0' 'err_has "not a safe place"' '! err_has "Packing"' 'not_called_re "^pct create"'
+  all '! rc 0' 'err_has "not a safe place"' '! err_has "Packing"' 'not_called_re "^pct create"'
+rm -rf "$S/othertmp"
 # A symlinked TMPDIR is resolved once, and the directory it leads to is the
 # one checked and used: checked through the link, it could be pointed
 # elsewhere before nexcage made its directory there.
