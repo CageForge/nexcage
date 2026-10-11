@@ -108,9 +108,10 @@ jobs:
       # for whatever the GitHub runner happens to be, and it dies with SIGILL on
       # an older host -- a Xeon E5 v2, say, which is ordinary hardware for a
       # Proxmox node.
+      # Retried on Docker Hub's 429 Too Many Requests, and on nothing else.
       - name: Build the image
         run: |
-          docker build \
+          sh scripts/ci/retry_on_429.sh docker build \
             --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" \
             -t nexcage:release .
 

@@ -39,6 +39,8 @@ case "$type" in
     *) echo "check_deb.sh: nexcage in $NAME is not position-independent (${type:-unreadable})" >&2; exit 1 ;;
 esac
 
+# Docker Hub answers a runner's anonymous pulls with 429 at times.
+sh "$(dirname "$0")/retry_on_429.sh" docker pull debian:trixie
 docker run --rm -v "$DIR:/dist:ro" debian:trixie sh -euxc "
   apt-get update -qq
   apt-get install -y -qq /dist/$NAME

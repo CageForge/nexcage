@@ -55,7 +55,7 @@ jobs:
       - name: Build
         run: |
           set -eux
-          docker build \
+          sh scripts/ci/retry_on_429.sh docker build \
             --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" \
             -t nexcage:k8s-e2e .
           cid=$(docker create nexcage:k8s-e2e)

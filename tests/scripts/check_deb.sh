@@ -75,9 +75,10 @@ case "$*" in
 esac
 FAKE
 chmod +x "$T"/fake-*/*
-# docker run --rm -v DIR:/dist:ro debian:trixie sh -euxc SCRIPT
+# docker pull IMAGE, and docker run --rm -v DIR:/dist:ro debian:trixie sh -euxc SCRIPT
 cat > "$T/docker/docker" <<'FAKE'
 #!/bin/sh
+[ "$1" = pull ] && exit 0
 [ "$1 $2 $3" = "run --rm -v" ] || { echo "fake docker: unexpected $*" >&2; exit 2; }
 dist=${4%%:*}
 [ "$6 $7" = "sh -euxc" ] || { echo "fake docker: unexpected $*" >&2; exit 2; }
