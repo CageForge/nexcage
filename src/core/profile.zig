@@ -20,10 +20,12 @@ pub const annotation = "io.cageforge.nexcage.profile";
 pub const Profile = struct {
     name: []const u8,
     runtime: types.RuntimeType = .crun,
-    /// Refuse a bundle without a user namespace and uid/gid mappings. Nothing
-    /// is added: who owns the root filesystem is the engine's to arrange.
+    /// Refuse a bundle without a user namespace and uid/gid mappings, or with
+    /// one that maps host uid or gid 0. Nothing is added: who owns the root
+    /// filesystem is the engine's to arrange.
     require_user_namespace: bool = false,
-    /// Refuse a bundle without linux.seccomp. nexcage ships no filter.
+    /// Refuse a bundle without a seccomp filter that refuses some system
+    /// call. nexcage ships no filter.
     require_seccomp: bool = false,
     /// Capability names removed from every set of the container's process.
     drop_capabilities: []const []const u8 = &.{},
