@@ -40,6 +40,28 @@ jobs:
         # while: nothing checked.
         run: zig fmt --check src/ tests/
 
+      - name: build.zig's include paths exist
+        # build.zig named ./crun-1.23.1 for a release after vendored crun had
+        # moved to deps/crun, and a stray directory of that name would have
+        # been searched. A path inside a submodule counts: this checkout does
+        # not fetch submodules.
+        run: |
+          set -eu
+          subs=$(git config -f .gitmodules --get-regexp '\.path$' | awk '{print $2}')
+          paths=$(sed -n 's/.*\.cwd_relative = "\([^"]*\)".*/\1/p' build.zig | sort -u)
+          [ -n "$paths" ] || { echo "::error::no include paths read from build.zig"; exit 1; }
+          bad=0
+          for p in $paths; do
+            case $p in /*) continue ;; esac
+            p=${p#./}
+            [ -e "$p" ] && continue
+            in_sub=no
+            for s in $subs; do case "$p/" in "$s"/*) in_sub=yes ;; esac; done
+            [ "$in_sub" = yes ] && continue
+            echo "::error::build.zig names the include path $p, which does not exist"; bad=1
+          done
+          exit "$bad"
+
       - name: Build (Debug)
         run: zig build --summary all
 

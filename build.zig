@@ -216,8 +216,6 @@ pub fn build(b: *std.Build) void {
     // Add include paths
     exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
     exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-    exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
-    exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
@@ -286,8 +284,6 @@ pub fn build(b: *std.Build) void {
 
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-    test_exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
-    test_exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
