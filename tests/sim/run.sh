@@ -1214,10 +1214,12 @@ check "create --node says the same options to that node's API" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc .*--net0 name=eth0,bridge=vmbr0,ip=dhcp,tag=7 .*--memory 1024 --onboot 1"'
 cfg '{"network":{"bridge":"vmbr0"}}'
 
-# An OCI bundle is packed into a template on *this* host, so it cannot travel.
+# An OCI bundle is packed into a private file on *this* host, so it cannot
+# travel.
 nx create --name there-3 --node titan --bundle /tmp/nexcage-bundles/b1
 check "--node with a bundle is refused, not half-done" \
-  all 'rc 1' 'err_has "packed into a template on this host"'
+  all 'rc 1' 'err_has "packed into a private file on this host, which titan cannot read"' '! err_has "Packing"' \
+      'not_called_re "nextid|^pct create|^pvesh create"'
 
 nx --runtime crun create --node titan --bundle /tmp/nexcage-bundles/b1 there-4
 check "--node on the crun backend says it has nowhere to put it" \

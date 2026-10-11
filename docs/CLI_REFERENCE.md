@@ -106,8 +106,8 @@ Two things `--node` will not do, and refuses rather than half-does:
 
 | | why |
 |---|---|
-| an OCI bundle (`--bundle`) | its rootfs is packed into a template on **this** host's storage, which the other node cannot read unless that storage is shared |
-| a registry image (`docker.io/...`) | the pull lands on this host, for the same reason |
+| an OCI bundle (`--bundle`) | its rootfs is packed into a private file under `$TMPDIR` on **this** host, which the other node cannot read |
+| a registry image (`docker.io/...`) | the pull lands on this host's storage, which the other node cannot read unless that storage is shared, and then only by its template name |
 
 A rootfs on a ZFS storage goes through: `proxmox.storage` reaches that node's
 API as `--rootfs <storage>:<size>`, and Proxmox makes the volume there, so name

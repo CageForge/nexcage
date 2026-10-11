@@ -206,16 +206,16 @@ pub const ProxmoxLxcDriver = struct {
             if (!same) target_node = wanted;
         }
         if (target_node) |node| {
-            // A bundle's rootfs is packed into a template on *this* host's
-            // storage, and a registry pull lands here too. Neither is visible
-            // from another node unless the storage is shared, and nexcage
-            // cannot make it so.
+            // A bundle's rootfs is packed into a private file under *this*
+            // host's $TMPDIR, which no storage can share, and a registry pull
+            // lands on this host's storage, visible from another node only
+            // if that storage is shared -- and then by its template name.
             const image_path = config.image orelse "";
             const is_template = std.mem.indexOf(u8, image_path, ":vztmpl/") != null or
                 std.mem.endsWith(u8, image_path, ".tar.zst");
             if (!is_template) {
                 if (self.logger) |log| {
-                    log.err("--node {s} needs a template that node can read, named <storage>:vztmpl/<file>. An OCI bundle is packed into a template on this host, and a registry image is pulled to this host, so neither reaches {s} unless the storage is shared", .{ node, node }) catch {};
+                    log.err("--node {s} needs a template that node can read, named <storage>:vztmpl/<file>. An OCI bundle is packed into a private file on this host, which {s} cannot read, and a registry image is pulled to this host, so it reaches {s} only as a template on a shared storage", .{ node, node, node }) catch {};
                 }
                 return core.Error.UnsupportedOperation;
             }
