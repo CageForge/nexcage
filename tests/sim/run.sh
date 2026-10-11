@@ -487,6 +487,15 @@ TMPDIR="$S/opentmp" nx create --name bundle-sticky /tmp/nexcage-bundles/b1
 check "bundle: a sticky TMPDIR, as /var/tmp is -> used, and left empty" \
   all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/opentmp/nexcage-bundle-bundle-sticky-"' '[ -z "$(ls -A "$S/opentmp")" ]'
 rm -rf "$S/opentmp"
+# Nor one another user owns, as a TMPDIR kept through pam_tmpdir or `sudo -E`
+# can be: its owner could rename the private directory and put another
+# archive where pct create reads as root. In the namespace the host's /usr
+# belongs to the overflow uid, and neither its group nor others can write to
+# it, so only its owner is wrong -- unless the suite runs as root, which the
+# first condition says rather than pass.
+TMPDIR=/usr nx create --name bundle-owner /tmp/nexcage-bundles/b1
+check "bundle: a TMPDIR another user owns -> refused before packing" \
+  all '[ "$(id -u)" != 0 ]' '! rc 0' 'err_has "not a safe place"' '! err_has "Packing"' 'not_called_re "^pct create"'
 # A signal ends nexcage without running its defers. SIGTERM goes to nexcage
 # itself -- the fake pct's parent -- while pct create stands still.
 echo 30 > "$S/fail_hang"; rm -f "$S/fail_hang.pid"
