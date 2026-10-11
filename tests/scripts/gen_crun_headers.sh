@@ -12,12 +12,12 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 SCRIPT=$(realpath "${1:-$REPO/scripts/gen_crun_headers_local.sh}")
 T=$(mktemp -d)
-planted=''
-feeder=''
+planted=()
+feeders=()
 cleanup() {
-  if [ -n "$feeder" ]; then pkill -P "$feeder" 2>/dev/null || true; kill "$feeder" 2>/dev/null || true; fi
-  [ -z "$planted" ] || rm -rf "$planted"
-  rm -rf "$T"
+  local f
+  for f in "${feeders[@]}"; do pkill -P "$f" 2>/dev/null || true; kill "$f" 2>/dev/null || true; done
+  rm -rf "${planted[@]}" "$T"
 }
 trap cleanup EXIT
 
@@ -118,7 +118,9 @@ fi
 # The script used /tmp/crun_headers.<its pid> and `mkdir -p`, which accepts a
 # directory someone else made first. That person then owns every entry in it:
 # here a FIFO in place of crun.tar.gz takes the downloaded tarball and hands
-# tar another one, with no race to win.
+# the next reader another one, with no race to win. The same trap is laid in
+# the TMPDIR the script is given and in /tmp, so a predictable name fails
+# here whichever of the two the script works in.
 r=$T/planted
 mk_repo "$r" legit
 mkfifo "$T/go"
@@ -128,21 +130,23 @@ PATH="$T/bin:$PATH" SERVE="$T/legit.tar.gz" CURL_LOG="$r/curl.log" TMPDIR="$r/tm
 victim=$!
 for _ in $(seq 1 50); do [ -s "$T/pid" ] && break; sleep 0.1; done
 pid=$(cat "$T/pid")
-planted=/tmp/crun_headers.$pid
-mkdir -m 0777 "$planted"
-mkfifo "$planted/crun.tar.gz"
-( cat "$planted/crun.tar.gz" > /dev/null; cat "$T/evil.tar.gz" > "$planted/crun.tar.gz" ) 2>/dev/null &
-feeder=$!
-disown "$feeder"
+for p in "$r/tmp/crun_headers.$pid" "/tmp/crun_headers.$pid"; do
+  planted+=("$p")
+  mkdir -m 0777 "$p"
+  mkfifo "$p/crun.tar.gz"
+  ( cat "$p/crun.tar.gz" > /dev/null; cat "$T/evil.tar.gz" > "$p/crun.tar.gz" ) 2>/dev/null &
+  feeders+=("$!")
+  disown "$!"
+done
 echo go > "$T/go"
 for _ in $(seq 1 100); do kill -0 "$victim" 2>/dev/null || break; sleep 0.1; done
 if kill -0 "$victim" 2>/dev/null; then kill "$victim"; fi
 rc=0; wait "$victim" || rc=$?
 if [ "$rc" = 0 ] && grep -qx '#define FIXTURE_legit 1' "$r/deps/crun/config.h" 2>/dev/null \
    && [ ! -e "$T/ran-evil" ]; then
-  ok "a directory planted at /tmp/crun_headers.<pid> is not used"
+  ok "a directory planted at crun_headers.<pid> in \$TMPDIR or /tmp is not used"
 else
-  bad "a directory planted at /tmp/crun_headers.<pid> is not used (exit $rc; config.h: $(cat "$r/deps/crun/config.h" 2>/dev/null || echo none); planted configure ran: $([ -e "$T/ran-evil" ] && echo yes || echo no))"
+  bad "a directory planted at crun_headers.<pid> in \$TMPDIR or /tmp is not used (exit $rc; config.h: $(cat "$r/deps/crun/config.h" 2>/dev/null || echo none); planted configure ran: $([ -e "$T/ran-evil" ] && echo yes || echo no))"
   sed 's/^/     /' "$r/out.log"
 fi
 
