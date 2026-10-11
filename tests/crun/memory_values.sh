@@ -102,8 +102,16 @@ swapped=$(spec '{ "limit": -9223372036854775808, "swap": 1 }'; as_own)
 mkfifo "$WORK/fifo/config.json"
 # printf is the shell's own, so the open that waits for a reader is in this
 # process, and killing it leaves nothing blocked. A reader that closes early
-# must not end it: SIGPIPE is ignored.
-sh -c 'trap "" PIPE; printf "%s" "$1" > "$3"; while :; do printf "%s" "$2" > "$3" 2>/dev/null; done' \
+# must not end it: SIGPIPE is ignored. The later answers wait for nexcage to
+# close the FIFO after the first, as read in /proc: a writer that opened it
+# while nexcage still read ran the two specs together into one document,
+# which is not JSON, and failed this check on correct code. A second open,
+# libcrun's, still finds them.
+sh -c 'trap "" PIPE
+held() { for fd in /proc/[0-9]*/fd/*; do [ "$(readlink "$fd" 2>/dev/null)" = "$1" ] && return 0; done; return 1; }
+printf "%s" "$1" > "$3"
+n=0; while held "$3" && [ $n -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+while :; do printf "%s" "$2" > "$3" 2>/dev/null; done' \
     sh "$checked" "$swapped" "$WORK/fifo/config.json" &
 feeder=$!
 rc=0; nx create --bundle "$WORK/fifo" "$ID-f" 2>/tmp/memory.err || rc=$?
