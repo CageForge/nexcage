@@ -457,10 +457,10 @@ nexcage's, for memory, cores and the network).
 
 | Option | pct | Notes |
 |---|---|---|
-| `--memory <size>` | `memory` | As for `update`: bytes, or with K, M or G. MiB, rounded up |
+| `--memory <size>` | `memory` | As for `update`: bytes, or with K, M or G. MiB, rounded up; at least 16 MiB |
 | `--memory-swap <size>` | `swap` | As for `update`, runc's meaning: memory plus swap. pct's `swap` is the difference, so it cannot be less than the memory |
-| `--cpu-quota <us>`, `--cpu-period <us>` | `cpulimit` | Quota over period, in cores; the period defaults to 100000 |
-| `--cpu-share <n>` | `cpuunits` | cgroup v1 shares converted to the v2 weight, as runc converts them |
+| `--cpu-quota <us>`, `--cpu-period <us>` | `cpulimit` | Quota over period, in cores; the period defaults to 100000. At least a hundredth of a core, as for `update` |
+| `--cpu-share <n>` | `cpuunits` | cgroup v1 shares converted to the v2 weight, as runc converts them; at least 1 |
 | `--cores <n>` | `cores` | The cores the container sees |
 | `--ip <cidr>` | `net0` `ip=` | `dhcp` by default; `manual` leaves it unset |
 | `--gw <address>` | `net0` `gw=` | |
@@ -834,7 +834,9 @@ parser would read as something else, or nested deeper than 64 levels (see
 `--resources <file>` is a runtime-spec `linux.resources` object, and `-` reads
 it from stdin. **That is how containerd sends an in-place resize**:
 `update --resources=- <id>` with the document on stdin. It cannot be combined
-with the value flags.
+with the value flags. A number in it is a whole one of at most
+9223372036854775807, as libcrun reads it too: one with a fraction or an
+exponent (`1.5`, `1e9`) is refused, naming the setting (exit 2).
 
 On the crun backend everything reaches libcrun, except what would take a
 container made under an isolation profile above the profile's memory or pids
@@ -843,11 +845,21 @@ On the Proxmox LXC backend the settings are said to `pct set`, in its terms:
 
 | runc's words | pct's |
 |---|---|
-| `--memory <bytes>` | `--memory <MiB>`, rounded up |
+| `--memory <bytes>` | `--memory <MiB>`, rounded up. Less than pct's least, 16 MiB, is refused rather than raised to it — `0` included, which runc reads as "unchanged". Proxmox works the bytes out again from the MiB in 64 bits, so a size past that is refused too |
 | `--memory-swap <bytes>` (memory plus swap) | `--swap <MiB>`, the difference from the memory limit — this call's, or the config's |
-| `--cpu-quota` / `--cpu-period` | `--cpulimit <cores>`, quota over period; a quota of `-1` is `0`, no limit |
-| `--cpu-share <shares>` | `--cpuunits <weight>`, converted the way runc converts cgroup v1 shares to a v2 weight (1024 → 39) |
-| anything else | refused, naming the setting, because a limit asked for and silently not applied is the worst answer |
+| `--cpu-quota` / `--cpu-period` | `--cpulimit <cores>`, quota over period; a quota of `-1` is `0`, no limit. pct reads `0` as no limit, so a quota of `0`, or one below a hundredth of a core — the least Proxmox can set, 1 ms in its 100 ms period — is refused rather than said as `0`. So is a quota so large that its cores overflow |
+| `--cpu-share <shares>` | `--cpuunits <weight>`, converted the way runc converts cgroup v1 shares to a v2 weight (1024 → 39); 262144 and above are 10000. `0`, runc's "unchanged", and below are refused |
+| anything else | refused, naming the setting, because a limit asked for and silently not applied is the worst answer (exit 1) |
+
+"Anything else" includes every setting a `--resources` document gives besides
+the ones above — `memory.swappiness`, `unified`, a `devices` or
+`hugepageLimits` list — so the whole document is refused, and nothing in it is
+applied. A setting that is `null`, an empty list or an empty object sets
+nothing and is not refused.
+
+A value refused above is a usage error naming the setting (exit 2), before pct
+is asked: a limit pct cannot say as it was asked is not turned into a
+different one.
 
 A container on another node is updated through that node's API
 (`pvesh set /nodes/<node>/lxc/<vmid>/config`), which takes the same options.

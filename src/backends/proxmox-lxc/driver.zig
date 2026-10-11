@@ -724,7 +724,24 @@ pub const ProxmoxLxcDriver = struct {
     /// owning node's API for a container elsewhere -- `/config` is a call the
     /// API does have. Only what Proxmox can express is applied; the rest is
     /// refused by name. Nothing about the OCI state changes.
-    pub fn update(self: *Self, container_id: []const u8, values: []const core.types.ResourceUpdate) !void {
+    ///
+    /// `values` are the settings `update` read out of `resources_json`, the
+    /// document when one was given. A setting in it they leave out --
+    /// memory.swappiness, unified, a device list -- is refused here, before
+    /// the cluster is asked: dropped, it was a limit reported as set and
+    /// never applied.
+    pub fn update(self: *Self, container_id: []const u8, resources_json: ?[]const u8, values: []const core.types.ResourceUpdate) !void {
+        if (resources_json) |doc| {
+            const unread = core.resources.firstUnread(self.allocator, doc) catch |err| switch (err) {
+                error.OutOfMemory => return err,
+                else => return core.Error.InvalidInput,
+            };
+            if (unread) |name| {
+                defer self.allocator.free(name);
+                if (self.logger) |log| log.err("{s} has no Proxmox setting for a container: Proxmox knows memory, swap, cpulimit and cpuunits, so a document here may set memory.limit, memory.swap, cpu.quota, cpu.period and cpu.shares", .{name}) catch {};
+                return core.Error.UnsupportedOperation;
+            }
+        }
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
         try self.pve_client.setResources(loc.vmid, values, loc.remote());

@@ -230,7 +230,7 @@ pub const BackendRouter = struct {
             // the backend's answer is carried out to main rather than dropped.
             .pause => try proxmox_backend.pause(container_id),
             .resume_ => try proxmox_backend.unpause(container_id),
-            .update => |up| try proxmox_backend.update(container_id, up.values),
+            .update => |up| try proxmox_backend.update(container_id, up.resources_json, up.values),
             .snapshot => |s| try proxmox_backend.snapshot(container_id, s.name, s.description),
             .rollback => |r| try proxmox_backend.rollback(container_id, r.name, r.start),
             .delsnapshot => |s| try proxmox_backend.deleteSnapshot(container_id, s.name),
@@ -448,7 +448,8 @@ pub const RollbackConfig = struct {
 
 /// `update`: the linux.resources document an engine sent, for a backend that
 /// reads one (libcrun), and the settings in it -- or the ones the command line
-/// named -- for a backend that cannot (Proxmox LXC, which says them to pct).
+/// named -- for a backend that cannot (Proxmox LXC, which says them to pct,
+/// and refuses what in the document they leave out).
 pub const UpdateConfig = struct {
     resources_json: ?[]const u8 = null,
     values: []const types.ResourceUpdate = &.{},

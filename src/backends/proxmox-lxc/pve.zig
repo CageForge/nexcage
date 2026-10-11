@@ -1180,7 +1180,9 @@ pub const PveClient = struct {
     /// The limits in pct's options, appended to `args` (each string owned by
     /// it): what `update` says to `pct set` and `create` to `pct create`
     /// (#308). `memory_fallback` is the memory limit in bytes when `values`
-    /// has a swap but no memory of its own.
+    /// has a swap but no memory of its own. A value pct cannot say as it was
+    /// asked is refused, naming the setting, rather than said as a different
+    /// limit.
     pub fn resourceOptions(self: *const Self, values: []const core.types.ResourceUpdate, memory_fallback: ?i64, args: *std.ArrayListUnmanaged([]const u8)) !void {
         const res = core.resources;
         var memory_bytes: ?i64 = null;
@@ -1198,7 +1200,17 @@ pub const PveClient = struct {
                     return core.Error.UnsupportedOperation;
                 }
                 memory_bytes = num;
-                try pushOption(self.allocator, args, "--memory", "{d}", .{res.mibCeil(num)});
+                const mib = res.mibCeil(num) catch {
+                    if (self.logger) |log| log.err("memory.limit (--memory) of {d} bytes is more than Proxmox can hold: it keeps MiB and works the bytes out again in 64 bits", .{num}) catch {};
+                    return core.Error.InvalidInput;
+                };
+                // Raised to pct's least, 0 (runc's "leave it as it is") and
+                // 4 MiB both became a limit of 16 MiB that nobody asked for.
+                if (mib < res.min_memory_mib) {
+                    if (self.logger) |log| log.err("memory.limit (--memory) of {d} bytes is less than the {d} MiB pct takes, and raised to that it would be a limit nobody asked for; give at least {d}M, or leave it out", .{ num, res.min_memory_mib, res.min_memory_mib }) catch {};
+                    return core.Error.InvalidInput;
+                }
+                try pushOption(self.allocator, args, "--memory", "{d}", .{mib});
             } else if (isSetting(v, "memory", "swap")) {
                 if (num < 0) {
                     if (self.logger) |log| log.err("--memory-swap -1: Proxmox has no unlimited swap for a container; give a size", .{}) catch {};
@@ -1210,6 +1222,12 @@ pub const PveClient = struct {
             } else if (isSetting(v, "cpu", "period")) {
                 period = num;
             } else if (isSetting(v, "cpu", "shares")) {
+                // 0 is runc's "leave it as it is" and became the lowest
+                // weight; a negative number of shares is none at all.
+                if (num <= 0) {
+                    if (self.logger) |log| log.err("cpu.shares (--cpu-share) of {d} is no CPU weight: shares run from 2 to 262144, and 0 is runc's \"leave it as it is\", which pct cannot say; give a number of shares, or leave it out", .{num}) catch {};
+                    return core.Error.InvalidInput;
+                }
                 try pushOption(self.allocator, args, "--cpuunits", "{d}", .{res.sharesToWeight(num)});
             } else {
                 if (self.logger) |log| log.err("{s}.{s} has no Proxmox setting for a container: Proxmox knows memory, swap, cpulimit and cpuunits, so this backend takes --memory, --memory-swap, --cpu-quota/--cpu-period and --cpu-share", .{ v.section, v.name }) catch {};
@@ -1226,12 +1244,23 @@ pub const PveClient = struct {
                 if (self.logger) |log| log.err("--memory-swap is memory plus swap, as runc means it, and {d} is less than the memory limit of {d}", .{ total, limit }) catch {};
                 return core.Error.InvalidInput;
             }
-            try pushOption(self.allocator, args, "--swap", "{d}", .{@divFloor(total - limit + (1024 * 1024 - 1), 1024 * 1024)});
+            // total >= limit >= 0, so the difference cannot overflow; its
+            // MiB, which Proxmox turns back into bytes, can be too many.
+            const swap_mib = res.mibCeil(total - limit) catch {
+                if (self.logger) |log| log.err("memory.swap (--memory-swap) of {d} bytes is more than Proxmox can hold: it keeps MiB and works the bytes out again in 64 bits", .{total}) catch {};
+                return core.Error.InvalidInput;
+            };
+            try pushOption(self.allocator, args, "--swap", "{d}", .{swap_mib});
         }
         if (quota) |q| {
             var buf: [32]u8 = undefined;
-            const cores = res.cpulimit(&buf, q, period orelse 100000) catch {
-                if (self.logger) |log| log.err("--cpu-period must be positive", .{}) catch {};
+            const p = period orelse 100000;
+            const cores = res.cpulimit(&buf, q, p) catch |err| {
+                if (self.logger) |log| switch (err) {
+                    error.QuotaTooLarge => log.err("cpu.quota (--cpu-quota) of {d} over a period of {d} is more cores than pct takes", .{ q, p }) catch {},
+                    error.QuotaTooSmall => log.err("cpu.quota (--cpu-quota) of {d} over a period of {d} is less than a hundredth of a core, the least Proxmox can set, and pct's cpulimit 0 would be no limit at all; give a larger quota, or -1 for no limit", .{ q, p }) catch {},
+                    else => log.err("cpu.period (--cpu-period) must be positive", .{}) catch {},
+                };
                 return core.Error.InvalidInput;
             };
             try pushOption(self.allocator, args, "--cpulimit", "{s}", .{cores});
@@ -1289,7 +1318,15 @@ pub const PveClient = struct {
                 }
             }
         }
-        return mib * 1024 * 1024;
+        // A size in bytes is what the swap is worked out from, so a config
+        // whose MiB are past 64 bits of bytes, or below none, is an error
+        // here rather than an overflow there.
+        const bytes = std.math.mul(i64, mib, 1024 * 1024) catch -1;
+        if (bytes < 0) {
+            if (self.logger) |log| log.err("the config of CT {s} gives a memory of {d} MiB, which is no size in bytes that 64 bits hold", .{ vmid, mib }) catch {};
+            return core.Error.OperationFailed;
+        }
+        return bytes;
     }
 
     /// Whether a container's processes are frozen, read from the cgroup itself.
@@ -1804,4 +1841,22 @@ test "formatUtc writes the epoch second as UTC with a zone" {
     try std.testing.expectEqualStrings("2026-09-30T23:59:59Z", formatUtc(&buf, 1790812799));
     try std.testing.expectEqualStrings("1970-01-01T00:00:00Z", formatUtc(&buf, 0));
     try std.testing.expectEqualStrings("", formatUtc(&buf, -1));
+}
+
+test "resourceOptions: a swap whose MiB Proxmox cannot hold is refused, not an overflow" {
+    // create's fallback is the bundle's memory limit, which can be a byte;
+    // memory plus swap at the top of i64 then left nothing to round up into.
+    const client = PveClient.init(std.testing.allocator, null);
+    var args = std.ArrayListUnmanaged([]const u8){};
+    defer {
+        for (args.items) |a| std.testing.allocator.free(a);
+        args.deinit(std.testing.allocator);
+    }
+    const swap = [_]core.types.ResourceUpdate{.{ .section = "memory", .name = "swap", .value = "9223372036854775807", .numeric = true }};
+    try std.testing.expectError(core.Error.InvalidInput, client.resourceOptions(&swap, 1, &args));
+    try std.testing.expectEqual(@as(usize, 0), args.items.len);
+    // With a MiB less in the difference it fits, and is said in MiB
+    try client.resourceOptions(&swap, 1024 * 1024 - 1, &args);
+    try std.testing.expectEqualStrings("--swap", args.items[0]);
+    try std.testing.expectEqualStrings("8796093022207", args.items[1]);
 }

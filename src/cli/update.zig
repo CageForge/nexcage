@@ -88,8 +88,20 @@ pub const UpdateCommand = struct {
                 if (self.base.logger) |log| log.err("cannot read the resources from '{s}': {s}", .{ path, @errorName(err) }) catch {};
                 return types.Error.InvalidInput;
             };
-            core.resources.valuesFromResources(allocator, resources_json.?, &values) catch |err| {
-                if (self.base.logger) |log| log.err("'{s}' is not a linux.resources document ({s}); it wants sections such as memory, cpu and pids", .{ path, @errorName(err) }) catch {};
+            var refused: ?core.resources.Setting = null;
+            core.resources.valuesFromResources(allocator, resources_json.?, &values, &refused) catch |err| {
+                if (err == error.OutOfMemory) return err;
+                if (self.base.logger) |log| {
+                    if (refused) |s| {
+                        if (err == error.NotAnInteger) {
+                            log.err("{s}.{s} in '{s}' is not a whole number nexcage can take: one with no fraction or exponent, and at most 9223372036854775807", .{ s.section, s.name, path }) catch {};
+                        } else {
+                            log.err("{s}.{s} in '{s}' is neither a number nor a string", .{ s.section, s.name, path }) catch {};
+                        }
+                    } else {
+                        log.err("'{s}' is not a linux.resources document ({s}); it wants sections such as memory, cpu and pids", .{ path, @errorName(err) }) catch {};
+                    }
+                }
                 return types.Error.InvalidInput;
             };
         } else {
