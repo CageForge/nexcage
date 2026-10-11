@@ -507,8 +507,11 @@ check "--root: state goes under the given directory, not /run/nexcage" \
 # directory, said it had succeeded, and left the CT in Proxmox.
 check "--root: the Proxmox backend's state is not where libcrun keeps its containers" \
   all '[ ! -e "$S/run/alt/rooted-1" ]'
-nx --root /run/alt/ start rooted-1
-check "--root with a trailing slash names the same directory" all 'rc 0' 'called_re "^pct start [0-9]+$"'
+# --root is normalised before it is compared with the default: /run/nexcage/
+# is the default root, where from-tpl has its record, and not a caller's root
+# with the records under .proxmox-lxc.
+nx --root /run/nexcage/ start from-tpl
+check "--root naming the default with a trailing slash is the default" all 'rc 0' 'called_re "^pct start [0-9]+$"'
 nx --root /run/alt delete --force rooted-1
 check "--root: delete --force reaches Proxmox and removes the state" \
   all 'rc 0' 'called_re "^pct destroy [0-9]+$"' '[ ! -e "$S/run/alt/.proxmox-lxc/rooted-1" ]'
