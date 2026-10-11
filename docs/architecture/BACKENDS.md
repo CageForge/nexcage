@@ -25,7 +25,7 @@ flowchart LR
   driver --> zfs["zfs.zig<br/>optional datasets"]
   pve -->|runs| tools[("pct, pvesh, pveversion, pveam")]
   zfs -->|runs| ztools[("zfs, zpool")]
-  driver -->|writes| state[("/run/nexcage/NAME/state.json")]
+  driver -->|writes| state[("/run/nexcage/NAME/state.json<br/>under --root DIR: DIR/.proxmox-lxc/NAME")]
 ```
 
 | Operation | What the driver runs |

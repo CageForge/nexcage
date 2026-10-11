@@ -117,6 +117,20 @@ pub const BackendRouter = struct {
             log.debug("Routing container '{s}' to runtime: {s}", .{ container_id, @tagName(runtime_type) }) catch {};
         }
 
+        // One id, one backend. Every later command goes where the record is,
+        // and with a record on each side the second container could only be
+        // reached by removing the first.
+        if (operation == .create or operation == .run) {
+            const other: ?[]const u8 = switch (runtime_type) {
+                .crun => if (hasLxcRecord(container_id)) "Proxmox LXC" else null,
+                .lxc, .proxmox_lxc => if (hasCrunState(container_id)) "crun" else null,
+            };
+            if (other) |name| {
+                if (self.logger) |log| log.err("'{s}' already exists on the {s} backend; one id names one container", .{ container_id, name }) catch {};
+                return types.Error.OperationFailed;
+            }
+        }
+
         switch (runtime_type) {
             .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
             .crun => try self.executeCrun(operation, container_id, config, profile),
@@ -382,7 +396,7 @@ pub const BackendRouter = struct {
 /// The backend an existing container is on (#372, ADR-005 decision 3). The
 /// container decides, not the configuration: routing is read only when a
 /// container is created, so a rule changed since then cannot send `kill` or
-/// `delete` to the other backend. libcrun keeps a directory per container
+/// `delete` to the other backend. libcrun keeps a status file per container
 /// under its state root, which costs a stat to look for; anything not there
 /// is the Proxmox backend's to find, or to report missing. An explicit
 /// --runtime naming the other backend for a container libcrun has is
@@ -399,12 +413,26 @@ pub fn backendOf(container_id: []const u8, explicit: ?types.RuntimeType, logger:
     return if (on_crun) .crun else .proxmox_lxc;
 }
 
+/// libcrun's own record of the container: the `status` file it writes at
+/// create, not merely a directory with the id's name. A directory proved
+/// nothing -- under --root the Proxmox backend kept its state.json in one of
+/// the same name, and every command after an LXC create went to libcrun.
 fn hasCrunState(container_id: []const u8) bool {
-    // An id is one path component; anything else is not libcrun's.
+    return recordExists(core.state_root.crun(), container_id, "status");
+}
+
+/// The Proxmox LXC backend's own record: the state.json it writes when it
+/// creates a container, under the name the container was created with.
+fn hasLxcRecord(container_id: []const u8) bool {
+    return recordExists(core.state_root.get(), container_id, "state.json");
+}
+
+fn recordExists(dir: []const u8, container_id: []const u8, file: []const u8) bool {
+    // An id is one path component; anything else is no backend's.
     if (container_id.len == 0 or std.mem.indexOfScalar(u8, container_id, '/') != null) return false;
     if (std.mem.eql(u8, container_id, ".") or std.mem.eql(u8, container_id, "..")) return false;
     var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = std.fmt.bufPrint(&buf, "{s}/{s}", .{ core.state_root.crun(), container_id }) catch return false;
+    const path = std.fmt.bufPrint(&buf, "{s}/{s}/{s}", .{ dir, container_id, file }) catch return false;
     std.fs.cwd().access(path, .{}) catch return false;
     return true;
 }
@@ -517,3 +545,39 @@ pub const Config = struct {
     network: ?types.NetworkConfig = null,
     resources: ?types.ResourceLimits = null,
 };
+
+test "a Proxmox LXC container's state under --root is not taken for libcrun's" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    try core.state_root.set(root);
+    defer core.state_root.set("/run/nexcage") catch unreachable;
+
+    // What the Proxmox backend writes for a container, wherever it puts it
+    try tmp.dir.makePath("web");
+    try tmp.dir.writeFile(.{ .sub_path = "web/state.json", .data = "{}" });
+    try tmp.dir.writeFile(.{ .sub_path = "web/runtime-metadata.json", .data = "{}" });
+    try std.testing.expect(!hasCrunState("web"));
+
+    // and what libcrun writes for one at create
+    try tmp.dir.makePath("ctr");
+    try tmp.dir.writeFile(.{ .sub_path = "ctr/status", .data = "" });
+    try std.testing.expect(hasCrunState("ctr"));
+}
+
+test "under --root the Proxmox LXC records are in their own directory" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    try core.state_root.set(root);
+    defer core.state_root.set("/run/nexcage") catch unreachable;
+
+    try tmp.dir.makePath(".proxmox-lxc/web");
+    try tmp.dir.writeFile(.{ .sub_path = ".proxmox-lxc/web/state.json", .data = "{}" });
+    try std.testing.expect(hasLxcRecord("web"));
+    try std.testing.expect(!hasCrunState("web"));
+    try std.testing.expect(!hasLxcRecord(".."));
+    try std.testing.expect(!hasLxcRecord("web/../web"));
+}

@@ -473,7 +473,25 @@ nx --root /run/alt list
 check "--root before the command is not read as the command" all 'rc 0' '! err_has "unknown command"'
 nx create --root /run/alt --name rooted-1 "$TPL"
 check "--root: state goes under the given directory, not /run/nexcage" \
-  all 'rc 0' '[ -f "$S/run/alt/rooted-1/state.json" ]' '[ ! -e "$S/run/nexcage/rooted-1" ]'
+  all 'rc 0' '[ -f "$S/run/alt/.proxmox-lxc/rooted-1/state.json" ]' '[ ! -e "$S/run/nexcage/rooted-1" ]'
+# libcrun keeps its containers in --root itself, one directory per id. The
+# Proxmox backend's state.json used to go there too, and in a build with crun
+# every later command took the container for libcrun's: delete removed the
+# directory, said it had succeeded, and left the CT in Proxmox.
+check "--root: the Proxmox backend's state is not where libcrun keeps its containers" \
+  all '[ ! -e "$S/run/alt/rooted-1" ]'
+nx --root /run/alt/ start rooted-1
+check "--root with a trailing slash names the same directory" all 'rc 0' 'called_re "^pct start [0-9]+$"'
+nx --root /run/alt delete --force rooted-1
+check "--root: delete --force reaches Proxmox and removes the state" \
+  all 'rc 0' 'called_re "^pct destroy [0-9]+$"' '[ ! -e "$S/run/alt/.proxmox-lxc/rooted-1" ]'
+# One id, one backend: with a record on each side, every later command would
+# reach only one of the two containers.
+mkdir -p "$S/run/crun/both-1" && : > "$S/run/crun/both-1/status"
+nx create --name both-1 "$TPL"
+check "create refuses an id the crun backend already has" \
+  all 'rc 1' 'err_has "already exists on the crun backend"' 'not_called_re "^pct create"'
+rm -rf "$S/run/crun"
 nx --root relative list
 check "--root with a relative path -> exit 2" all 'rc 2' 'err_has "absolute"'
 nx --root

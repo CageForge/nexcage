@@ -176,7 +176,11 @@ fn run() !void {
             failure_reported = true;
             return error.InvalidInput;
         }
-        core.state_root.set(root);
+        core.state_root.set(root) catch {
+            printError("--root is longer than a path can be: '{s}'", .{root});
+            failure_reported = true;
+            return error.InvalidInput;
+        };
     }
 
     // Initialize application context in place: commands hold &app.logger
