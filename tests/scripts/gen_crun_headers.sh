@@ -77,6 +77,43 @@ run_script() {
     bash "$1/scripts/gen_crun_headers_local.sh" > "$1/out.log" 2>&1 || rc=$?
 }
 
+# --- a tarball without the pinned sha256 is neither unpacked nor run --------
+# The release asset can be replaced (crun's releases are not immutable), and
+# its configure runs as root in the release build.
+r=$T/unpinned
+mk_repo "$r"
+run_script "$r" evil
+if [ "$rc" != 0 ] && [ ! -e "$T/ran-evil" ] && [ ! -e "$r/deps/crun/config.h" ]; then
+  ok "a tarball that does not have the pinned sha256 is refused"
+else
+  bad "a tarball that does not have the pinned sha256 is refused (exit $rc; its configure ran: $([ -e "$T/ran-evil" ] && echo yes || echo no); config.h written: $([ -e "$r/deps/crun/config.h" ] && echo yes || echo no))"
+  sed 's/^/     /' "$r/out.log"
+fi
+rm -f "$T/ran-evil"
+
+# The pinned one is used: the check above is not refusing everything.
+r=$T/pinned
+mk_repo "$r" legit
+run_script "$r" legit
+if [ "$rc" = 0 ] && grep -qx '#define FIXTURE_legit 1' "$r/deps/crun/config.h" 2>/dev/null; then
+  ok "a tarball with the pinned sha256 is configured"
+else
+  bad "a tarball with the pinned sha256 is configured (exit $rc)"
+  sed 's/^/     /' "$r/out.log"
+fi
+
+# --- without .upstream_tag the release is not "the latest" -------------------
+r=$T/untagged
+mk_repo "$r" legit
+rm "$r/deps/crun/.upstream_tag"
+run_script "$r" legit
+if [ "$rc" != 0 ] && ! grep -q 'releases/latest' "$r/curl.log" 2>/dev/null; then
+  ok "without deps/crun/.upstream_tag it stops rather than build against crun's latest release"
+else
+  bad "without deps/crun/.upstream_tag it stops rather than build against crun's latest release (exit $rc)"
+  sed 's/^/     curl.log: /' "$r/curl.log" 2>/dev/null || true
+fi
+
 # --- a directory planted where the script makes its own is not used --------
 # The script used /tmp/crun_headers.<its pid> and `mkdir -p`, which accepts a
 # directory someone else made first. That person then owns every entry in it:
@@ -94,7 +131,7 @@ pid=$(cat "$T/pid")
 planted=/tmp/crun_headers.$pid
 mkdir -m 0777 "$planted"
 mkfifo "$planted/crun.tar.gz"
-( cat "$planted/crun.tar.gz" > /dev/null; cat "$T/evil.tar.gz" > "$planted/crun.tar.gz" ) &
+( cat "$planted/crun.tar.gz" > /dev/null; cat "$T/evil.tar.gz" > "$planted/crun.tar.gz" ) 2>/dev/null &
 feeder=$!
 disown "$feeder"
 echo go > "$T/go"

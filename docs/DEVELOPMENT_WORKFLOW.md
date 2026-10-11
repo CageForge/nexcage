@@ -119,6 +119,9 @@ its `config.h`. Everything else is upstream at a tag. To move to a new release:
    checkout), and change the hash the `Dockerfile` checks out; the Dockerfile
    clones by hash because `.dockerignore` excludes `.git`. If libocispec's
    submodules changed, the `submodule update --init` line there changes too.
+   Add the release tarball's sha256, from the release's `CHECKSUMS`, to
+   `tarball_sha256` in `scripts/gen_crun_headers_local.sh`: the script runs
+   that tarball's `configure` only if the sum matches.
 3. Run `sh scripts/check_features_abi.sh <path to the new container.h>` from the
    repository root. It compares the field order of the `features` structs in
    the header against the order the Zig mirror in
