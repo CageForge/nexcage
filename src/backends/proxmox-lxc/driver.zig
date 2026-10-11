@@ -481,6 +481,17 @@ pub const ProxmoxLxcDriver = struct {
             return self.pve_client.mapPctError(result.stderr);
         }
 
+        // There is a container now, and nexcage's record of it is written
+        // before anything else can fail. It was written last, so a create
+        // that failed after pct create -- a bundle's mounts and namespaces
+        // are pct calls of their own -- left a CT nexcage had no record of.
+        // An engine cleans up a failed create with delete --force, which was
+        // told there was nothing to delete: the CT stayed, and its name with
+        // it, so the engine's next create of the name failed too. With the
+        // record, delete --force finds the CT by its name and destroys it.
+        errdefer if (self.logger) |log| log.err("CT {s} was made as '{s}', but create did not finish; `nexcage --runtime lxc delete --force {s}` removes it", .{ vmid, config.name, config.name }) catch {};
+        try self.writeOciState(config.name, "created", 0, oci_bundle_path);
+
         // 7. Post-creation setup
         if (oci_bundle_path) |bp| {
             try self.applyMountsToLxcConfig(vmid, bp);
@@ -495,7 +506,6 @@ pub const ProxmoxLxcDriver = struct {
 
         const bundle_ptr: ?*const bundle.OciBundleConfig = if (bundle_config) |*bc| bc else null;
         try self.persistRuntimeMetadata(config.name, vmid, bundle_ptr, net_runtime.items);
-        try self.writeOciState(config.name, "created", 0, oci_bundle_path);
 
         if (target_node) |node| {
             if (self.logger) |log| log.info("Proxmox LXC container created on node {s}: {s} (vmid {s})", .{ node, config.name, vmid }) catch {};

@@ -145,6 +145,10 @@ case "$cmd" in
     ;;
   set)
     exists "$1" || missing "$1"
+    # A change pct refuses on a container that exists -- create has made it
+    # and a bundle's options follow as calls of their own. $SIM/fail_set
+    # holds what pct says; it exits 255, as pct does when it dies.
+    [ -e "$SIM/fail_set" ] && { cat "$SIM/fail_set" >&2; exit 255; }
     echo "set: $*" >> "$SIM/conf.$1"
     ;;
   # Snapshots: a list per container in $SIM/snaps.<vmid>, "name epoch

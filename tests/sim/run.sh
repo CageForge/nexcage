@@ -473,6 +473,22 @@ check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
 check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
 check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_re "^pct set [0-9]+ --features nesting=1,keyctl=1$"
+# A create can fail after pct create has made the CT: a bundle's namespaces
+# are a `pct set` of their own ($SIM/fail_set). An engine cleans that up with
+# delete --force. nexcage's record was written last, so there was none, and
+# delete --force said there was nothing to delete: the CT stayed, and the
+# engine's next create of the name was refused.
+echo "can't lock file '/run/lock/lxc/pve-config-0.lock' - got timeout" > "$S/fail_set"
+nx create --name half-1 /tmp/nexcage-bundles/b1
+check "a create that fails after pct create exits 1 and says how to remove the CT" \
+  all 'rc 1' 'called_re "^pct create [0-9]+ .*--hostname half-1 "' 'err_has "delete --force half-1"'
+rm -f "$S/fail_set"
+half=$(awk '$3=="half-1" {print $1}' "$S/db")
+nx delete --force half-1
+check "and delete --force, as an engine cleans up, destroys that CT" \
+  all 'rc 0' "called 'pct destroy ${half:-none}'" '! grep -q " half-1$" "$S/db"' '[ ! -e "$S/run/nexcage/half-1" ]'
+nx create --name half-1 /tmp/nexcage-bundles/b1
+check "so the name can be created again" all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname half-1 "'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
