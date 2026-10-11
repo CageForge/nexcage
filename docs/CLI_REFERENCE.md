@@ -199,6 +199,21 @@ from its own copy of the spec, from before the profile narrowed it, so in a
 container made under a profile every capability set of that process is cut
 to the container's bounding set.
 
+It holds for `update` as well, for the same reason: containerd builds an
+in-place resize from its copy of the spec and sends the pod's own limit.
+`create` records the profile's caps in the container's config, as the
+annotations `io.cageforge.nexcage.profile.memory` and `.pids`. An update
+that would take `memory.limit`, `memory.swap` or `pids.limit` (or the cgroup
+v2 files `memory.max`, `memory.swap.max` and `pids.max` under `unified`)
+above a cap, or to no limit (`-1`, `max`), exits 2 naming the cap and changes
+nothing. A pids limit of 0, which libcrun reads as "leave it", passes. A
+resize within the caps applies as it always did; the caps are the profile's,
+not the limits the container was made with, so a pod that asked for less can
+be resized up to them. A pod whose declared memory limit is above the cap
+cannot be resized in place at all, since every resize resends that limit:
+declare limits within the cap. A container made by an earlier nexcage
+carries no recorded caps and is not held to them.
+
 It is named by the **program name**, `nexcage@<profile>`, or by
 `--profile <profile>`. The program name is how a container engine names one:
 containerd runs a runtime's `BinaryName`, and conmon a CRI-O handler's
@@ -219,9 +234,9 @@ names are not read as one.
 - A bundle the profile refuses exits 2 with the reason, and nothing is
   created.
 - `state` reports the profile as the annotation
-  `io.cageforge.nexcage.profile`. A bundle that carries that annotation
-  itself is refused, with a profile or without one: `state` would report a
-  profile nothing applied.
+  `io.cageforge.nexcage.profile`, and its caps under the same prefix. A
+  bundle that carries an annotation of that name or under it is refused, with
+  a profile or without one: `state` would report a profile nothing applied.
 
 ## Exit status
 
@@ -653,8 +668,10 @@ it from stdin. **That is how containerd sends an in-place resize**:
 `update --resources=- <id>` with the document on stdin. It cannot be combined
 with the value flags.
 
-On the crun backend everything reaches libcrun. On the Proxmox LXC backend the
-settings are said to `pct set`, in its terms:
+On the crun backend everything reaches libcrun, except what would take a
+container made under an isolation profile above the profile's memory or pids
+cap: that exits 2 and names the cap (see [Isolation profiles](#isolation-profiles)).
+On the Proxmox LXC backend the settings are said to `pct set`, in its terms:
 
 | runc's words | pct's |
 |---|---|

@@ -554,6 +554,7 @@ pub const CrunDriver = struct {
     /// over in crun's own section/name form.
     pub fn update(self: *Self, container_id: []const u8, resources_json: ?[]const u8, values: []const core.types.ResourceUpdate) !void {
         try validation.SecurityValidation.validateContainerId(container_id);
+        try self.holdToProfile(container_id, resources_json, values);
 
         const ctx = try self.initContext("", container_id);
         const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
@@ -595,6 +596,30 @@ pub const CrunDriver = struct {
             try self.handleError(&err_ptr, "container_update_from_values");
             return core.Error.OperationFailed;
         }
+    }
+
+    /// An update of a container made under an isolation profile stays within
+    /// the caps the profile had at create (core.profile.boundUpdate). The
+    /// container's stored config.json is where they are recorded; read here
+    /// the way boundProcessFile reads it for exec.
+    fn holdToProfile(self: *Self, container_id: []const u8, resources_json: ?[]const u8, values: []const core.types.ResourceUpdate) !void {
+        const stored_path = try std.fs.path.join(self.allocator, &.{ self.state_root, container_id, "config.json" });
+        defer self.allocator.free(stored_path);
+        // No stored config is no container, which is libcrun's to report.
+        const stored = std.fs.cwd().readFileAlloc(self.allocator, stored_path, 16 * 1024 * 1024) catch |err| switch (err) {
+            error.FileNotFound => return,
+            else => return self.cannotRead(stored_path, err),
+        };
+        defer self.allocator.free(stored);
+
+        var why: core.profile.Refusal = .{};
+        core.profile.boundUpdate(self.allocator, stored, resources_json, values, &why) catch |err| switch (err) {
+            error.ProfileRefused => {
+                if (self.logger) |log| log.err("{s}", .{why.text()}) catch {};
+                return core.Error.ValidationError;
+            },
+            else => return err,
+        };
     }
 
     fn freeze(self: *Self, container_id: []const u8, on: bool) !void {

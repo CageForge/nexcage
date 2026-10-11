@@ -102,7 +102,7 @@ the configuration file on the node. Nothing in a bundle defines or changes one.
   | `user_namespace: "require"` | A bundle without a user namespace and uid/gid mappings is refused. Nothing is added: a user namespace changes who owns the root filesystem, which is the engine's to arrange (Kubernetes `hostUsers: false`) |
   | `seccomp: "require"` | A bundle without `linux.seccomp` is refused. The message names the fix (`securityContext.seccompProfile.type: RuntimeDefault`) |
   | `capabilities.drop` | Removed from every capability set of the container's process. A later `exec --process` gets no capability the container's own process was denied: nexcage takes that from the config libcrun stored at create, not from the profile, which only `create` reads (decision 3) |
-  | `limits.memory`, `limits.pids` | The bundle's limit, or the profile's when the bundle has none or a larger one |
+  | `limits.memory`, `limits.pids` | The bundle's limit, or the profile's when the bundle has none or a larger one. create records the caps in the stored config (`io.cageforge.nexcage.profile.memory`, `.pids`), and a later `update` above them, or to no limit, is refused: an engine builds a resize from its pre-profile copy of the spec, as it does exec's process |
 
   `no_new_privileges`, AppArmor, read-only root and the rest can follow when
   someone asks for them, under the same rule (decision 4).

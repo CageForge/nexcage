@@ -16,6 +16,14 @@ const types = @import("types.zig");
 /// profile that was not applied.
 pub const annotation = "io.cageforge.nexcage.profile";
 
+/// The profile's caps, recorded next to its name at create, in decimal: what
+/// `update` holds the container to (boundUpdate). Recorded rather than read
+/// from the profile again, because a profile may change or go after create
+/// (decision 3) and a running container keeps what it was made with. Reserved
+/// like the name: a bundle carrying either is refused.
+pub const memory_cap_annotation = annotation ++ ".memory";
+pub const pids_cap_annotation = annotation ++ ".pids";
+
 pub const Profile = struct {
     name: []const u8,
     runtime: types.RuntimeType = .crun,
@@ -122,7 +130,12 @@ fn narrow(allocator: std.mem.Allocator, spec_json: []const u8, profile: *const P
 
     // Looked up again, not kept from above: adding a key to the root may
     // move the objects it holds.
-    try (try child(arena, root, "annotations")).put(annotation, .{ .string = profile.name });
+    const marks = try child(arena, root, "annotations");
+    try marks.put(annotation, .{ .string = profile.name });
+    // The caps themselves, not the limits lowered to them: a bundle that
+    // asked for less than a cap may still be resized up to it.
+    if (profile.memory_limit) |cap| try marks.put(memory_cap_annotation, .{ .string = try std.fmt.allocPrint(arena, "{d}", .{cap}) });
+    if (profile.pids_limit) |cap| try marks.put(pids_cap_annotation, .{ .string = try std.fmt.allocPrint(arena, "{d}", .{cap}) });
     return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
 }
 
@@ -158,6 +171,163 @@ pub fn boundExec(allocator: std.mem.Allocator, process_json: []const u8, contain
     return try std.json.Stringify.valueAlloc(allocator, process.value, .{});
 }
 
+/// Refuses an `update` of a container made under a profile that would take
+/// memory or pids above the caps recorded at create, or to no limit at all.
+/// An engine builds an update from its own copy of the spec, from before the
+/// profile lowered it, and libcrun writes what it is given into the cgroup:
+/// containerd's in-place resize sent the pod's own 8Gi, and `update --memory
+/// -1 --pids-limit -1` took both caps off, while `state` still named the
+/// profile. Refused rather than lowered to the cap, so that the caller is
+/// not told a value took that did not. A resize within the caps is let
+/// through as it is, and so is a container made without a profile or under
+/// one without caps.
+///
+/// `resources_json` is the linux.resources document libcrun is about to
+/// read; without one, `values` are the command line's settings in crun's
+/// section/name form, which is what libcrun turns into one.
+pub fn boundUpdate(allocator: std.mem.Allocator, container_json: []const u8, resources_json: ?[]const u8, values: []const types.ResourceUpdate, why: *Refusal) !void {
+    const container = try parse(allocator, container_json, "the container's stored config.json", why);
+    defer container.deinit();
+    const marks_value = container.value.object.get("annotations") orelse return;
+    if (marks_value != .object) return;
+    const marks = marks_value.object;
+    const named = marks.get(annotation) orelse return;
+    const caps = Caps{
+        .profile = if (named == .string) named.string else "",
+        .memory = try recordedCap(marks, memory_cap_annotation, why),
+        .pids = try recordedCap(marks, pids_cap_annotation, why),
+    };
+    if (caps.memory == null and caps.pids == null) return;
+
+    const doc = resources_json orelse {
+        for (values) |v| {
+            const field: Field = if (std.mem.eql(u8, v.section, "memory") and std.mem.eql(u8, v.name, "limit"))
+                .memory_limit
+            else if (std.mem.eql(u8, v.section, "memory") and std.mem.eql(u8, v.name, "swap"))
+                .memory_swap
+            else if (std.mem.eql(u8, v.section, "pids") and std.mem.eql(u8, v.name, "limit"))
+                .pids_limit
+            else
+                continue;
+            try caps.check(field, wholeNumber(v.value), v.value, why);
+        }
+        return;
+    };
+
+    // The document as libcrun reads it: the resources object itself.
+    var parsed = try parse(allocator, doc, "the resources document", why);
+    defer parsed.deinit();
+    const r = &parsed.value.object;
+    if (r.get("memory")) |m| {
+        if (m != .object) return why.set("the resources document's memory is not an object", .{});
+        try caps.checkJson(.memory_limit, m.object.get("limit"), why);
+        try caps.checkJson(.memory_swap, m.object.get("swap"), why);
+    }
+    if (r.get("pids")) |p| {
+        if (p != .object) return why.set("the resources document's pids is not an object", .{});
+        try caps.checkJson(.pids_limit, p.object.get("limit"), why);
+    }
+    // cgroup v2 files by name, which libcrun writes after everything else.
+    if (r.get("unified")) |u| {
+        if (u != .object) return why.set("the resources document's unified is not an object", .{});
+        var it = u.object.iterator();
+        while (it.next()) |e| {
+            const field: Field = if (std.mem.eql(u8, e.key_ptr.*, "memory.max"))
+                .unified_memory_max
+            else if (std.mem.eql(u8, e.key_ptr.*, "memory.swap.max"))
+                .unified_memory_swap_max
+            else if (std.mem.eql(u8, e.key_ptr.*, "pids.max"))
+                .unified_pids_max
+            else
+                continue;
+            if (e.value_ptr.* != .string) return why.set("unified {s} is not a string", .{e.key_ptr.*});
+            const text = e.value_ptr.string;
+            // Digits only: the kernel also takes "max" and sizes like "8G",
+            // and a cap compares against bytes.
+            const n: ?i64 = for (text) |c| {
+                if (!std.ascii.isDigit(c)) break null;
+            } else std.fmt.parseInt(i64, text, 10) catch null;
+            try caps.check(field, n, text, why);
+        }
+    }
+}
+
+const Field = enum {
+    memory_limit,
+    memory_swap,
+    pids_limit,
+    unified_memory_max,
+    unified_memory_swap_max,
+    unified_pids_max,
+
+    fn name(f: Field) []const u8 {
+        return switch (f) {
+            .memory_limit => "memory.limit",
+            .memory_swap => "memory.swap",
+            .pids_limit => "pids.limit",
+            .unified_memory_max => "unified memory.max",
+            .unified_memory_swap_max => "unified memory.swap.max",
+            .unified_pids_max => "unified pids.max",
+        };
+    }
+};
+
+const Caps = struct {
+    profile: []const u8,
+    memory: ?i64,
+    pids: ?i64,
+
+    /// `n` is the value as a whole number, null when `text` is not one.
+    fn check(caps: Caps, field: Field, n: ?i64, text: []const u8, why: *Refusal) error{ProfileRefused}!void {
+        const cap = switch (field) {
+            .pids_limit, .unified_pids_max => caps.pids,
+            else => caps.memory,
+        } orelse return;
+        const unit = switch (field) {
+            .pids_limit, .unified_pids_max => "",
+            else => " bytes",
+        };
+        const v = n orelse {
+            if (std.mem.eql(u8, text, "max")) return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for max, which is no limit", .{ caps.profile, field.name(), cap, unit });
+            return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for '{s}', which is not a whole number", .{ caps.profile, field.name(), cap, unit, text });
+        };
+        const lowest: i64 = switch (field) {
+            // No memory at all is no use to anyone, and -1 is no limit.
+            .memory_limit => 1,
+            // libcrun leaves pids.max as it is for a limit of 0.
+            else => 0,
+        };
+        if (v < lowest) return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for {d}, which is no limit", .{ caps.profile, field.name(), cap, unit, v });
+        if (v > cap) return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for {d}", .{ caps.profile, field.name(), cap, unit, v });
+    }
+
+    fn checkJson(caps: Caps, field: Field, value: ?std.json.Value, why: *Refusal) error{ProfileRefused}!void {
+        const v = value orelse return;
+        switch (v) {
+            .null => return,
+            .integer => |i| return caps.check(field, i, "", why),
+            else => return caps.check(field, null, @tagName(v), why),
+        }
+    }
+};
+
+/// A cap recorded at create, or null when the profile set none. One that does
+/// not read back as a number refuses the update: it was written by nexcage,
+/// and guessing would be choosing a limit.
+fn recordedCap(marks: std.json.ObjectMap, key: []const u8, why: *Refusal) error{ProfileRefused}!?i64 {
+    const v = marks.get(key) orelse return null;
+    if (v == .string) if (wholeNumber(v.string)) |n| return n;
+    return why.set("the container's recorded cap {s} is not a number; refusing to update it", .{key});
+}
+
+/// Decimal digits with an optional leading minus, and nothing else.
+fn wholeNumber(text: []const u8) ?i64 {
+    const digits = if (text.len > 0 and text[0] == '-') text[1..] else text;
+    if (digits.len == 0) return null;
+    for (digits) |c| if (!std.ascii.isDigit(c)) return null;
+    return std.fmt.parseInt(i64, text, 10) catch null;
+}
+
 fn capabilitiesOf(process: ?std.json.Value) ?std.json.ObjectMap {
     const p = process orelse return null;
     if (p != .object) return null;
@@ -179,11 +349,15 @@ fn parse(allocator: std.mem.Allocator, json: []const u8, what: []const u8, why: 
     return parsed;
 }
 
-/// The record `state` reports must be one nexcage wrote.
+/// The record `state` reports must be one nexcage wrote: the profile's name
+/// and every annotation under it, the recorded caps among them.
 fn refuseClaim(root: *const std.json.ObjectMap, why: *Refusal) error{ProfileRefused}!void {
     const a = root.get("annotations") orelse return;
-    if (a == .object and a.object.contains(annotation))
-        return why.set("the bundle carries the annotation {s}, which nexcage writes itself", .{annotation});
+    if (a != .object) return;
+    for (a.object.keys()) |key| {
+        if (std.mem.eql(u8, key, annotation) or std.mem.startsWith(u8, key, annotation ++ "."))
+            return why.set("the bundle carries the annotation {s}, which nexcage writes itself", .{key});
+    }
 }
 
 /// The object under `key`, made when it is not there. The pointer is good
@@ -404,4 +578,78 @@ test "lowering the memory limit keeps the swap the bundle allowed, and no more" 
             try std.testing.expectEqual(want, mem.get("swap").?.integer);
         } else try std.testing.expect(mem.get("swap") == null);
     }
+}
+
+test "update holds a container made under a profile to the caps recorded at create" {
+    const allocator = std.testing.allocator;
+    const profile = Profile{ .name = "hardened", .memory_limit = 67108864, .pids_limit = 50 };
+    var why: Refusal = .{};
+    // What libcrun keeps as the container's config.json.
+    const stored = try narrow(allocator, "{\"ociVersion\":\"1.0.0\",\"linux\":{\"resources\":{\"memory\":{\"limit\":1073741824,\"swap\":1073741824}}}}", &profile, &why);
+    defer allocator.free(stored);
+
+    // containerd's resize, from its copy of the spec from before the profile
+    try std.testing.expectError(error.ProfileRefused, boundUpdate(allocator, stored, "{\"memory\":{\"limit\":8589934592,\"swap\":8589934592},\"cpu\":{\"shares\":512}}", &.{}, &why));
+    try std.testing.expectEqualStrings("profile 'hardened' caps memory.limit at 67108864 bytes, and the update asks for 8589934592", why.text());
+    const refused = [_][]const u8{
+        "{\"memory\":{\"limit\":-1}}",
+        "{\"memory\":{\"limit\":0}}",
+        "{\"memory\":{\"limit\":33554432,\"swap\":-1}}",
+        "{\"memory\":{\"limit\":33554432,\"swap\":134217728}}",
+        "{\"memory\":{\"limit\":1.5e9}}",
+        "{\"memory\":{\"limit\":\"33554432\"}}",
+        "{\"memory\":\"lots\"}",
+        "{\"pids\":{\"limit\":500}}",
+        "{\"pids\":{\"limit\":-1}}",
+        "{\"unified\":{\"memory.max\":\"max\"}}",
+        "{\"unified\":{\"memory.max\":\"8G\"}}",
+        "{\"unified\":{\"memory.swap.max\":\"max\"}}",
+        "{\"unified\":{\"pids.max\":\"51\"}}",
+        "{\"unified\":{\"pids.max\":\"max\"}}",
+        // two of the same key: libcrun's parser would read the second
+        "{\"pids\":{\"limit\":40,\"limit\":500}}",
+    };
+    for (refused) |doc| {
+        boundUpdate(allocator, stored, doc, &.{}, &why) catch |err| {
+            try std.testing.expectEqual(error.ProfileRefused, err);
+            continue;
+        };
+        std.debug.print("let through: {s}\n", .{doc});
+        return error.TestExpectedRefusal;
+    }
+    const pids_over = [_]types.ResourceUpdate{.{ .section = "pids", .name = "limit", .value = "999", .numeric = true }};
+    try std.testing.expectError(error.ProfileRefused, boundUpdate(allocator, stored, null, &pids_over, &why));
+    try std.testing.expectEqualStrings("profile 'hardened' caps pids.limit at 50, and the update asks for 999", why.text());
+    const unlimited = [_]types.ResourceUpdate{.{ .section = "memory", .name = "limit", .value = "-1", .numeric = true }};
+    try std.testing.expectError(error.ProfileRefused, boundUpdate(allocator, stored, null, &unlimited, &why));
+    try std.testing.expect(std.mem.indexOf(u8, why.text(), "which is no limit") != null);
+
+    // Within the caps, up to them from below, and what the caps do not name.
+    const allowed = [_][]const u8{
+        "{\"memory\":{\"limit\":33554432,\"swap\":33554432},\"pids\":{\"limit\":40}}",
+        "{\"memory\":{\"limit\":67108864,\"swap\":67108864},\"pids\":{\"limit\":50}}",
+        "{\"cpu\":{\"shares\":512,\"quota\":-1}}",
+        "{\"pids\":{\"limit\":0}}",
+        "{\"unified\":{\"memory.max\":\"33554432\",\"memory.high\":\"max\",\"pids.max\":\"50\"}}",
+    };
+    for (allowed) |doc| try boundUpdate(allocator, stored, doc, &.{}, &why);
+    const within = [_]types.ResourceUpdate{
+        .{ .section = "memory", .name = "limit", .value = "33554432", .numeric = true },
+        .{ .section = "cpu", .name = "quota", .value = "-1", .numeric = true },
+    };
+    try boundUpdate(allocator, stored, null, &within, &why);
+}
+
+test "update is not bounded without a profile or its caps, and the caps cannot be claimed" {
+    const allocator = std.testing.allocator;
+    var why: Refusal = .{};
+    const unlimited = "{\"memory\":{\"limit\":-1},\"pids\":{\"limit\":-1}}";
+    try boundUpdate(allocator, "{\"ociVersion\":\"1.0.0\"}", unlimited, &.{}, &why);
+    // A profile that caps neither, as made before the caps were recorded.
+    try boundUpdate(allocator, "{\"annotations\":{\"io.cageforge.nexcage.profile\":\"p\"}}", unlimited, &.{}, &why);
+    try std.testing.expectError(error.ProfileRefused, boundUpdate(allocator, "{\"annotations\":{\"io.cageforge.nexcage.profile\":\"p\",\"io.cageforge.nexcage.profile.pids\":\"lots\"}}", unlimited, &.{}, &why));
+
+    try std.testing.expectError(error.ProfileRefused, checkUnclaimed(allocator, "{\"annotations\":{\"io.cageforge.nexcage.profile.memory\":\"1099511627776\"}}", &why));
+    try std.testing.expectEqualStrings("the bundle carries the annotation io.cageforge.nexcage.profile.memory, which nexcage writes itself", why.text());
+    try expectRefused("{\"annotations\":{\"io.cageforge.nexcage.profile.pids\":\"1\"}}", .{ .name = "h", .pids_limit = 10 }, "which nexcage writes itself");
 }
