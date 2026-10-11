@@ -6,7 +6,10 @@
 # ssh and gh are fakes that log their arguments. The fake ssh answers as the
 # host does: the script connects as root, and the actions runner's config.sh
 # refuses to run as root ("Must not run with sudo") unless the runner service
-# sets RUNNER_ALLOW_RUNASROOT, which a login over ssh does not.
+# sets RUNNER_ALLOW_RUNASROOT, which a login over ssh does not. The fake gh
+# lists the two runners the repository had on 2026-10-11, nexcage-e2e first,
+# through the caller's --jq filter as gh applies it (jq, strings printed raw),
+# so a filter that picks the wrong runner deletes the wrong id here too.
 #
 #   bash tests/scripts/manage_github_runner.sh [path/to/manage_github_runner.sh]
 set -euo pipefail
@@ -35,11 +38,29 @@ printf '%s\n' "$*" >> "$LOG_DIR/gh.log"
 case "$*" in
   *DELETE*) exit 0 ;;
   *actions/runners/registration-token*|*actions/runners/remove-token*) echo AAAAFAKETOKEN ;;
-  *actions/runners*) echo 2 ;;
+  *actions/runners*)
+    filter=.
+    while [ $# -gt 0 ]; do
+      case $1 in --jq) filter=$2; shift 2 ;; *) shift ;; esac
+    done
+    exec jq -r "$filter" "$LOG_DIR/runners.json" ;;
 esac
 exit 0
 FAKE
 chmod +x "$T/bin/ssh" "$T/bin/gh"
+cat > "$T/runners.json" <<'JSON'
+{
+  "total_count": 2,
+  "runners": [
+    {"id": 7, "name": "nexcage-e2e", "os": "Linux", "status": "online", "busy": false,
+     "labels": [{"id": 1, "name": "self-hosted", "type": "read-only"},
+                {"id": 11, "name": "nexcage-e2e", "type": "custom"}]},
+    {"id": 2, "name": "proxmox-runner", "os": "Linux", "status": "online", "busy": false,
+     "labels": [{"id": 1, "name": "self-hosted", "type": "read-only"},
+                {"id": 12, "name": "proxmox", "type": "custom"}]}
+  ]
+}
+JSON
 
 rc=0
 PATH="$T/bin:$PATH" LOG_DIR=$T bash "$SCRIPT" remove > "$T/out.log" 2>&1 || rc=$?
@@ -50,6 +71,11 @@ if grep -qx 'api -X DELETE repos/CageForge/nexcage/actions/runners/2' "$T/gh.log
   ok "the runner is deregistered through the API, from this machine"
 else
   bad "the runner is deregistered through the API, from this machine"; sed 's/^/     gh: /' "$T/gh.log"
+fi
+if grep -q 'DELETE .*/runners/7' "$T/gh.log"; then
+  bad "the other runner (nexcage-e2e, id 7) stays registered"; sed 's/^/     gh: /' "$T/gh.log"
+else
+  ok "the other runner (nexcage-e2e, id 7) stays registered"
 fi
 if grep -q 'systemctl disable' "$T/ssh.log"; then
   ok "the runner service is disabled, not only stopped"
