@@ -5,7 +5,7 @@
 | Workflow | Runs on | Trigger | What it checks |
 |---|---|---|---|
 | `ci.yml` | ubuntu-24.04 | push/PR to `main` | Debug and ReleaseSafe builds (the release build has to be a PIE), `zig build test`, smoke tests of exit codes; every command against fake Proxmox tools (`tests/sim/run.sh`); shellcheck at error level and the tests of `scripts/` (`tests/scripts/run.sh`); the Dockerfile's crun is the one `deps/crun` pins. **The required check.** |
-| `proxmox_e2e.yml` | self-hosted, `pve9` | push/PR to `main`/`develop` | Through the built binary on Proxmox VE: create → state → start → stop → delete, `pct config` against the config file, exit codes, `kill`, `run`, create from an OCI bundle |
+| `proxmox_e2e.yml` | ubuntu-24.04, then self-hosted `pve9` | push/PR to `main`/`develop` | The release binary, built as `release.yml` builds it (both backends, ReleaseSafe, `-Dcpu=baseline`), on Proxmox VE: create → state → start → stop → delete, `pct config` against the config file, exit codes, `kill`, `run`, create from an OCI bundle |
 | `crun_build.yml` | ubuntu-24.04 | push/PR to `main` | Docker build with `-Denable-backend-crun=true`; the `.deb` packs that binary and installs on Debian 13 (`scripts/ci/check_deb.sh`); the features document against libcrun's; `ps` against crun; a pod through containerd's CRI; the runtime-spec validation suite ([RUNTIME_SPEC_VALIDATION.md](RUNTIME_SPEC_VALIDATION.md)); critest, the CRI validation suite ([KUBERNETES_INTEGRATION.md](KUBERNETES_INTEGRATION.md#critest-what-kubernetes-checks-of-a-runtime)) |
 | `k8s_e2e.yml` | ubuntu-24.04, then self-hosted `pve9` | tag `v*`, dispatch, PR touching `tests/k8s/` | `tests/k8s/pod_on_node.sh` with the `.deb` built from the commit and installed with apt: k3s, `runtimeClassName: nexcage`, the pod Ready, `kubectl logs`, `kubectl exec`, delete, all through nexcage |
 | `memory_leak_check.yml` | ubuntu-22.04 | push/PR | Valgrind over basic commands; a memory error fails it |
@@ -31,7 +31,11 @@ this repository.
 `proxmox_e2e.yml` needs a GitHub Actions runner with the `pve9` label on a
 Proxmox VE host, and on that host:
 
-- **sudo without a password** for the runner user to run the checked-out
+- **The libraries the release binary links**: `libjson-c5`, `libseccomp2`,
+  `libcap2` and `libsystemd0`, what the `.deb`'s `Depends` brings. The job
+  tests the binary a release ships, built on a GitHub-hosted runner, and
+  stops with an explicit error when one is missing.
+- **sudo without a password** for the runner user to run the downloaded
   `zig-out/bin/nexcage`, `pct`, `pvesm`, `pvesh` and `pveversion`, plus
   `mkdir`, `tar`, `tee`, `rm`, `find`, `cat`, `grep` and `kill` for the OCI
   bundle, cgroup and cleanup checks. nexcage needs root; the job stops with an

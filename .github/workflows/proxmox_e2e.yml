@@ -15,8 +15,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The binary a release ships, built the way release.yml builds it: through
+  # the Dockerfile, with both backends, ReleaseSafe, -Dcpu=baseline. Since
+  # #380 that is the only binary Proxmox hosts get, and it is not the plain
+  # `zig build` this job used to test: it links libcrun, whose constructor
+  # re-executes the binary from a memfd before main on every command, LXC
+  # ones included, and it loads libjson-c, libseccomp, libcap and libsystemd.
+  # Built on a GitHub-hosted runner, which has Docker; the node need not.
+  binary:
+    name: The release binary (both backends)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build it as release.yml does
+        run: |
+          set -eux
+          sh scripts/ci/retry_on_429.sh docker build \
+            --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" \
+            -t nexcage:pve-e2e .
+          cid=$(docker create nexcage:pve-e2e)
+          docker cp "$cid:/usr/local/bin/nexcage" nexcage
+          docker rm "$cid"
+
+      - name: Upload it
+        uses: actions/upload-artifact@v6
+        with:
+          name: nexcage-pve-e2e
+          path: nexcage
+          retention-days: 7
+
   e2e:
     name: Proxmox Self-Hosted E2E
+    needs: binary
     # pve9 is the label of the node kubemox provisions from
     # nexcage-pve-tpl-v0-2 (deploy/kubernetes/tenant-nexcage). Naming it
     # rather than plain "proxmox" keeps this job on a Proxmox VE 9.x host,
@@ -52,28 +88,30 @@ jobs:
         echo "User: $(whoami)"
         command -v pct && pct version || true
         command -v pveversion && pveversion -v || true
-        command -v zig && zig version || true
 
-    - name: Setup Zig
-      uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+    # Where every step below runs it from. v4, as k8s_e2e.yml uses on this
+    # runner.
+    - name: The release binary
+      uses: actions/download-artifact@v4
       with:
-        version: 0.15.1
+        name: nexcage-pve-e2e
+        path: zig-out/bin
 
-    - name: Build (Debug)
-      run: zig build
-
+    # The node needs what the .deb's Depends brings: without one of those
+    # libraries the binary does not start at all.
     - name: Smoke tests (no root required)
       run: |
         set -euo pipefail
+        chmod +x zig-out/bin/nexcage
+        if ldd zig-out/bin/nexcage | grep 'not found'; then
+          echo "::error::the node lacks a library the release binary links; apt install libjson-c5 libseccomp2 libcap2 libsystemd0"
+          exit 1
+        fi
         ./zig-out/bin/nexcage --help
         ./zig-out/bin/nexcage version
-
-    - name: Upload binary artifact
-      uses: actions/upload-artifact@v6
-      with:
-        name: nexcage-selfhosted-amd64
-        path: zig-out/bin/nexcage
-        retention-days: 7
+        # Answered by libcrun: this is the two-backend binary, not an
+        # LXC-only build.
+        ./zig-out/bin/nexcage --runtime crun features > /dev/null
 
     # Drives containers through nexcage itself. This job used to call pct
     # directly, so it passed without nexcage ever creating anything.
