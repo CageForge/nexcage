@@ -27,7 +27,8 @@ permissions:
 # (its own configuration's) and passed, and Semgrep either hit Docker Hub's
 # rate limit or crashed on today's rules, and passed. A finding accepted on
 # purpose goes in a baseline with its reason: .trivyignore.yaml,
-# .gitleaksignore, a `# nosemgrep: <rule> -- reason` comment, or
+# .gitleaksignore, a `# nosemgrep: <rule> -- reason` comment (on the line
+# above the finding in a Dockerfile, where a line cannot end in a comment), or
 # .github/zizmor.yml. The two scanners that cannot be run outside GitHub here
 # first show they find a planted secret, so a scanner that quietly scans
 # nothing turns the job red.
