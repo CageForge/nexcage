@@ -321,7 +321,9 @@ jobs:
         # exec a program. The first version of this check did exactly that,
         # got 127 in five milliseconds, and took it for "did not succeed".
         EXEC_OUT=$(mktemp)
-        $SUDO "$NEXCAGE" exec "$NAME" -- sh -c 'echo thawed' >"$EXEC_OUT" 2>&1 &
+        # --config as nx would: an /etc/nexcage/config.json another job left
+        # behind must not be read here either.
+        $SUDO "$NEXCAGE" --config "$NXCFG" exec "$NAME" -- sh -c 'echo thawed' >"$EXEC_OUT" 2>&1 &
         EXEC_PID=$!
         # /proc rather than kill -0: the child is sudo, which is root's, and a
         # zombie is a finished exec, not a held one.

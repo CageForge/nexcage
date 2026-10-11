@@ -523,9 +523,10 @@ The script removes the k3s it installed unless `--keep` is passed (or
 `KEEP=1`), because that node is the E2E runner. `/etc/nexcage/config.json`,
 which routes everything to crun, is written only when absent and removed again
 by the run that wrote it. Any nexcage on that node run without `--config`
-reads that file, and a default build has no crun backend. On a node that already had k3s, the containerd template with the
-`nexcage` runtime (pointing at `/nexcage-traced`, which is removed) and
-`RuntimeClass/nexcage` are left in place.
+reads that file, and a default build has no crun backend. On a node that
+already had k3s, the containerd template with the `nexcage` runtime (pointing
+at `/nexcage-traced`, which is removed) and `RuntimeClass/nexcage` are left in
+place.
 
 `k8s_e2e.yml` runs the script on the E2E node (#312) on release tags, on
 demand, and on a pull request that changes `tests/k8s/` or the node files
