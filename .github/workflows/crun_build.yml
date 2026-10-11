@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Build image
         run: docker build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t nexcage:ci .

@@ -45,6 +45,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # As release.yml builds it: the Dockerfile brings the submodules and
       # libcrun's generated headers, -Dcpu=baseline keeps the binary from
@@ -79,6 +81,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Download the .deb
         uses: actions/download-artifact@v4

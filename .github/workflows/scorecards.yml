@@ -8,10 +8,9 @@ on:
     - cron: '0 2 * * 1' # Every Monday at 2 AM UTC
   workflow_dispatch:
 
-permissions:
-  security-events: write
-  contents: read
-  id-token: write
+# Read-only at the top, as scorecard-action's workflow check asks; the job
+# below adds what publishing its results needs.
+permissions: read-all
 
 jobs:
   analysis:
@@ -29,7 +28,7 @@ jobs:
           persist-credentials: false
 
       - name: Run analysis
-        uses: ossf/scorecard-action@v2.4.4
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
         with:
           results_file: results.sarif
           results_format: sarif
@@ -38,7 +37,7 @@ jobs:
           checks: all
 
       - name: Upload results
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: results.sarif
 
