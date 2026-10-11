@@ -1563,11 +1563,24 @@ fn pctRow(buf: []u8, vmid: []const u8, status: []const u8, lock: []const u8, nam
     return std.fmt.bufPrint(buf, "{s: <10} {s: <10} {s: <12} {s: <20}", .{ vmid, status, lock, name });
 }
 
+/// A pull's UPID without its node and its file, as PVE::UPID::encode writes it
+/// for pvesh, which runs as root@pam. pstart takes 9 hex digits once a node
+/// has been up for 497 days.
+const pull_upid_rest = "UPID:" ++ ":00000000:000000000:00000000:ociregistrypull:" ++ ":root@pam:";
+
+/// The longest node name: a node is named for its hostname, and the kernel
+/// keeps 64 characters of one.
+const max_node_name = 64;
+
 /// The longest file name nexcage gives a pull, before the ".tar" Proxmox adds:
-/// 200 characters of the reference, '-' and 16 hex digits. Proxmox writes to
-/// "<name>.tar.tmp.<pid>" first, and that still fits in the 255 bytes a file
-/// name can have.
-const max_pull_name = 200 + 1 + 16;
+/// 127 characters. The file itself could have 255, but the pull runs as a
+/// task, and Proxmox names the task's log for its UPID, which holds the node
+/// and the file: /var/log/pve/tasks/<x>/<UPID>, one file name of 255 bytes at
+/// most (pve-common, PVE/UPID.pm encode and open_log). Past that, pvesh fails
+/// with "unable to create file ... File name too long" before anything is
+/// pulled. This was sized for the file alone once, and a reference of 160
+/// characters, written out whole, failed on a node whose name was 24.
+const max_pull_name = 255 - pull_upid_rest.len - max_node_name - ".tar".len;
 
 /// The file name nexcage pulls `reference` under, before the ".tar" Proxmox
 /// adds: the whole reference -- registry, namespace, name and tag -- with every
@@ -1580,8 +1593,8 @@ const max_pull_name = 200 + 1 + 16;
 /// pull was refused as already there. The whole reference spelled out says it
 /// to a person reading `images`. The digest says it to nexcage, because '/'
 /// and ':' both becoming '_' still lets two references read the same
-/// (a/b_c:1 and a_b/c:1), and because a reference too long for a file name is
-/// cut here while the digest covers all of it.
+/// (a/b_c:1 and a_b/c:1), and because past 110 characters a reference is cut
+/// here (see max_pull_name) while the digest covers all of it.
 fn pulledTemplateName(allocator: std.mem.Allocator, reference: []const u8) ![]u8 {
     const readable = reference[0..@min(reference.len, max_pull_name - 17)];
     var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
@@ -1745,16 +1758,24 @@ test "a pulled template is named for the whole reference, and two references nev
     try std.testing.expectEqualStrings(left[0 .. left.len - 16], right[0 .. right.len - 16]);
     try std.testing.expect(!std.mem.eql(u8, left, right));
 
-    // Too long for a file name: cut, and still told apart
+    // Too long for a pull's task: cut, and still told apart
     const long_a = "registry.example/" ++ "x" ** 250 ++ ":1";
     const long_b = "registry.example/" ++ "x" ** 250 ++ ":2";
     const cut_a = try pulledTemplateName(a, long_a);
     defer a.free(cut_a);
     const cut_b = try pulledTemplateName(a, long_b);
     defer a.free(cut_b);
+    try std.testing.expectEqual(@as(usize, 127), max_pull_name);
     try std.testing.expectEqual(max_pull_name, cut_a.len);
+    try std.testing.expectEqualStrings("registry.example_" ++ "x" ** 93 ++ "-", cut_a[0 .. cut_a.len - 16]);
     try std.testing.expect(isPlainFileName(cut_a));
     try std.testing.expect(!std.mem.eql(u8, cut_a, cut_b));
+
+    // The UPID of its pull, on a node with the longest name and with a
+    // 9-digit pstart, is still one file name
+    const upid = try std.fmt.allocPrint(a, "UPID:{s}:000700FD:10057F07B:6AC81A67:ociregistrypull:{s}.tar:root@pam:", .{ "n" ** max_node_name, cut_a });
+    defer a.free(upid);
+    try std.testing.expectEqual(@as(usize, 255), upid.len);
 
     // Nothing Proxmox would rewrite, hide or read as an option, and nothing
     // rmi would refuse
@@ -1781,6 +1802,7 @@ test "a --filename is one Proxmox leaves as it is" {
     try std.testing.expect(!isPlainFileName("-x"));
     try std.testing.expect(!isPlainFileName("a b"));
     try std.testing.expect(!isPlainFileName("a..b"));
+    try std.testing.expect(isPlainFileName("x" ** max_pull_name));
     try std.testing.expect(!isPlainFileName("x" ** (max_pull_name + 1)));
 }
 

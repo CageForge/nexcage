@@ -559,9 +559,12 @@ shared storage with `pull`, then creating from the volid it prints, is how
 **The file is named for the whole reference**: registry, namespace, name and
 tag, with every character a file name cannot have as `_`, then `-` and 16 hex
 digits of the reference's SHA-256, plus the `.tar` Proxmox adds. The digest tells
-apart references that read the same once `/` and `:` are `_`. Proxmox's own name
-kept only the last path component and the tag, so `docker.io/library/redis:7`
-and `ghcr.io/someone/redis:7` were both `redis_7.tar`. nexcage prints the volid
+apart references that read the same once `/` and `:` are `_`. Past 110
+characters the reference is cut, and the digest still covers all of it: Proxmox
+names the pull's task log for an ID that holds the node and the file, and that
+has to fit in one file name on any node. Proxmox's own name kept only the last
+path component and the tag, so `docker.io/library/redis:7` and
+`ghcr.io/someone/redis:7` were both `redis_7.tar`. nexcage prints the volid
 once the storage holds exactly that file, and fails otherwise — a storage that
 cannot be listed is an error, and a file someone else writes during the pull is
 not taken for it. `create` from a registry reference uses the same name, and
@@ -580,10 +583,10 @@ pvesh passes the path to that node's shell.
 
 `--filename <name>` names the file instead, before the `.tar` Proxmox adds. It
 takes letters, digits, `.`, `_` and `-`, not first a `.` or `-` and without
-`..`, so that Proxmox keeps it as it is and `rmi` takes it; anything else is a
-usage error (exit 2). A file of
-that name already on the storage is an error (exit 1) rather than an answer: the
-name says nothing about which image it holds.
+`..`, so that Proxmox keeps it as it is and `rmi` takes it, and at most 127
+characters, which leaves room for the task's log; anything else is a usage error
+(exit 2). A file of that name already on the storage is an error (exit 1) rather
+than an answer: the name says nothing about which image it holds.
 
 Whoever can write templates to the storage (`Datastore.AllocateTemplate`) can
 put a file under any name, this one included, and Proxmox's upload writes over

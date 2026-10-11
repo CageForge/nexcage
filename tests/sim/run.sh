@@ -119,8 +119,9 @@ check "registry image on PVE 8.4 -> exit 1 with a version message, nothing pulle
 echo 9.1.0 > "$S/pvever"
 # nexcage names a pulled file for the whole reference. The name is derived here
 # as well, apart from nexcage's code (pve.zig, pulledTemplateName): `pulled` is
-# the name pvesh is given, `pulled_re` the template's file as a regex.
-pulled()    { printf '%s-%s' "$(printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' _)" "$(printf '%s' "$1" | sha256sum | cut -c1-16)"; }
+# the name pvesh is given, `pulled_re` the template's file as a regex. Past 110
+# characters the reference is cut, and the digest is still of all of it.
+pulled()    { printf '%s-%s' "$(printf '%s' "${1:0:110}" | tr -c 'A-Za-z0-9_.-' _)" "$(printf '%s' "$1" | sha256sum | cut -c1-16)"; }
 pulled_re() { printf '%s\\.tar' "$(pulled "$1" | sed 's/\./\\./g')"; }
 nx create --name nginx-1 docker.io/library/nginx:latest
 check "registry image on PVE 9.1 -> pvesh oci-registry-pull, then an unprivileged pct create with the .tar" \
@@ -1137,6 +1138,22 @@ check "pull --filename onto a file that is there is an error, not some other tem
 nx pull docker.io/library/nginx:1.27 --filename "a b"
 check "pull --filename that Proxmox would rewrite is refused before pvesh" \
   all 'rc 2' 'not_called_re "^pvesh create"'
+# The tight limit on the name is the pull's task: Proxmox names the task's log
+# for a UPID holding the node and the file, one file name of 255 bytes at most.
+# A long reference written out whole made that UPID too long, and the pull
+# failed where Proxmox's own short name had worked. The name has to leave room
+# for any node's name, and a hostname may have 64 characters.
+long_ref=europe-west3-docker.pkg.dev/my-gcp-project-123456/my-artifact-repo/platform-team/payments/service-name:2026.10.11-main-0123456789abcdef0123456789abcdef01234567
+long_node=pve-$(printf 'n%.0s' {1..60})
+nx pull "$long_ref"
+check "pull of a long reference leaves room for its task's log, and answers with its file" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re "$long_ref")" "$S/out"'
+nx pull "$long_ref" --node "$long_node"
+check "and so on a node whose name is as long as a hostname can be" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re "$long_ref")" "$S/out"'
+nx pull docker.io/library/nginx:1.27 --filename "$(printf 'x%.0s' {1..128})"
+check "pull --filename too long for a task's log on every node is refused before pvesh" \
+  all 'rc 2' 'err_has "at most 127"' 'not_called_re "^pvesh create"'
 # Another pull's file landing meanwhile is not this one, and a listing that
 # fails is an error: the listing before the pull failing once used to make the
 # first template on the storage the answer.

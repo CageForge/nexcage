@@ -289,6 +289,17 @@ case "$1 $2" in
     if grep -qxF "$node $volid" "$SIM/node_templates" 2>/dev/null; then
       echo "refusing to override existing file '$file'" >&2; exit 25
     fi
+    # The pull runs as a task, and the task's log is named for its UPID, which
+    # holds the node and the file: /var/log/pve/tasks/<x>/<UPID>, a single file
+    # name of 255 bytes at most. A longer one fails before skopeo runs, with
+    # nothing written (pve-common, PVE/UPID.pm open_log, PVE/File.pm
+    # create_owned_file_fh), and pvesh exits with the errno Perl holds,
+    # ENAMETOOLONG. This fake printed any UPID, so a name too long for its task
+    # was pulled here and failed on Proxmox.
+    upid="UPID:$node:00000001:00000001:00000001:ociregistrypull:$file:root@pam:"
+    if [ ${#upid} -gt 255 ]; then
+      echo "unable to create file '/var/log/pve/tasks/1/$upid' - File name too long" >&2; exit 36
+    fi
     # $SIM/also_lands holds volids another writer puts on the storage while
     # this pull runs: a second pull, an upload, another create's bundle archive.
     if [ -s "$SIM/also_lands" ]; then
@@ -304,7 +315,7 @@ case "$1 $2" in
     echo "$volid" >> "$SIM/templates"
     echo "$node $volid" >> "$SIM/node_templates"
     # What pvesh prints for the task it ran, as captured on PVE 9.2
-    echo "UPID:$node:00000001:00000001:00000001:ociregistrypull:$file:root@pam:"
+    echo "$upid"
     ;;
   "set /nodes/"*/lxc/*/config)
     # A container's options through its node's API -- what `update` uses for
