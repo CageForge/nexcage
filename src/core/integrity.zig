@@ -1,6 +1,7 @@
 const std = @import("std");
 const logging = @import("logging.zig");
 const config = @import("config.zig");
+const state_root = @import("state_root.zig");
 
 /// System integrity checker for monitoring critical components
 pub const IntegrityChecker = struct {
@@ -15,92 +16,78 @@ pub const IntegrityChecker = struct {
         };
     }
 
-    /// Check system integrity
+    /// Check system integrity. Only checks that can both pass and fail are
+    /// here. Gone: an API check that always warned; three directories --
+    /// /var/lib/nexcage, /var/cache/nexcage, /tmp/nexcage -- that nothing
+    /// creates, so every correct host failed; `pgrep nexcage`, which found
+    /// the health check itself; and "network interfaces operational" and
+    /// "system resources adequate", which said only that `ip` and `df` ran.
     pub fn checkSystemIntegrity(self: *IntegrityChecker) !IntegrityReport {
         var report = IntegrityReport.init(self.allocator);
         errdefer report.deinit();
 
-        // Check critical system components
         try self.checkProxmoxConnectivity(&report);
         try self.checkStorageIntegrity(&report);
-        try self.checkNetworkIntegrity(&report);
         try self.checkConfigurationIntegrity(&report);
-        try self.checkProcessIntegrity(&report);
 
         return report;
     }
 
-    /// Check Proxmox connectivity
+    /// Whether pct works. `pct list` is what nexcage itself runs, and it
+    /// needs the cluster filesystem; this used to run `pct version`, which
+    /// pct does not have, so the check failed on every Proxmox VE node.
     fn checkProxmoxConnectivity(self: *IntegrityChecker, report: *IntegrityReport) !void {
         if (self.logger) |log| try log.info("Checking Proxmox connectivity...", .{});
 
-        // Check if pct command is available
-        const pct_check = self.runCommand(&[_][]const u8{ "pct", "version" });
-        if (pct_check) |result| {
-            // runCommand hands over both buffers; these were never freed
-            defer {
-                self.allocator.free(result.stdout);
-                self.allocator.free(result.stderr);
-            }
+        if (self.runCommand(&[_][]const u8{ "pct", "list" })) |result| {
+            defer result.deinit(self.allocator);
             if (result.exit_code == 0) {
-                try report.addCheck("proxmox_pct_available", .pass, "pct command available", .{});
+                try report.addCheck("proxmox_pct_available", .pass, "pct list works", .{});
             } else {
-                try report.addCheck("proxmox_pct_available", .fail, "pct command failed", .{});
+                try report.addCheck("proxmox_pct_available", .fail, "pct list failed (exit {d}): {s}", .{ result.exit_code, firstLine(result.stderr) });
             }
         } else |err| {
-            try report.addCheck("proxmox_pct_available", .fail, "pct command not found: {}", .{err});
-        }
-
-        // Check Proxmox API connectivity (if configured)
-        const api_check = self.checkProxmoxApi();
-        if (api_check) {
-            try report.addCheck("proxmox_api_connectivity", .pass, "Proxmox API accessible", .{});
-        } else {
-            try report.addCheck("proxmox_api_connectivity", .warn, "Proxmox API not accessible", .{});
+            try report.addCheck("proxmox_pct_available", .fail, "pct cannot be run: {s}", .{@errorName(err)});
         }
     }
 
-    /// Check storage integrity
+    /// The directories nexcage uses, and the ZFS pools.
     fn checkStorageIntegrity(self: *IntegrityChecker, report: *IntegrityReport) !void {
         if (self.logger) |log| try log.info("Checking storage integrity...", .{});
 
-        // Check if storage directories exist and are writable
-        const storage_paths = [_][]const u8{
-            "/var/lib/nexcage",
-            "/var/cache/nexcage",
-            "/tmp/nexcage",
-            "/etc/pve/lxc",
-        };
-
-        for (storage_paths) |path| {
-            const path_check = self.checkPathAccess(path);
-            if (path_check) {
-                try report.addCheck("storage_path", .pass, "Path accessible: {s}", .{path});
+        // Where per-container state goes: /run/nexcage, or --root. The first
+        // create makes it, so its absence is no fault; one nexcage cannot
+        // write to is. Opened as a directory: a blocking open of a FIFO in
+        // its place cannot hang the check.
+        const root = state_root.get();
+        if (std.fs.openDirAbsolute(root, .{})) |d| {
+            var dir = d;
+            dir.close();
+            if (std.posix.access(root, std.posix.W_OK)) {
+                try report.addCheck("state_root", .pass, "State directory: {s}", .{root});
             } else |err| {
-                try report.addCheck("storage_path", .fail, "Path not accessible: {s} ({})", .{ path, err });
+                try report.addCheck("state_root", .fail, "State directory {s} is not writable: {s}", .{ root, @errorName(err) });
             }
+        } else |err| switch (err) {
+            error.FileNotFound => try report.addCheck("state_root", .warn, "State directory {s} does not exist yet; the first create makes it", .{root}),
+            else => try report.addCheck("state_root", .fail, "State directory {s} cannot be opened: {s}", .{ root, @errorName(err) }),
         }
 
-        // Check ZFS pool status (if available)
-        const zfs_check = self.checkZfsPool();
-        if (zfs_check) |pool_status| {
-            defer self.allocator.free(pool_status);
-            try report.addCheck("zfs_pool_status", .pass, "ZFS pool healthy: {s}", .{pool_status});
+        // Proxmox VE's container configurations, there on every node
+        if (std.fs.openDirAbsolute("/etc/pve/lxc", .{})) |d| {
+            var dir = d;
+            dir.close();
+            try report.addCheck("storage_path", .pass, "Path accessible: /etc/pve/lxc", .{});
         } else |err| {
-            try report.addCheck("zfs_pool_status", .warn, "ZFS pool check failed: {}", .{err});
+            try report.addCheck("storage_path", .fail, "Path not accessible: /etc/pve/lxc ({s})", .{@errorName(err)});
         }
-    }
 
-    /// Check network integrity
-    fn checkNetworkIntegrity(self: *IntegrityChecker, report: *IntegrityReport) !void {
-        if (self.logger) |log| try log.info("Checking network integrity...", .{});
-
-        // Check if network interfaces are up
-        const network_check = self.checkNetworkInterfaces();
-        if (network_check) {
-            try report.addCheck("network_interfaces", .pass, "Network interfaces operational", .{});
-        } else {
-            try report.addCheck("network_interfaces", .warn, "Network interface issues detected", .{});
+        if (self.runCommand(&[_][]const u8{ "zpool", "status", "-x" })) |result| {
+            defer result.deinit(self.allocator);
+            const status = zpoolStatus(result);
+            try report.addCheck("zfs_pool_status", status.result, "zpool status -x (exit {d}): {s}", .{ result.exit_code, status.message });
+        } else |err| {
+            try report.addCheck("zfs_pool_status", .warn, "zpool cannot be run: {s}", .{@errorName(err)});
         }
     }
 
@@ -121,128 +108,62 @@ pub const IntegrityChecker = struct {
         }
     }
 
-    /// Check process integrity
-    fn checkProcessIntegrity(self: *IntegrityChecker, report: *IntegrityReport) !void {
-        if (self.logger) |log| try log.info("Checking process integrity...", .{});
-
-        // Check if nexcage process is running
-        const process_check = self.checkNexcageProcess();
-        if (process_check) {
-            try report.addCheck("nexcage_process", .pass, "nexcage process running", .{});
-        } else {
-            try report.addCheck("nexcage_process", .warn, "nexcage process not detected", .{});
-        }
-
-        // Check system resources
-        const resources_check = self.checkSystemResources();
-        if (resources_check) {
-            try report.addCheck("system_resources", .pass, "System resources adequate", .{});
-        } else {
-            try report.addCheck("system_resources", .warn, "System resource constraints detected", .{});
-        }
-    }
-
-    /// Run a command and return result
+    /// Run a command and return what it printed. Both pipes are read
+    /// together: reading stdout to its end before stderr hung the check on
+    /// a tool that filled the stderr pipe first.
     fn runCommand(self: *IntegrityChecker, args: []const []const u8) !CommandResult {
-        var result = CommandResult{
-            .exit_code = 0,
-            .stdout = &[_]u8{},
-            .stderr = &[_]u8{},
+        const result = try std.process.Child.run(.{
+            .allocator = self.allocator,
+            .argv = args,
+            .max_output_bytes = 1024 * 1024,
+        });
+        return .{
+            .exit_code = switch (result.term) {
+                .Exited => |code| code,
+                else => 1,
+            },
+            .stdout = result.stdout,
+            .stderr = result.stderr,
         };
-
-        var child = std.process.Child.init(args, self.allocator);
-
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Pipe;
-
-        try child.spawn();
-
-        const stdout = try child.stdout.?.readToEndAlloc(self.allocator, 1024 * 1024);
-        defer self.allocator.free(stdout);
-
-        const stderr = try child.stderr.?.readToEndAlloc(self.allocator, 1024 * 1024);
-        defer self.allocator.free(stderr);
-
-        const term = try child.wait();
-        result.exit_code = switch (term) {
-            .Exited => |code| code,
-            else => 1,
-        };
-        result.stdout = try self.allocator.dupe(u8, stdout);
-        result.stderr = try self.allocator.dupe(u8, stderr);
-
-        return result;
-    }
-
-    /// Check if Proxmox API is accessible
-    /// Note: Currently not implemented as we use pct CLI instead of direct API
-    fn checkProxmoxApi(_: *IntegrityChecker) bool {
-        // Proxmox API check not implemented - using pct CLI for operations
-        // To implement: add HTTP client to query /api2/json/access/ticket
-        return false;
-    }
-
-    /// Check if path is accessible
-    fn checkPathAccess(_: *IntegrityChecker, path: []const u8) !void {
-        // Check if path is absolute
-        if (std.fs.path.isAbsolute(path)) {
-            const file = std.fs.openFileAbsolute(path, .{}) catch return error.FileNotFound;
-            file.close();
-        } else {
-            // Try relative path
-            const rel_file = std.fs.cwd().openFile(path, .{}) catch return error.FileNotFound;
-            rel_file.close();
-        }
-    }
-
-    /// Check ZFS pool status
-    fn checkZfsPool(self: *IntegrityChecker) ![]const u8 {
-        const result = try self.runCommand(&[_][]const u8{ "zpool", "status" });
-        defer {
-            self.allocator.free(result.stdout);
-            self.allocator.free(result.stderr);
-        }
-
-        if (result.exit_code == 0) {
-            return try self.allocator.dupe(u8, result.stdout);
-        } else {
-            return error.ZfsCheckFailed;
-        }
-    }
-
-    /// Check network interfaces
-    fn checkNetworkInterfaces(self: *IntegrityChecker) bool {
-        const result = self.runCommand(&[_][]const u8{ "ip", "link", "show" }) catch return false;
-        defer {
-            self.allocator.free(result.stdout);
-            self.allocator.free(result.stderr);
-        }
-
-        return result.exit_code == 0;
-    }
-
-    /// Check if nexcage process is running
-    fn checkNexcageProcess(self: *IntegrityChecker) bool {
-        const result = self.runCommand(&[_][]const u8{ "pgrep", "nexcage" }) catch return false;
-        defer {
-            self.allocator.free(result.stdout);
-            self.allocator.free(result.stderr);
-        }
-
-        return result.exit_code == 0 and result.stdout.len > 0;
-    }
-
-    /// Check system resources
-    fn checkSystemResources(self: *IntegrityChecker) bool {
-        const result = self.runCommand(&[_][]const u8{ "df", "-h", "/" }) catch return false;
-        defer {
-            self.allocator.free(result.stdout);
-            self.allocator.free(result.stderr);
-        }
-
-        return result.exit_code == 0;
     }
 };
+
+/// What `zpool status -x` says, as a check. It prints "all pools are
+/// healthy" when they are, the status of each pool that is not, and "no
+/// pools available" on stderr when there is none -- exiting 0 in all three.
+/// Plain `zpool status` was taken as healthy whenever it exited 0, a
+/// degraded pool included.
+fn zpoolStatus(result: CommandResult) struct { result: CheckResult, message: []const u8 } {
+    const out = std.mem.trim(u8, result.stdout, " \t\r\n");
+    if (result.exit_code != 0) {
+        const why = firstLine(result.stderr);
+        return .{ .result = .warn, .message = if (why.len == 0) "failed" else why };
+    }
+    if (std.mem.eql(u8, out, "all pools are healthy")) return .{ .result = .pass, .message = out };
+    if (out.len == 0) return .{ .result = .warn, .message = "no ZFS pool" };
+    return .{ .result = .warn, .message = firstLine(out) };
+}
+
+/// The first non-empty line of a tool's output, for a one-line report.
+fn firstLine(text: []const u8) []const u8 {
+    var lines = std.mem.tokenizeAny(u8, text, "\r\n");
+    return std.mem.trim(u8, lines.next() orelse "", " \t");
+}
+
+test "a zpool check passes only when zpool says every pool is healthy" {
+    const Case = struct { code: u32, out: []const u8, err: []const u8, want: CheckResult };
+    const cases = [_]Case{
+        .{ .code = 0, .out = "all pools are healthy\n", .err = "", .want = .pass },
+        .{ .code = 0, .out = "", .err = "no pools available\n", .want = .warn },
+        .{ .code = 0, .out = "  pool: tank\n state: DEGRADED\n", .err = "", .want = .warn },
+        .{ .code = 1, .out = "", .err = "The ZFS modules are not loaded.\n", .want = .warn },
+    };
+    for (cases) |c| {
+        const status = zpoolStatus(.{ .exit_code = c.code, .stdout = @constCast(c.out), .stderr = @constCast(c.err) });
+        try std.testing.expectEqual(c.want, status.result);
+    }
+    try std.testing.expectEqualStrings("pool: tank", zpoolStatus(.{ .exit_code = 0, .stdout = @constCast(cases[2].out), .stderr = @constCast("") }).message);
+}
 
 /// Command execution result
 const CommandResult = struct {
@@ -250,7 +171,7 @@ const CommandResult = struct {
     stdout: []u8,
     stderr: []u8,
 
-    pub fn deinit(self: *CommandResult, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: CommandResult, allocator: std.mem.Allocator) void {
         allocator.free(self.stdout);
         allocator.free(self.stderr);
     }

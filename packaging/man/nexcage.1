@@ -150,11 +150,10 @@ Only the crun backend answers \fBfeatures\fR and \fBps\fR; the Proxmox LXC
 backend refuses them.
 .TP
 \fBhealth\fR
-Check pct, storage, the network, the configuration file
-(the one the other commands read; see CONFIGURATION) and the nexcage
-process, print a report on standard error, and exit 1 if any check failed;
-warnings do not fail. The Proxmox API is not checked: its line in the report
-is always a warning.
+Check that pct list works, the state directory and /etc/pve/lxc, the ZFS pools
+and the configuration file (the one the other commands read; see
+CONFIGURATION), print a report on standard error, and exit 1 if any check
+failed; warnings do not fail.
 .TP
 \fBversion\fR, \fBhelp\fR
 Print the version or the list of commands.

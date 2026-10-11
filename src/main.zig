@@ -398,7 +398,7 @@ fn printUsage() !void {
         \\  rollback  Roll a container back to a snapshot
         \\  delsnapshot  Delete a snapshot
         \\  run       Create and start a container
-        \\  health    Check the host: pct, storage, network, configuration, processes
+        \\  health    Check the host: pct, state and storage, ZFS pools, configuration
         \\  help      Show this help message
         \\  version   Show version information
         \\

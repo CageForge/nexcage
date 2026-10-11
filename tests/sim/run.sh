@@ -1226,6 +1226,26 @@ cfg '{"proxmox":{"storage":"local-lvm"}}'
 nx health
 check "health reports the config file the commands read" err_has "Config file in use: $S/work/config.json"
 check "health resolves no outside name" all '! grep -qiE "dns|google" "$S/err"'
+# Only checks that can both pass and fail. Three directories nothing creates
+# failed every correct host, `pct version`, which pct does not have, failed
+# every node, and `pgrep nexcage` found health itself.
+check "health checks only what nexcage uses, with a command pct has" \
+  all 'err_has "PASS proxmox_pct_available: pct list works"' 'called "pct list"' 'not_called_re "^pct version"' \
+      '! err_has "/var/lib/nexcage"' '! err_has "/var/cache/nexcage"' '! err_has "/tmp/nexcage"' '! err_has "nexcage_process"'
+# It opened /tmp/nexcage as root with a blocking open, in a directory anyone can
+# write: a FIFO there hung it. And it read a tool's stdout to the end before
+# its stderr, so a tool that filled the stderr pipe first hung it too.
+mkdir -p "$S/noisy"
+printf '#!/bin/sh\nmkfifo /tmp/nexcage && exec timeout 10 %s "$@"\n' "$NEXCAGE" > "$S/noisy/fifo-nexcage"
+printf '#!/bin/sh\nhead -c 100000 /dev/zero | tr "\\000" x >&2\necho "all pools are healthy"\n' > "$S/noisy/zpool"
+printf '#!/bin/sh\nPATH=%s:$PATH exec timeout 10 %s "$@"\n' "$S/noisy" "$NEXCAGE" > "$S/noisy/noisy-nexcage"
+chmod +x "$S"/noisy/*
+NEXCAGE=$S/noisy/fifo-nexcage nx health
+check "a FIFO at /tmp/nexcage does not hang health" all '[ "$RC" != 124 ]' 'err_has "config_file"'
+NEXCAGE=$S/noisy/noisy-nexcage nx health
+check "a tool that fills its stderr pipe does not hang health" \
+  all '[ "$RC" != 124 ]' 'err_has "PASS zfs_pool_status: zpool status -x (exit 0): all pools are healthy"'
+rm -rf "$S/noisy"
 printf '{}\n' > "$S/work/alt.json"
 nx --config alt.json health
 check "health reports the file --config names" err_has "Config file in use: alt.json"

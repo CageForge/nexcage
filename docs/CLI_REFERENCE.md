@@ -816,13 +816,20 @@ nexcage health
 Checks the host and prints a report on stderr, one PASS, WARN or FAIL line per
 check. It exits 1 if any check failed and 0 otherwise; warnings do not fail.
 
-These are failures: `pct version` missing or failing; any of
-`/var/lib/nexcage`, `/var/cache/nexcage`, `/tmp/nexcage` and `/etc/pve/lxc` not
-existing (fixed paths, not read from the configuration, and nexcage creates
-none of them). These are only warnings: the Proxmox API line, which always warns
-because that check is not implemented; `zpool status`; `ip link show`; no
-config file; `pgrep nexcage`; and `df -h /`. It resolves no names and asks no
-host outside this one.
+These are failures: `pct list` missing or failing; the state directory
+(`/run/nexcage`, or `--root`) existing but not a directory nexcage can write;
+`/etc/pve/lxc` not existing. These are only warnings: a state directory not
+made yet, which the first `create` makes; a ZFS pool `zpool status -x` does not
+call healthy, no pool, or no `zpool`; no config file, or an OCI runtime spec
+passed over in the search. It resolves no names and asks no host outside this
+one.
+
+Every check can both pass and fail. In 0.17.0 and earlier `health` also ran
+`pct version`, which `pct` does not have, so it failed on every node; required
+`/var/lib/nexcage`, `/var/cache/nexcage` and `/tmp/nexcage`, which nothing
+creates; ran `pgrep nexcage`, which found `health` itself; and reported an API
+check that always warned, and `ip link show` and `df -h /` as checks of the
+network and of resources. Those are gone.
 
 It reports the config file the other commands read: the one `--config` names,
 else the first of `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
