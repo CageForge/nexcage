@@ -671,7 +671,9 @@ test "a mount path goes into a pct property string only when absolute, normalise
     for ([_][]const u8{ "/", "/srv/data", "/srv/my data", "/a:b" }) |ok| {
         try std.testing.expectEqual(@as(?[]const u8, null), mountPathProblem(ok));
     }
-    for ([_][]const u8{ "", "srv/data", "/srv/", "//srv", "/srv//data", "/srv/./data", "/srv/..", "/srv/../etc", "/x\nlxc.hook.pre-start: /bin/sh", "/x\r", "/x\x7f", "/srv/a,ro=0", "/srv/a=b" }) |bad| {
+    // A comma alone is enough: "/srv/a," would be read as the source /srv/a,
+    // and "/a,/b" fails in pct set, once the container exists
+    for ([_][]const u8{ "", "srv/data", "/srv/", "//srv", "/srv//data", "/srv/./data", "/srv/..", "/srv/../etc", "/x\nlxc.hook.pre-start: /bin/sh", "/x\r", "/x\x7f", "/srv/a,ro=0", "/srv/a,", "/srv/a,b", "/a,/b", "/srv/a=b" }) |bad| {
         try std.testing.expect(mountPathProblem(bad) != null);
     }
 }

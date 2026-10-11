@@ -559,7 +559,8 @@ nx create --name mp-rbind /tmp/nexcage-bundles/mp-rbind
 check "bundle mount with rbind among its options is a bind mount" \
   all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/rw,mp=/rw$"'
 for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\nlxc.apparmor.profile: unconfined" contains a control character' \
-           'mp-comma|{"destination":"/x","type":"bind","source":"/srv/a,ro=0"}|contains '"','"' or '"'='"'' \
+           'mp-comma|{"destination":"/x","type":"bind","source":"/srv/a,"}|source "/srv/a," contains '"','"' or '"'='"'' \
+           'mp-equals|{"destination":"/x=y","type":"bind","source":"/srv/a"}|destination "/x=y" contains '"','"' or '"'='"'' \
            'mp-rel|{"destination":"/x","type":"bind","source":"srv/a"}|source "srv/a" is not an absolute path' \
            'mp-dots|{"destination":"/data/../etc","type":"bind","source":"/srv/a"}|is not a normalised path' \
            'mp-root|{"destination":"/","type":"bind","source":"/srv/a"}|cover the container'"'"'s root' \
