@@ -135,12 +135,15 @@ nx --log /run/create-fail.json --log-format json create --name web-5 "$TPL"
 check "a long pct error keeps its message in the JSON log, cut and marked" \
   all 'rc 1' 'json_error_msg_is "$S/run/create-fail.json" "pct command failed: tar: ./dev/tty1: " "..."'
 # What pct prints is not nexcage's to lay out: a newline in it made a line of
-# the log that nobody wrote, and an escape sequence reached the terminal.
-printf 'unable to create CT\n[1790000000] ERROR nexcage: forged\033]0;t\007\n' > "$S/fail_create"
+# the log that nobody wrote, and an escape sequence reached the terminal. CSI
+# and NEL as UTF-8 (C2 9B, C2 85) are the same escape and the same new line
+# to xterm and VTE terminals.
+printf 'unable to create CT\n[1790000000] ERROR nexcage: forged\033]0;t\007\302\2332J\302\205[1790000000] ERROR nexcage: nel\n' > "$S/fail_create"
 nx create --name web-5 "$TPL"
 check "a text log line cannot be forged from what pct prints" \
   all 'rc 1' '! grep -q "^\[1790000000\] ERROR nexcage: forged" "$S/err"' '! grep -q "$(printf "\033")" "$S/err"' \
-      'err_has "unable to create CT\n[1790000000] ERROR nexcage: forged\x1b]0;t\x07"'
+      '! grep -qF "$(printf "\302\233")" "$S/err"' '! grep -qF "$(printf "\302\205")" "$S/err"' \
+      'err_has "unable to create CT\n[1790000000] ERROR nexcage: forged\x1b]0;t\x07\xc2\x9b2J\xc2\x85[1790000000] ERROR nexcage: nel"'
 rm -f "$S/fail_create"
 
 nx create --name nginx-1 docker.io/library/nginx:latest

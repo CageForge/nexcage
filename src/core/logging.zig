@@ -123,24 +123,49 @@ fn cut(buf: []u8, comptime format: []const u8, args: anytype) []const u8 {
     return w.buffered();
 }
 
-/// Writes `msg` with each control character but tab as an escape: \n, \r or
-/// \xNN. A message carries text nexcage did not write -- pct's stderr, a
-/// libcrun error naming the bundle's process.args[0] -- and a newline in it
-/// made a second log line indistinguishable from a real one, while an escape
-/// sequence reached the terminal of whoever read the log or nexcage's stderr.
+/// Writes `msg` with each control character but tab as an escape -- \n, \r
+/// or \xNN -- and each backslash doubled, so that text which looks like an
+/// escape cannot pass for one. A message carries text nexcage did not write
+/// -- pct's stderr, a libcrun error naming the bundle's process.args[0] --
+/// and a newline in it made a second log line indistinguishable from a real
+/// one, while an escape sequence reached the terminal of whoever read the log
+/// or nexcage's stderr.
+///
+/// That includes the C1 controls, U+0080 to U+009F: xterm and VTE terminals
+/// act on them written as UTF-8, on CSI (U+009B) as on ESC [, and NEL
+/// (U+0085) starts a line on screen. Escaping only bytes below 0x20 let them
+/// through. They are escaped a byte at a time, as are U+2028 and U+2029,
+/// which some readers take for line breaks, and any byte that is not part of
+/// valid UTF-8, since a terminal not in UTF-8 mode takes a lone 0x9b for CSI.
 fn writeEscaped(out: *std.Io.Writer, msg: []const u8) !void {
     var start: usize = 0;
-    for (msg, 0..) |c, i| {
-        if ((c >= 0x20 and c != 0x7f) or c == '\t') continue;
-        try out.writeAll(msg[start..i]);
-        switch (c) {
-            '\n' => try out.writeAll("\\n"),
-            '\r' => try out.writeAll("\\r"),
-            else => try out.print("\\x{x:0>2}", .{c}),
+    var i: usize = 0;
+    while (i < msg.len) {
+        const len, const escape = nextCharacter(msg[i..]);
+        if (escape) {
+            try out.writeAll(msg[start..i]);
+            for (msg[i..][0..len]) |c| switch (c) {
+                '\n' => try out.writeAll("\\n"),
+                '\r' => try out.writeAll("\\r"),
+                '\\' => try out.writeAll("\\\\"),
+                else => try out.print("\\x{x:0>2}", .{c}),
+            };
+            start = i + len;
         }
-        start = i + 1;
+        i += len;
     }
     try out.writeAll(msg[start..]);
+}
+
+/// The length of the character `rest` starts with, and whether writeEscaped
+/// escapes it. A byte that does not start valid UTF-8 is taken on its own.
+fn nextCharacter(rest: []const u8) struct { usize, bool } {
+    const c = rest[0];
+    if (c < 0x80) return .{ 1, (c < 0x20 and c != '\t') or c == 0x7f or c == '\\' };
+    const len = std.unicode.utf8ByteSequenceLength(c) catch return .{ 1, true };
+    if (len > rest.len) return .{ 1, true };
+    const cp = std.unicode.utf8Decode(rest[0..len]) catch return .{ 1, true };
+    return .{ len, cp <= 0x9f or cp == 0x2028 or cp == 0x2029 };
 }
 
 pub const LogContext = struct {
@@ -354,7 +379,14 @@ test "a json message longer than the line allows keeps its start, and says it wa
 }
 
 test "a logged value cannot add a line or a terminal escape" {
-    const forged = "/x\n[1790000000] ERROR nexcage: forged\r\x1b]0;t\x07";
+    // C0 controls; C1 ones as UTF-8, which xterm and VTE terminals act on
+    // (U+009B is CSI, U+0085 NEL a new line); U+2028, where some readers
+    // split lines; a lone byte that is not UTF-8, which a terminal not in
+    // UTF-8 mode takes for CSI; and a backslash before an n, which must not
+    // read as an escaped newline. The text between them, Cyrillic as much as
+    // ASCII, is kept as it is. A JSON log writes the controls as \u escapes,
+    // and the lone byte, which no JSON string can stand for, as it was.
+    const forged = "/x\n[1790000000] ERROR nexcage: forged\r\x1b]0;t\x07\u{9b}2J\u{85}[1790000000] ERROR nexcage: nel\u{2028}ls \x9b \\n \u{440}";
     for ([_]LogFormat{ .text, .json }) |format| {
         var tmp = std.testing.tmpDir(.{});
         defer tmp.cleanup();
@@ -369,14 +401,19 @@ test "a logged value cannot add a line or a terminal escape" {
         logger.echo = echo_file;
         try logger.err("libcrun container_create: executable file `{s}` not found", .{forged});
 
-        var buf: [512]u8 = undefined;
+        var buf: [1024]u8 = undefined;
         for ([_][]const u8{ "log", "stderr" }) |name| {
             const got = try tmp.dir.readFile(name, &buf);
             try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, got, "\n"));
-            for ([_]u8{ '\r', 0x1b, 0x07 }) |c| try std.testing.expect(std.mem.indexOfScalar(u8, got, c) == null);
+            for ([_][]const u8{ "\r", "\x1b", "\x07", "\u{9b}", "\u{85}", "\u{2028}" }) |c| {
+                if (std.mem.indexOf(u8, got, c)) |at| {
+                    std.debug.print("{s} ({s}) has {x} at {d}\n", .{ name, @tagName(format), c, at });
+                    return error.TestUnexpectedControl;
+                }
+            }
         }
         try std.testing.expectEqualStrings(
-            "nexcage: libcrun container_create: executable file `/x\\n[1790000000] ERROR nexcage: forged\\r\\x1b]0;t\\x07` not found\n",
+            "nexcage: libcrun container_create: executable file `/x\\n[1790000000] ERROR nexcage: forged\\r\\x1b]0;t\\x07\\xc2\\x9b2J\\xc2\\x85[1790000000] ERROR nexcage: nel\\xe2\\x80\\xa8ls \\x9b \\\\n \u{440}` not found\n",
             try tmp.dir.readFile("stderr", &buf),
         );
     }
