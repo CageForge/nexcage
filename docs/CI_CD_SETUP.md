@@ -73,5 +73,10 @@ leftover `gh-e2e-*` container at the end, pass or fail.
 3. `release.yml` checks that the tag matches `VERSION` and runs the tests.
    It builds the one binary, with both backends, through the Dockerfile, and
    the `.deb` that packs it. It installs the `.deb` in a Debian 13 container
-   and checks that the crun backend answers. It then publishes the release,
-   with the notes file as its body.
+   and checks that the crun backend answers; if either check fails, nothing
+   is published. The binary and the `.deb` are attested where they are built
+   (`actions/attest-build-provenance`; `gh attestation verify <file> -R
+   CageForge/nexcage`), and the SBOMs are made in a job of their own that
+   holds no signing token. It then publishes the release, with the notes file
+   as its body. Signing with a project key is #318; what the SBOMs list is
+   #333.
