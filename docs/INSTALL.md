@@ -230,7 +230,9 @@ gets no capability the pod's container lacks, and an in-place resize cannot
 take the container above the profile's caps: containerd resends the pod's own
 limit with every update, so under `hardened` a pod declaring more than 1G
 cannot be resized in place, and the kubelet's CPU manager (static policy)
-cannot move it to other CPUs either. Declare limits within the profile's.
+cannot move it to other CPUs either. Declare limits within the profile's,
+and on a node with swap (NodeSwap, `LimitedSwap`) keep memory plus swap
+within the memory cap as well.
 
 ## From source
 

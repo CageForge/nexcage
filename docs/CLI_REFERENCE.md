@@ -214,7 +214,10 @@ be resized up to them. A pod whose declared memory limit is above the cap
 cannot be updated in place at all, since containerd rebuilds every update
 from the pod's spec and so resends that limit: an in-place resize is refused,
 and so is the kubelet CPU manager's cpuset update (static policy), which
-leaves the container on the CPUs it had. Declare limits within the cap. A
+leaves the container on the CPUs it had. Declare limits within the cap.
+`memory.swap`, which is memory plus swap, is held to the memory cap too: on
+a node with swap (NodeSwap, `LimitedSwap`), a pod whose memory plus swap is
+above the cap is created, but refused every update in the same way. A
 container made by an earlier nexcage carries no recorded caps and is not
 held to them.
 
