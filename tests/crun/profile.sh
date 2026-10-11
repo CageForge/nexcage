@@ -82,7 +82,7 @@ ln -s "$NEXCAGE" "$WORK/nexcage@hardened"
 nx() { "$NEXCAGE" --config "$CFG" "$@"; }
 cleanup() {
     cd /
-    for id in "$ID" "$ID-s" "$ID-sa" "$ID-u" "$ID-a" "$ID-z" "$ID-c" "$ID-v" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
+    for id in "$ID" "$ID-s" "$ID-sa" "$ID-sf" "$ID-sb" "$ID-u" "$ID-a" "$ID-z" "$ID-c" "$ID-v" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
         nx delete --force "$id" >/dev/null 2>&1 || true
     done
     umount "$WORK/userns-pin" 2>/dev/null || true
@@ -221,6 +221,33 @@ rc=0; nx --profile needs-seccomp create --bundle "$BUNDLE" "$ID-sa" 2>"$WORK/err
 grep -q "refuses no system call" "$WORK/err" || fail "the refusal does not say why: $(tail -1 "$WORK/err")"
 [ ! -e "/run/crun/$ID-sa" ] || fail "a refused create left state behind"
 echo "ok: a profile requiring seccomp refuses a filter that refuses no call"
+
+# The filter the profile judges must be the one the kernel enforces. libcrun
+# installs run.oci.seccomp_bpf_data, a program compiled elsewhere, in its
+# place, for the container and every exec into it; this one loads the arch
+# and the call number and lets the call through. First, that the bundle's
+# own filter refuses mkdir here, or the second check would prove nothing.
+refuses_mkdir=', "seccomp": { "defaultAction": "SCMP_ACT_ALLOW", "syscalls": [ { "names": [ "mkdir", "mkdirat" ], "action": "SCMP_ACT_ERRNO" } ] }'
+cat > "$WORK/mkdir.json" <<'JSON'
+{ "terminal": false, "user": { "uid": 0, "gid": 0 }, "cwd": "/",
+  "env": [ "PATH=/bin:/usr/bin" ],
+  "args": [ "/bin/sh", "-c", "mkdir /dev/seccomp-probe 2>/dev/null && echo made || echo refused" ] }
+JSON
+spec "$refuses_mkdir" ""
+nx --profile needs-seccomp create --bundle "$BUNDLE" "$ID-sf" 2>"$WORK/err" && nx start "$ID-sf" 2>>"$WORK/err" || fail "a filter refusing mkdir: $(tail -1 "$WORK/err")"
+got=$(nx exec "$ID-sf" --process "$WORK/mkdir.json" 2>&1) || true
+[ "$got" = refused ] || fail "the bundle's own filter does not refuse mkdir here, so the precompiled program could not be told apart: exec printed $got"
+spec "$refuses_mkdir" ', "annotations": { "run.oci.seccomp_bpf_data": "IAAAAAQAAAAgAAAAAAAAAAYAAAAAAP9/" }'
+rc=0; nx --profile needs-seccomp create --bundle "$BUNDLE" "$ID-sb" 2>"$WORK/err" || rc=$?
+if [ "$rc" = 0 ]; then
+    nx start "$ID-sb" 2>"$WORK/err" || fail "a bundle with run.oci.seccomp_bpf_data was created, and start failed: $(tail -1 "$WORK/err")"
+    got=$(nx exec "$ID-sb" --process "$WORK/mkdir.json" 2>&1) || true
+    [ "$got" = refused ] || fail "run.oci.seccomp_bpf_data replaced the filter the profile judged: an exec'd mkdir, which that filter refuses, printed $got"
+    fail "a bundle with run.oci.seccomp_bpf_data was created under a profile requiring seccomp"
+fi
+grep -q 'annotation run.oci.seccomp_bpf_data has libcrun install a precompiled program' "$WORK/err" || fail "the refusal does not name the annotation: $(tail -1 "$WORK/err")"
+[ ! -e "/run/crun/$ID-sb" ] || fail "a refused create left state behind"
+echo "ok: run.oci.seccomp_bpf_data is refused under a profile requiring seccomp; the bundle's own filter refuses mkdir"
 spec "" ""
 nx --profile needs-userns create --bundle "$BUNDLE" "$ID-u" 2>"$WORK/err" && fail "a bundle without a user namespace passed a profile that requires one"
 grep -q "hostUsers: false" "$WORK/err" || fail "the user namespace refusal does not say how to fix it: $(tail -1 "$WORK/err")"

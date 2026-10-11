@@ -25,7 +25,8 @@ pub const Profile = struct {
     /// filesystem is the engine's to arrange.
     require_user_namespace: bool = false,
     /// Refuse a bundle without a seccomp filter that refuses some system
-    /// call. nexcage ships no filter.
+    /// call, or with a precompiled program libcrun would install instead.
+    /// nexcage ships no filter.
     require_seccomp: bool = false,
     /// Capability names removed from every set of the container's process.
     drop_capabilities: []const []const u8 = &.{},
@@ -138,7 +139,10 @@ fn narrow(allocator: std.mem.Allocator, spec_json: []const u8, profile: *const P
 
     if (profile.require_user_namespace) try checkUserNamespace(linux, profile, why);
 
-    if (profile.require_seccomp) try checkSeccomp(linux, profile, why);
+    if (profile.require_seccomp) {
+        try checkSeccomp(linux, profile, why);
+        try refusePrecompiledSeccomp(root, profile, why);
+    }
 
     if (profile.drop_capabilities.len > 0) dropCapabilities(root, profile.drop_capabilities);
 
@@ -398,6 +402,29 @@ fn refuses(action: ?std.json.Value) bool {
         if (std.mem.eql(u8, a.string, name)) return true;
     }
     return false;
+}
+
+/// libcrun's annotation for a seccomp program compiled elsewhere: base64 BPF,
+/// installed in place of the filter libcrun would compile from linux.seccomp,
+/// for the container and for every exec into it.
+const precompiled_seccomp = "run.oci.seccomp_bpf_data";
+
+/// require_seccomp, the other way in: with the annotation, the filter
+/// checkSeccomp judged is never installed, and a program nexcage cannot read
+/// is, which may let every call through. It is refused whatever it holds:
+/// libcrun uses any value in place of linux.seccomp.
+fn refusePrecompiledSeccomp(root: *const std.json.ObjectMap, profile: *const Profile, why: *Refusal) error{ProfileRefused}!void {
+    if (annotationOf(root, precompiled_seccomp) == null) return;
+    return why.set("profile '{s}' requires a seccomp filter nexcage can judge, and the bundle's annotation {s} has libcrun install a precompiled program in place of linux.seccomp; leave it out", .{ profile.name, precompiled_seccomp });
+}
+
+/// One of the bundle's annotations, as libcrun finds it. Keys are compared
+/// whole: under a profile, checkDocument has refused a key with a NUL in it,
+/// and the parser a key given twice.
+fn annotationOf(root: *const std.json.ObjectMap, name: []const u8) ?std.json.Value {
+    const marks = root.get("annotations") orelse return null;
+    if (marks != .object) return null;
+    return marks.object.get(name);
 }
 
 /// require_user_namespace: a user namespace that keeps the container's root
@@ -1128,4 +1155,27 @@ test "a seccomp filter that refuses no system call does not meet a profile that 
         var why: Refusal = .{};
         std.testing.allocator.free(try narrow(std.testing.allocator, try std.fmt.bufPrint(&buf, "{{\"linux\":{{\"seccomp\":{s}}}}}", .{given}), &profile, &why));
     }
+}
+
+test "a precompiled seccomp program does not meet a profile that requires a filter: libcrun installs it in place of the one judged" {
+    const profile = Profile{ .name = "h", .require_seccomp = true };
+    // RuntimeDefault in linux.seccomp, and beside it a program that lets
+    // every call through: load the arch, load the number, return ALLOW.
+    const smuggled =
+        \\{"linux":{"seccomp":{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[{"names":["read","write"],"action":"SCMP_ACT_ALLOW"}]}},
+        \\ "annotations":{"run.oci.seccomp_bpf_data":"IAAAAAQAAAAgAAAAAAAAAAYAAAAAAP9/"}}
+    ;
+    try expectRefused(smuggled, profile, "annotation run.oci.seccomp_bpf_data has libcrun install a precompiled program");
+    // Whatever it holds.
+    try expectRefused(
+        \\{"linux":{"seccomp":{"defaultAction":"SCMP_ACT_ERRNO"}},"annotations":{"run.oci.seccomp_bpf_data":""}}
+    , profile, "run.oci.seccomp_bpf_data");
+
+    var why: Refusal = .{};
+    // Other annotations are the bundle's own.
+    std.testing.allocator.free(try narrow(std.testing.allocator,
+        \\{"linux":{"seccomp":{"defaultAction":"SCMP_ACT_ERRNO"}},"annotations":{"run.oci.seccomp_fail_unknown_syscall":"1"}}
+    , &profile, &why));
+    // A profile that requires no filter does not judge which one is installed.
+    std.testing.allocator.free(try narrow(std.testing.allocator, smuggled, &.{ .name = "p" }, &why));
 }
