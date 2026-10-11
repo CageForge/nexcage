@@ -187,17 +187,39 @@ pub const ProxmoxLxcDriver = struct {
         // unique -- and unique across the cluster, not just on this host, or
         // the name would resolve to two containers and the first one found
         // would win. Checked before any image is pulled.
-        if (self.pve_client.locate(self.allocator, config.name, .name_or_vmid)) |found| {
-            var existing = found;
-            defer existing.deinit();
-            if (existing.local) {
-                if (self.logger) |log| log.err("Container '{s}' already exists (vmid {s})", .{ config.name, existing.vmid }) catch {};
-            } else {
-                if (self.logger) |log| log.err("Container '{s}' already exists on node {s} (vmid {s})", .{ config.name, existing.node, existing.vmid }) catch {};
+        //
+        // A container the cluster gives no name holds up a lookup
+        // (PveClient.Pick.unnamed) but not a create: every container of a
+        // node down for five minutes is one, and no create would succeed
+        // until that node came back. So two creates of one name on different
+        // nodes, seconds apart, can both succeed; every later lookup of the
+        // name then refuses it, naming both.
+        {
+            const all = try self.pve_client.list(self.allocator);
+            defer {
+                for (all) |*c| c.deinit();
+                self.allocator.free(all);
             }
-            return core.Error.OperationFailed;
-        } else |err| {
-            if (err != core.Error.NotFound) return err;
+            switch (pve.PveClient.pick(all, config.name, .name_or_vmid)) {
+                .none, .unnamed => {},
+                .many => {
+                    if (self.logger) |log| log.err("Container '{s}' already exists: more than one container has that name", .{config.name}) catch {};
+                    return core.Error.OperationFailed;
+                },
+                .one => |i| {
+                    const existing = all[i];
+                    const here = self.pve_client.getNodeName() catch null;
+                    defer if (here) |h| self.allocator.free(h);
+                    // `pct list` rows carry this host's name, or none when it is unknown
+                    const local = if (existing.node) |n| (if (here) |h| std.mem.eql(u8, h, n) else false) else true;
+                    if (local) {
+                        if (self.logger) |log| log.err("Container '{s}' already exists (vmid {s})", .{ config.name, existing.id }) catch {};
+                    } else {
+                        if (self.logger) |log| log.err("Container '{s}' already exists on node {s} (vmid {s})", .{ config.name, existing.node.?, existing.id }) catch {};
+                    }
+                    return core.Error.OperationFailed;
+                },
+            }
         }
 
         // --node: make the container on another node of the cluster, through
@@ -704,8 +726,10 @@ pub const ProxmoxLxcDriver = struct {
             // keeping the id from the crun backend all that time. libcrun
             // does the same for a status file whose container is gone. A
             // listing that fails is never NotFound (PveClient.listingError),
-            // so this is a container no node has, not one nexcage could not
-            // ask about.
+            // and nor is a miss while the listing has a container without a
+            // name, which may be this one (PveClient.Pick.unnamed): so this
+            // is a container no node has, not one nexcage could not ask
+            // about or could not tell apart.
             if (err == core.Error.NotFound and force and self.forget(container_id)) {
                 if (self.logger) |log| log.warn("no container is named '{s}' on any node, so nexcage forgot its record of it and did nothing else", .{container_id}) catch {};
                 return;

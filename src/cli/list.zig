@@ -50,7 +50,8 @@ pub const ListCommand = struct {
         try stdout.writeAll("\n  NODE is the cluster node a Proxmox LXC container is on, or \"-\" when it\n");
         try stdout.writeAll("  is not known. Containers on other nodes of the cluster are\n");
         try stdout.writeAll("  listed too, which `pct list` on one host cannot do. NAMES is \"-\" for one\n");
-        try stdout.writeAll("  the cluster has not named yet, a few seconds after it was created.\n");
+        try stdout.writeAll("  the cluster has no report for: made on another node seconds ago, or on a\n");
+        try stdout.writeAll("  node that has been down for five minutes.\n");
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
@@ -87,8 +88,8 @@ pub const ListCommand = struct {
             // "-" rather than blank: a column that is sometimes empty is
             // hard to read, and every Proxmox LXC row has a node.
             const node = container.node orelse "-";
-            // A container on another node that the cluster has not named
-            // yet has no name to show
+            // A container on another node that the cluster has no report
+            // for has no name to show
             const names = if (container.name.len > 0) container.name else "-";
 
             // Simple output without allocPrint to avoid allocator issues

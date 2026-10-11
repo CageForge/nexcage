@@ -61,6 +61,14 @@ case "$1 $2" in
         old_name=$(awk -v v="$vmid" '$1==v {print $2}' "$SIM/stale_name" 2>/dev/null)
         [ -n "$old_name" ] && name=$old_name
       fi
+      # $SIM/noname lists VMIDs the cluster has no report for: a container
+      # its node made seconds ago, or any container of a node down for five
+      # minutes, whose reports pmxcfs has dropped. PVE::API2Tools::
+      # extract_vm_stats then gives the entry no name and status "unknown".
+      if [ -s "$SIM/noname" ] && grep -qxF "$vmid" "$SIM/noname"; then
+        printf ',{"vmid":%s,"node":"%s","status":"unknown","type":"lxc"}' "$vmid" "${node:-$HERE}"
+        continue
+      fi
       printf ',{"vmid":%s,"name":"%s","node":"%s","status":"%s","type":"lxc"}' \
         "$vmid" "$name" "${node:-$HERE}" "$status"
     # In Proxmox's order: Cluster.pm walks `sort keys %$idlist`, a string

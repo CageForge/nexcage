@@ -141,6 +141,17 @@ while the cluster's copy can be seconds stale, so `list`, `state` and every
 lookup take the status and the name from `pct` and keep from the cluster the
 one thing only it knows: which node a container elsewhere is on.
 
+**A container the cluster has no report for has no name in its listing.**
+Proxmox takes a container's name from its node's reports, so one made on
+another node a few seconds ago has none yet, and nor does any container of a
+node that has been down for five minutes. `list` shows `-` for its name. A name
+that matches nothing while such a container is listed may still be that one, so
+it is not "no such container": the command exits 1 naming the unnamed CT and
+its node, does nothing, and can be tried again once the cluster names it.
+`create` is the exception, or a node that is down would stop every create; two
+creates of one name on different nodes seconds apart can therefore both
+succeed, and every later lookup of the name refuses it.
+
 **Which container a name means.** A name is looked for before a VMID, so a
 container named `1000` is the one `1000` finds even when another container has
 VMID 1000. A VMID finds its container only with `--runtime lxc`, and only when
@@ -422,7 +433,11 @@ engine sends `--force` once it has given up waiting for a clean shutdown.
 safe to repeat; plain `delete` of one exits 1 (see
 [Backend selection](#backend-selection)). So does `delete --force` of a
 container nexcage has a record of but no node has any more: it forgets the
-record and touches nothing else.
+record and touches nothing else. Not while the cluster lists a container it has
+no name for, which may be that one (see [Clusters](#clusters)): `delete` then
+exits 1 and keeps the record. If a node stays down and the container is known
+to be gone, its record is the directory `/run/nexcage/<name>`
+(`<root>/.proxmox-lxc/<name>` under `--root`), which can be removed by hand.
 
 ### kill
 

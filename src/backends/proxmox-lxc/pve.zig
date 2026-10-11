@@ -432,10 +432,10 @@ pub const PveClient = struct {
         node: []u8,
         local: bool,
         /// The container's name when it was found, or null when the listing
-        /// had none to give -- a container on another node that pvestatd has
-        /// not named yet, which only its VMID can have found. What `confirm`
-        /// checks the container against, and the name nexcage keeps its state
-        /// under, whatever the caller typed.
+        /// had none to give -- a container on another node that the cluster
+        /// has no report for (Pick.unnamed), which only its VMID can have
+        /// found. What `confirm` checks the container against, and the name
+        /// nexcage keeps its state under, whatever the caller typed.
         name: ?[]u8,
 
         /// The node to address through the API, or null when `pct` will do.
@@ -460,7 +460,16 @@ pub const PveClient = struct {
     /// no answer at all: which of them came first was the listing's choice,
     /// and acting on it destroyed another node's container as readily as the
     /// one meant.
-    pub const Pick = union(enum) { none, one: usize, many };
+    ///
+    /// `unnamed` is nothing matching while the listing has a container it
+    /// gives no name, the first of them: that one may be the container asked
+    /// for. /cluster/resources takes a container's name from its node's last
+    /// report (PVE::API2Tools::extract_vm_stats), which a container made a
+    /// few seconds ago does not have yet, and which pmxcfs drops five minutes
+    /// after a node goes down, so every container there loses its name. Taken
+    /// for `none`, it let delete --force forget nexcage's record of a
+    /// container that was still running, unnamed, on another node.
+    pub const Pick = union(enum) { none, one: usize, many, unnamed: usize };
 
     /// What an identifier may be taken for. nexcage's record of a container
     /// proves it made one with that name, and nothing about a VMID: a record
@@ -480,20 +489,37 @@ pub const PveClient = struct {
             } else found = i;
         }
         if (found) |f| return .{ .one = f };
-        if (by == .name) return .none;
+        if (by == .name_or_vmid) {
+            for (containers, 0..) |c, i| {
+                if (std.mem.eql(u8, c.id, name_or_vmid)) return .{ .one = i };
+            }
+        }
         for (containers, 0..) |c, i| {
-            if (std.mem.eql(u8, c.id, name_or_vmid)) return .{ .one = i };
+            if (c.name.len == 0) return .{ .unnamed = i };
         }
         return .none;
     }
 
     /// The one container among `containers` that `name_or_vmid` names, or
-    /// NotFound. A name more than one container has is refused, and the
-    /// message names each of them.
+    /// NotFound when no container has it. A name more than one container has
+    /// is refused, and the message names each of them; so is a miss while a
+    /// container has no name to compare, which is never NotFound.
     pub fn choose(self: *const Self, containers: []const core.ContainerInfo, name_or_vmid: []const u8, by: By) !usize {
         switch (pick(containers, name_or_vmid, by)) {
             .one => |i| return i,
             .none => return core.Error.NotFound,
+            .unnamed => |i| {
+                if (self.logger) |log| {
+                    var more: usize = 0;
+                    for (containers[i + 1 ..]) |c| {
+                        if (c.name.len == 0) more += 1;
+                    }
+                    var buf: [64]u8 = undefined;
+                    const others = if (more == 0) "" else std.fmt.bufPrint(&buf, ", and so may {d} more", .{more}) catch "";
+                    log.err("no container in the cluster's listing is named '{s}', but CT {s} on {s} has no name there and may be that one{s}. Proxmox names a container from its node's reports, which one made seconds ago does not have yet and a node down for five minutes no longer sends. Nothing was done; try again once the cluster names it", .{ name_or_vmid, containers[i].id, containers[i].node orelse "this host", others }) catch {};
+                }
+                return core.Error.OperationFailed;
+            },
             .many => {
                 if (self.logger) |log| {
                     var buf: [512]u8 = undefined;
@@ -1120,9 +1146,10 @@ pub const PveClient = struct {
             };
             var vmid_buf: [24]u8 = undefined;
             const vmid_str = std.fmt.bufPrint(&vmid_buf, "{d}", .{vmid_num}) catch continue;
-            // A container pvestatd has not reached yet has no name here: the
-            // API takes it from pvestatd's last pass, a few seconds behind a
-            // create. It stays empty. The VMID used to be put in its place,
+            // A container its node has not reported yet has no name here, and
+            // nor does every container of a node down for five minutes: the
+            // API takes the name from the node's last report (Pick.unnamed).
+            // It stays empty. The VMID used to be put in its place,
             // and then a container really named after its VMID -- `create
             // --name 100` on a fresh host gets VMID 100 -- passed for one
             // without a name: found "by VMID", it had no record written or
@@ -1837,6 +1864,18 @@ test "by name alone, a VMID finds nothing" {
     try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "250", .name));
     try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "web-1", .name));
     try std.testing.expectEqual(PveClient.Pick{ .one = 0 }, PveClient.pick(&rows, "250", .name_or_vmid));
+}
+
+test "a miss is no answer while a container has no name" {
+    // CT 300 on titan, which the cluster has no report for: it may be rem-1
+    const rows = [_]core.ContainerInfo{ testEntry("100", "web-1", "pve"), testEntry("300", "", "titan") };
+    try std.testing.expectEqual(PveClient.Pick{ .unnamed = 1 }, PveClient.pick(&rows, "rem-1", .name));
+    try std.testing.expectEqual(PveClient.Pick{ .unnamed = 1 }, PveClient.pick(&rows, "rem-1", .name_or_vmid));
+    // what does match is still found
+    try std.testing.expectEqual(PveClient.Pick{ .one = 0 }, PveClient.pick(&rows, "web-1", .name));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "300", .name_or_vmid));
+    // and with every container named, a miss is a miss
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(rows[0..1], "rem-1", .name));
 }
 
 test "parsePctStatus reads the init's host PID of a running container" {

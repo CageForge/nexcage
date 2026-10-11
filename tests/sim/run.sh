@@ -1239,6 +1239,29 @@ nx delete --force web-9
 check "a record is not forgotten when the cluster could not be asked" \
   all 'rc 1' 'err_has "/cluster/resources"' '[ -f "$S/run/nexcage/web-9/state.json" ]'
 rm -f "$S/fail_resources"
+# Nor while the cluster lists a container without a name ($SIM/noname): one
+# its node made seconds ago, or any of a node down for five minutes. It may be
+# the one, and forgetting the record left it running with nexcage told it was
+# gone.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "titan $TPL" >> "$S/node_templates"
+nx create --name rem-1 --node titan "$TPL" >/dev/null 2>&1
+nx start rem-1 >/dev/null 2>&1
+rem=$(awk '$3=="rem-1" {print $1}' "$S/db")
+check "(rem-1, made through nexcage and running on titan)" grep -qx "${rem:-none} running rem-1 titan" "$S/db"
+echo "$rem" > "$S/noname"
+nx delete --force rem-1
+check "a record is not forgotten while the cluster lists a container without a name" \
+  all 'rc 1' "err_has 'CT ${rem:-none} on titan has no name'" 'err_has "try again"' \
+      '[ -f "$S/run/nexcage/rem-1/state.json" ]' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/"'
+nx create --name rem-2 "$TPL"
+check "while a create is not held up by it, or a node that is down would stop every create" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname rem-2 "'
+rm -f "$S/noname"
+nx delete --force rem-1
+check "and once the cluster names it, delete --force destroys it" \
+  all 'rc 0' "called 'pvesh delete /nodes/titan/lxc/${rem:-none}'" '[ ! -e "$S/run/nexcage/rem-1" ]'
 
 echo "--- create --node ---"
 reset_sim
