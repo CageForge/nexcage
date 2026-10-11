@@ -481,6 +481,10 @@ pub const PveClient = struct {
     pub const By = enum { name, name_or_vmid };
 
     pub fn pick(containers: []const core.ContainerInfo, name_or_vmid: []const u8, by: By) Pick {
+        // An empty id names nothing. It matched every container the listing
+        // had no name for: `--runtime lxc delete --force ''`, an unset shell
+        // variable, destroyed one.
+        if (name_or_vmid.len == 0) return .none;
         var found: ?usize = null;
         for (containers, 0..) |c, i| {
             if (!std.mem.eql(u8, c.name, name_or_vmid)) continue;
@@ -1876,6 +1880,12 @@ test "a miss is no answer while a container has no name" {
     try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "300", .name_or_vmid));
     // and with every container named, a miss is a miss
     try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(rows[0..1], "rem-1", .name));
+}
+
+test "an empty id names no container, not one without a name" {
+    const rows = [_]core.ContainerInfo{ testEntry("300", "", "titan"), testEntry("100", "web-1", "pve") };
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "", .name));
 }
 
 test "parsePctStatus reads the init's host PID of a running container" {

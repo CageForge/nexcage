@@ -1258,6 +1258,10 @@ check "a record is not forgotten while the cluster lists a container without a n
 nx create --name rem-2 "$TPL"
 check "while a create is not held up by it, or a node that is down would stop every create" \
   all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname rem-2 "'
+# An empty id, an unset shell variable, matched the container without a name
+nx --runtime lxc delete --force ''
+check "and an empty id is not taken for that container: nothing is stopped or destroyed" \
+  all 'rc 1' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/"' "grep -qx '${rem:-none} running rem-1 titan' \"\$S/db\""
 rm -f "$S/noname"
 nx delete --force rem-1
 check "and once the cluster names it, delete --force destroys it" \
