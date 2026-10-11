@@ -38,6 +38,16 @@ container differently from what was asked.
 Logs go to stderr. stdout carries only command output (`list`, `state`,
 help text).
 
+A log message often carries text nexcage did not write, such as what `pct`
+printed, so in a text log line and in the error echoed to stderr each control
+character but tab is written as an escape: `\n`, `\r`, or `\xNN` for each
+byte, the C1 controls U+0080 to U+009F and the line separators U+2028 and
+U+2029 included, and so is any byte that is not valid UTF-8. A backslash is
+written `\\`. One message is always one line, and nothing in it acts on the
+terminal. A `json` line carries the message as a JSON string, with those
+characters escaped there too (`\n`, `\u009b`); a byte that is not valid
+UTF-8 is left as it is.
+
 Without `--config`, configuration comes from the first of
 `/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json` that exists; see the
 README for the keys. Nothing in the working directory is read: up to 0.17.0
