@@ -25,7 +25,7 @@ BUNDLE=$DEV/bundle
 # GitHub-hosted runner, except security.yml, whose scanners upload to GitHub,
 # plus dependency_check.yml's crun job in its dry run, which reads the
 # repository's issues and the crun releases and writes nothing.
-ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
+ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation ci.yml:scripts version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
 
 if [ -t 2 ]; then B=$'\033[1m' R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' N=$'\033[0m'; else B='' R='' G='' Y='' N=''; fi
 say()  { echo "${B}==> $*${N}" >&2; }
@@ -45,7 +45,7 @@ Build and test (no containers)
   build             Debug build (zig-out/bin) and ReleaseSafe (zig-out/release/bin)
   test              zig fmt --check and the unit tests
   sim               every command against fake Proxmox tools (tests/sim)
-  check             test + sim: the quick gate before a commit
+  check             test + sim + the tests of scripts/: the quick gate before a commit
 
 Containers (rootless podman or Docker)
   crun              the crun-backend image, and what crun_build.yml checks on it
@@ -440,7 +440,7 @@ case "$cmd" in
   build)   build ;;
   test)    unit ;;
   sim)     sim ;;
-  check)   step test unit; step sim sim; summary ;;
+  check)   step test unit; step sim sim; step scripts bash tests/scripts/run.sh; summary ;;
   crun)    crun_checks ;;
   cri)     cri ;;
   e2e)     step sim sim; step crun crun_checks; step cri cri; summary ;;

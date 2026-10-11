@@ -125,3 +125,18 @@ jobs:
 
       - name: Run tests/sim/run.sh
         run: tests/sim/run.sh
+
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Each test runs a copy of a script from scripts/ against fakes of the
+      # tools it calls. Nothing is downloaded, and what a test makes outside
+      # its scratch directory it removes.
+      - name: tests/scripts/run.sh
+        run: tests/scripts/run.sh

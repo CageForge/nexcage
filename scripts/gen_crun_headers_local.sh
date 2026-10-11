@@ -6,7 +6,6 @@ set -euo pipefail
 
 OWNER_REPO="containers/crun"
 DEPS_DIR="$(cd "$(dirname "$0")/.." && pwd)/deps/crun"
-TMP_DIR="/tmp/crun_headers.$$"
 
 TAG=""
 
@@ -30,7 +29,10 @@ if [[ -z "$TAG" ]]; then
   fi
 fi
 
-mkdir -p "$TMP_DIR"
+# A directory of its own, made here: a fixed name such as /tmp/crun_headers.$$
+# can be created first by another local user, who then owns what is unpacked
+# and run from it.
+TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/crun_headers.XXXXXXXX")
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 TARBALL_URL="https://github.com/$OWNER_REPO/releases/download/$TAG/crun-$TAG.tar.gz"
