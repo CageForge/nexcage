@@ -27,7 +27,7 @@ own, and an argument there keeps its `=`.
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
 | `--systemd-cgroup` | `create` on the crun backend has systemd place the container, as crun and runc do: libcrun asks systemd, over D-Bus, for a scope under the slice the bundle's `cgroupsPath` names (`<slice>:<prefix>:<name>`). containerd sends it for a handler with `SystemdCgroup = true`; CRI-O and podman send it whenever their cgroup manager is systemd, their default. It has to match the kubelet's cgroup driver: without it, a `cgroupsPath` in that form becomes a cgroup of that very name at the root of the hierarchy, outside the pod's. Where systemd cannot be reached, `create` fails with libcrun's `cannot open sd-bus`, as crun's does. Later commands follow the manager the container was created with; `delete --force` under it leaves `/sys/fs/cgroup/<id>` alone (see [delete](#delete)). On the Proxmox LXC backend it changes nothing: Proxmox puts the container's cgroup at `/lxc/<vmid>` |
 | `--rootless <value>` | Accepted and ignored, as crun does. go-runc sends `--rootless=<true\|false>` when its caller sets one, and to runc it means "ignore cgroup permission errors"; libcrun decides that for itself, and as root it ignores none |
-| `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute; it is normalised first, so `/run/nexcage/` is the default. The crun backend's state is `<dir>/<id>`, libcrun's own; the Proxmox LXC backend's is `<dir>/.proxmox-lxc/<name>`, so the two never share a directory. It used to be `<dir>/<name>`, which a build with crun took for libcrun's; a record an older version left there is not read, and its container takes `--runtime lxc` once |
+| `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute; it is normalised first, so `/run/nexcage/` is the default. The crun backend's state is `<dir>/<id>`, libcrun's own; the Proxmox LXC backend's is `<dir>/.proxmox-lxc/<name>`, so the two never share a directory. It used to be `<dir>/<name>`, which a build with crun took for libcrun's; a record an older version left there is not read, and its container takes `--runtime lxc` once, on a command that changes it (start, stop, pause, resume, rollback), which writes the record again, as described under [Backend selection](#backend-selection). Until then a plain `delete --force` of it exits 0 and leaves the container in place |
 | `--profile <name>` | Create the container under the isolation profile `<name>` from the configuration file; see [Isolation profiles](#isolation-profiles). Only `create` reads it, and `run` refuses it |
 | `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
 
@@ -781,8 +781,13 @@ printing an empty table.
 ### state
 
 ```bash
-nexcage state <name|vmid>
+nexcage state <name>
+nexcage --runtime lxc state <vmid>
 ```
+
+A VMID names a Proxmox LXC container only with `--runtime lxc`; without it,
+an id is the name of a container nexcage has a record of (see
+[Backend selection](#backend-selection)).
 
 Prints OCI runtime state JSON:
 

@@ -1687,6 +1687,17 @@ check "rollback --start asks pct to start it afterwards, and it runs" \
 nx state sn-1
 check "state agrees it is running after rollback --start" \
   all 'rc 0' '[ "$(json_get "$S/out" status)" = running ]' '[ "$(json_get "$S/out" pid)" != 0 ]'
+# A container nexcage has no record of is reached with --runtime lxc, and a
+# command that changes it writes the record, so that the next one needs no
+# --runtime: a rollback too, which leaves it stopped. Without --start it
+# wrote none.
+echo "120 stopped other-rb" >> "$S/db"
+echo "snap1 0" > "$S/snaps.120"
+nx --runtime lxc rollback other-rb snap1
+check "rollback through --runtime lxc of a container with no record writes one, stopped" \
+  all 'rc 0' 'called "pct rollback 120 snap1"' '[ "$(json_get "$S/run/nexcage/other-rb/state.json" status)" = stopped ]'
+nx state other-rb
+check "so the next command finds it without --runtime" all 'rc 0' '[ "$(json_get "$S/out" status)" = stopped ]'
 nx stop sn-1 >/dev/null 2>&1
 nx rollback sn-1 ghost
 check "rollback to a snapshot that does not exist is an error" all 'rc 1' 'err_has "does not exist"'

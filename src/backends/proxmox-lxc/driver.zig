@@ -921,7 +921,9 @@ pub const ProxmoxLxcDriver = struct {
     /// --start. The OCI state nexcage keeps follows: `stop`'s bookkeeping for a
     /// container that had been started, `start`'s when --start brought it up.
     /// One that was never started stays "created"; a rollback does not change
-    /// that.
+    /// that. One nexcage has no record of, reached with --runtime lxc, gets
+    /// one, as stop gives it: without, the next command had to name the
+    /// backend again.
     pub fn rollback(self: *Self, container_id: []const u8, name: []const u8, start_after: bool) !void {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
@@ -936,7 +938,7 @@ pub const ProxmoxLxcDriver = struct {
         }
         const was = if (loc.name) |n| self.persistedStatus(n) else null;
         defer if (was) |s| self.allocator.free(s);
-        if (was != null and !std.mem.eql(u8, was.?, "created")) {
+        if (was == null or !std.mem.eql(u8, was.?, "created")) {
             self.record(&loc, "stopped", 0);
         }
     }
