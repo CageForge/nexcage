@@ -120,4 +120,17 @@ fi
 grep -q "is a container on the crun backend" /tmp/state.err || fail "--runtime lxc was refused without saying why: $(tail -1 /tmp/state.err)"
 echo "ok: --runtime lxc on a crun container is refused"
 
+# An id neither backend has a record of does not exist, and delete --force of
+# it exits 0, as crun's and runc's does: an engine deletes twice, or after a
+# reboot emptied /run. It used to go to the Proxmox backend, which on this
+# image, with no pct, answered "not supported on this host" and exit 1.
+nx delete --force "$ID" >/dev/null 2>&1 || fail "delete --force of the container"
+"$NEXCAGE" delete --force "$ID" >/dev/null 2>/tmp/delete.err || fail "a second delete --force failed: $(tail -1 /tmp/delete.err)"
+echo "ok: a second delete --force exits 0"
+if "$NEXCAGE" state "$ID" >/dev/null 2>/tmp/state.err; then
+    fail "state of a deleted container succeeded"
+fi
+grep -q "does not exist" /tmp/state.err || fail "state of a deleted container does not say it does not exist: $(tail -1 /tmp/state.err)"
+echo "ok: state of a deleted container says it does not exist"
+
 echo "PASS: update's flags reach the container's cgroup"

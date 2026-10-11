@@ -157,9 +157,24 @@ nothing, when the VMID now belongs to a container with another name.
 rules in the config file, Proxmox LXC by default; `features` asks that backend
 too. Every other command — `start`, `stop`, `delete`, `kill`, `exec`, `state`,
 `pause`, `resume`, `update`, `ps` and the snapshot commands — goes to the
-backend that has the container: the crun backend when libcrun's state
-directory (`--root`, else `/run/crun`) has it, Proxmox LXC otherwise. A rule
-changed after `create` does not move a container (since 0.17.0, #372).
+backend that has a record of the container: the crun backend when libcrun's
+`status` file for it exists (under `--root`, else `/run/crun`), Proxmox LXC
+when nexcage's own `state.json` for it does — written when nexcage creates the
+container, in `/run/nexcage/<name>` (`<root>/.proxmox-lxc/<name>` under
+`--root`). A rule changed after `create` does not move a container (since
+0.17.0, #372).
+
+**An id neither backend has a record of does not exist.** The command exits 1
+saying so, without asking Proxmox anything, and `delete --force` exits 0, as it
+does with crun and runc — a container engine cleans up that way. Such an id
+used to go to the Proxmox backend, which matched it against every container in
+the cluster by name or VMID, so a second `delete --force` of a crun container
+named like a VMID destroyed that Proxmox container. A Proxmox container nexcage
+did not create, one addressed by its VMID, and one whose record a reboot
+cleared from `/run` are reached with `--runtime lxc`; a command that changes
+one (start, stop, pause, resume, rollback) writes the record again under its
+name, so the next command needs no `--runtime`.
+
 `--runtime <lxc|crun>` overrides that for one command, before or after the
 command name; `--runtime lxc` for a container the crun backend has exits 2.
 
@@ -386,6 +401,9 @@ Destroys the container with `pct destroy` and removes its state directory.
 A running container must be stopped first, unless `--force` is given: that
 shuts it down and then destroys it, as `runc delete --force` does. A container
 engine sends `--force` once it has given up waiting for a clean shutdown.
+`delete --force` of a container no backend has a record of exits 0, and so is
+safe to repeat; plain `delete` of one exits 1 (see
+[Backend selection](#backend-selection)).
 
 ### kill
 

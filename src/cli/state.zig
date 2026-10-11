@@ -211,7 +211,7 @@ pub const StateCommand = struct {
             "which also carries rootfs, created and owner.\n\n" ++
             "Examples:\n" ++
             "  nexcage state web-1\n" ++
-            "  nexcage state 101        # a VMID works too\n");
+            "  nexcage --runtime lxc state 101    # a VMID, or a container nexcage did not create\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

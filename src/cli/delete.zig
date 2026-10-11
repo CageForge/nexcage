@@ -66,8 +66,10 @@ pub const DeleteCommand = struct {
             "  -f, --force        Stop the container first if it is running\n" ++
             "  --runtime <type>   lxc|crun; overrides routing from the config file\n\n" ++
             "Notes:\n" ++
-            "  If pct is not in PATH, the Proxmox LXC backend fails: nexcage must run on a\n" ++
-            "  Proxmox VE host.\n");
+            "  A container neither backend has a record of does not exist: delete exits 1,\n" ++
+            "  and delete --force exits 0, as crun and runc do. A Proxmox container nexcage\n" ++
+            "  did not create is deleted with --runtime lxc. If pct is not in PATH, the\n" ++
+            "  Proxmox LXC backend fails: nexcage must run on a Proxmox VE host.\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {
