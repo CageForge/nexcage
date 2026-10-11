@@ -102,11 +102,20 @@ jobs:
           $nx version || fail "version failed"
           $nx create --help >/dev/null || fail "create --help failed"
 
-          # No Proxmox here: operations must fail with a clear message and exit 1
+          # An id nexcage holds no record of reaches no backend: it is not
+          # taken for a Proxmox container nexcage did not create. Exit 1,
+          # saying so.
           rc=0; $nx start ci-smoke 2> err.txt || rc=$?
           cat err.txt
-          [ "$rc" -eq 1 ] || fail "start without pct: expected exit 1, got $rc"
-          grep -q "not found in PATH" err.txt || fail "start without pct: no explanation on stderr"
+          [ "$rc" -eq 1 ] || fail "start of an unknown id: expected exit 1, got $rc"
+          grep -q "ERROR nexcage: container 'ci-smoke' does not exist: " err.txt || fail "start of an unknown id: no explanation on stderr"
+
+          # Sent to Proxmox LXC by --runtime lxc, with no Proxmox here: exit
+          # 1, with a clear message
+          rc=0; $nx start --runtime lxc ci-smoke 2> err.txt || rc=$?
+          cat err.txt
+          [ "$rc" -eq 1 ] || fail "start without Proxmox's tools: expected exit 1, got $rc"
+          grep -qE "ERROR nexcage: '(pct|pvesh)' not found in PATH; " err.txt || fail "start without Proxmox's tools: no explanation on stderr"
 
           rc=0; $nx no-such-command 2> /dev/null || rc=$?
           [ "$rc" -eq 2 ] || fail "unknown command: expected exit 2, got $rc"
