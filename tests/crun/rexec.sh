@@ -53,8 +53,11 @@ if grep -h '^_LIBCONTAINER_CLONED_BINARY=' "$WORK"/env.*; then
 fi
 echo "ok: nexcage list (Proxmox LXC) does not re-execute: pct and pvesh see no _LIBCONTAINER_CLONED_BINARY"
 
-# 3. The protection is still there for a container: while exec runs a
-# command, nexcage's own /proc/<pid>/exe is not the binary on the host.
+# 3. The protection is still there for a container: the init create leaves,
+# and nexcage while exec runs a command, have a /proc/<pid>/exe that is not
+# the binary on the host. libcrun counts a binary on a read-only mount as
+# protected already, and copies nothing; then there is nothing to check.
+real=$(readlink -f "$NEXCAGE")
 cat > "$BUNDLE/config.json" <<JSON
 {
   "ociVersion": "1.0.0",
@@ -74,21 +77,31 @@ cat > "$BUNDLE/config.json" <<JSON
 }
 JSON
 nx create --bundle "$BUNDLE" "$ID" 2>"$WORK/err" || fail "create: $(tr '\n' ' ' < "$WORK/err")"
+# The init is a process create forked from nexcage. It waits there for start
+# and then executes the container's program in its place: until then it is
+# nexcage, in the container's namespaces, and its /proc/<pid>/exe is what a
+# process in the container could open.
+initpid=$(nx state "$ID" | sed -n 's/.*"pid": *\([0-9][0-9]*\).*/\1/p')
+[ -n "$initpid" ] || fail "state $ID names no pid after create"
+initexe=$(readlink "/proc/$initpid/exe") || fail "cannot read /proc/$initpid/exe, the init create left: the check would prove nothing"
+if [ -w "$real" ]; then
+    [ "$initexe" != "$real" ] || fail "create left the container's init running from $real itself, not a sealed copy: the CVE-2019-5736 protection is gone"
+    echo "ok: create's init runs from a sealed copy ($initexe), not from $real"
+fi
 nx start "$ID" 2>"$WORK/err" || fail "start: $(tr '\n' ' ' < "$WORK/err")"
 # The binary itself in the background, not the nx function: $! has to be
 # nexcage's pid, not a subshell's.
 "$NEXCAGE" --runtime crun exec "$ID" /bin/sleep 3 &
 execpid=$!
 sleep 1
-exe=$(readlink "/proc/$execpid/exe" 2>/dev/null || echo "(gone)")
+exe=$(readlink "/proc/$execpid/exe" 2>/dev/null) || exe=
 wait "$execpid" || fail "exec $ID /bin/sleep 3 failed"
-real=$(readlink -f "$NEXCAGE")
+[ -n "$exe" ] || fail "cannot read /proc/$execpid/exe while exec ran: the check would prove nothing"
 if [ -w "$real" ]; then
     [ "$exe" != "$real" ] || fail "exec ran from $real itself, not a sealed copy: the CVE-2019-5736 protection is gone"
     echo "ok: exec runs from a sealed copy ($exe), not from $real"
 else
-    # libcrun counts a binary on a read-only mount as protected already.
-    echo "ok: $real is on a read-only mount, which libcrun counts as protected (exec ran from $exe)"
+    echo "ok: $real is on a read-only mount, which libcrun counts as protected (create's init ran from $initexe, exec from $exe)"
 fi
 
 echo "PASS: the re-execution happens for containers, and nothing else needs it"
