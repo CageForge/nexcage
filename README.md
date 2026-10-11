@@ -165,6 +165,8 @@ an isolation profile requires, so nexcage refuses one that is not owned by root
 (or by the user running nexcage), that group or others can write, or that sits
 in a directory they can write without the sticky bit. The message names the
 file and the reason; `chmod go-w` on the file or its directory puts it right.
+Ownership is judged by the uids nexcage's user namespace sees: under rootless
+podman a file host root owns shows as uid 65534, and is refused.
 
 The table below is every key there is. **Since 0.17.0 anything else refuses the
 file**: a key nexcage does not read, a value of the wrong type, a runtime or

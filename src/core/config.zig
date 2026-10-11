@@ -388,19 +388,34 @@ pub const ConfigLoader = struct {
         if (!std.posix.S.ISREG(st.mode)) return self.refuse("it is not a regular file", .{});
         switch (distrust(st, euid)) {
             .none => {},
-            .owner => return self.refuse("it is owned by uid {d}, not by root or by uid {d}, which runs nexcage", .{ st.uid, euid }),
+            .owner => return self.refuse("it is owned by uid {d}{s}, not by root or by uid {d}, which runs nexcage", .{ st.uid, unmappedNote(st.uid), euid }),
             .writable => return self.refuse("group or others can write it (mode {o:0>4}); run chmod go-w on it", .{st.mode & 0o7777}),
         }
         const dir_st = std.posix.fstat(dir.fd) catch |err| return self.refuse("cannot stat its directory ({s})", .{@errorName(err)});
         switch (distrust(dir_st, euid)) {
             .none => {},
-            .owner => return self.refuse("its directory is owned by uid {d}, not by root or by uid {d}, and its owner can put another file in its place", .{ dir_st.uid, euid }),
+            .owner => return self.refuse("its directory is owned by uid {d}{s}, not by root or by uid {d}, and its owner can put another file in its place", .{ dir_st.uid, unmappedNote(dir_st.uid), euid }),
             .writable => return self.refuse("group or others can write its directory (mode {o:0>4}) and put another file in its place; run chmod go-w on the directory", .{dir_st.mode & 0o7777}),
         }
         return file;
     }
 
     const Distrust = enum { none, owner, writable };
+
+    /// What to say after an owner's uid when it is the one the kernel shows
+    /// for an owner with no uid in this user namespace (kernel.overflowuid).
+    /// Rootless podman runs the runtime in a namespace of its own, where a
+    /// file host root owns shows as uid 65534, and "owned by uid 65534" on
+    /// its own points at a user nobody made the owner.
+    fn unmappedNote(uid: std.posix.uid_t) []const u8 {
+        var buf: [16]u8 = undefined;
+        const overflow_uid = if (std.fs.cwd().readFile("/proc/sys/kernel/overflowuid", &buf)) |text|
+            std.fmt.parseInt(std.posix.uid_t, std.mem.trim(u8, text, " \n"), 10) catch 65534
+        else |_|
+            65534;
+        if (uid != overflow_uid) return "";
+        return " (how the kernel shows an owner outside nexcage's user namespace, as host root is under rootless podman)";
+    }
 
     /// Why a configuration file, or the directory that holds it, cannot be
     /// trusted to say what root does, or .none when it can: owned by root or

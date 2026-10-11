@@ -488,10 +488,11 @@ NEXCAGE=$S/timed-nexcage nx --config fifo.json list
 check "a FIFO named as the config file is refused, not waited on" \
   all 'rc 1' 'err_has "fifo.json: it is not a regular file"'
 rm -f "$S/work/fifo.json" "$S/timed-nexcage"
-# Host root's files are nobody's in the simulator's namespace.
+# Host root's files are nobody's in the simulator's namespace, as they are in
+# rootless podman's, and the message says that is what 65534 can mean.
 nx --config /etc/passwd list
 check "a config file owned by somebody else is refused, naming the owner" \
-  all 'rc 1' 'err_has "it is owned by uid 65534, not by root"' 'not_called_re "^(pct|pvesh)"'
+  all 'rc 1' "err_has \"it is owned by uid 65534 (how the kernel shows an owner outside nexcage's user namespace\"" 'err_has "rootless podman), not by root"' 'not_called_re "^(pct|pvesh)"'
 # /etc/nexcage, without --config. An OCI spec there is passed over whatever its
 # size -- one over the 1 MiB a configuration may hold failed every command with
 # FileTooBig -- and an error or `health` names the file actually read, not the

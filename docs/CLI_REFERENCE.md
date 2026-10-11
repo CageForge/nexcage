@@ -51,6 +51,11 @@ spec, the `config.json` a bundle holds. Such a file is skipped in the search,
 whatever its size, and refused when named with `--config`. An error names the
 file that has it, and `health` names the file read and any spec it skipped.
 
+Who owns a configuration file is judged by the uids nexcage's user namespace
+sees. Rootless podman runs the runtime in a namespace of its own, where a file
+host root owns shows as uid 65534, the kernel's overflow uid; such a file is
+refused there, and the message says what that uid means.
+
 `--root` is read before any command touches state, wherever it appears on the
 command line.
 
