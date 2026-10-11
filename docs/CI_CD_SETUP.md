@@ -133,6 +133,9 @@ leftover `gh-e2e-*` container at the end, pass or fail.
    is published. The binary and the `.deb` are attested where they are built
    (`actions/attest-build-provenance`; `gh attestation verify <file> -R
    CageForge/nexcage`), and the SBOMs are made in a job of their own that
-   holds no signing token. It then publishes the release, with the notes file
-   as its body. Signing with a project key is #318; what the SBOMs list is
-   #333.
+   holds no signing token. That job can still replace a stored artifact, so
+   the `.deb` job and the release job check the binary and the `.deb` against
+   the sha256 their own jobs recorded, and the release publishes no file
+   besides the ones the workflow builds. It then publishes the release, with
+   the notes file as its body. Signing with a project key is #318; what the
+   SBOMs list is #333.

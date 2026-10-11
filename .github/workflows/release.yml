@@ -94,6 +94,11 @@ jobs:
       contents: read
       id-token: write
       attestations: write
+    # The binary's sha256 as this job measured it. A job output cannot be
+    # changed by a later job, as a stored artifact can; build-deb and release
+    # check the file they are given against it.
+    outputs:
+      sha256: ${{ steps.build.outputs.sha256 }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -195,7 +200,10 @@ jobs:
 
   # The SBOMs, from the binary the binary job uploaded. anchore/sbom-action
   # also downloads and runs syft; here it has a read-only token and nothing
-  # to sign with, and it runs after the binary has been attested and stored.
+  # to sign with. It still holds the run's artifact token, with which it could
+  # delete the stored binary or .deb and upload another file under any name,
+  # so build-deb and release check every file they take from the store
+  # against the sha256 the job that built it recorded.
   sbom:
     name: SBOMs of the binary
     runs-on: ubuntu-24.04
@@ -260,6 +268,8 @@ jobs:
       contents: read
       id-token: write
       attestations: write
+    outputs:
+      sha256: ${{ steps.deb.outputs.sha256 }}
 
     steps:
       - name: Checkout code
@@ -274,6 +284,14 @@ jobs:
           name: nexcage-${{ needs.build.outputs.version }}-amd64
           path: bin
 
+      # The .deb packs, and this job attests, only the file the binary job
+      # built: the sbom job, running in parallel, can replace the stored one.
+      - name: It is the binary the binary job built
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA256: ${{ needs.binary.outputs.sha256 }}
+        run: printf '%s  %s\n' "$SHA256" "bin/nexcage-${VERSION}-amd64" | sha256sum --strict -c -
+
       - name: Build package
         # The .deb packs that same binary: one release, one binary.
         env:
@@ -284,6 +302,15 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: sh scripts/ci/check_deb.sh "dist/nexcage-${VERSION}-amd64.deb"
+
+      - name: Record the .deb's sha256
+        id: deb
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          sum=$(sha256sum "dist/nexcage-${VERSION}-amd64.deb" | cut -d' ' -f1)
+          echo "sha256=${sum}" >> "$GITHUB_OUTPUT"
 
       - name: Attest the .deb
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -321,6 +348,31 @@ jobs:
           mkdir -p release
           find artifacts -type f -exec cp {} release/ \;
           ls -la release/
+
+      # Every artifact of the run is downloaded, and the sbom job could have
+      # replaced one or added its own (see that job). checksums.txt, made
+      # next, would vouch for whatever is here. So the binary and the .deb
+      # have to have the sha256 their own jobs recorded, and nothing else may
+      # be published.
+      - name: The assets are the files this workflow built
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          BIN_SHA256: ${{ needs.binary.outputs.sha256 }}
+          DEB_SHA256: ${{ needs.build-deb.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          cd release
+          printf '%s  %s\n' "$BIN_SHA256" "nexcage-${VERSION}-amd64" \
+            "$DEB_SHA256" "nexcage-${VERSION}-amd64.deb" | sha256sum --strict -c -
+          expected=$(printf '%s\n' "nexcage-${VERSION}-amd64" "nexcage-${VERSION}-amd64.deb" \
+            "nexcage-${VERSION}-amd64.sbom.cdx.json" "nexcage-${VERSION}-amd64.sbom.spdx.json" \
+            provenance.json | LC_ALL=C sort)
+          actual=$(ls -A | LC_ALL=C sort)
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::the release assets are not the files this workflow builds"
+            diff <(echo "$expected") <(echo "$actual") || true
+            exit 1
+          fi
 
       - name: Create checksums
         run: |
