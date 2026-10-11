@@ -68,7 +68,7 @@ one more reason every third-party action is pinned by commit.
 
 The audit of 2026-10 found these, and they are settings and machines, not
 files. `bash scripts/check_runner_exposure.sh` reads the settings and fails
-until the first three are done, and while the approval policy is anything
+until the first four are done, and while the approval policy is anything
 but `all_external_contributors`. It needs gh logged in as an organization
 owner with the `admin:org` scope (`gh auth refresh -s admin:org`), for the
 runner groups; without it, it fails rather than skip them.
@@ -96,6 +96,14 @@ runner groups; without it, it fails rather than skip them.
   at `refs/heads/main`, or into a group this repository cannot use. The
   build agent of #339 too, if it comes back. Then remove the
   repository-level registration.
+- **Make the workflow token read-only by default**: Settings > Actions >
+  General > Workflow permissions, "Read repository contents and packages
+  permissions", and untick "Allow GitHub Actions to create and approve pull
+  requests". Today the default is write, with approval allowed. Every
+  workflow here asks for what it needs in its own `permissions:` block, so
+  none of them changes; a workflow without one, pushed to a branch or added
+  later, gets a read-only token instead of one that can push to `main`
+  (unprotected) and approve its own pull request.
 - Worth doing as well: register the E2E runner with `--ephemeral` and re-clone
   its VM per job, and keep the VM off the 192.168.3.0/24 LAN it shares with
   prox-home and the build agent.

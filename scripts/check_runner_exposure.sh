@@ -10,7 +10,9 @@
 #     runner group can restrict which workflows reach it;
 #   - every runner group this repository can use, and that holds runners,
 #     serves only workflows named by path at a branch (refs/heads/...);
-#   - every repository secret is one a workflow uses.
+#   - every repository secret is one a workflow uses;
+#   - the workflow token is read-only unless a workflow asks for more, and
+#     cannot approve pull requests.
 #
 # The runner groups need an organization owner's token with admin:org
 # (gh auth refresh -s admin:org); without it the check fails rather than
@@ -109,6 +111,18 @@ else
   else
     ok "every repository secret is used by a workflow"
   fi
+fi
+
+# Every workflow here asks for what it needs in a permissions block of its
+# own, so the default reaches only a workflow without one: one pushed to a
+# branch, or added later. It should get a read-only token, not write to
+# contents, issues, pull requests, actions and packages.
+if ! token=$(gh api "repos/$REPO_SLUG/actions/permissions/workflow" --jq '"\(.default_workflow_permissions) \(.can_approve_pull_request_reviews)"'); then
+  bad "could not read the default permissions of the workflow token"
+elif [ "$token" = "read false" ]; then
+  ok "the workflow token is read-only by default and cannot approve pull requests"
+else
+  bad "the workflow token's default is ${token% *}, and approving pull requests is ${token#* }; set \"Read repository contents and packages permissions\" and untick \"Allow GitHub Actions to create and approve pull requests\""
 fi
 
 exit "$failed"

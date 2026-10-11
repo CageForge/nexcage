@@ -3,10 +3,12 @@
 # answers from fixtures, shaped as the API documents them, and puts them
 # through the script's own --jq filters as gh does. The fixtures: the settings
 # of 2026-10-11 (two repository-level runners, four secrets no workflow uses,
-# and the organization's Default group as the review of this check found it:
+# the organization's Default group as the review of this check found it --
 # buildagent-node in it, public repositories let in, no workflow
-# restriction); the settings once an administrator has done what
-# docs/CI_CD_SETUP.md lists; and each of those undone again, one at a time.
+# restriction -- and the workflow token's default as the audit read it,
+# write and allowed to approve pull requests); the settings once an
+# administrator has done what docs/CI_CD_SETUP.md lists; and each of those
+# undone again, one at a time.
 #
 #   bash tests/scripts/check_runner_exposure.sh [path/to/check_runner_exposure.sh]
 set -euo pipefail
@@ -85,6 +87,7 @@ put "$F" repos/CageForge/nexcage/actions/runners "$(list runners "$e2e" "$old")"
 put "$F" repos/CageForge/nexcage/actions/secrets "$(list secrets '{"name":"GH_TOKEN"}' '{"name":"PROXMOX_SSH_KEY"}' '{"name":"PVE_HOST"}' '{"name":"PVE_PASSWORD"}')"
 put "$F" orgs/CageForge/actions/runner-groups "$(list runner_groups "$(group 1 Default all true false)")"
 put "$F" orgs/CageForge/actions/runner-groups/1/runners "$(list runners "$agent")"
+put "$F" repos/CageForge/nexcage/actions/permissions/workflow '{"default_workflow_permissions":"write","can_approve_pull_request_reviews":true}'
 
 # Done: nothing registered to the repository, the stale secrets gone, the
 # Default group closed to public repositories, a group of another
@@ -104,6 +107,7 @@ put "$D" orgs/CageForge/actions/runner-groups/2/repositories "$(list repositorie
 put "$D" orgs/CageForge/actions/runner-groups/2/runners "$(list runners "$other")"
 put "$D" orgs/CageForge/actions/runner-groups/3/repositories "$(list repositories '{"id":2,"name":"nexcage","full_name":"CageForge/nexcage","private":false}')"
 put "$D" orgs/CageForge/actions/runner-groups/3/runners "$(list runners "$e2e")"
+put "$D" repos/CageForge/nexcage/actions/permissions/workflow '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}'
 
 # variant <name>: a copy of the done fixtures to change, in $V.
 variant() { V="$T/$1"; cp -r "$D" "$V"; }
@@ -115,15 +119,16 @@ show() { sed 's/^/     /' "$T/out"; }
 
 run "$F"
 if [ "$rc" != 0 ] && grep -q 'proxmox-runner' "$T/out" && grep -q 'PROXMOX_SSH_KEY' "$T/out" \
-   && grep -q '^FAIL runner group Default serves every workflow' "$T/out" && grep -q '^ *buildagent-node ' "$T/out"; then
-  ok "the settings of 2026-10-11 fail, naming the runners, the secrets and the Default group"
+   && grep -q '^FAIL runner group Default serves every workflow' "$T/out" && grep -q '^ *buildagent-node ' "$T/out" \
+   && grep -q "^FAIL the workflow token's default is write, and approving pull requests is true" "$T/out"; then
+  ok "the settings of 2026-10-11 fail, naming the runners, the secrets, the Default group and the token's default"
 else
-  bad "the settings of 2026-10-11 fail, naming the runners, the secrets and the Default group (exit $rc)"; show
+  bad "the settings of 2026-10-11 fail, naming the runners, the secrets, the Default group and the token's default (exit $rc)"; show
 fi
 
 run "$D"
-if [ "$rc" = 0 ]; then ok "with the runners out of reach or restricted and the secrets gone, it passes"
-else bad "with the runners out of reach or restricted and the secrets gone, it passes (exit $rc)"; show; fi
+if [ "$rc" = 0 ]; then ok "with all docs/CI_CD_SETUP.md lists done, it passes"
+else bad "with all docs/CI_CD_SETUP.md lists done, it passes (exit $rc)"; show; fi
 
 # The policy is the one barrier while a runner can be reached: with
 # everything else in order, it alone has to fail the check.
@@ -163,6 +168,29 @@ if [ "$rc" != 0 ] && grep -q '^FAIL runner group nexcage-e2e serves workflows no
   ok "a group restricted to a tag or branch pattern, or an unpinned workflow, fails, naming those three"
 else
   bad "a group restricted to a tag or branch pattern, or an unpinned workflow, fails, naming those three (exit $rc)"; show
+fi
+
+# The two halves of the token's default, each on its own.
+for t in 'write false' 'read true'; do
+  variant "token-${t% *}"
+  put "$V" repos/CageForge/nexcage/actions/permissions/workflow \
+    "{\"default_workflow_permissions\":\"${t% *}\",\"can_approve_pull_request_reviews\":${t#* }}"
+  run "$V"
+  if [ "$rc" != 0 ] && grep -q "^FAIL the workflow token's default is ${t% *}, and approving pull requests is ${t#* }" "$T/out"; then
+    ok "a workflow token default of ${t% *}, approving pull requests ${t#* }, fails"
+  else
+    bad "a workflow token default of ${t% *}, approving pull requests ${t#* }, fails (exit $rc)"; show
+  fi
+done
+
+# A default that cannot be read is not a pass either.
+variant token-unread
+rm "$V/repos/CageForge/nexcage/actions/permissions/workflow.json"
+run "$V"
+if [ "$rc" != 0 ] && grep -q '^FAIL could not read the default permissions of the workflow token' "$T/out"; then
+  ok "a workflow token default that cannot be read fails"
+else
+  bad "a workflow token default that cannot be read fails (exit $rc)"; show
 fi
 
 # A token without admin:org cannot see the groups; that is not a pass.
