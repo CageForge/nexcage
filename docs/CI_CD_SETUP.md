@@ -14,7 +14,7 @@
 | `release.yml` | ubuntu-24.04 | tag `v*` | Tests; the one binary, with both backends; the `.deb` that packs it, installed on Debian 13; SBOMs; GitHub release |
 | `dependency_check.yml` | ubuntu-latest | weekly | New OCI spec / crun releases; at most one open issue per dependency |
 | `scorecards.yml`, `pages.yml`, `docs_mike.yml` | ubuntu-latest | various | OpenSSF Scorecards, documentation site |
-| `buildagent.yml` | self-hosted, `buildagent`, `nexcage` | push/PR to `main`, daily | On Debian 13: Debug build, `zig build test`, `tests/sim/run.sh`, `make deb` and what the `.deb` carries. |
+| `buildagent.yml` | self-hosted, `buildagent`, `nexcage` | push/PR to `main`, daily | On Debian 13: Debug build, `zig build test`, `tests/sim/run.sh`, `make deb` and what the `.deb` carries. **Not running**: no registered runner has these labels since 2026-10-04, so every run waits until the next one cancels it ([#339](https://github.com/CageForge/nexcage/issues/339)) |
 
 ## Self-hosted runners and forks
 

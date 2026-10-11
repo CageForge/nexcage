@@ -5,6 +5,11 @@ name: Build agent (self-hosted)
 # VM, so it has no pct and cannot run the Proxmox E2E suite — that is what
 # proxmox_e2e.yml and its [proxmox] runner are for.
 #
+# Not running at the moment: no registered runner carries these labels since
+# 2026-10-04, so every run waits in the queue until the next one cancels it.
+# #339 decides between bringing the agent back (in a runner group restricted
+# to this workflow) and deleting this file.
+#
 # What it adds over the GitHub-hosted CI: the .deb is built and installed on
 # the distribution nexcage is packaged for, and the simulation suite runs
 # without having to turn off an AppArmor restriction first, because Debian
