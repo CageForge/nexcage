@@ -238,14 +238,22 @@ pub const OciProcessor = struct {
     /// The kernel's ceiling for cgroup v1 cpu.shares
     pub const max_cpu_shares = 262144;
 
+    /// The least memory Proxmox gives a container: 16 MiB, memory's minimum
+    /// in pve-container's PVE::LXC::Config
+    pub const min_memory = 16 * 1024 * 1024;
+
     pub fn bundleResources(self: *const Self, cfg: *const bundle.OciBundleConfig) core.Error!Resources {
         var res = Resources{};
         if (cfg.memory_limit) |limit| {
             // runc reads 0 as no value at all, and -1 as no limit
             if (limit == -1) {
                 res.memory_unlimited = true;
-            } else if (limit > 0) {
+            } else if (limit >= min_memory) {
                 res.memory = @intCast(limit);
+            } else if (limit > 0) {
+                // pct create refused it, once the rootfs had been packed
+                if (self.logger) |log| log.err("linux.resources.memory.limit {d} in the bundle is less than the 16 MiB Proxmox gives a container at least", .{limit}) catch {};
+                return core.Error.InvalidInput;
             } else if (limit < 0) {
                 if (self.logger) |log| log.err("linux.resources.memory.limit {d} in the bundle is not a limit: it is bytes, or -1 for none", .{limit}) catch {};
                 return core.Error.InvalidInput;
@@ -631,6 +639,18 @@ test "memory.limit -1 is no limit, and leaves --memory out; another negative is 
 
     cfg.memory_limit = -5;
     try std.testing.expectError(core.Error.InvalidInput, proc.bundleResources(&cfg));
+}
+
+test "a memory.limit below the 16 MiB Proxmox takes is refused, not left to pct" {
+    const proc = testProcessor();
+    var cfg = bundle.OciBundleConfig{ .allocator = std.testing.allocator, .rootfs_path = "" };
+
+    for ([_]i64{ 1, 1 << 20, OciProcessor.min_memory - 1 }) |limit| {
+        cfg.memory_limit = limit;
+        try std.testing.expectError(core.Error.InvalidInput, proc.bundleResources(&cfg));
+    }
+    cfg.memory_limit = OciProcessor.min_memory;
+    try std.testing.expectEqual(@as(?u64, OciProcessor.min_memory), (try proc.bundleResources(&cfg)).memory);
 }
 
 test "cpu.shares past the kernel's maximum is refused, not cast" {

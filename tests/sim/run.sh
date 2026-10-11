@@ -619,6 +619,16 @@ res_bundle res-neg '{"memory":{"limit":-5}}'
 nx create --name res-neg /tmp/nexcage-bundles/res-neg
 check "bundle memory.limit -5 -> exit 2 naming it, before anything is packed or a VMID taken" \
   all 'rc 2' 'err_has "memory.limit -5"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+# Proxmox gives a container 16 MiB at least: a smaller limit became
+# --memory 0 and was refused by pct create, after the rootfs was packed.
+res_bundle res-small '{"memory":{"limit":1048576}}'
+nx create --name res-small /tmp/nexcage-bundles/res-small
+check "bundle memory.limit 1 MiB, below Proxmox's 16 -> exit 2 naming it, before anything is packed" \
+  all 'rc 2' 'err_has "memory.limit 1048576"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+res_bundle res-min '{"memory":{"limit":16777216}}'
+nx create --name res-min /tmp/nexcage-bundles/res-min
+check "bundle memory.limit 16 MiB, Proxmox's minimum -> --memory 16" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-min --memory 16 "'
 res_bundle res-cpu '{"cpu":{"shares":5000000000000}}'
 nx create --name res-cpu /tmp/nexcage-bundles/res-cpu
 check "bundle cpu.shares past the kernel's maximum -> exit 2 naming it, before anything is packed" \

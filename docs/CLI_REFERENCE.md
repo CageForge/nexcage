@@ -343,9 +343,10 @@ The bundle's `linux.resources.memory.limit`, in bytes, becomes `--memory`. `-1`,
 the runtime-spec's "no limit", leaves `--memory` out, so pct's default of 512
 MiB applies: Proxmox has no unlimited memory for a container.
 `linux.resources.cpu.shares` becomes `--cores`, 1024 shares to a core, up to
-the kernel's maximum of 262144 (256 cores). Another negative limit, more
-shares than that, or a value that is not an integer is refused (exit 2) before
-anything is packed. So is a `config.json` whose `mounts` is not a list, or
+the kernel's maximum of 262144 (256 cores). Another negative limit, a
+limit below the 16 MiB Proxmox gives a container at least, more shares than
+that, or a value that is not an integer is refused (exit 2) before anything
+is packed. So is a `config.json` whose `mounts` is not a list, or
 whose `linux`, `linux.resources`, `memory` or `cpu` is not an object, or
 that holds a mount, argument or environment entry of the wrong type: such a
 part used to be skipped, with the mounts or limits it held.
