@@ -276,6 +276,17 @@ case "$1 $2" in
       echo "400 Parameter verification failed." >&2
       echo "filename: value must be at least 1 characters long" >&2; exit 2
     fi
+    # Proxmox's pattern for --reference (pve-storage, Status.pm
+    # oci_registry_pull; \d and \w spelled out): an optional registry and port,
+    # a lower-case path, and a tag, which is not optional -- a reference
+    # without one, or pinned by a digest, is refused. This fake pulled any
+    # reference, the empty one too, and printed a template for it.
+    LC_ALL=C
+    ref_re='^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]))*(:[0-9]+)?/)?[a-z0-9]+(([._]|__|-*)[a-z0-9]+)*(/[a-z0-9]+(([._]|__|-*)[a-z0-9]+)*)*:[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$'
+    if ! [[ $ref =~ $ref_re ]]; then
+      echo "400 Parameter verification failed." >&2
+      echo "reference: value does not match the regex pattern" >&2; exit 2
+    fi
     # The file is pve-storage's normalize_content_filename of --filename, or of
     # the reference without one, plus ".tar": everything up to the last '/' or
     # '\' goes, and every character outside [a-zA-Z0-9_.-] becomes '_'. So

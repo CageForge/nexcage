@@ -570,6 +570,10 @@ cannot be listed is an error, and a file someone else writes during the pull is
 not taken for it. `create` from a registry reference uses the same name, and
 uses a template already on the storage only when it is that exact file.
 
+Proxmox takes a reference that ends in a tag. One pinned by a digest
+(`...@sha256:...`) or with no tag it refuses ("reference: value does not match
+the regex pattern"), and nexcage exits 1 with that message.
+
 A reference pulled there before is not pulled again: Proxmox does not write over
 a file, and the volid of the one there is printed. To fetch it afresh, `rmi` it
 first. Templates an earlier nexcage pulled have Proxmox's short names

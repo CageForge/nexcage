@@ -1184,6 +1184,15 @@ check "pull: a storage listing that fails is an error, not some template's volid
 nx pull docker.io/library/nginx:1.27 --node titan --storage 'x;id;'
 check "pull refuses a storage that is not a Proxmox storage ID, before pvesh" \
   all 'rc 2' 'err_has "storage name"' 'not_called_re "^pvesh"'
+# Proxmox takes a reference with a tag and nothing else. The fake pvesh pulled
+# any, and so the sim said an empty reference or one pinned by a digest gave a
+# template, which on Proxmox they never do.
+nx pull ''
+check "pull of an empty reference is Proxmox's error, and no template" \
+  all 'rc 1' 'err_has "reference: value does not match"' '[ ! -s "$S/out" ]'
+nx pull "docker.io/library/redis@sha256:$(printf 'ab%.0s' {1..32})"
+check "nor is one pinned by a digest, which Proxmox's pattern does not take" \
+  all 'rc 1' 'err_has "reference: value does not match"' '[ ! -s "$S/out" ]'
 # The first listing is this host's local: it is left out and named, and the
 # other storages are still shown.
 echo 1 > "$S/fail_list_in"

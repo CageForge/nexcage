@@ -1614,7 +1614,9 @@ fn pulledTemplateName(allocator: std.mem.Allocator, reference: []const u8) ![]u8
     for (readable, 0..) |c, i| {
         // A leading '.' would hide the file from the storage's listing, a
         // leading '-' reads as an option, and ".." -- which a tag may hold --
-        // is what `rmi` refuses in a volid.
+        // is what `rmi` refuses in a volid. (Only an empty reference gives a
+        // name that starts with the '-' below, and Proxmox refuses that
+        // reference before it looks at the name.)
         const keep = isFileNameChar(c) and
             !(i == 0 and (c == '.' or c == '-')) and
             !(c == '.' and i > 0 and name[i - 1] == '.');
