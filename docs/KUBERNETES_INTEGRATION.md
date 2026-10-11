@@ -483,7 +483,8 @@ limit, QoS class or node-allocatable cap was over the pod, sandbox included.
 A pod's own limits still held, which is why the checks read from inside a pod
 could not see it. The script now reads each pod's container and sandbox from
 the host as well, `/proc/<pid>/cgroup` of the PID crictl reports, and fails
-unless both are in the pod's cgroup under `kubepods.slice`.
+unless both are in the pod's cgroup under `kubepods.slice`, or under
+`/kubepods/` on a kubelet with the cgroupfs driver.
 
 ```yaml
 apiVersion: node.k8s.io/v1
@@ -592,7 +593,8 @@ one pod under each, and reads from inside each pod:
 - `pids.max`;
 
 and from the host, that each pod's container and sandbox are in its pod's
-cgroup under `kubepods.slice`, as for the first pod.
+cgroup under `kubepods.slice` (`/kubepods/` with the cgroupfs driver), as for
+the first pod.
 
 A third pod under `nexcage-hardened` without `hostUsers: false` must stay
 uncreated, with "requires a user namespace" in its events.
