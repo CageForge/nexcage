@@ -159,9 +159,13 @@ echo 0 > "$S/slow_create"; touch "$S/hold_create"
 before=$(wc -l < "$S/calls")
 nexcage_ns create --name slow-1 "$TPL" > "$S/out" 2> "$S/err" &
 bg=$!
-for _ in $(seq 1 100); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
+for _ in $(seq 1 600); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
 worker=$(cat "$S/create_worker" 2>/dev/null)
-kill -KILL "$(cat "$S/create_caller")"
+caller=$(cat "$S/create_caller" 2>/dev/null)
+# Not named within a minute -- a machine too loaded for pct to get that far:
+# the work is let go, so that the wait below ends and the check fails, rather
+# than the suite waiting for ever on a create held for a kill that never came.
+if [ -n "$caller" ]; then kill -KILL "$caller"; else rm -f "$S/hold_create"; fi
 RC=0; wait "$bg" || RC=$?
 tail -n +"$((before + 1))" "$S/calls" > "$S/calls.last"; LAST="nexcage create --name slow-1 $TPL, killed during pct create"
 check "nexcage killed during pct create: the create does not carry on without it" \
@@ -625,7 +629,7 @@ echo 0 > "$S/slow_create"; touch "$S/hold_create"
 before=$(wc -l < "$S/calls")
 nexcage_ns run --name dup "$TPL" > "$S/out" 2> "$S/err" &
 bg=$!
-for _ in $(seq 1 100); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
+for _ in $(seq 1 600); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
 mid=$(wc -l < "$S/calls")
 echo "90 stopped dup" >> "$S/db"
 pct_ns start 90
