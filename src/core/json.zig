@@ -18,10 +18,32 @@ pub fn writeString(writer: anytype, value: []const u8) !void {
     try writer.writeByte('"');
 }
 
-/// What writeString writes between the quotes. A profile's refusal quotes
-/// the bundle's strings with it, so that one can neither close the quotes
-/// round it nor carry a control character into the message an engine reads
-/// back from the --log-format json log and decodes.
+/// A string someone else wrote -- a bundle's, a caller's -- as a message
+/// quotes it with `{f}`: escaped as between the quotes of a JSON string, a
+/// newline as \n and a NUL as \u0000, so that it cannot start a line of its
+/// own, or move the cursor, in the log the engine keeps of the message. That
+/// covers C0, DEL, and C1, which UTF-8 writes as 0xc2 then 0x80 to 0x9f:
+/// U+009B is a terminal's CSI, as ESC [ is; and U+2028 and U+2029, which some
+/// readers take for line breaks. A quote or a backslash is escaped too, so
+/// the text cannot close the quotes a message puts round it. Both backends'
+/// refusals of a bundle quote it this way, so the same text reads the same
+/// whichever refused it.
+pub const Quoted = struct {
+    s: []const u8,
+
+    pub fn format(self: Quoted, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        try writeStringContents(w, self.s);
+    }
+};
+
+pub fn quoted(s: []const u8) Quoted {
+    return .{ .s = s };
+}
+
+/// What writeString writes between the quotes. A refusal quotes the bundle's
+/// strings with it, through `quoted`, so that one can neither close the
+/// quotes round it nor carry a control character into the message an engine
+/// reads back from the --log-format json log and decodes.
 pub fn writeStringContents(writer: anytype, value: []const u8) !void {
     var i: usize = 0;
     while (i < value.len) : (i += 1) {
