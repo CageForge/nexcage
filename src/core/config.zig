@@ -175,13 +175,15 @@ const TrustedFiles = struct {
     fn init(files: []const struct { name: []const u8, data: []const u8 }) !TrustedFiles {
         // iterate: an O_PATH descriptor, the default, cannot be chmod'ed
         var self = TrustedFiles{ .tmp = std.testing.tmpDir(.{ .iterate = true }) };
-        errdefer self.tmp.cleanup();
+        std.debug.assert(files.len <= self.paths.len);
+        // A test that fails here still frees the paths already made.
+        errdefer self.deinit();
         try self.tmp.dir.chmod(0o755);
-        for (files, 0..) |f, i| {
+        for (files) |f| {
             try self.tmp.dir.writeFile(.{ .sub_path = f.name, .data = f.data, .flags = .{ .mode = 0o644 } });
-            self.paths[i] = try self.tmp.dir.realpathAlloc(std.testing.allocator, f.name);
+            self.paths[self.paths_len] = try self.tmp.dir.realpathAlloc(std.testing.allocator, f.name);
+            self.paths_len += 1;
         }
-        self.paths_len = files.len;
         return self;
     }
 
