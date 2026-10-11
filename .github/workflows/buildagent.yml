@@ -5,6 +5,11 @@ name: Build agent (self-hosted)
 # VM, so it has no pct and cannot run the Proxmox E2E suite — that is what
 # proxmox_e2e.yml and its [proxmox] runner are for.
 #
+# Not running at the moment: no registered runner carries these labels since
+# 2026-10-04, so every run waits in the queue until the next one cancels it.
+# #339 decides between bringing the agent back (in a runner group restricted
+# to this workflow) and deleting this file.
+#
 # What it adds over the GitHub-hosted CI: the .deb is built and installed on
 # the distribution nexcage is packaged for, and the simulation suite runs
 # without having to turn off an AppArmor restriction first, because Debian
@@ -30,9 +35,12 @@ concurrency:
 jobs:
   package:
     name: Build, simulate and package on Debian 13
-    # A pull request from a fork must not run code on this machine, a build
-    # agent shared with other projects (#362). A maintainer runs the job on
-    # such code by pushing it to a branch here.
+    # A build agent shared with other projects (#362). This `if:` keeps this
+    # workflow from running a fork's code there; it does not keep a fork off
+    # the agent, since a pull request runs its own copy of the workflows. The
+    # approval policy and the runner group do (docs/CI_CD_SETUP.md,
+    # "Self-hosted runners and forks"). A maintainer runs the job on such
+    # code by pushing it to a branch here.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, buildagent, nexcage]
     timeout-minutes: 30
@@ -40,6 +48,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Print environment info
         run: |

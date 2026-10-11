@@ -1,12 +1,18 @@
 version: 2
 updates:
   # GitHub Actions dependencies
+  # Third-party actions are pinned by commit with the version in a comment;
+  # Dependabot moves both.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+    # A release has to be a week old before it is proposed: a compromised
+    # release is usually found and pulled within days.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     reviewers:
       - "CageForge/nexcage-maintainers"
@@ -38,6 +44,8 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     reviewers:
       - "CageForge/nexcage-maintainers"
@@ -47,6 +55,28 @@ updates:
     commit-message:
       prefix: "chore(docker)"
       include: "scope"
+
+  # The hash-pinned Python tools CI installs: .github/requirements/*.txt
+  # (the documentation site's, and zizmor).
+  - package-ecosystem: "pip"
+    directory: "/.github"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+    groups:
+      python-tools:
+        patterns:
+          - "*"
 
   # Note: OCI specs, crun, and Proxmox VE are monitored via
   # .github/workflows/dependency_check.yml workflow

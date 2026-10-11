@@ -20,6 +20,13 @@ with the crun backend built in. Releases 0.11.2 to 0.16.0 carried that backend
 in a second binary, `nexcage-<version>-amd64-crun`, and the `.deb` held the
 binary without it. There is no `-crun` asset any more.
 
+`checksums.txt` shows that a download is the file published next to it, not
+who built it. Releases after 0.17.0 also have a GitHub build attestation for
+the binary and the `.deb`, made by `release.yml` when it built them; with the
+GitHub CLI, `gh attestation verify nexcage-$VERSION-amd64.deb -R
+CageForge/nexcage` checks that the file came from that workflow in this
+repository, and from which commit.
+
 ### .deb
 
 ```bash

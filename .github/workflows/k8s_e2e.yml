@@ -45,6 +45,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # As release.yml builds it: the Dockerfile brings the submodules and
       # libcrun's generated headers, -Dcpu=baseline keeps the binary from
@@ -53,7 +55,7 @@ jobs:
       - name: Build
         run: |
           set -eux
-          docker build \
+          sh scripts/ci/retry_on_429.sh docker build \
             --build-arg BUILD_FLAGS="-Denable-backend-crun=true -Dcpu=baseline" \
             -t nexcage:k8s-e2e .
           cid=$(docker create nexcage:k8s-e2e)
@@ -71,14 +73,19 @@ jobs:
   pod:
     name: A pod on nexcage through k3s
     needs: build
-    # A pull request from a fork must not run code as root on the node: the
-    # runner user there has sudo for everything.
+    # The runner user on the node has sudo for everything. This `if:` keeps
+    # this workflow from running a fork's code there; it does not keep a fork
+    # off the node, since a pull request runs its own copy of the workflows.
+    # The approval policy and the runner group do (docs/CI_CD_SETUP.md,
+    # "Self-hosted runners and forks").
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, pve9]
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Download the .deb
         uses: actions/download-artifact@v4

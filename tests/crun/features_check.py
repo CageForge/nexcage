@@ -22,5 +22,9 @@ assert "bind" in d["mountOptions"], d["mountOptions"][:10]
 assert d["linux"]["cgroup"]["v2"] is True, d["linux"]["cgroup"]
 assert d["annotations"]["run.oci.crun.version"], d["annotations"]
 assert d["annotations"]["io.cageforge.nexcage.backend"] == "crun"
+# config.h, generated from crun's release tarball, decides whether libcrun is
+# built with seccomp; one built without it would run bundles' seccomp
+# profiles as nothing.
+assert d["linux"]["seccomp"]["enabled"] is True, d["linux"].get("seccomp")
 print("spec", d["ociVersionMin"], "to", d["ociVersionMax"],
       "on crun", d["annotations"]["run.oci.crun.version"])

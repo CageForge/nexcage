@@ -35,7 +35,7 @@ Status legend: [x] present/ok, [~] partial, [ ] missing
   - All artifacts uploaded to GitHub Releases
 
 - [~] **Code scanning**
-  - Semgrep, Trivy and Gitleaks (`.github/workflows/security.yml`), non-blocking
+  - zizmor, Semgrep, Trivy and Gitleaks (`.github/workflows/security.yml`); each fails the check on what it finds, against baselines that give a reason for every accepted finding
   - OpenSSF Scorecards (`.github/workflows/scorecards.yml`), currently disabled by GitHub for inactivity
   - No CodeQL: it supports C/C++ but not Zig, and the repository has no C/C++ sources of its own
 

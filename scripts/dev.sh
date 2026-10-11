@@ -22,10 +22,11 @@ DEV=$REPO/zig-out/dev
 BUNDLE=$DEV/bundle
 
 # The jobs `act` runs by default: every job a pull request gets on a
-# GitHub-hosted runner, except security.yml, whose scanners upload to GitHub,
-# plus dependency_check.yml's crun job in its dry run, which reads the
-# repository's issues and the crun releases and writes nothing.
-ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
+# GitHub-hosted runner, except security.yml's scanners, which download their
+# databases, images and rules (its zizmor job is in), plus dependency_check.yml's
+# crun job in its dry run, which reads the repository's issues and the crun
+# releases and writes nothing.
+ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation ci.yml:scripts security.yml:zizmor version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
 
 if [ -t 2 ]; then B=$'\033[1m' R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' N=$'\033[0m'; else B='' R='' G='' Y='' N=''; fi
 say()  { echo "${B}==> $*${N}" >&2; }
@@ -45,7 +46,7 @@ Build and test (no containers)
   build             Debug build (zig-out/bin) and ReleaseSafe (zig-out/release/bin)
   test              zig fmt --check and the unit tests
   sim               every command against fake Proxmox tools (tests/sim)
-  check             test + sim: the quick gate before a commit
+  check             test + sim + the tests of scripts/: the quick gate before a commit
 
 Containers (rootless podman or Docker)
   crun              the crun-backend image, and what crun_build.yml checks on it
@@ -153,6 +154,13 @@ doctor() {
   fi
   if [ -x /usr/bin/time ]; then ok "GNU time" "perf reports peak memory"
   else opt "GNU time" "optional: apt install time, for peak memory in perf"; fi
+
+  # tests/scripts: jq applies gh's --jq filters in the fake gh, dpkg-deb and
+  # readelf build and read the packages check_deb.sh is tried on.
+  echo "${B}check (the tests of scripts/)${N}"
+  for t in jq dpkg-deb readelf; do
+    if have "$t"; then ok "$t" "$(command -v "$t")"; else miss "$t" "install it with the system package manager (jq, dpkg, binutils)"; fi
+  done
 
   echo "${B}crun, cri, e2e, shell, perf --suite crun${N}"
   local e found=''
@@ -454,7 +462,7 @@ case "$cmd" in
   build)   build ;;
   test)    unit ;;
   sim)     sim ;;
-  check)   step test unit; step sim sim; summary ;;
+  check)   step test unit; step sim sim; step scripts bash tests/scripts/run.sh; summary ;;
   crun)    crun_checks ;;
   cri)     cri ;;
   e2e)     step sim sim; step crun crun_checks; step cri cri; summary ;;

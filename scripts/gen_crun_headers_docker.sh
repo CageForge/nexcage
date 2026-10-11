@@ -2,8 +2,13 @@
 set -euo pipefail
 
 # Generate config.h and git-version.h for vendored crun inside Docker
+#
+# It runs scripts/gen_crun_headers_local.sh in the container, so the release
+# it fetches and the sha256 that tarball has to have are decided in one place.
+# This used to download and configure the tarball itself, unchecked, and fall
+# back to crun's latest release when deps/crun/.upstream_tag was missing.
 
-OWNER_REPO="containers/crun"
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPS_DIR="$(cd "$(dirname "$0")/.." && pwd)/deps/crun"
 TAG=""
 IMAGE="ubuntu:24.04"
@@ -19,29 +24,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$TAG" ]]; then
-  if [[ -f "$DEPS_DIR/.upstream_tag" ]]; then
-    TAG=$(head -n1 "$DEPS_DIR/.upstream_tag")
-  else
-    TAG=$(curl -fsSL "https://api.github.com/repos/$OWNER_REPO/releases/latest" | sed -n 's/.*"tag_name"\s*:\s*"\([^"]*\)".*/\1/p')
-  fi
-fi
-
 mkdir -p "$DEPS_DIR"
 
+# The tag reaches the container as a variable, not as script text.
 docker run --rm -t \
-  -v "$DEPS_DIR":/out \
-  "$IMAGE" bash -lc "set -e; \
+  -v "$SCRIPTS_DIR":/src/scripts:ro \
+  -v "$DEPS_DIR":/src/deps/crun \
+  -e TAG="$TAG" \
+  -e DEBIAN_FRONTEND=noninteractive \
+  "$IMAGE" bash -lc 'set -e
     apt-get update -y >/dev/null && apt-get install -y >/dev/null \
-      build-essential autoconf automake libtool pkg-config \
-      libjson-c-dev libcap-dev libseccomp-dev libsystemd-dev curl ca-certificates >/dev/null; \
-    curl -fsSL https://github.com/$OWNER_REPO/releases/download/$TAG/crun-$TAG.tar.gz -o /tmp/crun.tar.gz; \
-    mkdir -p /tmp/crun && tar -C /tmp/crun -xzf /tmp/crun.tar.gz; \
-    cd /tmp/crun/crun-$TAG; \
-    if [[ -x ./configure ]]; then ./configure >/dev/null; else ./autogen.sh >/dev/null && ./configure >/dev/null; fi; \
-    cp -f config.h /out/config.h; \
-    echo \"#define GIT_VERSION \\\"$TAG\\\"\" > /out/git-version.h; \
-    echo done"
+      build-essential autoconf automake libtool pkg-config python3 \
+      libjson-c-dev libcap-dev libseccomp-dev libsystemd-dev curl ca-certificates >/dev/null
+    bash /src/scripts/gen_crun_headers_local.sh ${TAG:+--tag "$TAG"}'
 
 echo "[docker-headers] Wrote $DEPS_DIR/config.h and git-version.h"
-
