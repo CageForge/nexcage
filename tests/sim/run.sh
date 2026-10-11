@@ -535,8 +535,10 @@ check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")"
 check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_re "^pct set [0-9]+ --features nesting=1,keyctl=1$"
 # A step after pct create that fails must not leave the container behind: it
 # had no state.json and none of the bundle's features, and a retry under the
-# same name was refused with "already exists".
-echo "CT is locked (backup)" > "$S/fail_set"
+# same name was refused with "already exists". The refusal is pct's own for
+# this `pct set --features`, and not a lock, which would refuse the undo's
+# pct destroy as well.
+echo "Permission check failed (changing feature flags (except nesting) is only allowed for root@pam)" > "$S/fail_set"
 nx create --name rb-1 /tmp/nexcage-bundles/b1
 rb_vmid=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
 check "a failure after pct create destroys the container it made, and the packed rootfs" \
