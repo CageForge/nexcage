@@ -506,6 +506,24 @@ check "state reports the bundle the container was created from" \
   all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'
 nx start spec-1; nx state spec-1
 check "start keeps the bundle in state" all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'
+# state.json is replaced, never rewritten in place: a write that fails part
+# way -- /run full, an I/O error -- leaves the record as it was. It used to be
+# truncated first, so one failed start lost the bundle path for good, and a
+# `state` reading in between found an empty file. A file size limit of 0 on
+# nexcage alone stands in for the full /run; the fake tools lift it again.
+W=$S/wrapbin; rm -rf "$W"; mkdir -p "$W"
+for t in "$BIN"/*; do
+  printf '#!/bin/bash\nulimit -S -f unlimited\nexec %q "$@"\n' "$t" > "$W/${t##*/}"; chmod +x "$W/${t##*/}"
+done
+printf '#!/bin/bash\ntrap "" XFSZ\nulimit -S -f 0\nexec %q "$@"\n' "$NEXCAGE" > "$W/nexcage"; chmod +x "$W/nexcage"
+nx create spec-w --bundle /tmp/nexcage-bundles/b1
+NEXCAGE=$W/nexcage BIN=$W nx start spec-w
+check "start with /run full: pct start runs, and start does not fail on the bookkeeping" all 'rc 0' 'called_re "^pct start [0-9]+$"'
+nx state spec-w
+check "a state write that fails keeps the record it was to replace: the bundle survives" \
+  all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]' \
+      '[ "$(ls -A "$S/run/nexcage/spec-w" | tr "\n" " ")" = "runtime-metadata.json state.json " ]'
+rm -rf "$W"
 nx create tpl-1 --bundle /tmp/nexcage-bundles/b1 >/dev/null 2>&1 || true
 nx create --name from-tpl "$TPL"; nx state from-tpl
 check "a container created from a template reports bundle null" \

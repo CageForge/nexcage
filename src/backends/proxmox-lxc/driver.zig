@@ -564,9 +564,6 @@ pub const ProxmoxLxcDriver = struct {
         const metadata_path = try std.fmt.allocPrint(self.allocator, "{s}/runtime-metadata.json", .{container_dir});
         defer self.allocator.free(metadata_path);
 
-        const file = try std.fs.cwd().createFile(metadata_path, .{ .truncate = true });
-        defer file.close();
-
         var buffer = std.array_list.Managed(u8).init(self.allocator);
         defer buffer.deinit();
         var writer = buffer.writer();
@@ -640,7 +637,8 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         try writer.writeAll("\n}\n");
-        try file.writeAll(buffer.items);
+        // Replaced as state.json is, rather than truncated and rewritten
+        try common.writeFileAtomic(container_dir, "runtime-metadata.json", buffer.items);
 
         if (self.logger) |log| log.debug("Persisted runtime metadata for {s} at {s}", .{ container_name, metadata_path }) catch {};
     }
@@ -895,16 +893,19 @@ pub const ProxmoxLxcDriver = struct {
         return self.allocator.dupe(u8, value.string) catch null;
     }
 
+    /// Record the container's OCI state in `<root>/<id>/state.json`. The
+    /// file is replaced, never rewritten in place: `state` reads it at any
+    /// moment, and start, stop and their kin carry `bundle` forward from it,
+    /// so one empty read used to lose the bundle path until the container was
+    /// deleted. Those callers go on when this fails -- Proxmox has done what
+    /// was asked -- so the failure is said here rather than dropped.
     fn writeOciState(self: *Self, container_id: []const u8, status: []const u8, pid: i32, bundle_path: ?[]const u8) !void {
         const state_dir = core.state_root.get();
+        errdefer |err| if (self.logger) |log| log.warn("state of {s} not recorded under {s}: {s}", .{ container_id, state_dir, @errorName(err) }) catch {};
         try std.fs.cwd().makePath(state_dir);
         const container_dir = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ state_dir, container_id });
         defer self.allocator.free(container_dir);
         try std.fs.cwd().makePath(container_dir);
-        const state_path = try std.fmt.allocPrint(self.allocator, "{s}/state.json", .{container_dir});
-        defer self.allocator.free(state_path);
-        const file = try std.fs.cwd().createFile(state_path, .{ .truncate = true, .read = false });
-        defer file.close();
 
         var json_buf = std.ArrayListUnmanaged(u8){};
         defer json_buf.deinit(self.allocator);
@@ -916,7 +917,7 @@ pub const ProxmoxLxcDriver = struct {
         if (bundle_path) |bp| try core.json.writeString(writer, bp) else try writer.writeAll("null");
         try writer.writeAll(",\n  \"annotations\": {}\n}\n");
 
-        try file.writeAll(json_buf.items);
+        try common.writeFileAtomic(container_dir, "state.json", json_buf.items);
     }
 
     /// The node nexcage is running on. `state` needs it to tell a container

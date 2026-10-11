@@ -183,6 +183,41 @@ fn runBound(args: struct {
     return .{ .term = term, .stdout = stdout, .stderr = stderr };
 }
 
+/// Replace `<dir_path>/<name>` with `bytes`, so that whoever reads it sees the
+/// old file or the new one and never part of either.
+///
+/// The bytes go to a new file beside it, which is synced and then renamed over
+/// the old one; a rename within a directory is atomic. Rewriting the file in
+/// place -- truncate, then write -- let a reader find it empty, and a write
+/// that failed half-way (/run full, an I/O error) or a nexcage killed in
+/// between left it empty for good. The new file is made with O_EXCL and
+/// O_NOFOLLOW, so it is nexcage's own whatever was put under its name, and
+/// with the mode a plain create gives, as the file had before.
+pub fn writeFileAtomic(dir_path: []const u8, name: []const u8, bytes: []const u8) !void {
+    var dir = try std.fs.cwd().openDir(dir_path, .{});
+    defer dir.close();
+
+    var tmp_buf: [std.fs.max_name_bytes]u8 = undefined;
+    const tmp_name = try std.fmt.bufPrint(&tmp_buf, ".{s}.{x:0>16}", .{ name, std.crypto.random.int(u64) });
+    const fd = try posix.openat(dir.fd, tmp_name, .{
+        .ACCMODE = .WRONLY,
+        .CREAT = true,
+        .EXCL = true,
+        .NOFOLLOW = true,
+        .CLOEXEC = true,
+    }, std.fs.File.default_mode);
+    const file = std.fs.File{ .handle = fd };
+    var renamed = false;
+    defer if (!renamed) dir.deleteFile(tmp_name) catch {};
+    {
+        defer file.close();
+        try file.writeAll(bytes);
+        try file.sync();
+    }
+    try posix.renameat(dir.fd, tmp_name, dir.fd, name);
+    renamed = true;
+}
+
 test "runCommand: output, status and a missing program, as Child.run gave them" {
     const allocator = std.testing.allocator;
 
@@ -265,4 +300,50 @@ test "runBound: the child is sent parent_death_signal when its parent dies" {
     } else false;
     if (!gone) posix.kill(grandchild, posix.SIG.KILL) catch {};
     try std.testing.expect(gone);
+}
+
+test "writeFileAtomic: a reader keeps a whole file, and a failed write keeps the old one" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(dir);
+
+    try writeFileAtomic(dir, "state.json", "{\"status\": \"created\"}\n");
+    // Someone reading the file while it is replaced
+    const reader = try tmp.dir.openFile("state.json", .{});
+    defer reader.close();
+    try writeFileAtomic(dir, "state.json", "{\"status\": \"running\"}\n");
+
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("{\"status\": \"created\"}\n", buf[0..try reader.readAll(&buf)]);
+    try std.testing.expectEqualStrings("{\"status\": \"running\"}\n", try tmp.dir.readFile("state.json", &buf));
+
+    // The mode a plain create gives, as before
+    const reference = try tmp.dir.createFile("reference", .{});
+    reference.close();
+    try std.testing.expectEqual((try tmp.dir.statFile("reference")).mode, (try tmp.dir.statFile("state.json")).mode);
+    try tmp.dir.deleteFile("reference");
+
+    // A write that fails, as on a full /run: with SIGXFSZ ignored, a file
+    // size limit of 0 makes write(2) fail with EFBIG.
+    const old_limit = try posix.getrlimit(.FSIZE);
+    const ignore = posix.Sigaction{ .handler = .{ .handler = posix.SIG.IGN }, .mask = posix.sigemptyset(), .flags = 0 };
+    var old_action: posix.Sigaction = undefined;
+    posix.sigaction(posix.SIG.XFSZ, &ignore, &old_action);
+    try posix.setrlimit(.FSIZE, .{ .cur = 0, .max = old_limit.max });
+    const failed = writeFileAtomic(dir, "state.json", "{\"status\": \"stopped\"}\n");
+    try posix.setrlimit(.FSIZE, old_limit);
+    posix.sigaction(posix.SIG.XFSZ, &old_action, null);
+    try std.testing.expectError(error.FileTooBig, failed);
+
+    try std.testing.expectEqualStrings("{\"status\": \"running\"}\n", try tmp.dir.readFile("state.json", &buf));
+    // and no temporary file is left beside it
+    var it = tmp.dir.iterate();
+    var names: usize = 0;
+    while (try it.next()) |entry| {
+        try std.testing.expectEqualStrings("state.json", entry.name);
+        names += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 1), names);
 }
