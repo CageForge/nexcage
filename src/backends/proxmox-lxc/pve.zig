@@ -2595,8 +2595,10 @@ test "formatUtc writes the epoch second as UTC with a zone" {
 }
 
 test "resourceOptions: a swap whose MiB Proxmox cannot hold is refused, not an overflow" {
-    // create's fallback is the bundle's memory limit, which can be a byte;
-    // memory plus swap at the top of i64 then left nothing to round up into.
+    // The memory limit a swap is worked out from -- create's, the bundle's
+    // or the default, or update's, the container's -- is 16 MiB at least as
+    // those come, but taken as given here. With a byte, memory plus swap at
+    // the top of i64 left nothing to round up into.
     const client = PveClient.init(std.testing.allocator, null);
     var args = std.ArrayListUnmanaged([]const u8){};
     defer {

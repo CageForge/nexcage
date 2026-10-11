@@ -2,9 +2,13 @@
 
 `src/backends/mod.zig` always imports the Proxmox LXC backend, and the crun
 backend only when its build option (declared in `build.zig`) is on.
-The CLI router (`src/cli/router.zig`) sends a command to a backend according
-to the routing rules in the config file; without rules everything goes to
-Proxmox LXC.
+The CLI router (`src/cli/router.zig`) sends `create` and `run` to a backend
+according to the routing rules in the config file, Proxmox LXC without rules.
+Every other command goes to the backend that has a record of the container —
+libcrun's `status` file, or the `state.json` nexcage writes for a Proxmox LXC
+container — and an id neither has a record of does not exist; `--runtime`
+overrides both. See
+[CLI_REFERENCE.md](../CLI_REFERENCE.md#backend-selection).
 
 | Backend | Build option | Default | State |
 |---|---|---|---|

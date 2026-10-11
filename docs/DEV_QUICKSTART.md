@@ -38,11 +38,15 @@ Without Proxmox tools, operations fail cleanly — useful for checking error
 paths:
 
 ```bash
-./zig-out/bin/nexcage start web-1; echo "exit $?"
-# ERROR nexcage: 'pct' not found in PATH; nexcage must run on a Proxmox VE host
-# nexcage: start: not supported on this host or by this build
+./zig-out/bin/nexcage list; echo "exit $?"
+# ERROR nexcage: 'pvesh' not found in PATH; nexcage must run on a Proxmox VE host
+# ERROR nexcage: the cluster's listing of its containers (pvesh get /cluster/resources) could not be read
+# nexcage: list: not supported on this host or by this build
 # exit 1
 ```
+
+A command on one container stops before that: `start web-1` says that no
+backend has a record of `web-1`, which only a `create` writes.
 
 ## Build options
 
