@@ -113,6 +113,17 @@ jobs:
             -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
             --entrypoint /bin/sh nexcage:ci /t/update.sh
 
+      # A Proxmox LXC container made under --root stays that backend's in a
+      # binary that has crun too: its state.json once went where libcrun
+      # keeps its own containers, and every later command went to libcrun.
+      # The simulator builds without crun; its fake Proxmox tools do here.
+      - name: a Proxmox LXC container under --root stays the Proxmox backend's
+        run: |
+          set -eux
+          docker run --rm --privileged \
+            -v "$PWD/tests/sim/bin:/sim/bin:ro" -v "$PWD/tests/crun:/t:ro" \
+            --entrypoint /bin/sh nexcage:ci /t/lxc_root.sh
+
       # An isolation profile narrows the bundle create hands libcrun (#315,
       # ADR-005). The check names the profile by the program name, as an
       # engine's BinaryName does, and reads the result from the container's
