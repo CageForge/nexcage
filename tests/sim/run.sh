@@ -456,6 +456,30 @@ check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_r
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
+# The bundle's linux.resources. memory.limit -1 is the runtime-spec's "no
+# limit", and Proxmox has none, so --memory is left out and pct's default
+# applies. Both values used to be cast unchecked: -1, or shares worth more
+# cores than a u32, aborted nexcage with a panic.
+res_bundle() {  # <name> <the resources object>
+  mkdir -p "$S/bundles/$1"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/$1/"
+  printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"linux":{"resources":%s}}' "$2" > "$S/bundles/$1/config.json"
+}
+res_bundle res-unl '{"memory":{"limit":-1}}'
+nx create --name res-unl /tmp/nexcage-bundles/res-unl
+check "bundle memory.limit -1 (no limit) -> created without --memory, so pct's default" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-unl --cores 1 "'
+res_bundle res-neg '{"memory":{"limit":-5}}'
+nx create --name res-neg /tmp/nexcage-bundles/res-neg
+check "bundle memory.limit -5 -> exit 2 naming it, before anything is packed or a VMID taken" \
+  all 'rc 2' 'err_has "memory.limit -5"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+res_bundle res-cpu '{"cpu":{"shares":5000000000000}}'
+nx create --name res-cpu /tmp/nexcage-bundles/res-cpu
+check "bundle cpu.shares past the kernel's maximum -> exit 2 naming it, before anything is packed" \
+  all 'rc 2' 'err_has "cpu.shares 5000000000000"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+res_bundle res-max '{"cpu":{"shares":262144}}'
+nx create --name res-max /tmp/nexcage-bundles/res-max
+check "bundle cpu.shares 262144, the kernel's maximum -> --cores 256" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-max --memory 512 --cores 256 "'
 nx --runtime crun create --memory 1G --bundle /tmp/nexcage-bundles/b1 crun-opt
 check "create's Proxmox options on the crun backend: refused, naming the bundle's config.json" \
   all 'rc 1' 'err_has "is for the Proxmox LXC backend"' 'err_has "config.json"'

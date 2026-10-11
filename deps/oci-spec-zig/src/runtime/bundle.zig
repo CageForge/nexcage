@@ -146,7 +146,7 @@ pub const OciBundleParser = struct {
             .environment = null,
             .mounts = null,
             .memory_limit = null,
-            .cpu_limit = null,
+            .cpu_shares = null,
             .capabilities = null,
             .seccomp_profile = null,
         };
@@ -234,26 +234,21 @@ pub const OciBundleParser = struct {
                     if (resources_val == .object) {
                         const resources_obj = resources_val.object;
 
+                        // memory.limit is an int64 and cpu.shares a uint64,
+                        // kept as the runtime-spec types them: what a limit
+                        // of -1 means is the backend's to say. The limit was
+                        // cast to u64 here, and -1 -- runc's "no limit" --
+                        // took the process down.
                         if (resources_obj.get("memory")) |memory_val| {
                             if (memory_val == .object) {
-                                const memory_obj = memory_val.object;
-                                if (memory_obj.get("limit")) |limit_val| {
-                                    if (limit_val == .integer) {
-                                        bundle_config.memory_limit = @as(u64, @intCast(limit_val.integer));
-                                    }
-                                }
+                                bundle_config.memory_limit = try optionalInt(i64, memory_val.object, "limit");
                             }
                         }
 
                         // Parse CPU limit
                         if (resources_obj.get("cpu")) |cpu_val| {
                             if (cpu_val == .object) {
-                                const cpu_obj = cpu_val.object;
-                                if (cpu_obj.get("shares")) |shares_val| {
-                                    if (shares_val == .integer) {
-                                        bundle_config.cpu_limit = @as(f64, @floatFromInt(shares_val.integer));
-                                    }
-                                }
+                                bundle_config.cpu_shares = try optionalInt(u64, cpu_val.object, "shares");
                             }
                         }
                     }
@@ -584,6 +579,20 @@ pub const OciBundleParser = struct {
         if (val != .string) return BundleError.InvalidConfigFormat;
         return try self.allocator.dupe(u8, val.string);
     }
+
+    /// An object's integer field as the runtime-spec types it, null when it
+    /// is absent or null. A fraction, a string or a value outside T refuses
+    /// the bundle; one silently left out would be a limit not applied.
+    fn optionalInt(comptime T: type, obj: std.json.ObjectMap, key: []const u8) BundleError!?T {
+        const val = obj.get(key) orelse return null;
+        return switch (val) {
+            .null => null,
+            .integer => |i| std.math.cast(T, i) orelse BundleError.InvalidConfigFormat,
+            // A number past i64 that may still fit T, such as a uint64
+            .number_string => |s| std.fmt.parseInt(T, s, 10) catch BundleError.InvalidConfigFormat,
+            else => BundleError.InvalidConfigFormat,
+        };
+    }
 };
 
 /// OCI Bundle configuration extracted from config.json
@@ -594,8 +603,10 @@ pub const OciBundleConfig = struct {
     process_args: ?[]const []const u8 = null,
     environment: ?[]const []const u8 = null,
     mounts: ?[]const MountConfig = null,
-    memory_limit: ?u64 = null,
-    cpu_limit: ?f64 = null,
+    /// linux.resources.memory.limit in bytes; -1 is the runtime-spec's "no limit"
+    memory_limit: ?i64 = null,
+    /// linux.resources.cpu.shares, the cgroup v1 weight
+    cpu_shares: ?u64 = null,
     capabilities: ?[]const u8 = null,
     seccomp_profile: ?[]const u8 = null,
 

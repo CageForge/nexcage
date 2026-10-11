@@ -248,6 +248,7 @@ pub const ProxmoxLxcDriver = struct {
         defer if (oci_bundle_path) |bp| self.allocator.free(bp);
         var bundle_config: ?bundle.OciBundleConfig = null;
         defer if (bundle_config) |*bc| bc.deinit();
+        var bundle_resources = oci.OciProcessor.Resources{};
         // The archive packed from a bundle's rootfs is needed only by pct create
         var bundle_template: ?oci.BundleTemplate = null;
         defer if (bundle_template) |*bt| bt.remove(self.allocator);
@@ -321,6 +322,7 @@ pub const ProxmoxLxcDriver = struct {
                         if (self.logger) |log| log.err("'{s}' is not a usable OCI bundle ({s}); it needs rootfs/ and a config.json in the runtime-spec's format", .{ safe_path, @errorName(err) }) catch {};
                         return core.Error.InvalidInput;
                     };
+                    bundle_resources = try self.oci_processor.bundleResources(&bundle_config.?);
 
                     // pct creates containers only from templates. This used to
                     // hand pct a template name that nothing had written.
@@ -379,16 +381,19 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // Resources. --memory and --cores replace the defaults rather than
-        // being given twice (#308); the other limits only add options.
+        // being given twice (#308); the other limits only add options. A
+        // bundle's own limits were checked when it was read. Without
+        // --memory, pct gives the container 512 MiB, the default here too.
         const opts = config.pve;
-        const mem_mb = if (bundle_config) |bc| (bc.memory_limit orelse (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES)) else (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES);
-        if (!hasLimit(opts.limits, "memory", "limit")) {
+        const mem_mb = bundle_resources.memory orelse (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES);
+        if (!hasLimit(opts.limits, "memory", "limit") and !bundle_resources.memory_unlimited) {
             const mem_mb_str = try std.fmt.allocPrint(self.allocator, "{d}", .{mem_mb / (1024 * 1024)});
             try allocated_args.append(mem_mb_str);
             try args_builder.appendSlice(&[_][]const u8{ "--memory", mem_mb_str });
         }
 
-        const cores = if (bundle_config) |bc| @as(u32, @intFromFloat(if (bc.cpu_limit) |l| @max(1.0, l / 1024.0) else (if (config.resources) |r| r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES) else @as(f64, core.constants.DEFAULT_CPU_CORES)))) else @as(u32, @intFromFloat(if (config.resources) |r| r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES) else @as(f64, core.constants.DEFAULT_CPU_CORES)));
+        const default_cpu: f64 = if (config.resources) |r| r.cpu orelse core.constants.DEFAULT_CPU_CORES else core.constants.DEFAULT_CPU_CORES;
+        const cores: u32 = bundle_resources.cores orelse std.math.lossyCast(u32, @max(1.0, default_cpu));
         if (opts.cores) |c| {
             try args_builder.appendSlice(&[_][]const u8{ "--cores", c });
         } else {

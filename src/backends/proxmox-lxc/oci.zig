@@ -111,6 +111,50 @@ pub const OciProcessor = struct {
         return null;
     }
 
+    /// What a bundle's linux.resources ask of pct create. Read once the
+    /// bundle is parsed, so a value nexcage cannot give pct is refused before
+    /// anything is packed or created.
+    pub const Resources = struct {
+        /// --memory in bytes; null when the bundle sets no limit
+        memory: ?u64 = null,
+        /// memory.limit -1, the runtime-spec's "no limit". Proxmox has no
+        /// unlimited memory for a container, so --memory is left out and pct
+        /// gives the container its own default, as for a template created
+        /// without one.
+        memory_unlimited: bool = false,
+        /// --cores; null when the bundle sets no shares
+        cores: ?u32 = null,
+    };
+
+    /// The kernel's ceiling for cgroup v1 cpu.shares
+    pub const max_cpu_shares = 262144;
+
+    pub fn bundleResources(self: *const Self, cfg: *const bundle.OciBundleConfig) core.Error!Resources {
+        var res = Resources{};
+        if (cfg.memory_limit) |limit| {
+            // runc reads 0 as no value at all, and -1 as no limit
+            if (limit == -1) {
+                res.memory_unlimited = true;
+            } else if (limit > 0) {
+                res.memory = @intCast(limit);
+            } else if (limit < 0) {
+                if (self.logger) |log| log.err("linux.resources.memory.limit {d} in the bundle is not a limit: it is bytes, or -1 for none", .{limit}) catch {};
+                return core.Error.InvalidInput;
+            }
+        }
+        if (cfg.cpu_shares) |shares| {
+            // Read as 1024 shares to a core, as this backend always has. The
+            // value was divided as a float and cast to u32 unchecked, which
+            // trapped -- a root-process abort -- on shares past 4 * 10^12.
+            if (shares > max_cpu_shares) {
+                if (self.logger) |log| log.err("linux.resources.cpu.shares {d} in the bundle is past the kernel's maximum of {d}", .{ shares, max_cpu_shares }) catch {};
+                return core.Error.InvalidInput;
+            }
+            if (shares > 0) res.cores = @intCast(@max(1, shares / 1024));
+        }
+        return res;
+    }
+
     pub fn applyMountsToLxcConfig(self: *const Self, vmid: []const u8, bundle_path: []const u8) !void {
         var parser = bundle.OciBundleParser.init(self.allocator, self.getBundleLogger());
         var cfg = try parser.parseBundle(bundle_path);
@@ -242,4 +286,78 @@ test "well-formed mounts still parse, and free what they hold" {
     try std.testing.expectEqual(@as(usize, 2), cfg.mounts.?.len);
     try std.testing.expectEqualStrings("/srv/data", cfg.mounts.?[1].source.?);
     try std.testing.expectEqualStrings("/sbin/init", cfg.process_args.?[0]);
+}
+
+fn testProcessor() OciProcessor {
+    return OciProcessor.init(std.testing.allocator, null, .{ .allocator = std.testing.allocator });
+}
+
+test "memory.limit -1 is no limit, and leaves --memory out; another negative is refused" {
+    const proc = testProcessor();
+    var cfg = bundle.OciBundleConfig{ .allocator = std.testing.allocator, .rootfs_path = "" };
+
+    cfg.memory_limit = -1;
+    const unlimited = try proc.bundleResources(&cfg);
+    try std.testing.expect(unlimited.memory_unlimited and unlimited.memory == null);
+
+    cfg.memory_limit = 1 << 30;
+    try std.testing.expectEqual(@as(?u64, 1 << 30), (try proc.bundleResources(&cfg)).memory);
+
+    // runc reads 0 as no value
+    cfg.memory_limit = 0;
+    const zero = try proc.bundleResources(&cfg);
+    try std.testing.expect(!zero.memory_unlimited and zero.memory == null);
+
+    cfg.memory_limit = -5;
+    try std.testing.expectError(core.Error.InvalidInput, proc.bundleResources(&cfg));
+}
+
+test "cpu.shares past the kernel's maximum is refused, not cast" {
+    const proc = testProcessor();
+    var cfg = bundle.OciBundleConfig{ .allocator = std.testing.allocator, .rootfs_path = "" };
+
+    cfg.cpu_shares = 5_000_000_000_000;
+    try std.testing.expectError(core.Error.InvalidInput, proc.bundleResources(&cfg));
+    cfg.cpu_shares = std.math.maxInt(u64);
+    try std.testing.expectError(core.Error.InvalidInput, proc.bundleResources(&cfg));
+
+    cfg.cpu_shares = OciProcessor.max_cpu_shares;
+    try std.testing.expectEqual(@as(?u32, 256), (try proc.bundleResources(&cfg)).cores);
+    cfg.cpu_shares = 2;
+    try std.testing.expectEqual(@as(?u32, 1), (try proc.bundleResources(&cfg)).cores);
+    cfg.cpu_shares = 0;
+    try std.testing.expectEqual(@as(?u32, null), (try proc.bundleResources(&cfg)).cores);
+}
+
+test "memory.limit and cpu.shares of the wrong type are refused, not dropped" {
+    const cases = [_][]const u8{
+        \\{"root":{"path":"rootfs"},"linux":{"resources":{"memory":{"limit":1.5e9}}}}
+        ,
+        \\{"root":{"path":"rootfs"},"linux":{"resources":{"memory":{"limit":"1G"}}}}
+        ,
+        \\{"root":{"path":"rootfs"},"linux":{"resources":{"cpu":{"shares":-2}}}}
+        ,
+        \\{"root":{"path":"rootfs"},"linux":{"resources":{"cpu":{"shares":36893488147419103232}}}}
+        ,
+    };
+    for (cases) |json| {
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        const path = try testBundle(&tmp, json);
+        defer std.testing.allocator.free(path);
+        var parser = bundle.OciBundleParser.init(std.testing.allocator, null);
+        try std.testing.expectError(error.InvalidConfigFormat, parser.parseBundle(path));
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try testBundle(&tmp,
+        \\{"root":{"path":"rootfs"},"linux":{"resources":{"memory":{"limit":-1},"cpu":{"shares":18446744073709551615}}}}
+    );
+    defer std.testing.allocator.free(path);
+    var parser = bundle.OciBundleParser.init(std.testing.allocator, null);
+    var cfg = try parser.parseBundle(path);
+    defer cfg.deinit();
+    try std.testing.expectEqual(@as(?i64, -1), cfg.memory_limit);
+    try std.testing.expectEqual(@as(?u64, std.math.maxInt(u64)), cfg.cpu_shares);
 }
