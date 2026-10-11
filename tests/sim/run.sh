@@ -989,10 +989,10 @@ check "delsnapshot on another node goes through that node's API" \
   all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200/snapshot/s1"' 'not_called_re "^pct delsnapshot"'
 # pvesh hands the path of a call for another node to that node's shell over
 # ssh, unquoted: a snapshot name there was a command run as root on titan.
-nx rollback remote-1 'x;touch${IFS}/root/pwn;'
+nx --runtime lxc rollback remote-1 'x;touch${IFS}/root/pwn;'
 check "a snapshot name that is a shell command never reaches another node's pvesh path" \
   all 'rc 2' 'err_has "not a snapshot name"' 'not_called_re "^pvesh create /nodes/.*/snapshot/"'
-nx delsnapshot remote-1 '../../201/snapshot/s'
+nx --runtime lxc delsnapshot remote-1 '../../201/snapshot/s'
 check "nor does one that climbs out of the container's snapshots" \
   all 'rc 2' 'not_called_re "^pvesh delete"'
 
