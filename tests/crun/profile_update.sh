@@ -75,15 +75,16 @@ limits() { echo "memory.max=$(cat "$cg/memory.max") pids.max=$(cat "$cg/pids.max
 [ "$(limits)" = "memory.max=67108864 pids.max=50" ] || fail "create did not apply the profile: $(limits)"
 echo "ok: created under the profile: $(limits)"
 
-# Each of these would lift a cap. Every one must be refused, say which cap,
-# and leave the cgroup as it was.
+# Each of these would lift a cap. Every one must be refused, say why ($says:
+# which cap, unless set otherwise), and leave the cgroup as it was.
+says="profile 'hardened' caps"
 refused() {  # <what> <command...>
     what=$1; shift
     rc=0; "$@" >/dev/null 2>"$WORK/err" || rc=$?
     [ "$rc" != 0 ] || fail "$what was accepted: now $(limits)"
-    grep -q "profile 'hardened' caps" "$WORK/err" || fail "$what was refused without naming the cap: $(tr '\n' ' ' < "$WORK/err")"
+    grep -qF "$says" "$WORK/err" || fail "$what was refused without saying \"$says\": $(tr '\n' ' ' < "$WORK/err")"
     [ "$(limits)" = "memory.max=67108864 pids.max=50" ] || fail "$what was refused and still changed the cgroup: $(limits)"
-    echo "ok: refused (exit $rc): $what -- $(grep -o "profile 'hardened' caps.*" "$WORK/err" | head -1)"
+    echo "ok: refused (exit $rc): $what -- $(awk -v s="$says" 'i = index($0, s) { print substr($0, i); exit }' "$WORK/err")"
 }
 doc() { printf '%s' "$1" > "$WORK/doc.json"; }
 doc '{"memory":{"limit":1073741824,"swap":1073741824},"cpu":{"shares":512}}'
@@ -98,6 +99,20 @@ refused "--memory -1" nx update --memory -1 "$ID"
 refused "--memory 2G" nx update --memory 2G "$ID"
 refused "--pids-limit -1" nx update --pids-limit -1 "$ID"
 refused "--pids-limit 999" nx update --pids-limit 999 "$ID"
+
+# A key that ends in a NUL is the key before it to libcrun's parser, which
+# keeps the last of two keys that are then the same: each of these took a cap
+# off past a check that read the first. Refused for the NUL, which no
+# runtime spec has.
+says='has a NUL in the key'
+doc '{"memory":{"limit":33554432,"limit\u0000":1073741824}}'
+refused "--resources memory.limit 32M, and 1G behind \"limit\\u0000\"" nx update --resources "$WORK/doc.json" "$ID"
+doc '{"memory":{"limit":33554432},"memory\u0000":{"limit":-1}}'
+refused "--resources memory.limit 32M, and -1 behind \"memory\\u0000\"" nx update --resources "$WORK/doc.json" "$ID"
+doc '{"unified":{"memory.max\u0000":"max"}}'
+refused "--resources unified \"memory.max\\u0000\" max" nx update --resources "$WORK/doc.json" "$ID"
+doc '{"pids":{"limit":40,"limit\u0000":-1}}'
+refused "--resources pids.limit 40, and -1 behind \"limit\\u0000\"" nx update --resources - "$ID" < "$WORK/doc.json"
 
 # Within the caps: down, and back up to them, the engine's way and by flags.
 doc '{"memory":{"limit":33554432,"swap":33554432},"pids":{"limit":40}}'

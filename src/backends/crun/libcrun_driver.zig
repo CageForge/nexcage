@@ -752,12 +752,17 @@ pub const CrunDriver = struct {
     }
 
     /// checkMemory on a JSON document: the linux.resources object itself, as
-    /// update sends it, or a whole spec, as create hands it over.
+    /// update sends it, or a whole spec, as create hands it over. Read the
+    /// way the profile checks read one (core.profile.parse), which refuses
+    /// what libcrun's parser would read otherwise: with "limit" and
+    /// "limit\u0000", the check here saw the first and libcrun overflowed on
+    /// the second, which it reads as "limit" too.
     fn checkMemoryJson(self: *Self, what: []const u8, json: []const u8, shape: enum { resources, spec }) core.Error!void {
-        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, json, .{}) catch |err| switch (err) {
+        var why: core.profile.Refusal = .{};
+        const parsed = core.profile.parse(self.allocator, json, what, &why) catch |err| switch (err) {
             error.OutOfMemory => return core.Error.OutOfMemory,
-            else => {
-                if (self.logger) |log| log.err("{s} is not valid JSON ({s})", .{ what, @errorName(err) }) catch {};
+            error.ProfileRefused => {
+                if (self.logger) |log| log.err("{s}", .{why.text()}) catch {};
                 return core.Error.ValidationError;
             },
         };
@@ -1198,6 +1203,9 @@ test "memory values libcrun would overflow on are refused before it sees them" {
         "{\"memory\":{\"limit\":-1,\"swap\":9223372036854775807}}",
         "{\"memory\":{\"swap\":1.5}}",
         "{\"memory\":{\"limit\":\"64M\"}}",
+        // a key that ends in a NUL is the one before it to libcrun
+        "{\"memory\":{\"limit\":67108864,\"limit\\u0000\":-9223372036854775808,\"swap\":1}}",
+        "{\"memory\":{\"limit\":67108864},\"memory\\u0000\":{\"limit\":-9223372036854775808,\"swap\":1}}",
     };
     for (refused) |doc| {
         driver.checkMemoryJson("t", doc, .resources) catch |err| {
@@ -1218,6 +1226,8 @@ test "memory values libcrun would overflow on are refused before it sees them" {
 
     // A whole spec, as create hands it over.
     try std.testing.expectError(core.Error.ValidationError, driver.checkMemoryJson("t", "{\"linux\":{\"resources\":{\"memory\":{\"limit\":-9223372036854775808,\"swap\":1}}}}", .spec));
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemoryJson("t", "{\"linux\":{\"resources\":{\"memory\":{\"limit\":67108864,\"limit\\u0000\":-9223372036854775808,\"swap\":1}}}}", .spec));
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemoryJson("t", "{\"linux\":{\"resources\":{}},\"linux\\u0000\":{\"resources\":{\"memory\":{\"limit\":-9223372036854775808,\"swap\":1}}}}", .spec));
     try driver.checkMemoryJson("t", "{\"ociVersion\":\"1.0.0\",\"linux\":{\"resources\":{\"memory\":{\"limit\":1073741824}}}}", .spec);
     try driver.checkMemoryJson("t", "{\"ociVersion\":\"1.0.0\"}", .spec);
 

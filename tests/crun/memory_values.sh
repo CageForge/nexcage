@@ -11,7 +11,10 @@
 # through update died after memory.max had been rewritten to max.
 #
 # The checks hold for what libcrun is given: it gets the bytes nexcage read,
-# not the bundle's file to read again.
+# not the bundle's file to read again. And for how libcrun reads them: its
+# parser ends a key at a NUL and keeps the last of two keys that are then the
+# same, so "limit\u0000" after "limit" was the limit libcrun overflowed on,
+# while the check read the first.
 #
 # The kernel's files are the check: the cgroup directory, memory.max, and
 # the processes in a cgroup that must be left alone. cgroup v2 only.
@@ -89,6 +92,15 @@ grep -q "memory.limit is -9223372036854775808" /tmp/memory.err || fail "the refu
 [ ! -e "$CG/$ID-c" ] || fail "a refused create left the cgroup $CG/$ID-c"
 echo "ok: create with memory.limit INT64_MIN exits 2 and leaves nothing"
 
+# ... and so with the value behind a second "limit" that ends in a NUL.
+spec '{ "limit": 67108864, "limit\u0000": -9223372036854775808, "swap": 1 }'
+rc=0; nx create --bundle "$BUNDLE" "$ID-c" 2>/tmp/memory.err || rc=$?
+[ "$rc" = 2 ] || fail "create with a second memory.limit behind \"limit\\u0000\" exited $rc, not 2: $(tr '\n' ' ' < /tmp/memory.err | head -c 300)"
+grep -qF 'has a NUL in the key "limit\u0000"' /tmp/memory.err || fail "the refusal does not name the key: $(tr '\n' ' ' < /tmp/memory.err)"
+[ ! -e "/run/crun/$ID-c" ] || fail "a refused create left /run/crun/$ID-c"
+[ ! -e "$CG/$ID-c" ] || fail "a refused create left the cgroup $CG/$ID-c"
+echo "ok: create with memory.limit INT64_MIN behind \"limit\\u0000\" exits 2 and leaves nothing"
+
 # ... and what passed the check is what libcrun creates from. A config.json
 # that is a FIFO answers the first read with a spec that passes, and every
 # later one with the spec above: handed the path, libcrun read it again, to
@@ -134,6 +146,10 @@ cg=$CG$(sed -n 's/^0:://p' "/proc/$pid/cgroup")
 [ "$(cat "$cg/memory.max")" = 67108864 ] || fail "memory.max is $(cat "$cg/memory.max") after create, not 67108864"
 rc=0; printf '{"memory":{"limit":-9223372036854775808,"swap":1}}' | nx update --resources - "$ID-u" 2>/tmp/memory.err || rc=$?
 [ "$rc" = 2 ] || fail "update --resources with memory.limit INT64_MIN exited $rc, not 2: $(tr '\n' ' ' < /tmp/memory.err | head -c 300)"
+[ "$(cat "$cg/memory.max")" = 67108864 ] || fail "a refused update changed memory.max to $(cat "$cg/memory.max")"
+rc=0; printf '%s' '{"memory":{"limit":67108864,"limit\u0000":-9223372036854775808,"swap":1}}' | nx update --resources - "$ID-u" 2>/tmp/memory.err || rc=$?
+[ "$rc" = 2 ] || fail "update --resources with memory.limit INT64_MIN behind \"limit\\u0000\" exited $rc, not 2: $(tr '\n' ' ' < /tmp/memory.err | head -c 300)"
+grep -qF 'has a NUL in the key "limit\u0000"' /tmp/memory.err || fail "the refused update does not name the key: $(tr '\n' ' ' < /tmp/memory.err)"
 [ "$(cat "$cg/memory.max")" = 67108864 ] || fail "a refused update changed memory.max to $(cat "$cg/memory.max")"
 rc=0; nx update --memory -1 --memory-swap 9223372036854775807 "$ID-u" 2>/tmp/memory.err || rc=$?
 [ "$rc" = 2 ] || fail "update --memory -1 --memory-swap 9223372036854775807 exited $rc, not 2: $(tr '\n' ' ' < /tmp/memory.err | head -c 300)"

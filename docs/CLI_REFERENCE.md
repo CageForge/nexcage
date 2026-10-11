@@ -678,7 +678,8 @@ everything else is a number. On the crun backend a memory limit, swap or
 reservation, in a document or a bundle, is `-1` or a number of bytes: any
 other negative value, a value that is not a whole 64-bit number, and a swap
 and limit whose difference does not fit in 64 bits exit 2 before libcrun sees
-them (see [Backends](architecture/BACKENDS.md#crun)).
+them, and so does a document with a NUL in any key, which libcrun's parser
+would read as another key (see [Backends](architecture/BACKENDS.md#crun)).
 
 `--resources <file>` is a runtime-spec `linux.resources` object, and `-` reads
 it from stdin. **That is how containerd sends an in-place resize**:

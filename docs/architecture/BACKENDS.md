@@ -64,6 +64,12 @@ with the vendored header field by field. What nexcage does around libcrun:
   parse it and to keep a copy in its state directory, and a bundle changed
   after nexcage's checks, or between the two reads, went to libcrun
   unchecked.
+- **A document with a NUL in a key is refused**: the bundle's spec on
+  `create` and the resources document on `update`, with or without a
+  profile, and `exec`'s process spec under one. libcrun's parser ends a key
+  at a NUL and keeps the last of two keys that are then the same, so
+  `"limit\u0000"` after `"limit"` was the limit libcrun applied, while
+  nexcage's checks read the first. No runtime spec has a NUL in a key.
 - **`create` and `exec` run from a sealed copy of the binary** (the
   CVE-2019-5736 protection): the driver calls libcrun's
   `ensure_cloned_binary` before anything else. libcrun does that from a

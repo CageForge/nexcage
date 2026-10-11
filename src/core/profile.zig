@@ -85,10 +85,10 @@ pub const Refusal = struct {
 
 const capability_sets = [_][]const u8{ "bounding", "effective", "inheritable", "permitted", "ambient" };
 
-/// What create hands libcrun instead of the bundle's file: with a profile,
+/// What create hands libcrun instead of the bytes it read: with a profile,
 /// the spec narrowed by it, which the caller owns; without one, null, and
-/// libcrun reads the file. Either way a bundle that claims a profile is
-/// refused.
+/// libcrun gets those bytes. Either way a bundle that claims a profile is
+/// refused, and so is one libcrun would read otherwise than parse does.
 pub fn prepare(allocator: std.mem.Allocator, spec_json: []const u8, profile: ?*const Profile, why: *Refusal) !?[]u8 {
     const p = profile orelse {
         try checkUnclaimed(allocator, spec_json, why);
@@ -337,18 +337,47 @@ fn capabilitiesOf(process: ?std.json.Value) ?std.json.ObjectMap {
     return if (c == .object) c.object else null;
 }
 
-/// A JSON object, or a refusal. Duplicate keys are refused too: libcrun's
-/// parser would read one of them and this one the other.
-fn parse(allocator: std.mem.Allocator, json: []const u8, what: []const u8, why: *Refusal) !std.json.Parsed(std.json.Value) {
+/// A JSON object, or a refusal: a document read as libcrun will read it, for
+/// whatever checks it before libcrun does. Duplicate keys are refused too:
+/// libcrun's parser would read one of them and this one the other. So is a
+/// key with a NUL in it (refuseNulKeys), which is a duplicate to libcrun.
+pub fn parse(allocator: std.mem.Allocator, json: []const u8, what: []const u8, why: *Refusal) !std.json.Parsed(std.json.Value) {
     const parsed = std.json.parseFromSlice(std.json.Value, allocator, json, .{}) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return why.set("{s} is not valid JSON ({s})", .{ what, @errorName(err) }),
     };
-    if (parsed.value != .object) {
-        parsed.deinit();
-        return why.set("{s} is not a JSON object", .{what});
-    }
+    errdefer parsed.deinit();
+    if (parsed.value != .object) return why.set("{s} is not a JSON object", .{what});
+    try refuseNulKeys(allocator, parsed.value, what, why);
     return parsed;
+}
+
+/// Refuses a document with a NUL in any key, at any depth. libcrun's parser
+/// copies a key as a C string, so it ends at the NUL, and of two keys that
+/// are then the same it keeps the last: {"limit":33554432,"limit\u0000":-1}
+/// is a limit of -1 to libcrun and of 33554432 to every check here, and so
+/// is a "memory\u0000" object, or "memory.max\u0000" in unified. No runtime
+/// spec has a NUL in a key. A list, not recursion: std.json builds a
+/// document of any depth, and this walk must not run out of stack on one.
+fn refuseNulKeys(allocator: std.mem.Allocator, root: std.json.Value, what: []const u8, why: *Refusal) !void {
+    var todo = std.ArrayListUnmanaged(std.json.Value){};
+    defer todo.deinit(allocator);
+    try todo.append(allocator, root);
+    while (todo.pop()) |value| switch (value) {
+        .object => |obj| {
+            var it = obj.iterator();
+            while (it.next()) |entry| {
+                const key = entry.key_ptr.*;
+                // Spelt as JSON, with every control and non-ASCII character
+                // escaped: the NUL itself is not for the log.
+                if (std.mem.indexOfScalar(u8, key, 0)) |nul|
+                    return why.set("{s} has a NUL in the key {f}, which libcrun's parser reads as {f}", .{ what, std.json.fmt(key, .{ .escape_unicode = true }), std.json.fmt(key[0..nul], .{ .escape_unicode = true }) });
+                try todo.append(allocator, entry.value_ptr.*);
+            }
+        },
+        .array => |list| try todo.appendSlice(allocator, list.items),
+        else => {},
+    };
 }
 
 /// The record `state` reports must be one nexcage wrote: the profile's name
@@ -610,6 +639,11 @@ test "update holds a container made under a profile to the caps recorded at crea
         "{\"unified\":{\"pids.max\":\"max\"}}",
         // two of the same key: libcrun's parser would read the second
         "{\"pids\":{\"limit\":40,\"limit\":500}}",
+        // and so they are to it when one ends in a NUL
+        "{\"memory\":{\"limit\":33554432,\"limit\\u0000\":1073741824}}",
+        "{\"memory\":{\"limit\":33554432},\"memory\\u0000\":{\"limit\":-1}}",
+        "{\"unified\":{\"memory.max\\u0000\":\"max\"}}",
+        "{\"pids\":{\"limit\":40,\"limit\\u0000\":-1}}",
     };
     for (refused) |doc| {
         boundUpdate(allocator, stored, doc, &.{}, &why) catch |err| {
@@ -657,4 +691,43 @@ test "update is not bounded without a profile or its caps, and the caps cannot b
     try std.testing.expectError(error.ProfileRefused, checkUnclaimed(allocator, "{\"annotations\":{\"io.cageforge.nexcage.profile.memory\":\"1099511627776\"}}", &why));
     try std.testing.expectEqualStrings("the bundle carries the annotation io.cageforge.nexcage.profile.memory, which nexcage writes itself", why.text());
     try expectRefused("{\"annotations\":{\"io.cageforge.nexcage.profile.pids\":\"1\"}}", .{ .name = "h", .pids_limit = 10 }, "which nexcage writes itself");
+}
+
+test "a key with a NUL in it is refused in every document read, at any depth" {
+    const allocator = std.testing.allocator;
+    var why: Refusal = .{};
+    const stored = "{\"annotations\":{\"io.cageforge.nexcage.profile\":\"hardened\",\"io.cageforge.nexcage.profile.memory\":\"67108864\",\"io.cageforge.nexcage.profile.pids\":\"50\"}}";
+    try std.testing.expectError(error.ProfileRefused, boundUpdate(allocator, stored, "{\"memory\":{\"limit\":33554432,\"limit\\u0000\":1073741824}}", &.{}, &why));
+    try std.testing.expectEqualStrings("the resources document has a NUL in the key \"limit\\u0000\", which libcrun's parser reads as \"limit\"", why.text());
+
+    // create, without a profile: libcrun would take a limit nothing checked,
+    // and overflow on it (the driver's checkMemory).
+    try std.testing.expectError(error.ProfileRefused, checkUnclaimed(allocator, "{\"linux\":{\"resources\":{\"memory\":{\"limit\":67108864,\"limit\\u0000\":-9223372036854775808,\"swap\":1}}}}", &why));
+    try std.testing.expectEqualStrings("the bundle's config.json has a NUL in the key \"limit\\u0000\", which libcrun's parser reads as \"limit\"", why.text());
+    // ... and under one: the profile lowers the first limit, libcrun applies
+    // the second.
+    try expectRefused("{\"linux\":{\"resources\":{\"memory\":{\"limit\":1073741824,\"limit\\u0000\":1073741824},\"pids\":{\"limit\":500,\"limit\\u0000\":500}}}}", .{ .name = "hardened", .memory_limit = 67108864, .pids_limit = 50 }, "has a NUL in the key \"limit\\u0000\"");
+    // A claim of the caps behind a NUL is a claim to libcrun.
+    try std.testing.expectError(error.ProfileRefused, checkUnclaimed(allocator, "{\"annotations\":{},\"annotations\\u0000\":{\"io.cageforge.nexcage.profile.memory\":\"1099511627776\"}}", &why));
+    try std.testing.expectEqualStrings("the bundle's config.json has a NUL in the key \"annotations\\u0000\", which libcrun's parser reads as \"annotations\"", why.text());
+    // exec: "capabilities\u0000" is a process with nothing to cut, and
+    // libcrun's "capabilities".
+    try std.testing.expectError(error.ProfileRefused, boundExec(allocator, "{\"args\":[\"sh\"],\"capabilities\\u0000\":{\"bounding\":[\"CAP_SYS_ADMIN\"]}}", "{\"annotations\":{\"io.cageforge.nexcage.profile\":\"hardened\"}}", &why));
+    try std.testing.expect(std.mem.indexOf(u8, why.text(), "the process spec has a NUL in the key \"capabilities\\u0000\"") != null);
+
+    // Deeper than any stack would hold as recursion, inside a list.
+    const depth = 1 << 17;
+    const deep = try allocator.alloc(u8, 2 * depth + 16);
+    defer allocator.free(deep);
+    @memset(deep[0..depth], '[');
+    const middle = "{\"a\\u0000\":1}";
+    @memcpy(deep[depth..][0..middle.len], middle);
+    @memset(deep[depth + middle.len ..][0..depth], ']');
+    var doc = std.ArrayListUnmanaged(u8){};
+    defer doc.deinit(allocator);
+    try doc.print(allocator, "{{\"x\":{s}}}", .{deep[0 .. 2 * depth + middle.len]});
+    try std.testing.expectError(error.ProfileRefused, checkUnclaimed(allocator, doc.items, &why));
+    try std.testing.expectEqualStrings("the bundle's config.json has a NUL in the key \"a\\u0000\", which libcrun's parser reads as \"a\"", why.text());
+    // Anything else spelt with \u escapes is a key like any other.
+    try checkUnclaimed(allocator, "{\"annotations\":{\"caf\\u00e9\":\"\\u0000 in a value\"}}", &why);
 }
