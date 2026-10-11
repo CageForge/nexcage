@@ -9,6 +9,7 @@ pub const SimpleAdvancedLogging = struct {
     file_logger: ?LogContext = null,
     debug_mode: bool = false,
     log_file_path: ?[]const u8 = null,
+    /// When the command started, in nanoseconds on the monotonic clock.
     command_start_time: ?u64 = null,
 
     const Self = @This();
@@ -112,7 +113,7 @@ pub const SimpleAdvancedLogging = struct {
 
     /// Log command execution start
     pub fn logCommandStart(self: *Self, command_name: []const u8, args: []const []const u8) !void {
-        self.command_start_time = @intCast(std.time.nanoTimestamp());
+        self.command_start_time = monotonicNs();
 
         if (args.len > 0) {
             const joined_args = try std.mem.join(self.allocator, " ", args);
@@ -135,7 +136,7 @@ pub const SimpleAdvancedLogging = struct {
     /// Log command execution completion
     pub fn logCommandComplete(self: *Self, command_name: []const u8, success: bool) !void {
         if (self.command_start_time) |start_time| {
-            const duration_ms = (@as(u64, @intCast(std.time.nanoTimestamp())) - start_time) / 1_000_000;
+            const duration_ms = (monotonicNs() -| start_time) / std.time.ns_per_ms;
             try self.info("Command '{s}' completed in {d}ms", .{ command_name, duration_ms });
         }
 
@@ -196,6 +197,30 @@ pub const SimpleAdvancedLogging = struct {
         }
     }
 };
+
+/// Now, in nanoseconds on the monotonic clock. The duration of a command was
+/// taken from the wall clock, and in u64: NTP or `date -s` stepping it back
+/// while a command ran made the subtraction overflow, a panic after the
+/// command had already succeeded -- an engine saw a create that worked
+/// fail. The monotonic clock does not step, and the subtraction that uses it
+/// saturates anyway. 0 if the clock cannot be read, which gives no duration
+/// rather than a wrong one.
+fn monotonicNs() u64 {
+    const ts = std.posix.clock_gettime(.MONOTONIC) catch return 0;
+    return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
+}
+
+test "a command's duration cannot overflow, whatever the clock did meanwhile" {
+    var logger = try SimpleAdvancedLogging.init(std.testing.allocator, false, null);
+    defer logger.deinit();
+    const null_file = try std.fs.openFileAbsolute("/dev/null", .{ .mode = .write_only });
+    defer null_file.close();
+    logger.console_logger.file = null_file;
+    // A start later than now on any clock: what a wall clock stepped back
+    // during the command looked like.
+    logger.command_start_time = std.math.maxInt(u64);
+    try logger.logCommandComplete("create", true);
+}
 
 /// Re-export LogLevel and LogContext for compatibility
 pub const LogLevel = @import("logging.zig").LogLevel;
