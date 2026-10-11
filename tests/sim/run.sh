@@ -512,6 +512,7 @@ check "--root: the Proxmox backend's state is not where libcrun keeps its contai
 # with the records under .proxmox-lxc.
 nx --root /run/nexcage/ start from-tpl
 check "--root naming the default with a trailing slash is the default" all 'rc 0' 'called_re "^pct start [0-9]+$"'
+nx stop from-tpl >/dev/null 2>&1   # stopped, as the checks further down expect it
 nx --root /run/alt delete --force rooted-1
 check "--root: delete --force reaches Proxmox and removes the state" \
   all 'rc 0' 'called_re "^pct destroy [0-9]+$"' '[ ! -e "$S/run/alt/.proxmox-lxc/rooted-1" ]'
@@ -1114,6 +1115,11 @@ check "a container whose VMID has gone to another one is not stopped in its plac
 nx --runtime lxc delete --force web-old
 check "nor destroyed in its place" \
   all 'rc 1' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/200"' 'grep -q "^200 running web-new titan$" "$S/db"'
+echo "s1 0" > "$S/snaps.200"
+nx --runtime lxc rollback web-old s1
+check "nor rolled back in its place" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pvesh create /nodes/titan/lxc/200/snapshot/"' \
+      'grep -q "^200 running web-new titan$" "$S/db"'
 rm -f "$S/stale_name"
 # On this host `pct list` is current, and its name wins over the cache's.
 reset_sim
@@ -1126,6 +1132,21 @@ check "a name the cluster's cache still gives a reused VMID here does not find t
 nx start web-new
 check "(which its own name does)" all 'rc 0' 'called "pct start 100"'
 rm -f "$S/stale_name"
+# kill reaches for the init from the host. A VMID that changes hands after
+# the listing ($SIM/meanwhile.list runs once, right after `pct list`) is the
+# same race as stop's, and SIGKILL is as final as a destroy.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name web-old "$TPL" >/dev/null 2>&1
+nx start web-old >/dev/null 2>&1
+cat > "$S/meanwhile.list" <<'SH'
+# web-old is destroyed elsewhere and web-new takes VMID 100
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx kill web-old TERM
+check "a container whose VMID changed hands after it was found is not sent the signal" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pct status"' '! grep -qx SIGTERM "$S/sig.100"'
+rm -f "$S/meanwhile.list"
 # The window that matters most: a forced delete waits for the shutdown, and
 # the VMID is free once something else has destroyed the container.
 reset_sim

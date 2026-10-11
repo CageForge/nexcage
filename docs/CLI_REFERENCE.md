@@ -150,9 +150,9 @@ resolved to whichever the listing put first; address one by its VMID, with
 
 **A VMID can change hands.** Proxmox gives a destroyed container's VMID to the
 next container created, so right before `stop`, `delete` (and the stop
-`--force` does first) and `rollback`, nexcage reads the container's hostname
-from its config again — `pct config`, or the node's API — and refuses, touching
-nothing, when the VMID now belongs to a container with another name.
+`--force` does first), `rollback` and `kill`, nexcage reads the container's
+hostname from its config again — `pct config`, or the node's API — and refuses,
+touching nothing, when the VMID now belongs to a container with another name.
 
 ## Backend selection
 

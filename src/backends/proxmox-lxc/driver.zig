@@ -831,6 +831,9 @@ pub const ProxmoxLxcDriver = struct {
     pub fn kill(self: *Self, container_id: []const u8, signal: []const u8) !void {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        // An engine's SIGKILL is as final as a destroy, and the VMID can
+        // change hands between the listing and the signal the same way.
+        try self.pve_client.confirm(&loc);
         try self.pve_client.kill(loc.vmid, signal, loc.remote());
     }
 

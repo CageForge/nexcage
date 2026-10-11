@@ -280,9 +280,14 @@ case "$1 $2" in
     # A container's config, as its node's API gives it: what `update
     # --memory-swap` reads when no --memory came with it, and the hostname a
     # command checks right before it stops or destroys the container.
+    # Only the node the container is on has its config: the API proxies the
+    # call to the node in the path, and that node reads its own
+    # nodes/<node>/lxc/<vmid>.conf. Answering for any node let a check that
+    # asked the wrong one pass.
+    node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/lxc/.*|\1|p')
     vmid=$(echo "$2" | sed -n 's|.*/lxc/\([0-9]*\)/config|\1|p')
-    host=$(awk -v v="$vmid" '$1==v {print $3; f=1} END {exit !f}' "$SIM/db") || {
-      echo "Configuration file 'nodes/x/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    host=$(awk -v v="$vmid" -v n="$node" -v h="$HERE" '$1==v && ($4==n || ($4=="" && n==h)) {print $3; f=1} END {exit !f}' "$SIM/db") || {
+      echo "Configuration file 'nodes/$node/lxc/$vmid.conf' does not exist" >&2; exit 2; }
     printf '{"cores":1,"hostname":"%s","memory":512,"swap":512}\n' "$host"
     ;;
   *) echo "fake pvesh: unsupported $*" >&2; exit 99 ;;

@@ -65,6 +65,9 @@ case "$cmd" in
       lock=""; [ -e "$SIM/lock.$v" ] && lock=$(cat "$SIM/lock.$v")
       printf "%-10s %-10s %-12s %-20s\n" "$v" "$s" "$lock" "$n"
     done
+    # Something else on the host acting right after the listing was read,
+    # once: $SIM/meanwhile.list is a script, run and removed.
+    if [ -e "$SIM/meanwhile.list" ]; then bash "$SIM/meanwhile.list"; rm -f "$SIM/meanwhile.list"; fi
     ;;
   create)
     vmid=$1; tpl=$2; shift 2
