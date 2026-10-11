@@ -128,6 +128,7 @@ administrator makes one link per profile and points the handler at it:
   runtime_type = 'io.containerd.runc.v2'
   [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage-hardened.options]
     BinaryName = '/usr/local/bin/nexcage@hardened'
+    SystemdCgroup = true    # as runc's handler has it: the kubelet's cgroup driver
 ```
 
 ```toml

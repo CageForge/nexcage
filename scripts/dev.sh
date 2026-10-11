@@ -255,6 +255,8 @@ crun_checks() {
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/memory_values.sh
   say "the re-execution happens for containers only"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/rexec.sh
+  say "--systemd-cgroup before the command reaches libcrun"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/systemd_cgroup.sh
 }
 
 # Always through crun_image: an image left from older sources would test them.

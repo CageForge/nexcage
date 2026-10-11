@@ -628,9 +628,18 @@ check "a capability the kernel does not have refuses the file, naming it: the ty
   all 'rc 1' 'err_has "profiles.x.crun.capabilities.drop"' "err_has 'names \"CAP_SYSADMIN\"'"
 rm -f "$S/work/config.json" "$S"/nexcage@*
 
-nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup list
-check "the options containerd sends are accepted, not read as a command" \
-  all 'rc 0' '! err_has "unknown command"'
+# What engines put before the command, in both their orders: go-runc's, which
+# containerd's shim runs (with --rootless=<bool> when its caller sets one), and
+# conmon's, for CRI-O and podman. On this backend they can only be accepted:
+# Proxmox places a container's cgroup itself. tests/crun/systemd_cgroup.sh
+# checks that --systemd-cgroup reaches libcrun.
+nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup --rootless=false list
+check "go-runc's global options are accepted, not read as a command" \
+  all 'rc 0' '! err_has "unknown"'
+nx --systemd-cgroup --root=/run/alt --rootless true list
+check "conmon's order, and --rootless in its two-word form, likewise" all 'rc 0' '! err_has "unknown"'
+nx --root /run/alt list --systemd-cgroup --rootless=true
+check "after the command, as every global option is" all 'rc 0' '! err_has "unknown"'
 # a command that fails, so there is a line for the engine to read back
 nx --log "$S/run/ct.json" --log-format json state no-such-container
 check "--log --log-format json: the error lands in the file containerd reads" \

@@ -122,6 +122,7 @@ Then name it wherever the engine names a runtime:
   runtime_type = "io.containerd.runc.v2"
   [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
     BinaryName = "/usr/bin/nexcage"
+    SystemdCgroup = true    # as runc's handler has it: the kubelet's cgroup driver
 ```
 
 ```bash
