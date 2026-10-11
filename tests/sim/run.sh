@@ -328,16 +328,34 @@ check "nexcage's logging flags after -- belong to the command too" \
 # Nor without --, the form `exec --help` shows: the command starts at the word
 # after the container id, and every word of it is the command's, `=` and all.
 # Each of these failed the call, made root write its log into the file named,
-# or turned --color=auto into two words.
+# or turned --color=auto into two words. nexcage_ns gives a call that names
+# --config no file of its own, and cannot tell this one from such a call, so an
+# empty /etc/nexcage stands in for the host's.
+mkdir -p "$S/etc/nexcage"
 nx exec web-1 echo --config /nonexistent --root rel --runtime bogus --profile nope --log /run/exec-z.log --debug --color=auto
 check "the command's words are its own without -- too" \
   all 'rc 0' '[ ! -e "$S/run/exec-z.log" ]' '! err_has "DEBUG"' \
       'called "pct exec 100 -- echo --config /nonexistent --root rel --runtime bogus --profile nope --log /run/exec-z.log --debug --color=auto"'
-# nexcage's own options before the command are still nexcage's
+rm -r "${S:?}/etc"
+# nexcage's own options before the command are still nexcage's, in either
+# spelling
 nx exec web-1 --log /run/exec-own.log echo hi
 check "and nexcage's options before the command are still read" \
   all 'rc 0' '[ -e "$S/run/exec-own.log" ]' 'called "pct exec 100 -- echo hi"'
-rm -f "$S/run/exec-own.log"
+nx exec web-1 --log=/run/exec-eq.log echo hi
+check "an option's value after = is the option's, not the command" \
+  all 'rc 0' '[ -e "$S/run/exec-eq.log" ]' 'called "pct exec 100 -- echo hi"'
+rm -f "$S/run/exec-own.log" "$S/run/exec-eq.log"
+# An option exec does not have, or one that takes no value, given a value
+# after =: what was meant cannot be told -- the `true` of --tty=true was run as
+# the command -- so it is a usage error. Each crashed nexcage once the command
+# was looked for.
+nx exec web-1 --foo=bar ls
+check "an option exec does not have, written with =, is a usage error" \
+  all 'rc 2' 'err_has "--foo"' 'not_called_re "^pct exec"'
+nx exec web-1 --tty=false echo hi
+check "and so is a value for one that takes none, not a command" \
+  all 'rc 2' "err_has \"'--tty=false': exec has no option '--tty' that takes a value\"" 'not_called_re "^pct exec"'
 
 # `exec --process <file>` hands over an OCI process spec: an identity to become,
 # an environment, a terminal. `pct exec` takes a command and returns when it

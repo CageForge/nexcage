@@ -73,6 +73,9 @@ nexcage_ns() {
   # or --config. So the file cfg wrote is named, unless the call names one
   # itself -- before a bare --, after which the words are the command exec
   # runs -- or SIM_NO_CONFIG asks what the binary does without --config.
+  # Where exec's command starts without --, after the container id, only
+  # nexcage knows: a --config there counts here too, so a call that has one
+  # there gets no file and reads /etc/nexcage, and makes $S/etc/nexcage for it.
   local a named=
   for a in "$@"; do
     [ "$a" = -- ] && break

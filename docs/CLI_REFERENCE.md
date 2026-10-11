@@ -466,6 +466,13 @@ included, so `nexcage exec web-1 grep --config x` runs `grep --config x`, as
 `runc exec` would. `--` is needed only when the command itself starts with a
 dash.
 
+Before the command, `--option=value` is one word:
+`exec --config=/etc/nexcage/alt.json web-1 id` reads that file as nexcage's
+configuration, and `id` is the command. Written that way, an option `exec` does
+not have, or one that takes no value, is a usage error (exit 2) rather than
+guessed at: `exec web-1 --tty=false sh` asked for a terminal in 0.17.0, and took
+`false sh` for the command.
+
 stdin, stdout and stderr are connected straight to the process in the
 container; nexcage does not buffer the output.
 
