@@ -59,6 +59,14 @@ with the vendored header field by field. What nexcage does around libcrun:
   that are known to reach libcrun's int64 arithmetic are refused first, on
   `create` and on `update`: a limit, swap or reservation is `-1` or a number of
   bytes, and a swap minus limit that does not fit in 64 bits is refused too.
+- **`create` and `exec` run from a sealed copy of the binary** (the
+  CVE-2019-5736 protection): the driver calls libcrun's
+  `ensure_cloned_binary` before anything else. libcrun does that from a
+  constructor in `linux.c`, before `main`, on every run of the binary;
+  `build.zig` compiles that one file with the constructor defined away, so
+  `version`, `--help` and Proxmox LXC commands no longer need `/proc`,
+  `open_tree` or an executable memfd. The requirements are in
+  [INSTALL.md](../INSTALL.md#for-a-container-engine).
 - **`delete --force` removes the cgroup an unfinished `create` left**: the
   default `/sys/fs/cgroup/<id>`, when libcrun's state for the id has no status
   file, and with `rmdir` alone (see `delete` in the

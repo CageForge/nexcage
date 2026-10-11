@@ -75,6 +75,17 @@ it. Routing decides only where `create` and `run` put a new container, so a
 A routing pattern is a regular expression only when it starts with `^` or ends
 with `$`; `".*"` is read as a wildcard and matches nothing. Use `"*"`.
 
+`create` and `exec` on the crun backend first re-execute nexcage from a sealed
+copy of its binary, as crun and runc do, so that a process in a container
+cannot reach the binary on the host through `/proc/<pid>/exe`
+(CVE-2019-5736). That needs `/proc` and one of `open_tree`, a bind mount or an
+executable memfd; a systemd unit that runs the engine with
+`SystemCallFilter=@system-service` and the default kill action needs `@mount`
+as well, or the call dies of `SIGSYS`. If none is possible, `create` and
+`exec` exit 1 and say which. No other command does it: `version`, `--help`
+and every Proxmox LXC command need none of this. A binary on a read-only
+mount counts as protected already and is not copied.
+
 ## A Kubernetes node on Proxmox VE (since 0.16.0)
 
 A node whose kubelet runs pods on nexcage needs four things:

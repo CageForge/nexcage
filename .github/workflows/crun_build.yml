@@ -225,6 +225,21 @@ jobs:
             -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
             --entrypoint /bin/sh nexcage:ci /t/memory_values.sh
 
+      # libcrun's CVE-2019-5736 re-execution happens for create and exec,
+      # and for nothing else: version and --help run with /proc hidden, a
+      # Proxmox LXC command's tools see no _LIBCONTAINER_CLONED_BINARY, and an
+      # exec runs from a sealed copy, not from the binary on disk.
+      - name: the re-execution happens for containers only
+        run: |
+          set -eux
+          mkdir -p bundle/rootfs
+          docker create --name bbrexec busybox:1.36 >/dev/null
+          docker export bbrexec | tar -x -C bundle/rootfs
+          docker rm bbrexec >/dev/null
+          docker run --rm --privileged --cgroupns=private \
+            -v "$PWD/bundle:/bundle" -v "$PWD/tests/crun:/t:ro" \
+            --entrypoint /bin/sh nexcage:ci /t/rexec.sh
+
       # critest (#311), the CRI validation suite from cri-tools: what
       # Kubernetes checks of a runtime, through the same containerd and the
       # image the pod step built. It runs last: it takes the longest, and a

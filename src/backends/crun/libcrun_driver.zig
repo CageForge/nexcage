@@ -162,8 +162,36 @@ pub const CrunDriver = struct {
         return core.Error.OperationFailed;
     }
 
+    /// The CVE-2019-5736 protection, for the commands that need it: before
+    /// nexcage makes a container's process (create) or joins a container
+    /// (exec), it re-executes from a sealed copy of its own binary, so that a
+    /// process in the container that gets hold of /proc/<pid>/exe finds the
+    /// copy and not the file on the host. libcrun did this from a constructor,
+    /// before main, on every run of the binary, so `version`, `--help` and
+    /// every Proxmox LXC command needed /proc and open_tree, a bind mount or
+    /// an executable memfd as well, and died without a word under a seccomp
+    /// filter that kills on open_tree. build.zig compiles that constructor out
+    /// and this calls the same function, first, before the command has done
+    /// anything a second run would repeat. It does not return the first time;
+    /// the second, from the copy, it returns at once.
+    fn runFromSealedCopy(self: *Self) core.Error!void {
+        const ret = ffi.Libcrun.ensure_cloned_binary();
+        if (ret >= 0) return;
+        const errno: i64 = -@as(i64, ret);
+        const cause = switch (errno) {
+            @intFromEnum(std.posix.E.NOTRECOVERABLE) => "/proc/self/exe cannot be opened; is /proc mounted?",
+            @intFromEnum(std.posix.E.INVAL) => "/proc/self/cmdline cannot be read; is /proc mounted?",
+            @intFromEnum(std.posix.E.IO) => "no sealed copy of the binary could be made: open_tree, a bind mount and an executable memfd were all refused",
+            @intFromEnum(std.posix.E.NOEXEC) => "the sealed copy could not be executed (vm.memfd_noexec, or a filter on execveat)",
+            else => "it failed in a way libcrun does not name",
+        };
+        if (self.logger) |log| log.err("cannot run from a sealed copy of nexcage before touching a container (the CVE-2019-5736 protection): {s}", .{cause}) catch {};
+        return core.Error.OperationFailed;
+    }
+
     /// Create an OCI container using libcrun
     pub fn create(self: *Self, config: core.types.SandboxConfig) !void {
+        try self.runFromSealedCopy();
         if (self.logger) |log| {
             try log.info("Creating OCI container with libcrun: {s}", .{config.name});
         }
@@ -814,6 +842,8 @@ pub const CrunDriver = struct {
     /// directory and removes it afterwards (writeSpecFile). See the binding
     /// for why a path rather than the struct entry points.
     pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8, process_file: ?[]const u8) !void {
+        // Before the process spec is written: a re-execution would leave it.
+        try self.runFromSealedCopy();
         try validation.SecurityValidation.validateContainerId(container_id);
 
         var written: ?[]u8 = null;

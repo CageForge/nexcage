@@ -340,6 +340,16 @@ pub const Libcrun = struct {
 
     /// Default state root
     pub const DEFAULT_STATE_ROOT: []const u8 = "/run/crun";
+
+    /// int ensure_cloned_binary (void), from cloned_binary.c: the
+    /// CVE-2019-5736 protection. Unless the process already runs from a
+    /// sealed copy of its binary, it makes one and re-executes from it with
+    /// the same arguments (read back from /proc/self/cmdline), which does not
+    /// return. Running from the copy, it returns a positive number at once.
+    /// On failure: -ENOTRECOVERABLE (/proc/self/exe cannot be opened),
+    /// -EINVAL (/proc/self/cmdline cannot be read), -EIO (no copy could be
+    /// made) or -ENOEXEC (the copy could not be executed).
+    pub extern fn ensure_cloned_binary() c_int;
 };
 
 /// Fails the build unless `Mirror` lays out `C` exactly: the same fields in
