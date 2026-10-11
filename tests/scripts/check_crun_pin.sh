@@ -30,6 +30,15 @@ else
   bad "a Dockerfile that builds another crun commit is refused, naming both (exit $rc)"; sed 's/^/     /' "$T/out"
 fi
 
+# The one line still names the pin, and the next RUN moves crun elsewhere.
+sed "/submodule update --init runtime-spec image-spec\$/a RUN cd deps/crun \&\& git checkout $other" Dockerfile > "$T/Dockerfile.second"
+rc=0; sh "$CHECK" "$T/Dockerfile.second" > "$T/out" 2>&1 || rc=$?
+if [ "$rc" != 0 ] && grep -q "$other" "$T/out" && grep -q "^RUN cd deps/crun && git checkout $other\$" "$T/Dockerfile.second"; then
+  ok "a Dockerfile that checks out another crun commit a second way is refused, naming it"
+else
+  bad "a Dockerfile that checks out another crun commit a second way is refused, naming it (exit $rc)"; sed 's/^/     /' "$T/out"
+fi
+
 grep -v 'git -C deps/crun checkout' Dockerfile > "$T/Dockerfile.noline"
 rc=0; sh "$CHECK" "$T/Dockerfile.noline" > "$T/out" 2>&1 || rc=$?
 if [ "$rc" != 0 ]; then ok "a Dockerfile with no crun checkout line is refused"; else bad "a Dockerfile with no crun checkout line is refused"; fi

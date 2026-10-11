@@ -33,4 +33,12 @@ if [ "$built" != "$pin" ]; then
     echo "check_crun_pin.sh: change both together (docs/DEVELOPMENT_WORKFLOW.md, \"Updating the vendored crun\")" >&2
     exit 1
 fi
+# A second checkout spelled another way, such as `cd deps/crun && git
+# checkout <sha>`, would build a crun the line above does not name. No other
+# commit-sized hash belongs in the Dockerfile; sha256 sums are longer.
+stray=$(grep -oE '[0-9a-fA-F]+' "$DOCKERFILE" | awk 'length == 40' | tr 'A-F' 'a-f' | grep -vx "$pin" || true)
+if [ -n "$stray" ]; then
+    echo "check_crun_pin.sh: $DOCKERFILE names a commit besides $pin: $(echo "$stray" | tr "\n" " ")" >&2
+    exit 1
+fi
 echo "ok: the Dockerfile builds crun $pin, the commit deps/crun pins"
