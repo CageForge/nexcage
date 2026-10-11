@@ -306,8 +306,9 @@ set, seccomp filter and device rules, and pct cannot take a bundle's instead.
 `process.selinuxLabel`, `process.rlimits`, `root.readonly`, `linux.seccomp`,
 `linux.maskedPaths`, `linux.readonlyPaths`, `linux.devices` and
 `linux.resources.devices` are therefore not applied: create names the ones a
-bundle sets in one warning and goes ahead. A bundle whose confinement has to
-hold needs `--runtime crun`.
+bundle sets in one warning and goes ahead. The warning is on stderr, and in
+the `--log` file as well when there is one; `--log-level error` leaves it out.
+A bundle whose confinement has to hold needs `--runtime crun`.
 
 The bundle's bind mounts become the container's mount points `mp0`, `mp1`, ...
 through one `pct set` after the create, which checks each as Proxmox's API

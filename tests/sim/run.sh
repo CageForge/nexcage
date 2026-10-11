@@ -512,6 +512,15 @@ check "bundle confinement the backend cannot apply: created, with one warning na
   all 'rc 0' 'called_re "^pct create "' '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
       'err_has "process.capabilities, process.noNewPrivileges, root.readonly, linux.seccomp, linux.maskedPaths, linux.readonlyPaths, linux.devices in"' \
       'err_has "--runtime crun"'
+# With --log the log is a file, and only errors were echoed to stderr: the
+# warning reached the file alone, and whoever ran create never saw it.
+nx --log "$S/run/conf-sec.log" create --name conf-sec-log /tmp/nexcage-bundles/conf-sec
+check "bundle confinement warning with --log: in that file once, and on stderr once" \
+  all 'rc 0' '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/run/conf-sec.log")" = 1 ]' \
+      '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
+      'grep -qE "^nexcage: warning: process\.capabilities, .* --runtime crun applies a bundle.s own$" "$S/err"'
+nx --log "$S/run/conf-sec-quiet.log" --log-level error create --name conf-sec-quiet /tmp/nexcage-bundles/conf-sec
+check "bundle confinement warning with --log-level error: not written" all 'rc 0' '! err_has "not applied"' '! grep -qs "not applied" "$S/run/conf-sec-quiet.log"'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'

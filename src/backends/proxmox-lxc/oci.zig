@@ -258,7 +258,21 @@ pub const OciProcessor = struct {
     pub fn warnUnappliedConfinement(self: *const Self, bundle_path: []const u8, asked: bundle.Confinement) !void {
         const names = try unappliedConfinement(self.allocator, asked) orelse return;
         defer self.allocator.free(names);
-        if (self.logger) |log| log.warn("{s} in {s}/config.json: not applied on the Proxmox LXC backend, which confines the container with Proxmox's own AppArmor profile, capabilities, seccomp filter and device rules instead. --runtime crun applies a bundle's own", .{ names, bundle_path }) catch {};
+        const log = self.logger orelse return;
+        const message = "{s} in {s}/config.json: not applied on the Proxmox LXC backend, which confines the container with Proxmox's own AppArmor profile, capabilities, seccomp filter and device rules instead. --runtime crun applies a bundle's own";
+        log.warn(message, .{ names, bundle_path }) catch {};
+        // With --log the log is a file and only errors are echoed to stderr,
+        // so whoever ran create never saw this one. It is about protection
+        // the container does not have: it goes to stderr as well, unless
+        // --log-level asked for errors only.
+        if (log.echo) |echo| if (@intFromEnum(log.level) <= @intFromEnum(core.LogLevel.warn)) {
+            var buffer: [1024]u8 = undefined;
+            var writer = echo.writerStreaming(&buffer);
+            // A line that cannot be written must not fail the create, as in
+            // the logger itself
+            writer.interface.print("{s}: warning: " ++ message ++ "\n", .{ log.component, names, bundle_path }) catch {};
+            writer.interface.flush() catch {};
+        };
     }
 
     /// The mount points a bundle's mounts become: one pct property string
