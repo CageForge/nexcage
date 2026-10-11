@@ -49,9 +49,15 @@ const table = [_]Entry{
 /// Parses a signal the way runc does: a number from 1 to `max`, or a name in
 /// any case with or without the SIG prefix ("TERM", "SIGTERM", "sigterm").
 /// Anything else, 0 included, is null.
+///
+/// A number is decimal digits and nothing else. std.fmt.parseInt also takes
+/// `_` between digits, so "1_5" passed as 15 here while libcrun, which read
+/// the same text with strtol, stopped at the `_` and sent SIGHUP; "0_9" passed
+/// as SIGKILL and sent nothing. runc's Atoi refuses both.
 pub fn parse(text: []const u8) ?u8 {
     if (text.len == 0) return null;
     if (std.ascii.isDigit(text[0])) {
+        for (text) |c| if (!std.ascii.isDigit(c)) return null;
         const number = std.fmt.parseInt(u8, text, 10) catch return null;
         return if (number >= 1 and number <= max) number else null;
     }
@@ -81,7 +87,7 @@ test "parse accepts numbers from 1 to 64" {
 }
 
 test "parse rejects everything else" {
-    for ([_][]const u8{ "", "0", "65", "300", "-1", "+15", "SIG", "SIGRTMIN", "TERM;id", "BOGUS", "SIGTERMSIGTERMSIGTERM" }) |text| {
+    for ([_][]const u8{ "", "0", "65", "300", "-1", "+15", "SIG", "SIGRTMIN", "TERM;id", "BOGUS", "SIGTERMSIGTERMSIGTERM", "1_5", "0_9", "1__5", "6_4", "15 ", "1e1" }) |text| {
         try std.testing.expectEqual(@as(?u8, null), parse(text));
     }
 }

@@ -162,16 +162,51 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        libcrun_module.addCSourceFiles(.{
-            .files = libcrun_sources,
-            .flags = &[_][]const u8{
-                "-std=gnu11",
-                "-D_GNU_SOURCE",
-                "-Wno-macro-redefined",
-                "-DLIBCRUN_STATIC",
-                "-DLIBCRUN_PUBLIC=",
-            },
-        });
+        // ReleaseSafe, which every release is built with, compiles this C
+        // with UBSan in trap mode: Zig's default for C in a safe build, and
+        // kept on purpose. Undefined behaviour in libcrun then stops the root
+        // process instead of carrying on with a value nobody chose -- built
+        // the usual way, crun turns a memory limit that overflows into "max",
+        // no limit at all. The cost is that it stops with SIGILL, and a
+        // SIGILL whose frames are in libcrun is such a trap, not a CPU
+        // without AVX2 (that one is -Dcpu=baseline). Values known to reach
+        // such arithmetic are refused before libcrun sees them
+        // (libcrun_driver.zig, checkMemory).
+        const libcrun_flags = [_][]const u8{
+            "-std=gnu11",
+            "-D_GNU_SOURCE",
+            "-Wno-macro-redefined",
+            "-DLIBCRUN_STATIC",
+            "-DLIBCRUN_PUBLIC=",
+        };
+        // linux.c ends in `__attribute__ ((constructor)) static void
+        // libcrun_rexec (void)`, crun's CVE-2019-5736 protection: before main,
+        // on every run of the binary, it re-executes from a sealed copy of
+        // itself, and exits 1 -- or dies of a seccomp filter's SIGSYS without
+        // a word -- where /proc, open_tree, a bind mount or an executable
+        // memfd is missing. In crun every command needs it; in nexcage only
+        // the ones that make or join a container's process do, and `version`,
+        // `--help` and every Proxmox LXC command died of it all the same.
+        // So that one file is compiled with `constructor` defined to
+        // `unused`: the function is left an unused static and dropped, and
+        // the crun driver calls ensure_cloned_binary itself for create and
+        // exec (libcrun_driver.zig, runFromSealedCopy). Preprocessed, linux.c
+        // differs from the plain compile in that one line and no other; the
+        // word appearing anywhere else in the file stops the build here, so a
+        // pin bump cannot widen what the define touches unseen.
+        const linux_c = "deps/crun/src/libcrun/linux.c";
+        const linux_src = std.fs.cwd().readFileAlloc(b.allocator, linux_c, 4 * 1024 * 1024) catch @panic("cannot read " ++ linux_c);
+        if (std.mem.count(u8, linux_src, "constructor") != 1) {
+            std.debug.print("[build] error: {s} uses the word `constructor` {d} times, and build.zig defines it away for that file assuming one: libcrun_rexec. Check what the vendored crun changed before adjusting this.\n", .{ linux_c, std.mem.count(u8, linux_src, "constructor") });
+            @panic("libcrun's rexec constructor has changed");
+        }
+        var other_sources = std.ArrayListUnmanaged([]const u8){};
+        for (libcrun_sources) |path| {
+            if (!std.mem.eql(u8, path, linux_c)) other_sources.append(b.allocator, path) catch @panic("OOM");
+        }
+        if (other_sources.items.len + 1 != libcrun_sources.len) @panic(linux_c ++ " is not among the libcrun sources");
+        libcrun_module.addCSourceFiles(.{ .files = other_sources.items, .flags = &libcrun_flags });
+        libcrun_module.addCSourceFile(.{ .file = b.path(linux_c), .flags = &(libcrun_flags ++ [_][]const u8{"-Dconstructor=unused"}) });
         libcrun_module.addIncludePath(.{ .cwd_relative = "/usr/include" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun" });
@@ -190,6 +225,13 @@ pub fn build(b: *std.Build) void {
         libcrun_compile.root_module.linkSystemLibrary("systemd", .{ .use_pkg_config = .no, .needed = true });
         libcrun_lib = libcrun_compile;
         libcrun_abi_active = true;
+
+        // src/backends/crun/mod.zig compares libcrun_ffi.zig's hand-written
+        // mirrors of libcrun's structs with the vendored header through
+        // @cImport, which looks in the backends module's include paths.
+        backends_mod.addIncludePath(.{ .cwd_relative = "deps/crun" });
+        backends_mod.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
+        backends_mod.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
     }
 
     feature_options.addOption(bool, "libcrun_abi_requested", enable_libcrun_abi);

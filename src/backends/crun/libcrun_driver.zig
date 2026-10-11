@@ -162,8 +162,38 @@ pub const CrunDriver = struct {
         return core.Error.OperationFailed;
     }
 
+    /// The CVE-2019-5736 protection, for the commands that need it: before
+    /// nexcage makes a container's process (create) or joins a container
+    /// (exec), it re-executes from a sealed copy of its own binary, so that a
+    /// process in the container that gets hold of /proc/<pid>/exe finds the
+    /// copy and not the file on the host. libcrun did this from a constructor,
+    /// before main, on every run of the binary, so `version`, `--help` and
+    /// every Proxmox LXC command needed /proc and open_tree, a bind mount or
+    /// an executable memfd as well, and died without a word under a seccomp
+    /// filter that kills on open_tree. build.zig compiles that constructor out
+    /// and this calls the same function, first, before the driver has done
+    /// anything a second run would repeat. The copy starts again from main,
+    /// so what the command logged before routing here is logged twice. It
+    /// does not return the first time; the second, from the copy, it returns
+    /// at once.
+    fn runFromSealedCopy(self: *Self) core.Error!void {
+        const ret = ffi.Libcrun.ensure_cloned_binary();
+        if (ret >= 0) return;
+        const errno: i64 = -@as(i64, ret);
+        const cause = switch (errno) {
+            @intFromEnum(std.posix.E.NOTRECOVERABLE) => "/proc/self/exe cannot be opened; is /proc mounted?",
+            @intFromEnum(std.posix.E.INVAL) => "/proc/self/cmdline cannot be read; is /proc mounted?",
+            @intFromEnum(std.posix.E.IO) => "no sealed copy of the binary could be made: open_tree, a bind mount and an executable memfd were all refused",
+            @intFromEnum(std.posix.E.NOEXEC) => "the sealed copy could not be executed (vm.memfd_noexec, or a filter on execveat)",
+            else => "it failed in a way libcrun does not name",
+        };
+        if (self.logger) |log| log.err("cannot run from a sealed copy of nexcage before touching a container (the CVE-2019-5736 protection): {s}", .{cause}) catch {};
+        return core.Error.OperationFailed;
+    }
+
     /// Create an OCI container using libcrun
     pub fn create(self: *Self, config: core.types.SandboxConfig) !void {
+        try self.runFromSealedCopy();
         if (self.logger) |log| {
             try log.info("Creating OCI container with libcrun: {s}", .{config.name});
         }
@@ -206,14 +236,16 @@ pub const CrunDriver = struct {
         };
         defer self.allocator.free(spec);
 
-        const config_path_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{config_path}, 0);
-        defer self.allocator.free(config_path_c);
-
         // Allocate error structure
         var err_ptr: ?*ffi.Libcrun.Error = null;
 
-        // Without a profile libcrun reads the file. With one, it is given the
-        // spec the profile narrowed, which it keeps as the container's
+        // libcrun is given the spec as bytes, the ones checked here, and never
+        // the file. Handed the path, it read the file twice, to parse it and
+        // again to copy it into the state directory, and whoever can write
+        // the bundle could change it after these checks or between the two
+        // reads: libcrun made a container from a spec nothing had checked and
+        // kept another as its config. With a profile the bytes are the spec
+        // the profile narrowed, which libcrun keeps as the container's
         // config.json, so `state` reports the profile from it. Either way a
         // bundle that claims a profile is refused (ADR-005).
         var why: core.profile.Refusal = .{};
@@ -227,16 +259,18 @@ pub const CrunDriver = struct {
             else => return err,
         };
         defer if (narrowed) |n| self.allocator.free(n);
-        const container = if (narrowed) |n| blk: {
-            const narrowed_z = try self.allocator.dupeZ(u8, n);
-            defer self.allocator.free(narrowed_z);
-            break :blk ffi.Libcrun.libcrun_container_load_from_memory(narrowed_z.ptr, &err_ptr) orelse {
+        const given = narrowed orelse spec;
+        // The spec libcrun is about to be given, before it does arithmetic on
+        // its memory values (checkMemory).
+        try self.checkMemoryJson("the bundle's config.json", given, .spec);
+        const container = blk: {
+            // libcrun keeps a copy of its own.
+            const given_z = try self.allocator.dupeZ(u8, given);
+            defer self.allocator.free(given_z);
+            break :blk ffi.Libcrun.libcrun_container_load_from_memory(given_z.ptr, &err_ptr) orelse {
                 try self.handleError(&err_ptr, "container_load_from_memory");
                 return;
             };
-        } else ffi.Libcrun.libcrun_container_load_from_file(config_path_c.ptr, &err_ptr) orelse {
-            try self.handleError(&err_ptr, "container_load_from_file");
-            return;
         };
         defer ffi.Libcrun.libcrun_container_free(container);
 
@@ -332,7 +366,16 @@ pub const CrunDriver = struct {
         const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
         defer self.allocator.free(id_c);
 
-        const signal_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{signal}, 0);
+        // libcrun parses the text again, with rules of its own: names only in
+        // upper case, and numbers with strtol, which stops at the first
+        // character that is not a digit. So it is given the number nexcage
+        // validated, in decimal, which both read the same way; a name in any
+        // case, as the help promises, reaches it as that number.
+        const signo = core.signals.parse(signal) orelse {
+            if (self.logger) |log| log.err("unknown signal '{s}'; use a name such as TERM or SIGKILL, or a number from 1 to {d}", .{ signal, core.signals.max }) catch {};
+            return core.Error.InvalidInput;
+        };
+        const signal_c = try std.fmt.allocPrintSentinel(self.allocator, "{d}", .{signo}, 0);
         defer self.allocator.free(signal_c);
 
         // --all is libcrun_container_killall: every process in the cgroup
@@ -365,6 +408,10 @@ pub const CrunDriver = struct {
         const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
         defer self.allocator.free(id_c);
 
+        // Asked before libcrun removes the state directory, which is the only
+        // record of how far a create got.
+        const unfinished = force and self.createDidNotFinish(container_id);
+
         // force was hardcoded false, so `delete --force` was accepted and
         // then not forced. libcrun takes it as the fourth argument.
         const ret = ffi.Libcrun.libcrun_container_delete(ctx, null, id_c.ptr, force, &err_ptr);
@@ -372,10 +419,58 @@ pub const CrunDriver = struct {
             try self.handleError(&err_ptr, "container_delete");
             return;
         }
+        if (unfinished) self.removeLeftoverCgroup(container_id);
 
         if (self.logger) |log| {
             try log.info("Successfully deleted OCI container with libcrun: {s}", .{container_id});
         }
+    }
+
+    /// Whether libcrun began to create this container and never finished: a
+    /// create killed half way (SIGKILL, OOM, a UBSan trap) leaves the state
+    /// directory without the status file create writes last, and libcrun's
+    /// delete then removes the directory and nothing else, so the cgroup it
+    /// had made stayed, one per attempt. Only the cgroup that is certainly
+    /// this container's is in question: the default one libcrun's cgroupfs
+    /// manager makes, /sys/fs/cgroup/<id> on cgroup v2, which needs a
+    /// config.json kept in the state directory that names no cgroupsPath,
+    /// and a delete without --systemd-cgroup: under systemd, libcrun puts the
+    /// container in a scope, crun-<id>.scope, and nothing at the root.
+    fn createDidNotFinish(self: *Self, container_id: []const u8) bool {
+        if (self.systemd_cgroup) return false;
+        var dir = std.fs.cwd().openDir(self.state_root, .{}) catch return false;
+        defer dir.close();
+        var kept_dir = dir.openDir(container_id, .{ .no_follow = true }) catch return false;
+        defer kept_dir.close();
+        // The status file is the last thing create writes.
+        if (kept_dir.access("status", .{})) |_| return false else |err| if (err != error.FileNotFound) return false;
+        const kept = kept_dir.readFileAlloc(self.allocator, "config.json", 16 * 1024 * 1024) catch return false;
+        defer self.allocator.free(kept);
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, kept, .{}) catch return false;
+        defer parsed.deinit();
+        if (parsed.value != .object) return false;
+        const linux = parsed.value.object.get("linux") orelse return true;
+        if (linux != .object) return false;
+        const path = linux.object.get("cgroupsPath") orelse return true;
+        return path == .null;
+    }
+
+    /// rmdir of the cgroup an unfinished create left, and nothing more: no
+    /// recursion and no kill. The kernel refuses to remove a cgroup that
+    /// still has processes or child cgroups, and that one is left in place
+    /// and named, since nothing here can prove they are this container's.
+    fn removeLeftoverCgroup(self: *Self, container_id: []const u8) void {
+        std.fs.cwd().access("/sys/fs/cgroup/cgroup.controllers", .{}) catch return;
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        const path = std.fmt.bufPrint(&buf, "/sys/fs/cgroup/{s}", .{container_id}) catch return;
+        std.posix.rmdir(path) catch |err| switch (err) {
+            error.FileNotFound => return,
+            else => {
+                if (self.logger) |log| log.warn("'{s}' was never fully created, and its cgroup {s} could not be removed ({s}); it is left in place", .{ container_id, path, @errorName(err) }) catch {};
+                return;
+            },
+        };
+        if (self.logger) |log| log.info("removed {s}, the cgroup an unfinished create of '{s}' left behind", .{ path, container_id }) catch {};
     }
 
     /// Execute a command in a running container (best-effort; may be limited by libcrun API)
@@ -545,6 +640,19 @@ pub const CrunDriver = struct {
     /// over in crun's own section/name form.
     pub fn update(self: *Self, container_id: []const u8, resources_json: ?[]const u8, values: []const core.types.ResourceUpdate) !void {
         try validation.SecurityValidation.validateContainerId(container_id);
+        try self.holdToProfile(container_id, resources_json, values);
+        if (resources_json) |doc| {
+            try self.checkMemoryJson("the resources document", doc, .resources);
+        } else {
+            var m: [3]MemoryValue = .{ .absent, .absent, .absent };
+            for (values) |v| {
+                if (!std.mem.eql(u8, v.section, "memory")) continue;
+                for (memory_fields, 0..) |name, i| {
+                    if (std.mem.eql(u8, v.name, name)) m[i] = MemoryValue.ofText(v.value);
+                }
+            }
+            try self.checkMemory("the update", m);
+        }
 
         const ctx = try self.initContext("", container_id);
         const id_c = try std.fmt.allocPrintSentinel(self.allocator, "{s}", .{container_id}, 0);
@@ -552,7 +660,11 @@ pub const CrunDriver = struct {
         var err_ptr: ?*ffi.Libcrun.Error = null;
 
         if (resources_json) |doc| {
-            const ret = ffi.Libcrun.libcrun_container_update(ctx, id_c.ptr, doc.ptr, doc.len, &err_ptr);
+            // libcrun strlen()s the document and ignores the length: it gets a
+            // copy that ends in NUL (see the binding).
+            const doc_z = try self.allocator.dupeZ(u8, doc);
+            defer self.allocator.free(doc_z);
+            const ret = ffi.Libcrun.libcrun_container_update(ctx, id_c.ptr, doc_z.ptr, doc_z.len, &err_ptr);
             if (ret < 0) {
                 try self.handleError(&err_ptr, "container_update");
                 return core.Error.OperationFailed;
@@ -582,6 +694,93 @@ pub const CrunDriver = struct {
             try self.handleError(&err_ptr, "container_update_from_values");
             return core.Error.OperationFailed;
         }
+    }
+
+    /// An update of a container made under an isolation profile stays within
+    /// the caps the profile had at create (core.profile.boundUpdate). The
+    /// container's stored config.json is where they are recorded; read here
+    /// the way boundProcessFile reads it for exec.
+    fn holdToProfile(self: *Self, container_id: []const u8, resources_json: ?[]const u8, values: []const core.types.ResourceUpdate) !void {
+        const stored_path = try std.fs.path.join(self.allocator, &.{ self.state_root, container_id, "config.json" });
+        defer self.allocator.free(stored_path);
+        // No stored config is no container, which is libcrun's to report.
+        const stored = std.fs.cwd().readFileAlloc(self.allocator, stored_path, 16 * 1024 * 1024) catch |err| switch (err) {
+            error.FileNotFound => return,
+            else => return self.cannotRead(stored_path, err),
+        };
+        defer self.allocator.free(stored);
+
+        var why: core.profile.Refusal = .{};
+        core.profile.boundUpdate(self.allocator, stored, resources_json, values, &why) catch |err| switch (err) {
+            error.ProfileRefused => {
+                if (self.logger) |log| log.err("{s}", .{why.text()}) catch {};
+                return core.Error.ValidationError;
+            },
+            else => return err,
+        };
+    }
+
+    /// memory.limit, swap and reservation as libcrun is about to be given
+    /// them, checked before it does arithmetic on them. libcrun is compiled
+    /// with UBSan in trap mode (see build.zig), so an int64 overflow in it is
+    /// SIGILL in the root process, and write_memory_swap computes `swap -
+    /// limit` once swap is positive and no less than the limit: a bundle with
+    /// a limit of -9223372036854775808 and swap 1 killed create half way,
+    /// leaving a cgroup behind, and the same document killed update after
+    /// memory.max had been rewritten. -1 is no limit and 0 or more a number of
+    /// bytes; anything else is refused, and so is a limit and swap whose
+    /// difference does not fit in 64 bits, which -1 and the largest swap is.
+    /// `m` is limit, swap and reservation, in memory_fields' order.
+    fn checkMemory(self: *Self, what: []const u8, m: [3]MemoryValue) core.Error!void {
+        for (m, memory_fields) |v, name| switch (v) {
+            .absent => {},
+            .whole => |n| if (n < -1) {
+                if (self.logger) |log| log.err("{s}: memory.{s} is {d}; a memory value is a number of bytes, or -1 for no limit", .{ what, name, n }) catch {};
+                return core.Error.ValidationError;
+            },
+            .other => {
+                if (self.logger) |log| log.err("{s}: memory.{s} is not a whole number that fits in 64 bits", .{ what, name }) catch {};
+                return core.Error.ValidationError;
+            },
+        };
+        if (m[0] == .whole and m[1] == .whole) {
+            const limit = m[0].whole;
+            const swap = m[1].whole;
+            if (swap > 0 and swap >= limit) _ = std.math.sub(i64, swap, limit) catch {
+                if (self.logger) |log| log.err("{s}: memory.swap {d} less memory.limit {d} does not fit in 64 bits", .{ what, swap, limit }) catch {};
+                return core.Error.ValidationError;
+            };
+        }
+    }
+
+    /// checkMemory on a JSON document: the linux.resources object itself, as
+    /// update sends it, or a whole spec, as create hands it over. Read the
+    /// way the profile checks read one (core.profile.parse), which refuses
+    /// what libcrun's parser would read otherwise: with "limit" and
+    /// "limit\u0000", the check here saw the first and libcrun overflowed on
+    /// the second, which it reads as "limit" too.
+    fn checkMemoryJson(self: *Self, what: []const u8, json: []const u8, shape: enum { resources, spec }) core.Error!void {
+        var why: core.profile.Refusal = .{};
+        const parsed = core.profile.parse(self.allocator, json, what, &why) catch |err| switch (err) {
+            error.OutOfMemory => return core.Error.OutOfMemory,
+            error.ProfileRefused => {
+                if (self.logger) |log| log.err("{s}", .{why.text()}) catch {};
+                return core.Error.ValidationError;
+            },
+        };
+        defer parsed.deinit();
+        var resources = parsed.value;
+        if (shape == .spec) for ([_][]const u8{ "linux", "resources" }) |key| {
+            if (resources != .object) return;
+            resources = resources.object.get(key) orelse return;
+        };
+        if (resources != .object) return;
+        const memory = resources.object.get("memory") orelse return;
+        // Not an object: libcrun's parser refuses that itself.
+        if (memory != .object) return;
+        var m: [3]MemoryValue = undefined;
+        for (memory_fields, 0..) |name, i| m[i] = MemoryValue.ofJson(memory.object.get(name));
+        return self.checkMemory(what, m);
     }
 
     fn freeze(self: *Self, container_id: []const u8, on: bool) !void {
@@ -648,9 +847,12 @@ pub const CrunDriver = struct {
     /// Both end in libcrun_container_exec_process_file, which takes the path of
     /// a file holding the OCI process spec. For `--process` that is the
     /// caller's own file, handed over untouched; for a command line nexcage
-    /// writes the same shape to a temporary file and removes it afterwards.
-    /// See the binding for why a path rather than the struct entry points.
+    /// writes the same shape to a file of its own in the container's state
+    /// directory and removes it afterwards (writeSpecFile). See the binding
+    /// for why a path rather than the struct entry points.
     pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8, process_file: ?[]const u8) !void {
+        // Before the process spec is written: a re-execution would leave it.
+        try self.runFromSealedCopy();
         try validation.SecurityValidation.validateContainerId(container_id);
 
         var written: ?[]u8 = null;
@@ -670,7 +872,7 @@ pub const CrunDriver = struct {
                 }
                 return core.Error.InvalidInput;
             }
-            const path = try self.writeProcessSpec(argv);
+            const path = try self.writeProcessSpec(container_id, argv);
             written = path;
             break :blk @as([]const u8, path);
         };
@@ -705,12 +907,12 @@ pub const CrunDriver = struct {
         // Either file missing is libcrun's to report, as it does today.
         const stored = std.fs.cwd().readFileAlloc(self.allocator, stored_path, 16 * 1024 * 1024) catch |err| switch (err) {
             error.FileNotFound => return null,
-            else => return err,
+            else => return self.cannotRead(stored_path, err),
         };
         defer self.allocator.free(stored);
         const process = std.fs.cwd().readFileAlloc(self.allocator, given, 16 * 1024 * 1024) catch |err| switch (err) {
             error.FileNotFound => return null,
-            else => return err,
+            else => return self.cannotRead(given, err),
         };
         defer self.allocator.free(process);
 
@@ -723,35 +925,83 @@ pub const CrunDriver = struct {
             else => return err,
         } orelse return null;
         defer self.allocator.free(bounded);
-        return try self.writeTemp(bounded);
+        return try self.writeSpecFile(container_id, bounded);
     }
 
-    /// `bytes` in a file of this process's own, where libcrun can read it.
-    /// The name is predictable, so the file is created, never opened: a
-    /// symlink left there is removed rather than followed. The caller owns
-    /// and removes the path.
-    fn writeTemp(self: *Self, bytes: []const u8) ![]u8 {
-        const path = try std.fmt.allocPrint(
-            self.allocator,
-            "/tmp/nexcage-exec-{d}.json",
-            .{std.os.linux.getpid()},
-        );
-        errdefer self.allocator.free(path);
-        const file = std.fs.cwd().createFile(path, .{ .exclusive = true, .mode = 0o600 }) catch |err| switch (err) {
-            error.PathAlreadyExists => blk: {
-                try std.fs.cwd().deleteFile(path);
-                break :blk try std.fs.cwd().createFile(path, .{ .exclusive = true, .mode = 0o600 });
+    /// A file that could not be read, as an error of the command's own set.
+    /// The command registry casts every error into core.types.Error, and one
+    /// outside it -- IsDir, AccessDenied -- aborted the process with "invalid
+    /// error code" instead of failing the command.
+    fn cannotRead(self: *Self, path: []const u8, err: anyerror) core.Error {
+        if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+        if (self.logger) |log| log.err("cannot read {s}: {s}", .{ path, @errorName(err) }) catch {};
+        return core.Error.OperationFailed;
+    }
+
+    /// `bytes` in a new file in the container's own libcrun state directory,
+    /// where libcrun reads it. The caller owns and removes the path.
+    ///
+    /// This used to be /tmp/nexcage-exec-<pid>.json. Anyone can make entries
+    /// in /tmp and the next pids are easy to guess, so a local user who left
+    /// directories under a few thousand of those names made every exec that
+    /// drew one fail -- by aborting the root process, as removing the
+    /// directory gave error.IsDir, which nothing expected. The state directory
+    /// is libcrun's, made 0700 by root, and goes with the container, so even
+    /// a file an exec killed half way leaves behind is removed with it. The
+    /// name is random besides, the file is made with O_EXCL and O_NOFOLLOW,
+    /// an entry that is already there is neither removed nor followed --
+    /// another name is drawn -- and every failure is an error of the command's
+    /// own set.
+    fn writeSpecFile(self: *Self, container_id: []const u8, bytes: []const u8) ![]u8 {
+        const dir_path = try std.fs.path.join(self.allocator, &.{ self.state_root, container_id });
+        defer self.allocator.free(dir_path);
+        var dir = std.fs.cwd().openDir(dir_path, .{ .no_follow = true }) catch |err| switch (err) {
+            error.FileNotFound => {
+                if (self.logger) |log| log.err("container '{s}' does not exist: there is no {s}", .{ container_id, dir_path }) catch {};
+                return core.Error.NotFound;
             },
-            else => return err,
+            else => {
+                if (self.logger) |log| log.err("cannot open the container's state directory {s}: {s}", .{ dir_path, @errorName(err) }) catch {};
+                return core.Error.OperationFailed;
+            },
         };
-        defer file.close();
-        try file.writeAll(bytes);
-        return path;
+        defer dir.close();
+
+        var attempt: usize = 0;
+        while (attempt < 16) : (attempt += 1) {
+            var random: [8]u8 = undefined;
+            std.crypto.random.bytes(&random);
+            const path = try std.fmt.allocPrint(self.allocator, "{s}/nexcage-exec-{s}.json", .{ dir_path, &std.fmt.bytesToHex(random, .lower) });
+            errdefer self.allocator.free(path);
+            const name = path[dir_path.len + 1 ..];
+            const flags: std.posix.O = .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true };
+            const fd = std.posix.openat(dir.fd, name, flags, 0o600) catch |err| switch (err) {
+                error.PathAlreadyExists => {
+                    self.allocator.free(path);
+                    continue;
+                },
+                else => {
+                    if (self.logger) |log| log.err("cannot create {s}: {s}", .{ path, @errorName(err) }) catch {};
+                    return core.Error.OperationFailed;
+                },
+            };
+            const file = std.fs.File{ .handle = fd };
+            defer file.close();
+            file.writeAll(bytes) catch |err| {
+                // O_EXCL made it, in a directory only root writes to: ours.
+                dir.deleteFile(name) catch {};
+                if (self.logger) |log| log.err("cannot write {s}: {s}", .{ path, @errorName(err) }) catch {};
+                return core.Error.OperationFailed;
+            };
+            return path;
+        }
+        if (self.logger) |log| log.err("no free name for the process spec in {s} after {d} tries", .{ dir_path, attempt }) catch {};
+        return core.Error.OperationFailed;
     }
 
     /// The OCI process spec for a command given on the command line, written
     /// where libcrun can read it. The caller owns and removes the path.
-    fn writeProcessSpec(self: *Self, argv: []const []const u8) ![]u8 {
+    fn writeProcessSpec(self: *Self, container_id: []const u8, argv: []const []const u8) ![]u8 {
         var out = std.ArrayListUnmanaged(u8){};
         defer out.deinit(self.allocator);
         const w = out.writer(self.allocator);
@@ -798,7 +1048,7 @@ pub const CrunDriver = struct {
         try core.json.writeString(w, self.exec_cwd orelse "/");
         try w.writeAll("}\n");
 
-        return self.writeTemp(out.items);
+        return self.writeSpecFile(container_id, out.items);
     }
 
     /// Generate basic OCI config.json
@@ -817,6 +1067,36 @@ pub const CrunDriver = struct {
 
         // Minimal OCI config.json
         try file.writeAll("{\"ociVersion\":\"1.0.0\",\"process\":{\"terminal\":true,\"user\":{\"uid\":0,\"gid\":0},\"args\":[\"/bin/sh\"],\"env\":[\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"]},\"root\":{\"path\":\"rootfs\",\"readonly\":false},\"hostname\":\"container\",\"linux\":{\"namespaces\":[{\"type\":\"pid\"},{\"type\":\"network\"},{\"type\":\"ipc\"},{\"type\":\"uts\"},{\"type\":\"mount\"}]}}");
+    }
+};
+
+/// The memory fields checkMemory looks at, in the order it takes them.
+const memory_fields = [_][]const u8{ "limit", "swap", "reservation" };
+
+/// A memory value as libcrun would read it. Its parser takes only an integer
+/// that fits in 64 bits; json-c clamps a larger negative one to the smallest
+/// int64, so a value std.json cannot hold in an i64 is `other` and refused,
+/// never passed over.
+const MemoryValue = union(enum) {
+    absent,
+    whole: i64,
+    other,
+
+    fn ofJson(v: ?std.json.Value) MemoryValue {
+        const value = v orelse return .absent;
+        return switch (value) {
+            .null => .absent,
+            .integer => |n| .{ .whole = n },
+            else => .other,
+        };
+    }
+
+    /// A command line's value, which update.zig has already made decimal.
+    fn ofText(text: []const u8) MemoryValue {
+        const digits = if (text.len > 0 and text[0] == '-') text[1..] else text;
+        if (digits.len == 0) return .other;
+        for (digits) |c| if (!std.ascii.isDigit(c)) return .other;
+        return .{ .whole = std.fmt.parseInt(i64, text, 10) catch return .other };
     }
 };
 
@@ -882,4 +1162,110 @@ fn freeCStrArray(arr: [*c][*c]u8) void {
     // The array itself is a double pointer, which does not coerce to the
     // anyopaque free() takes; each element above does.
     std.c.free(@ptrCast(arr));
+}
+
+test "exec's process spec is a new 0600 file in the container's own state directory" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makeDir("c1");
+    const root = try tmp.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(root);
+    var driver = CrunDriver{ .allocator = allocator, .state_root = root };
+    defer driver.deinit();
+
+    const a = try driver.writeSpecFile("c1", "{\"args\":[\"true\"]}");
+    defer allocator.free(a);
+    const b = try driver.writeSpecFile("c1", "{}");
+    defer allocator.free(b);
+    // Not a name anyone can work out in advance: two writes, two names.
+    try std.testing.expect(!std.mem.eql(u8, a, b));
+    const dir = try std.fs.path.join(allocator, &.{ root, "c1" });
+    defer allocator.free(dir);
+    try std.testing.expectEqualStrings(dir, std.fs.path.dirname(a).?);
+    const st = try std.fs.cwd().statFile(a);
+    try std.testing.expectEqual(@as(std.fs.File.Mode, 0o600), st.mode & 0o777);
+    const back = try std.fs.cwd().readFileAlloc(allocator, a, 1024);
+    defer allocator.free(back);
+    try std.testing.expectEqualStrings("{\"args\":[\"true\"]}", back);
+
+    // No container, no state directory: an error of the command's own set,
+    // and no file anywhere else.
+    try std.testing.expectError(core.Error.NotFound, driver.writeSpecFile("c2", "{}"));
+}
+
+test "memory values libcrun would overflow on are refused before it sees them" {
+    var driver = CrunDriver{ .allocator = std.testing.allocator };
+    const refused = [_][]const u8{
+        "{\"memory\":{\"limit\":-9223372036854775808,\"swap\":1}}",
+        // json-c clamps this one to the smallest int64; std.json cannot hold it
+        "{\"memory\":{\"limit\":-9223372036854775809,\"swap\":1}}",
+        "{\"memory\":{\"limit\":-2}}",
+        "{\"memory\":{\"reservation\":-5}}",
+        "{\"memory\":{\"limit\":-1,\"swap\":9223372036854775807}}",
+        "{\"memory\":{\"swap\":1.5}}",
+        "{\"memory\":{\"limit\":\"64M\"}}",
+        // a key that ends in a NUL is the one before it to libcrun
+        "{\"memory\":{\"limit\":67108864,\"limit\\u0000\":-9223372036854775808,\"swap\":1}}",
+        "{\"memory\":{\"limit\":67108864},\"memory\\u0000\":{\"limit\":-9223372036854775808,\"swap\":1}}",
+    };
+    for (refused) |doc| {
+        driver.checkMemoryJson("t", doc, .resources) catch |err| {
+            try std.testing.expectEqual(core.Error.ValidationError, err);
+            continue;
+        };
+        std.debug.print("let through: {s}\n", .{doc});
+        return error.TestExpectedRefusal;
+    }
+    const ok = [_][]const u8{
+        "{\"memory\":{\"limit\":-1,\"swap\":-1}}",
+        "{\"memory\":{\"limit\":67108864,\"swap\":134217728,\"reservation\":0}}",
+        "{\"memory\":{\"limit\":null}}",
+        "{\"cpu\":{\"quota\":-1}}",
+        "{}",
+    };
+    for (ok) |doc| try driver.checkMemoryJson("t", doc, .resources);
+
+    // A whole spec, as create hands it over.
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemoryJson("t", "{\"linux\":{\"resources\":{\"memory\":{\"limit\":-9223372036854775808,\"swap\":1}}}}", .spec));
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemoryJson("t", "{\"linux\":{\"resources\":{\"memory\":{\"limit\":67108864,\"limit\\u0000\":-9223372036854775808,\"swap\":1}}}}", .spec));
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemoryJson("t", "{\"linux\":{\"resources\":{}},\"linux\\u0000\":{\"resources\":{\"memory\":{\"limit\":-9223372036854775808,\"swap\":1}}}}", .spec));
+    try driver.checkMemoryJson("t", "{\"ociVersion\":\"1.0.0\",\"linux\":{\"resources\":{\"memory\":{\"limit\":1073741824}}}}", .spec);
+    try driver.checkMemoryJson("t", "{\"ociVersion\":\"1.0.0\"}", .spec);
+
+    // The command line's values.
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemory("t", .{ MemoryValue.ofText("-1"), MemoryValue.ofText("9223372036854775807"), .absent }));
+    try std.testing.expectError(core.Error.ValidationError, driver.checkMemory("t", .{ MemoryValue.ofText("1_0"), .absent, .absent }));
+    try driver.checkMemory("t", .{ MemoryValue.ofText("67108864"), MemoryValue.ofText("201326592"), .absent });
+}
+
+test "an unfinished create has state without a status file and a config naming no cgroup path" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const cases = [_]struct { id: []const u8, config: ?[]const u8, status: bool, unfinished: bool }{
+        .{ .id = "plain", .config = "{\"linux\":{\"namespaces\":[]}}", .status = false, .unfinished = true },
+        .{ .id = "nulled", .config = "{\"linux\":{\"cgroupsPath\":null}}", .status = false, .unfinished = true },
+        .{ .id = "finished", .config = "{\"linux\":{}}", .status = true, .unfinished = false },
+        .{ .id = "elsewhere", .config = "{\"linux\":{\"cgroupsPath\":\"/kubepods/x\"}}", .status = false, .unfinished = false },
+        .{ .id = "noconfig", .config = null, .status = false, .unfinished = false },
+    };
+    for (cases) |c| {
+        var dir = try tmp.dir.makeOpenPath(c.id, .{});
+        defer dir.close();
+        if (c.config) |text| try dir.writeFile(.{ .sub_path = "config.json", .data = text });
+        if (c.status) try dir.writeFile(.{ .sub_path = "status", .data = "{}" });
+    }
+    const root = try tmp.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(root);
+    var driver = CrunDriver{ .allocator = allocator, .state_root = root };
+    for (cases) |c| {
+        if (driver.createDidNotFinish(c.id) != c.unfinished) {
+            std.debug.print("{s}: expected {}\n", .{ c.id, c.unfinished });
+            return error.TestUnexpectedResult;
+        }
+    }
+    try std.testing.expect(!driver.createDidNotFinish("missing"));
+    driver.systemd_cgroup = true;
+    try std.testing.expect(!driver.createDidNotFinish("plain"));
 }

@@ -25,7 +25,7 @@ inside the container keeps its `=`.
 | `--config <path>` | Read configuration from `<path>` only. A missing or unparsable file is an error (exit 1) |
 | `--log <path>` | The runtime's own log goes to `<path>` instead of stderr, as an OCI runtime's does. A container engine reads it back to report why the runtime failed |
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
-| `--systemd-cgroup` | Accepted anywhere, so that an engine sending it is not refused. Only after `create`, on the crun backend, does it reach libcrun's context; anywhere else it has no effect |
+| `--systemd-cgroup` | Accepted anywhere, so that an engine sending it is not refused. Only after `create`, on the crun backend, does it reach libcrun's context, and after `delete` it keeps `--force` from removing `/sys/fs/cgroup/<id>` (see [delete](#delete)); anywhere else it has no effect |
 | `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
 | `--profile <name>` | Create the container under the isolation profile `<name>` from the configuration file; see [Isolation profiles](#isolation-profiles). Only `create` reads it, and `run` refuses it |
 | `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
@@ -200,6 +200,28 @@ from its own copy of the spec, from before the profile narrowed it, so in a
 container made under a profile every capability set of that process is cut
 to the container's bounding set.
 
+It holds for `update` as well, for the same reason: containerd builds an
+in-place resize from its copy of the spec and sends the pod's own limit.
+`create` records the profile's caps in the container's config, as the
+annotations `io.cageforge.nexcage.profile.memory` and `.pids`. An update
+that would take `memory.limit`, `memory.swap` or `pids.limit` (or the cgroup
+v2 files `memory.max`, `memory.swap.max` and `pids.max` under `unified`)
+above a cap, or to no limit (`-1`, `max`), exits 2 naming the cap and changes
+nothing; so does a `memory.limit` of 0, which libcrun writes as a limit of
+zero bytes. A pids limit of 0, which libcrun reads as "leave it", passes. A
+resize within the caps applies as it always did; the caps are the profile's,
+not the limits the container was made with, so a pod that asked for less can
+be resized up to them. A pod whose declared memory limit is above the cap
+cannot be updated in place at all, since containerd rebuilds every update
+from the pod's spec and so resends that limit: an in-place resize is refused,
+and so is the kubelet CPU manager's cpuset update (static policy), which
+leaves the container on the CPUs it had. Declare limits within the cap.
+`memory.swap`, which is memory plus swap, is held to the memory cap too: on
+a node with swap (NodeSwap, `LimitedSwap`), a pod whose memory plus swap is
+above the cap is created, but refused every update in the same way. A
+container made by an earlier nexcage carries no recorded caps and is not
+held to them.
+
 Under a profile, `create` refuses a bundle that libcrun would read otherwise
 than nexcage checked it, and `exec --process` into a container made under one
 refuses such a process spec. The message names where in the file:
@@ -234,9 +256,9 @@ names are not read as one.
 - A bundle the profile refuses exits 2 with the reason, and nothing is
   created.
 - `state` reports the profile as the annotation
-  `io.cageforge.nexcage.profile`. A bundle that carries that annotation
-  itself is refused, with a profile or without one: `state` would report a
-  profile nothing applied.
+  `io.cageforge.nexcage.profile`, and its caps under the same prefix. A
+  bundle that carries an annotation of that name or under it is refused, with
+  a profile or without one: `state` would report a profile nothing applied.
 
 ## Exit status
 
@@ -380,6 +402,15 @@ A running container must be stopped first, unless `--force` is given: that
 shuts it down and then destroys it, as `runc delete --force` does. A container
 engine sends `--force` once it has given up waiting for a clean shutdown.
 
+On `--runtime crun`, `--force` also cleans up after a `create` that was killed
+half way: libcrun's state directory is there without its status file, and the
+cgroup create had made would otherwise stay behind, one per attempt. nexcage
+removes that cgroup only when it is the default one, `/sys/fs/cgroup/<id>`
+(the config libcrun kept names no `cgroupsPath`, and `delete` was not given
+`--systemd-cgroup`, under which libcrun puts a container in a systemd scope
+and makes nothing at the root), and only with `rmdir`: a cgroup that still
+has processes or child cgroups is left in place and named in a warning.
+
 ### kill
 
 ```bash
@@ -390,9 +421,11 @@ nexcage kill [-s|--signal SIGNAL] [--all] <name>
 Sends `SIGNAL` to the container's init process from the host, as an OCI runtime
 does: nexcage reads the init's host PID from `pct status <vmid> --verbose` and
 calls `kill(2)`. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
-`SIGKILL`, `usr1`), or a number from 1 to 64; the default is `SIGTERM`. An
-unknown signal is a usage error (exit 2); a container that is not running is an
-error (exit 1).
+`SIGKILL`, `usr1`), or a number from 1 to 64 in decimal digits and nothing else
+(`1_5` is refused, as runc refuses it); the default is `SIGTERM`. On
+`--runtime crun` libcrun is given the number nexcage read, not the text, so
+both backends send the same signal for the same input. An unknown signal is a
+usage error (exit 2); a container that is not running is an error (exit 1).
 
 `--all` means every process in the container, not only its init. On
 `--runtime crun` it goes to `libcrun_container_killall`, which walks the
@@ -659,15 +692,22 @@ update` do, with their flag names: `--memory`, `--memory-swap`,
 `--cpu-rt-period`, `--cpu-rt-runtime`, `--kernel-memory`,
 `--kernel-memory-tcp`. Memory sizes take a binary suffix (`512M`, `2G`) or
 `-1` for no limit; `--cpuset-cpus` and `--cpuset-mems` take a list (`0-1`);
-everything else is a number.
+everything else is a number. On the crun backend a memory limit, swap or
+reservation, in a document or a bundle, is `-1` or a number of bytes: any
+other negative value, a value that is not a whole 64-bit number, and a swap
+and limit whose difference does not fit in 64 bits exit 2 before libcrun sees
+them, and so does a document with a NUL in any key, which libcrun's parser
+would read as another key (see [Backends](architecture/BACKENDS.md#crun)).
 
 `--resources <file>` is a runtime-spec `linux.resources` object, and `-` reads
 it from stdin. **That is how containerd sends an in-place resize**:
 `update --resources=- <id>` with the document on stdin. It cannot be combined
 with the value flags.
 
-On the crun backend everything reaches libcrun. On the Proxmox LXC backend the
-settings are said to `pct set`, in its terms:
+On the crun backend everything reaches libcrun, except what would take a
+container made under an isolation profile above the profile's memory or pids
+cap: that exits 2 and names the cap (see [Isolation profiles](#isolation-profiles)).
+On the Proxmox LXC backend the settings are said to `pct set`, in its terms:
 
 | runc's words | pct's |
 |---|---|

@@ -75,6 +75,17 @@ it. Routing decides only where `create` and `run` put a new container, so a
 A routing pattern is a regular expression only when it starts with `^` or ends
 with `$`; `".*"` is read as a wildcard and matches nothing. Use `"*"`.
 
+`create` and `exec` on the crun backend first re-execute nexcage from a sealed
+copy of its binary, as crun and runc do, so that a process in a container
+cannot reach the binary on the host through `/proc/<pid>/exe`
+(CVE-2019-5736). That needs `/proc` and one of `open_tree`, a bind mount or an
+executable memfd; a systemd unit that runs the engine with
+`SystemCallFilter=@system-service` and the default kill action needs `@mount`
+as well, or the call dies of `SIGSYS`. If none is possible, `create` and
+`exec` exit 1 and say which. No other command does it: `version`, `--help`
+and every Proxmox LXC command need none of this. A binary on a read-only
+mount counts as protected already and is not copied.
+
 ## A Kubernetes node on Proxmox VE (since 0.16.0)
 
 A node whose kubelet runs pods on nexcage needs four things:
@@ -215,7 +226,13 @@ Without them it stays `ContainerCreating`. `kubectl describe pod` gives the
 reason, for example "profile 'hardened' requires a user namespace … set
 hostUsers: false on the pod". A profile only takes away: a pod's 2Gi limit
 under `hardened` becomes 1G, while a 512M limit stays 512M. `kubectl exec`
-gets no capability the pod's container lacks.
+gets no capability the pod's container lacks, and an in-place resize cannot
+take the container above the profile's caps: containerd resends the pod's own
+limit with every update, so under `hardened` a pod declaring more than 1G
+cannot be resized in place, and the kubelet's CPU manager (static policy)
+cannot move it to other CPUs either. Declare limits within the profile's,
+and on a node with swap (NodeSwap, `LimitedSwap`) keep memory plus swap
+within the memory cap as well.
 
 ## From source
 

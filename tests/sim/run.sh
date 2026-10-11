@@ -241,6 +241,8 @@ check "the init survives the signals it handles" status_is web-1 running
 nx kill web-1 'TERM;id';       check "kill: bad signal -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
 nx kill web-1 0;               check "kill: signal 0 -> exit 2"       all 'rc 2' 'not_called_re "^pct"'
 nx kill web-1 65;              check "kill: signal 65 -> exit 2"      all 'rc 2' 'not_called_re "^pct"'
+# Digits only: "1_5" read as 15 here and as 1 by libcrun's strtol on crun
+nx kill web-1 1_5;             check "kill: 1_5 is not a number -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
 nx kill nope;                  check "kill missing -> exit 1"         rc 1
 nx kill;                       check "kill without name -> exit 2"    rc 2
 nx kill web-3;                 check "kill a stopped container -> exit 1, says it is not running" all 'rc 1' 'err_has "not running"'
