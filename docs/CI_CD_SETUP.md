@@ -26,8 +26,8 @@ or add `.github/workflows/anything.yml` with `runs-on: [self-hosted, pve9]`.
 The `if:` is not a security boundary, and it is not what #362 needed.
 
 On the E2E node the runner user has sudo for everything, so a job there runs
-as root, and the runner is persistent, so what one job leaves behind sees
-every later job. What keeps a fork's code off it is outside this
+as root, and the runner is persistent, so what one job leaves behind is
+there for every later job. What keeps a fork's code off it is outside this
 repository's files:
 
 1. **Approval of every outside contributor's run.** The repository's
@@ -43,7 +43,9 @@ repository's files:
    `CageForge/nexcage/.github/workflows/k8s_e2e.yml@refs/tags/v*`, visible to
    this repository only. A workflow a pull request adds or edits does not
    match, so it cannot reach them. The cost: the E2E then runs on `main`, on
-   tags and by dispatch from those refs, not on every pull request.
+   tags and by dispatch from those refs, not on every pull request, and
+   `scripts/dev.sh pve-e2e`, which dispatches it on a branch, works only for
+   a ref the group lists.
 
 Dependabot's pull requests come from a branch here, so the `if:` lets them
 through; a bumped action runs on the node before anyone has read it, which is
