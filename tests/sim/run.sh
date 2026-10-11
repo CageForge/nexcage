@@ -1128,6 +1128,31 @@ check "a VMID that changed hands during delete --force's shutdown is not destroy
       'grep -q "^100 stopped web-new$" "$S/db"' 'err_has "no longer"'
 rm -f "$S/meanwhile"
 
+# A container named after its own VMID: on a fresh host `create --name 100`
+# gets VMID 100, the next free one. A name equal to the VMID was taken for no
+# name at all, so the container counted as found by VMID: its record was not
+# written by start or stop, nor removed by delete, and nothing confirmed it
+# was still the same container before it was destroyed.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name 100 "$TPL" >/dev/null 2>&1
+check "(a container named 100, at VMID 100)" grep -qx "100 stopped 100" "$S/db"
+nx start 100 >/dev/null 2>&1; nx stop 100 >/dev/null 2>&1
+check "a container named after its VMID: state after stop says stopped" status_is 100 stopped
+nx delete 100
+check "and delete removes its record with it" all 'rc 0' 'called "pct destroy 100"' '[ ! -e "$S/run/nexcage/100" ]'
+nx create --name 100 "$TPL" >/dev/null 2>&1
+nx start 100 >/dev/null 2>&1
+cat > "$S/meanwhile" <<'SH'
+# the container named 100 is destroyed elsewhere and web-new takes VMID 100
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx delete --force 100
+check "and a VMID that changed hands during its delete --force's shutdown is not destroyed" \
+  all 'rc 1' 'called_re "^pct shutdown 100 "' 'not_called_re "^pct destroy"' \
+      'grep -q "^100 stopped web-new$" "$S/db"' 'err_has "no longer"'
+rm -f "$S/meanwhile"
+
 echo "--- create --node ---"
 reset_sim
 : > "$S/node_templates"

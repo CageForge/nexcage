@@ -86,7 +86,9 @@ pub const ListCommand = struct {
             // "-" rather than blank: a column that is sometimes empty is
             // hard to read, and every Proxmox LXC row has a node.
             const node = container.node orelse "-";
-            const names = container.name;
+            // A container on another node that the cluster has not named
+            // yet has no name to show
+            const names = if (container.name.len > 0) container.name else "-";
 
             // Simple output without allocPrint to avoid allocator issues
             _ = try stdout.writeAll(id);

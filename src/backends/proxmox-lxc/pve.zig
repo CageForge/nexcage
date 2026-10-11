@@ -432,9 +432,10 @@ pub const PveClient = struct {
         node: []u8,
         local: bool,
         /// The container's name when it was found, or null when the listing
-        /// had none to give -- a container addressed by VMID that pvestatd
-        /// has not named yet. What `confirm` checks the container against, and
-        /// the name nexcage keeps its state under, whatever the caller typed.
+        /// had none to give -- a container on another node that pvestatd has
+        /// not named yet, which only its VMID can have found. What `confirm`
+        /// checks the container against, and the name nexcage keeps its state
+        /// under, whatever the caller typed.
         name: ?[]u8,
 
         /// The node to address through the API, or null when `pct` will do.
@@ -525,8 +526,6 @@ pub const PveClient = struct {
         // `pct list` rows carry this host's name, or none when it is unknown
         const local = if (c.node) |n| (if (here) |h| std.mem.eql(u8, h, n) else false) else true;
         const node = c.node orelse here orelse "localhost";
-        // A listing with no name for a container gives its VMID in its place
-        const named = c.name.len > 0 and !std.mem.eql(u8, c.name, c.id);
 
         const vmid_owned = try allocator.dupe(u8, c.id);
         errdefer allocator.free(vmid_owned);
@@ -537,7 +536,7 @@ pub const PveClient = struct {
             .vmid = vmid_owned,
             .node = node_owned,
             .local = local,
-            .name = if (named) try allocator.dupe(u8, c.name) else null,
+            .name = if (c.name.len > 0) try allocator.dupe(u8, c.name) else null,
         };
     }
 
@@ -1099,6 +1098,13 @@ pub const PveClient = struct {
             };
             var vmid_buf: [24]u8 = undefined;
             const vmid_str = std.fmt.bufPrint(&vmid_buf, "{d}", .{vmid_num}) catch continue;
+            // A container pvestatd has not reached yet has no name here: the
+            // API takes it from pvestatd's last pass, a few seconds behind a
+            // create. It stays empty. The VMID used to be put in its place,
+            // and then a container really named after its VMID -- `create
+            // --name 100` on a fresh host gets VMID 100 -- passed for one
+            // without a name: found "by VMID", it had no record written or
+            // removed and no identity to confirm before it was destroyed.
             const name = if (obj.get("name")) |n| (if (n == .string) n.string else "") else "";
             const status = if (obj.get("status")) |st| (if (st == .string) st.string else "unknown") else "unknown";
             const node = if (obj.get("node")) |n| (if (n == .string) n.string else "") else "";
@@ -1106,7 +1112,7 @@ pub const PveClient = struct {
             try containers.append(self.allocator, core.ContainerInfo{
                 .allocator = allocator,
                 .id = try allocator.dupe(u8, vmid_str),
-                .name = try allocator.dupe(u8, if (name.len > 0) name else vmid_str),
+                .name = try allocator.dupe(u8, name),
                 .status = try allocator.dupe(u8, status),
                 .backend_type = try allocator.dupe(u8, "proxmox-lxc"),
                 .runtime = try allocator.dupe(u8, "pct"),
