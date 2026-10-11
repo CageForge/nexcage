@@ -398,7 +398,9 @@ fn child(arena: std.mem.Allocator, obj: *std.json.ObjectMap, key: []const u8) !*
 /// the call, SCMP_ACT_NOTIFY asks whatever listens at listenerPath, and
 /// SCMP_ACT_TRACE a tracer, which can be a process in the container. Which
 /// calls a filter refuses is not judged: a rule naming no call this kernel
-/// has is skipped by libcrun, and still counts here.
+/// has is skipped by libcrun, and still counts here, and so does a rule whose
+/// args conditions no call can meet. Refusing rules with args would refuse
+/// real filters, such as one that refuses clone(CLONE_NEWUSER) only.
 fn checkSeccomp(linux: *const std.json.ObjectMap, profile: *const Profile, why: *Refusal) error{ProfileRefused}!void {
     const seccomp = linux.get("seccomp") orelse
         return why.set("profile '{s}' requires a seccomp filter, and the bundle has none; in Kubernetes, set securityContext.seccompProfile.type: RuntimeDefault", .{profile.name});
