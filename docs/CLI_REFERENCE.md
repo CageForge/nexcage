@@ -199,6 +199,17 @@ from its own copy of the spec, from before the profile narrowed it, so in a
 container made under a profile every capability set of that process is cut
 to the container's bounding set.
 
+Under a profile, `create` refuses a bundle that libcrun would read otherwise
+than nexcage checked it, and `exec --process` into a container made under one
+refuses such a process spec. The message names where in the file:
+
+- a key or a string with a NUL (`\u0000`) in it. libcrun's parser ends it
+  there, so `"linux\u0000"` would be a second `linux`, and the one applied;
+- nesting deeper than 64 levels. No runtime spec comes near it.
+
+Without a profile, a bundle carrying the annotation
+`io.cageforge.nexcage.profile` is refused, with a NUL after the key or not.
+
 It is named by the **program name**, `nexcage@<profile>`, or by
 `--profile <profile>`. The program name is how a container engine names one:
 containerd runs a runtime's `BinaryName`, and conmon a CRI-O handler's

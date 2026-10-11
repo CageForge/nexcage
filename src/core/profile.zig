@@ -102,6 +102,7 @@ fn narrow(allocator: std.mem.Allocator, spec_json: []const u8, profile: *const P
     defer parsed.deinit();
     const arena = parsed.arena.allocator();
     const root = &parsed.value.object;
+    try checkDocument(parsed.value, "the bundle's config.json", why);
     try refuseClaim(root, why);
 
     const linux = try child(arena, root, "linux");
@@ -141,6 +142,9 @@ pub fn boundExec(allocator: std.mem.Allocator, process_json: []const u8, contain
 
     var process = try parse(allocator, process_json, "the process spec", why);
     defer process.deinit();
+    // Before anything is taken from it, and before deciding it has nothing
+    // to cut: "capabilities\u0000" is "capabilities" to libcrun.
+    try checkDocument(process.value, "the process spec", why);
     const caps = process.value.object.getPtr("capabilities") orelse return null;
     if (caps.* != .object) return null;
 
@@ -179,12 +183,120 @@ fn parse(allocator: std.mem.Allocator, json: []const u8, what: []const u8, why: 
     return parsed;
 }
 
-/// The record `state` reports must be one nexcage wrote.
+/// The record `state` reports must be one nexcage wrote. Keys are compared as
+/// libcrun compares them, up to a NUL: without a profile libcrun reads the
+/// file itself, and "annotations\u0000" or "io.cageforge.nexcage.profile\u0000"
+/// is the real key to it.
 fn refuseClaim(root: *const std.json.ObjectMap, why: *Refusal) error{ProfileRefused}!void {
-    const a = root.get("annotations") orelse return;
-    if (a == .object and a.object.contains(annotation))
-        return why.set("the bundle carries the annotation {s}, which nexcage writes itself", .{annotation});
+    var it = root.iterator();
+    while (it.next()) |entry| {
+        if (!std.mem.eql(u8, beforeNul(entry.key_ptr.*), "annotations")) continue;
+        if (entry.value_ptr.* != .object) continue;
+        var keys = entry.value_ptr.object.iterator();
+        while (keys.next()) |key| {
+            if (std.mem.eql(u8, beforeNul(key.key_ptr.*), annotation))
+                return why.set("the bundle carries the annotation {s}, which nexcage writes itself", .{annotation});
+        }
+    }
 }
+
+/// What a C reader of the key or string sees: everything before a NUL.
+fn beforeNul(s: []const u8) []const u8 {
+    return s[0 .. std.mem.indexOfScalar(u8, s, 0) orelse s.len];
+}
+
+/// Deeper than any runtime spec nests (a seccomp rule's argument is seven
+/// levels down), and well under the 256 levels std.json.Stringify checks in a
+/// safe build: a bundle nested past those made nexcage panic, not refuse it.
+const max_depth = 64;
+
+/// Refuses a document libcrun would read otherwise than this parser did, or
+/// that cannot be written back. Its parser, json-c, ends a key or a string at
+/// a NUL, and keeps the last of two keys that are then the same: with "linux"
+/// and "linux\u0000", the profile would check the first and libcrun apply the
+/// second, which nothing checked. "CAP_SYS_ADMIN\u0000x" would get past a
+/// drop the same way. No runtime spec has a NUL anywhere, so every key and
+/// string is refused for one, and so is nesting deeper than max_depth.
+fn checkDocument(value: std.json.Value, what: []const u8, why: *Refusal) error{ProfileRefused}!void {
+    var at: Path = .{};
+    return walk(value, 1, &at, what, why);
+}
+
+/// Recursive, and bounded by max_depth: the parser that built `value` keeps
+/// its own stack on the heap and takes any depth.
+fn walk(value: std.json.Value, depth: usize, at: *Path, what: []const u8, why: *Refusal) error{ProfileRefused}!void {
+    switch (value) {
+        .object => |obj| {
+            if (depth > max_depth) return tooDeep(what, at, why);
+            var it = obj.iterator();
+            while (it.next()) |entry| {
+                const back = at.key(entry.key_ptr.*);
+                if (std.mem.indexOfScalar(u8, entry.key_ptr.*, 0) != null) return nul(what, "key", at, why);
+                try walk(entry.value_ptr.*, depth + 1, at, what, why);
+                at.len = back;
+            }
+        },
+        .array => |list| {
+            if (depth > max_depth) return tooDeep(what, at, why);
+            for (list.items, 0..) |item, i| {
+                const back = at.index(i);
+                try walk(item, depth + 1, at, what, why);
+                at.len = back;
+            }
+        },
+        .string => |s| if (std.mem.indexOfScalar(u8, s, 0) != null) return nul(what, "string", at, why),
+        else => {},
+    }
+}
+
+fn tooDeep(what: []const u8, at: *const Path, why: *Refusal) error{ProfileRefused} {
+    return why.set("{s} nests deeper than {d} levels, at {s}; no runtime spec does", .{ what, max_depth, at.text() });
+}
+
+fn nul(what: []const u8, kind: []const u8, at: *const Path, why: *Refusal) error{ProfileRefused} {
+    return why.set("{s} has a NUL in the {s} at {s}: libcrun's parser ends a {s} there, so it would read something other than what the profile checked", .{ what, kind, at.text(), kind });
+}
+
+/// Where in a document a refusal points, as linux.namespaces[1].path. A NUL
+/// or another control character in a key is written as \u0000.
+const Path = struct {
+    buf: [128]u8 = undefined,
+    len: usize = 0,
+
+    fn text(self: *const Path) []const u8 {
+        return if (self.len == 0) "the top level" else self.buf[0..self.len];
+    }
+
+    /// Appends `.name`, and returns the length to go back to.
+    fn key(self: *Path, name: []const u8) usize {
+        const back = self.len;
+        if (self.len > 0) self.put(".");
+        for (name) |c| {
+            if (c >= 0x20) {
+                self.put(&.{c});
+                continue;
+            }
+            var esc: [6]u8 = undefined;
+            self.put(std.fmt.bufPrint(&esc, "\\u{x:0>4}", .{c}) catch unreachable);
+        }
+        return back;
+    }
+
+    /// Appends `[i]`, and returns the length to go back to.
+    fn index(self: *Path, i: usize) usize {
+        const back = self.len;
+        var digits: [24]u8 = undefined;
+        self.put(std.fmt.bufPrint(&digits, "[{d}]", .{i}) catch unreachable);
+        return back;
+    }
+
+    /// What fits: a path longer than the buffer is cut, not refused.
+    fn put(self: *Path, bytes: []const u8) void {
+        const n = @min(bytes.len, self.buf.len - self.len);
+        @memcpy(self.buf[self.len..][0..n], bytes[0..n]);
+        self.len += n;
+    }
+};
 
 /// The object under `key`, made when it is not there. The pointer is good
 /// until the next key is added to `obj`.
@@ -404,4 +516,71 @@ test "lowering the memory limit keeps the swap the bundle allowed, and no more" 
             try std.testing.expectEqual(want, mem.get("swap").?.integer);
         } else try std.testing.expect(mem.get("swap") == null);
     }
+}
+
+test "a key or a string with a NUL in it is refused: libcrun would read another bundle than the one checked" {
+    // The profile checks the first process and linux; json-c reads the keys
+    // as "process" and "linux" again, keeps the second of each, and that is
+    // what libcrun would apply: CAP_SYS_ADMIN, and no user namespace.
+    const smuggled =
+        \\{"process":{"capabilities":{"bounding":["CAP_KILL"]}},
+        \\ "linux":{"namespaces":[{"type":"user"}],
+        \\  "uidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
+        \\  "gidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
+        \\  "seccomp":{"defaultAction":"SCMP_ACT_ERRNO"}},
+        \\ "process\u0000":{"capabilities":{"bounding":["CAP_KILL","CAP_SYS_ADMIN"]}},
+        \\ "linux\u0000":{"namespaces":[{"type":"pid"}]}}
+    ;
+    const drop = [_][]const u8{"CAP_SYS_ADMIN"};
+    try expectRefused(smuggled, .{ .name = "h", .require_user_namespace = true, .require_seccomp = true, .drop_capabilities = &drop }, "has a NUL in the key at process\\u0000:");
+    // A C string ends at the NUL, so this is CAP_SYS_ADMIN to libcap.
+    try expectRefused(
+        \\{"process":{"capabilities":{"bounding":["CAP_KILL","CAP_SYS_ADMIN\u0000x"]}}}
+    , .{ .name = "h", .drop_capabilities = &drop }, "a NUL in the string at process.capabilities.bounding[1]");
+
+    // Without a profile libcrun reads the file itself, so a claim behind a
+    // NUL is a claim.
+    var why: Refusal = .{};
+    try std.testing.expectError(error.ProfileRefused, checkUnclaimed(std.testing.allocator,
+        \\{"annotations":{"io.cageforge.nexcage.profile\u0000":"hardened"}}
+    , &why));
+    try std.testing.expect(std.mem.indexOf(u8, why.text(), "which nexcage writes itself") != null);
+    try std.testing.expectError(error.ProfileRefused, checkUnclaimed(std.testing.allocator,
+        \\{"annotations":{"a":"b"},"annotations\u0000":{"io.cageforge.nexcage.profile":"hardened"}}
+    , &why));
+    try checkUnclaimed(std.testing.allocator,
+        \\{"annotations":{"io.cageforge.nexcage.profilex":"y"}}
+    , &why);
+
+    // An exec into a container made under a profile: without this,
+    // "capabilities\u0000" was a process with no capabilities to cut, handed
+    // to libcrun as it was, and libcrun read them as "capabilities".
+    const stored =
+        \\{"process":{"capabilities":{"bounding":["CAP_KILL"]}},
+        \\ "annotations":{"io.cageforge.nexcage.profile":"hardened"}}
+    ;
+    try std.testing.expectError(error.ProfileRefused, boundExec(std.testing.allocator,
+        \\{"args":["sh"],"capabilities\u0000":{"bounding":["CAP_SYS_ADMIN"],"effective":["CAP_SYS_ADMIN"]}}
+    , stored, &why));
+    try std.testing.expect(std.mem.indexOf(u8, why.text(), "the process spec has a NUL in the key at capabilities\\u0000:") != null);
+}
+
+test "a document nested deeper than any runtime spec is refused, not a panic" {
+    // Past 256 levels std.json.Stringify panics in a safe build; the release
+    // binary is one.
+    const deep = "{\"x\":" ++ "[" ** 300 ++ "]" ** 300 ++ "}";
+    try expectRefused(deep, .{ .name = "h" }, "the bundle's config.json nests deeper than 64 levels, at x[0][0]");
+    // The deepest a profile takes: the top level and 63 lists inside it.
+    const deepest = "{\"x\":" ++ "[" ** 63 ++ "]" ** 63 ++ "}";
+    var why: Refusal = .{};
+    std.testing.allocator.free(try narrow(std.testing.allocator, deepest, &.{ .name = "h" }, &why));
+    try expectRefused("{\"x\":" ++ "[" ** 64 ++ "]" ** 64 ++ "}", .{ .name = "h" }, "nests deeper than 64 levels");
+
+    const stored =
+        \\{"process":{"capabilities":{"bounding":["CAP_KILL"]}},
+        \\ "annotations":{"io.cageforge.nexcage.profile":"hardened"}}
+    ;
+    const process = "{\"capabilities\":{\"bounding\":[\"CAP_KILL\"]},\"x\":" ++ "[" ** 300 ++ "]" ** 300 ++ "}";
+    try std.testing.expectError(error.ProfileRefused, boundExec(std.testing.allocator, process, stored, &why));
+    try std.testing.expect(std.mem.indexOf(u8, why.text(), "the process spec nests deeper than 64 levels") != null);
 }

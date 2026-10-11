@@ -76,7 +76,9 @@ JSON
 # The program name names the profile, as an engine's BinaryName does.
 ln -s "$NEXCAGE" "$WORK/nexcage@hardened"
 nx() { "$NEXCAGE" --config "$CFG" "$@"; }
-cleanup() { cd /; for id in "$ID" "$ID-s" "$ID-u" "$ID-a"; do nx delete --force "$id" >/dev/null 2>&1 || true; done; rm -rf "$WORK"; }
+cleanup() { cd /; for id in "$ID" "$ID-s" "$ID-u" "$ID-a" "$ID-z"; do nx delete --force "$id" >/dev/null 2>&1 || true; done; rm -rf "$WORK"; }
+# The pid of a started container, from its state.
+pid_of() { nx state "$1" | sed -n 's/.*"pid": *\([0-9][0-9]*\).*/\1/p'; }
 trap cleanup EXIT
 cd /
 
@@ -116,6 +118,26 @@ capbnd=$(nx exec "$ID" --process "$WORK/process.json" 2>"$WORK/err") || fail "ex
 [ "$(bit 5)" = 1 ] || fail "an exec'd process lost CAP_KILL, which the container has ($capbnd)"
 echo "ok: exec --process asking for NET_RAW and MKNOD gets CapBnd $capbnd"
 
+# libcrun's parser ends a key at a NUL, and of two keys that are then the
+# same it keeps the last. "capabilities\u0000" is what it applies, and the
+# process spec had no "capabilities" for nexcage to cut.
+cat > "$WORK/process-nul.json" <<'JSON'
+{ "terminal": false, "user": { "uid": 0, "gid": 0 }, "cwd": "/",
+  "env": [ "PATH=/bin:/usr/bin" ],
+  "args": [ "/bin/sh", "-c", "sed -n 's/^CapBnd:[[:space:]]*//p' /proc/self/status" ],
+  "capabilities\u0000": {
+    "bounding": [ "CAP_CHOWN", "CAP_KILL", "CAP_NET_RAW", "CAP_MKNOD" ],
+    "effective": [ "CAP_CHOWN", "CAP_KILL", "CAP_NET_RAW", "CAP_MKNOD" ],
+    "permitted": [ "CAP_CHOWN", "CAP_KILL", "CAP_NET_RAW", "CAP_MKNOD" ] } }
+JSON
+rc=0; capbnd=$(nx exec "$ID" --process "$WORK/process-nul.json" 2>"$WORK/err") || rc=$?
+if [ "$rc" = 0 ]; then
+    [ "$(bit 13)" = 0 ] || fail "an exec'd process got CAP_NET_RAW back through \"capabilities\\u0000\" (CapBnd $capbnd)"
+    fail "exec --process with a NUL in a key ran (CapBnd $capbnd)"
+fi
+grep -q 'the process spec has a NUL in the key at capabilities\\u0000' "$WORK/err" || fail "the NUL refusal does not say where: $(tail -1 "$WORK/err")"
+echo "ok: exec --process with \"capabilities\\u0000\" is refused"
+
 cg=/sys/fs/cgroup$(sed -n 's/^0:://p' "/proc/$pid/cgroup")
 [ "$(cat "$cg/memory.max")" = 67108864 ] || fail "memory.max is $(cat "$cg/memory.max"), not the profile's 64M"
 [ "$(cat "$cg/pids.max")" = 50 ] || fail "pids.max is $(cat "$cg/pids.max"), not the profile's 50"
@@ -127,6 +149,26 @@ if [ -f "$cg/memory.swap.max" ]; then
 else
     echo "skipped: no memory.swap.max here (no swap accounting), so swap is not checked"
 fi
+
+# A second "process" behind a NUL: the profile checked the first, and
+# libcrun, which reads "process\u0000" as "process" and keeps the last, would
+# apply this one, NET_RAW and MKNOD included.
+spec "" ', "process\u0000": { "terminal": false, "user": { "uid": 0, "gid": 0 },
+    "args": [ "/bin/sleep", "300" ], "env": [ "PATH=/bin:/usr/bin" ], "cwd": "/",
+    "capabilities": { "bounding": [ "CAP_KILL", "CAP_NET_RAW", "CAP_MKNOD" ],
+      "effective": [ "CAP_KILL", "CAP_NET_RAW", "CAP_MKNOD" ],
+      "permitted": [ "CAP_KILL", "CAP_NET_RAW", "CAP_MKNOD" ] } }'
+rc=0; "$WORK/nexcage@hardened" --config "$CFG" create --bundle "$BUNDLE" "$ID-z" 2>"$WORK/err" || rc=$?
+if [ "$rc" = 0 ]; then
+    nx start "$ID-z" 2>"$WORK/err" || fail "a bundle with a NUL in a key was created, and start failed: $(tail -1 "$WORK/err")"
+    capbnd=$(sed -n 's/^CapBnd:[[:space:]]*//p' "/proc/$(pid_of "$ID-z")/status")
+    [ "$(bit 13)" = 0 ] && [ "$(bit 27)" = 0 ] || fail "the second \"process\" behind a NUL was applied: CapBnd $capbnd holds NET_RAW or MKNOD, which the profile drops"
+    fail "a bundle with a NUL in a key was created (CapBnd $capbnd)"
+fi
+grep -q 'has a NUL in the key at process\\u0000' "$WORK/err" || fail "the NUL refusal does not say where: $(tail -1 "$WORK/err")"
+[ ! -e "/run/crun/$ID-z" ] || fail "a refused create left state behind"
+echo "ok: a second \"process\" behind a NUL is refused, and nothing is created"
+spec "" ""
 
 # A requirement refuses a bundle without it, and leaves nothing behind.
 nx --profile needs-seccomp create --bundle "$BUNDLE" "$ID-s" 2>"$WORK/err" && fail "a bundle without seccomp passed a profile that requires it"
