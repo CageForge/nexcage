@@ -1695,7 +1695,7 @@ fn templateVolidStorage(volid: []const u8) ?[]const u8 {
 /// pve-configid format, a letter and then letters, digits, '-' or '_', two to
 /// 40 characters. "current" fits it, and is refused too: it is the API's name
 /// for where the container is now, not a snapshot.
-pub fn isSnapshotName(name: []const u8) bool {
+fn isSnapshotName(name: []const u8) bool {
     if (name.len < 2 or name.len > 40) return false;
     if (!std.ascii.isAlphabetic(name[0])) return false;
     for (name) |c| {
