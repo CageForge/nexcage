@@ -129,6 +129,7 @@ fn narrow(allocator: std.mem.Allocator, spec_json: []const u8, profile: *const P
     const root = &parsed.value.object;
     try checkDocument(parsed.value, "the bundle's config.json", why);
     try refuseClaim(root, why);
+    try checkCapabilityNames(capabilitiesOf(root.get("process")), "the bundle's process.capabilities", why);
 
     const linux = try child(arena, root, "linux");
 
@@ -172,6 +173,7 @@ pub fn boundExec(allocator: std.mem.Allocator, process_json: []const u8, contain
     try checkDocument(process.value, "the process spec", why);
     const caps = process.value.object.getPtr("capabilities") orelse return null;
     if (caps.* != .object) return null;
+    try checkCapabilityNames(caps.object, "the process spec's capabilities", why);
 
     const arena = process.arena.allocator();
     var bounding = std.ArrayListUnmanaged([]const u8){};
@@ -185,6 +187,37 @@ pub fn boundExec(allocator: std.mem.Allocator, process_json: []const u8, contain
         if (set.* == .array) filter(&set.array, bounding.items, true);
     }
     return try std.json.Stringify.valueAlloc(allocator, process.value, .{});
+}
+
+/// Every entry of every capability set is a capability spelt as the kernel
+/// spells it. libcrun reads them with libcap's cap_from_name, which takes
+/// "cap_net_raw", "Cap_Net_Raw", "13", "0x0d", "13junk" and "CAP_NET_RAW2"
+/// all for CAP_NET_RAW, and json-c hands it a number as its digits; a profile
+/// compares names, and a drop that missed such a spelling left the capability
+/// in place. Exec's bound compares names with the stored bounding set, which
+/// this keeps to the same spellings.
+fn checkCapabilityNames(caps: ?std.json.ObjectMap, at: []const u8, why: *Refusal) error{ProfileRefused}!void {
+    const c = caps orelse return;
+    for (capability_sets) |set_name| {
+        // A set that is not a list is no set to libcrun, and grants nothing.
+        const set = c.get(set_name) orelse continue;
+        if (set != .array) continue;
+        for (set.array.items) |item| {
+            if (item != .string)
+                return why.set("{s}.{s} holds a JSON {s}, where only capability names go, such as \"CAP_NET_RAW\"", .{ at, set_name, kindOf(item) });
+            if (!isCapabilityName(item.string))
+                return why.set("{s}.{s} lists \"{s}\", which is not a capability name as the kernel spells it, such as \"CAP_NET_RAW\"; libcrun could read it as one the profile does not see", .{ at, set_name, item.string });
+        }
+    }
+}
+
+/// A value's JSON type, for a message.
+fn kindOf(v: std.json.Value) []const u8 {
+    return switch (v) {
+        .integer, .float, .number_string => "number",
+        .bool => "boolean",
+        else => @tagName(v),
+    };
 }
 
 fn capabilitiesOf(process: ?std.json.Value) ?std.json.ObjectMap {
@@ -621,4 +654,31 @@ test "the capability names are the kernel's, by number" {
     // What libcap's cap_from_name also reads as CAP_SYS_ADMIN, and a typo.
     for ([_][]const u8{ "cap_sys_admin", "Cap_Sys_Admin", "21", "0x15", "CAP_SYS_ADMIN1", "CAP_SYS_ADMIN ", "CAP_SYSADMIN", "" }) |n|
         try std.testing.expect(!isCapabilityName(n));
+}
+
+test "a capability spelt otherwise than the kernel spells it is refused: libcap would grant what the drop missed" {
+    const drop = [_][]const u8{ "CAP_NET_RAW", "CAP_SYS_ADMIN" };
+    const profile = Profile{ .name = "h", .drop_capabilities = &drop };
+    // Each of these is CAP_NET_RAW or CAP_SYS_ADMIN to cap_from_name.
+    const spellings = [_][]const u8{ "cap_net_raw", "Cap_Sys_Admin", "13", "0x15", "13junk", "CAP_NET_RAW2", "CAP_SYS_ADMIN " };
+    for (spellings) |name| {
+        var spec: [256]u8 = undefined;
+        const json = try std.fmt.bufPrint(&spec, "{{\"process\":{{\"capabilities\":{{\"bounding\":[\"CAP_KILL\",\"{s}\"],\"effective\":[\"CAP_KILL\"]}}}}}}", .{name});
+        try expectRefused(json, profile, "is not a capability name as the kernel spells it");
+    }
+    // json-c gives libcap a number's digits: 21 is CAP_SYS_ADMIN.
+    try expectRefused("{\"process\":{\"capabilities\":{\"permitted\":[\"CAP_KILL\",21]}}}", profile, "process.capabilities.permitted holds a JSON number, where only capability names go");
+    // Under any profile, not only one that drops: exec compares names with
+    // what the container was made with.
+    try expectRefused("{\"process\":{\"capabilities\":{\"ambient\":[\"cap_kill\"]}}}", .{ .name = "h" }, "process.capabilities.ambient lists \"cap_kill\"");
+
+    const stored =
+        \\{"process":{"capabilities":{"bounding":["CAP_CHOWN","CAP_KILL"]}},
+        \\ "annotations":{"io.cageforge.nexcage.profile":"hardened"}}
+    ;
+    var why: Refusal = .{};
+    try std.testing.expectError(error.ProfileRefused, boundExec(std.testing.allocator,
+        \\{"args":["sh"],"capabilities":{"bounding":["CAP_KILL","cap_sys_admin"],"effective":["cap_sys_admin"]}}
+    , stored, &why));
+    try std.testing.expect(std.mem.indexOf(u8, why.text(), "the process spec's capabilities.bounding lists \"cap_sys_admin\"") != null);
 }

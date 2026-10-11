@@ -205,7 +205,10 @@ refuses such a process spec. The message names where in the file:
 
 - a key or a string with a NUL (`\u0000`) in it. libcrun's parser ends it
   there, so `"linux\u0000"` would be a second `linux`, and the one applied;
-- nesting deeper than 64 levels. No runtime spec comes near it.
+- nesting deeper than 64 levels. No runtime spec comes near it;
+- a capability not spelt as the kernel spells it, such as `cap_net_raw` or
+  `13`. libcrun reads names with libcap, which takes those for
+  `CAP_NET_RAW`, while a profile compares names.
 
 Without a profile, a bundle carrying the annotation
 `io.cageforge.nexcage.profile` is refused, with a NUL after the key or not.

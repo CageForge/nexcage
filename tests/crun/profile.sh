@@ -76,7 +76,7 @@ JSON
 # The program name names the profile, as an engine's BinaryName does.
 ln -s "$NEXCAGE" "$WORK/nexcage@hardened"
 nx() { "$NEXCAGE" --config "$CFG" "$@"; }
-cleanup() { cd /; for id in "$ID" "$ID-s" "$ID-u" "$ID-a" "$ID-z"; do nx delete --force "$id" >/dev/null 2>&1 || true; done; rm -rf "$WORK"; }
+cleanup() { cd /; for id in "$ID" "$ID-s" "$ID-u" "$ID-a" "$ID-z" "$ID-c"; do nx delete --force "$id" >/dev/null 2>&1 || true; done; rm -rf "$WORK"; }
 # The pid of a started container, from its state.
 pid_of() { nx state "$1" | sed -n 's/.*"pid": *\([0-9][0-9]*\).*/\1/p'; }
 trap cleanup EXIT
@@ -168,6 +168,20 @@ fi
 grep -q 'has a NUL in the key at process\\u0000' "$WORK/err" || fail "the NUL refusal does not say where: $(tail -1 "$WORK/err")"
 [ ! -e "/run/crun/$ID-z" ] || fail "a refused create left state behind"
 echo "ok: a second \"process\" behind a NUL is refused, and nothing is created"
+
+# libcrun reads capability names with libcap, which takes "cap_net_raw" and
+# "27" for CAP_NET_RAW and CAP_MKNOD; the profile compares names.
+spec "" ""
+sed -i 's/"CAP_NET_RAW"/"cap_net_raw"/g; s/"CAP_MKNOD"/"27"/g' "$BUNDLE/config.json"
+rc=0; "$WORK/nexcage@hardened" --config "$CFG" create --bundle "$BUNDLE" "$ID-c" 2>"$WORK/err" || rc=$?
+if [ "$rc" = 0 ]; then
+    nx start "$ID-c" 2>"$WORK/err" || fail "a bundle spelling capabilities as libcap does was created, and start failed: $(tail -1 "$WORK/err")"
+    capbnd=$(sed -n 's/^CapBnd:[[:space:]]*//p' "/proc/$(pid_of "$ID-c")/status")
+    [ "$(bit 13)" = 0 ] && [ "$(bit 27)" = 0 ] || fail "cap_net_raw and 27 got past the drop: CapBnd $capbnd holds NET_RAW or MKNOD"
+    fail "a bundle spelling capabilities as libcap does was created (CapBnd $capbnd)"
+fi
+grep -q 'lists "cap_net_raw", which is not a capability name as the kernel spells it' "$WORK/err" || fail "the refusal does not name the spelling: $(tail -1 "$WORK/err")"
+echo "ok: \"cap_net_raw\" and \"27\" are refused, not let past the drop"
 spec "" ""
 
 # A requirement refuses a bundle without it, and leaves nothing behind.
