@@ -315,10 +315,12 @@ does. A mount's source and destination must be absolute, normalised paths
 (no empty, `.` or `..` component, no trailing `/`) without control
 characters, `,` or `=`; the destination cannot be `/`, and a source under
 `/dev/` is refused, since Proxmox would mount the filesystem on that device
-rather than bind it. The kernel filesystems a runtime-spec bundle mounts at
-`/proc`, `/sys`, `/sys/fs/cgroup`, `/dev`, `/dev/pts`, `/dev/shm` and
-`/dev/mqueue` are the container's own, set up by LXC and its init, and are
-left out; any other mount that is not a bind mount is refused.
+rather than bind it. Proxmox binds directories only: a source that is not a
+directory when the container starts makes the start fail. The kernel
+filesystems a runtime-spec bundle mounts at `/proc`, `/sys`, `/sys/fs/cgroup`,
+`/dev`, `/dev/pts`, `/dev/shm` and `/dev/mqueue` are the container's own, set
+up by LXC and its init, and are left out; any other mount that is not a bind
+mount is refused.
 
 A bind mount's `ro` becomes `ro=1`, which Proxmox checks took effect, and
 `nosuid`, `nodev`, `noexec` and `noatime` become its `mountoptions`. Proxmox

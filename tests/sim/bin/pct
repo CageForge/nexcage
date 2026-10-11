@@ -51,8 +51,9 @@ mp_check() {
   local key=$1 val=$2 part k v vol="" mp=""
   bad() { echo "400 Parameter verification failed." >&2; echo "$key: $*" >&2; return 1; }
   case $val in *$'\n'*) bad "invalid format - properties must not contain newlines"; return ;; esac
-  local IFS=,
-  for part in $val; do
+  local parts
+  IFS=, read -ra parts <<< "$val"
+  for part in "${parts[@]}"; do
     [[ $part =~ ^[[:space:]]*$ ]] && continue
     if [[ $part =~ ^([^=]+)=(.+)$ ]]; then
       k=${BASH_REMATCH[1]}; v=${BASH_REMATCH[2]}
