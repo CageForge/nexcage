@@ -938,6 +938,9 @@ test "a document nested deeper than any runtime spec is refused, not a panic" {
     // binary is one.
     const deep = "{\"x\":" ++ "[" ** 300 ++ "]" ** 300 ++ "}";
     try expectRefused(deep, .{ .name = "h" }, "the bundle's config.json nests deeper than 64 levels, at x[0][0]");
+    // Objects nest as lists do.
+    const deep_objects = "{\"x\":" ++ "{\"a\":" ** 300 ++ "1" ++ "}" ** 301;
+    try expectRefused(deep_objects, .{ .name = "h" }, "the bundle's config.json nests deeper than 64 levels, at x.a.a");
     // The deepest a profile takes: the top level and 63 lists inside it.
     const deepest = "{\"x\":" ++ "[" ** 63 ++ "]" ** 63 ++ "}";
     var why: Refusal = .{};
