@@ -82,7 +82,7 @@ ln -s "$NEXCAGE" "$WORK/nexcage@hardened"
 nx() { "$NEXCAGE" --config "$CFG" "$@"; }
 cleanup() {
     cd /
-    for id in "$ID" "$ID-s" "$ID-sa" "$ID-sf" "$ID-sb" "$ID-u" "$ID-g" "$ID-a" "$ID-z" "$ID-c" "$ID-v" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
+    for id in "$ID" "$ID-s" "$ID-sa" "$ID-sf" "$ID-sb" "$ID-u" "$ID-g" "$ID-a" "$ID-z" "$ID-c" "$ID-v" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-jg" "$ID-h0" "$ID-h1" "$ID-hg"; do
         nx delete --force "$id" >/dev/null 2>&1 || true
     done
     umount "$WORK/userns-pin" 2>/dev/null || true
@@ -255,13 +255,14 @@ echo "ok: a profile requiring a user namespace refuses a bundle without one"
 
 # A user namespace that leaves the container's root the host's does not
 # count: mappings that include host uid 0, or a namespace joined by path that
-# is nexcage's own or maps host uid 0. One joined by path that maps neither
+# is nexcage's own or maps host uid or gid 0. One joined by path that maps none
 # passes, as a pod's containers join the sandbox's: by /proc/<pid>/ns/user
 # (containerd) or by a bind mount that pins it (CRI-O). uid_map is read from
 # the kernel, in this namespace's terms, where root is 0.
 mappings() { echo ", \"uidMappings\": [ { \"containerID\": 0, \"hostID\": $1, \"size\": $2 } ], \"gidMappings\": [ { \"containerID\": 0, \"hostID\": $1, \"size\": $2 } ]"; }
-maps_root() { awk '$2 == 0 { found = 1 } END { exit !found }' "/proc/$1/uid_map"; }
+maps_root() { awk '$2 == 0 { found = 1 } END { exit !found }' "/proc/$1/${2:-uid}_map"; }
 uid_map() { tr -s ' \n' ' ' < "/proc/$1/uid_map"; }
+gid_map() { tr -s ' \n' ' ' < "/proc/$1/gid_map"; }
 
 spec "$(mappings 0 1)" "" ', { "type": "user" }'
 rc=0; nx --profile needs-userns create --bundle "$BUNDLE" "$ID-m" 2>"$WORK/err" || rc=$?
@@ -292,14 +293,19 @@ grep -q 'annotation run.oci.keep_original_groups keeps nexcage' "$WORK/err" || f
 [ ! -e "/run/crun/$ID-g" ] || fail "a refused create left state behind"
 echo "ok: run.oci.keep_original_groups is refused under a required user namespace"
 
-# Two sandboxes made without a profile: one mapping host uid 0, one not.
+# Three sandboxes made without a profile: one mapping host uid 0, one mapping
+# host gid 0 and no uid 0, so that only its gid_map can refuse it, and one
+# mapping neither.
 spec "$(mappings 0 1)" "" ', { "type": "user" }'
 nx --runtime crun create --bundle "$BUNDLE" "$ID-h0" 2>"$WORK/err" && nx start "$ID-h0" 2>>"$WORK/err" || fail "a sandbox mapping host uid 0: $(tail -1 "$WORK/err")"
+spec ', "uidMappings": [ { "containerID": 0, "hostID": 1, "size": 65536 } ], "gidMappings": [ { "containerID": 0, "hostID": 0, "size": 1 } ]' "" ', { "type": "user" }'
+nx --runtime crun create --bundle "$BUNDLE" "$ID-hg" 2>"$WORK/err" && nx start "$ID-hg" 2>>"$WORK/err" || fail "a sandbox mapping host gid 0: $(tail -1 "$WORK/err")"
 spec "$(mappings 1 65536)" "" ', { "type": "user" }'
 nx --runtime crun create --bundle "$BUNDLE" "$ID-h1" 2>"$WORK/err" && nx start "$ID-h1" 2>>"$WORK/err" || fail "a sandbox with a user namespace of its own: $(tail -1 "$WORK/err")"
-h0=$(pid_of "$ID-h0"); h1=$(pid_of "$ID-h1")
+h0=$(pid_of "$ID-h0"); hg=$(pid_of "$ID-hg"); h1=$(pid_of "$ID-h1")
 maps_root "$h0" || fail "the sandbox meant to map host uid 0 does not: $(uid_map "$h0")"
-! maps_root "$h1" || fail "the sandbox meant to leave host uid 0 out maps it: $(uid_map "$h1")"
+! maps_root "$hg" && maps_root "$hg" gid || fail "the sandbox meant to map host gid 0 alone does not: uid_map $(uid_map "$hg"), gid_map $(gid_map "$hg")"
+! maps_root "$h1" && ! maps_root "$h1" gid || fail "the sandbox meant to leave host uid and gid 0 out maps one: uid_map $(uid_map "$h1"), gid_map $(gid_map "$h1")"
 joining() { spec "$(mappings 1 65536)" "" ", { \"type\": \"user\", \"path\": \"$1\" }"; }
 
 joining "/proc/$h0/ns/user"
@@ -312,6 +318,19 @@ if [ "$rc" = 0 ]; then
 fi
 grep -q "the one the bundle joins, /proc/$h0/ns/user, maps it" "$WORK/err" || fail "the refusal does not say why: $(tail -1 "$WORK/err")"
 echo "ok: joining a user namespace that maps host uid 0 is refused"
+
+# The gid_map is read too: gid 0 in the container would be the host's root
+# group, which owns what the host gives no one else.
+joining "/proc/$hg/ns/user"
+rc=0; nx --profile needs-userns create --bundle "$BUNDLE" "$ID-jg" 2>"$WORK/err" || rc=$?
+if [ "$rc" = 0 ]; then
+    nx start "$ID-jg" 2>"$WORK/err" || fail "joining a namespace that maps host gid 0 passed the profile, and start failed: $(tail -1 "$WORK/err")"
+    p=$(pid_of "$ID-jg")
+    maps_root "$p" gid && fail "joining a namespace that maps host gid 0 passed the profile: the container's gid_map is $(gid_map "$p")"
+    fail "joining a namespace that maps host gid 0 passed the profile"
+fi
+grep -q "does not map host gid 0, and the one the bundle joins, /proc/$hg/ns/user, maps it" "$WORK/err" || fail "the refusal does not say why: $(tail -1 "$WORK/err")"
+echo "ok: joining a user namespace that maps host gid 0 is refused"
 
 # pid 1 here shares nexcage's user namespace, as init does on a host.
 joining "/proc/1/ns/user"
