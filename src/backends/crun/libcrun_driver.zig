@@ -552,7 +552,11 @@ pub const CrunDriver = struct {
         var err_ptr: ?*ffi.Libcrun.Error = null;
 
         if (resources_json) |doc| {
-            const ret = ffi.Libcrun.libcrun_container_update(ctx, id_c.ptr, doc.ptr, doc.len, &err_ptr);
+            // libcrun strlen()s the document and ignores the length: it gets a
+            // copy that ends in NUL (see the binding).
+            const doc_z = try self.allocator.dupeZ(u8, doc);
+            defer self.allocator.free(doc_z);
+            const ret = ffi.Libcrun.libcrun_container_update(ctx, id_c.ptr, doc_z.ptr, doc_z.len, &err_ptr);
             if (ret < 0) {
                 try self.handleError(&err_ptr, "container_update");
                 return core.Error.OperationFailed;

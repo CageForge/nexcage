@@ -170,13 +170,20 @@ pub const Libcrun = struct {
     /// document, which is what a container engine sends for an in-place resize,
     /// or a list of settings in crun's section/name vocabulary, which is what a
     /// command line says.
+    ///
+    /// `content` must end in a NUL, whatever `len` says: libcrun marks `len`
+    /// unused and strlen()s the pointer (container.c, parse_json_file). Typed
+    /// as a plain many-pointer, it took the slice update.zig read, which has
+    /// no terminator, and libcrun read on past the allocation: a resize the
+    /// engine sent was refused as "invalid utf-8 at position <len>" at some
+    /// lengths, and a 64 KiB document crashed the process on an unmapped page.
     pub const UpdateValue = extern struct {
         section: [*:0]const u8,
         name: [*:0]const u8,
         numeric: bool,
         value: [*:0]const u8,
     };
-    pub extern fn libcrun_container_update(context: *Context, id: [*c]const u8, content: [*]const u8, len: usize, err: *?*Error) c_int;
+    pub extern fn libcrun_container_update(context: *Context, id: [*c]const u8, content: [*:0]const u8, len: usize, err: *?*Error) c_int;
     pub extern fn libcrun_container_update_from_values(context: *Context, id: [*c]const u8, values: [*]UpdateValue, len: usize, err: *?*Error) c_int;
 
     /// int libcrun_container_read_pids (libcrun_context_t *context, const char *id,
