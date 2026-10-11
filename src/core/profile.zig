@@ -326,7 +326,8 @@ fn nul(what: []const u8, kind: []const u8, at: *const Path, why: *Refusal) error
 }
 
 /// Where in a document a refusal points, as linux.namespaces[1].path. A NUL
-/// or another control character in a key is written as \u0000.
+/// or another control character in a key is written as \u0000, as Shown
+/// writes it.
 const Path = struct {
     buf: [128]u8 = undefined,
     len: usize = 0,
@@ -339,14 +340,11 @@ const Path = struct {
     fn key(self: *Path, name: []const u8) usize {
         const back = self.len;
         if (self.len > 0) self.put(".");
-        for (name) |c| {
-            if (c >= 0x20) {
-                self.put(&.{c});
-                continue;
-            }
-            var esc: [6]u8 = undefined;
-            self.put(std.fmt.bufPrint(&esc, "\\u{x:0>4}", .{c}) catch unreachable);
-        }
+        var w: std.Io.Writer = .fixed(self.buf[self.len..]);
+        // A fixed writer fails only when it is full: what fits is kept, and
+        // the rest cut, as put cuts.
+        w.print("{f}", .{shown(name)}) catch {};
+        self.len += w.end;
         return back;
     }
 
@@ -367,15 +365,25 @@ const Path = struct {
 };
 
 /// A string from the bundle, as a refusal shows it with `{f}`: a control
-/// character is written escaped, a newline as \u000a, as Path writes one in a
-/// key, so that a bundle cannot start a line of its own, or move the cursor,
-/// in the log the engine keeps of the message.
+/// character is written escaped, a newline as \u000a, so that a bundle cannot
+/// start a line of its own, or move the cursor, in the log the engine keeps
+/// of the message. That is C0, DEL, and C1, which UTF-8 writes as 0xc2 then
+/// 0x80 to 0x9f: U+009B is a terminal's CSI, as ESC [ is. std.json refuses
+/// a document that is not UTF-8, so no other byte of 0x80 to 0x9f stands
+/// for one.
 const Shown = struct {
     s: []const u8,
 
     pub fn format(self: Shown, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        for (self.s) |c| {
-            if (c >= 0x20) try w.writeByte(c) else try w.print("\\u{x:0>4}", .{c});
+        var i: usize = 0;
+        while (i < self.s.len) : (i += 1) {
+            const c = self.s[i];
+            if (c == 0xc2 and i + 1 < self.s.len and self.s[i + 1] >= 0x80 and self.s[i + 1] <= 0x9f) {
+                i += 1;
+                try w.print("\\u{x:0>4}", .{self.s[i]});
+            } else if (c < 0x20 or c == 0x7f) {
+                try w.print("\\u{x:0>4}", .{c});
+            } else try w.writeByte(c);
         }
     }
 };
@@ -1239,10 +1247,13 @@ test "a bundle that keeps nexcage's own groups does not meet a profile that requ
 }
 
 test "a refusal shows the bundle's strings with control characters escaped: it writes no line of its own into a log" {
-    // A newline, a forged log line, and the escape that erases a line.
-    const forged = "\\n[INFO] nexcage: create completed\\u001b[2K";
+    // A newline, a forged log line, and the escape that erases a line,
+    // written as ESC [ and as the one character CSI; then DEL.
+    const forged = "\\n[INFO] nexcage: create completed\\u001b[2K\\u009b2K\\u007f";
     const cases = [_]struct { []const u8, Profile }{
         .{ "{\"process\":{\"capabilities\":{\"bounding\":[\"CAP_X" ++ forged ++ "\"]}}}", .{ .name = "h" } },
+        // A key, as a refusal's path shows it.
+        .{ "{\"x\\u0000" ++ forged ++ "\":1}", .{ .name = "h" } },
         .{
             \\{"linux":{"uidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
             \\ "gidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
@@ -1255,7 +1266,9 @@ test "a refusal shows the bundle's strings with control characters escaped: it w
         var why: Refusal = .{};
         try std.testing.expectError(error.ProfileRefused, narrow(std.testing.allocator, c[0], &c[1], &why));
         const text = why.text();
-        if (std.mem.indexOfAny(u8, text, "\n\x1b") != null or std.mem.indexOf(u8, text, "\\u000a[INFO] nexcage: create completed\\u001b[2K") == null) {
+        if (std.mem.indexOfAny(u8, text, "\n\x1b\x7f") != null or std.mem.indexOf(u8, text, "\u{9b}") != null or
+            std.mem.indexOf(u8, text, "\\u000a[INFO] nexcage: create completed\\u001b[2K\\u009b2K\\u007f") == null)
+        {
             std.debug.print("got: {s}\n", .{text});
             return error.TestUnexpectedRefusal;
         }
