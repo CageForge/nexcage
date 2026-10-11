@@ -96,7 +96,7 @@ echo "ok: create with memory.limit INT64_MIN exits 2 and leaves nothing"
 spec '{ "limit": 67108864, "limit\u0000": -9223372036854775808, "swap": 1 }'
 rc=0; nx create --bundle "$BUNDLE" "$ID-c" 2>/tmp/memory.err || rc=$?
 [ "$rc" = 2 ] || fail "create with a second memory.limit behind \"limit\\u0000\" exited $rc, not 2: $(tr '\n' ' ' < /tmp/memory.err | head -c 300)"
-grep -qF 'has a NUL in the key "limit\u0000"' /tmp/memory.err || fail "the refusal does not name the key: $(tr '\n' ' ' < /tmp/memory.err)"
+grep -qF 'has a NUL in the key at linux.resources.memory.limit\u0000:' /tmp/memory.err || fail "the refusal does not name the key: $(tr '\n' ' ' < /tmp/memory.err)"
 [ ! -e "/run/crun/$ID-c" ] || fail "a refused create left /run/crun/$ID-c"
 [ ! -e "$CG/$ID-c" ] || fail "a refused create left the cgroup $CG/$ID-c"
 echo "ok: create with memory.limit INT64_MIN behind \"limit\\u0000\" exits 2 and leaves nothing"
@@ -149,7 +149,7 @@ rc=0; printf '{"memory":{"limit":-9223372036854775808,"swap":1}}' | nx update --
 [ "$(cat "$cg/memory.max")" = 67108864 ] || fail "a refused update changed memory.max to $(cat "$cg/memory.max")"
 rc=0; printf '%s' '{"memory":{"limit":67108864,"limit\u0000":-9223372036854775808,"swap":1}}' | nx update --resources - "$ID-u" 2>/tmp/memory.err || rc=$?
 [ "$rc" = 2 ] || fail "update --resources with memory.limit INT64_MIN behind \"limit\\u0000\" exited $rc, not 2: $(tr '\n' ' ' < /tmp/memory.err | head -c 300)"
-grep -qF 'has a NUL in the key "limit\u0000"' /tmp/memory.err || fail "the refused update does not name the key: $(tr '\n' ' ' < /tmp/memory.err)"
+grep -qF 'has a NUL in the key at memory.limit\u0000:' /tmp/memory.err || fail "the refused update does not name the key: $(tr '\n' ' ' < /tmp/memory.err)"
 [ "$(cat "$cg/memory.max")" = 67108864 ] || fail "a refused update changed memory.max to $(cat "$cg/memory.max")"
 rc=0; nx update --memory -1 --memory-swap 9223372036854775807 "$ID-u" 2>/tmp/memory.err || rc=$?
 [ "$rc" = 2 ] || fail "update --memory -1 --memory-swap 9223372036854775807 exited $rc, not 2: $(tr '\n' ' ' < /tmp/memory.err | head -c 300)"
