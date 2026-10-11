@@ -22,10 +22,12 @@ pub const BundleTemplate = struct {
 
     /// Deletes the archive and its directory once pct create has unpacked
     /// it, or failed to. A signal that ends nexcage first is handled by
-    /// interrupt_cleanup.
+    /// interrupt_cleanup, which stays armed until both are gone: disarmed
+    /// first, a signal in between left the archive behind. One that comes
+    /// after the deletes only unlinks what is no longer there.
     pub fn remove(self: *BundleTemplate, allocator: std.mem.Allocator, logger: ?*core.LogContext) void {
-        interrupt_cleanup.disarm();
         removeArchive(self.dir, self.path, logger);
+        interrupt_cleanup.disarm();
         allocator.free(self.dir);
         allocator.free(self.path);
     }
@@ -118,12 +120,15 @@ pub const OciProcessor = struct {
         errdefer self.allocator.free(dir);
         const path = try std.fs.path.join(self.allocator, &.{ dir, "rootfs.tar.zst" });
         errdefer self.allocator.free(path);
-        errdefer removeArchive(dir, path, self.logger);
         interrupt_cleanup.arm(dir, path) catch {
+            removeArchive(dir, path, self.logger);
             if (self.logger) |log| log.err("{s} is too long a path for the bundle's archive", .{path}) catch {};
             return core.Error.InvalidInput;
         };
+        // On an error below these run in reverse: the archive is deleted
+        // before the handler is disarmed, as in BundleTemplate.remove
         errdefer interrupt_cleanup.disarm();
+        errdefer removeArchive(dir, path, self.logger);
 
         // Made here, new and 0600, in a directory no one else can enter; tar
         // truncates it and keeps the mode
