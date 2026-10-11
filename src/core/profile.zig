@@ -360,7 +360,7 @@ const Caps = struct {
         };
         const v = n orelse {
             if (std.mem.eql(u8, text, "max")) return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for max, which is no limit", .{ caps.profile, field.name(), cap, unit });
-            return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for '{s}', which is not a whole number", .{ caps.profile, field.name(), cap, unit, text });
+            return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for '{f}', which is not a whole number", .{ caps.profile, field.name(), cap, unit, shown(text) });
         };
         const lowest: i64 = switch (field) {
             // No memory at all is no use to anyone, and -1 is no limit.
@@ -435,7 +435,7 @@ fn refuseClaim(root: *const std.json.ObjectMap, why: *Refusal) error{ProfileRefu
     if (a != .object) return;
     for (a.object.keys()) |key| {
         if (std.mem.eql(u8, key, annotation) or std.mem.startsWith(u8, key, annotation ++ "."))
-            return why.set("the bundle carries the annotation {s}, which nexcage writes itself", .{key});
+            return why.set("the bundle carries the annotation {f}, which nexcage writes itself", .{shown(key)});
     }
 }
 
@@ -1439,17 +1439,29 @@ test "a refusal shows the bundle's strings with control characters escaped: it w
             ++ forged ++ "\"}]}}",
             .{ .name = "h", .require_user_namespace = true },
         },
+        // An annotation under the profile's name, which the bundle may not
+        // carry.
+        .{ "{\"annotations\":{\"io.cageforge.nexcage.profile.x" ++ forged ++ "\":\"1\"}}", .{ .name = "h" } },
     };
     for (cases) |c| {
         var why: Refusal = .{};
         try std.testing.expectError(error.ProfileRefused, narrow(std.testing.allocator, c[0], &c[1], &why));
-        const text = why.text();
-        if (std.mem.indexOfAny(u8, text, "\n\x1b\x7f") != null or std.mem.indexOf(u8, text, "\u{9b}") != null or
-            std.mem.indexOf(u8, text, "\\u000a[INFO] nexcage: create completed\\u001b[2K\\u009b2K\\u007f") == null)
-        {
-            std.debug.print("got: {s}\n", .{text});
-            return error.TestUnexpectedRefusal;
-        }
+        try expectEscaped(&why);
+    }
+    // update's refusal quotes a unified value it cannot read as a number.
+    var why: Refusal = .{};
+    const stored = "{\"annotations\":{\"io.cageforge.nexcage.profile\":\"h\",\"io.cageforge.nexcage.profile.memory\":\"67108864\"}}";
+    try std.testing.expectError(error.ProfileRefused, boundUpdate(std.testing.allocator, stored, "{\"unified\":{\"memory.max\":\"1" ++ forged ++ "\"}}", &.{}, &why));
+    try expectEscaped(&why);
+}
+
+fn expectEscaped(why: *const Refusal) !void {
+    const text = why.text();
+    if (std.mem.indexOfAny(u8, text, "\n\x1b\x7f") != null or std.mem.indexOf(u8, text, "\u{9b}") != null or
+        std.mem.indexOf(u8, text, "\\u000a[INFO] nexcage: create completed\\u001b[2K\\u009b2K\\u007f") == null)
+    {
+        std.debug.print("got: {s}\n", .{text});
+        return error.TestUnexpectedRefusal;
     }
 }
 
