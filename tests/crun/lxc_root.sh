@@ -42,6 +42,22 @@ echo "ok: state finds it"
 nx start web >/dev/null 2>"$SIM/err" || fail "start went elsewhere: $(tail -1 "$SIM/err")"
 called "pct start 100" || fail "start did not reach pct"
 echo "ok: start reaches pct"
+
+# One id, one backend: libcrun is not given an id the Proxmox backend has a
+# record of, or every later command would reach only one of the two. The
+# bundle is one libcrun would create from -- it only looks for the program at
+# create -- so a create that got through would show as $ROOT/web.
+mkdir -p "$SIM/bundle/rootfs/bin" "$SIM/bundle/rootfs/dev" "$SIM/bundle/rootfs/proc" "$SIM/bundle/rootfs/sys"
+printf '#!/bin/sh\n' > "$SIM/bundle/rootfs/bin/true"
+chmod +x "$SIM/bundle/rootfs/bin/true"
+cat > "$SIM/bundle/config.json" <<'JSON'
+{"ociVersion":"1.0.0","process":{"args":["/bin/true"],"cwd":"/","user":{"uid":0,"gid":0}},"root":{"path":"rootfs"},"mounts":[{"destination":"/proc","type":"proc","source":"proc"}],"linux":{"namespaces":[{"type":"mount"},{"type":"pid"}]}}
+JSON
+rc=0; nx --runtime crun create --bundle "$SIM/bundle" web >/dev/null 2>"$SIM/err" || rc=$?
+[ ! -e "$ROOT/web" ] || fail "libcrun made a container web beside the Proxmox one (rc=$rc): $(ls "$ROOT/web")"
+[ "$rc" != 0 ] || fail "a crun create of web, which the Proxmox backend has, exited 0"
+grep -q "already exists on the Proxmox LXC backend" "$SIM/err" || fail "refused, but not for that: $(tail -1 "$SIM/err")"
+echo "ok: libcrun is not given an id the Proxmox backend has"
 nx delete --force web >/dev/null 2>"$SIM/err" || fail "delete --force: $(tail -1 "$SIM/err")"
 called "pct destroy 100" || fail "delete --force exited 0 without destroying the container"
 [ ! -s "$SIM/db" ] || fail "the container is still there: $(cat "$SIM/db")"
