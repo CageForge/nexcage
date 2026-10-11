@@ -422,10 +422,8 @@ nx list --config
 check "--config without a path -> exit 2" all 'rc 2' 'err_has "--config needs a path"'
 
 echo "=== create from an OCI bundle ==="
-# A bundle's rootfs is packed into a private directory under $TMPDIR, here
-# one of the simulator's own rather than the host's /var/tmp. nexcage takes
-# only a directory no one else can write to, or a sticky one.
-export TMPDIR="$S/vartmp"; mkdir -p "$TMPDIR"; chmod 755 "$TMPDIR"
+# A bundle's rootfs is packed into a private directory under $TMPDIR, which
+# lib.sh points at $S/vartmp rather than the host's /var/tmp.
 mkdir -p "$S/bundles/b1/rootfs/bin" "$S/bundles/nocfg/rootfs"
 printf '#!/bin/sh\n' > "$S/bundles/b1/rootfs/bin/busybox"; chmod 755 "$S/bundles/b1/rootfs/bin/busybox"
 ln -s busybox "$S/bundles/b1/rootfs/bin/sh"
