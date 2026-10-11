@@ -104,6 +104,7 @@ pub const OciBundleParser = struct {
         defer parsed.deinit();
 
         var bundle_config = try self.parseOciConfig(&parsed.value, rootfs_path);
+        errdefer bundle_config.deinit();
 
         // Try to parse metadata.json if it exists
         const metadata_path = try std.fs.path.join(self.allocator, &[_][]const u8{ bundle_path, "metadata.json" });
@@ -149,6 +150,8 @@ pub const OciBundleParser = struct {
             .capabilities = null,
             .seccomp_profile = null,
         };
+        // Every return below an error frees what was parsed before it
+        errdefer bundle_config.deinit();
 
         if (config.* != .object) {
             return BundleError.InvalidConfigFormat;
@@ -171,28 +174,14 @@ pub const OciBundleParser = struct {
                 // Parse args (command to run)
                 if (process_obj.get("args")) |args_val| {
                     if (args_val == .array) {
-                        const args_array = args_val.array;
-                        var process_args = try self.allocator.alloc([]const u8, args_array.items.len);
-                        for (args_array.items, 0..) |arg_val, i| {
-                            if (arg_val == .string) {
-                                process_args[i] = try self.allocator.dupe(u8, arg_val.string);
-                            }
-                        }
-                        bundle_config.process_args = process_args;
+                        bundle_config.process_args = try self.dupeStrings(args_val.array.items);
                     }
                 }
 
                 // Parse environment variables
                 if (process_obj.get("env")) |env_val| {
                     if (env_val == .array) {
-                        const env_array = env_val.array;
-                        var environment = try self.allocator.alloc([]const u8, env_array.items.len);
-                        for (env_array.items, 0..) |env_val_item, i| {
-                            if (env_val_item == .string) {
-                                environment[i] = try self.allocator.dupe(u8, env_val_item.string);
-                            }
-                        }
-                        bundle_config.environment = environment;
+                        bundle_config.environment = try self.dupeStrings(env_val.array.items);
                     }
                 }
 
@@ -206,31 +195,30 @@ pub const OciBundleParser = struct {
             }
         }
 
-        // Parse mounts
+        // Parse mounts. Each one is an object, and its fields are strings: a
+        // slot for anything else used to be left undefined, and deinit freed
+        // whatever its pointers held -- a crash of the root process on
+        // `"mounts": [1]`. A bundle like that is refused, as runc and crun
+        // refuse it.
         if (obj.get("mounts")) |mounts_val| {
             if (mounts_val == .array) {
                 const mounts_array = mounts_val.array;
                 var mounts = try self.allocator.alloc(MountConfig, mounts_array.items.len);
-                for (mounts_array.items, 0..) |mount_val, i| {
-                    if (mount_val == .object) {
-                        const mount_obj = mount_val.object;
-                        mounts[i] = MountConfig{
-                            .allocator = self.allocator,
-                            .source = if (mount_obj.get("source")) |s|
-                                if (s == .string) try self.allocator.dupe(u8, s.string) else null
-                            else
-                                null,
-                            .destination = if (mount_obj.get("destination")) |d|
-                                if (d == .string) try self.allocator.dupe(u8, d.string) else null
-                            else
-                                null,
-                            .type = if (mount_obj.get("type")) |t|
-                                if (t == .string) try self.allocator.dupe(u8, t.string) else null
-                            else
-                                null,
-                            .options = null, // TODO: Parse mount options
-                        };
-                    }
+                var filled: usize = 0;
+                errdefer {
+                    for (mounts[0..filled]) |*m| m.deinit();
+                    self.allocator.free(mounts);
+                }
+                for (mounts_array.items) |mount_val| {
+                    if (mount_val != .object) return BundleError.InvalidConfigFormat;
+                    const mount_obj = mount_val.object;
+                    var mount = MountConfig{ .allocator = self.allocator };
+                    errdefer mount.deinit();
+                    mount.source = try self.optionalString(mount_obj, "source");
+                    mount.destination = try self.optionalString(mount_obj, "destination");
+                    mount.type = try self.optionalString(mount_obj, "type");
+                    mounts[filled] = mount;
+                    filled += 1;
                 }
                 bundle_config.mounts = mounts;
             }
@@ -544,36 +532,18 @@ pub const OciBundleParser = struct {
         // Parse ENTRYPOINT from metadata.json
         if (obj.get("entrypoint")) |entrypoint_val| {
             if (entrypoint_val == .array) {
-                const entrypoint_array = entrypoint_val.array;
-                var entrypoint = try self.allocator.alloc([]const u8, entrypoint_array.items.len);
+                config.entrypoint = try self.dupeStrings(entrypoint_val.array.items);
 
-                for (entrypoint_array.items, 0..) |ep_val, i| {
-                    if (ep_val == .string) {
-                        entrypoint[i] = try self.allocator.dupe(u8, ep_val.string);
-                    }
-                }
-
-                config.entrypoint = entrypoint;
-
-                self.logInfo("Parsed ENTRYPOINT from metadata: {d} args", .{entrypoint_array.items.len});
+                self.logInfo("Parsed ENTRYPOINT from metadata: {d} args", .{entrypoint_val.array.items.len});
             }
         }
 
         // Parse CMD from metadata.json
         if (obj.get("cmd")) |cmd_val| {
             if (cmd_val == .array) {
-                const cmd_array = cmd_val.array;
-                var cmd = try self.allocator.alloc([]const u8, cmd_array.items.len);
+                config.cmd = try self.dupeStrings(cmd_val.array.items);
 
-                for (cmd_array.items, 0..) |cmd_item, i| {
-                    if (cmd_item == .string) {
-                        cmd[i] = try self.allocator.dupe(u8, cmd_item.string);
-                    }
-                }
-
-                config.cmd = cmd;
-
-                self.logInfo("Parsed CMD from metadata: {d} args", .{cmd_array.items.len});
+                self.logInfo("Parsed CMD from metadata: {d} args", .{cmd_val.array.items.len});
             }
         }
 
@@ -585,6 +555,34 @@ pub const OciBundleParser = struct {
                 self.logInfo("Parsed working directory from metadata: {s}", .{workdir_val.string});
             }
         }
+    }
+
+    /// A copy of a JSON array of strings. Any other element refuses the
+    /// bundle: these arrays were allocated whole and only their string
+    /// elements written, so `"args": ["/bin/sh", 1]` left a slot undefined
+    /// that deinit then freed.
+    fn dupeStrings(self: *OciBundleParser, items: []const std.json.Value) BundleError![]const []const u8 {
+        const out = try self.allocator.alloc([]const u8, items.len);
+        var filled: usize = 0;
+        errdefer {
+            for (out[0..filled]) |s| self.allocator.free(s);
+            self.allocator.free(out);
+        }
+        for (items) |item| {
+            if (item != .string) return BundleError.InvalidConfigFormat;
+            out[filled] = try self.allocator.dupe(u8, item.string);
+            filled += 1;
+        }
+        return out;
+    }
+
+    /// A copy of an object's string field, null when it is absent or null. A
+    /// field of another type refuses the bundle rather than reading as absent.
+    fn optionalString(self: *OciBundleParser, obj: std.json.ObjectMap, key: []const u8) BundleError!?[]const u8 {
+        const val = obj.get(key) orelse return null;
+        if (val == .null) return null;
+        if (val != .string) return BundleError.InvalidConfigFormat;
+        return try self.allocator.dupe(u8, val.string);
     }
 };
 

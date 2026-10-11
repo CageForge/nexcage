@@ -194,3 +194,52 @@ pub const OciProcessor = struct {
         return max_idx;
     }
 };
+
+/// A bundle directory under a test's tmpDir holding `config_json` and an
+/// empty rootfs/; returns its absolute path, which the caller frees.
+fn testBundle(tmp: *std.testing.TmpDir, config_json: []const u8) ![]u8 {
+    try tmp.dir.makePath("rootfs");
+    try tmp.dir.writeFile(.{ .sub_path = "config.json", .data = config_json });
+    return tmp.dir.realpathAlloc(std.testing.allocator, ".");
+}
+
+test "a config.json with a mount, arg or env entry of the wrong type is refused, not crashed on" {
+    const cases = [_][]const u8{
+        \\{"root":{"path":"rootfs"},"mounts":[1]}
+        ,
+        \\{"root":{"path":"rootfs"},"mounts":[{"destination":"/a","source":"/b","type":"bind"},"x"]}
+        ,
+        \\{"root":{"path":"rootfs"},"mounts":[null]}
+        ,
+        \\{"root":{"path":"rootfs"},"mounts":[{"destination":5,"source":"/b"}]}
+        ,
+        \\{"root":{"path":"rootfs"},"process":{"args":["/bin/sh",1]}}
+        ,
+        \\{"root":{"path":"rootfs"},"process":{"env":["A=1",{}]}}
+        ,
+    };
+    for (cases) |json| {
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        const path = try testBundle(&tmp, json);
+        defer std.testing.allocator.free(path);
+        var parser = bundle.OciBundleParser.init(std.testing.allocator, null);
+        try std.testing.expectError(error.InvalidConfigFormat, parser.parseBundle(path));
+    }
+}
+
+test "well-formed mounts still parse, and free what they hold" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try testBundle(&tmp,
+        \\{"root":{"path":"rootfs"},"process":{"args":["/sbin/init"],"env":["A=1"]},
+        \\ "mounts":[{"destination":"/proc","type":"proc","source":"proc"},{"destination":"/data","type":"bind","source":"/srv/data"}]}
+    );
+    defer std.testing.allocator.free(path);
+    var parser = bundle.OciBundleParser.init(std.testing.allocator, null);
+    var cfg = try parser.parseBundle(path);
+    defer cfg.deinit();
+    try std.testing.expectEqual(@as(usize, 2), cfg.mounts.?.len);
+    try std.testing.expectEqualStrings("/srv/data", cfg.mounts.?[1].source.?);
+    try std.testing.expectEqualStrings("/sbin/init", cfg.process_args.?[0]);
+}

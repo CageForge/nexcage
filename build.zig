@@ -342,6 +342,8 @@ pub fn build(b: *std.Build) void {
             file_mod.addImport("cli", cli_mod);
             file_mod.addImport("backends", backends_mod);
             file_mod.addImport("utils", utils_mod);
+            // The Proxmox backend's bundle translation imports the parser
+            file_mod.addImport("oci_spec", oci_spec_mod);
 
             const file_test = b.addTest(.{ .name = entry.basename, .root_module = file_mod });
             file_test.linkSystemLibrary("c");

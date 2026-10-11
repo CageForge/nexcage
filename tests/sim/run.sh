@@ -437,6 +437,13 @@ check "a bundle outside nexcage's own directories is accepted and then fails on 
   all 'rc 2' '! err_has "must be an absolute path"' 'not_called_re "^pct create"'
 nx create --name bundle-x /tmp/nexcage-bundles/nocfg
 check "bundle without config.json -> exit 2, no crash" all 'rc 2' 'err_has "config.json"' 'not_called_re "^pct create"'
+# A mount that is not an object left the parser's slot undefined, and freeing
+# it crashed nexcage (root) after pct create had already run.
+mkdir -p "$S/bundles/badmp/rootfs"
+printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":[1,"/srv:/data"]}' > "$S/bundles/badmp/config.json"
+nx create --name bundle-bad /tmp/nexcage-bundles/badmp
+check "bundle whose mounts hold a non-object -> exit 2 before pct create, no crash" \
+  all 'rc 2' 'err_has "not a usable OCI bundle"' '! err_has "General protection"' 'not_called_re "^pct create"'
 nx create --name bundle-1 /tmp/nexcage-bundles/b1
 check "bundle: rootfs packed on storage local, pct create uses that volume" \
   all 'rc 0' 'called_re "^pvesm path local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst$"' \

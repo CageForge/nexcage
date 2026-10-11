@@ -313,10 +313,12 @@ pub const ProxmoxLxcDriver = struct {
                     // BundleError is not part of core.Error, the set the
                     // command registry casts every error into: a bundle
                     // without config.json crashed nexcage with "panic:
-                    // invalid error code".
+                    // invalid error code". A config.json with a value of the
+                    // wrong type, such as a mount that is not an object, is
+                    // refused here too, before anything is packed or created.
                     bundle_config = bundle_parser.parseBundle(safe_path) catch |err| {
                         if (err == error.OutOfMemory) return core.Error.OutOfMemory;
-                        if (self.logger) |log| log.err("'{s}' is not a usable OCI bundle ({s}); it needs config.json and rootfs/", .{ safe_path, @errorName(err) }) catch {};
+                        if (self.logger) |log| log.err("'{s}' is not a usable OCI bundle ({s}); it needs rootfs/ and a config.json in the runtime-spec's format", .{ safe_path, @errorName(err) }) catch {};
                         return core.Error.InvalidInput;
                     };
 
