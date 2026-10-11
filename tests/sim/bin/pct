@@ -204,7 +204,10 @@ case "$cmd" in
     mps=(); rest=()
     while [ $# -gt 0 ]; do
       case $1 in
-        --mp[0-9]*) mp_check "${1#--}" "$2" || exit 255; mps+=("${1#--}: $2"); shift 2 ;;
+        # mp0 to mp255 (MAX_MOUNT_POINTS); Getopt::Long has no other
+        --mp[0-9]*)
+          [ "${1#--mp}" -le 255 ] 2>/dev/null || { echo "Unknown option: ${1#--}" >&2; echo "400 unable to parse option" >&2; exit 255; }
+          mp_check "${1#--}" "$2" || exit 255; mps+=("${1#--}: $2"); shift 2 ;;
         *) rest+=("$1"); shift ;;
       esac
     done

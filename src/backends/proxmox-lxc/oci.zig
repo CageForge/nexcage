@@ -291,7 +291,8 @@ pub const OciProcessor = struct {
     /// kernel filesystems a runtime-spec bundle mounts at their usual places
     /// (proc at /proc, a tmpfs at /dev, ...) are the container's own, which
     /// LXC and the container's init set up, so they are left out. Any other
-    /// mount is refused.
+    /// mount is refused, and so are more bind mounts than a container has
+    /// mount points.
     pub fn bundleMountPoints(self: *const Self, mounts: []const bundle.MountConfig) core.Error![][]u8 {
         var specs = std.ArrayListUnmanaged([]u8){};
         errdefer {
@@ -332,8 +333,18 @@ pub const OciProcessor = struct {
             errdefer self.allocator.free(spec);
             try specs.append(self.allocator, spec);
         }
+        // Past mp255 pct refuses the option, and it did so in `pct set`,
+        // after the container had been created
+        if (specs.items.len > max_mount_points) {
+            if (self.logger) |log| log.err("the bundle has {d} bind mounts; a Proxmox container has {d} mount points, mp0 to mp{d}", .{ specs.items.len, max_mount_points, max_mount_points - 1 }) catch {};
+            return core.Error.InvalidInput;
+        }
         return specs.toOwnedSlice(self.allocator);
     }
+
+    /// A container's mount points, mp0 to mp255: MAX_MOUNT_POINTS in
+    /// pve-container's PVE::LXC::Config
+    pub const max_mount_points = 256;
 
     /// One mount point's property string, with what its options ask for.
     /// Proxmox mounts a bind mount point with `mount -o bind`, remounts it
@@ -662,6 +673,20 @@ test "a mount pct cannot take as a bind mount is refused, and nothing leaks" {
     for (cases) |mounts| {
         try std.testing.expectError(core.Error.InvalidInput, proc.bundleMountPoints(&mounts));
     }
+}
+
+test "more bind mounts than a container has mount points are refused, and nothing leaks" {
+    const proc = testProcessor();
+    var mounts: [OciProcessor.max_mount_points + 1]bundle.MountConfig = undefined;
+    for (&mounts) |*m| m.* = .{ .allocator = std.testing.allocator, .destination = "/a", .type = "bind", .source = "/srv/a" };
+    try std.testing.expectError(core.Error.InvalidInput, proc.bundleMountPoints(&mounts));
+
+    const specs = try proc.bundleMountPoints(mounts[0..OciProcessor.max_mount_points]);
+    defer {
+        for (specs) |s| std.testing.allocator.free(s);
+        std.testing.allocator.free(specs);
+    }
+    try std.testing.expectEqual(@as(usize, 256), specs.len);
 }
 
 test "a bind mount's ro, nosuid, nodev and noexec reach its mount point" {

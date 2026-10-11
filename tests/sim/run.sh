@@ -566,6 +566,17 @@ for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"
   check "bundle mount refused before anything is packed: $why" \
     all 'rc 2' 'err_has "$why"' '! err_has "Packing"' 'not_called_re "nextid|^pct (create|set)"'
 done
+# A container has mount points mp0 to mp255. A 257th bind mount passed
+# nexcage and failed in `pct set`, after the container had been created.
+many_mounts() { python3 -c 'import json,sys; print(json.dumps([{"destination":"/m%d" % i,"type":"bind","source":"/srv/m%d" % i} for i in range(int(sys.argv[1]))]))' "$1"; }
+mp_bundle mp-256 "$(many_mounts 256)"
+nx create --name mp-256 /tmp/nexcage-bundles/mp-256
+check "bundle with 256 bind mounts -> mp0 to mp255 in one pct set" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/m0,mp=/m0 .* --mp255 /srv/m255,mp=/m255$"' 'grep -qx "mp255: /srv/m255,mp=/m255" "$S"/conf.*'
+mp_bundle mp-257 "$(many_mounts 257)"
+nx create --name mp-257 /tmp/nexcage-bundles/mp-257
+check "bundle with 257 bind mounts, more than a container has mount points -> refused before anything is packed" \
+  all 'rc 2' 'err_has "the bundle has 257 bind mounts"' '! err_has "Packing"' 'not_called_re "nextid|^pct (create|set)"'
 # The bundle's linux.resources. memory.limit -1 is the runtime-spec's "no
 # limit", and Proxmox has none, so --memory is left out and pct's default
 # applies. Both values used to be cast unchecked: -1, or shares worth more
