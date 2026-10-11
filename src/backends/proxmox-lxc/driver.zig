@@ -313,9 +313,10 @@ pub const ProxmoxLxcDriver = struct {
                 // pull what it has -- and `pull` is the explicit fetch. This
                 // used to call the endpoint every time and then *compose* the
                 // volid from the reference, a guess about how PVE normalises
-                // a file name; the volid is read back from the storage now,
-                // the way `pull` reads it, so what pct is given exists.
-                if (try self.pve_client.findTemplate(self.allocator, node, storage, image_path, null)) |found| {
+                // a file name. nexcage names the file now, the same way for
+                // `pull`, and only that exact file on the storage is taken,
+                // so what pct is given exists and is this image.
+                if (try self.pve_client.findTemplate(self.allocator, node, storage, image_path)) |found| {
                     if (self.logger) |log| log.info("{s} is already on {s} as {s}; not pulling it again", .{ image_path, storage, found }) catch {};
                     template_name = found;
                 } else {

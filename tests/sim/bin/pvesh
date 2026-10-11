@@ -116,6 +116,17 @@ case "$1 $2" in
     # "the template is not there" check mean something.
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
     want_storage=$(echo "$2" | sed -n 's|/nodes/[^/]*/storage/\([^/]*\)/content.*|\1|p')
+    # $SIM/fail_list_in holds N: the Nth listing from now fails, the way a
+    # shared storage that is briefly not online does, and the ones after it
+    # answer again.
+    if [ -s "$SIM/fail_list_in" ]; then
+      n=$(cat "$SIM/fail_list_in")
+      if [ "$n" -le 1 ]; then
+        rm -f "$SIM/fail_list_in"
+        echo "storage '$want_storage' is not online" >&2; exit 255
+      fi
+      echo $((n - 1)) > "$SIM/fail_list_in"
+    fi
     printf '['
     sep=""
     while read -r n volid; do
@@ -259,8 +270,8 @@ case "$1 $2" in
   "create /nodes/"*)
     # oci-registry-pull. The pulled file has to appear in two places: $SIM/templates,
     # which the create path's template detection reads, and $SIM/node_templates,
-    # which is what a storage's content listing answers from -- `pull` reads the
-    # volid back from the storage rather than composing it.
+    # which is what a storage's content listing answers from -- `pull` checks
+    # the storage holds the file it named.
     [ -e "$SIM/fail_pull" ] && { echo "pull failed" >&2; exit 1; }
     # What Proxmox does when its pull task fails, a refused login among others
     # (#309): skopeo's reason on stdout, the failed command on stderr, nothing
@@ -273,12 +284,74 @@ case "$1 $2" in
     fi
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
     store=$(echo "$2" | sed -n 's|/nodes/[^/]*/storage/\([^/]*\)/oci-registry-pull|\1|p')
-    ref=$4; tag=${ref##*:}; img=${ref%:*}; img=${img##*/}
+    shift 2
+    ref=""; fname=""; has_fname=0
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --reference) ref=$2; shift 2 ;;
+        --filename) fname=$2; has_fname=1; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    if [ "$has_fname" = 1 ] && [ ${#fname} -gt 255 ]; then
+      echo "400 Parameter verification failed." >&2
+      echo "filename: value may only be 255 characters long" >&2; exit 2
+    fi
+    if [ "$has_fname" = 1 ] && [ -z "$fname" ]; then
+      echo "400 Parameter verification failed." >&2
+      echo "filename: value must be at least 1 characters long" >&2; exit 2
+    fi
+    # Proxmox's pattern for --reference (pve-storage, Status.pm
+    # oci_registry_pull; \d and \w spelled out): an optional registry and port,
+    # a lower-case path, and a tag, which is not optional -- a reference
+    # without one, or pinned by a digest, is refused. This fake pulled any
+    # reference, the empty one too, and printed a template for it.
+    LC_ALL=C
+    ref_re='^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]))*(:[0-9]+)?/)?[a-z0-9]+(([._]|__|-*)[a-z0-9]+)*(/[a-z0-9]+(([._]|__|-*)[a-z0-9]+)*)*:[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$'
+    if ! [[ $ref =~ $ref_re ]]; then
+      echo "400 Parameter verification failed." >&2
+      echo "reference: value does not match the regex pattern" >&2; exit 2
+    fi
+    # The file is pve-storage's normalize_content_filename of --filename, or of
+    # the reference without one, plus ".tar": everything up to the last '/' or
+    # '\' goes, and every character outside [a-zA-Z0-9_.-] becomes '_'. So
+    # docker.io/library/redis:7 alone is redis_7.tar, and so is
+    # ghcr.io/someone/redis:7. This fake used to ignore --filename.
+    [ "$has_fname" = 1 ] || fname=$ref
+    file=$(printf '%s' "$fname" | sed 's|.*[/\\]||; s/[^a-zA-Z0-9_.-]/_/g').tar
+    volid="${store:-local}:vztmpl/$file"
+    # Proxmox does not write over a file that is there: the handler dies before
+    # it starts the task, and pvesh exits with the errno Perl holds, 25.
+    if grep -qxF "$node $volid" "$SIM/node_templates" 2>/dev/null; then
+      echo "refusing to override existing file '$file'" >&2; exit 25
+    fi
+    # The pull runs as a task, and the task's log is named for its UPID, which
+    # holds the node and the file: /var/log/pve/tasks/<x>/<UPID>, a single file
+    # name of 255 bytes at most. A longer one fails before skopeo runs, with
+    # nothing written (pve-common, PVE/UPID.pm open_log, PVE/File.pm
+    # create_owned_file_fh), and pvesh exits with the errno Perl holds,
+    # ENAMETOOLONG. This fake printed any UPID, so a name too long for its task
+    # was pulled here and failed on Proxmox.
+    upid="UPID:$node:00000001:00000001:00000001:ociregistrypull:$file:root@pam:"
+    if [ ${#upid} -gt 255 ]; then
+      echo "unable to create file '/var/log/pve/tasks/1/$upid' - File name too long" >&2; exit 36
+    fi
+    # $SIM/also_lands holds volids another writer puts on the storage while
+    # this pull runs: a second pull, an upload, another create's bundle archive.
+    if [ -s "$SIM/also_lands" ]; then
+      while read -r other; do
+        echo "$other" >> "$SIM/templates"
+        echo "$node $other" >> "$SIM/node_templates"
+      done < "$SIM/also_lands"
+      rm -f "$SIM/also_lands"
+    fi
     # The volid names the storage that was asked for, as it does on PVE. This
     # used to write local: whatever the path said, so a correct --storage on
     # create failed against the fake at pct create, not against Proxmox.
-    echo "${store:-local}:vztmpl/${img}_${tag}.tar" >> "$SIM/templates"
-    echo "$node ${store:-local}:vztmpl/${img}_${tag}.tar" >> "$SIM/node_templates"
+    echo "$volid" >> "$SIM/templates"
+    echo "$node $volid" >> "$SIM/node_templates"
+    # What pvesh prints for the task it ran, as captured on PVE 9.2
+    echo "$upid"
     ;;
   "set /nodes/"*/lxc/*/config)
     # A container's options through its node's API -- what `update` uses for

@@ -150,7 +150,10 @@ resolves a name and two containers sharing one would make that ambiguous. Then
 the template is checked **on the target node**, before a VMID is taken: a storage
 called `local` is a different directory on every node unless it is shared, so a
 volid that exists here may simply not be there. The message names the node and
-the storage rather than leaving the API to say "volume does not exist".
+the storage rather than leaving the API to say "volume does not exist". The
+template has to be a `<storage>:vztmpl/<file>` volid in the characters Proxmox
+names templates with, as for [`rmi`](#rmi); anything else is a usage error
+(exit 2) before that node is asked.
 
 Two things `--node` will not do, and refuses rather than half-does:
 
@@ -419,7 +422,7 @@ unique in the cluster. The VMID comes from `pvesh get /cluster/nextid`. `--image
 |---|---|---|
 | Proxmox template | `local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst` | Any `<storage>:vztmpl/…` volume |
 | Template file name | `debian-12-standard_12.7-1_amd64.tar.zst` | Looked up as `local:vztmpl/<file>` |
-| OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only. Found on `--storage` (default `local`) if already pulled, else pulled there through `oci-registry-pull`; the volid is read back from the storage, never guessed from the reference |
+| OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only. Pulled onto `--storage` (default `local`) through `oci-registry-pull` into a file named for the whole reference, as [`pull`](#pull) names it, and created from exactly that file. A file already there under that name is used rather than pulled again; no other template is, whatever its name |
 | OCI bundle directory | `/var/lib/nexcage/bundles/web` | Any absolute path, containing `config.json` and `rootfs/`; a relative path is a usage error (exit 2) |
 
 `--console-socket <path>` is where the runtime sends the master end of the
@@ -782,7 +785,7 @@ each one is on:
 ```
 NODE        STORAGE      SHARED  SIZE   TEMPLATE
 prox-home   local        no      129M   local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst
-prox-home   shared-rdma  yes     31M    shared-rdma:vztmpl/redis_7.tar
+prox-home   shared-rdma  yes     31M    shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
 titan       local        no      98M    local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz
 ```
 
@@ -791,6 +794,9 @@ what `create --node` checks, so this is where to look before placing a container
 elsewhere. **A storage marked `SHARED` carries the same files on every node** and
 is listed once rather than once per node — counting a template twice is worse
 than not showing it.
+
+A storage that cannot be listed — an NFS mount that is offline, say — is left
+out with a warning that names it, rather than hiding every other template.
 
 Proxmox LXC only: the crun backend is handed a bundle whose rootfs is already
 there, so it has nothing to list.
@@ -806,8 +812,8 @@ container template, and prints the volid — which is what `create` takes:
 
 ```bash
 $ nexcage pull docker.io/library/redis:7 --storage shared-rdma
-shared-rdma:vztmpl/redis_7.tar
-$ nexcage create --name r1 --node titan shared-rdma:vztmpl/redis_7.tar
+shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
+$ nexcage create --name r1 --node titan shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
 ```
 
 That pair is the point. `create` pulls too when given a registry reference, but
@@ -816,9 +822,51 @@ only on this host, onto `local` unless `--storage` names another, and `create
 shared storage with `pull`, then creating from the volid it prints, is how
 `create --node` gets a registry image.
 
-The volid is read back from the storage rather than composed from the reference:
-the endpoint normalises the file name, and only the storage knows what it
-settled on.
+**The file is named for the whole reference**: registry, namespace, name and
+tag, with every character a file name cannot have as `_`, then `-` and 16 hex
+digits of the reference's SHA-256, plus the `.tar` Proxmox adds. The digest tells
+apart references that read the same once `/` and `:` are `_`. Past 110
+characters the reference is cut, and the digest still covers all of it: Proxmox
+names the pull's task log for an ID that holds the node and the file, and that
+has to fit in one file name on any node. Proxmox's own name kept only the last
+path component and the tag, so `docker.io/library/redis:7` and
+`ghcr.io/someone/redis:7` were both `redis_7.tar`. nexcage prints the volid
+once the storage holds exactly that file, and fails otherwise — a storage that
+cannot be listed is an error, and a file someone else writes during the pull is
+not taken for it. `create` from a registry reference uses the same name, and
+uses a template already on the storage only when it is that exact file.
+
+Proxmox takes a reference that ends in a tag. One pinned by a digest
+(`...@sha256:...`) or with no tag it refuses ("reference: value does not match
+the regex pattern"), and nexcage exits 1 with that message.
+
+A reference pulled there before is not pulled again: Proxmox does not write over
+a file, and the volid of the one there is printed. To fetch it afresh, `rmi` it
+first. Templates an earlier nexcage pulled have Proxmox's short names
+(`redis_7.tar`): `create` pulls the image once more rather than guess what they
+hold, and `rmi` removes the old file.
+
+`--storage` has to be a Proxmox storage ID — a letter, then letters, digits,
+`-`, `_` or `.` — for `pull` and for `create`, or it is a usage error (exit 2)
+before Proxmox is asked anything: it goes into pvesh paths, and for another node
+pvesh passes the path to that node's shell.
+
+`--filename <name>` names the file instead, before the `.tar` Proxmox adds. It
+takes letters, digits, `.`, `_` and `-`, not first a `.` or `-`, not last a `.`
+and without `..`, so that Proxmox keeps it as it is and `rmi` and `create
+--node` take the volid `pull` prints (a last `.` and the `.tar` Proxmox adds
+would make `..`), and at most 127
+characters, which leaves room for the task's log; anything else is a usage error
+(exit 2). So is a name ending in `-` and 16 lower-case hex digits, the shape of
+a name nexcage derives: `create` would take that file for the reference the name
+was derived from, whatever image was pulled into it. A file of that name already
+on the storage is an error (exit 1) rather than an answer: the name says nothing
+about which image it holds.
+
+Whoever can write templates to the storage (`Datastore.AllocateTemplate`) can
+put a file under any name, this one included, and Proxmox's upload writes over
+an existing file. Those users are trusted with every image created from that
+storage.
 
 Needs **Proxmox VE 9.1 or later** on the target node, which is where
 `oci-registry-pull` arrived. nexcage checks the version of the host it runs on,
@@ -854,7 +902,12 @@ named, and the output says so rather than leaving someone to discover it.
 
 A template that is not there is an error (exit 1), not a no-op: a mistyped volid
 should not look like a successful removal. A malformed name is a usage error
-(exit 2).
+(exit 2), before Proxmox is asked anything: the volid has to be exactly
+`<storage>:vztmpl/<file>`, with a Proxmox storage ID and the file in letters,
+digits, `.`, `_` and `-`, without `..` — the characters Proxmox's own uploads,
+downloads and pulls write. A template named otherwise is removed on its node
+(`pveam remove`). The volid goes into the delete's pvesh path, which for another
+node reaches that node's shell.
 
 Removing a template does not affect containers created from it — a template is
 copied when a container is made, not referenced.
@@ -980,8 +1033,12 @@ adds is the container by name, found on any node of the cluster.
 The storage has to be one that can snapshot: zfs, lvm-thin, or a directory
 storage holding qcow2. A raw volume on a directory storage cannot, and the
 answer is then pct's refusal plus one line saying which storages can. The
-snapshot's name is Proxmox's: letters, digits, `-` and `_`, not `current`, and
-not one already used.
+snapshot's name is Proxmox's: a letter, then letters, digits, `-` or `_`, 2 to
+40 characters, not `current`, and not one already used. nexcage checks the rule
+itself, for `snapshot`, `rollback` and `delsnapshot`, before it looks the
+container up or asks Proxmox anything, and anything else is a usage error (exit
+2): for a container on another node the name goes into a pvesh path, and pvesh
+passes that path to the node's shell over ssh without quoting it.
 
 `rollback` of a running container stops it first: Proxmox kills it, as `pct
 rollback` does, and it stays stopped unless `--start`, which brings it up

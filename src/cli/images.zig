@@ -113,7 +113,8 @@ pub const ImagesCommand = struct {
             "  -h, --help      Show this help message\n\n" ++
             "A storage marked SHARED carries the same files on every node, so it\n" ++
             "is listed once rather than once per node. A template on a shared\n" ++
-            "storage is the one to use with `create --node`.\n\n" ++
+            "storage is the one to use with `create --node`. A storage that cannot\n" ++
+            "be listed is left out, with a warning that names it.\n\n" ++
             "Examples:\n" ++
             "  nexcage images\n" ++
             "  nexcage images --node titan\n" ++

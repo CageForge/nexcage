@@ -150,14 +150,51 @@ nx create --name nginx-1 docker.io/library/nginx:latest
 check "registry image on PVE 8.4 -> exit 1 with a version message, nothing pulled" \
   all 'rc 1' 'err_has "9.1"' 'not_called_re "^pvesh create"' 'not_called_re "^pct create"'
 echo 9.1.0 > "$S/pvever"
+# nexcage names a pulled file for the whole reference. The name is derived here
+# as well, apart from nexcage's code (pve.zig, pulledTemplateName): `pulled` is
+# the name pvesh is given, `pulled_re` the template's file as a regex. Past 110
+# characters the reference is cut, and the digest is still of all of it.
+pulled()    { printf '%s-%s' "$(printf '%s' "${1:0:110}" | tr -c 'A-Za-z0-9_.-' _)" "$(printf '%s' "$1" | sha256sum | cut -c1-16)"; }
+pulled_re() { printf '%s\\.tar' "$(pulled "$1" | sed 's/\./\\./g')"; }
 nx create --name nginx-1 docker.io/library/nginx:latest
 check "registry image on PVE 9.1 -> pvesh oci-registry-pull, then an unprivileged pct create with the .tar" \
-  all 'rc 0' "called 'pvesh create /nodes/$(hostname)/storage/local/oci-registry-pull --reference docker.io/library/nginx:latest'" \
-      'called_re "^pct create [0-9]+ local:vztmpl/nginx_latest.tar --hostname nginx-1 .*--unprivileged 1( |$)"' 'not_called_re "--ostype"'
+  all 'rc 0' "called 'pvesh create /nodes/$(hostname)/storage/local/oci-registry-pull --reference docker.io/library/nginx:latest --filename $(pulled docker.io/library/nginx:latest)'" \
+      'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/nginx:latest) --hostname nginx-1 .*--unprivileged 1( |$)"' 'not_called_re "--ostype"'
 cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_size_gb":2,"unprivileged":false}}'
 nx create --name redis-1 docker.io/library/redis:7
 check "registry image with unprivileged=false: no --unprivileged 0, which pct rejects, and a warning" \
-  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/redis_7.tar --hostname redis-1 "' 'not_called_re "--unprivileged"' 'err_has "always run unprivileged"'
+  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/redis:7) --hostname redis-1 "' 'not_called_re "--unprivileged"' 'err_has "always run unprivileged"'
+# Reuse is of that exact file and nothing else. Any template whose name held
+# the image's last path component and its tag used to do: Proxmox's own system
+# template, a file someone uploaded, the same name from another registry -- and
+# with unprivileged=false a .tar.zst among them ran privileged.
+nx create --name deb-1 docker.io/library/debian:12
+check "a registry image is pulled, not taken from a system template whose name contains it" \
+  all 'rc 0' 'called_re "oci-registry-pull --reference docker.io/library/debian:12 --filename "' \
+      'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/debian:12) "' 'not_called_re "^pct create [0-9]+ local:vztmpl/debian-12"'
+echo "$(hostname) local:vztmpl/postgres-16-custom.tar.zst" >> "$S/node_templates"
+echo "local:vztmpl/postgres-16-custom.tar.zst" >> "$S/templates"
+nx create --name pg-1 docker.io/library/postgres:16
+check "nor from an uploaded file whose name contains it, which would run privileged" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/postgres:16) "' \
+      'not_called_re "postgres-16-custom"' 'not_called_re "--unprivileged 0"'
+nx pull ghcr.io/someone/valkey:8 >/dev/null 2>&1
+nx create --name vk-1 docker.io/library/valkey:8
+check "nor from the same name pulled from another registry" \
+  all 'rc 0' 'called_re "oci-registry-pull --reference docker.io/library/valkey:8 "' \
+      'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/valkey:8) "'
+# The pulled file is the one nexcage named, never whatever appeared on the
+# storage meanwhile -- here another create's bundle archive -- and a listing
+# that fails is an error, not an empty storage: read as empty, the listing
+# before the pull made every template already there look new.
+echo "local:vztmpl/nexcage-tenant-b-1791664000.tar.zst" > "$S/also_lands"
+nx create --name mc-1 docker.io/library/memcached:1.6
+check "a file another writer adds during the pull is not taken for the image" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/memcached:1.6) "' 'not_called_re "nexcage-tenant-b"'
+echo 2 > "$S/fail_list_in"
+nx create --name hp-1 docker.io/library/haproxy:3
+check "a storage listing that fails during create is an error, and nothing is created" \
+  all 'rc 1' 'err_has "could not be listed"' 'not_called_re "^pct create"'
 cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_size_gb":2}}'
 touch "$S/fail_pull"
 nx create --name nginx-2 docker.io/library/nginx:1.27
@@ -168,13 +205,13 @@ rm -f "$S/fail_pull"
 # call the endpoint every time and then guess the volid from the reference.
 nx create --name nginx-3 docker.io/library/nginx:latest
 check "a registry image already on the storage is reused, not pulled again" \
-  all 'rc 0' 'not_called_re "oci-registry-pull"' 'called_re "^pct create [0-9]+ local:vztmpl/nginx_latest\.tar "'
+  all 'rc 0' 'not_called_re "oci-registry-pull"' 'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/nginx:latest) "'
 # --storage names where the pull lands, as it does for `pull`, and what pct is
 # given is what that storage holds afterwards.
 nx create --name nginx-4 --storage shared-rdma docker.io/library/nginx:1.26
 check "create --storage pulls into that storage and creates from what it holds" \
   all 'rc 0' 'called_re "^pvesh create /nodes/[^/]+/storage/shared-rdma/oci-registry-pull --reference docker.io/library/nginx:1.26"' \
-      'called_re "^pct create [0-9]+ shared-rdma:vztmpl/nginx_1\.26\.tar "'
+      'called_re "^pct create [0-9]+ shared-rdma:vztmpl/$(pulled_re docker.io/library/nginx:1.26) "'
 rm -f "$S/fail_pull" "$S/pvever"
 
 cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","ostype":"debian","unprivileged":true}}'
@@ -1437,7 +1474,13 @@ check "snapshots --format takes json or table only" all 'rc 2' 'not_called_re "^
 nx snapshot sn-1 before
 check "a name already used is pct's refusal, passed on" all 'rc 1' 'err_has "already used"'
 nx snapshot sn-1 current
-check "'current' is Proxmox's reserved name, and the refusal is pct's" all 'rc 1' 'err_has reserved'
+check "'current' is Proxmox's reserved name: refused before pct" all 'rc 2' 'err_has reserved' 'not_called_re "^pct snapshot"'
+# Proxmox's rule for the name (pve-configid), checked by nexcage before any pct
+# or pvesh call: for a container on another node the name goes into a pvesh
+# path, and that path reaches the node's shell.
+nx snapshot sn-1 'a/b'
+check "a snapshot name outside Proxmox's rule is a usage error, before pct" \
+  all 'rc 2' 'err_has "not a snapshot name"' 'not_called_re "^pct snapshot"'
 nx snapshot sn-1
 check "snapshot without a name is a usage error, before any pct" all 'rc 2' 'not_called_re "^pct snapshot"'
 nx snapshot sn-1 two words
@@ -1489,12 +1532,12 @@ check "and the list no longer has it, while the other stays" \
 nx delsnapshot sn-1 before
 check "deleting it twice is an error" all 'rc 1' 'err_has "does not exist"'
 
-nx --runtime crun snapshot sn-1 x
+nx --runtime crun snapshot sn-1 xx
 check "snapshot on the crun backend is refused as a Proxmox operation, before any pct" \
   all 'rc 1' 'err_has "Proxmox VE operation"' 'not_called_re "^pct"'
 nx --runtime crun snapshots sn-1
 check "so is the listing" all 'rc 1' 'err_has "Proxmox VE operation"' 'not_called_re "^pvesh"'
-nx snapshot no-such-sn-$$ x
+nx snapshot no-such-sn-$$ xx
 check "snapshot of a container that does not exist is an error naming it" \
   all 'rc 1' 'err_has "does not exist"' 'not_called_re "^pct snapshot"'
 
@@ -1560,6 +1603,16 @@ check "rollback on another node goes through that node's API, with --start" \
 nx --runtime lxc delsnapshot remote-1 s1
 check "delsnapshot on another node goes through that node's API" \
   all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200/snapshot/s1"' 'not_called_re "^pct delsnapshot"'
+# pvesh hands the path of a call for another node to that node's shell over
+# ssh, unquoted: a snapshot name there was a command run as root on titan. One
+# without '/', since a '/' splits the path and pvesh then finds no handler to
+# pass it to.
+nx --runtime lxc rollback remote-1 'x;touch${IFS}pwn;'
+check "a snapshot name that is a shell command never reaches another node's pvesh path" \
+  all 'rc 2' 'err_has "not a snapshot name"' 'not_called_re "^pvesh create /nodes/.*/snapshot/"'
+nx --runtime lxc delsnapshot remote-1 '../../201/snapshot/s'
+check "nor does one that climbs out of the container's snapshots" \
+  all 'rc 2' 'not_called_re "^pvesh delete"'
 
 nx create --name remote-1 "$TPL"
 check "a name taken on another node is not free" \
@@ -1833,6 +1886,13 @@ nx list
 check "and it is listed on that node" \
   all 'rc 0' 'awk -F"\t" '"'"'$8=="there-1" && $7=="titan" {f=1} END {exit !f}'"'"' "$S/out"'
 
+# The volid's storage goes into a pvesh path on that node, and that path
+# reaches the node's shell: only a <storage>:vztmpl/<file> in Proxmox's
+# characters gets that far.
+nx create --name there-x --node titan 'x;id;:vztmpl/a.tar'
+check "create --node refuses a template volid that is not one, before that node is asked" \
+  all 'rc 2' 'err_has "vztmpl"' 'not_called_re "^pvesh get /nodes/titan/storage/"'
+
 # The template check is the point: a node that cannot see it is told so, and
 # nothing is created.
 nx create --name there-2 --node otherhost "$TPL"
@@ -1928,13 +1988,87 @@ check "images on the crun backend says templates are not its business" \
 # Pulling needs PVE 9.1+, which is where oci-registry-pull arrived.
 echo 9.1.0 > "$S/pvever"
 nx pull docker.io/library/nginx:1.27
-check "pull answers with the volid the storage ended up holding" \
-  all 'rc 0' 'called_re "^pvesh create /nodes/.*/storage/local/oci-registry-pull --reference docker.io/library/nginx:1.27"' \
-      'grep -q "^local:vztmpl/nginx_1.27.tar$" "$S/out"'
+check "pull names the file for the whole reference and answers with exactly that volid" \
+  all 'rc 0' "called 'pvesh create /nodes/$HOST/storage/local/oci-registry-pull --reference docker.io/library/nginx:1.27 --filename $(pulled docker.io/library/nginx:1.27)'" \
+      'grep -qxE "local:vztmpl/$(pulled_re docker.io/library/nginx:1.27)" "$S/out"'
 nx pull docker.io/library/nginx:1.27 --node titan --storage shared-rdma
 check "pull --node --storage puts it where create --node can read it" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/storage/shared-rdma/oci-registry-pull"' \
-      'grep -q "^shared-rdma:vztmpl/nginx_1.27.tar$" "$S/out"'
+      'grep -qxE "shared-rdma:vztmpl/$(pulled_re docker.io/library/nginx:1.27)" "$S/out"'
+# Proxmox will not write over a file: a reference pulled before is that file.
+nx pull docker.io/library/nginx:1.27
+check "pulling a reference already there answers with its file" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re docker.io/library/nginx:1.27)" "$S/out"'
+# A name the caller chose says nothing about what the file holds: one that is
+# there already is an error. It used to be answered with any template whose
+# name held the image and the tag.
+nx pull docker.io/library/redis:7 --filename mine >/dev/null 2>&1
+nx pull docker.io/library/nginx:1.27 --filename mine
+check "pull --filename onto a file that is there is an error, not some other template" \
+  all 'rc 1' 'err_has "already on local"' '[ ! -s "$S/out" ]'
+nx pull docker.io/library/nginx:1.27 --filename "a b"
+check "pull --filename that Proxmox would rewrite is refused before pvesh" \
+  all 'rc 2' 'not_called_re "^pvesh create"'
+# Proxmox adds ".tar" to the name, so one ending in '.' was pulled as
+# <name>..tar and printed, and then rmi and create --node refused that volid
+# for its "..".
+nx pull docker.io/library/redis:7 --node titan --storage shared-rdma --filename myredis.
+check "pull --filename ending in '.' is refused before pvesh, since rmi could not take its file" \
+  all 'rc 2' "err_has \"not ending in '.'\"" 'not_called_re "^pvesh create"' '[ ! -s "$S/out" ]'
+# The tight limit on the name is the pull's task: Proxmox names the task's log
+# for a UPID holding the node and the file, one file name of 255 bytes at most.
+# A long reference written out whole made that UPID too long, and the pull
+# failed where Proxmox's own short name had worked. The name has to leave room
+# for any node's name, and a hostname may have 64 characters.
+long_ref=europe-west3-docker.pkg.dev/my-gcp-project-123456/my-artifact-repo/platform-team/payments/service-name:2026.10.11-main-0123456789abcdef0123456789abcdef01234567
+long_node=pve-$(printf 'n%.0s' {1..60})
+nx pull "$long_ref"
+check "pull of a long reference leaves room for its task's log, and answers with its file" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re "$long_ref")" "$S/out"'
+nx pull "$long_ref" --node "$long_node"
+check "and so on a node whose name is as long as a hostname can be" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re "$long_ref")" "$S/out"'
+nx pull docker.io/library/nginx:1.27 --filename "$(printf 'x%.0s' {1..128})"
+check "pull --filename too long for a task's log on every node is refused before pvesh" \
+  all 'rc 2' 'err_has "at most 127"' 'not_called_re "^pvesh create"'
+# `create` takes the file under a reference's derived name for that reference,
+# so a pull of another one must not be written there by name.
+nx pull ghcr.io/someone/redis:7 --filename "$(pulled docker.io/library/redis:7)"
+check "pull --filename with the name of another reference's pull is refused before pvesh" \
+  all 'rc 2' 'err_has "16 hex digits"' 'not_called_re "^pvesh create"'
+nx create --name redis-2 docker.io/library/redis:7
+check "and create of that reference pulls it, not ghcr.io's image" \
+  all 'rc 0' 'called_re "^pvesh create .*oci-registry-pull --reference docker.io/library/redis:7 --filename "'
+# Another pull's file landing meanwhile is not this one, and a listing that
+# fails is an error: the listing before the pull failing once used to make the
+# first template on the storage the answer.
+echo "local:vztmpl/alpine_3.20.tar" > "$S/also_lands"
+nx pull docker.io/library/nginx:1.24
+check "pull: another file landing during the pull is not reported as this one" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re docker.io/library/nginx:1.24)" "$S/out"'
+echo 1 > "$S/fail_list_in"
+nx pull docker.io/library/nginx:1.23
+check "pull: a storage listing that fails is an error, not some template's volid" \
+  all 'rc 1' 'err_has "could not be listed"' '[ ! -s "$S/out" ]'
+nx pull docker.io/library/nginx:1.27 --node titan --storage 'x;id;'
+check "pull refuses a storage that is not a Proxmox storage ID, before pvesh" \
+  all 'rc 2' 'err_has "storage name"' 'not_called_re "^pvesh"'
+# Proxmox takes a reference with a tag and nothing else. The fake pvesh pulled
+# any, and so the sim said an empty reference or one pinned by a digest gave a
+# template, which on Proxmox they never do.
+nx pull ''
+check "pull of an empty reference is Proxmox's error, and no template" \
+  all 'rc 1' 'err_has "reference: value does not match"' '[ ! -s "$S/out" ]'
+nx pull "docker.io/library/redis@sha256:$(printf 'ab%.0s' {1..32})"
+check "nor is one pinned by a digest, which Proxmox's pattern does not take" \
+  all 'rc 1' 'err_has "reference: value does not match"' '[ ! -s "$S/out" ]'
+# The first listing is this host's local: it is left out and named, and the
+# other storages are still shown.
+echo 1 > "$S/fail_list_in"
+nx images
+check "images leaves out a storage it cannot list, and says which" \
+  all 'rc 0' "err_has 'storage local on $HOST could not be listed'" '! out_has "debian-13.tar.zst"' \
+      'out_has "local:vztmpl/alpine-3.22.tar.zst"' 'out_has "shared-rdma:vztmpl/redis_7.tar"'
 
 # Proxmox's pvesh exits 0 when its pull task fails, with skopeo's reason on
 # stdout (#309). A refused login is reported with that reason, and with where
@@ -1976,6 +2110,20 @@ nx rmi not-a-volid
 # 2, not 1: a malformed name is a usage error, and nexcage keeps that apart
 # from "the thing is not there", which is 1.
 check "rmi wants <storage>:vztmpl/<file>" all 'rc 2' 'err_has "vztmpl"'
+nx rmi "local:vztmpl/../../x.tar"
+check "rmi refuses a volid that climbs out of vztmpl/, before any pvesh" all 'rc 2' 'not_called_re "^pvesh"'
+# A tag may hold "..": the name a pull is written under does not keep it, so
+# what pull prints, rmi takes.
+nx pull docker.io/library/nginx:1..2
+nx rmi "$(cat "$S/out")"
+check "rmi takes the volid pull printed, for a tag with '..' in it too" \
+  all 'rc 0' 'out_has "removed from"' 'called_re "^pvesh delete /nodes/[^/]+/storage/local/content/local:vztmpl/docker\.io_library_nginx_1\._2-[0-9a-f]{16}\.tar$"'
+# A file named by hand on a storage is listed as it is, and its volid went
+# into the delete's path: for another node, into that node's shell.
+echo "titan local:vztmpl/evil;id>pwn.tar.zst" >> "$S/node_templates"
+nx rmi "local:vztmpl/evil;id>pwn.tar.zst" --node titan
+check "rmi refuses a volid outside Proxmox's file name characters, before any pvesh" \
+  all 'rc 2' 'not_called_re "^pvesh"'
 
 # On a shared storage the file goes for every node, and that is said.
 nx rmi "shared-rdma:vztmpl/redis_7.tar" --node titan
