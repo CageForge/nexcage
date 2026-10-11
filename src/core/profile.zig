@@ -38,6 +38,31 @@ pub const Profile = struct {
     }
 };
 
+/// The kernel's capability names, by number (include/uapi/linux/capability.h),
+/// through CAP_CHECKPOINT_RESTORE, the last one as of Linux 7.0. A name not
+/// here is no capability at all: a drop naming it would remove nothing.
+const capability_names = [_][]const u8{
+    "CAP_CHOWN",              "CAP_DAC_OVERRIDE",    "CAP_DAC_READ_SEARCH",  "CAP_FOWNER",
+    "CAP_FSETID",             "CAP_KILL",            "CAP_SETGID",           "CAP_SETUID",
+    "CAP_SETPCAP",            "CAP_LINUX_IMMUTABLE", "CAP_NET_BIND_SERVICE", "CAP_NET_BROADCAST",
+    "CAP_NET_ADMIN",          "CAP_NET_RAW",         "CAP_IPC_LOCK",         "CAP_IPC_OWNER",
+    "CAP_SYS_MODULE",         "CAP_SYS_RAWIO",       "CAP_SYS_CHROOT",       "CAP_SYS_PTRACE",
+    "CAP_SYS_PACCT",          "CAP_SYS_ADMIN",       "CAP_SYS_BOOT",         "CAP_SYS_NICE",
+    "CAP_SYS_RESOURCE",       "CAP_SYS_TIME",        "CAP_SYS_TTY_CONFIG",   "CAP_MKNOD",
+    "CAP_LEASE",              "CAP_AUDIT_WRITE",     "CAP_AUDIT_CONTROL",    "CAP_SETFCAP",
+    "CAP_MAC_OVERRIDE",       "CAP_MAC_ADMIN",       "CAP_SYSLOG",           "CAP_WAKE_ALARM",
+    "CAP_BLOCK_SUSPEND",      "CAP_AUDIT_READ",      "CAP_PERFMON",          "CAP_BPF",
+    "CAP_CHECKPOINT_RESTORE",
+};
+
+/// Whether `name` is a capability, spelt as the kernel spells it.
+pub fn isCapabilityName(name: []const u8) bool {
+    for (capability_names) |n| {
+        if (std.mem.eql(u8, n, name)) return true;
+    }
+    return false;
+}
+
 /// A profile name is a DNS label, so that it can be a RuntimeClass handler's
 /// name as it is.
 pub fn isValidName(name: []const u8) bool {
@@ -583,4 +608,17 @@ test "a document nested deeper than any runtime spec is refused, not a panic" {
     const process = "{\"capabilities\":{\"bounding\":[\"CAP_KILL\"]},\"x\":" ++ "[" ** 300 ++ "]" ** 300 ++ "}";
     try std.testing.expectError(error.ProfileRefused, boundExec(std.testing.allocator, process, stored, &why));
     try std.testing.expect(std.mem.indexOf(u8, why.text(), "the process spec nests deeper than 64 levels") != null);
+}
+
+test "the capability names are the kernel's, by number" {
+    try std.testing.expectEqual(@as(usize, 41), capability_names.len);
+    try std.testing.expectEqualStrings("CAP_NET_RAW", capability_names[13]);
+    try std.testing.expectEqualStrings("CAP_SYS_ADMIN", capability_names[21]);
+    try std.testing.expectEqualStrings("CAP_MKNOD", capability_names[27]);
+    try std.testing.expectEqualStrings("CAP_SETFCAP", capability_names[31]);
+    try std.testing.expectEqualStrings("CAP_CHECKPOINT_RESTORE", capability_names[40]);
+    try std.testing.expect(isCapabilityName("CAP_SYS_ADMIN"));
+    // What libcap's cap_from_name also reads as CAP_SYS_ADMIN, and a typo.
+    for ([_][]const u8{ "cap_sys_admin", "Cap_Sys_Admin", "21", "0x15", "CAP_SYS_ADMIN1", "CAP_SYS_ADMIN ", "CAP_SYSADMIN", "" }) |n|
+        try std.testing.expect(!isCapabilityName(n));
 }
