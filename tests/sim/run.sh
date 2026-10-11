@@ -475,6 +475,13 @@ echo "unable to create CT - no space left" > "$S/fail_create"
 nx create --name bundle-f /tmp/nexcage-bundles/b1
 rm -f "$S/fail_create"
 check "bundle: a failed pct create removes the archive too" all '! rc 0' 'called_re "^pct create "' '[ -z "$(ls -A "$S/vartmp")" ]' '[ -z "$(ls -A "$S/cache")" ]'
+# So does a failed pack -- zstd out of space under tar, say -- which ends
+# create before a VMID is taken.
+: > "$S/fail_zstd"
+nx create --name bundle-z /tmp/nexcage-bundles/b1
+rm -f "$S/fail_zstd"
+check "bundle: packing that fails removes the archive and its directory, before pct create" \
+  all '! rc 0' 'err_has "Packing /tmp/nexcage-bundles/b1/rootfs failed"' 'not_called_re "nextid|^pct create"' '[ -z "$(ls -A "$S/vartmp")" ]'
 # Root writes the archive by path, so the directory it is made in must be one
 # where no one else can swap a symlink in: not writable by others unless
 # sticky, as /var/tmp is.
