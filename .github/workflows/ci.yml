@@ -68,6 +68,18 @@ jobs:
       - name: Build (ReleaseSafe)
         run: zig build -Doptimize=ReleaseSafe -p zig-out-release
 
+      - name: The release build is position-independent
+        # nexcage runs as root and, with the crun backend, parses bundles in
+        # libcrun's C code. Only a PIE is loaded at a random address; Zig's
+        # default for an executable is not one.
+        run: |
+          type=$(readelf -h zig-out-release/bin/nexcage | sed -n 's/^ *Type: *//p')
+          echo "ELF type: ${type:-unreadable}"
+          case "$type" in
+            DYN*) ;;
+            *) echo "::error::zig-out-release/bin/nexcage is not position-independent"; exit 1 ;;
+          esac
+
       - name: Unit tests
         run: zig build test --summary all
 

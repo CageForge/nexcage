@@ -2,7 +2,7 @@
 # Installs a nexcage .deb into a clean Debian 13 container, as a Proxmox VE 9
 # node is, and runs it there (#380). That proves the Depends line brings in
 # everything the binary links, and that the crun backend is in the binary:
-# `features` is answered by libcrun itself.
+# `features` is answered by libcrun itself. The binary has to be a PIE.
 #
 # What the package carries is read from the package, not from the installed
 # tree: a minimized image skips /usr/share/doc and man pages on install.
@@ -24,6 +24,18 @@ for f in ./usr/bin/nexcage \
          ./usr/share/doc/nexcage/examples/config.oci.example.json; do
     echo "$payload" | grep -qx "$f" || { echo "check_deb.sh: $f missing from $NAME" >&2; exit 1; }
 done
+
+# Position-independent, so the kernel loads it at a random address: it runs as
+# root and parses bundles in libcrun's C code. build.zig asks for a PIE; Zig's
+# default for an executable is not one.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+dpkg-deb --fsys-tarfile "$DEB" | tar -x -C "$tmp" ./usr/bin/nexcage
+type=$(readelf -h "$tmp/usr/bin/nexcage" | sed -n 's/^ *Type: *//p')
+case "$type" in
+    DYN*) echo "nexcage in $NAME: $type" ;;
+    *) echo "check_deb.sh: nexcage in $NAME is not position-independent (${type:-unreadable})" >&2; exit 1 ;;
+esac
 
 docker run --rm -v "$DIR:/dist:ro" debian:trixie sh -euxc "
   apt-get update -qq
