@@ -1,9 +1,15 @@
 const std = @import("std");
 
 /// FFI bindings for libcrun library
-/// Using extern struct with minimal fields needed for API calls
 pub const Libcrun = struct {
-    /// Context structure (only fields we need to set)
+    /// struct libcrun_context_s from deps/crun/src/libcrun/container.h at the
+    /// vendored commit, field for field. libcrun is handed a pointer to it
+    /// and reads every field, so "only the fields we set" is not an option:
+    /// this used to lack `no_open_tree_namespace`, which 1.30 added after
+    /// `no_pivot`, and the offsets still matched only because the new bool
+    /// fell into the padding before `argv`. The next field would not have.
+    /// crun/mod.zig compares this with the header when the backend is built
+    /// (expectSameLayout), so a pin that moves a field fails the build.
     pub const Context = extern struct {
         state_root: [*c]const u8,
         id: [*c]const u8,
@@ -22,6 +28,8 @@ pub const Libcrun = struct {
         no_new_keyring: bool,
         force_no_cgroup: bool,
         no_pivot: bool,
+        /// Turns off libcrun's open_tree mount path; zeroed, as crun leaves it.
+        no_open_tree_namespace: bool,
         argv: [*][*c]u8,
         argc: c_int,
         handler_manager: ?*anyopaque,
@@ -333,3 +341,33 @@ pub const Libcrun = struct {
     /// Default state root
     pub const DEFAULT_STATE_ROOT: []const u8 = "/run/crun";
 };
+
+/// Fails the build unless `Mirror` lays out `C` exactly: the same fields in
+/// the same order, each at the same offset and of the same size, and the same
+/// size overall. `C` is the struct as @cImport translates it from the vendored
+/// header. Field names are compared too: the mirrors keep crun's.
+pub fn expectSameLayout(comptime Mirror: type, comptime C: type) void {
+    const theirs = @typeInfo(C).@"struct".fields;
+    const ours = @typeInfo(Mirror).@"struct".fields;
+    const n = @min(theirs.len, ours.len);
+    inline for (0..n) |i| {
+        const t = theirs[i];
+        const o = ours[i];
+        if (!std.mem.eql(u8, t.name, o.name)) @compileError(std.fmt.comptimePrint(
+            "{s} has diverged from the vendored header's {s}: field {d} is `{s}` here and `{s}` there",
+            .{ @typeName(Mirror), @typeName(C), i, o.name, t.name },
+        ));
+        if (@offsetOf(Mirror, o.name) != @offsetOf(C, t.name) or @sizeOf(o.type) != @sizeOf(t.type)) @compileError(std.fmt.comptimePrint(
+            "{s}.{s} is {d} bytes at offset {d}, and in the vendored header {d} bytes at offset {d}",
+            .{ @typeName(Mirror), o.name, @sizeOf(o.type), @offsetOf(Mirror, o.name), @sizeOf(t.type), @offsetOf(C, t.name) },
+        ));
+    }
+    if (theirs.len != ours.len) @compileError(std.fmt.comptimePrint(
+        "{s} has {d} fields and the vendored header's {s} has {d}: the first {d} agree, so one end gained or lost a field",
+        .{ @typeName(Mirror), ours.len, @typeName(C), theirs.len, n },
+    ));
+    if (@sizeOf(Mirror) != @sizeOf(C)) @compileError(std.fmt.comptimePrint(
+        "{s} is {d} bytes and the vendored header's {s} is {d}",
+        .{ @typeName(Mirror), @sizeOf(Mirror), @typeName(C), @sizeOf(C) },
+    ));
+}

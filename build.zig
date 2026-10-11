@@ -190,6 +190,13 @@ pub fn build(b: *std.Build) void {
         libcrun_compile.root_module.linkSystemLibrary("systemd", .{ .use_pkg_config = .no, .needed = true });
         libcrun_lib = libcrun_compile;
         libcrun_abi_active = true;
+
+        // src/backends/crun/mod.zig compares libcrun_ffi.zig's hand-written
+        // mirrors of libcrun's structs with the vendored header through
+        // @cImport, which looks in the backends module's include paths.
+        backends_mod.addIncludePath(.{ .cwd_relative = "deps/crun" });
+        backends_mod.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
+        backends_mod.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
     }
 
     feature_options.addOption(bool, "libcrun_abi_requested", enable_libcrun_abi);
