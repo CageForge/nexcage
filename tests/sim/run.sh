@@ -286,6 +286,12 @@ check "an = after -- survives untouched" \
 nx exec web-1 -- echo --config /nonexistent --runtime bogus --profile nope --root /x
 check "nexcage's flags after -- belong to the command, not to nexcage" \
   all 'rc 0' 'called "pct exec 100 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
+# Its logging flags neither: root created the file the command named and wrote
+# nexcage's own log into it.
+nx exec web-1 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug
+check "nexcage's logging flags after -- belong to the command too" \
+  all 'rc 0' '[ ! -e "$S/run/exec-x.log" ]' '[ ! -e "$S/run/exec-y.log" ]' '! err_has "DEBUG"' \
+      'called "pct exec 100 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug"'
 
 # `exec --process <file>` hands over an OCI process spec: an identity to become,
 # an environment, a terminal. `pct exec` takes a command and returns when it

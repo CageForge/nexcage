@@ -418,8 +418,11 @@ command's result rather than "the runtime succeeded", which is why this command
 does not follow the exit table above.
 
 `--` separates the command from nexcage's own options, and is needed when the
-command itself starts with a dash. Everything after it is passed through
-untouched.
+command itself starts with a dash, or when one of its arguments is a word
+nexcage takes as its own option — `--config`, `--root`, `--runtime`,
+`--profile`, `--log`, `--log-file`, `--log-level`, `--log-format`, `--debug`,
+`--verbose`. nexcage reads those anywhere before `--` and nowhere after it;
+everything after it is passed through untouched.
 
 stdin, stdout and stderr are connected straight to the process in the
 container; nexcage does not buffer the output.

@@ -73,8 +73,10 @@ pub const ExecCommand = struct {
             \\  nexcage exec <name> -- <command> [args...]
             \\  nexcage exec --process <file> <name>
             \\
-            \\Use "--" when the command starts with a dash, so nexcage does not
-            \\read it as one of its own options.
+            \\Use "--" when the command starts with a dash, or has an argument
+            \\nexcage takes for one of its own options (--config, --root, --log,
+            \\--debug...): nexcage reads its options anywhere before "--" and
+            \\nowhere after it.
             \\
             \\Options:
             \\  --process <file>   An OCI process spec, which is how a container
