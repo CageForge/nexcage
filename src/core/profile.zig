@@ -1079,21 +1079,9 @@ test "a user namespace joined by path is read from inside it, and one that leave
     if (try std.posix.read(ready[0], &b) != 1) return error.SkipZigTest;
 
     var name: [64]u8 = undefined;
-    var line: [64]u8 = undefined;
-    const outside_uid = if (os.geteuid() == 0) 100000 else os.geteuid();
-    const outside_gid = if (os.getegid() == 0) 100000 else os.getegid();
-    const writes = [_]struct { file: []const u8, text: []const u8 }{
-        .{ .file = "setgroups", .text = "deny" },
-        .{ .file = "uid_map", .text = try std.fmt.bufPrint(line[0..32], "0 {d} 1", .{outside_uid}) },
-        .{ .file = "gid_map", .text = try std.fmt.bufPrint(line[32..], "0 {d} 1", .{outside_gid}) },
-    };
-    for (writes) |w| {
-        const f = std.fs.cwd().openFile(try std.fmt.bufPrint(&name, "/proc/{d}/{s}", .{ pid, w.file }), .{ .mode = .write_only }) catch return error.SkipZigTest;
-        defer f.close();
-        f.writeAll(w.text) catch return error.SkipZigTest;
-    }
     // Where a namespace can be made but not joined (a seccomp filter that
-    // allows unshare and not setns), there is nothing to check here.
+    // allows unshare and not setns), there is nothing to check here. Its
+    // owner joins it with nothing mapped yet.
     {
         const fd = try std.posix.open(try std.fmt.bufPrint(&name, "/proc/{d}/ns/user", .{pid}), .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
         defer std.posix.close(fd);
@@ -1107,6 +1095,25 @@ test "a user namespace joined by path is read from inside it, and one that leave
         \\ "uidMappings":[{{"containerID":0,"hostID":100000,"size":65536}}],
         \\ "gidMappings":[{{"containerID":0,"hostID":100000,"size":65536}}]}}}}
     , .{pid});
+    // A namespace that maps nothing yet is not one that leaves host root
+    // out: whoever owns it can still map 0, if that is theirs to map.
+    var says: [128]u8 = undefined;
+    try expectRefused(json, .{ .name = "h", .require_user_namespace = true }, try std.fmt.bufPrint(&says, "the uid_map of the one the bundle joins, /proc/{d}/ns/user, does not read as a map", .{pid}));
+
+    var line: [64]u8 = undefined;
+    const outside_uid = if (os.geteuid() == 0) 100000 else os.geteuid();
+    const outside_gid = if (os.getegid() == 0) 100000 else os.getegid();
+    const writes = [_]struct { file: []const u8, text: []const u8 }{
+        .{ .file = "setgroups", .text = "deny" },
+        .{ .file = "uid_map", .text = try std.fmt.bufPrint(line[0..32], "0 {d} 1", .{outside_uid}) },
+        .{ .file = "gid_map", .text = try std.fmt.bufPrint(line[32..], "0 {d} 1", .{outside_gid}) },
+    };
+    for (writes) |w| {
+        const f = std.fs.cwd().openFile(try std.fmt.bufPrint(&name, "/proc/{d}/{s}", .{ pid, w.file }), .{ .mode = .write_only }) catch return error.SkipZigTest;
+        defer f.close();
+        f.writeAll(w.text) catch return error.SkipZigTest;
+    }
+
     var why: Refusal = .{};
     const out = narrow(std.testing.allocator, json, &.{ .name = "h", .require_user_namespace = true }, &why) catch |err| {
         std.debug.print("refused: {s}\n", .{why.text()});
