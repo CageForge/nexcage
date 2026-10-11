@@ -12,5 +12,5 @@
 | `mkdocs_build.sh`, `mkdocs_serve.sh` | `make docs-build`, `make docs-serve` | Build or serve the documentation site |
 | `setup_secure_runner.sh` | `docs/SECURITY_SELF_HOSTED_RUNNER.md` | Install a hardened self-hosted GitHub Actions runner |
 | `fix_runner_service.sh` | run by hand on the runner | Repair the runner's systemd service |
-| `manage_github_runner.sh` | run by hand | Start, stop or restart the runner over SSH |
+| `manage_github_runner.sh` | run by hand | Start, stop or restart the runner on the Proxmox VE host `proxmox-runner` lived on, over SSH; `remove` deregisters it through the API (gh, as a repository admin) and deletes its service and directory |
 | `register_e2e_runner.sh` | run by hand on the E2E node (piped over ssh, token on stdin) | Register the GitHub Actions runner with labels `proxmox,pve9,nexcage-e2e` and install it as a service with `svc.sh` |
