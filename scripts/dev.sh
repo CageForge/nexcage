@@ -342,6 +342,12 @@ act_jobs() {
     [ "$job" != "$a" ] || die "'$a': name a job as WORKFLOW:JOB, e.g. ci.yml:simulation"
     case "$wf" in
       dependency_check.yml)
+        # It reads the crun pin from deps/crun, and with .actrc's --bind act
+        # takes the checkout as it is: the workflow's `submodules: recursive`
+        # does nothing here, and a worktree has no deps/crun of its own.
+        if [ ! -e deps/crun/.git ]; then
+          warn "skipping $a: deps/crun is not checked out here (git submodule update --init --depth 1 deps/crun)"; continue
+        fi
         # Scheduled, so it is dispatched here. Given a token its last step
         # files, edits or closes issues in the repository; dry_run prints
         # what it would do instead. The token is gh's, read inside the step

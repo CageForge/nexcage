@@ -28,7 +28,7 @@ scripts/dev.sh all          # before a pull request: check, then every CI job th
 | `cri` | | A pod through containerd's CRI with nexcage as the runtime handler: sandbox, CNI address, container, `exec`, `update`, removal | a container engine | 5 s, plus the images |
 | `e2e` | `e2e` | `sim` + `crun` + `cri` | | |
 | `shell [CMD]` | `dev-shell` | A shell with nexcage (crun backend), crun, containerd and crictl, or CMD run there | a container engine | |
-| `act` | `act` | The GitHub-hosted CI jobs, in the runner image | act, a container engine; gh logged in for `dependency_check.yml` | 1.5–4 min per job |
+| `act` | `act` | The GitHub-hosted CI jobs, in the runner image | act, a container engine; gh logged in and `deps/crun` checked out for `dependency_check.yml` | 1.5–4 min per job |
 | `all` | `local-ci` | `check`, then `act`, whose `crun_build.yml` job is `crun` and `cri` as CI runs them | | 12 min |
 | `pve-e2e` | | `proxmox_e2e.yml` on the self-hosted Proxmox VE runner, for this branch | gh, the branch pushed | 10 min |
 | `perf` | `perf` | Times the lifecycle commands; see [Performance](#performance) | zig, python3, tar; unshare and zstd unless `--suite crun`; a container engine unless `--suite lxc` | 1 min for `lxc`, 4 min for both with `--against` |
@@ -132,7 +132,26 @@ cannot know:
 repository's open issues and the crun releases and prints what it would file,
 edit or close. Without that input and with a token it does those things in
 CageForge/nexcage, so keep `--input dry_run=true` when running act on it by
-hand; without a gh login `dev.sh` skips the job and says so.
+hand; without a gh login `dev.sh` skips the job and says so. It skips it too,
+and says so, where `deps/crun` is not checked out — in a worktree, say — since
+with `--bind` the workflow's `submodules: recursive` checks nothing out:
+`git submodule update --init --depth 1 deps/crun` first.
+
+Three things act runs differently from GitHub's runners:
+
+- `crun_build.yml`'s `docker build -t nexcage:ci` and `--target builder -t
+  nexcage:builder` go to podman, which names the results
+  `localhost/nexcage:ci` and `localhost/nexcage:builder` in your image store:
+  the same tags `crun`, `cri` and `shell` build and use. Running that job
+  replaces them, and two runs at once race on them, so run it one at a time.
+- `ci.yml`'s `build-test` fails at its last step, "Upload binary
+  (ReleaseSafe)": act 0.2.89's artifact server answers
+  `actions/upload-artifact@v6` with "Error unauthorized". Every step before it
+  is what CI runs; the job's FAIL comes from that one step.
+- `crun_build.yml`'s runtime-spec suite: `tests/runtime-tools/known-failures`
+  is the list for rootful Docker, and under rootless podman five tests differ
+  from it, so the step fails here
+  ([RUNTIME_SPEC_VALIDATION.md](RUNTIME_SPEC_VALIDATION.md) names them).
 
 Not in the default set: `proxmox_e2e.yml` and `buildagent.yml`, which need
 self-hosted runners, and `security.yml`.
