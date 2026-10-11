@@ -108,9 +108,10 @@ pub const PullCommand = struct {
             "  --storage <name>   The storage to pull into (default: local)\n" ++
             "  --filename <name>  The file name instead, before the .tar Proxmox adds:\n" ++
             "                     letters, digits, '.', '_' and '-', without '..',\n" ++
-            "                     at most 127 characters, not ending in '-' and 16 hex\n" ++
-            "                     digits as a derived name does. It must not be there\n" ++
-            "                     already\n" ++
+            "                     not first a '.' or '-', not last a '.' (the .tar\n" ++
+            "                     would make it '..', which rmi refuses), at most 127\n" ++
+            "                     characters, not ending in '-' and 16 hex digits as\n" ++
+            "                     a derived name does. It must not be there already\n" ++
             "  -h, --help         Show this help message\n\n" ++
             "This is how to make `create --node` work: a storage called `local` is\n" ++
             "a different directory on every node, so pull onto a shared storage and\n" ++

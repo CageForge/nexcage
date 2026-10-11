@@ -268,7 +268,7 @@ pub const PveClient = struct {
             // to a '/' goes). A name it would change is refused rather than
             // guessed at, because the volid has to be known exactly.
             if (!isPlainFileName(f)) {
-                if (self.logger) |log| log.err("--filename '{s}': letters, digits, '.', '_' and '-' only, not starting with '.' or '-', without '..', at most {d} characters; Proxmox adds .tar", .{ f, max_pull_name }) catch {};
+                if (self.logger) |log| log.err("--filename '{s}': letters, digits, '.', '_' and '-' only, not starting with '.' or '-', not ending in '.', without '..', at most {d} characters; Proxmox adds .tar", .{ f, max_pull_name }) catch {};
                 return core.Error.InvalidInput;
             }
             // `create` takes the file under a reference's derived name for
@@ -1647,8 +1647,11 @@ fn isFileNameChar(c: u8) bool {
 fn isPlainFileName(name: []const u8) bool {
     if (name.len == 0 or name.len > max_pull_name) return false;
     if (name[0] == '.' or name[0] == '-') return false;
-    // `rmi` refuses ".." in a volid, so a template is not named with it
-    if (std.mem.indexOf(u8, name, "..") != null) return false;
+    // `rmi` refuses ".." in a volid, so a template is not named with it --
+    // nor with a last '.', which the ".tar" Proxmox adds turns into "..".
+    // "myredis." was pulled as myredis..tar, printed, and then refused by
+    // `rmi` and `create --node`.
+    if (std.mem.indexOf(u8, name, "..") != null or name[name.len - 1] == '.') return false;
     for (name) |c| {
         if (!isFileNameChar(c)) return false;
     }
@@ -1821,8 +1824,18 @@ test "a --filename is one Proxmox leaves as it is" {
     try std.testing.expect(!isPlainFileName("-x"));
     try std.testing.expect(!isPlainFileName("a b"));
     try std.testing.expect(!isPlainFileName("a..b"));
+    // Proxmox adds ".tar": "foo." would be foo..tar, which rmi refuses
+    try std.testing.expect(!isPlainFileName("foo."));
     try std.testing.expect(isPlainFileName("x" ** max_pull_name));
     try std.testing.expect(!isPlainFileName("x" ** (max_pull_name + 1)));
+
+    // What pull prints for a name it takes, rmi and create --node take
+    for ([_][]const u8{ "redis-7", "my_app.v2", "a.b-c_d", "x" ** max_pull_name }) |ok| {
+        try std.testing.expect(isPlainFileName(ok));
+        const volid = try std.fmt.allocPrint(std.testing.allocator, "local:vztmpl/{s}.tar", .{ok});
+        defer std.testing.allocator.free(volid);
+        try std.testing.expect(templateVolidStorage(volid) != null);
+    }
 
     // The shape of a derived name, which a --filename may not have
     try std.testing.expect(hasDerivedShape("docker.io_library_redis_7-a0ed741ac6ba1c57"));

@@ -1140,6 +1140,12 @@ check "pull --filename onto a file that is there is an error, not some other tem
 nx pull docker.io/library/nginx:1.27 --filename "a b"
 check "pull --filename that Proxmox would rewrite is refused before pvesh" \
   all 'rc 2' 'not_called_re "^pvesh create"'
+# Proxmox adds ".tar" to the name, so one ending in '.' was pulled as
+# <name>..tar and printed, and then rmi and create --node refused that volid
+# for its "..".
+nx pull docker.io/library/redis:7 --node titan --storage shared-rdma --filename myredis.
+check "pull --filename ending in '.' is refused before pvesh, since rmi could not take its file" \
+  all 'rc 2' "err_has \"not ending in '.'\"" 'not_called_re "^pvesh create"' '[ ! -s "$S/out" ]'
 # The tight limit on the name is the pull's task: Proxmox names the task's log
 # for a UPID holding the node and the file, one file name of 255 bytes at most.
 # A long reference written out whole made that UPID too long, and the pull
