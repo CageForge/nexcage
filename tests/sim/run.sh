@@ -275,7 +275,37 @@ check "kill KILL: the unrelated process holding the PID lives on" \
 rm -f "$S/reused_pid.100" "$S/sig.stranger"; kill -9 "$stranger" 2>/dev/null; wait "$stranger" 2>/dev/null
 nx kill web-1 CONT
 check "and the container's own init is signalled as before" all 'rc 0' 'got_signal 100 SIGCONT'
-nx kill web-1 'TERM;id';       check "kill: bad signal -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
+# The tree under lxc/<vmid>/ns is the container's: its root makes cgroups
+# there, and one that cannot be read -- a threaded cgroup's cgroup.procs
+# fails with EOPNOTSUPP, one systemd removes mid-walk with ENODEV -- made kill
+# fail on a live container, so an engine's TERM-then-KILL never landed. Here
+# the cgroup's list is longer than kill reads. It has to be met before the
+# init's: the walk goes in directory order (ls -f), which is hash order on
+# ext4, creation order on btrfs, ZFS and newer tmpfs, newest first on older
+# tmpfs. So the cgroup is made while the init's list is out of the directory,
+# then moved out and back itself, and other names are tried until it comes
+# first.
+unreadable_cgroup_first() {
+  local d=$1 i
+  first() { [ "$(ls -f "$d" | grep -Ex "t$i|cgroup\.procs" | head -1)" = "t$i" ]; }
+  for i in $(seq 0 63); do
+    mv "$d/cgroup.procs" "$d/../procs.x" || return 1
+    mkdir "$d/t$i" && truncate -s 17M "$d/t$i/cgroup.procs"
+    mv "$d/../procs.x" "$d/cgroup.procs" || return 1
+    first && return 0
+    mv "$d/t$i" "$d/../t.x" && mv "$d/../t.x" "$d/t$i"
+    first && return 0
+    rm -rf "${d:?}/t$i"
+  done
+  return 1
+}
+placed=no; unreadable_cgroup_first "$S/cgroup/lxc/100/ns" && placed=yes
+: > "$S/sig.100"
+nx kill web-1 USR1
+check "kill: a cgroup in the container that cannot be read is passed over; the init is signalled" \
+  all '[ "$placed" = yes ]' 'rc 0' 'got_signal 100 SIGUSR1'
+rm -rf "$S"/cgroup/lxc/100/ns/t[0-9]*
+nx kill web-1 'TERM;id';      check "kill: bad signal -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
 nx kill web-1 0;               check "kill: signal 0 -> exit 2"       all 'rc 2' 'not_called_re "^pct"'
 nx kill web-1 65;              check "kill: signal 65 -> exit 2"      all 'rc 2' 'not_called_re "^pct"'
 nx kill nope;                  check "kill missing -> exit 1"         rc 1

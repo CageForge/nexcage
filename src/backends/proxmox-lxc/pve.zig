@@ -96,6 +96,106 @@ test "listsPid finds a whole PID in a cgroup.procs list, never a part of one" {
     try std.testing.expect(!listsPid("\n\n", 4242));
 }
 
+/// What a search of a cgroup tree for a PID found.
+const CgroupSearch = struct {
+    found: bool = false,
+    /// Cgroups passed over because they could not be opened or read
+    unread: usize = 0,
+    /// Why the first of them could not be
+    first_error: ?anyerror = null,
+
+    fn passOver(self: *CgroupSearch, err: anyerror) void {
+        if (self.unread == 0) self.first_error = err;
+        self.unread += 1;
+    }
+};
+
+/// Whether a cgroup.procs anywhere under `root` lists `pid`.
+///
+/// The tree is not nexcage's to trust. ns/ is delegated to the container,
+/// whose root can make cgroups there that cannot be read -- a threaded
+/// cgroup's cgroup.procs fails with EOPNOTSUPP -- and systemd and nested
+/// containers remove theirs while the walk goes on (ENOENT, ENODEV). Failing
+/// on one of those made kill fail on a live container, so a tenant could stop
+/// an engine's TERM-then-KILL from landing. A cgroup that cannot be opened or
+/// read is passed over as one that lists no process instead: a threaded
+/// cgroup's processes are listed in its domain's cgroup.procs, which is read
+/// too, and a removed one has none. Passing over can only turn a match into
+/// "not running"; it never lets a signal reach a process outside the tree.
+fn cgroupTreeLists(allocator: std.mem.Allocator, root: std.fs.Dir, pid: std.posix.pid_t) !CgroupSearch {
+    var search = CgroupSearch{};
+    var walker = try root.walk(allocator);
+    defer walker.deinit();
+    while (true) {
+        // The Walker leaves out a directory it could not open and drops one
+        // it could not list, so the next call carries on with the rest.
+        const entry = walker.next() catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => {
+                search.passOver(err);
+                continue;
+            },
+        } orelse return search;
+        if (entry.kind != .file or !std.mem.eql(u8, entry.basename, "cgroup.procs")) continue;
+        const procs = entry.dir.readFileAlloc(allocator, entry.basename, 16 * 1024 * 1024) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => {
+                search.passOver(err);
+                continue;
+            },
+        };
+        defer allocator.free(procs);
+        if (listsPid(procs, pid)) {
+            search.found = true;
+            return search;
+        }
+    }
+}
+
+test "cgroupTreeLists passes over a cgroup it cannot read, and still finds the PID" {
+    const allocator = std.testing.allocator;
+    const posix = std.posix;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+
+    // The init's cgroup, as systemd in a container has it
+    try tmp.dir.makePath("ns/init.scope");
+    try tmp.dir.writeFile(.{ .sub_path = "ns/init.scope/cgroup.procs", .data = "1\n4242\n" });
+    // A cgroup.procs whose read fails, as a threaded cgroup's does: here one
+    // longer than the walk reads
+    try tmp.dir.makePath("ns/t");
+    {
+        const long = try tmp.dir.createFile("ns/t/cgroup.procs", .{});
+        defer long.close();
+        try long.setEndPos(16 * 1024 * 1024 + 1);
+    }
+    // and cgroups that cannot be opened: a chain deeper than the file
+    // descriptors left to the walk, which a tenant can make as well
+    {
+        var chain = std.ArrayListUnmanaged(u8){};
+        defer chain.deinit(allocator);
+        try chain.appendSlice(allocator, "ns/d");
+        for (0..64) |_| try chain.appendSlice(allocator, "/d");
+        try tmp.dir.makePath(chain.items);
+    }
+
+    // The lowest free descriptor, and a few above it: the walk holds one per
+    // level it is in
+    const old_limit = try posix.getrlimit(.NOFILE);
+    const lowest = try posix.dup(tmp.dir.fd);
+    posix.close(lowest);
+    try posix.setrlimit(.NOFILE, .{ .cur = @intCast(lowest + 16), .max = old_limit.max });
+    const absent = cgroupTreeLists(allocator, tmp.dir, 999);
+    const present = cgroupTreeLists(allocator, tmp.dir, 4242);
+    try posix.setrlimit(.NOFILE, old_limit);
+
+    // Every cgroup is visited when the PID is in none, whatever the order
+    const a = try absent;
+    try std.testing.expect(!a.found);
+    try std.testing.expect(a.unread >= 2);
+    try std.testing.expect((try present).found);
+}
+
 pub const PveVersion = struct {
     major: u32,
     minor: u32,
@@ -1414,8 +1514,9 @@ pub const PveClient = struct {
         const root = try std.fmt.allocPrint(self.allocator, "/sys/fs/cgroup/lxc/{s}", .{vmid});
         defer self.allocator.free(root);
         var dir = std.fs.cwd().openDir(root, .{ .iterate = true }) catch |err| switch (err) {
-            // A stopped container has no cgroup
-            error.FileNotFound => return false,
+            // A stopped container has no cgroup, and a stopping one's is
+            // being removed
+            error.FileNotFound, error.NoDevice => return false,
             else => {
                 if (self.logger) |log| log.err("cannot read {s}: {s}", .{ root, @errorName(err) }) catch {};
                 return core.Error.OperationFailed;
@@ -1423,25 +1524,11 @@ pub const PveClient = struct {
         };
         defer dir.close();
 
-        var walker = try dir.walk(self.allocator);
-        defer walker.deinit();
-        while (walker.next() catch |err| {
-            if (self.logger) |log| log.err("cannot read {s}: {s}", .{ root, @errorName(err) }) catch {};
-            return core.Error.OperationFailed;
-        }) |entry| {
-            if (entry.kind != .file or !std.mem.eql(u8, entry.basename, "cgroup.procs")) continue;
-            // A cgroup that went away while being read held no process
-            const procs = entry.dir.readFileAlloc(self.allocator, entry.basename, 16 * 1024 * 1024) catch |err| switch (err) {
-                error.FileNotFound => continue,
-                else => {
-                    if (self.logger) |log| log.err("cannot read {s}/{s}: {s}", .{ root, entry.path, @errorName(err) }) catch {};
-                    return core.Error.OperationFailed;
-                },
-            };
-            defer self.allocator.free(procs);
-            if (listsPid(procs, pid)) return true;
+        const search = try cgroupTreeLists(self.allocator, dir, pid);
+        if (!search.found and search.unread > 0) {
+            if (self.logger) |log| log.warn("{d} cgroups under {s} could not be read and were passed over, the first with {s}; PID {d} may be in one of them", .{ search.unread, root, @errorName(search.first_error.?), pid }) catch {};
         }
-        return false;
+        return search.found;
     }
 
     /// Run a command inside the container with `pct exec`, and return the

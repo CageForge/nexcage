@@ -386,7 +386,10 @@ opens a pidfd for it, checks that the process is in the container's cgroup
 (under `/sys/fs/cgroup/lxc/<vmid>/`) and sends the signal through the pidfd. A
 PID that is not the container's any more — the init exited after `pct status`
 read it, and the PID went to another process — is not signalled; the container
-is reported as not running (exit 1). `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
+is reported as not running (exit 1). A cgroup in that tree that cannot be read
+— a threaded cgroup made inside the container, one removed while nexcage looks
+— is passed over as one without the init, rather than failing the kill of a
+live container. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
 `SIGKILL`, `usr1`), or a number from 1 to 64; the default is `SIGTERM`. An
 unknown signal is a usage error (exit 2); a container that is not running is an
 error (exit 1).
