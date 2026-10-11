@@ -12,10 +12,11 @@ short: a pull request runs the workflow files of its own merge commit, so an
 `if:` in a workflow does not keep a fork off a runner -- the fork deletes the
 `if:`, or adds a workflow of its own. What does is GitHub's approval of every
 outside contributor's run (the repository's policy is
-`all_external_contributors`) and runners in an organization runner group
-restricted to selected workflows. The sections below were written as general
-guidance; where they show an `if:` as the defence, read them with that in
-mind.
+`all_external_contributors`) and runners no workflow of a pull request can
+select: in a runner group restricted to selected workflows, where the plan
+offers that, or in a group this repository cannot use. The sections below
+were written as general guidance; where they show an `if:` as the defence,
+read them with that in mind.
 
 ## ⚠️ Security Considerations
 
@@ -155,9 +156,11 @@ What does keep a fork's code off the runner is not in the repository:
   first-time contributors only, stops asking after one merged pull request.
   Whoever approves reads the pull request's `.github/` changes first.
 - **Runner groups restricted to selected workflows** (an organization
-  feature): the runner serves only, say,
-  `org/repo/.github/workflows/e2e.yml@refs/heads/main`. A workflow a pull
-  request adds or edits is not that one, so its jobs never get the runner.
+  feature GitHub documents for Enterprise Cloud and Enterprise Server): the
+  runner serves only, say, `org/repo/.github/workflows/e2e.yml@refs/heads/main`.
+  A workflow a pull request adds or edits is not that one, so its jobs never
+  get the runner. Without the feature, a runner a public repository's
+  workflows can select at all is held back by approval alone.
 - **Ephemeral runners** (`config.sh --ephemeral`, the VM re-created per job),
   so a job cannot leave something behind for the next one.
 
@@ -291,7 +294,7 @@ pull request runs its own copy of the workflow.
 
 ### Workflow Configuration
 - [ ] Fork pull requests need approval for every outside contributor (repository setting)
-- [ ] Self-hosted runners are in a runner group restricted to selected workflows, not registered to the repository
+- [ ] No self-hosted runner is registered to the repository, and every runner group it can use is restricted to workflows named at a branch (`scripts/check_runner_exposure.sh`)
 - [ ] No repository secret that no workflow uses; credentials a job needs live in an environment with reviewers
 - [ ] Secrets are NOT accessible in PR workflows
 - [ ] Minimal permissions in workflow files

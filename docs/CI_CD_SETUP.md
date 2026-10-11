@@ -36,16 +36,29 @@ repository's files:
    request, a typo fix, was enough never to be asked again. Approving a run
    is approving that pull request's code on these machines: read its
    `.github/`, `scripts/`, `build.zig` and `Makefile` changes first.
-2. **Runners only the named workflows can use.** Repository-level runners
-   have no such restriction. The runners belong in an organization runner
-   group with "Restrict to selected workflows", for example
+2. **Runners only named workflows can use.** A runner registered to the
+   repository, or in an organization runner group open to it, serves every
+   workflow of the repository, a pull request's own included. A runner
+   group's "Workflow access" can name workflows by path at a branch:
    `CageForge/nexcage/.github/workflows/proxmox_e2e.yml@refs/heads/main` and
-   `CageForge/nexcage/.github/workflows/k8s_e2e.yml@refs/tags/v*`, visible to
-   this repository only. A workflow a pull request adds or edits does not
-   match, so it cannot reach them. The cost: the E2E then runs on `main`, on
-   tags and by dispatch from those refs, not on every pull request, and
-   `scripts/dev.sh pve-e2e`, which dispatches it on a branch, works only for
-   a ref the group lists.
+   `CageForge/nexcage/.github/workflows/k8s_e2e.yml@refs/heads/main`. A pull
+   request runs at `refs/pull/<n>/merge`, so a workflow it adds or edits
+   matches neither. Write the ref in full, not `@main` and not a pattern, and
+   name no reusable workflow (`on: workflow_call`): a pull request's
+   workflow could call it. The cost: the E2E runs on `main` and by dispatch
+   from `main` only. Pull-request and tag runs of these two workflows do not
+   get the runner, so a release's `k8s_e2e.yml` is dispatched from `main`
+   before the tag, and `scripts/dev.sh pve-e2e`, which dispatches on a
+   branch, works only for a branch the group names.
+
+   GitHub documents Workflow access for
+   [Enterprise Cloud](https://docs.github.com/en/enterprise-cloud@latest/actions/how-tos/manage-runners/self-hosted-runners/manage-access#changing-which-workflows-can-access-a-runner-group)
+   and Enterprise Server only, and CageForge is on the Team plan
+   (2026-10-11), so the group's settings may not offer it. Without it, the
+   runners belong in a group this public repository cannot use (one that
+   does not allow public repositories, or names other repositories only),
+   and the E2E runs from a private repository whose workflow checks out
+   `main`. Until one or the other is done, approval is the only barrier.
 
 Dependabot's pull requests come from a branch here, so the `if:` lets them
 through; a bumped action runs on the node before anyone has read it, which is
@@ -54,9 +67,11 @@ one more reason every third-party action is pinned by commit.
 ### Still to do, by an administrator
 
 The audit of 2026-10 found these, and they are settings and machines, not
-files. `bash scripts/check_runner_exposure.sh`, with gh logged in as a
-repository admin, reads the settings and fails until the first three are
-done:
+files. `bash scripts/check_runner_exposure.sh` reads the settings and fails
+until the first three are done, and while the approval policy is anything
+but `all_external_contributors`. It needs gh logged in as an organization
+owner with the `admin:org` scope (`gh auth refresh -s admin:org`), for the
+runner groups; without it, it fails rather than skip them.
 
 - **Deregister `proxmox-runner`**, the runner on the Proxmox VE host
   mgr.cp.if.ua (labels `proxmox`, `ubuntu`). No workflow uses it, it is
@@ -72,8 +87,15 @@ done:
   root password, and revoke the `GH_TOKEN` personal access token. A future
   job that needs credentials gets them from an environment with required
   reviewers, not from repository secrets.
-- **Move `nexcage-e2e` (and the build agent, #339) into a workflow-restricted
-  runner group**, as above, and remove the repository-level registration.
+- **Put every runner this repository can reach out of a pull request's
+  reach**, as above: `nexcage-e2e`, registered to the repository, and every
+  runner in an organization group open to it. A review on 2026-10-11
+  reported `buildagent-node` in the organization's Default group, which has
+  no workflow restriction; the check lists every runner it finds that way.
+  Each goes into a group with Workflow access naming the two E2E workflows
+  at `refs/heads/main`, or into a group this repository cannot use. The
+  build agent of #339 too, if it comes back. Then remove the
+  repository-level registration.
 - Worth doing as well: register the E2E runner with `--ephemeral` and re-clone
   its VM per job, and keep the VM off the 192.168.3.0/24 LAN it shares with
   prox-home and the build agent.
