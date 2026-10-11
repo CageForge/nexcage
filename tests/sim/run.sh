@@ -1046,7 +1046,18 @@ check "and so is a lookup, even of a container on this host" \
 nx create --name remote-9 "$TPL"
 check "create refuses a name it cannot check across the cluster" \
   all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct create"'
+# Whatever words the failure has. A tool's "not found" or "No such file or
+# directory" is read as a missing container, which is right for a call about
+# one container; for a listing it made create take the name for free.
+echo "ipcc_send_rec[1] failed: No such file or directory" > "$S/fail_resources"
+nx create --name remote-9 "$TPL"
+check "a failing cluster listing that reads like a miss is still no answer to create" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct create"'
 rm -f "$S/fail_resources"
+echo "No such file or directory" > "$S/fail_list"
+nx create --name remote-9 "$TPL"
+check "nor is a failing pct list" all 'rc 1' 'err_has "pct list"' 'not_called_re "^pct create"'
+rm -f "$S/fail_list"
 
 echo "--- which container a command acts on ---"
 # A name before a VMID. One pass took the first row matching either, and the

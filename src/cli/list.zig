@@ -170,7 +170,8 @@ pub const ListCommand = struct {
             "  NAMES    - Container names\n\n" ++
             "Notes:\n" ++
             "  Proxmox LXC containers are listed via 'pvesh get /cluster/resources'\n" ++
-            "  merged with 'pct list'; list fails only when both fail.\n");
+            "  merged with 'pct list'; list fails when either fails, rather than\n" ++
+            "  show part of the cluster as if it were all of it.\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

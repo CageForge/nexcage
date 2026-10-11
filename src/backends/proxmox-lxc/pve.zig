@@ -632,7 +632,7 @@ pub const PveClient = struct {
         }
         if (res.exit_code != 0) {
             if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) failed: {s}", .{std.mem.trim(u8, res.stderr, " \t\r\n")}) catch {};
-            return errorFor(res.stderr);
+            return listingError(res.stderr);
         }
         const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch |err| {
             if (err == error.OutOfMemory) return core.Error.OutOfMemory;
@@ -1006,6 +1006,18 @@ pub const PveClient = struct {
         return core.Error.OperationFailed;
     }
 
+    /// What a listing that failed means. Never NotFound, whatever the tool
+    /// said: a listing that could not be read says nothing about any one
+    /// container, and NotFound from a lookup is what create takes for "the
+    /// name is free". errorFor reads "not found" or "No such file or
+    /// directory" as a missing container, which is right for a call about one
+    /// container -- and it let create past its cluster-wide check whenever
+    /// the listing failed with those words.
+    fn listingError(stderr: []const u8) core.Error {
+        const err = errorFor(stderr);
+        return if (err == core.Error.NotFound) core.Error.OperationFailed else err;
+    }
+
     /// List containers across the cluster.
     ///
     /// `pct list` answers for the node it runs on and nothing else, so on a
@@ -1131,7 +1143,10 @@ pub const PveClient = struct {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        if (res.exit_code != 0) return self.mapPctError(res.stderr);
+        if (res.exit_code != 0) {
+            if (self.logger) |log| log.err("this host's listing of its containers (pct list) failed: {s}", .{std.mem.trim(u8, res.stderr, " \t\r\n")}) catch {};
+            return listingError(res.stderr);
+        }
 
         var lines = std.mem.splitScalar(u8, res.stdout, '\n');
         var containers = std.ArrayListUnmanaged(core.ContainerInfo){};

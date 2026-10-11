@@ -57,6 +57,8 @@ done
 cmd=$1; shift
 case "$cmd" in
   list)
+    # this host's listing failing on its own, while pvesh still answers
+    [ -e "$SIM/fail_list" ] && { cat "$SIM/fail_list" >&2; exit 2; }
     printf "%-10s %-10s %-12s %-20s\n" VMID Status Lock Name
     sort -n "$DB" | while read -r v s n node; do
       [ -z "$node" ] || [ "$node" = "$THIS_NODE" ] || continue
