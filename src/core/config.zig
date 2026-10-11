@@ -28,27 +28,27 @@ const default_paths = [_][]const u8{
     "/etc/nexcage/nexcage.json",
 };
 
-/// The file loadDefault reads: the one --config names, else the first default
-/// location that exists. null when there is none and the built-in defaults
-/// apply. For `health`, which used to look at files of its own.
+/// The file the last load read, or stopped at with an error. Recorded by the
+/// load itself: it used to be worked out again as the first default location
+/// that exists, and the search passes over an OCI spec, so behind a spec the
+/// error and `health` named the spec while another file, or none, was read.
+var active_path: ?[]const u8 = null;
+/// A default location the last load passed over because it holds an OCI
+/// runtime spec, for `health` to say so.
+var skipped_spec: ?[]const u8 = null;
+
+/// The file the configuration came from: the one --config names, else the
+/// first default location that holds a configuration; null when there is
+/// none and the built-in defaults apply. When a load failed, the file it
+/// stopped at. Valid after a load, which main does before any command runs.
 pub fn activePath() ?[]const u8 {
-    if (explicit_path) |path| return path;
-    for (default_paths) |path| {
-        // loadDefault moves on only past a file that is not there, so a file
-        // that is there but cannot be read is still the one in use.
-        std.fs.cwd().access(path, .{}) catch |err| switch (err) {
-            error.FileNotFound => continue,
-            else => {},
-        };
-        return path;
-    }
-    return null;
+    return active_path;
 }
 
-test "the file in use is the one --config names" {
-    setExplicitPath("alt.json");
-    defer setExplicitPath(null);
-    try std.testing.expectEqualStrings("alt.json", activePath().?);
+/// A default location passed over because it holds an OCI runtime spec, or
+/// null.
+pub fn skippedSpecPath() ?[]const u8 {
+    return skipped_spec;
 }
 
 test "a config.json in the working directory is not read" {
@@ -61,10 +61,10 @@ test "a config.json in the working directory is not read" {
     defer cwd.setAsCwd() catch {};
 
     setExplicitPath(null);
-    if (activePath()) |path| try std.testing.expect(std.fs.path.isAbsolute(path));
     var loader = ConfigLoader.init(std.testing.allocator);
     var cfg = try loader.loadDefault();
     defer cfg.deinit();
+    if (activePath()) |path| try std.testing.expect(std.fs.path.isAbsolute(path));
     try std.testing.expect(cfg.proxmox.unprivileged orelse true);
     if (cfg.network.bridge) |bridge| try std.testing.expect(!std.mem.eql(u8, bridge, "vmbr666"));
 }
@@ -86,6 +86,7 @@ test "an explicit path replaces the default search, and must exist" {
     var cfg = try loader.loadDefault();
     defer cfg.deinit();
     try std.testing.expectEqualStrings("vmbr42", cfg.network.bridge.?);
+    try std.testing.expectEqualStrings(path, activePath().?);
 
     setExplicitPath("/nonexistent/nexcage-config.json");
     try std.testing.expectError(types.Error.FileNotFound, loader.loadDefault());
@@ -152,6 +153,97 @@ test "only a file of root's or of the user running nexcage is trusted" {
     try std.testing.expectEqual(ConfigLoader.Distrust.writable, ConfigLoader.distrust(st, 1001));
 }
 
+/// A directory under .zig-cache/tmp holding `files`, made as the loader
+/// requires: only their owner can write them, whatever the umask. The
+/// returned paths are absolute, in the order given.
+const TrustedFiles = struct {
+    tmp: std.testing.TmpDir,
+    paths: [4][]const u8 = undefined,
+    paths_len: usize = 0,
+
+    fn init(files: []const struct { name: []const u8, data: []const u8 }) !TrustedFiles {
+        // iterate: an O_PATH descriptor, the default, cannot be chmod'ed
+        var self = TrustedFiles{ .tmp = std.testing.tmpDir(.{ .iterate = true }) };
+        errdefer self.tmp.cleanup();
+        try self.tmp.dir.chmod(0o755);
+        for (files, 0..) |f, i| {
+            try self.tmp.dir.writeFile(.{ .sub_path = f.name, .data = f.data, .flags = .{ .mode = 0o644 } });
+            self.paths[i] = try self.tmp.dir.realpathAlloc(std.testing.allocator, f.name);
+        }
+        self.paths_len = files.len;
+        return self;
+    }
+
+    fn deinit(self: *TrustedFiles) void {
+        for (self.paths[0..self.paths_len]) |p| std.testing.allocator.free(p);
+        self.tmp.cleanup();
+    }
+};
+
+test "an OCI spec in the search is passed over whatever its size, and the file read is the one named" {
+    // Over the 1 MiB a configuration may hold: this used to stop the read at
+    // the limit and fail every command with FileTooBig.
+    const big_spec = "{\"ociVersion\":\"1.0.2\",\"process\":{\"env\":[\"X=" ++ "x" ** (1100 * 1024) ++ "\"]},\"root\":{\"path\":\"rootfs\"}}";
+    var files = try TrustedFiles.init(&.{
+        .{ .name = "spec.json", .data = big_spec },
+        .{ .name = "real.json", .data = "{\"network\":{\"bridge\":\"vmbr7\"}}" },
+    });
+    defer files.deinit();
+
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.search(files.paths[0..2]);
+    defer cfg.deinit();
+    try std.testing.expectEqualStrings("vmbr7", cfg.network.bridge.?);
+    try std.testing.expectEqualStrings(files.paths[1], activePath().?);
+    try std.testing.expectEqualStrings(files.paths[0], skippedSpecPath().?);
+
+    // A spec and nothing else: the built-in defaults, and no file in use.
+    var defaults = try loader.search(files.paths[0..1]);
+    defer defaults.deinit();
+    try std.testing.expect(activePath() == null);
+    try std.testing.expectEqualStrings(files.paths[0], skippedSpecPath().?);
+}
+
+test "an error behind a spec names the file that has it, not the spec" {
+    var files = try TrustedFiles.init(&.{
+        .{ .name = "spec.json", .data = "{\"ociVersion\":\"1.0.0\",\"root\":{\"path\":\"rootfs\"}}" },
+        .{ .name = "real.json", .data = "{\"routnig\":[]}" },
+    });
+    defer files.deinit();
+
+    var loader = ConfigLoader.init(std.testing.allocator);
+    try std.testing.expectError(types.Error.InvalidConfig, loader.search(files.paths[0..2]));
+    try std.testing.expectEqualStrings(files.paths[1], activePath().?);
+}
+
+test "a large file that is not a spec is refused, saying so" {
+    const big = "{\"network\":{\"bridge\":\"" ++ "v" ** (1100 * 1024) ++ "\"}}";
+    var files = try TrustedFiles.init(&.{.{ .name = "big.json", .data = big }});
+    defer files.deinit();
+
+    var loader = ConfigLoader.init(std.testing.allocator);
+    try std.testing.expectError(types.Error.InvalidConfig, loader.search(files.paths[0..1]));
+    try std.testing.expect(std.mem.indexOf(u8, loader.problem().?, "larger than 1024 KiB") != null);
+    try std.testing.expectEqualStrings(files.paths[0], activePath().?);
+}
+
+test "a spec is a whole JSON document declaring ociVersion at the top, however the key is written" {
+    var files = try TrustedFiles.init(&.{
+        .{ .name = "escaped.json", .data = "{\"oci\\u0056ersion\":\"1.0.0\"}" },
+        .{ .name = "nested.json", .data = "{\"x\":{\"ociVersion\":\"1.0.0\"}}" },
+        .{ .name = "broken.json", .data = "{\"ociVersion\":\"1.0.0\"," },
+        .{ .name = "longer.json", .data = "{\"ociVersionX\":1,\"ociVersio\":2}" },
+    });
+    defer files.deinit();
+
+    const expected = [_]bool{ true, false, false, false };
+    for (files.paths, expected) |path, spec| {
+        const file = try std.fs.openFileAbsolute(path, .{});
+        defer file.close();
+        try std.testing.expectEqual(spec, ConfigLoader.isOciSpec(file));
+    }
+}
+
 /// Configuration loader and manager
 pub const ConfigLoader = struct {
     const Self = @This();
@@ -178,49 +270,69 @@ pub const ConfigLoader = struct {
 
     /// Load configuration from default locations
     pub fn loadDefault(self: *Self) !Config {
+        active_path = null;
+        skipped_spec = null;
         // --config replaces the search: a missing file is an error there, not
         // a reason to fall back to the defaults
         if (explicit_path) |path| {
+            active_path = path;
             // Named on the command line, so silence would be wrong: say it is
             // the wrong kind of file rather than "not found".
             return self.loadFromFile(path) catch |err| switch (err) {
-                types.Error.FileNotFound => blk: {
-                    const content = std.fs.cwd().readFileAlloc(self.allocator, path, 1024 * 1024) catch break :blk types.Error.FileNotFound;
-                    defer self.allocator.free(content);
-                    break :blk if (isOciSpec(content)) self.refuse("it is an OCI runtime spec, not a nexcage configuration", .{}) else types.Error.FileNotFound;
+                error.OciSpec => self.refuse("it is an OCI runtime spec, not a nexcage configuration", .{}),
+                else => err,
+            };
+        }
+        return self.search(&default_paths);
+    }
+
+    /// The first of `paths` that holds a configuration, or the built-in
+    /// defaults when none does. A file that is not there, or that is an OCI
+    /// runtime spec, is passed over; any other failure stops the search there,
+    /// at the file activePath names.
+    fn search(self: *Self, paths: []const []const u8) !Config {
+        for (paths) |path| {
+            active_path = path;
+            return self.loadFromFile(path) catch |err| switch (err) {
+                types.Error.FileNotFound => {
+                    active_path = null;
+                    continue;
+                },
+                error.OciSpec => {
+                    active_path = null;
+                    skipped_spec = path;
+                    continue;
                 },
                 else => err,
             };
         }
-
-        // Try to load from default locations in order
-        for (default_paths) |path| {
-            if (self.loadFromFile(path)) |config| {
-                return config;
-            } else |err| switch (err) {
-                types.Error.FileNotFound => continue,
-                else => return err,
-            }
-        }
-
-        // Return default config if no file found
         return try Config.init(self.allocator, .lxc);
     }
 
-    /// Load configuration from file
+    /// The most a configuration file may hold. Far above any real one; an OCI
+    /// spec is recognised whatever its size, before this applies.
+    const max_file_bytes = 1024 * 1024;
+
+    /// Load configuration from file. error.OciSpec when it is an OCI runtime
+    /// spec, which the caller passes over or refuses.
     pub fn loadFromFile(self: *Self, path: []const u8) !Config {
         const file = try self.openTrusted(path);
         defer file.close();
-        const file_content = try file.readToEndAlloc(self.allocator, 1024 * 1024);
-        defer self.allocator.free(file_content);
 
         // An OCI bundle holds a config.json that is a runtime spec, not
-        // nexcage's configuration, and a container engine runs the runtime
-        // from the bundle directory — so ./config.json in the search path
-        // found the spec and silently replaced the real configuration, taking
-        // the routing rules with it. A file declaring ociVersion is not ours.
-        if (isOciSpec(file_content)) return types.Error.FileNotFound;
+        // nexcage's configuration. When ./config.json was in the search path,
+        // a container engine running the runtime from the bundle directory
+        // made the spec silently replace the real configuration, routing
+        // rules and all. A file declaring ociVersion is not ours: the search
+        // passes it over, and --config refuses it.
+        if (isOciSpec(file)) return error.OciSpec;
 
+        const file_content = file.readToEndAlloc(self.allocator, max_file_bytes) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            error.FileTooBig => return self.refuse("it is larger than {d} KiB, and no configuration is", .{max_file_bytes / 1024}),
+            else => return self.refuse("cannot read it ({s})", .{@errorName(err)}),
+        };
+        defer self.allocator.free(file_content);
         return self.loadFromString(file_content);
     }
 
@@ -275,15 +387,51 @@ pub const ConfigLoader = struct {
         return .none;
     }
 
-    /// Whether this is an OCI runtime spec rather than a nexcage config.
+    /// Whether the file is an OCI runtime spec rather than a nexcage config.
     /// Checked on the text: the spec parses as JSON perfectly well, so
     /// parsing cannot tell them apart, and the difference is that a spec
-    /// declares ociVersion at the top level.
-    fn isOciSpec(content: []const u8) bool {
-        var parsed = std.json.parseFromSlice(std.json.Value, std.heap.page_allocator, content, .{}) catch return false;
-        defer parsed.deinit();
-        if (parsed.value != .object) return false;
-        return parsed.value.object.get("ociVersion") != null;
+    /// declares ociVersion at the top level. Read as a stream, so that a spec
+    /// is recognised whatever its size: one over the configuration's limit
+    /// used to stop at the limit, and every command failed with FileTooBig
+    /// instead of passing it over. The document must be JSON throughout, as
+    /// when it was parsed whole; a broken one is refused as not JSON.
+    fn isOciSpec(file: std.fs.File) bool {
+        var buffer: [4096]u8 = undefined;
+        // Positional: reads from the start, and leaves the file's offset
+        // where loadFromFile reads it from.
+        var file_reader = file.reader(&buffer);
+        var reader = std.json.Reader.init(std.heap.page_allocator, &file_reader.interface);
+        defer reader.deinit();
+        return declaresOciVersion(&reader) catch false;
+    }
+
+    fn declaresOciVersion(reader: *std.json.Reader) !bool {
+        if (try reader.next() != .object_begin) return false;
+        const key = "ociVersion";
+        var declared = false;
+        while (true) {
+            // A key can come in pieces, and be of any length. Only whether it
+            // is "ociVersion" matters, so it is compared as it comes.
+            var matched: usize = 0;
+            var same = true;
+            while (true) {
+                const token = try reader.next();
+                const piece: []const u8 = switch (token) {
+                    .object_end => return declared and try reader.next() == .end_of_document,
+                    .string, .partial_string => |s| s,
+                    .partial_string_escaped_1 => |*b| b,
+                    .partial_string_escaped_2 => |*b| b,
+                    .partial_string_escaped_3 => |*b| b,
+                    .partial_string_escaped_4 => |*b| b,
+                    else => return false,
+                };
+                same = same and matched + piece.len <= key.len and std.mem.eql(u8, piece, key[matched..][0..piece.len]);
+                matched += piece.len;
+                if (token == .string) break;
+            }
+            if (same and matched == key.len) declared = true;
+            try reader.skipValue();
+        }
     }
 
     /// Load configuration from string

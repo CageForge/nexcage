@@ -449,6 +449,25 @@ chmod 755 "$S/work"; rm -f "$S/work/config.json"
 nx --config /etc/passwd list
 check "a config file owned by somebody else is refused, naming the owner" \
   all 'rc 1' 'err_has "it is owned by uid 65534, not by root"' 'not_called_re "^(pct|pvesh)"'
+# /etc/nexcage, without --config. An OCI spec there is passed over whatever its
+# size -- one over the 1 MiB a configuration may hold failed every command with
+# FileTooBig -- and an error or `health` names the file actually read, not the
+# first one that exists.
+mkdir -p "$S/etc/nexcage"
+python3 -I -c 'import json,sys; json.dump({"ociVersion":"1.0.0","process":{"args":["/bin/sh"],"env":["V%d=%s"%(i,"x"*1000) for i in range(1100)]},"root":{"path":"rootfs"}}, open(sys.argv[1],"w"))' "$S/etc/nexcage/config.json"
+nx list
+check "an OCI spec over 1 MiB in /etc/nexcage is passed over, not a FileTooBig" \
+  all 'rc 0' '! err_has "FileTooBig"' '! err_has "invalid configuration"'
+printf '{"ociVersion":"1.0.0","process":{"args":["/bin/sh"]},"root":{"path":"rootfs"}}\n' > "$S/etc/nexcage/config.json"
+printf '{"routnig":[]}\n' > "$S/etc/nexcage/nexcage.json"
+nx list
+check "an error behind a spec names the file that has it" \
+  all 'rc 1' 'err_has "invalid configuration file /etc/nexcage/nexcage.json"' 'not_called_re "^(pct|pvesh)"'
+printf '{"network":{"bridge":"vmbr1"}}\n' > "$S/etc/nexcage/nexcage.json"
+nx health
+check "health names the file read, and the spec passed over" \
+  all 'err_has "Config file in use: /etc/nexcage/nexcage.json"' 'err_has "/etc/nexcage/config.json is an OCI runtime spec"'
+rm -rf "$S/etc"
 
 echo "=== create from an OCI bundle ==="
 mkdir -p "$S/bundles/b1/rootfs/bin" "$S/bundles/nocfg/rootfs"

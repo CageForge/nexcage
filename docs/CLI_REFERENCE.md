@@ -48,7 +48,8 @@ choosing. Name such a file with `--config` instead.
 
 A file that declares `ociVersion` is not a configuration but an OCI runtime
 spec, the `config.json` a bundle holds. Such a file is skipped in the search,
-and refused when named with `--config`.
+whatever its size, and refused when named with `--config`. An error names the
+file that has it, and `health` names the file read and any spec it skipped.
 
 `--root` is read before any command touches state, wherever it appears on the
 command line.
@@ -822,7 +823,8 @@ host outside this one.
 
 It reports the config file the other commands read: the one `--config` names,
 else the first of `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
-that exists. Like every command, `health` loads
+that holds a configuration. One of them that is an OCI runtime spec is skipped,
+and the report says so in a warning. Like every command, `health` loads
 that file first, and one that is not valid stops it there with exit 1, before
 any check runs.
 

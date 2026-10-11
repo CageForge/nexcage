@@ -55,7 +55,7 @@ trap stop_inits EXIT
 
 reset_sim() {
   stop_inits
-  rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/* "$S"/cgroup/*
+  rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/* "$S"/cgroup/* "$S/etc"
   mkdir -p "$S/cache"
   : > "$S/db"; : > "$S/calls"
   rm -f "$S"/fail_* "$S/pvever" "$S"/lock.* "$S"/conf.* "$S"/tarlist.* "$S"/sig.* "$S"/snaps.*
@@ -83,8 +83,10 @@ nexcage_ns() {
   fi
   # /sys/fs/cgroup is bound from $SIM, not a fresh tmpfs: `pause` writes the
   # freezer and a later `state` has to read what it wrote, and every nx call is
-  # its own namespace.
+  # its own namespace. $SIM/etc, when a check makes one, is laid over /etc:
+  # that is where /etc/nexcage comes from.
   unshare -rm bash -c '
+    { [ ! -d "$SIM/etc" ] || mount -t overlay overlay -o lowerdir="$SIM/etc":/etc /etc; } &&
     mount --bind "$SIM/run" /run &&
     mount -t tmpfs tmpfs /tmp &&
     mkdir /tmp/nexcage-bundles && mount --bind "$SIM/bundles" /tmp/nexcage-bundles &&

@@ -115,6 +115,10 @@ pub const IntegrityChecker = struct {
         } else {
             try report.addCheck("config_file", .warn, "No config file in use; the built-in defaults apply", .{});
         }
+        // Passed over without a word anywhere else
+        if (config.skippedSpecPath()) |path| {
+            try report.addCheck("config_file", .warn, "{s} is an OCI runtime spec, not a configuration, and was passed over", .{path});
+        }
     }
 
     /// Check process integrity
