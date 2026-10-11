@@ -70,9 +70,13 @@ test "a config.json in the working directory is not read" {
 }
 
 test "an explicit path replaces the default search, and must exist" {
-    var tmp = std.testing.tmpDir(.{});
+    // iterate: an O_PATH descriptor, the default, cannot be chmod'ed
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "alt.json", .data = "{\"network\":{\"bridge\":\"vmbr42\"}}" });
+    // Only its owner may write a configuration, and the umask may give the
+    // group write access to what tmpDir and writeFile make.
+    try tmp.dir.chmod(0o755);
+    try tmp.dir.writeFile(.{ .sub_path = "alt.json", .data = "{\"network\":{\"bridge\":\"vmbr42\"}}", .flags = .{ .mode = 0o644 } });
     const path = try tmp.dir.realpathAlloc(std.testing.allocator, "alt.json");
     defer std.testing.allocator.free(path);
 
@@ -85,6 +89,67 @@ test "an explicit path replaces the default search, and must exist" {
 
     setExplicitPath("/nonexistent/nexcage-config.json");
     try std.testing.expectError(types.Error.FileNotFound, loader.loadDefault());
+}
+
+test "a configuration others can write, or replace in its directory, is refused" {
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.chmod(0o755);
+    try tmp.dir.writeFile(.{ .sub_path = "config.json", .data = "{\"proxmox\":{\"unprivileged\":false}}", .flags = .{ .mode = 0o644 } });
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, "config.json");
+    defer std.testing.allocator.free(path);
+    var file = try tmp.dir.openFile("config.json", .{});
+    defer file.close();
+    setExplicitPath(path);
+    defer setExplicitPath(null);
+
+    const cases = [_]struct { file: std.fs.File.Mode, dir: std.fs.File.Mode, says: ?[]const u8 }{
+        .{ .file = 0o644, .dir = 0o755, .says = null },
+        .{ .file = 0o666, .dir = 0o755, .says = "group or others can write it (mode 0666)" },
+        .{ .file = 0o664, .dir = 0o755, .says = "group or others can write it (mode 0664)" },
+        .{ .file = 0o644, .dir = 0o777, .says = "group or others can write its directory (mode 0777)" },
+        .{ .file = 0o644, .dir = 0o775, .says = "group or others can write its directory (mode 0775)" },
+        // /tmp's mode: nobody else can replace a file they do not own there
+        .{ .file = 0o644, .dir = 0o1777, .says = null },
+    };
+    for (cases) |case| {
+        try tmp.dir.chmod(case.dir);
+        try file.chmod(case.file);
+        var loader = ConfigLoader.init(std.testing.allocator);
+        if (case.says) |says| {
+            try std.testing.expectError(types.Error.InvalidConfig, loader.loadDefault());
+            const why = loader.problem() orelse return error.TestExpectedProblem;
+            if (std.mem.indexOf(u8, why, says) == null) {
+                std.debug.print("mode {o}, directory {o}: got \"{s}\"\n", .{ case.file, case.dir, why });
+                return error.TestUnexpectedProblem;
+            }
+        } else {
+            var cfg = try loader.loadDefault();
+            defer cfg.deinit();
+            try std.testing.expectEqual(@as(?bool, false), cfg.proxmox.unprivileged);
+        }
+    }
+    try tmp.dir.chmod(0o755);
+}
+
+test "only a file of root's or of the user running nexcage is trusted" {
+    var st = std.mem.zeroes(std.posix.Stat);
+    st.mode = std.posix.S.IFREG | 0o644;
+    st.uid = 0;
+    try std.testing.expectEqual(ConfigLoader.Distrust.none, ConfigLoader.distrust(st, 0));
+    try std.testing.expectEqual(ConfigLoader.Distrust.none, ConfigLoader.distrust(st, 1001));
+    st.uid = 1001;
+    try std.testing.expectEqual(ConfigLoader.Distrust.owner, ConfigLoader.distrust(st, 0));
+    try std.testing.expectEqual(ConfigLoader.Distrust.none, ConfigLoader.distrust(st, 1001));
+    st.mode = std.posix.S.IFREG | 0o620;
+    try std.testing.expectEqual(ConfigLoader.Distrust.writable, ConfigLoader.distrust(st, 1001));
+    // The sticky bit means something on a directory only.
+    st.mode = std.posix.S.IFREG | 0o1666;
+    try std.testing.expectEqual(ConfigLoader.Distrust.writable, ConfigLoader.distrust(st, 1001));
+    st.mode = std.posix.S.IFDIR | 0o1777;
+    try std.testing.expectEqual(ConfigLoader.Distrust.none, ConfigLoader.distrust(st, 1001));
+    st.mode = std.posix.S.IFDIR | 0o777;
+    try std.testing.expectEqual(ConfigLoader.Distrust.writable, ConfigLoader.distrust(st, 1001));
 }
 
 /// Configuration loader and manager
@@ -144,10 +209,9 @@ pub const ConfigLoader = struct {
 
     /// Load configuration from file
     pub fn loadFromFile(self: *Self, path: []const u8) !Config {
-        const file_content = std.fs.cwd().readFileAlloc(self.allocator, path, 1024 * 1024) catch |err| switch (err) {
-            error.FileNotFound => return types.Error.FileNotFound,
-            else => return err,
-        };
+        const file = try self.openTrusted(path);
+        defer file.close();
+        const file_content = try file.readToEndAlloc(self.allocator, 1024 * 1024);
         defer self.allocator.free(file_content);
 
         // An OCI bundle holds a config.json that is a runtime spec, not
@@ -158,6 +222,57 @@ pub const ConfigLoader = struct {
         if (isOciSpec(file_content)) return types.Error.FileNotFound;
 
         return self.loadFromString(file_content);
+    }
+
+    /// Opens a configuration file for reading, or refuses it when anyone but
+    /// root or the user running nexcage could have written what it says. The
+    /// file decides whether LXC containers are privileged, what an isolation
+    /// profile requires and which file root appends its log to: one that group
+    /// or others can write, or that sits in a directory they can write and so
+    /// replace it in, handed all of that to them. The checks are made on the
+    /// open descriptors, so the file checked is the file read. A symlink is
+    /// followed, and the file it names is the one checked.
+    fn openTrusted(self: *Self, path: []const u8) !std.fs.File {
+        var dir = std.fs.cwd().openDir(std.fs.path.dirname(path) orelse ".", .{}) catch |err| switch (err) {
+            error.FileNotFound => return types.Error.FileNotFound,
+            else => return self.refuse("cannot open its directory ({s})", .{@errorName(err)}),
+        };
+        defer dir.close();
+        const file = dir.openFile(std.fs.path.basename(path), .{}) catch |err| switch (err) {
+            error.FileNotFound => return types.Error.FileNotFound,
+            else => return self.refuse("cannot open it ({s})", .{@errorName(err)}),
+        };
+        errdefer file.close();
+
+        const euid = std.posix.geteuid();
+        const st = std.posix.fstat(file.handle) catch |err| return self.refuse("cannot stat it ({s})", .{@errorName(err)});
+        if (!std.posix.S.ISREG(st.mode)) return self.refuse("it is not a regular file", .{});
+        switch (distrust(st, euid)) {
+            .none => {},
+            .owner => return self.refuse("it is owned by uid {d}, not by root or by uid {d}, which runs nexcage", .{ st.uid, euid }),
+            .writable => return self.refuse("group or others can write it (mode {o:0>4}); run chmod go-w on it", .{st.mode & 0o7777}),
+        }
+        const dir_st = std.posix.fstat(dir.fd) catch |err| return self.refuse("cannot stat its directory ({s})", .{@errorName(err)});
+        switch (distrust(dir_st, euid)) {
+            .none => {},
+            .owner => return self.refuse("its directory is owned by uid {d}, not by root or by uid {d}, and its owner can put another file in its place", .{ dir_st.uid, euid }),
+            .writable => return self.refuse("group or others can write its directory (mode {o:0>4}) and put another file in its place; run chmod go-w on the directory", .{dir_st.mode & 0o7777}),
+        }
+        return file;
+    }
+
+    const Distrust = enum { none, owner, writable };
+
+    /// Why a configuration file, or the directory that holds it, cannot be
+    /// trusted to say what root does, or .none when it can: owned by root or
+    /// by the user running nexcage, and writable by nobody else. A directory
+    /// with the sticky bit, as /tmp has, lets nobody else replace a file in
+    /// it, so its write bits do not count.
+    fn distrust(st: std.posix.Stat, euid: std.posix.uid_t) Distrust {
+        if (st.uid != 0 and st.uid != euid) return .owner;
+        const sticky = std.posix.S.ISDIR(st.mode) and st.mode & std.posix.S.ISVTX != 0;
+        if (st.mode & 0o022 != 0 and !sticky) return .writable;
+        return .none;
     }
 
     /// Whether this is an OCI runtime spec rather than a nexcage config.

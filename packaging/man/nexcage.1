@@ -224,6 +224,9 @@ not parse is an error:
 .IR /etc/nexcage/nexcage.json .
 The working directory is not searched; name a file there with
 \fB\-\-config\fR.
+A file that is not owned by root or by the user running nexcage, that group or
+others can write, or whose directory they can write without the sticky bit, is
+refused.
 .TP
 .B network.bridge
 Bridge for eth0, which uses DHCP. Default vmbr0.

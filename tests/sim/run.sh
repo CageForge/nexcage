@@ -429,6 +429,26 @@ nx list --config bad.json
 check "--config with invalid JSON -> exit 1" all 'rc 1' 'err_has "invalid configuration"' 'not_called_re "^pct"'
 nx list --config
 check "--config without a path -> exit 2" all 'rc 2' 'err_has "--config needs a path"'
+# The file decides whether containers are privileged and where root appends
+# its log, so only root (or the user running nexcage) may be able to write it.
+cfg '{"network":{"bridge":"vmbr666"},"proxmox":{"unprivileged":false}}'
+chmod 666 "$S/work/config.json"
+nx create --name ww-1 "$TPL"
+check "a config file others can write is refused, saying why" \
+  all 'rc 1' 'err_has "group or others can write it (mode 0666)"' 'not_called_re "^pct create"'
+chmod 644 "$S/work/config.json"; chmod 777 "$S/work"
+nx create --name ww-2 "$TPL"
+check "and so is one in a directory others can write" \
+  all 'rc 1' 'err_has "can write its directory (mode 0777)"' 'not_called_re "^pct create"'
+chmod 1777 "$S/work"
+nx create --name ww-3 "$TPL"
+check "a sticky directory, as /tmp is, lets nobody else replace it" \
+  all 'rc 0' 'called_re "--hostname ww-3 .*bridge=vmbr666"'
+chmod 755 "$S/work"; rm -f "$S/work/config.json"
+# Host root's files are nobody's in the simulator's namespace.
+nx --config /etc/passwd list
+check "a config file owned by somebody else is refused, naming the owner" \
+  all 'rc 1' 'err_has "it is owned by uid 65534, not by root"' 'not_called_re "^(pct|pvesh)"'
 
 echo "=== create from an OCI bundle ==="
 mkdir -p "$S/bundles/b1/rootfs/bin" "$S/bundles/nocfg/rootfs"
@@ -560,11 +580,14 @@ check "a key that was parsed and never used is refused too" \
 rm -f "$S/work/config.json"
 
 # What the project ships, and what INSTALL.md tells an administrator to
-# install, still loads.
+# install, still loads. Copied as `cp` puts it in /etc/nexcage: the checkout's
+# modes follow whoever cloned it, and nexcage refuses a file others can write.
 for f in packaging/config/config.json packaging/config/config.oci.example.json config.json.example; do
-  nx --config "$REPO/$f" version
+  install -m 644 "$REPO/$f" "$S/work/shipped.json"
+  nx --config "$S/work/shipped.json" version
   check "$f loads" all 'rc 0' '! err_has "invalid configuration"'
 done
+rm -f "$S/work/shipped.json"
 
 # No runc backend since 0.13.0. A rule that still names it describes an OCI
 # container, so it goes to crun -- and is said, since the file should change.

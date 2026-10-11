@@ -160,6 +160,12 @@ that does not parse is an error; a file declaring `ociVersion` is skipped in
 that search, and refused when named with `--config`, because that is an OCI
 runtime spec and not a configuration.
 
+Whoever can change the file decides whether containers are privileged and what
+an isolation profile requires, so nexcage refuses one that is not owned by root
+(or by the user running nexcage), that group or others can write, or that sits
+in a directory they can write without the sticky bit. The message names the
+file and the reason; `chmod go-w` on the file or its directory puts it right.
+
 The table below is every key there is. **Since 0.17.0 anything else refuses the
 file**: a key nexcage does not read, a value of the wrong type, a runtime or
 log level it does not know. The message names the file and the key, and

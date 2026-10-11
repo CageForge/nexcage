@@ -262,6 +262,13 @@ Set at least `proxmox.storage` to a storage that holds container volumes
 (`pvesm status` lists them) and `network.bridge` to your bridge. The keys are
 described in the README.
 
+The file has to be root's and writable by nobody else, and so does
+`/etc/nexcage`: nexcage refuses a configuration that group or others can
+write, or that sits in a directory they can write, because whoever can change
+it decides whether containers are privileged and what an isolation profile
+requires. `cp` as root with the usual umask (022) gives `0644` and `0755`;
+`chmod go-w /etc/nexcage /etc/nexcage/config.json` puts them right otherwise.
+
 You also need a container template, for example:
 
 ```bash

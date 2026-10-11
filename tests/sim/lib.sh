@@ -36,6 +36,11 @@ if ! unshare -rm bash -c 'mount -t tmpfs tmpfs /tmp' 2>/dev/null; then
   exit 2
 fi
 mkdir -p "$SIM/run" "$SIM/work" "$SIM/bundles" "$SIM/cache" "$SIM/cgroup"
+# nexcage refuses a configuration file that group or others can write, or
+# that sits in a directory they can write. Files made here are root's inside
+# the namespace and get root's umask, not the one a desktop session gives.
+umask 022
+chmod go-w "$SIM/work"
 
 # Fake pct start leaves a fake init running per started container
 stop_inits() {
