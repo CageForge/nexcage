@@ -651,7 +651,14 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             i += 2;
         } else if (std.mem.eql(u8, arg, "--node") and i + 1 < args.len) {
             // Which node of the Proxmox cluster `create` should make the
-            // container on.
+            // container on, `pull` pull on, `images` list, `rmi` remove from.
+            // It goes into pvesh paths, /nodes/<node>/..., and pvesh hands
+            // the path of a call for another node to that node's shell over
+            // ssh, unquoted, so it is held to Proxmox's own rule first.
+            if (!isNodeName(args[i + 1])) {
+                printError("--node \"{f}\" is not a Proxmox node name: letters, digits and '-', a letter or digit first and last", .{core.json.quoted(args[i + 1])});
+                return error.InvalidInput;
+            }
             options.node = try allocator.dupe(u8, args[i + 1]);
             i += 2;
         } else if (std.mem.eql(u8, arg, "--process") and i + 1 < args.len) {
@@ -1231,6 +1238,23 @@ fn expectCommand(raw: []const []const u8, name: []const u8, systemd_cgroup: bool
     const found = findCommand(args);
     try std.testing.expectEqualStrings(name, args[found.index]);
     try std.testing.expectEqual(systemd_cgroup, found.systemd_cgroup);
+}
+
+/// A node name as Proxmox's pve-node format takes it
+/// (PVE::JSONSchema::pve_verify_node_name): one DNS label, letters, digits
+/// and '-', with a letter or digit first and last.
+fn isNodeName(name: []const u8) bool {
+    if (name.len == 0) return false;
+    if (!std.ascii.isAlphanumeric(name[0]) or !std.ascii.isAlphanumeric(name[name.len - 1])) return false;
+    for (name) |c| {
+        if (!(std.ascii.isAlphanumeric(c) or c == '-')) return false;
+    }
+    return true;
+}
+
+test "--node takes what Proxmox's pve-node takes, and nothing that changes a path" {
+    for ([_][]const u8{ "pve", "prox-home", "titan", "n1", "7", "Node-2" }) |ok| try std.testing.expect(isNodeName(ok));
+    for ([_][]const u8{ "", "-pve", "pve-", "a/b", "..", "pve.local", "x;id", "a b", "titan\n", "n\x00" }) |bad| try std.testing.expect(!isNodeName(bad));
 }
 
 test "findCommand: --systemd-cgroup before the command is recorded, in each engine's order" {

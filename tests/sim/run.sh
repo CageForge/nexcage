@@ -2092,6 +2092,21 @@ nx create --name there-x --node titan 'x;id;:vztmpl/a.tar'
 check "create --node refuses a template volid that is not one, before that node is asked" \
   all 'rc 2' 'err_has "vztmpl"' 'not_called_re "^pvesh get /nodes/titan/storage/"'
 
+# --node goes into the same paths, so it is held to Proxmox's own rule for a
+# node name (pve-node) before anything is asked, for every command that takes
+# one: one label of letters, digits and '-'.
+for node in 'x;id;' '../../nodes/titan' 'titan/lxc' '-titan'; do
+  nx create --name there-n --node "$node" "$TPL"
+  check "create --node '$node', not a node name, is refused before Proxmox is asked" \
+    all 'rc 2' 'err_has "is not a Proxmox node name"' 'not_called_re "^(pvesh|pct)"'
+done
+nx images --node 'x;id;'
+check "and so are images --node," all 'rc 2' 'err_has "is not a Proxmox node name"' 'not_called_re "^(pvesh|pct)"'
+nx pull docker.io/library/nginx:1.27 --node 'x;id;'
+check "pull --node" all 'rc 2' 'err_has "is not a Proxmox node name"' 'not_called_re "^(pvesh|pct|pveversion)"'
+nx rmi local:vztmpl/x.tar --node 'x;id;'
+check "and rmi --node" all 'rc 2' 'err_has "is not a Proxmox node name"' 'not_called_re "^(pvesh|pct)"'
+
 # The template check is the point: a node that cannot see it is told so, and
 # nothing is created.
 nx create --name there-2 --node otherhost "$TPL"

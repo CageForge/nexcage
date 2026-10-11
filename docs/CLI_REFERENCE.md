@@ -169,6 +169,12 @@ a storage the target node has.
 `--node` naming the host nexcage is running on is not "another node": it takes
 the ordinary local path, `pct` and all.
 
+The name goes into the API paths, `/nodes/<name>/...`, and `pvesh` hands the
+path of a call for another node to that node's shell unquoted, so `create`,
+`pull`, `images` and `rmi` take a `--node` only in the form Proxmox gives a
+node name: letters, digits and `-`, a letter or digit first and last. Anything
+else is a usage error (exit 2) before Proxmox is asked.
+
 A host that is not in a cluster answers `/cluster/resources` with its own
 containers, so nothing changes there. **A cluster listing that cannot be read is
 an error** (exit 1) naming the cause — `pvesh` failing, its output not being
