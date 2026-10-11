@@ -258,6 +258,16 @@ test "a FIFO where the configuration should be is refused, not waited on" {
     try std.testing.expectEqualStrings("it is not a regular file", loader.problem().?);
 }
 
+test "a directory named as the configuration is refused as one, / as much as ." {
+    var loader = ConfigLoader.init(std.testing.allocator);
+    defer setExplicitPath(null);
+    for ([_][]const u8{ "/", "." }) |path| {
+        setExplicitPath(path);
+        try std.testing.expectError(types.Error.InvalidConfig, loader.loadDefault());
+        try std.testing.expectEqualStrings("it is not a regular file", loader.problem().?);
+    }
+}
+
 test "a spec is a whole JSON document declaring ociVersion at the top, however the key is written" {
     var files = try TrustedFiles.init(&.{
         .{ .name = "escaped.json", .data = "{\"oci\\u0056ersion\":\"1.0.0\"}" },
@@ -376,6 +386,10 @@ pub const ConfigLoader = struct {
     /// open descriptors, so the file checked is the file read. A symlink is
     /// followed, and the file it names is the one checked.
     fn openTrusted(self: *Self, path: []const u8) !std.fs.File {
+        // "/" has no last component to open in a directory: openat with ""
+        // came back as a bare FileNotFound for a path that is there.
+        const name = std.fs.path.basename(path);
+        if (name.len == 0) return self.refuse("it is not a regular file", .{});
         var dir = std.fs.cwd().openDir(std.fs.path.dirname(path) orelse ".", .{}) catch |err| switch (err) {
             error.FileNotFound => return types.Error.FileNotFound,
             else => return self.refuse("cannot open its directory ({s})", .{@errorName(err)}),
@@ -383,7 +397,7 @@ pub const ConfigLoader = struct {
         defer dir.close();
         // O_NONBLOCK: a FIFO in the file's place opens at once, to be refused
         // below, rather than hanging every call until something writes to it.
-        const fd = std.posix.openat(dir.fd, std.fs.path.basename(path), .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NOCTTY = true, .NONBLOCK = true }, 0) catch |err| switch (err) {
+        const fd = std.posix.openat(dir.fd, name, .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NOCTTY = true, .NONBLOCK = true }, 0) catch |err| switch (err) {
             error.FileNotFound => return types.Error.FileNotFound,
             else => return self.refuse("cannot open it ({s})", .{@errorName(err)}),
         };
