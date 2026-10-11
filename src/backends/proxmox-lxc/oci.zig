@@ -279,11 +279,14 @@ pub const OciProcessor = struct {
     /// as if the bundle's had been applied, and nothing said otherwise. Not
     /// refused: `runc spec` writes capabilities, masked paths and
     /// noNewPrivileges into every bundle, so refusing would refuse them all.
-    pub fn warnUnappliedConfinement(self: *const Self, bundle_path: []const u8, asked: bundle.Confinement) !void {
-        const names = try unappliedConfinement(self.allocator, asked) orelse return;
+    /// The options of the kernel filesystems LXC and the container's init
+    /// mount their own way are named too: a bundle's noexec on /dev/shm was
+    /// dropped at debug level.
+    pub fn warnUnappliedConfinement(self: *const Self, bundle_path: []const u8, asked: bundle.Confinement, mounts: []const bundle.MountConfig) !void {
+        const names = try unappliedConfinement(self.allocator, asked, mounts) orelse return;
         defer self.allocator.free(names);
         const log = self.logger orelse return;
-        const message = "{s} in {s}/config.json: not applied on the Proxmox LXC backend, which confines the container with Proxmox's own AppArmor profile, capabilities, seccomp filter and device rules instead. --runtime crun applies a bundle's own";
+        const message = "{s} in {s}/config.json: not applied on the Proxmox LXC backend, which confines the container with Proxmox's own AppArmor profile, capabilities, seccomp filter and device rules instead, and leaves /proc, /sys and /dev to LXC and the container's init. --runtime crun applies a bundle's own";
         log.warn(message, .{ names, bundle_path }) catch {};
         // With --log the log is a file and only errors are echoed to stderr,
         // so whoever ran create never saw this one. It is about protection
@@ -314,7 +317,8 @@ pub const OciProcessor = struct {
     /// A bind mount of a host directory is what Proxmox can express. The
     /// kernel filesystems a runtime-spec bundle mounts at their usual places
     /// (proc at /proc, a tmpfs at /dev, ...) are the container's own, which
-    /// LXC and the container's init set up, so they are left out. Any other
+    /// LXC and the container's init set up, so they are left out, and
+    /// warnUnappliedConfinement names the options they had. Any other
     /// mount is refused, and so are more bind mounts than a container has
     /// mount points.
     pub fn bundleMountPoints(self: *const Self, mounts: []const bundle.MountConfig) core.Error![][]u8 {
@@ -448,16 +452,24 @@ pub const OciProcessor = struct {
     }
 };
 
-/// The fields of `asked` that ask for something, comma-separated, or null
-/// when none does.
-fn unappliedConfinement(allocator: std.mem.Allocator, asked: bundle.Confinement) !?[]u8 {
+/// The fields of `asked` that ask for something, and the options of the
+/// mounts bundleMountPoints leaves to LXC, comma-separated, or null when
+/// there are none.
+fn unappliedConfinement(allocator: std.mem.Allocator, asked: bundle.Confinement, mounts: []const bundle.MountConfig) !?[]u8 {
     var names = std.ArrayListUnmanaged(u8){};
     errdefer names.deinit(allocator);
+    const w = names.writer(allocator);
     inline for (std.meta.fields(bundle.Confinement)) |f| {
         if (@field(asked, f.name)) {
-            if (names.items.len > 0) try names.appendSlice(allocator, ", ");
-            try names.appendSlice(allocator, f.name);
+            if (names.items.len > 0) try w.writeAll(", ");
+            try w.writeAll(f.name);
         }
+    }
+    for (mounts, 0..) |m, i| {
+        const dest = m.destination orelse continue;
+        if (isBindMount(m) or !isContainerOwnMount(dest) or (m.options orelse &.{}).len == 0) continue;
+        if (names.items.len > 0) try w.writeAll(", ");
+        try w.print("mounts[{d}] ({s}) options", .{ i, dest });
     }
     if (names.items.len == 0) return null;
     return try names.toOwnedSlice(allocator);
@@ -837,10 +849,29 @@ test "the confinement a bundle asks for is named, and a bundle that asks for non
     var parser = bundle.OciBundleParser.init(std.testing.allocator, null);
     var cfg = try parser.parseBundle(path);
     defer cfg.deinit();
-    const names = (try unappliedConfinement(std.testing.allocator, cfg.confinement)).?;
+    const names = (try unappliedConfinement(std.testing.allocator, cfg.confinement, &.{})).?;
     defer std.testing.allocator.free(names);
     // An empty profile, list or false asks for nothing, and is not named
     try std.testing.expectEqualStrings("process.capabilities, process.noNewPrivileges, root.readonly, linux.seccomp, linux.maskedPaths, linux.resources.devices", names);
 
-    try std.testing.expectEqual(@as(?[]u8, null), try unappliedConfinement(std.testing.allocator, .{}));
+    try std.testing.expectEqual(@as(?[]u8, null), try unappliedConfinement(std.testing.allocator, .{}, &.{}));
+}
+
+test "the options of a kernel filesystem mount left to LXC are named; a bind mount's are applied" {
+    const a = std.testing.allocator;
+    const mounts = [_]bundle.MountConfig{
+        .{ .allocator = a, .destination = "/proc", .type = "proc", .source = "proc" },
+        .{ .allocator = a, .destination = "/dev/shm", .type = "tmpfs", .source = "shm", .options = &.{ "nosuid", "noexec", "nodev", "mode=1777" } },
+        .{ .allocator = a, .destination = "/data", .type = "bind", .source = "/srv/data", .options = &.{"ro"} },
+        .{ .allocator = a, .destination = "/sys", .type = "sysfs", .source = "sysfs", .options = &.{"ro"} },
+    };
+    const names = (try unappliedConfinement(a, .{}, &mounts)).?;
+    defer a.free(names);
+    try std.testing.expectEqualStrings("mounts[1] (/dev/shm) options, mounts[3] (/sys) options", names);
+
+    const both = (try unappliedConfinement(a, .{ .@"linux.seccomp" = true }, mounts[1..2])).?;
+    defer a.free(both);
+    try std.testing.expectEqualStrings("linux.seccomp, mounts[0] (/dev/shm) options", both);
+
+    try std.testing.expectEqual(@as(?[]u8, null), try unappliedConfinement(a, .{}, mounts[0..1]));
 }

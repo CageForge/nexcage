@@ -324,9 +324,11 @@ rather than bind it. Proxmox binds directories only: a source that is not a
 directory when the container starts makes the start fail. The kernel
 filesystems a runtime-spec bundle mounts at `/proc`, `/sys`, `/sys/fs/cgroup`,
 `/dev`, `/dev/pts`, `/dev/shm` and `/dev/mqueue` are the container's own, set
-up by LXC and its init, and are left out; any other mount that is not a bind
-mount is refused. A container has 256 mount points, `mp0` to `mp255`, so a
-bundle with more bind mounts than that is refused too.
+up by LXC and its init, and are left out with their options: the warning
+above names each such mount that has options (a `noexec` on `/dev/shm`, say).
+Any other mount that is not a bind mount is refused. A container has 256
+mount points, `mp0` to `mp255`, so a bundle with more bind mounts than that
+is refused too.
 
 A bind mount's `ro` becomes `ro=1`, which Proxmox checks took effect, and
 `nosuid`, `nodev`, `noexec` and `noatime` become its `mountoptions`. Proxmox

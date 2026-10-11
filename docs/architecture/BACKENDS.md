@@ -79,8 +79,10 @@ keyctl filter Proxmox puts on an unprivileged container.
 container: its AppArmor profile, LXC's capability drops and seccomp filter,
 its device rules, and the user namespace of an unprivileged container. A
 bundle's own `process.capabilities`, `linux.seccomp`, AppArmor profile,
-`noNewPrivileges`, read-only or masked paths and devices are not applied, so
-a bundle cannot loosen that confinement, and cannot tighten it either. create
-says which of them a bundle sets, in one warning, rather than refusing,
-since `runc spec` puts capabilities, masked paths and `noNewPrivileges` into
-every bundle. The crun backend applies them.
+`noNewPrivileges`, read-only or masked paths and devices are not applied, nor
+are the options of its mounts at `/proc`, `/sys` and `/dev`, which LXC and the
+container's init mount their own way. So a bundle cannot loosen that
+confinement, and cannot tighten it either. create says which of them a
+bundle sets, in one warning, rather than refusing, since `runc spec` puts
+capabilities, masked paths and `noNewPrivileges` into every bundle. The crun
+backend applies them.

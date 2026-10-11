@@ -546,6 +546,22 @@ check "bundle confinement warning with --log: in that file once, and on stderr o
       'grep -qE "^nexcage: warning: process\.capabilities, .* --runtime crun applies a bundle.s own$" "$S/err"'
 nx --log "$S/run/conf-sec-quiet.log" --log-level error create --name conf-sec-quiet /tmp/nexcage-bundles/conf-sec
 check "bundle confinement warning with --log-level error: not written" all 'rc 0' '! err_has "not applied"' '! grep -qs "not applied" "$S/run/conf-sec-quiet.log"'
+# The kernel filesystems at /proc, /sys and /dev are LXC's and the init's to
+# mount, so a bundle's options for them are not applied either: its noexec
+# on /dev/shm was dropped at debug level. A bind mount's options are applied.
+mkdir -p "$S/bundles/conf-mnt"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/conf-mnt/"
+cat > "$S/bundles/conf-mnt/config.json" <<'JSON'
+{"ociVersion":"1.0.2","root":{"path":"rootfs"},
+ "mounts":[{"destination":"/proc","type":"proc","source":"proc"},
+           {"destination":"/dev/shm","type":"tmpfs","source":"shm","options":["nosuid","noexec","nodev","mode=1777"]},
+           {"destination":"/data","type":"bind","source":"/srv/data","options":["ro"]}]}
+JSON
+nx create --name conf-mnt /tmp/nexcage-bundles/conf-mnt
+check "bundle mount options LXC's own /dev/shm replaces: created, and named in the one warning" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data,ro=1$"' \
+      '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
+      'err_has "nexcage: mounts[1] (/dev/shm) options in /tmp/nexcage-bundles/conf-mnt/config.json: not applied"' \
+      '! err_has "mounts[0]"' '! err_has "mounts[2]"'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
