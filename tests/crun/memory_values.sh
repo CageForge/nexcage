@@ -73,7 +73,7 @@ cleanup() {
     cd /
     [ -z "$busy" ] || kill "$busy" 2>/dev/null || true
     [ -z "$feeder" ] || kill "$feeder" 2>/dev/null || true
-    for id in "$ID" "$ID-c" "$ID-f" "$ID-u" "$ID-b" "$ID-p" "$ID-s"; do
+    for id in "$ID" "$ID-c" "$ID-f" "$ID-u" "$ID-b" "$ID-p" "$ID-s" "$ID-g"; do
         nx delete --force "$id" >/dev/null 2>&1 || true
         rmdir "$CG/$id" 2>/dev/null || true
         rm -rf "/run/crun/$id"
@@ -199,5 +199,13 @@ nx delete --force --systemd-cgroup "$ID-s" >/dev/null 2>&1 || fail "delete --for
 [ ! -e "/run/crun/$ID-s" ] || fail "delete --force --systemd-cgroup left /run/crun/$ID-s"
 [ -d "$CG/$ID-s" ] || fail "delete --force --systemd-cgroup removed $CG/$ID-s, which a create under systemd does not make"
 echo "ok: under --systemd-cgroup, $CG/<id> is not touched"
+
+# ... and so with the flag before the command, where go-runc and conmon put
+# it: dropped there, it left delete on the cgroupfs branch.
+leftover "$ID-g" '{}'
+nx --systemd-cgroup delete --force "$ID-g" >/dev/null 2>&1 || fail "--systemd-cgroup delete --force of an unfinished create"
+[ ! -e "/run/crun/$ID-g" ] || fail "--systemd-cgroup delete --force left /run/crun/$ID-g"
+[ -d "$CG/$ID-g" ] || fail "--systemd-cgroup before delete --force removed $CG/$ID-g, which a create under systemd does not make"
+echo "ok: with --systemd-cgroup before the command, $CG/<id> is not touched either"
 
 echo "PASS: memory values are checked before libcrun, and an unfinished create is cleaned up"
