@@ -791,9 +791,11 @@ mp_bundle mp-rbind '[{"destination":"/rw","type":"none","source":"/srv/rw","opti
 nx create --name mp-rbind /tmp/nexcage-bundles/mp-rbind
 check "bundle mount with rbind among its options is a bind mount" \
   all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/rw,mp=/rw$"'
-for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\nlxc.apparmor.profile: unconfined" contains a control character' \
-           'mp-nel|{"destination":"/x\u0085lxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\xc2\x85lxc.apparmor.profile: unconfined" contains a control character' \
-           'mp-lsep|{"destination":"/x","type":"bind","source":"/srv/a\u2028b"}|source "/srv/a\xe2\x80\xa8b" contains a line or paragraph separator' \
+# The refusal quotes a path with Zig's escapes, \n or \xc2, and stderr writes
+# each backslash in a message as \\: the reasons below are as stderr has them.
+for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\\nlxc.apparmor.profile: unconfined" contains a control character' \
+           'mp-nel|{"destination":"/x\u0085lxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\\xc2\\x85lxc.apparmor.profile: unconfined" contains a control character' \
+           'mp-lsep|{"destination":"/x","type":"bind","source":"/srv/a\u2028b"}|source "/srv/a\\xe2\\x80\\xa8b" contains a line or paragraph separator' \
            'mp-comma|{"destination":"/x","type":"bind","source":"/srv/a,"}|source "/srv/a," contains '"','"' or '"'='"'' \
            'mp-equals|{"destination":"/x=y","type":"bind","source":"/srv/a"}|destination "/x=y" contains '"','"' or '"'='"'' \
            'mp-rel|{"destination":"/x","type":"bind","source":"srv/a"}|source "srv/a" is not an absolute path' \
