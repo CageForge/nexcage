@@ -484,6 +484,19 @@ nx create --name ww-3 "$TPL"
 check "a sticky directory, as /tmp is, lets nobody else replace it" \
   all 'rc 0' 'called_re "--hostname ww-3 .*bridge=vmbr666"'
 chmod 755 "$S/work"; rm -f "$S/work/config.json"
+# A symlink is followed, and the directory holding the file it leads to is
+# checked as the symlink's own is: a link into a directory anyone can write
+# let whoever writes there choose root's configuration.
+mkdir "$S/work/open"; chmod 777 "$S/work/open"
+printf '%s\n' '{"network":{"bridge":"vmbr666"},"proxmox":{"unprivileged":false}}' > "$S/work/open/cfg.json"
+ln -s open/cfg.json "$S/work/link.json"
+nx --config link.json create --name sl-1 "$TPL"
+check "a symlink into a directory others can write is refused, naming the file it leads to" \
+  all 'rc 1' "err_has \"link.json: it leads to $S/work/open/cfg.json, in a directory group or others can write (mode 0777)\"" 'not_called_re "^pct create"'
+chmod 755 "$S/work/open"
+nx --config link.json create --name sl-2 "$TPL"
+check "and followed when only its owner can write that directory" all 'rc 0' 'called_re "--hostname sl-2 .*bridge=vmbr666"'
+rm -r "${S:?}/work/open" "$S/work/link.json"
 # Opening a FIFO waits for a writer. One in the file's place opens at once and,
 # with nothing writing to it, reads as an empty pipe does.
 mkfifo "$S/work/fifo.json"

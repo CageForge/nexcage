@@ -299,6 +299,58 @@ test "a configuration in a pipe is read once, as --config <(...) and /dev/stdin 
     }
 }
 
+test "a symlink to a configuration is trusted only where the file it leads to is" {
+    // iterate: an O_PATH descriptor, the default, cannot be chmod'ed
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.chmod(0o755);
+    try tmp.dir.makeDir("trusted");
+    try tmp.dir.makeDir("open");
+    var trusted = try tmp.dir.openDir("trusted", .{ .iterate = true });
+    defer trusted.close();
+    var open = try tmp.dir.openDir("open", .{ .iterate = true });
+    defer open.close();
+    try trusted.chmod(0o755);
+    try trusted.writeFile(.{ .sub_path = "real.json", .data = "{\"network\":{\"bridge\":\"vmbr5\"}}", .flags = .{ .mode = 0o644 } });
+    try open.writeFile(.{ .sub_path = "cfg.json", .data = "{\"network\":{\"bridge\":\"vmbr666\"}}", .flags = .{ .mode = 0o644 } });
+    try trusted.symLink("real.json", "here.json", .{});
+    try trusted.symLink("../open/cfg.json", "away.json", .{});
+    // The file's directory is the one that counts, however many links lead there
+    try trusted.symLink("away.json", "chain.json", .{});
+    const dir_path = try tmp.dir.realpathAlloc(std.testing.allocator, "trusted");
+    defer std.testing.allocator.free(dir_path);
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    defer setExplicitPath(null);
+
+    const cases = [_]struct { link: []const u8, open_mode: std.fs.File.Mode, bridge: ?[]const u8 }{
+        .{ .link = "here.json", .open_mode = 0o777, .bridge = "vmbr5" },
+        .{ .link = "away.json", .open_mode = 0o755, .bridge = "vmbr666" },
+        .{ .link = "away.json", .open_mode = 0o777, .bridge = null },
+        .{ .link = "chain.json", .open_mode = 0o777, .bridge = null },
+        .{ .link = "away.json", .open_mode = 0o775, .bridge = null },
+    };
+    for (cases) |case| {
+        try open.chmod(case.open_mode);
+        setExplicitPath(try std.fmt.bufPrint(&path_buf, "{s}/{s}", .{ dir_path, case.link }));
+        var loader = ConfigLoader.init(std.testing.allocator);
+        if (case.bridge) |bridge| {
+            var cfg = try loader.loadDefault();
+            defer cfg.deinit();
+            try std.testing.expectEqualStrings(bridge, cfg.network.bridge.?);
+        } else {
+            try std.testing.expectError(types.Error.InvalidConfig, loader.loadDefault());
+            const why = loader.problem().?;
+            var says_buf: [64]u8 = undefined;
+            const says = try std.fmt.bufPrint(&says_buf, "group or others can write (mode {o:0>4})", .{case.open_mode});
+            if (std.mem.indexOf(u8, why, "/open/cfg.json, in a directory ") == null or std.mem.indexOf(u8, why, says) == null) {
+                std.debug.print("{s} with open/ at {o}: got \"{s}\"\n", .{ case.link, case.open_mode, why });
+                return error.TestUnexpectedProblem;
+            }
+        }
+    }
+    try open.chmod(0o755);
+}
+
 test "a directory named as the configuration is refused as one, / as much as ." {
     var loader = ConfigLoader.init(std.testing.allocator);
     defer setExplicitPath(null);
@@ -341,7 +393,7 @@ pub const ConfigLoader = struct {
     removed_vm_runtime: ?[]const u8 = null,
     /// What was wrong with the file when a load failed with InvalidConfig --
     /// the key it stopped at, or that it is not JSON. main prints it.
-    problem_buf: [256]u8 = undefined,
+    problem_buf: [512]u8 = undefined,
     problem_len: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator) Self {
@@ -452,7 +504,8 @@ pub const ConfigLoader = struct {
     /// or others can write, or that sits in a directory they can write and so
     /// replace it in, handed all of that to them. The checks are made on the
     /// open descriptors, so the file checked is the file read. A symlink is
-    /// followed, and the file it names is the one checked.
+    /// followed; the file it names is checked, and so are both the directory
+    /// that holds the symlink and the one that holds that file.
     fn openTrusted(self: *Self, path: []const u8) !Opened {
         // "/" has no last component to open in a directory: openat with ""
         // came back as a bare FileNotFound for a path that is there.
@@ -464,9 +517,21 @@ pub const ConfigLoader = struct {
         };
         defer dir.close();
         // O_NONBLOCK: a FIFO in the file's place opens at once, rather than
-        // hanging every call until something opens it to write.
-        const fd = std.posix.openat(dir.fd, name, .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NOCTTY = true, .NONBLOCK = true }, 0) catch |err| switch (err) {
+        // hanging every call until something opens it to write. O_NOFOLLOW
+        // first, to know whether the file is in this directory at all.
+        const flags: std.posix.O = .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NOCTTY = true, .NONBLOCK = true };
+        var linked = false;
+        var no_follow = flags;
+        no_follow.NOFOLLOW = true;
+        const fd = std.posix.openat(dir.fd, name, no_follow, 0) catch |err| switch (err) {
             error.FileNotFound => return types.Error.FileNotFound,
+            error.SymLinkLoop => blk: {
+                linked = true;
+                break :blk std.posix.openat(dir.fd, name, flags, 0) catch |e| switch (e) {
+                    error.FileNotFound => return types.Error.FileNotFound,
+                    else => return self.refuse("cannot open it ({s})", .{@errorName(e)}),
+                };
+            },
             else => return self.refuse("cannot open it ({s})", .{@errorName(err)}),
         };
         const file = std.fs.File{ .handle = fd };
@@ -486,7 +551,37 @@ pub const ConfigLoader = struct {
             .owner => return self.refuse("its directory is owned by uid {d}{s}, not by root or by uid {d}, and its owner can put another file in its place", .{ dir_st.uid, unmappedNote(dir_st.uid), euid }),
             .writable => return self.refuse("group or others can write its directory (mode {o:0>4}) and put another file in its place; run chmod go-w on the directory", .{dir_st.mode & 0o7777}),
         }
+        if (linked) try self.checkLinkTarget(file, dir_st, euid);
         return .{ .file = file, .regular = std.posix.S.ISREG(st.mode) };
+    }
+
+    /// The directory that holds the file a symlink led to, checked as the
+    /// symlink's own directory is. Checking only the symlink's let
+    /// `--config trusted/link.json`, pointing into a directory anyone can
+    /// write, be accepted: whoever could write there could put any file in
+    /// its place. The kernel names the file the descriptor reached in
+    /// /proc/self/fd, so the directory checked is that file's however many
+    /// links led there (theirs are not checked, nor is any parent). A pipe
+    /// has no directory, and nobody can put another pipe in its place.
+    fn checkLinkTarget(self: *Self, file: std.fs.File, link_dir: std.posix.Stat, euid: std.posix.uid_t) !void {
+        var fd_path_buf: [32]u8 = undefined;
+        const fd_path = std.fmt.bufPrint(&fd_path_buf, "/proc/self/fd/{d}", .{file.handle}) catch unreachable;
+        var target_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const target = std.posix.readlink(fd_path, &target_buf) catch |err|
+            return self.refuse("it is a symlink, and the directory of the file it leads to cannot be found ({s} in /proc/self/fd)", .{@errorName(err)});
+        if (!std.fs.path.isAbsolute(target)) return;
+        const target_dir_path = std.fs.path.dirname(target) orelse "/";
+        var target_dir = std.fs.openDirAbsolute(target_dir_path, .{}) catch |err|
+            return self.refuse("it leads to {s}, whose directory cannot be opened ({s})", .{ target, @errorName(err) });
+        defer target_dir.close();
+        const st = std.posix.fstat(target_dir.fd) catch |err|
+            return self.refuse("it leads to {s}, whose directory cannot be checked ({s})", .{ target, @errorName(err) });
+        if (st.dev == link_dir.dev and st.ino == link_dir.ino) return;
+        switch (distrust(st, euid)) {
+            .none => {},
+            .owner => return self.refuse("it leads to {s}, in a directory owned by uid {d}{s}, not by root or by uid {d}, whose owner can put another file in its place", .{ target, st.uid, unmappedNote(st.uid), euid }),
+            .writable => return self.refuse("it leads to {s}, in a directory group or others can write (mode {o:0>4}) and put another file in its place; run chmod go-w on that directory", .{ target, st.mode & 0o7777 }),
+        }
     }
 
     const Distrust = enum { none, owner, writable };

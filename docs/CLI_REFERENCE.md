@@ -71,6 +71,9 @@ refused with exit 1, and a message naming the file and the reason, when:
   directory can put another file in the file's place. `sudo nexcage --config
   ~/nexcage/config.json` is refused for this when `~/nexcage` is yours and
   not root's, even with a root-owned file in it;
+- it is a symlink, and the directory holding the file it leads to is one of
+  those. A symlink is followed, and both directories count: the symlink's,
+  where it can be replaced, and the file's, however many links lie between;
 - it is a directory.
 
 A pipe is read as 0.17.0 read it: `--config <(...)`, or `--config /dev/stdin`

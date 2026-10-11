@@ -227,7 +227,8 @@ The working directory is not searched; name a file there with
 \fB\-\-config\fR.
 A file that is not owned by root or by the user running nexcage, that group or
 others can write, or whose directory they can write without the sticky bit or
-anyone else owns, is refused. A pipe, as \fB\-\-config\fR <(...) or
+anyone else owns, is refused; for a symlink, so is a file in such a directory
+that the link leads to. A pipe, as \fB\-\-config\fR <(...) or
 \fB\-\-config\fR /dev/stdin fed by one gives, is read once, up to 1 MiB; a
 command that acts on a container reads the configuration again and finds it
 empty, as in 0.17.0.
