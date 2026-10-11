@@ -863,7 +863,7 @@ const value_options = [_][]const u8{
     "--log-format", "--config",         "--root",      "--user",        "--workdir",
     "--cwd",        "--format",         "--storage",   "--resources",   "-r",
     "--filename",   "--node",           "--process",   "--description", "--signal",
-    "-s",
+    "-s",           "--rootless",
 };
 
 fn takesValue(arg: []const u8) bool {
@@ -1042,6 +1042,15 @@ test "ownWordsEnd reads exec's options as parseRuntimeOptions does" {
     try expectExecLine(&.{"--name=lxc"}, "lxc", &.{ "web", "ls" });
     // and options that take no value, the other way round
     for (no_value_options) |option| try expectExecLine(&.{option}, "web", &.{"ls"});
+}
+
+test "exec reads --rootless's value as parseRuntimeOptions does" {
+    // parseRuntimeOptions takes the word after --rootless for its value, as
+    // go-runc writes it. Read as an option without one, `false` was the
+    // container id and `web` the command, and `--rootless=false` a usage
+    // error.
+    try expectExecLine(&.{ "--rootless", "false" }, "web", &.{"ls"});
+    try expectExecLine(&.{"--rootless=false"}, "web", &.{"ls"});
 }
 
 /// valueForNoValueOption on a command line as run() sees it.
