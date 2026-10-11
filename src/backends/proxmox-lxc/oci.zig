@@ -349,12 +349,12 @@ pub const OciProcessor = struct {
                 return core.Error.InvalidInput;
             };
             if (!isBindMount(m)) {
-                const kind = std.zig.fmtString(m.type orelse "no type");
+                const kind = core.json.quoted(m.type orelse "no type");
                 if (isContainerOwnMount(dest)) {
                     if (self.logger) |log| log.debug("mounts[{d}] ({f} at {s}) is the container's own; LXC and its init mount it", .{ i, kind, dest }) catch {};
                     continue;
                 }
-                if (self.logger) |log| log.err("mounts[{d}] in the bundle ({f} at \"{f}\"): the Proxmox LXC backend can only bind-mount a host directory into a container", .{ i, kind, std.zig.fmtString(dest) }) catch {};
+                if (self.logger) |log| log.err("mounts[{d}] in the bundle ({f} at \"{f}\"): the Proxmox LXC backend can only bind-mount a host directory into a container", .{ i, kind, core.json.quoted(dest) }) catch {};
                 return core.Error.InvalidInput;
             }
             const source = m.source orelse {
@@ -403,7 +403,7 @@ pub const OciProcessor = struct {
         var n_flags: usize = 0;
         for (options) |opt| {
             switch (bindOption(opt) orelse {
-                if (self.logger) |log| log.err("mounts[{d}] in the bundle asks for \"{f}\", which a Proxmox bind mount cannot do: it takes ro, nosuid, nodev, noexec and noatime", .{ i, std.zig.fmtString(opt) }) catch {};
+                if (self.logger) |log| log.err("mounts[{d}] in the bundle asks for \"{f}\", which a Proxmox bind mount cannot do: it takes ro, nosuid, nodev, noexec and noatime", .{ i, core.json.quoted(opt) }) catch {};
                 return core.Error.InvalidInput;
             }) {
                 .none => {},
@@ -429,7 +429,7 @@ pub const OciProcessor = struct {
 
     fn checkMountPath(self: *const Self, i: usize, which: []const u8, path: []const u8) core.Error!void {
         const problem = mountPathProblem(path) orelse return;
-        if (self.logger) |log| log.err("mounts[{d}] in the bundle: the {s} \"{f}\" {s}", .{ i, which, std.zig.fmtString(path), problem }) catch {};
+        if (self.logger) |log| log.err("mounts[{d}] in the bundle: the {s} \"{f}\" {s}", .{ i, which, core.json.quoted(path), problem }) catch {};
         return core.Error.InvalidInput;
     }
 

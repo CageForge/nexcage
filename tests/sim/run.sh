@@ -1060,11 +1060,12 @@ check "and delete --force, as an engine cleans up, destroys that CT" \
   all 'rc 0' "called 'pct destroy ${half:-none}'" '! grep -q " half-1$" "$S/db"' '[ ! -e "$S/run/nexcage/half-1" ]'
 nx create --name half-1 /tmp/nexcage-bundles/half-1
 check "so the name can be created again" all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname half-1 "'
-# The refusal quotes a path with Zig's escapes, \n or \xc2, and stderr writes
-# each backslash in a message as \\: the reasons below are as stderr has them.
+# The refusal quotes a path as a JSON string has it, \n or \u0085, as the crun
+# backend's profile refusals quote a bundle, and stderr writes each backslash
+# in a message as \\: the reasons below are as stderr has them.
 for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\\nlxc.apparmor.profile: unconfined" contains a control character' \
-           'mp-nel|{"destination":"/x\u0085lxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\\xc2\\x85lxc.apparmor.profile: unconfined" contains a control character' \
-           'mp-lsep|{"destination":"/x","type":"bind","source":"/srv/a\u2028b"}|source "/srv/a\\xe2\\x80\\xa8b" contains a line or paragraph separator' \
+           'mp-nel|{"destination":"/x\u0085lxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\\u0085lxc.apparmor.profile: unconfined" contains a control character' \
+           'mp-lsep|{"destination":"/x","type":"bind","source":"/srv/a\u2028b"}|source "/srv/a\\u2028b" contains a line or paragraph separator' \
            'mp-comma|{"destination":"/x","type":"bind","source":"/srv/a,"}|source "/srv/a," contains '"','"' or '"'='"'' \
            'mp-equals|{"destination":"/x=y","type":"bind","source":"/srv/a"}|destination "/x=y" contains '"','"' or '"'='"'' \
            'mp-rel|{"destination":"/x","type":"bind","source":"srv/a"}|source "srv/a" is not an absolute path' \

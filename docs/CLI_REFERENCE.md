@@ -520,7 +520,9 @@ below it: `rbind` gives no more than `bind`, and the recursive forms (`rro`,
 `slave` propagation modes need nothing, since LXC never lets a container's
 mounts propagate to the host. Any other option (`rshared`, `strictatime`,
 `suid`, ...) is refused rather than dropped. A refusal is exit 2, before
-anything is packed or created. What a bind mount can reach is in
+anything is packed or created, and quotes the mount's path or option escaped
+as in a JSON string, as the crun backend's refusals quote a bundle: U+0085 is
+`\u0085`, and `\\u0085` on stderr. What a bind mount can reach is in
 [BACKENDS.md](architecture/BACKENDS.md#a-container-from-an-oci-bundle).
 
 The bundle's `linux.resources.memory.limit`, in bytes, becomes `--memory`. `-1`,
