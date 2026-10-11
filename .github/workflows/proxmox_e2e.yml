@@ -18,10 +18,12 @@ jobs:
   # The binary a release ships, built the way release.yml builds it: through
   # the Dockerfile, with both backends, ReleaseSafe, -Dcpu=baseline. Since
   # #380 that is the only binary Proxmox hosts get, and it is not the plain
-  # `zig build` this job used to test: it links libcrun, whose constructor
-  # re-executes the binary from a memfd before main on every command, LXC
-  # ones included, and it loads libjson-c, libseccomp, libcap and libsystemd.
-  # Built on a GitHub-hosted runner, which has Docker; the node need not.
+  # `zig build` this job used to test: it links libcrun, and loads libjson-c,
+  # libseccomp, libcap and libsystemd. libcrun's constructor, which
+  # re-executed the binary from a memfd before main on every command, LXC ones
+  # included, is compiled out; the crun backend runs from a sealed copy for
+  # its own create and exec, and the LXC commands below run the binary on
+  # disk. Built on a GitHub-hosted runner, which has Docker; the node need not.
   binary:
     name: The release binary (both backends)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
