@@ -245,6 +245,8 @@ crun_checks() {
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/ps.sh
   say "a bundle is found from a working directory that is not it"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/foreign_cwd.sh
+  say "--systemd-cgroup before the command reaches libcrun"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/systemd_cgroup.sh
 }
 
 # Always through crun_image: an image left from older sources would test them.

@@ -382,6 +382,20 @@ What made both findings defects rather than guesses was the same control as
 before: two runtime handlers in one CRI-O config, one ending in nexcage and one
 in `/usr/bin/crun`, same pod, same bundles.
 
+A third thing stood in the way and nothing here saw it, because no run gave
+nexcage systemd's cgroup driver: **`--systemd-cgroup` before the command was
+dropped.** conmon puts it first of all whenever CRI-O's `cgroup_manager` is
+systemd, which is CRI-O's default and has no per-handler setting, and
+containerd's shim puts it after `--log-format` for a handler with
+`SystemdCgroup = true`. nexcage read it only after the command, where no
+engine sends it, so libcrun stayed on its cgroupfs manager. That manager takes
+the kubelet's `kubepods-besteffort-pod<uid>.slice:crio:<id>` for a directory
+name and makes it at the root of the hierarchy: outside the pod's cgroup, its
+QoS class and `kubepods.slice`, and every limit the kubelet sets on them. It is
+read before the command now, and `tests/crun/systemd_cgroup.sh` checks it in
+each engine's order. In a container without systemd, which is where that
+check runs, `create` then fails with `cannot open sd-bus`, as crun's does.
+
 **A pod network, and it is not this runtime's work.** The engine creates the
 sandbox's network namespace, runs the CNI plugins in it, and hands the runtime a
 path in `linux.namespaces`; joining a namespace by path is what libcrun already

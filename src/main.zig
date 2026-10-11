@@ -195,57 +195,10 @@ fn run() !void {
         return;
     }
 
-    // Find the actual command (skip flags)
-    var command_name = args[1];
-    var command_args = args[2..];
-
-    // Skip debug/verbose flags to find the actual command
-    var i: usize = 1;
-    while (i < args.len) {
-        if (std.mem.eql(u8, args[i], "--debug") or std.mem.eql(u8, args[i], "--verbose")) {
-            i += 1;
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--log-file") and i + 1 < args.len) {
-            i += 2; // Skip --log-file and its value
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--log-level") and i + 1 < args.len) {
-            i += 2; // Skip --log-level and its value
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
-            i += 2; // Skip --config and its value, applied above
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--root") and i + 1 < args.len) {
-            i += 2; // Skip --root and its value, applied above
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--runtime") and i + 1 < args.len) {
-            i += 2; // Skip --runtime and its value; parseRuntimeOptions reads it
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--profile") and i + 1 < args.len) {
-            i += 2; // Skip --profile and its value, read below
-            continue;
-        }
-        // What a container engine puts before the command. Without these,
-        // `--log` was taken for the command name and containerd got
-        // "unknown command '--log'" on its very first call.
-        if ((std.mem.eql(u8, args[i], "--log") or std.mem.eql(u8, args[i], "--log-format")) and i + 1 < args.len) {
-            i += 2;
-            continue;
-        }
-        if (std.mem.eql(u8, args[i], "--systemd-cgroup")) {
-            i += 1;
-            continue;
-        }
-        // Found the actual command
-        command_name = args[i];
-        command_args = args[i + 1 ..];
-        break;
-    }
+    // The command, past the global options in front of it
+    const found = findCommand(args);
+    var command_name = args[found.index];
+    const command_args = args[found.index + 1 ..];
 
     // Log command execution start - safely handle logger errors
     if (app.advanced_logger) |*logger| {
@@ -267,7 +220,16 @@ fn run() !void {
     var options = try parseRuntimeOptions(allocator, command_name, command_args);
     defer options.deinit();
 
-    // A --runtime before the command never reached the parser: the loop above
+    // Every engine sends --systemd-cgroup before the command, and the parser
+    // only sees the words after it. Dropped there, the flag left libcrun on
+    // its cgroupfs manager, which takes the engine's systemd-form cgroupsPath
+    // ("kubepods-besteffort-pod<uid>.slice:cri-containerd:<id>") for a
+    // directory name and makes it at the root of the hierarchy: outside the
+    // pod's cgroup, its QoS class and kubepods.slice, and every limit the
+    // kubelet sets on them.
+    if (found.systemd_cgroup) options.systemd_cgroup = true;
+
+    // A --runtime before the command never reached the parser: findCommand
     // skips it to find the command, and command_args starts after the command,
     // so the flag was dropped and the routing silently stayed on the default.
     // After the defer, so an unknown value does not leak what is already
@@ -409,6 +371,81 @@ fn printUsage() !void {
     try out.flush();
 }
 
+/// Where the command is on the command line, and what the global options in
+/// front of it said that parseRuntimeOptions, which reads only the words after
+/// the command, never sees.
+const CommandPosition = struct {
+    /// The command's index in argv. On a line of nothing but options it is 1,
+    /// so that the first option is the one reported as an unknown command.
+    index: usize,
+    /// --systemd-cgroup was among the words before the command.
+    systemd_cgroup: bool = false,
+};
+
+/// Steps over the global options to the command. An engine puts its options
+/// there, the way runc's command line has them: containerd's shim (go-runc)
+/// sends `--root <dir> --log <file> --log-format json --systemd-cgroup create
+/// ...`, with `--rootless=<bool>` after them when its caller sets one, and
+/// conmon, for CRI-O and podman, `--systemd-cgroup --root=<dir> create ...`.
+/// Every option but one is read where it is used, wherever on the line it
+/// appears, or ignored; --systemd-cgroup has no such reader, so it is
+/// recorded here.
+fn findCommand(args: []const []const u8) CommandPosition {
+    var systemd_cgroup = false;
+    var i: usize = 1;
+    while (i < args.len) {
+        if (std.mem.eql(u8, args[i], "--debug") or std.mem.eql(u8, args[i], "--verbose")) {
+            i += 1;
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--log-file") and i + 1 < args.len) {
+            i += 2; // Skip --log-file and its value
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--log-level") and i + 1 < args.len) {
+            i += 2; // Skip --log-level and its value
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--config") and i + 1 < args.len) {
+            i += 2; // Skip --config and its value, applied in run()
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--root") and i + 1 < args.len) {
+            i += 2; // Skip --root and its value, applied in run()
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--runtime") and i + 1 < args.len) {
+            i += 2; // Skip --runtime and its value, read in run()
+            continue;
+        }
+        if (std.mem.eql(u8, args[i], "--profile") and i + 1 < args.len) {
+            i += 2; // Skip --profile and its value, read in run()
+            continue;
+        }
+        // What a container engine puts before the command. Without these,
+        // `--log` was taken for the command name and containerd got
+        // "unknown command '--log'" on its very first call.
+        if ((std.mem.eql(u8, args[i], "--log") or std.mem.eql(u8, args[i], "--log-format")) and i + 1 < args.len) {
+            i += 2;
+            continue;
+        }
+        // Ignored, as crun ignores it; parseRuntimeOptions says why.
+        if (std.mem.eql(u8, args[i], "--rootless") and i + 1 < args.len) {
+            i += 2;
+            continue;
+        }
+        // Recorded, not just stepped over: this is the only place an engine
+        // ever puts it.
+        if (std.mem.eql(u8, args[i], "--systemd-cgroup")) {
+            systemd_cgroup = true;
+            i += 1;
+            continue;
+        }
+        return .{ .index = i, .systemd_cgroup = systemd_cgroup };
+    }
+    return .{ .index = 1 };
+}
+
 /// Parse runtime options from command line arguments
 fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, args: []const []const u8) !core.RuntimeOptions {
     var options = core.RuntimeOptions{
@@ -485,10 +522,17 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             options.profile = args[i + 1];
             i += 2;
         } else if (std.mem.eql(u8, arg, "--systemd-cgroup")) {
-            // cgroup management is libcrun's; accepted so an engine that sends
-            // it is not answered with a usage error
+            // Have libcrun place the container through systemd, under the
+            // slice the bundle's cgroupsPath names. Engines send it before the
+            // command (run() folds that in); after it is nexcage's own.
             options.systemd_cgroup = true;
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--rootless") and i + 1 < args.len) {
+            // runc's "ignore cgroup permission errors": go-runc sends
+            // --rootless=<bool> when its caller sets one. crun accepts it and
+            // ignores it, and so does nexcage: whatever the value, libcrun
+            // decides for itself, and as root it ignores no cgroup error.
+            i += 2;
         } else if ((std.mem.eql(u8, arg, "--log-level") or std.mem.eql(u8, arg, "--log-file") or
             std.mem.eql(u8, arg, "--log") or std.mem.eql(u8, arg, "--log-format")) and i + 1 < args.len)
         {
@@ -841,4 +885,54 @@ fn addResourceUpdate(allocator: std.mem.Allocator, options: *core.RuntimeOptions
     grown[old.len] = .{ .section = desc.section, .name = desc.name, .value = try allocator.dupe(u8, raw), .numeric = desc.numeric };
     if (options.resource_updates) |o| allocator.free(o);
     options.resource_updates = grown;
+}
+
+// The command lines below are the ones engines send: go-runc's args(), which
+// containerd's shim runs, and conmon's, for CRI-O and podman. Each is split as
+// run() splits it before anything reads it.
+
+/// findCommand on a command line as run() sees it.
+fn expectCommand(raw: []const []const u8, name: []const u8, systemd_cgroup: bool) !void {
+    const args = try splitEqualsFlags(std.testing.allocator, raw);
+    defer std.testing.allocator.free(args);
+    const found = findCommand(args);
+    try std.testing.expectEqualStrings(name, args[found.index]);
+    try std.testing.expectEqual(systemd_cgroup, found.systemd_cgroup);
+}
+
+test "findCommand: --systemd-cgroup before the command is recorded, in each engine's order" {
+    // containerd's shim for a handler with SystemdCgroup = true
+    try expectCommand(&.{ "nexcage", "--root", "/run/containerd/runc/k8s.io", "--log", "/run/containerd/t/log.json", "--log-format", "json", "--systemd-cgroup", "create", "--bundle", "/b", "--pid-file", "/b/init.pid", "abc" }, "create", true);
+    // go-runc's full set, --debug and the --rootless=<bool> its caller may add
+    try expectCommand(&.{ "nexcage", "--root", "/r", "--debug", "--log", "/l", "--log-format", "json", "--systemd-cgroup", "--rootless=false", "start", "abc" }, "start", true);
+    // conmon for CRI-O, whose cgroup_manager is systemd by default: the flag
+    // first, then CRI-O's runtime_root
+    try expectCommand(&.{ "nexcage", "--systemd-cgroup", "--root=/run/nexcage-crio", "create", "--bundle", "/b", "--pid-file", "/p", "abc" }, "create", true);
+    // conmon for podman
+    try expectCommand(&.{ "nexcage", "--systemd-cgroup", "create", "--bundle", "/b", "--pid-file", "/p", "abc" }, "create", true);
+}
+
+test "findCommand: nothing is recorded without the flag before the command" {
+    try expectCommand(&.{ "nexcage", "--root", "/r", "--log", "/l", "--log-format", "json", "create", "--bundle", "/b", "abc" }, "create", false);
+    try expectCommand(&.{ "nexcage", "--rootless=true", "--root=/r", "delete", "--force", "abc" }, "delete", false);
+    // After the command it is parseRuntimeOptions's to read
+    try expectCommand(&.{ "nexcage", "create", "--systemd-cgroup", "--bundle", "/b", "abc" }, "create", false);
+    // and a word of the command exec runs is not nexcage's at all
+    try expectCommand(&.{ "nexcage", "exec", "abc", "--", "prog", "--systemd-cgroup" }, "exec", false);
+}
+
+test "findCommand: on a line of nothing but options, the first one is the command" {
+    try expectCommand(&.{ "nexcage", "--systemd-cgroup" }, "--systemd-cgroup", false);
+    try expectCommand(&.{ "nexcage", "--rootless=true" }, "--rootless", false);
+}
+
+test "parseRuntimeOptions: --systemd-cgroup and --rootless after the command" {
+    const args = try splitEqualsFlags(std.testing.allocator, &.{ "--systemd-cgroup", "--rootless=false", "--bundle", "/b", "abc" });
+    defer std.testing.allocator.free(args);
+    var options = try parseRuntimeOptions(std.testing.allocator, "create", args);
+    defer options.deinit();
+    try std.testing.expect(options.systemd_cgroup);
+    // --rootless's value is its own, not the container's id or bundle
+    try std.testing.expectEqualStrings("abc", options.container_id.?);
+    try std.testing.expectEqualStrings("/b", options.image.?);
 }
