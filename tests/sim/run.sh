@@ -744,6 +744,14 @@ nx --log-file /run/lf-link.log list
 check "--log-file does not follow a symlink either" \
   all 'rc 0' '[ ! -e "$S/run/lf-target.log" ]' "err_has \"cannot open log file '/run/lf-link.log' (SymLinkLoop)\""
 rm -f "$S/run/lf-link.log" "$S/run/lf-target.log"
+# Opening a FIFO to write waits for a reader; one that nothing reads is refused
+# at once, for --log and --log-file alike, and the command still runs.
+mkfifo "$S/run/lf.fifo"
+printf '#!/bin/sh\nexec timeout 10 %s "$@"\n' "$NEXCAGE" > "$S/timed-nexcage"; chmod +x "$S/timed-nexcage"
+NEXCAGE=$S/timed-nexcage nx --log /run/lf.fifo --log-file /run/lf.fifo list
+check "a FIFO named as a log file is not waited on" \
+  all 'rc 0' "err_has \"cannot open --log file '/run/lf.fifo' (NoDevice)\"" "err_has \"cannot open log file '/run/lf.fifo' (NoDevice)\""
+rm -f "$S/run/lf.fifo" "$S/timed-nexcage"
 
 nx --runtime crun state some-id
 check "state on a crun binary that lacks the backend -> exit 1, says how to build it" \

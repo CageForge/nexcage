@@ -30,8 +30,19 @@ pub const LogFormat = enum { text, json };
 /// component is not followed if it is a symlink; an engine names a file in a
 /// directory of its own, which the runtime creates. O_CLOEXEC: no command
 /// nexcage runs inherits it.
+///
+/// O_NONBLOCK, for the open only: a FIFO in the file's place that nothing
+/// reads fails at once (NoDevice, ENXIO) instead of holding the call, as
+/// root, until something opens it for reading. list's help suggested a name
+/// in /tmp, where with fs.protected_fifos=0 anyone can leave one. Writes
+/// block again afterwards, so a slow reader loses no lines. openat, not
+/// open: only openat's wrapper names ENXIO rather than calling it Unexpected.
 pub fn openAppend(path: []const u8) !std.fs.File {
-    const fd = try std.posix.open(path, .{ .ACCMODE = .WRONLY, .CREAT = true, .APPEND = true, .CLOEXEC = true, .NOFOLLOW = true }, 0o640);
+    const fd = try std.posix.openat(std.posix.AT.FDCWD, path, .{ .ACCMODE = .WRONLY, .CREAT = true, .APPEND = true, .CLOEXEC = true, .NOFOLLOW = true, .NONBLOCK = true }, 0o640);
+    errdefer std.posix.close(fd);
+    const nonblock: usize = @as(u32, @bitCast(std.posix.O{ .NONBLOCK = true }));
+    const flags = try std.posix.fcntl(fd, std.posix.F.GETFL, 0);
+    _ = try std.posix.fcntl(fd, std.posix.F.SETFL, flags & ~nonblock);
     return .{ .handle = fd };
 }
 
@@ -67,6 +78,28 @@ test "a log path whose last component is a symlink is not followed" {
 
     try std.testing.expectError(error.SymLinkLoop, openAppend(log_path));
     try std.testing.expectError(error.FileNotFound, tmp.dir.access("target", .{}));
+}
+
+test "a FIFO in a log file's place is not waited on, and one that is read is written as a file is" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try std.testing.expectEqual(@as(usize, 0), std.os.linux.mknodat(tmp.dir.fd, "log", std.os.linux.S.IFIFO | 0o600, 0));
+    const path = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(path);
+    const log_path = try std.fs.path.join(std.testing.allocator, &.{ path, "log" });
+    defer std.testing.allocator.free(log_path);
+
+    // Nothing reads it: refused at once.
+    try std.testing.expectError(error.NoDevice, openAppend(log_path));
+
+    // Something reads it: opened, and its writes block again, as a file's do.
+    // The reader opens O_NONBLOCK itself, or it would wait for this writer.
+    const reader = try std.posix.openat(tmp.dir.fd, "log", .{ .ACCMODE = .RDONLY, .NONBLOCK = true, .CLOEXEC = true }, 0);
+    defer std.posix.close(reader);
+    const f = try openAppend(log_path);
+    defer f.close();
+    const nonblock: usize = @as(u32, @bitCast(std.posix.O{ .NONBLOCK = true }));
+    try std.testing.expectEqual(@as(usize, 0), try std.posix.fcntl(f.handle, std.posix.F.GETFL, 0) & nonblock);
 }
 
 /// The most of a message a JSON log line carries, in bytes.
