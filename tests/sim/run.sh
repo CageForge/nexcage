@@ -471,6 +471,18 @@ nx create --name mp-ok /tmp/nexcage-bundles/mp-ok
 check "bundle bind mount -> pct set --mp0 after the create; proc and /dev are the container's own" \
   all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data$"' 'not_called_re "--mp1|mp=/proc|mp=/dev"' \
       'grep -qx "mp0: /srv/data,mp=/data" "$S"/conf.*'
+# Options were dropped, so a mount asked to be read-only and nosuid came out
+# writable and setuid. "rbind" among the options makes a bind mount whatever
+# the type; private propagation is what LXC gives a container's mounts.
+mp_bundle mp-ro '[{"destination":"/ro","type":"bind","source":"/srv/ro","options":["rbind","ro","nosuid","nodev","noexec"]}]'
+nx create --name mp-ro /tmp/nexcage-bundles/mp-ro
+check "bundle mount options ro, nosuid, nodev, noexec reach the mount point, as pct takes them" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/ro,mp=/ro,ro=1,mountoptions=nosuid;nodev;noexec$"' \
+      'grep -qx "mp0: /srv/ro,mp=/ro,ro=1,mountoptions=nosuid;nodev;noexec" "$S"/conf.*'
+mp_bundle mp-rbind '[{"destination":"/rw","type":"none","source":"/srv/rw","options":["rbind","rprivate"]}]'
+nx create --name mp-rbind /tmp/nexcage-bundles/mp-rbind
+check "bundle mount with rbind among its options is a bind mount" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/rw,mp=/rw$"'
 for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\nlxc.apparmor.profile: unconfined" contains a control character' \
            'mp-comma|{"destination":"/x","type":"bind","source":"/srv/a,ro=0"}|contains '"','"' or '"'='"'' \
            'mp-rel|{"destination":"/x","type":"bind","source":"srv/a"}|source "srv/a" is not an absolute path' \
@@ -478,7 +490,8 @@ for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"
            'mp-root|{"destination":"/","type":"bind","source":"/srv/a"}|cover the container'"'"'s root' \
            'mp-dev|{"destination":"/disk","type":"bind","source":"/dev/sda1"}|as a device'"'"'s filesystem' \
            'mp-tmpfs|{"destination":"/data","type":"tmpfs","source":"tmpfs"}|can only bind-mount a host directory' \
-           'mp-nodest|{"type":"bind","source":"/srv/a"}|has no destination'; do
+           'mp-nodest|{"type":"bind","source":"/srv/a"}|has no destination' \
+           'mp-shared|{"destination":"/x","type":"bind","source":"/srv/a","options":["rbind","rshared"]}|asks for "rshared", which a Proxmox bind mount cannot do'; do
   IFS='|' read -r name mount why <<< "$bad"
   mp_bundle "$name" "[$mount]"
   nx create --name "$name" "/tmp/nexcage-bundles/$name"

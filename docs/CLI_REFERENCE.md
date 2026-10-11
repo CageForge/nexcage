@@ -300,9 +300,18 @@ characters, `,` or `=`; the destination cannot be `/`, and a source under
 rather than bind it. The kernel filesystems a runtime-spec bundle mounts at
 `/proc`, `/sys`, `/sys/fs/cgroup`, `/dev`, `/dev/pts`, `/dev/shm` and
 `/dev/mqueue` are the container's own, set up by LXC and its init, and are
-left out; any other mount that is not a bind mount is refused. A refusal is
-exit 2, before anything is packed or created. What a bind mount can reach is
-in [BACKENDS.md](architecture/BACKENDS.md#a-container-from-an-oci-bundle).
+left out; any other mount that is not a bind mount is refused.
+
+A bind mount's `ro` becomes `ro=1`, which Proxmox checks took effect, and
+`nosuid`, `nodev`, `noexec` and `noatime` become its `mountoptions`. Proxmox
+binds non-recursively, so the container sees the source without the mounts
+below it: `rbind` gives no more than `bind`, and the recursive forms (`rro`,
+`rnosuid`, ...) mean the same as the plain ones. `rw` and the `private` and
+`slave` propagation modes need nothing, since LXC never lets a container's
+mounts propagate to the host. Any other option (`rshared`, `strictatime`,
+`suid`, ...) is refused rather than dropped. A refusal is exit 2, before
+anything is packed or created. What a bind mount can reach is in
+[BACKENDS.md](architecture/BACKENDS.md#a-container-from-an-oci-bundle).
 
 The bundle's `linux.resources.memory.limit`, in bytes, becomes `--memory`. `-1`,
 the runtime-spec's "no limit", leaves `--memory` out, so pct's default of 512

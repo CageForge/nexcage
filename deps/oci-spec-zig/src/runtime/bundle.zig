@@ -217,6 +217,13 @@ pub const OciBundleParser = struct {
                     mount.source = try self.optionalString(mount_obj, "source");
                     mount.destination = try self.optionalString(mount_obj, "destination");
                     mount.type = try self.optionalString(mount_obj, "type");
+                    // Options were dropped here ("TODO"), so a mount asked to
+                    // be read-only or nosuid reached the backend as neither.
+                    if (mount_obj.get("options")) |opts| switch (opts) {
+                        .null => {},
+                        .array => |a| mount.options = try self.dupeStrings(a.items),
+                        else => return BundleError.InvalidConfigFormat,
+                    };
                     mounts[filled] = mount;
                     filled += 1;
                 }
@@ -711,13 +718,17 @@ pub const MountConfig = struct {
     source: ?[]const u8 = null,
     destination: ?[]const u8 = null,
     type: ?[]const u8 = null,
-    options: ?[]const u8 = null,
+    /// The mount's options as config.json lists them: "ro", "nosuid", "rbind"...
+    options: ?[]const []const u8 = null,
 
     pub fn deinit(self: *MountConfig) void {
         if (self.source) |s| self.allocator.free(s);
         if (self.destination) |d| self.allocator.free(d);
         if (self.type) |t| self.allocator.free(t);
-        if (self.options) |o| self.allocator.free(o);
+        if (self.options) |opts| {
+            for (opts) |o| self.allocator.free(o);
+            self.allocator.free(opts);
+        }
     }
 };
 

@@ -135,7 +135,8 @@ pub const OciProcessor = struct {
     }
 
     /// The mount points a bundle's mounts become: one pct property string
-    /// each, `<source>,mp=<destination>`, for `pct set --mpN`. Checked once
+    /// each, `<source>,mp=<destination>` and what the mount's options ask
+    /// for (`ro=1`, `mountoptions=`), for `pct set --mpN`. Checked once
     /// the bundle is parsed, so a mount nexcage cannot express is refused
     /// before anything is packed or created; the caller frees the strings.
     ///
@@ -186,11 +187,48 @@ pub const OciProcessor = struct {
                 if (self.logger) |log| log.err("mounts[{d}] binds {s}; Proxmox mounts a source under /dev/ as a device's filesystem, not as a bind mount", .{ i, source }) catch {};
                 return core.Error.InvalidInput;
             }
-            const spec = try std.fmt.allocPrint(self.allocator, "{s},mp={s}", .{ source, dest });
+            const spec = try self.mountPointSpec(i, source, dest, m.options orelse &.{});
             errdefer self.allocator.free(spec);
             try specs.append(self.allocator, spec);
         }
         return specs.toOwnedSlice(self.allocator);
+    }
+
+    /// One mount point's property string, with what its options ask for.
+    /// Proxmox mounts a bind mount point with `mount -o bind`, remounts it
+    /// read-only for `ro=1` and checks that it is, and passes `mountoptions`
+    /// from nosuid, nodev, noexec and noatime (pve-container's
+    /// mountpoint_mount). An option it has nothing for is refused rather
+    /// than dropped: dropping them made a mount the bundle asked to be
+    /// read-only and nosuid writable and setuid.
+    fn mountPointSpec(self: *const Self, i: usize, source: []const u8, dest: []const u8, options: []const []const u8) core.Error![]u8 {
+        var read_only = false;
+        var flags: [bind_flags.len][]const u8 = undefined;
+        var n_flags: usize = 0;
+        for (options) |opt| {
+            switch (bindOption(opt) orelse {
+                if (self.logger) |log| log.err("mounts[{d}] in the bundle asks for \"{f}\", which a Proxmox bind mount cannot do: it takes ro, nosuid, nodev, noexec and noatime", .{ i, std.zig.fmtString(opt) }) catch {};
+                return core.Error.InvalidInput;
+            }) {
+                .none => {},
+                .read_only => read_only = true,
+                .flag => |f| {
+                    for (flags[0..n_flags]) |have| {
+                        if (std.mem.eql(u8, have, f)) break;
+                    } else {
+                        flags[n_flags] = f;
+                        n_flags += 1;
+                    }
+                },
+            }
+        }
+        var out = std.ArrayListUnmanaged(u8){};
+        errdefer out.deinit(self.allocator);
+        const w = out.writer(self.allocator);
+        try w.print("{s},mp={s}", .{ source, dest });
+        if (read_only) try w.writeAll(",ro=1");
+        for (flags[0..n_flags], 0..) |f, n| try w.print("{s}{s}", .{ if (n == 0) ",mountoptions=" else ";", f });
+        return out.toOwnedSlice(self.allocator);
     }
 
     fn checkMountPath(self: *const Self, i: usize, which: []const u8, path: []const u8) core.Error!void {
@@ -258,9 +296,44 @@ pub const OciProcessor = struct {
     }
 };
 
-/// A bind mount: type "bind".
+/// A bind mount, as runc reads one: type "bind", or "bind" or "rbind" among
+/// the options.
 fn isBindMount(m: bundle.MountConfig) bool {
-    return if (m.type) |t| std.mem.eql(u8, t, "bind") else false;
+    if (m.type) |t| if (std.mem.eql(u8, t, "bind")) return true;
+    for (m.options orelse &.{}) |opt| {
+        if (std.mem.eql(u8, opt, "bind") or std.mem.eql(u8, opt, "rbind")) return true;
+    }
+    return false;
+}
+
+const BindOption = union(enum) {
+    /// Nothing to add to the mount point
+    none,
+    /// ro=1
+    read_only,
+    /// One of mountoptions'
+    flag: []const u8,
+};
+
+/// The mountoptions Proxmox applies to a bind mount, of the ones it takes
+const bind_flags = [_][]const u8{ "nosuid", "nodev", "noexec", "noatime" };
+
+/// What a bind mount's option means for its mount point, or null when
+/// Proxmox has nothing for it. Proxmox binds non-recursively, so there are
+/// no mounts below the source in the container: "rbind" shows less than it
+/// asks for, never more, and each recursive form ("rro", "rnosuid", ...)
+/// covers all the mount there is, the same as the plain one. LXC keeps a
+/// container's mounts from propagating to the host, which is what the
+/// private and slave modes ask for; shared ones would need the opposite.
+fn bindOption(opt: []const u8) ?BindOption {
+    const plain = [_][]const u8{ "bind", "rbind", "rw", "rrw", "private", "rprivate", "slave", "rslave" };
+    for (plain) |p| if (std.mem.eql(u8, opt, p)) return .none;
+    if (std.mem.eql(u8, opt, "ro") or std.mem.eql(u8, opt, "rro")) return .read_only;
+    for (bind_flags) |f| {
+        if (std.mem.eql(u8, opt, f)) return .{ .flag = f };
+        if (opt.len == f.len + 1 and opt[0] == 'r' and std.mem.eql(u8, opt[1..], f)) return .{ .flag = f };
+    }
+    return null;
 }
 
 /// Where a runtime-spec bundle mounts the container's own kernel
@@ -456,5 +529,65 @@ test "a mount pct cannot take as a bind mount is refused, and nothing leaks" {
     };
     for (cases) |mounts| {
         try std.testing.expectError(core.Error.InvalidInput, proc.bundleMountPoints(&mounts));
+    }
+}
+
+test "a bind mount's ro, nosuid, nodev and noexec reach its mount point" {
+    const proc = testProcessor();
+    const a = std.testing.allocator;
+    const Case = struct { opts: []const []const u8, want: []const u8, type: ?[]const u8 = "bind" };
+    const cases = [_]Case{
+        .{ .opts = &.{ "rbind", "ro", "nosuid", "nodev", "noexec" }, .want = "/srv/a,mp=/a,ro=1,mountoptions=nosuid;nodev;noexec" },
+        .{ .opts = &.{ "rbind", "rprivate" }, .want = "/srv/a,mp=/a" },
+        .{ .opts = &.{ "rw", "noatime" }, .want = "/srv/a,mp=/a,mountoptions=noatime" },
+        // "bind" among the options makes it a bind mount whatever the type
+        .{ .opts = &.{ "bind", "rro", "rnosuid", "nosuid" }, .want = "/srv/a,mp=/a,ro=1,mountoptions=nosuid", .type = "none" },
+        .{ .opts = &.{"rbind"}, .want = "/srv/a,mp=/a", .type = null },
+    };
+    for (cases) |c| {
+        const mounts = [_]bundle.MountConfig{.{ .allocator = a, .destination = "/a", .type = c.type, .source = "/srv/a", .options = c.opts }};
+        const specs = try proc.bundleMountPoints(&mounts);
+        defer {
+            for (specs) |s| a.free(s);
+            a.free(specs);
+        }
+        try std.testing.expectEqualStrings(c.want, specs[0]);
+    }
+}
+
+test "a bind mount option Proxmox has nothing for is refused, not dropped" {
+    const proc = testProcessor();
+    for ([_][]const u8{ "rshared", "shared", "unbindable", "strictatime", "relatime", "suid", "exec", "dev", "size=1m", "nosymfollow", "idmap", "ro\n" }) |opt| {
+        const opts = [_][]const u8{ "rbind", opt };
+        const mounts = [_]bundle.MountConfig{.{ .allocator = std.testing.allocator, .destination = "/a", .type = "bind", .source = "/srv/a", .options = &opts }};
+        try std.testing.expectError(core.Error.InvalidInput, proc.bundleMountPoints(&mounts));
+    }
+}
+
+test "mount options are parsed from config.json, and a malformed list is refused" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try testBundle(&tmp,
+        \\{"root":{"path":"rootfs"},"mounts":[{"destination":"/a","type":"bind","source":"/srv/a","options":["rbind","ro","nosuid"]}]}
+    );
+    defer std.testing.allocator.free(path);
+    var parser = bundle.OciBundleParser.init(std.testing.allocator, null);
+    var cfg = try parser.parseBundle(path);
+    defer cfg.deinit();
+    const opts = cfg.mounts.?[0].options.?;
+    try std.testing.expectEqual(@as(usize, 3), opts.len);
+    try std.testing.expectEqualStrings("ro", opts[1]);
+
+    for ([_][]const u8{
+        \\{"root":{"path":"rootfs"},"mounts":[{"destination":"/a","source":"/b","options":"ro"}]}
+        ,
+        \\{"root":{"path":"rootfs"},"mounts":[{"destination":"/a","source":"/b","options":["ro",1]}]}
+        ,
+    }) |json| {
+        var bad = std.testing.tmpDir(.{});
+        defer bad.cleanup();
+        const bad_path = try testBundle(&bad, json);
+        defer std.testing.allocator.free(bad_path);
+        try std.testing.expectError(error.InvalidConfigFormat, parser.parseBundle(bad_path));
     }
 }
