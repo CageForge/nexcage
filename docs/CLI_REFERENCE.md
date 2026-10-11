@@ -294,6 +294,15 @@ own namespaces, and a user namespace when it is unprivileged. Nesting and
 keyctl, which loosen the container's AppArmor profile and seccomp filter, are
 the host administrator's to give with `pct set <vmid> --features`.
 
+Proxmox confines every container with its own AppArmor profile, capability
+set, seccomp filter and device rules, and pct cannot take a bundle's instead.
+`process.capabilities`, `process.noNewPrivileges`, `process.apparmorProfile`,
+`process.selinuxLabel`, `process.rlimits`, `root.readonly`, `linux.seccomp`,
+`linux.maskedPaths`, `linux.readonlyPaths`, `linux.devices` and
+`linux.resources.devices` are therefore not applied: create names the ones a
+bundle sets in one warning and goes ahead. A bundle whose confinement has to
+hold needs `--runtime crun`.
+
 The bundle's bind mounts become the container's mount points `mp0`, `mp1`, ...
 through one `pct set` after the create, which checks each as Proxmox's API
 does. A mount's source and destination must be absolute, normalised paths

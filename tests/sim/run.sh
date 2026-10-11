@@ -448,7 +448,7 @@ nx create --name bundle-1 /tmp/nexcage-bundles/b1
 check "bundle: rootfs packed on storage local, pct create uses that volume" \
   all 'rc 0' 'called_re "^pvesm path local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst$"' \
       'called_re "^pct create [0-9]+ local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst --hostname bundle-1 "' \
-      '! err_has "No mp entries"'
+      '! err_has "No mp entries"' '! err_has "not applied on the Proxmox LXC backend"'
 check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
 check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
@@ -460,6 +460,22 @@ mkdir -p "$S/bundles/ns-pid"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/ns-pid/"
 printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"linux":{"namespaces":[{"type":"pid"},{"type":"mount"}]}}' > "$S/bundles/ns-pid/config.json"
 nx create --name ns-pid /tmp/nexcage-bundles/ns-pid
 check "bundle: namespaces without a user one turn on no keyctl either" all 'rc 0' 'not_called_re "--features"'
+# Proxmox confines every container its own way, and pct cannot take a
+# bundle's seccomp, capabilities and the rest. They were dropped without a
+# word; the container is still created (runc spec puts some in every bundle),
+# with one warning that names them.
+mkdir -p "$S/bundles/conf-sec"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/conf-sec/"
+cat > "$S/bundles/conf-sec/config.json" <<'JSON'
+{"ociVersion":"1.0.2","root":{"path":"rootfs","readonly":true},
+ "process":{"args":["/bin/sh"],"capabilities":{"bounding":["CAP_KILL"]},"noNewPrivileges":true},
+ "linux":{"seccomp":{"defaultAction":"SCMP_ACT_ERRNO"},"maskedPaths":["/proc/kcore"],"readonlyPaths":["/proc/sys"],
+          "devices":[{"path":"/dev/fuse","type":"c","major":10,"minor":229}]}}
+JSON
+nx create --name conf-sec /tmp/nexcage-bundles/conf-sec
+check "bundle confinement the backend cannot apply: created, with one warning naming each field" \
+  all 'rc 0' 'called_re "^pct create "' '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
+      'err_has "process.capabilities, process.noNewPrivileges, root.readonly, linux.seccomp, linux.maskedPaths, linux.readonlyPaths, linux.devices in"' \
+      'err_has "--runtime crun"'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'

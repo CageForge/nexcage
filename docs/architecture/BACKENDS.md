@@ -72,3 +72,13 @@ creating a container from it.
 LXC's to make, and a user namespace in the bundle used to set `nesting=1`
 and `keyctl=1`, loosening the container's AppArmor profile and lifting the
 keyctl filter Proxmox puts on an unprivileged container.
+
+**Confinement.** The container is confined the way Proxmox confines every
+container: its AppArmor profile, LXC's capability drops and seccomp filter,
+its device rules, and the user namespace of an unprivileged container. A
+bundle's own `process.capabilities`, `linux.seccomp`, AppArmor profile,
+`noNewPrivileges`, read-only or masked paths and devices are not applied, so
+a bundle cannot loosen that confinement, and cannot tighten it either. create
+says which of them a bundle sets, in one warning, rather than refusing,
+since `runc spec` puts capabilities, masked paths and `noNewPrivileges` into
+every bundle. The crun backend applies them.

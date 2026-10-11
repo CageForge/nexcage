@@ -328,6 +328,7 @@ pub const ProxmoxLxcDriver = struct {
                         if (self.logger) |log| log.err("'{s}' is not a usable OCI bundle ({s}); it needs rootfs/ and a config.json in the runtime-spec's format", .{ safe_path, @errorName(err) }) catch {};
                         return core.Error.InvalidInput;
                     };
+                    try self.oci_processor.warnUnappliedConfinement(safe_path, bundle_config.?.confinement);
                     bundle_resources = try self.oci_processor.bundleResources(&bundle_config.?);
                     bundle_mounts = try self.oci_processor.bundleMountPoints(bundle_config.?.mounts orelse &.{});
 

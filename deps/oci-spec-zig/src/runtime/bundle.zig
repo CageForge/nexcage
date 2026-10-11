@@ -159,6 +159,12 @@ pub const OciBundleParser = struct {
 
         const obj = config.object;
 
+        if (obj.get("root")) |root_val| {
+            if (root_val == .object) {
+                if (root_val.object.get("readonly")) |v| bundle_config.confinement.@"root.readonly" = asksFor(v);
+            }
+        }
+
         // Parse hostname
         if (obj.get("hostname")) |hostname_val| {
             if (hostname_val == .string) {
@@ -185,12 +191,10 @@ pub const OciBundleParser = struct {
                     }
                 }
 
-                // Parse capabilities
-                if (process_obj.get("capabilities")) |caps_val| {
-                    if (caps_val == .object) {
-                        // TODO: Parse capabilities and convert to LXC format
-                        self.logInfo("Capabilities found in OCI config, will be converted to LXC format", .{});
-                    }
+                // Capabilities and the rest of the process's confinement:
+                // recorded by name, not translated
+                inline for (.{ "capabilities", "noNewPrivileges", "apparmorProfile", "selinuxLabel", "rlimits" }) |key| {
+                    if (process_obj.get(key)) |v| @field(bundle_config.confinement, "process." ++ key) = asksFor(v);
                 }
             }
         }
@@ -258,6 +262,8 @@ pub const OciBundleParser = struct {
                                 bundle_config.cpu_shares = try optionalInt(u64, cpu_val.object, "shares");
                             }
                         }
+
+                        if (resources_obj.get("devices")) |v| bundle_config.confinement.@"linux.resources.devices" = asksFor(v);
                     }
                 }
 
@@ -453,6 +459,10 @@ pub const OciBundleParser = struct {
                     }
                 }
 
+                inline for (.{ "seccomp", "maskedPaths", "readonlyPaths", "devices" }) |key| {
+                    if (linux_obj.get(key)) |v| @field(bundle_config.confinement, "linux." ++ key) = asksFor(v);
+                }
+
                 // Parse seccomp profile
                 if (linux_obj.get("seccomp")) |seccomp_val| {
                     if (seccomp_val == .object) {
@@ -617,6 +627,9 @@ pub const OciBundleConfig = struct {
     capabilities: ?[]const u8 = null,
     seccomp_profile: ?[]const u8 = null,
 
+    /// The confinement config.json asks for, by field
+    confinement: Confinement = .{},
+
     // Extended OCI fields
     annotations: ?std.json.ObjectMap = null,
     user: ?UserConfig = null,
@@ -711,6 +724,37 @@ pub const OciBundleConfig = struct {
         if (self.working_directory) |wd| self.allocator.free(wd);
     }
 };
+
+/// The confinement a bundle asks for, by the config.json field that asks
+/// for it. Only whether each field asks for anything is recorded: nothing
+/// here translates them, and a backend that cannot apply them has to say
+/// which it leaves out rather than create the container as if it had.
+pub const Confinement = struct {
+    @"process.capabilities": bool = false,
+    @"process.noNewPrivileges": bool = false,
+    @"process.apparmorProfile": bool = false,
+    @"process.selinuxLabel": bool = false,
+    @"process.rlimits": bool = false,
+    @"root.readonly": bool = false,
+    @"linux.seccomp": bool = false,
+    @"linux.maskedPaths": bool = false,
+    @"linux.readonlyPaths": bool = false,
+    @"linux.devices": bool = false,
+    @"linux.resources.devices": bool = false,
+};
+
+/// Whether a confinement field asks for anything: true, a non-empty string
+/// or list, or an object -- even an empty one asks for something, such as
+/// no capabilities at all.
+fn asksFor(val: std.json.Value) bool {
+    return switch (val) {
+        .bool => |b| b,
+        .string => |str| str.len > 0,
+        .array => |a| a.items.len > 0,
+        .object => true,
+        else => false,
+    };
+}
 
 /// Mount configuration from OCI spec
 pub const MountConfig = struct {

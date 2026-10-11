@@ -134,6 +134,19 @@ pub const OciProcessor = struct {
         return res;
     }
 
+    /// Says, in one warning, which of the confinement a bundle asks for this
+    /// backend does not apply. Proxmox confines every container with its own
+    /// AppArmor profile, capability set, seccomp filter and device rules, and
+    /// pct has no way to take a bundle's instead; the container was created
+    /// as if the bundle's had been applied, and nothing said otherwise. Not
+    /// refused: `runc spec` writes capabilities, masked paths and
+    /// noNewPrivileges into every bundle, so refusing would refuse them all.
+    pub fn warnUnappliedConfinement(self: *const Self, bundle_path: []const u8, asked: bundle.Confinement) !void {
+        const names = try unappliedConfinement(self.allocator, asked) orelse return;
+        defer self.allocator.free(names);
+        if (self.logger) |log| log.warn("{s} in {s}/config.json: not applied on the Proxmox LXC backend, which confines the container with Proxmox's own AppArmor profile, capabilities, seccomp filter and device rules instead. --runtime crun applies a bundle's own", .{ names, bundle_path }) catch {};
+    }
+
     /// The mount points a bundle's mounts become: one pct property string
     /// each, `<source>,mp=<destination>` and what the mount's options ask
     /// for (`ro=1`, `mountoptions=`), for `pct set --mpN`. Checked once
@@ -271,6 +284,21 @@ pub const OciProcessor = struct {
         }
     }
 };
+
+/// The fields of `asked` that ask for something, comma-separated, or null
+/// when none does.
+fn unappliedConfinement(allocator: std.mem.Allocator, asked: bundle.Confinement) !?[]u8 {
+    var names = std.ArrayListUnmanaged(u8){};
+    errdefer names.deinit(allocator);
+    inline for (std.meta.fields(bundle.Confinement)) |f| {
+        if (@field(asked, f.name)) {
+            if (names.items.len > 0) try names.appendSlice(allocator, ", ");
+            try names.appendSlice(allocator, f.name);
+        }
+    }
+    if (names.items.len == 0) return null;
+    return try names.toOwnedSlice(allocator);
+}
 
 /// A bind mount, as runc reads one: type "bind", or "bind" or "rbind" among
 /// the options.
@@ -566,4 +594,25 @@ test "mount options are parsed from config.json, and a malformed list is refused
         defer std.testing.allocator.free(bad_path);
         try std.testing.expectError(error.InvalidConfigFormat, parser.parseBundle(bad_path));
     }
+}
+
+test "the confinement a bundle asks for is named, and a bundle that asks for none gets no list" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try testBundle(&tmp,
+        \\{"root":{"path":"rootfs","readonly":true},
+        \\ "process":{"args":["/bin/sh"],"capabilities":{"bounding":["CAP_KILL"]},"noNewPrivileges":true,"apparmorProfile":"","rlimits":[]},
+        \\ "linux":{"seccomp":{"defaultAction":"SCMP_ACT_ERRNO"},"maskedPaths":["/proc/kcore"],"readonlyPaths":[],
+        \\  "resources":{"devices":[{"allow":false,"access":"rwm"}]}}}
+    );
+    defer std.testing.allocator.free(path);
+    var parser = bundle.OciBundleParser.init(std.testing.allocator, null);
+    var cfg = try parser.parseBundle(path);
+    defer cfg.deinit();
+    const names = (try unappliedConfinement(std.testing.allocator, cfg.confinement)).?;
+    defer std.testing.allocator.free(names);
+    // An empty profile, list or false asks for nothing, and is not named
+    try std.testing.expectEqualStrings("process.capabilities, process.noNewPrivileges, root.readonly, linux.seccomp, linux.maskedPaths, linux.resources.devices", names);
+
+    try std.testing.expectEqual(@as(?[]u8, null), try unappliedConfinement(std.testing.allocator, .{}));
 }
