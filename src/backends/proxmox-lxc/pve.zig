@@ -77,6 +77,25 @@ pub fn parsePctStatus(output: []const u8) PctStatus {
     return result;
 }
 
+/// Whether a cgroup.procs list -- one PID per line -- holds `pid`.
+fn listsPid(procs: []const u8, pid: std.posix.pid_t) bool {
+    var lines = std.mem.tokenizeScalar(u8, procs, '\n');
+    while (lines.next()) |line| {
+        const listed = std.fmt.parseInt(std.posix.pid_t, line, 10) catch continue;
+        if (listed == pid) return true;
+    }
+    return false;
+}
+
+test "listsPid finds a whole PID in a cgroup.procs list, never a part of one" {
+    try std.testing.expect(listsPid("1\n4242\n77\n", 4242));
+    try std.testing.expect(listsPid("4242", 4242));
+    try std.testing.expect(!listsPid("42420\n", 4242));
+    try std.testing.expect(!listsPid("14242\n", 4242));
+    try std.testing.expect(!listsPid("", 4242));
+    try std.testing.expect(!listsPid("\n\n", 4242));
+}
+
 pub const PveVersion = struct {
     major: u32,
     minor: u32,
@@ -1333,13 +1352,96 @@ pub const PveClient = struct {
             if (self.logger) |log| log.err("CT {s} is not running", .{vmid}) catch {};
             return core.Error.OperationFailed;
         };
-        std.posix.kill(pid, signo) catch |err| {
-            if (self.logger) |log| log.err("sending signal {d} to PID {d} (init of CT {s}) failed: {s}", .{ signo, pid, vmid, @errorName(err) }) catch {};
-            return switch (err) {
-                error.PermissionDenied => core.Error.PermissionDenied,
-                else => core.Error.OperationFailed,
-            };
+
+        // `pct status`, another process, read that PID a moment ago -- for a
+        // perl tool, most of a second. The init can exit in between and its
+        // PID go to an unrelated process, which kill(2) as root would hit.
+        // A pidfd names one process for good: it is opened first, the PID is
+        // then confirmed to be in the container's cgroup, and the signal goes
+        // through the pidfd, so it reaches that process or none. A PID that
+        // is not the container's any more means the container is not running.
+        const linux = std.os.linux;
+        const open_rc = linux.pidfd_open(pid, 0);
+        switch (linux.E.init(open_rc)) {
+            .SUCCESS => {},
+            .SRCH => {
+                if (self.logger) |log| log.err("CT {s} is not running: its init, PID {d}, has exited", .{ vmid, pid }) catch {};
+                return core.Error.OperationFailed;
+            },
+            .NOSYS => {
+                if (self.logger) |log| log.err("this kernel has no pidfd_open (Linux 5.3); nexcage sends a container a signal only through one", .{}) catch {};
+                return core.Error.UnsupportedOperation;
+            },
+            else => |e| {
+                if (self.logger) |log| log.err("pidfd_open for PID {d} (init of CT {s}) failed: {s}", .{ pid, vmid, @tagName(e) }) catch {};
+                return core.Error.OperationFailed;
+            },
+        }
+        const pidfd: std.posix.fd_t = @intCast(open_rc);
+        defer std.posix.close(pidfd);
+
+        if (!try self.inContainerCgroup(vmid, pid)) {
+            if (self.logger) |log| log.err("CT {s} is not running: PID {d}, which pct status reported as its init, is not in the container's cgroup", .{ vmid, pid }) catch {};
+            return core.Error.OperationFailed;
+        }
+
+        switch (linux.E.init(linux.pidfd_send_signal(pidfd, signo, null, 0))) {
+            .SUCCESS => {},
+            .SRCH => {
+                if (self.logger) |log| log.err("CT {s} is not running: its init, PID {d}, has exited", .{ vmid, pid }) catch {};
+                return core.Error.OperationFailed;
+            },
+            .PERM => {
+                if (self.logger) |log| log.err("sending signal {d} to PID {d} (init of CT {s}) is not permitted", .{ signo, pid, vmid }) catch {};
+                return core.Error.PermissionDenied;
+            },
+            else => |e| {
+                if (self.logger) |log| log.err("sending signal {d} to PID {d} (init of CT {s}) failed: {s}", .{ signo, pid, vmid, @tagName(e) }) catch {};
+                return core.Error.OperationFailed;
+            },
+        }
+    }
+
+    /// Whether `pid` is one of CT `vmid`'s processes: listed in a
+    /// cgroup.procs anywhere under /sys/fs/cgroup/lxc/<vmid>/, where Proxmox
+    /// puts them -- the init under ns/, and systemd's units below that, so
+    /// the whole tree is looked through.
+    fn inContainerCgroup(self: *const Self, vmid: []const u8, pid: std.posix.pid_t) !bool {
+        // A VMID is a number, and nothing else may become part of the path
+        for (vmid) |c| if (!std.ascii.isDigit(c)) return false;
+        if (vmid.len == 0) return false;
+
+        const root = try std.fmt.allocPrint(self.allocator, "/sys/fs/cgroup/lxc/{s}", .{vmid});
+        defer self.allocator.free(root);
+        var dir = std.fs.cwd().openDir(root, .{ .iterate = true }) catch |err| switch (err) {
+            // A stopped container has no cgroup
+            error.FileNotFound => return false,
+            else => {
+                if (self.logger) |log| log.err("cannot read {s}: {s}", .{ root, @errorName(err) }) catch {};
+                return core.Error.OperationFailed;
+            },
         };
+        defer dir.close();
+
+        var walker = try dir.walk(self.allocator);
+        defer walker.deinit();
+        while (walker.next() catch |err| {
+            if (self.logger) |log| log.err("cannot read {s}: {s}", .{ root, @errorName(err) }) catch {};
+            return core.Error.OperationFailed;
+        }) |entry| {
+            if (entry.kind != .file or !std.mem.eql(u8, entry.basename, "cgroup.procs")) continue;
+            // A cgroup that went away while being read held no process
+            const procs = entry.dir.readFileAlloc(self.allocator, entry.basename, 16 * 1024 * 1024) catch |err| switch (err) {
+                error.FileNotFound => continue,
+                else => {
+                    if (self.logger) |log| log.err("cannot read {s}/{s}: {s}", .{ root, entry.path, @errorName(err) }) catch {};
+                    return core.Error.OperationFailed;
+                },
+            };
+            defer self.allocator.free(procs);
+            if (listsPid(procs, pid)) return true;
+        }
+        return false;
     }
 
     /// Run a command inside the container with `pct exec`, and return the

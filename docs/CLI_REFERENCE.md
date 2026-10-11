@@ -381,8 +381,12 @@ nexcage kill [-s|--signal SIGNAL] [--all] <name>
 ```
 
 Sends `SIGNAL` to the container's init process from the host, as an OCI runtime
-does: nexcage reads the init's host PID from `pct status <vmid> --verbose` and
-calls `kill(2)`. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
+does: nexcage reads the init's host PID from `pct status <vmid> --verbose`,
+opens a pidfd for it, checks that the process is in the container's cgroup
+(under `/sys/fs/cgroup/lxc/<vmid>/`) and sends the signal through the pidfd. A
+PID that is not the container's any more — the init exited after `pct status`
+read it, and the PID went to another process — is not signalled; the container
+is reported as not running (exit 1). `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
 `SIGKILL`, `usr1`), or a number from 1 to 64; the default is `SIGTERM`. An
 unknown signal is a usage error (exit 2); a container that is not running is an
 error (exit 1).

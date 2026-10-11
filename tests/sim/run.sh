@@ -257,6 +257,24 @@ nx kill web-1 10;              check "kill <name> 10 (runc form, a number)" all 
 nx kill web-1 --signal USR2;   check "kill <name> --signal USR2"      all 'rc 0' 'got_signal 100 SIGUSR2'
 check "kill never runs pct exec" all '! grep -q "^pct exec" "$S/calls"'
 check "the init survives the signals it handles" status_is web-1 running
+# The PID comes from `pct status`, another process, a moment before the
+# signal: the init can exit in between and its PID go to an unrelated process,
+# which kill(2) as root used to hit, reporting success. The signal goes through
+# a pidfd now, and only to a process in the container's cgroup. A stand-in for
+# the unrelated process records what it is sent.
+python3 "$(dirname "$0")/fake_init.py" "$S/sig.stranger" </dev/null >/dev/null 2>&1 &
+stranger=$!
+eventually 'grep -qx READY "$S/sig.stranger" 2>/dev/null'
+echo "$stranger" > "$S/reused_pid.100"
+nx kill web-1 TERM
+check "kill: a PID that is not the container's any more is not signalled; the container is not running" \
+  all 'rc 1' 'err_has "not running"' '! got_signal stranger SIGTERM'
+nx kill web-1 KILL; sleep 0.3
+check "kill KILL: the unrelated process holding the PID lives on" \
+  all 'rc 1' 'st=$(awk "{print \$3}" "/proc/$stranger/stat" 2>/dev/null); [ -n "$st" ] && [ "$st" != Z ]'
+rm -f "$S/reused_pid.100" "$S/sig.stranger"; kill -9 "$stranger" 2>/dev/null; wait "$stranger" 2>/dev/null
+nx kill web-1 CONT
+check "and the container's own init is signalled as before" all 'rc 0' 'got_signal 100 SIGCONT'
 nx kill web-1 'TERM;id';       check "kill: bad signal -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
 nx kill web-1 0;               check "kill: signal 0 -> exit 2"       all 'rc 2' 'not_called_re "^pct"'
 nx kill web-1 65;              check "kill: signal 65 -> exit 2"      all 'rc 2' 'not_called_re "^pct"'

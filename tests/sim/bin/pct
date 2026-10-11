@@ -36,6 +36,8 @@ start_ct() {
   mkdir -p "/sys/fs/cgroup/lxc/$1" 2>/dev/null && echo 0 > "/sys/fs/cgroup/lxc/$1/cgroup.freeze" 2>/dev/null
   python3 "$HERE/../fake_init.py" "$SIM/sig.$1" </dev/null >/dev/null 2>&1 &
   echo $! > "$SIM/pid.$1"
+  # Proxmox puts the init in lxc/<vmid>/ns, and kill looks for it there
+  mkdir -p "/sys/fs/cgroup/lxc/$1/ns" 2>/dev/null && echo $! > "/sys/fs/cgroup/lxc/$1/ns/cgroup.procs" 2>/dev/null
   for _ in $(seq 1 50); do
     grep -qx READY "$SIM/sig.$1" 2>/dev/null && break
     sleep 0.1
@@ -126,7 +128,14 @@ case "$cmd" in
       echo "cpus: 1"
       echo "maxmem: 536870912"
       echo "name: $(awk -v v="$1" '$1==v {print $3}' "$DB")"
-      [ "$st" = running ] && [ -e "$SIM/pid.$1" ] && echo "pid: $(cat "$SIM/pid.$1")"
+      # $SIM/reused_pid.<vmid> is the race kill has to survive: pct read the
+      # init's PID, the init exited, and the PID now belongs to an unrelated
+      # process -- the one the file names.
+      if [ -e "$SIM/reused_pid.$1" ]; then
+        echo "pid: $(cat "$SIM/reused_pid.$1")"
+      elif [ "$st" = running ] && [ -e "$SIM/pid.$1" ]; then
+        echo "pid: $(cat "$SIM/pid.$1")"
+      fi
       echo "status: $st"
       echo "type: lxc"
       echo "vmid: $1"
