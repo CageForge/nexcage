@@ -257,7 +257,7 @@ pub const ProxmoxLxcDriver = struct {
         };
         // The archive packed from a bundle's rootfs is needed only by pct create
         var bundle_template: ?oci.BundleTemplate = null;
-        defer if (bundle_template) |*bt| bt.remove(self.allocator);
+        defer if (bundle_template) |*bt| bt.remove(self.allocator, self.logger);
 
         if (config.image) |image_path| {
             const is_proxmox_template = std.mem.endsWith(u8, image_path, ".tar.zst") or
@@ -335,7 +335,6 @@ pub const ProxmoxLxcDriver = struct {
                     // pct creates containers only from templates. This used to
                     // hand pct a template name that nothing had written.
                     bundle_template = try self.oci_processor.createTemplateFromBundle(bundle_config.?.rootfs_path, config.name);
-                    template_name = try self.allocator.dupe(u8, bundle_template.?.volid);
                 }
             }
         }
@@ -346,7 +345,10 @@ pub const ProxmoxLxcDriver = struct {
 
         // 3. Resolve final template string
         var final_template: []const u8 = undefined;
-        if (template_name) |tname| {
+        if (bundle_template) |bt| {
+            // A file path, which pct create takes from root
+            final_template = try self.allocator.dupe(u8, bt.path);
+        } else if (template_name) |tname| {
             if (std.mem.indexOf(u8, tname, ":") != null) {
                 final_template = try self.allocator.dupe(u8, tname);
             } else if (std.mem.endsWith(u8, tname, ".tar.zst")) {

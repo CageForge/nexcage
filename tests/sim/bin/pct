@@ -113,11 +113,30 @@ case "$cmd" in
     [ -e "$SIM/fail_create" ] && { cat "$SIM/fail_create" >&2; exit 255; }
     exists "$vmid" && { echo "CT $vmid already exists on node 'pve'" >&2; exit 255; }
     # Like the real pct: the template volume has to exist on the storage.
-    # Archives nexcage packs itself land in $SIM/cache (see fake pvesm path).
+    # A pulled archive can land in $SIM/cache (see fake pvesm path).
     cached="$SIM/cache/${tpl#local:vztmpl/}"
     if [ "${tpl#local:vztmpl/}" != "$tpl" ] && [ -f "$cached" ]; then
       tar --zstd -tvf "$cached" > "$SIM/tarlist.$vmid" 2>&1 \
         || { echo "unable to create CT $vmid - broken archive '$tpl'" >&2; exit 255; }
+    elif [ "${tpl#/}" != "$tpl" ]; then
+      # A file path, which pct takes from root@pam (check_volume_access):
+      # abs_filesystem_path wants a regular file, and tar_compression_option
+      # a name that says how it is compressed. Archives nexcage packs from a
+      # bundle come this way; their mode and their directory's are kept for
+      # the checks.
+      [ -f "$tpl" ] || { echo "unable to create CT $vmid - can't find file '$tpl'" >&2; exit 255; }
+      [[ $tpl =~ \.tar(\.(gz|bz2|xz|lzo|zst))?$ ]] \
+        || { echo "unable to create CT $vmid - file does not look like a template archive: $tpl" >&2; exit 255; }
+      stat -c %a "$tpl" "$(dirname "$tpl")" | paste -sd' ' > "$SIM/tplmode.$vmid"
+      tar --zstd -tvf "$tpl" > "$SIM/tarlist.$vmid" 2>&1 \
+        || { echo "unable to create CT $vmid - broken archive '$tpl'" >&2; exit 255; }
+      # hang_create holds seconds to stand still, as an unpack does, so a
+      # check can signal nexcage meanwhile; hang_create.pid gets nexcage's PID
+      # and this one's
+      if [ -e "$SIM/hang_create" ]; then
+        echo "$PPID $$" > "$SIM/hang_create.pid"
+        exec sleep "$(cat "$SIM/hang_create")"
+      fi
     elif ! grep -qxF -- "$tpl" "$SIM/templates" 2>/dev/null; then
       echo "unable to create CT $vmid - volume '$tpl' does not exist" >&2; exit 255
     fi

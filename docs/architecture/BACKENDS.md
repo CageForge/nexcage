@@ -48,8 +48,10 @@ flowchart LR
 ### A container from an OCI bundle
 
 `create` from a bundle makes a system container of the bundle's `rootfs/`:
-the rootfs is packed into a template archive for `pct create`, which takes
-nothing else from `config.json`. What the backend then takes from the bundle
+the rootfs is packed into an archive for `pct create`, which takes nothing
+else from `config.json`. The archive is 0600, in a directory only root can
+enter under `$TMPDIR` or `/var/tmp`, outside every Proxmox storage, and is
+deleted once pct create has read it. What the backend then takes from the bundle
 is listed in the [CLI reference](../CLI_REFERENCE.md#create); the rest of
 this section is what that means for the container's confinement.
 

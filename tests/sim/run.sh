@@ -422,6 +422,10 @@ nx list --config
 check "--config without a path -> exit 2" all 'rc 2' 'err_has "--config needs a path"'
 
 echo "=== create from an OCI bundle ==="
+# A bundle's rootfs is packed into a private directory under $TMPDIR, here
+# one of the simulator's own rather than the host's /var/tmp. nexcage takes
+# only a directory no one else can write to, or a sticky one.
+export TMPDIR="$S/vartmp"; mkdir -p "$TMPDIR"; chmod 755 "$TMPDIR"
 mkdir -p "$S/bundles/b1/rootfs/bin" "$S/bundles/nocfg/rootfs"
 printf '#!/bin/sh\n' > "$S/bundles/b1/rootfs/bin/busybox"; chmod 755 "$S/bundles/b1/rootfs/bin/busybox"
 ln -s busybox "$S/bundles/b1/rootfs/bin/sh"
@@ -444,14 +448,48 @@ printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":[1,"/srv:/data"]
 nx create --name bundle-bad /tmp/nexcage-bundles/badmp
 check "bundle whose mounts hold a non-object -> exit 2 before pct create, no crash" \
   all 'rc 2' 'err_has "not a usable OCI bundle"' '! err_has "General protection"' 'not_called_re "^pct create"'
+rm -f "$S"/tplmode.*
 nx create --name bundle-1 /tmp/nexcage-bundles/b1
-check "bundle: rootfs packed on storage local, pct create uses that volume" \
-  all 'rc 0' 'called_re "^pvesm path local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst$"' \
-      'called_re "^pct create [0-9]+ local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst --hostname bundle-1 "' \
+# The archive was written to storage local as nexcage-<name>-<time>.tar.zst
+# with tar's umask, 0644: every local user could read the image's 0600 files
+# while pct create ran, and for good if nexcage was interrupted, and it was a
+# template other Proxmox users could use. pct create takes a file from root.
+check "bundle: rootfs packed in a private directory, not the template store; pct create reads that file" \
+  all 'rc 0' 'not_called_re "^pvesm path"' \
+      'called_re "^pct create [0-9]+ /[^ ]+/vartmp/nexcage-bundle-bundle-1-[0-9a-f]{16}/rootfs\.tar\.zst --hostname bundle-1 "' \
       '! err_has "No mp entries"' '! err_has "not applied on the Proxmox LXC backend"'
+check "bundle: the archive is 0600, in a 0700 directory, while pct create reads it" all '[ "$(cat "$S"/tplmode.*)" = "600 700" ]'
 check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
-check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
+check "bundle: archive and its directory removed after pct create" all '[ -z "$(ls -A "$S/vartmp")" ]' '[ -z "$(ls -A "$S/cache")" ]'
+echo "unable to create CT - no space left" > "$S/fail_create"
+nx create --name bundle-f /tmp/nexcage-bundles/b1
+rm -f "$S/fail_create"
+check "bundle: a failed pct create removes the archive too" all '! rc 0' 'called_re "^pct create "' '[ -z "$(ls -A "$S/vartmp")" ]' '[ -z "$(ls -A "$S/cache")" ]'
+# Root writes the archive by path, so the directory it is made in must be one
+# where no one else can swap a symlink in: not writable by others unless
+# sticky, as /var/tmp is.
+mkdir -p "$S/opentmp"; chmod 777 "$S/opentmp"
+TMPDIR="$S/opentmp" nx create --name bundle-open /tmp/nexcage-bundles/b1
+check "bundle: a TMPDIR anyone can write to, not sticky -> refused before packing" \
+  all '! rc 0' 'err_has "not a safe place"' '! err_has "Packing"' 'not_called_re "^pct create"' '[ -z "$(ls -A "$S/opentmp")" ]'
+chmod 1777 "$S/opentmp"
+TMPDIR="$S/opentmp" nx create --name bundle-sticky /tmp/nexcage-bundles/b1
+check "bundle: a sticky TMPDIR, as /var/tmp is -> used, and left empty" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/opentmp/nexcage-bundle-bundle-sticky-"' '[ -z "$(ls -A "$S/opentmp")" ]'
+rm -rf "$S/opentmp"
+# A signal ends nexcage without running its defers. SIGTERM goes to nexcage
+# itself -- the fake pct's parent -- while pct create stands still.
+echo 30 > "$S/hang_create"; rm -f "$S/hang_create.pid"
+nexcage_ns create --name bundle-sig /tmp/nexcage-bundles/b1 > "$S/out" 2> "$S/err" & bg=$!
+nexcage_pid=""; pct_pid=""
+if eventually '[ -s "$S/hang_create.pid" ]'; then read -r nexcage_pid pct_pid < "$S/hang_create.pid"; fi
+[ -n "$nexcage_pid" ] && kill -TERM "$nexcage_pid"
+RC=0; wait "$bg" || RC=$?
+[ -n "$pct_pid" ] && kill "$pct_pid" 2>/dev/null
+rm -f "$S/hang_create" "$S/hang_create.pid"; LAST="nexcage create --name bundle-sig (SIGTERM during pct create)"
+check "bundle: SIGTERM during pct create removes the archive, and nexcage still dies of it" \
+  all 'rc 143' '[ -z "$(ls -A "$S/vartmp")" ]'
 # A user namespace in the bundle turned on nesting=1,keyctl=1, and any other
 # namespace list keyctl=1: Proxmox's AppArmor profile loosened and its keyctl
 # filter lifted because a bundle asked for its own namespaces.
@@ -554,7 +592,7 @@ echo "=== runtime-spec command line ==="
 # --bundle, its own state directory behind --root.
 nx create spec-1 --bundle /tmp/nexcage-bundles/b1
 check "create <id> --bundle <dir>: the positional word is the id, not the image" \
-  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/nexcage-spec-1-[0-9]+\.tar\.zst --hostname spec-1 "'
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/nexcage-bundle-spec-1-[0-9a-f]{16}/rootfs\.tar\.zst --hostname spec-1 "'
 nx state spec-1
 check "state reports the bundle the container was created from" \
   all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'

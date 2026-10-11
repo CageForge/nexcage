@@ -3,19 +3,87 @@ const core = @import("core");
 const common = @import("common.zig");
 const oci_spec = @import("oci_spec");
 const bundle = oci_spec.runtime.bundle;
-/// A template archive packed from an OCI bundle's rootfs.
+
+/// A template archive packed from an OCI bundle's rootfs, for pct create.
+///
+/// It is made in a directory of its own, 0700 and named at random, under
+/// $TMPDIR or /var/tmp: on disk, since a rootfs can be large, and out of the
+/// template store. It used to be written to storage `local` as
+/// nexcage-<name>-<time>.tar.zst with tar's umask, so 0644: while pct create
+/// ran, and for good when nexcage was interrupted, any local user could read
+/// files the image kept 0600, Proxmox users could create containers from it,
+/// and `images` listed it. pct create takes a file path from root
+/// (PVE::Storage::check_volume_access), so the store is not needed.
 pub const BundleTemplate = struct {
-    /// Volume ID for pct create: local:vztmpl/nexcage-<name>-<timestamp>.tar.zst
-    volid: []u8,
-    /// The archive on the host
+    /// The private directory
+    dir: []u8,
+    /// The archive in it, the path pct create is given
     path: []u8,
 
-    /// Deletes the archive. pct create has unpacked it by then, and names
-    /// with a timestamp would otherwise pile up in the template list.
-    pub fn remove(self: *BundleTemplate, allocator: std.mem.Allocator) void {
-        std.fs.deleteFileAbsolute(self.path) catch {};
-        allocator.free(self.volid);
+    /// Deletes the archive and its directory once pct create has unpacked
+    /// it, or failed to. A signal that ends nexcage first is handled by
+    /// interrupt_cleanup.
+    pub fn remove(self: *BundleTemplate, allocator: std.mem.Allocator, logger: ?*core.LogContext) void {
+        interrupt_cleanup.disarm();
+        removeArchive(self.dir, self.path, logger);
+        allocator.free(self.dir);
         allocator.free(self.path);
+    }
+};
+
+/// Deletes an archive and its private directory. What cannot be deleted is
+/// said; it stays where only root can read it.
+fn removeArchive(dir: []const u8, path: []const u8, logger: ?*core.LogContext) void {
+    std.fs.deleteFileAbsolute(path) catch |err| if (err != error.FileNotFound) {
+        if (logger) |log| log.warn("cannot remove the bundle's archive {s} ({s})", .{ path, @errorName(err) }) catch {};
+    };
+    std.fs.deleteDirAbsolute(dir) catch |err| if (err != error.FileNotFound) {
+        if (logger) |log| log.warn("cannot remove {s} ({s})", .{ dir, @errorName(err) }) catch {};
+    };
+}
+
+/// Removes the bundle's archive when SIGINT, SIGTERM or SIGHUP ends nexcage
+/// while the archive is packed or read: a Zig defer runs on return, not on
+/// a signal. SIGKILL cannot be caught; what it leaves is in a directory
+/// only root can enter, and systemd-tmpfiles ages /var/tmp out.
+const interrupt_cleanup = struct {
+    const signals = [_]u8{ std.posix.SIG.INT, std.posix.SIG.TERM, std.posix.SIG.HUP };
+    var file_buf: [std.fs.max_path_bytes:0]u8 = undefined;
+    var dir_buf: [std.fs.max_path_bytes:0]u8 = undefined;
+    var previous: [signals.len]std.posix.Sigaction = undefined;
+    var armed = std.atomic.Value(bool).init(false);
+
+    fn arm(dir: []const u8, file: []const u8) error{NameTooLong}!void {
+        if (dir.len >= dir_buf.len or file.len >= file_buf.len) return error.NameTooLong;
+        @memcpy(dir_buf[0..dir.len], dir);
+        dir_buf[dir.len] = 0;
+        @memcpy(file_buf[0..file.len], file);
+        file_buf[file.len] = 0;
+        armed.store(true, .seq_cst);
+        const act = std.posix.Sigaction{ .handler = .{ .handler = handle }, .mask = std.posix.sigemptyset(), .flags = 0 };
+        for (signals, 0..) |sig, i| {
+            std.posix.sigaction(sig, &act, &previous[i]);
+            // A signal the caller ignores -- SIGINT for a background job of
+            // a shell -- stays ignored rather than starting to end nexcage
+            if (previous[i].handler.handler == std.posix.SIG.IGN) std.posix.sigaction(sig, &previous[i], null);
+        }
+    }
+
+    fn disarm() void {
+        if (!armed.swap(false, .seq_cst)) return;
+        for (signals, 0..) |sig, i| std.posix.sigaction(sig, &previous[i], null);
+    }
+
+    fn handle(sig: i32) callconv(.c) void {
+        if (armed.swap(false, .seq_cst)) {
+            _ = std.posix.system.unlink(&file_buf);
+            _ = std.posix.system.rmdir(&dir_buf);
+        }
+        // End the way the signal would have ended nexcage without this. Should
+        // raise fail, create goes on and fails on the archive it no longer has.
+        const default = std.posix.Sigaction{ .handler = .{ .handler = std.posix.SIG.DFL }, .mask = std.posix.sigemptyset(), .flags = 0 };
+        std.posix.sigaction(@intCast(sig), &default, null);
+        std.posix.raise(@intCast(sig)) catch {};
     }
 };
 
@@ -39,46 +107,87 @@ pub const OciProcessor = struct {
         return null;
     }
 
-    /// Packs a bundle's rootfs into a template archive on storage `local` for
-    /// pct create. The rootfs is used as it is, so it has to boot as a system
-    /// container, init included.
+    /// Packs a bundle's rootfs into an archive for pct create, in a private
+    /// directory (see BundleTemplate). The rootfs is used as it is, so it has
+    /// to boot as a system container, init included.
     ///
     /// Before this, create logged "Successfully converted OCI bundle to
     /// template" and gave pct a template name that nothing had written.
     pub fn createTemplateFromBundle(self: *Self, rootfs_path: []const u8, container_name: []const u8) !BundleTemplate {
-        const volid = try std.fmt.allocPrint(self.allocator, "local:vztmpl/nexcage-{s}-{d}.tar.zst", .{ container_name, std.time.timestamp() });
-        errdefer self.allocator.free(volid);
+        const dir = try self.makePrivateDir(try self.archiveBase(), container_name);
+        errdefer self.allocator.free(dir);
+        const path = try std.fs.path.join(self.allocator, &.{ dir, "rootfs.tar.zst" });
+        errdefer self.allocator.free(path);
+        errdefer removeArchive(dir, path, self.logger);
+        interrupt_cleanup.arm(dir, path) catch {
+            if (self.logger) |log| log.err("{s} is too long a path for the bundle's archive", .{path}) catch {};
+            return core.Error.InvalidInput;
+        };
+        errdefer interrupt_cleanup.disarm();
 
-        // The storage decides where its templates live. `pvesm path` only
-        // computes the path, so the file does not have to exist yet.
-        const path_res = try common.runCommand(self.allocator, self.logger, &.{ "pvesm", "path", volid });
-        defer {
-            self.allocator.free(path_res.stdout);
-            self.allocator.free(path_res.stderr);
-        }
-        const path = std.mem.trim(u8, path_res.stdout, " \t\r\n");
-        if (path_res.exit_code != 0 or !std.fs.path.isAbsolute(path)) {
-            if (self.logger) |log| log.err("Cannot place a template on storage 'local' (pvesm path {s}): {s}", .{ volid, std.mem.trim(u8, path_res.stderr, " \t\r\n") }) catch {};
+        // Made here, new and 0600, in a directory no one else can enter; tar
+        // truncates it and keeps the mode
+        const fd = std.posix.open(path, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true }, 0o600) catch |err| {
+            if (self.logger) |log| log.err("cannot create {s} ({s})", .{ path, @errorName(err) }) catch {};
             return core.Error.OperationFailed;
-        }
-        const owned_path = try self.allocator.dupe(u8, path);
-        errdefer self.allocator.free(owned_path);
+        };
+        std.posix.close(fd);
 
-        if (self.logger) |log| log.info("Packing OCI bundle rootfs {s} into {s}", .{ rootfs_path, volid }) catch {};
+        if (self.logger) |log| log.info("Packing OCI bundle rootfs {s} into {s}", .{ rootfs_path, path }) catch {};
 
         // tar keeps modes, ownership, symlinks and device nodes
-        const tar_res = try common.runCommand(self.allocator, self.logger, &.{ "tar", "--zstd", "--numeric-owner", "-cpf", owned_path, "-C", rootfs_path, "." });
+        const tar_res = try common.runCommand(self.allocator, self.logger, &.{ "tar", "--zstd", "--numeric-owner", "-cpf", path, "-C", rootfs_path, "." });
         defer {
             self.allocator.free(tar_res.stdout);
             self.allocator.free(tar_res.stderr);
         }
         if (tar_res.exit_code != 0) {
-            std.fs.deleteFileAbsolute(owned_path) catch {};
             if (self.logger) |log| log.err("Packing {s} failed: {s}", .{ rootfs_path, std.mem.trim(u8, tar_res.stderr, " \t\r\n") }) catch {};
             return core.Error.OperationFailed;
         }
 
-        return .{ .volid = volid, .path = owned_path };
+        return .{ .dir = dir, .path = path };
+    }
+
+    /// Where the archive's directory is made: $TMPDIR, as tar and mktemp
+    /// read it, else /var/tmp. Only a directory no one else can swap things
+    /// in -- owned by root or by nexcage's user, and sticky if others may
+    /// write to it -- since root writes the archive there by path.
+    fn archiveBase(self: *const Self) ![]const u8 {
+        const tmpdir = std.posix.getenv("TMPDIR") orelse "";
+        const base = if (tmpdir.len > 0) tmpdir else "/var/tmp";
+        const st = std.posix.fstatat(std.posix.AT.FDCWD, base, 0) catch |err| {
+            if (self.logger) |log| log.err("{s}, where the bundle's archive is packed, cannot be used ({s}); TMPDIR names another", .{ base, @errorName(err) }) catch {};
+            return core.Error.OperationFailed;
+        };
+        const others_write = st.mode & 0o022 != 0;
+        const sticky = st.mode & 0o1000 != 0;
+        if (!std.fs.path.isAbsolute(base) or !std.posix.S.ISDIR(st.mode) or
+            (st.uid != 0 and st.uid != std.posix.geteuid()) or (others_write and !sticky))
+        {
+            if (self.logger) |log| log.err("{s} is not a safe place for the bundle's archive: it has to be an absolute directory owned by root, and sticky if others can write to it (TMPDIR names another)", .{base}) catch {};
+            return core.Error.OperationFailed;
+        }
+        return base;
+    }
+
+    /// A new directory, 0700, under `base`, named for the container and 64
+    /// random bits. mkdir fails rather than reuse what is already there, a
+    /// symlink included.
+    fn makePrivateDir(self: *const Self, base: []const u8, container_name: []const u8) ![]u8 {
+        var attempts: usize = 0;
+        while (true) : (attempts += 1) {
+            var random: [8]u8 = undefined;
+            std.crypto.random.bytes(&random);
+            const dir = try std.fmt.allocPrint(self.allocator, "{s}/nexcage-bundle-{s}-{s}", .{ base, container_name, std.fmt.bytesToHex(random, .lower) });
+            std.posix.mkdir(dir, 0o700) catch |err| {
+                self.allocator.free(dir);
+                if (err == error.PathAlreadyExists and attempts < 8) continue;
+                if (self.logger) |log| log.err("cannot make a directory for the bundle's archive under {s} ({s})", .{ base, @errorName(err) }) catch {};
+                return core.Error.OperationFailed;
+            };
+            return dir;
+        }
     }
 
     pub fn parseBundleImageFromConfig(self: *const Self, config: *const bundle.OciBundleConfig) !?[]const u8 {

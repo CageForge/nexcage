@@ -285,14 +285,20 @@ one core unless the options below or the OCI bundle set them. Its root filesyste
 unprivileged unless `proxmox.unprivileged` is `false`; images from a registry
 always run unprivileged.
 
-For an OCI bundle, nexcage packs `rootfs/` with tar into
-`local:vztmpl/nexcage-<name>-<time>.tar.zst`, creates the container from that
-template and deletes the archive. The rootfs is used as it is, so it must boot
-as a system container: an image without an init will not start. The
-bundle's namespaces turn on no Proxmox features: LXC gives the container its
-own namespaces, and a user namespace when it is unprivileged. Nesting and
-keyctl, which loosen the container's AppArmor profile and seccomp filter, are
-the host administrator's to give with `pct set <vmid> --features`.
+For an OCI bundle, nexcage packs `rootfs/` with tar into an archive, 0600, in
+a directory of its own that only root can enter,
+`nexcage-bundle-<name>-<random>/` under `$TMPDIR` or else `/var/tmp`. It gives
+`pct create` that file, which Proxmox takes from root, and deletes it and its
+directory afterwards, also when SIGINT, SIGTERM or SIGHUP ends nexcage first
+(a SIGKILL leaves them, still readable by root alone). The archive is never on
+a Proxmox storage, so it is not a template anyone else can see or use.
+`$TMPDIR` has to be a directory owned by root that others cannot write to, or
+a sticky one like `/var/tmp`; another is refused. The rootfs is used as it
+is, so it must boot as a system container: an image without an init will not
+start. The bundle's namespaces turn on no Proxmox features: LXC gives the
+container its own namespaces, and a user namespace when it is unprivileged.
+Nesting and keyctl, which loosen the container's AppArmor profile and seccomp
+filter, are the host administrator's to give with `pct set <vmid> --features`.
 
 Proxmox confines every container with its own AppArmor profile, capability
 set, seccomp filter and device rules, and pct cannot take a bundle's instead.
