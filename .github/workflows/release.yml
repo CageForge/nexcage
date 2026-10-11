@@ -97,12 +97,15 @@ jobs:
       - name: It runs, and the crun backend is really in it
         # Checked inside the image, where the shared libraries are. `features`
         # is answered by libcrun itself, so it cannot succeed on a binary that
-        # was built without the backend.
+        # was built without the backend -- as long as its exit status is
+        # looked at: this used to be `features | head -3`, whose status is
+        # head's. A failure here stops the release before anything is
+        # published.
         run: |
           set -eux
           docker run --rm nexcage:release version
-          docker run --rm nexcage:release --runtime crun features \
-            | head -3
+          docker run --rm nexcage:release --runtime crun features > features.json
+          python3 tests/crun/features_check.py features.json
 
       - name: Extract the binary
         id: build

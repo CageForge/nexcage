@@ -2,7 +2,9 @@
 # Installs a nexcage .deb into a clean Debian 13 container, as a Proxmox VE 9
 # node is, and runs it there (#380). That proves the Depends line brings in
 # everything the binary links, and that the crun backend is in the binary:
-# `features` is answered by libcrun itself. The binary has to be a PIE.
+# `features` is answered by libcrun itself, so it fails on a binary without
+# the backend; its output goes to a file, since in a pipe the status would be
+# the last command's. The binary has to be a PIE.
 #
 # What the package carries is read from the package, not from the installed
 # tree: a minimized image skips /usr/share/doc and man pages on install.
@@ -42,7 +44,9 @@ docker run --rm -v "$DIR:/dist:ro" debian:trixie sh -euxc "
   apt-get install -y -qq /dist/$NAME
   nexcage version
   nexcage --help > /dev/null
-  nexcage --runtime crun features | head -3
+  nexcage --runtime crun features > /tmp/features.json
+  head -3 /tmp/features.json
+  grep -q '\"io.cageforge.nexcage.backend\": *\"crun\"' /tmp/features.json
   for c in config.json config.oci.example.json; do
     dpkg-deb --fsys-tarfile /dist/$NAME | tar -xO ./usr/share/doc/nexcage/examples/\$c > /tmp/\$c
     nexcage --config /tmp/\$c version
