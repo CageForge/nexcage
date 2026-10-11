@@ -452,7 +452,14 @@ check "bundle: rootfs packed on storage local, pct create uses that volume" \
 check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
 check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
-check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_re "^pct set [0-9]+ --features nesting=1,keyctl=1$"
+# A user namespace in the bundle turned on nesting=1,keyctl=1, and any other
+# namespace list keyctl=1: Proxmox's AppArmor profile loosened and its keyctl
+# filter lifted because a bundle asked for its own namespaces.
+check "bundle: a user namespace turns on no Proxmox features" not_called_re "--features"
+mkdir -p "$S/bundles/ns-pid"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/ns-pid/"
+printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"linux":{"namespaces":[{"type":"pid"},{"type":"mount"}]}}' > "$S/bundles/ns-pid/config.json"
+nx create --name ns-pid /tmp/nexcage-bundles/ns-pid
+check "bundle: namespaces without a user one turn on no keyctl either" all 'rc 0' 'not_called_re "--features"'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'

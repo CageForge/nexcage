@@ -67,3 +67,8 @@ nothing root owns, while files owned by the mapped uids are its own. In a
 privileged container (`proxmox.unprivileged: false`) container
 root is host root on whatever the mount shows. Read a bundle's mounts before
 creating a container from it.
+
+**Features.** A bundle turns on no Proxmox features. Its namespaces are
+LXC's to make, and a user namespace in the bundle used to set `nesting=1`
+and `keyctl=1`, loosening the container's AppArmor profile and lifting the
+keyctl filter Proxmox puts on an unprivileged container.

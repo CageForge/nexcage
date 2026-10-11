@@ -288,8 +288,11 @@ always run unprivileged.
 For an OCI bundle, nexcage packs `rootfs/` with tar into
 `local:vztmpl/nexcage-<name>-<time>.tar.zst`, creates the container from that
 template and deletes the archive. The rootfs is used as it is, so it must boot
-as a system container: an image without an init will not start. The user
-namespace maps to `nesting=1,keyctl=1`.
+as a system container: an image without an init will not start. The
+bundle's namespaces turn on no Proxmox features: LXC gives the container its
+own namespaces, and a user namespace when it is unprivileged. Nesting and
+keyctl, which loosen the container's AppArmor profile and seccomp filter, are
+the host administrator's to give with `pct set <vmid> --features`.
 
 The bundle's bind mounts become the container's mount points `mp0`, `mp1`, ...
 through one `pct set` after the create, which checks each as Proxmox's API

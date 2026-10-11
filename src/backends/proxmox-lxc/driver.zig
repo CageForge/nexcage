@@ -491,12 +491,13 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // 7. Post-creation setup
-        if (oci_bundle_path != null) {
-            try self.oci_processor.applyMountPoints(vmid, bundle_mounts orelse &.{});
-            if (bundle_config) |bc| {
-                if (bc.namespaces) |ns| try self.applyNamespacesToLxcConfig(vmid, ns);
-            }
-        }
+        // A bundle's namespaces turn on no Proxmox features: LXC gives the
+        // container its own namespaces, and a user namespace when it is
+        // unprivileged, whatever the bundle lists. A user namespace used to
+        // set nesting=1,keyctl=1, and any namespace list keyctl=1, which
+        // loosen Proxmox's AppArmor profile and lift its keyctl filter --
+        // confinement taken away because a bundle asked for confinement.
+        if (oci_bundle_path != null) try self.oci_processor.applyMountPoints(vmid, bundle_mounts orelse &.{});
 
         const bundle_ptr: ?*const bundle.OciBundleConfig = if (bundle_config) |*bc| bc else null;
         try self.persistRuntimeMetadata(config.name, vmid, bundle_ptr, net_runtime.items);
@@ -624,13 +625,6 @@ pub const ProxmoxLxcDriver = struct {
         try file.writeAll(buffer.items);
 
         if (self.logger) |log| log.debug("Persisted runtime metadata for {s} at {s}", .{ container_name, metadata_path }) catch {};
-    }
-
-    /// Apply namespaces from OCI bundle to LXC container via pct set --features
-    /// Maps OCI namespace types to LXC features where applicable
-    /// Apply namespaces from OCI bundle to LXC container via pct set --features
-    fn applyNamespacesToLxcConfig(self: *Self, vmid: []const u8, namespaces: []const oci_spec.runtime.bundle.NamespaceConfig) !void {
-        return self.oci_processor.applyNamespacesToLxcConfig(vmid, namespaces);
     }
 
     /// Start LXC container using pct command

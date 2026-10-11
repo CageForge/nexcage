@@ -270,30 +270,6 @@ pub const OciProcessor = struct {
             return core.Error.OperationFailed;
         }
     }
-
-    pub fn applyNamespacesToLxcConfig(self: *const Self, vmid: []const u8, namespaces: []const bundle.NamespaceConfig) !void {
-        var features = std.ArrayListUnmanaged(u8){};
-        defer features.deinit(self.allocator);
-
-        var has_user_ns = false;
-        for (namespaces) |ns| {
-            if (std.mem.eql(u8, ns.type, "user")) has_user_ns = true;
-        }
-
-        if (has_user_ns) {
-            try features.appendSlice(self.allocator, "nesting=1,keyctl=1");
-        } else {
-            try features.appendSlice(self.allocator, "keyctl=1");
-        }
-
-        const args = [_][]const u8{ "pct", "set", vmid, "--features", features.items };
-        const res = try common.runCommand(self.allocator, self.logger, &args);
-        defer {
-            self.allocator.free(res.stdout);
-            self.allocator.free(res.stderr);
-        }
-        if (res.exit_code != 0) return core.Error.RuntimeError;
-    }
 };
 
 /// A bind mount, as runc reads one: type "bind", or "bind" or "rbind" among
