@@ -238,6 +238,14 @@ line that explains it.
 way `runc exec` does, so 1 and 2 from that command mean whatever the command
 means by them.
 
+On the Proxmox LXC backend the tools nexcage runs (`pct`, `pvesh`, `pvesm`,
+`tar`, `zfs`; not `exec`'s `pct exec`) get `SIGTERM` when nexcage dies, and
+`pct` passes it on to its task. A command whose nexcage is killed — by a
+caller's timeout, say — is cut short rather than finishing behind its back. A
+`pct create` cut short is removed by Proxmox, but `stop`, `delete` and `pull`
+stop where they were, and a `pct destroy` cut short can leave a container half
+removed. Run the command again (`delete --force` for a delete) to finish it.
+
 ## Commands
 
 ### create
