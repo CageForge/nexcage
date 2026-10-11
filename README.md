@@ -98,7 +98,8 @@ nexcage create --name web-2 --node titan shared-rdma:vztmpl/redis_7.tar
 
 Containers are addressed by name, which becomes the hostname and must be unique
 across the cluster. A VMID, or a container nexcage did not create, takes
-`--runtime lxc`: without it, a name nexcage has no record of does not exist.
+`--runtime lxc`: without it, a name nexcage has no record of does not exist,
+and a record finds its container by name only, never by VMID.
 `exec`, `kill`, `pause`, `resume` and the `pid` in `state` work on the host
 the container is on, and say so for one elsewhere.
 Exit status is `0` for success, `1` when the operation failed, `2` for invalid

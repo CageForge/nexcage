@@ -20,6 +20,11 @@ pub const ProxmoxLxcDriver = struct {
     zfs_mgr: zfs.ZfsManager,
     pve_client: pve.PveClient,
     oci_processor: oci.OciProcessor,
+    /// What a command's id may be taken for: a name, unless the caller
+    /// asked for this backend with --runtime lxc, which lets a VMID find a
+    /// container too (PveClient.By). Without --runtime, the command came here
+    /// through nexcage's record of a container with that name.
+    by: pve.PveClient.By = .name,
 
     pub const CommandResult = common.CommandResult;
     pub const NetDeviceRuntimeInfo = common.NetDeviceRuntimeInfo;
@@ -182,7 +187,7 @@ pub const ProxmoxLxcDriver = struct {
         // unique -- and unique across the cluster, not just on this host, or
         // the name would resolve to two containers and the first one found
         // would win. Checked before any image is pulled.
-        if (self.pve_client.locate(self.allocator, config.name)) |found| {
+        if (self.pve_client.locate(self.allocator, config.name, .name_or_vmid)) |found| {
             var existing = found;
             defer existing.deinit();
             if (existing.local) {
@@ -681,7 +686,23 @@ pub const ProxmoxLxcDriver = struct {
             try log.info("Deleting Proxmox LXC container: {s}", .{container_id});
         }
 
-        var loc = try self.resolveLocation(container_id);
+        var loc = self.pve_client.locate(self.allocator, container_id, self.by) catch |err| {
+            // What is left of a container that is gone -- destroyed from the
+            // GUI or with pct, or renamed -- is nexcage's record of it, and
+            // delete --force is how an engine forgets one. It failed with
+            // "not found", and the record stayed until a reboot cleared /run,
+            // keeping the id from the crun backend all that time. libcrun
+            // does the same for a status file whose container is gone. A
+            // listing that fails is never NotFound (PveClient.listingError),
+            // so this is a container no node has, not one nexcage could not
+            // ask about.
+            if (err == core.Error.NotFound and force and self.forget(container_id)) {
+                if (self.logger) |log| log.warn("no container is named '{s}' on any node, so nexcage forgot its record of it and did nothing else", .{container_id}) catch {};
+                return;
+            }
+            self.notFound(container_id, err);
+            return err;
+        };
         defer loc.deinit();
         const vmid = loc.vmid;
 
@@ -710,16 +731,9 @@ pub const ProxmoxLxcDriver = struct {
         // Drop the state nexcage persisted for this container: the container
         // just destroyed, under its own name. The typed argument used to be
         // used, and `delete 1000` that resolved to the container with VMID
-        // 1000 removed the record of another one, named 1000. Never let the
-        // name address anything above the state root.
+        // 1000 removed the record of another one, named 1000.
         const name = loc.name orelse return;
-        if (std.mem.indexOfScalar(u8, name, '/') == null and
-            !std.mem.eql(u8, name, ".") and !std.mem.eql(u8, name, ".."))
-        {
-            const state_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ core.state_root.get(), name });
-            defer self.allocator.free(state_path);
-            std.fs.cwd().deleteTree(state_path) catch {};
-        }
+        _ = self.forget(name);
 
         // ZFS cleanup if needed (renaming with -delete suffix was a specific feature)
         if (self.config.zfs_pool) |pool| {
@@ -841,10 +855,23 @@ pub const ProxmoxLxcDriver = struct {
     }
 
     /// The one container of `containers` that `name_or_vmid` names, the way
-    /// every other command finds one: a name before a VMID, and a name two
-    /// containers share refused.
-    pub fn choose(self: *Self, containers: []const core.ContainerInfo, name_or_vmid: []const u8) !usize {
-        return self.pve_client.choose(containers, name_or_vmid);
+    /// every other command finds one: a name before a VMID, a VMID only `by`
+    /// one, and a name two containers share refused.
+    pub fn choose(self: *Self, containers: []const core.ContainerInfo, name_or_vmid: []const u8, by: pve.PveClient.By) !usize {
+        return self.pve_client.choose(containers, name_or_vmid, by);
+    }
+
+    /// Remove nexcage's record of the container named `name`, saying whether
+    /// there was one. Best effort, as it always was. Never lets the name
+    /// address anything above the state root.
+    fn forget(self: *Self, name: []const u8) bool {
+        if (name.len == 0 or std.mem.indexOfScalar(u8, name, '/') != null or
+            std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return false;
+        const dir = std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ core.state_root.get(), name }) catch return false;
+        defer self.allocator.free(dir);
+        std.fs.cwd().access(dir, .{}) catch return false;
+        std.fs.cwd().deleteTree(dir) catch {};
+        return true;
     }
 
     /// Rewrite nexcage's record of a container it has just acted on, under
@@ -945,12 +972,20 @@ pub const ProxmoxLxcDriver = struct {
     /// instead of being reported as missing; the not-found case is logged under
     /// the name the user typed.
     fn resolveLocation(self: *Self, container_id: []const u8) !pve.PveClient.Location {
-        return self.pve_client.locate(self.allocator, container_id) catch |err| {
-            if (err == core.Error.NotFound) {
-                if (self.logger) |log| log.err("Container '{s}' not found on any node", .{container_id}) catch {};
-            }
+        return self.pve_client.locate(self.allocator, container_id, self.by) catch |err| {
+            self.notFound(container_id, err);
             return err;
         };
+    }
+
+    /// Say so when a lookup found no container, and why a VMID did not count.
+    fn notFound(self: *Self, container_id: []const u8, err: anyerror) void {
+        if (err != core.Error.NotFound) return;
+        const log = self.logger orelse return;
+        switch (self.by) {
+            .name_or_vmid => log.err("Container '{s}' not found on any node", .{container_id}) catch {},
+            .name => log.err("Container '{s}' not found on any node: no container has that name. nexcage's record finds a container by its name; a VMID is reached with --runtime lxc", .{container_id}) catch {},
+        }
     }
 
     /// Name → VMID for commands that act on an existing container, with the

@@ -138,7 +138,10 @@ one thing only it knows: which node a container elsewhere is on.
 
 **Which container a name means.** A name is looked for before a VMID, so a
 container named `1000` is the one `1000` finds even when another container has
-VMID 1000; a VMID finds its container when no container has that name. A name
+VMID 1000. A VMID finds its container only with `--runtime lxc`, and only when
+no container has that name: without `--runtime` the command reached the Proxmox
+backend through nexcage's record of a container with that name, which says
+nothing about a VMID. A name
 that more than one container has — two nodes' creates racing, or a duplicate
 made outside nexcage — is refused with exit 1 and the containers listed, never
 resolved to whichever the listing put first; address one by its VMID, with
@@ -174,6 +177,15 @@ did not create, one addressed by its VMID, and one whose record a reboot
 cleared from `/run` are reached with `--runtime lxc`; a command that changes
 one (start, stop, pause, resume, rollback) writes the record again under its
 name, so the next command needs no `--runtime`.
+
+**A record is of a name, not a VMID.** Through it, an id finds the container
+with that name and nothing else: a record of `250` whose container was
+destroyed outside nexcage does not reach whatever container has VMID 250 now.
+Such a record — its container destroyed from the GUI or with `pct`, or renamed
+— is forgotten by `delete --force`, which then exits 0 and does nothing else;
+any other command exits 1 saying no container has that name. A cluster that
+cannot be asked is an error, never taken for "no such container", so a record
+is not forgotten on a failed listing.
 
 `--runtime <lxc|crun>` overrides that for one command, before or after the
 command name; `--runtime lxc` for a container the crun backend has exits 2.
@@ -403,7 +415,9 @@ shuts it down and then destroys it, as `runc delete --force` does. A container
 engine sends `--force` once it has given up waiting for a clean shutdown.
 `delete --force` of a container no backend has a record of exits 0, and so is
 safe to repeat; plain `delete` of one exits 1 (see
-[Backend selection](#backend-selection)).
+[Backend selection](#backend-selection)). So does `delete --force` of a
+container nexcage has a record of but no node has any more: it forgets the
+record and touches nothing else.
 
 ### kill
 

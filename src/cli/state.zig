@@ -61,7 +61,10 @@ pub const StateCommand = struct {
         // The OCI runtime spec makes querying a container that does not exist
         // an error. This used to print "status": "unknown" and exit 0, which a
         // caller cannot tell apart from a real container in an odd state.
-        var found = self.findContainer(allocator, runtime_type, container_id) catch |err| {
+        // A VMID finds a container only with --runtime lxc; without it the
+        // container was found through nexcage's record, which is of a name.
+        const by: backends.proxmox_lxc.pve.PveClient.By = if (options.runtime_type != null) .name_or_vmid else .name;
+        var found = self.findContainer(allocator, runtime_type, container_id, by) catch |err| {
             if (err == types.Error.NotFound) {
                 if (self.base.logger) |log| log.err("Container '{s}' not found", .{container_id}) catch {};
             }
@@ -116,7 +119,7 @@ pub const StateCommand = struct {
         frozen: bool = false,
     };
 
-    fn findContainer(self: *Self, allocator: std.mem.Allocator, runtime_type: types.RuntimeType, container_id: []const u8) !Found {
+    fn findContainer(self: *Self, allocator: std.mem.Allocator, runtime_type: types.RuntimeType, container_id: []const u8, by: backends.proxmox_lxc.pve.PveClient.By) !Found {
         switch (runtime_type) {
             .proxmox_lxc, .lxc => {
                 const proxmox_config = types.ProxmoxLxcBackendConfig{ .allocator = allocator };
@@ -136,7 +139,7 @@ pub const StateCommand = struct {
 
                 // Containers are addressed by name everywhere else (create
                 // sets the hostname, start/stop/delete resolve it), so match
-                // the name first; a bare VMID is accepted as well. This took
+                // the name first; a bare VMID only with --runtime lxc. This took
                 // the first entry matching either, so a container named 1000
                 // was reported as the one with VMID 1000 when the listing put
                 // that first, and one of two sharing a name as if it were
@@ -144,7 +147,7 @@ pub const StateCommand = struct {
                 const here = backend.nodeName() catch null;
                 defer if (here) |h| allocator.free(h);
 
-                const c = &containers[try backend.choose(containers, container_id)];
+                const c = &containers[try backend.choose(containers, container_id, by)];
 
                 // A container on another node of the cluster has an init, but
                 // its PID belongs to that node's process table. Reporting it

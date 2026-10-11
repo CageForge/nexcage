@@ -1164,6 +1164,42 @@ check "and a VMID that changed hands during its delete --force's shutdown is not
       'grep -q "^100 stopped web-new$" "$S/db"' 'err_has "no longer"'
 rm -f "$S/meanwhile"
 
+# nexcage's record proves it made a container with that name, and says
+# nothing about a VMID. A record whose container has gone -- destroyed from
+# the GUI or with pct, or renamed -- still unlocked a lookup by VMID, and a
+# CT nexcage never made, holding that number now, was the one destroyed.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name 250 "$TPL" >/dev/null 2>&1
+check "(a container named 250, at VMID 100)" grep -qx "100 stopped 250" "$S/db"
+# destroyed outside nexcage, and VMID 250 is a CT nexcage did not create
+echo "250 stopped tenant-b-db" > "$S/db"
+nx state 250
+check "through its record a numeric id is a name, not the CT with that VMID: state" \
+  all 'rc 1' '[ ! -s "$S/out" ]' 'err_has "not found"'
+nx delete 250
+check "nor delete" all 'rc 1' 'not_called_re "^pct destroy"' 'grep -qx "250 stopped tenant-b-db" "$S/db"'
+echo "250 stopped tenant-b-db" > "$S/db"   # each check on its own, whatever the last one did
+nx delete --force 250
+check "nor delete --force, which touches neither the CT nor anything else" \
+  all 'not_called_re "^(pct (shutdown|destroy)|pvesh (create|delete) /nodes/)"' 'grep -qx "250 stopped tenant-b-db" "$S/db"'
+# What is left of a container that is gone is its record, and delete --force
+# is how an engine forgets one. It failed, and the record stayed until a
+# reboot, keeping the id from the crun backend as well.
+check "and exits 0, forgetting the record of the container that is gone" \
+  all 'rc 0' '[ ! -e "$S/run/nexcage/250" ]' 'err_has "no container is named"'
+echo "250 stopped tenant-b-db" > "$S/db"
+nx --runtime lxc delete 250
+check "while --runtime lxc still reaches the CT by its VMID" all 'rc 0' 'called "pct destroy 250"'
+# Only a container no node has is forgotten that way. A listing that fails
+# says nothing about it, whatever words the failure has.
+nx create --name web-9 "$TPL" >/dev/null 2>&1
+echo "ipcc_send_rec[1] failed: No such file or directory" > "$S/fail_resources"
+nx delete --force web-9
+check "a record is not forgotten when the cluster could not be asked" \
+  all 'rc 1' 'err_has "/cluster/resources"' '[ -f "$S/run/nexcage/web-9/state.json" ]'
+rm -f "$S/fail_resources"
+
 echo "--- create --node ---"
 reset_sim
 : > "$S/node_templates"

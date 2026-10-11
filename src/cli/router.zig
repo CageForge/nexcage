@@ -145,7 +145,7 @@ pub const BackendRouter = struct {
         }
 
         switch (runtime_type) {
-            .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
+            .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, runtime != null, config, &cfg),
             .crun => try self.executeCrun(operation, container_id, config, profile),
         }
     }
@@ -177,7 +177,10 @@ pub const BackendRouter = struct {
         return p;
     }
 
-    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config, cfg: *const config_module.Config) !void {
+    /// `asked` is whether --runtime chose this backend. Only then does the
+    /// id find a container by VMID as well as by name: otherwise it came here
+    /// through nexcage's record, which proves a name and no VMID.
+    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, asked: bool, config: ?Config, cfg: *const config_module.Config) !void {
         const sandbox_config = try self.createSandboxConfig(operation, container_id, .proxmox_lxc, config);
         defer self.cleanupSandboxConfig(operation, &sandbox_config);
 
@@ -198,6 +201,7 @@ pub const BackendRouter = struct {
 
         if (self.logger) |log| proxmox_backend.setLogger(log);
         proxmox_backend.setDebugMode(self.debug_mode);
+        proxmox_backend.by = if (asked) .name_or_vmid else .name;
 
         // --console-socket and --pid-file mean what the runtime-spec means by
         // them: create leaves the container's process alive on a pty, and the

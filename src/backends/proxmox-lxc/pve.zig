@@ -462,7 +462,16 @@ pub const PveClient = struct {
     /// one meant.
     pub const Pick = union(enum) { none, one: usize, many };
 
-    pub fn pick(containers: []const core.ContainerInfo, name_or_vmid: []const u8) Pick {
+    /// What an identifier may be taken for. nexcage's record of a container
+    /// proves it made one with that name, and nothing about a VMID: a record
+    /// of `250` whose container was destroyed outside nexcage let a lookup
+    /// fall through to VMID 250, a container nexcage never made, and delete
+    /// --force destroyed it. So a command that found the container through
+    /// its record looks for the name alone, and a VMID is looked for only
+    /// when the caller asked for the Proxmox backend with --runtime lxc.
+    pub const By = enum { name, name_or_vmid };
+
+    pub fn pick(containers: []const core.ContainerInfo, name_or_vmid: []const u8, by: By) Pick {
         var found: ?usize = null;
         for (containers, 0..) |c, i| {
             if (!std.mem.eql(u8, c.name, name_or_vmid)) continue;
@@ -471,6 +480,7 @@ pub const PveClient = struct {
             } else found = i;
         }
         if (found) |f| return .{ .one = f };
+        if (by == .name) return .none;
         for (containers, 0..) |c, i| {
             if (std.mem.eql(u8, c.id, name_or_vmid)) return .{ .one = i };
         }
@@ -480,8 +490,8 @@ pub const PveClient = struct {
     /// The one container among `containers` that `name_or_vmid` names, or
     /// NotFound. A name more than one container has is refused, and the
     /// message names each of them.
-    pub fn choose(self: *const Self, containers: []const core.ContainerInfo, name_or_vmid: []const u8) !usize {
-        switch (pick(containers, name_or_vmid)) {
+    pub fn choose(self: *const Self, containers: []const core.ContainerInfo, name_or_vmid: []const u8, by: By) !usize {
+        switch (pick(containers, name_or_vmid, by)) {
             .one => |i| return i,
             .none => return core.Error.NotFound,
             .many => {
@@ -513,13 +523,13 @@ pub const PveClient = struct {
     /// which answers for this host alone, so a container on another node was
     /// "not found" and create's cluster-wide check passed a name another node
     /// had.
-    pub fn locate(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8) !Location {
+    pub fn locate(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8, by: By) !Location {
         const all = try self.list(self.allocator);
         defer {
             for (all) |*c| c.deinit();
             self.allocator.free(all);
         }
-        const c = all[try self.choose(all, name_or_vmid)];
+        const c = all[try self.choose(all, name_or_vmid, by)];
 
         const here = self.getNodeName() catch null;
         defer if (here) |h| self.allocator.free(h);
@@ -1808,18 +1818,25 @@ fn testEntry(vmid: []const u8, name: []const u8, node: []const u8) core.Containe
 test "a name wins over a VMID, whichever the listing puts first" {
     // Proxmox lists VMIDs in string order, so 1000 comes before 150
     const rows = [_]core.ContainerInfo{ testEntry("1000", "db-prod", "pve"), testEntry("150", "1000", "pve") };
-    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "1000"));
-    try std.testing.expectEqual(PveClient.Pick{ .one = 0 }, PveClient.pick(&rows, "db-prod"));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "1000", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 0 }, PveClient.pick(&rows, "db-prod", .name_or_vmid));
     // a VMID no container is named after still finds its container
-    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "150"));
-    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "web"));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "150", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "web", .name_or_vmid));
 }
 
 test "a name two containers share is no answer" {
     const rows = [_]core.ContainerInfo{ testEntry("100", "web-1", "titan"), testEntry("101", "web-1", "pve"), testEntry("102", "web-2", "pve") };
-    try std.testing.expectEqual(PveClient.Pick.many, PveClient.pick(&rows, "web-1"));
-    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "101"));
-    try std.testing.expectEqual(PveClient.Pick{ .one = 2 }, PveClient.pick(&rows, "web-2"));
+    try std.testing.expectEqual(PveClient.Pick.many, PveClient.pick(&rows, "web-1", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "101", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 2 }, PveClient.pick(&rows, "web-2", .name_or_vmid));
+}
+
+test "by name alone, a VMID finds nothing" {
+    const rows = [_]core.ContainerInfo{ testEntry("250", "tenant-b-db", "pve"), testEntry("100", "web-1", "pve") };
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "250", .name));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "web-1", .name));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 0 }, PveClient.pick(&rows, "250", .name_or_vmid));
 }
 
 test "parsePctStatus reads the init's host PID of a running container" {

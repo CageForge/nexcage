@@ -68,8 +68,10 @@ pub const DeleteCommand = struct {
             "Notes:\n" ++
             "  A container neither backend has a record of does not exist: delete exits 1,\n" ++
             "  and delete --force exits 0, as crun and runc do. A Proxmox container nexcage\n" ++
-            "  did not create is deleted with --runtime lxc. If pct is not in PATH, the\n" ++
-            "  Proxmox LXC backend fails: nexcage must run on a Proxmox VE host.\n");
+            "  did not create is deleted with --runtime lxc. delete --force of a container\n" ++
+            "  nexcage has a record of but no node has any more forgets the record and\n" ++
+            "  exits 0. If pct is not in PATH, the Proxmox LXC backend fails: nexcage must\n" ++
+            "  run on a Proxmox VE host.\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

@@ -276,6 +276,8 @@ pub const SnapshotsCommand = struct {
         const backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config);
         defer backend.deinit();
         if (self.base.logger) |log| backend.setLogger(log);
+        // a VMID finds the container only when --runtime lxc asked for one
+        backend.by = if (options.runtime_type != null) .name_or_vmid else .name;
 
         const list = try backend.listSnapshots(allocator, container_id);
         defer {
