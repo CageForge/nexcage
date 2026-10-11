@@ -38,9 +38,11 @@ pub const HealthCommand = struct {
             \\
             \\The health check verifies:
             \\  - pct works ('pct list'); a failure fails the check
-            \\  - the state directory (/run/nexcage, or --root) is writable, and
-            \\    /etc/pve/lxc is there; either missing fails it, except a state
-            \\    directory not made yet, which the first create makes
+            \\  - the state directory (/run/nexcage, or <root> and
+            \\    <root>/.proxmox-lxc under --root) is writable, and /etc/pve/lxc
+            \\    is there; either missing fails it, except a state directory not
+            \\    made yet in a place nexcage can write, which the first create
+            \\    makes
             \\  - ZFS pools ('zpool status -x'): a warning unless all are healthy
             \\  - Configuration (the file the other commands read, --config
             \\    included), and any OCI runtime spec passed over in the search

@@ -2339,6 +2339,22 @@ check "a FIFO at /tmp/nexcage does not hang health" all '[ "$RC" != 124 ]' 'err_
 NEXCAGE=$S/noisy/noisy-nexcage nx health
 check "a tool that fills its stderr pipe does not hang health" \
   all '[ "$RC" != 124 ]' 'err_has "PASS zfs_pool_status: zpool status -x (exit 0): all pools are healthy"'
+# Under --root, create writes in the root, where libcrun keeps its containers,
+# and makes <root>/.proxmox-lxc for the Proxmox LXC records. health looked only
+# at the second, so a root nexcage cannot write to was "not made yet", and the
+# next create failed on it. Read-only by a mount, not by its mode, so that it
+# is read-only to root too, as nexcage is when act runs this as root.
+printf '#!/bin/sh\nmkdir /tmp/ro-root && mount --bind /tmp/ro-root /tmp/ro-root && mount -o remount,bind,ro /tmp/ro-root && exec %s "$@"\n' "$NEXCAGE" > "$S/noisy/ro-nexcage"
+chmod +x "$S/noisy/ro-nexcage"
+NEXCAGE=$S/noisy/ro-nexcage nx --root /tmp/ro-root health
+check "health under a read-only --root fails on the root and on the directory create would make in it" \
+  all 'rc 1' 'err_has "FAIL state_root: State directory /tmp/ro-root is not writable: "' \
+      'err_has "FAIL state_root: State directory /tmp/ro-root/.proxmox-lxc cannot be made: /tmp/ro-root is not writable: "' \
+      '! err_has "does not exist yet"'
+nx --root /run/fresh health
+check "and under a --root not made yet, where it can be, both are warnings" \
+  all 'err_has "WARN state_root: State directory /run/fresh does not exist yet"' \
+      'err_has "WARN state_root: State directory /run/fresh/.proxmox-lxc does not exist yet"' '! err_has "FAIL state_root"'
 rm -rf "$S/noisy"
 printf '{}\n' > "$S/work/alt.json"
 nx --config alt.json health

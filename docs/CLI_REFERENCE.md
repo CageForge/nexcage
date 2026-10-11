@@ -1198,10 +1198,12 @@ nexcage health
 Checks the host and prints a report on stderr, one PASS, WARN or FAIL line per
 check. It exits 1 if any check failed and 0 otherwise; warnings do not fail.
 
-These are failures: `pct list` missing or failing; the state directory
-(`/run/nexcage`, or `--root`) existing but not a directory nexcage can write;
-`/etc/pve/lxc` not existing. These are only warnings: a state directory not
-made yet, which the first `create` makes; a ZFS pool `zpool status -x` does not
+These are failures: `pct list` missing or failing; a state directory
+(`/run/nexcage`, or both `<root>` and `<root>/.proxmox-lxc` under `--root`)
+existing but not a directory nexcage can write, or not made yet in a
+directory nexcage cannot write; `/etc/pve/lxc` not existing. These are only
+warnings: a state directory not made yet where nexcage can make it, which the
+first `create` does; a ZFS pool `zpool status -x` does not
 call healthy, no pool, or no `zpool`; no config file, or an OCI runtime spec
 passed over in the search. It resolves no names and asks no host outside this
 one.
