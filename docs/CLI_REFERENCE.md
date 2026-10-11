@@ -257,7 +257,7 @@ unique in the cluster. The VMID comes from `pvesh get /cluster/nextid`. `--image
 |---|---|---|
 | Proxmox template | `local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst` | Any `<storage>:vztmpl/…` volume |
 | Template file name | `debian-12-standard_12.7-1_amd64.tar.zst` | Looked up as `local:vztmpl/<file>` |
-| OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only. Found on `--storage` (default `local`) if already pulled, else pulled there through `oci-registry-pull`; the volid is read back from the storage, never guessed from the reference |
+| OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only. Pulled onto `--storage` (default `local`) through `oci-registry-pull` into a file named for the whole reference, as [`pull`](#pull) names it, and created from exactly that file. A file already there under that name is used rather than pulled again; no other template is, whatever its name |
 | OCI bundle directory | `/var/lib/nexcage/bundles/web` | Any absolute path, containing `config.json` and `rootfs/`; a relative path is a usage error (exit 2) |
 
 `--console-socket <path>` is where the runtime sends the master end of the
@@ -516,7 +516,7 @@ each one is on:
 ```
 NODE        STORAGE      SHARED  SIZE   TEMPLATE
 prox-home   local        no      129M   local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst
-prox-home   shared-rdma  yes     31M    shared-rdma:vztmpl/redis_7.tar
+prox-home   shared-rdma  yes     31M    shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
 titan       local        no      98M    local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz
 ```
 
@@ -525,6 +525,9 @@ what `create --node` checks, so this is where to look before placing a container
 elsewhere. **A storage marked `SHARED` carries the same files on every node** and
 is listed once rather than once per node — counting a template twice is worse
 than not showing it.
+
+A storage that cannot be listed — an NFS mount that is offline, say — is left
+out with a warning that names it, rather than hiding every other template.
 
 Proxmox LXC only: the crun backend is handed a bundle whose rootfs is already
 there, so it has nothing to list.
@@ -540,8 +543,8 @@ container template, and prints the volid — which is what `create` takes:
 
 ```bash
 $ nexcage pull docker.io/library/redis:7 --storage shared-rdma
-shared-rdma:vztmpl/redis_7.tar
-$ nexcage create --name r1 --node titan shared-rdma:vztmpl/redis_7.tar
+shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
+$ nexcage create --name r1 --node titan shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
 ```
 
 That pair is the point. `create` pulls too when given a registry reference, but
@@ -550,9 +553,33 @@ only on this host, onto `local` unless `--storage` names another, and `create
 shared storage with `pull`, then creating from the volid it prints, is how
 `create --node` gets a registry image.
 
-The volid is read back from the storage rather than composed from the reference:
-the endpoint normalises the file name, and only the storage knows what it
-settled on.
+**The file is named for the whole reference**: registry, namespace, name and
+tag, with every character a file name cannot have as `_`, then `-` and 16 hex
+digits of the reference's SHA-256, plus the `.tar` Proxmox adds. The digest tells
+apart references that read the same once `/` and `:` are `_`. Proxmox's own name
+kept only the last path component and the tag, so `docker.io/library/redis:7`
+and `ghcr.io/someone/redis:7` were both `redis_7.tar`. nexcage prints the volid
+once the storage holds exactly that file, and fails otherwise — a storage that
+cannot be listed is an error, and a file someone else writes during the pull is
+not taken for it. `create` from a registry reference uses the same name, and
+uses a template already on the storage only when it is that exact file.
+
+A reference pulled there before is not pulled again: Proxmox does not write over
+a file, and the volid of the one there is printed. To fetch it afresh, `rmi` it
+first. Templates an earlier nexcage pulled have Proxmox's short names
+(`redis_7.tar`): `create` pulls the image once more rather than guess what they
+hold, and `rmi` removes the old file.
+
+`--filename <name>` names the file instead, before the `.tar` Proxmox adds. It
+takes letters, digits, `.`, `_` and `-`, not first a `.` or `-`, so that
+Proxmox keeps it as it is; anything else is a usage error (exit 2). A file of
+that name already on the storage is an error (exit 1) rather than an answer: the
+name says nothing about which image it holds.
+
+Whoever can write templates to the storage (`Datastore.AllocateTemplate`) can
+put a file under any name, this one included, and Proxmox's upload writes over
+an existing file. Those users are trusted with every image created from that
+storage.
 
 Needs **Proxmox VE 9.1 or later** on the target node, which is where
 `oci-registry-pull` arrived. nexcage checks the version of the host it runs on,

@@ -93,7 +93,7 @@ nexcage snapshot web-1 before-upgrade   # through pct, on zfs or lvm-thin
 nexcage list                        # every node of the cluster
 nexcage delete web-1
 
-nexcage create --name web-2 --node titan shared-rdma:vztmpl/redis_7.tar
+nexcage create --name web-2 --node titan shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
 ```
 
 Containers are addressed by name, which becomes the hostname and must be unique

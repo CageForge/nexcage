@@ -164,28 +164,37 @@ pub const PveClient = struct {
         return try self.allocator.dupe(u8, node_name);
     }
 
-    /// The volid of a template on `storage` that already holds `reference`,
-    /// or null. What `create` asks before it pulls: an image already there is
-    /// what a container engine would use too, and `pull` is the explicit
-    /// fetch. Matched the way an "already there" pull is matched.
-    pub fn findTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8, reference: []const u8, filename: ?[]const u8) !?[]u8 {
-        const volids = try self.volidsOf(allocator, node, storage);
-        defer {
-            for (volids) |v| allocator.free(v);
-            allocator.free(volids);
-        }
-        return try self.matchTemplate(allocator, volids, reference, filename);
+    /// The volid of the template a pull of `reference` into `storage` writes,
+    /// when the storage already holds it; null when it does not. What `create`
+    /// asks before it pulls: an image already there is what a container engine
+    /// would use too, and `pull` is the explicit fetch.
+    ///
+    /// Only that exact file counts. This used to take the first template whose
+    /// name merely contained the image's last path component and its tag, so
+    /// docker.io/library/debian:12 was answered with Proxmox's own
+    /// debian-12-standard system template, redis:7 with redis_7.2.4.tar or with
+    /// a file someone else had uploaded, and an image from one registry with a
+    /// same-named one pulled from another.
+    pub fn findTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8, reference: []const u8) !?[]u8 {
+        const volid = try self.pullVolid(allocator, storage, reference, null);
+        errdefer allocator.free(volid);
+        if (try self.holdsTemplate(allocator, node, storage, volid)) return volid;
+        allocator.free(volid);
+        return null;
     }
 
     /// Pull an OCI image into a storage on a node, and answer with the volid
-    /// the storage ended up holding.
+    /// of the template it wrote.
     ///
-    /// The volid is read back from the storage rather than composed from the
-    /// reference. Composing it -- which `create` did until 0.13.0 -- is a
-    /// guess about how PVE normalises a name, and the endpoint's own
-    /// documentation says the filename "will be normalized". Asking the
-    /// storage is the only way to know, and the answer is what `pct create`
-    /// needs to be given.
+    /// nexcage names the file rather than leaving it to Proxmox: `filename`
+    /// when the caller gave one, else `pulledTemplateName` of the reference,
+    /// so the answer is exactly <storage>:vztmpl/<name>.tar once the storage
+    /// lists it, and that file or an error. This used to list the storage
+    /// before and after the pull and take whatever had appeared. A listing that
+    /// failed once made every template already there look new, and a file
+    /// another pull, an upload or a bundle create wrote meanwhile was taken
+    /// for this one; either way `create` built the container from it and
+    /// exited 0.
     ///
     /// There is no credential parameter on this endpoint, so a private registry
     /// cannot be authenticated here. The caller is told rather than left to
@@ -198,96 +207,87 @@ pub const PveClient = struct {
         reference: []const u8,
         filename: ?[]const u8,
     ) ![]u8 {
-        const before = try self.volidsOf(allocator, node, storage);
-        defer {
-            for (before) |v| allocator.free(v);
-            allocator.free(before);
-        }
+        const volid = try self.pullVolid(allocator, storage, reference, filename);
+        errdefer allocator.free(volid);
+        // The file name pvesh is given: the volid's, without the ".tar"
+        // Proxmox adds to it.
+        const name = volid[storage.len + ":vztmpl/".len .. volid.len - ".tar".len];
 
         const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/oci-registry-pull", .{ node, storage });
         defer self.allocator.free(path);
-
-        var args = std.ArrayListUnmanaged([]const u8){};
-        defer args.deinit(self.allocator);
-        try args.appendSlice(self.allocator, &.{ "pvesh", "create", path, "--reference", reference });
-        if (filename) |f| try args.appendSlice(self.allocator, &.{ "--filename", f });
-
-        const res = try common.runCommand(self.allocator, self.logger, args.items);
+        const args = [_][]const u8{ "pvesh", "create", path, "--reference", reference, "--filename", name };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        const already_there = res.exit_code == 25 and
+
+        // Proxmox will not write over a file that is there: the handler dies
+        // with "refusing to override existing file", and pvesh exits with
+        // whatever errno Perl holds at that point (25 in practice). Under the
+        // name derived from the reference, that file is this reference pulled
+        // before, as far as the storage can say, and it is the answer. A name
+        // the caller chose says nothing about what the file holds, so there
+        // it is an error, not a pull that quietly did not happen.
+        const already_there = res.exit_code != 0 and
             std.mem.indexOf(u8, res.stderr, "refusing to override existing file") != null;
+        if (already_there and filename != null) {
+            if (self.logger) |log| log.err("{s} is already on {s}, and a pull does not write over it; it may hold any image. Remove it first (nexcage rmi {s}) or give another --filename", .{ volid, storage, volid }) catch {};
+            return core.Error.OperationFailed;
+        }
         if (res.exit_code != 0 and !already_there) {
-            if (self.logger) |log| reportPullFailure(log, reference, storage, node, pullFailureReason(res.stdout, res.stderr));
+            if (self.logger) |log| reportPullFailure(log, reference, storage, node, volid, pullFailureReason(res.stdout, res.stderr));
             return core.Error.OperationFailed;
         }
 
-        const after = try self.volidsOf(allocator, node, storage);
-        defer {
-            for (after) |v| allocator.free(v);
-            allocator.free(after);
-        }
-
-        // What appeared. With nothing new and no "already there", the pull
-        // reported success and left the storage as it was, which is worth an
-        // error rather than a volid nobody can use.
-        for (after) |candidate| {
-            var found_before = false;
-            for (before) |old_volid| {
-                if (std.mem.eql(u8, old_volid, candidate)) found_before = true;
+        if (try self.holdsTemplate(allocator, node, storage, volid)) {
+            if (already_there) {
+                if (self.logger) |log| log.info("{s} is already on {s} as {s}; not pulled again", .{ reference, storage, volid }) catch {};
             }
-            if (!found_before) return try allocator.dupe(u8, candidate);
-        }
-
-        if (already_there) {
-            // Nothing new because it was there already: name the one that
-            // matches what was asked for.
-            if (try self.matchTemplate(allocator, after, reference, filename)) |match| return match;
+            return volid;
         }
 
         // pvesh exits 0 when the pull task it ran failed (#309): the reason is
         // in its output, and nothing reached the storage.
-        if (self.logger) |log| reportPullFailure(log, reference, storage, node, pullFailureReason(res.stdout, res.stderr));
+        if (self.logger) |log| reportPullFailure(log, reference, storage, node, volid, pullFailureReason(res.stdout, res.stderr));
         return core.Error.OperationFailed;
     }
 
-    /// The volid whose file name looks like what was asked for, or null.
-    fn matchTemplate(self: *const Self, allocator: std.mem.Allocator, volids: []const []u8, reference: []const u8, filename: ?[]const u8) !?[]u8 {
-        _ = self;
+    /// <storage>:vztmpl/<name>.tar, the volid a pull of `reference` writes:
+    /// `filename` when one was given, else the name derived from the
+    /// reference.
+    fn pullVolid(self: *const Self, allocator: std.mem.Allocator, storage: []const u8, reference: []const u8, filename: ?[]const u8) ![]u8 {
         if (filename) |f| {
-            for (volids) |v| {
-                if (std.mem.endsWith(u8, v, f)) return try allocator.dupe(u8, v);
+            // Proxmox normalises the name it is given (anything outside
+            // letters, digits, '.', '_' and '-' becomes '_', and everything up
+            // to a '/' goes). A name it would change is refused rather than
+            // guessed at, because the volid has to be known exactly.
+            if (!isPlainFileName(f)) {
+                if (self.logger) |log| log.err("--filename '{s}': letters, digits, '.', '_' and '-' only, not starting with '.' or '-', at most {d} characters; Proxmox adds .tar", .{ f, max_pull_name }) catch {};
+                return core.Error.InvalidInput;
             }
+            return std.fmt.allocPrint(allocator, "{s}:vztmpl/{s}.tar", .{ storage, f });
         }
-        // docker.io/library/redis:7 -> "redis" and "7"
-        const colon = std.mem.lastIndexOfScalar(u8, reference, ':') orelse reference.len;
-        const name_part = reference[0..colon];
-        const tag = if (colon < reference.len) reference[colon + 1 ..] else "latest";
-        const slash = std.mem.lastIndexOfScalar(u8, name_part, '/');
-        const image = if (slash) |i| name_part[i + 1 ..] else name_part;
-        for (volids) |v| {
-            if (std.mem.indexOf(u8, v, image) != null and std.mem.indexOf(u8, v, tag) != null) {
-                return try allocator.dupe(u8, v);
-            }
-        }
-        return null;
+        const name = try pulledTemplateName(allocator, reference);
+        defer allocator.free(name);
+        return std.fmt.allocPrint(allocator, "{s}:vztmpl/{s}.tar", .{ storage, name });
     }
 
-    /// The volids of the templates on one storage of one node.
-    fn volidsOf(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8) ![][]u8 {
+    /// Whether `storage` on `node` lists exactly `volid`. A storage that
+    /// cannot be listed is an error, never a "no": read as an empty storage,
+    /// it once made a pull take a template that was there all along for the
+    /// one it had just written.
+    fn holdsTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8, volid: []const u8) !bool {
         var out = std.ArrayListUnmanaged(Template){};
         defer {
             for (out.items) |*t| t.deinit();
             out.deinit(allocator);
         }
-        self.appendTemplatesOf(allocator, &out, node, storage, false) catch {};
-
-        var volids = try allocator.alloc([]u8, out.items.len);
-        errdefer allocator.free(volids);
-        for (out.items, 0..) |t, i| volids[i] = try allocator.dupe(u8, t.volid);
-        return volids;
+        try self.appendTemplatesOf(allocator, &out, node, storage, false, .fail);
+        for (out.items) |t| {
+            if (std.mem.eql(u8, t.volid, volid)) return true;
+        }
+        return false;
     }
 
     /// Remove a template from the storage it is on.
@@ -329,14 +329,7 @@ pub const PveClient = struct {
                 return core.Error.NotFound;
             }
 
-            const volids = try self.volidsOf(allocator, node, storage);
-            defer {
-                for (volids) |v| allocator.free(v);
-                allocator.free(volids);
-            }
-            for (volids) |v| {
-                if (std.mem.eql(u8, v, volid)) present = true;
-            }
+            present = try self.holdsTemplate(allocator, node, storage, volid);
         }
 
         if (!present) {
@@ -678,7 +671,7 @@ pub const PveClient = struct {
                     if (already) continue;
                     try seen_shared.append(self.allocator, try self.allocator.dupe(u8, st.name));
                 }
-                try self.appendTemplatesOf(allocator, &out, node, st.name, st.shared);
+                try self.appendTemplatesOf(allocator, &out, node, st.name, st.shared, .skip);
             }
         }
 
@@ -724,6 +717,12 @@ pub const PveClient = struct {
         return try out.toOwnedSlice(self.allocator);
     }
 
+    /// What to do with a storage that cannot be listed. Choosing a template
+    /// needs the answer, so there it is an error. `images` shows what the
+    /// cluster has, and one offline mount should not hide every template in
+    /// it, so there the storage is left out, with a warning that names it.
+    const Unlisted = enum { fail, skip };
+
     fn appendTemplatesOf(
         self: *const Self,
         allocator: std.mem.Allocator,
@@ -731,27 +730,29 @@ pub const PveClient = struct {
         node: []const u8,
         storage: []const u8,
         shared: bool,
+        when_unlisted: Unlisted,
     ) !void {
         const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/content", .{ node, storage });
         defer self.allocator.free(path);
         const args = [_][]const u8{ "pvesh", "get", path, "--content", "vztmpl", "--output-format", "json" };
-        const res = common.runCommand(self.allocator, self.logger, &args) catch return;
+        // runCommand has said why it could not run pvesh
+        const res = common.runCommand(self.allocator, self.logger, &args) catch |err| {
+            if (when_unlisted == .skip) return;
+            return err;
+        };
         defer {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        // A storage that cannot be read is skipped rather than fatal: one
-        // offline mount should not hide every template in the cluster.
         if (res.exit_code != 0) {
-            if (self.logger) |log| {
-                log.debug("storage {s} on {s} could not be listed", .{ storage, node }) catch {};
-            }
-            return;
+            return self.unlisted(when_unlisted, node, storage, std.mem.trim(u8, res.stderr, " \t\r\n"));
         }
 
-        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch return;
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch {
+            return self.unlisted(when_unlisted, node, storage, "the answer was not JSON");
+        };
         defer parsed.deinit();
-        if (parsed.value != .array) return;
+        if (parsed.value != .array) return self.unlisted(when_unlisted, node, storage, "the answer was not a list");
 
         for (parsed.value.array.items) |item| {
             if (item != .object) continue;
@@ -764,15 +765,35 @@ pub const PveClient = struct {
                 else => 0,
             } else 0;
 
+            const node_copy = try allocator.dupe(u8, node);
+            errdefer allocator.free(node_copy);
+            const storage_copy = try allocator.dupe(u8, storage);
+            errdefer allocator.free(storage_copy);
+            const volid_copy = try allocator.dupe(u8, volid);
+            errdefer allocator.free(volid_copy);
+            const format_copy = try allocator.dupe(u8, format);
+            errdefer allocator.free(format_copy);
             try out.append(allocator, .{
                 .allocator = allocator,
-                .node = try allocator.dupe(u8, node),
-                .storage = try allocator.dupe(u8, storage),
-                .volid = try allocator.dupe(u8, volid),
-                .format = try allocator.dupe(u8, format),
+                .node = node_copy,
+                .storage = storage_copy,
+                .volid = volid_copy,
+                .format = format_copy,
                 .size = size,
                 .shared = shared,
             });
+        }
+    }
+
+    fn unlisted(self: *const Self, when: Unlisted, node: []const u8, storage: []const u8, why: []const u8) !void {
+        switch (when) {
+            .fail => {
+                if (self.logger) |log| log.err("storage {s} on {s} could not be listed: {s}", .{ storage, node, why }) catch {};
+                return core.Error.OperationFailed;
+            },
+            .skip => {
+                if (self.logger) |log| log.warn("storage {s} on {s} could not be listed, so its templates are not shown: {s}", .{ storage, node, why }) catch {};
+            },
         }
     }
 
@@ -1534,6 +1555,109 @@ fn pctRow(buf: []u8, vmid: []const u8, status: []const u8, lock: []const u8, nam
     return std.fmt.bufPrint(buf, "{s: <10} {s: <10} {s: <12} {s: <20}", .{ vmid, status, lock, name });
 }
 
+/// The longest file name nexcage gives a pull, before the ".tar" Proxmox adds:
+/// 200 characters of the reference, '-' and 16 hex digits. Proxmox writes to
+/// "<name>.tar.tmp.<pid>" first, and that still fits in the 255 bytes a file
+/// name can have.
+const max_pull_name = 200 + 1 + 16;
+
+/// The file name nexcage pulls `reference` under, before the ".tar" Proxmox
+/// adds: the whole reference -- registry, namespace, name and tag -- with every
+/// character a template's file name cannot have turned into '_', then '-' and
+/// the first 16 hex digits of the reference's SHA-256.
+///
+/// Proxmox's own name is the last path component and the tag, so
+/// docker.io/library/redis:7 and ghcr.io/someone/redis:7 were both
+/// redis_7.tar: the name could not say which image a file held, and the second
+/// pull was refused as already there. The whole reference spelled out says it
+/// to a person reading `images`. The digest says it to nexcage, because '/'
+/// and ':' both becoming '_' still lets two references read the same
+/// (a/b_c:1 and a_b/c:1), and because a reference too long for a file name is
+/// cut here while the digest covers all of it.
+fn pulledTemplateName(allocator: std.mem.Allocator, reference: []const u8) ![]u8 {
+    const readable = reference[0..@min(reference.len, max_pull_name - 17)];
+    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(reference, &digest, .{});
+    const hex = std.fmt.bytesToHex(digest[0..8], .lower);
+
+    const name = try allocator.alloc(u8, readable.len + 1 + hex.len);
+    for (readable, 0..) |c, i| {
+        // A leading '.' would hide the file from the storage's listing, and a
+        // leading '-' reads as an option.
+        name[i] = if (isFileNameChar(c) and !(i == 0 and (c == '.' or c == '-'))) c else '_';
+    }
+    name[readable.len] = '-';
+    @memcpy(name[readable.len + 1 ..], &hex);
+    return name;
+}
+
+/// What Proxmox keeps of a template's file name: normalize_content_filename
+/// turns every other character into '_'.
+fn isFileNameChar(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '_' or c == '.' or c == '-';
+}
+
+/// A file name `pull --filename` may give: one Proxmox's normalisation leaves
+/// as it is, so that the file is known to be exactly <name>.tar afterwards.
+fn isPlainFileName(name: []const u8) bool {
+    if (name.len == 0 or name.len > max_pull_name) return false;
+    if (name[0] == '.' or name[0] == '-') return false;
+    for (name) |c| {
+        if (!isFileNameChar(c)) return false;
+    }
+    return true;
+}
+
+test "a pulled template is named for the whole reference, and two references never share a name" {
+    const a = std.testing.allocator;
+    const redis = try pulledTemplateName(a, "docker.io/library/redis:7");
+    defer a.free(redis);
+    // The digest is pinned: tests/sim derives the same name with sha256sum.
+    try std.testing.expectEqualStrings("docker.io_library_redis_7-a0ed741ac6ba1c57", redis);
+    try std.testing.expect(isPlainFileName(redis));
+
+    const other = try pulledTemplateName(a, "ghcr.io/someone/redis:7");
+    defer a.free(other);
+    try std.testing.expectEqualStrings("ghcr.io_someone_redis_7-", other[0 .. other.len - 16]);
+
+    // The same once '/' and ':' are '_', told apart by the digest
+    const left = try pulledTemplateName(a, "a/b_c:1");
+    defer a.free(left);
+    const right = try pulledTemplateName(a, "a_b/c:1");
+    defer a.free(right);
+    try std.testing.expectEqualStrings(left[0 .. left.len - 16], right[0 .. right.len - 16]);
+    try std.testing.expect(!std.mem.eql(u8, left, right));
+
+    // Too long for a file name: cut, and still told apart
+    const long_a = "registry.example/" ++ "x" ** 250 ++ ":1";
+    const long_b = "registry.example/" ++ "x" ** 250 ++ ":2";
+    const cut_a = try pulledTemplateName(a, long_a);
+    defer a.free(cut_a);
+    const cut_b = try pulledTemplateName(a, long_b);
+    defer a.free(cut_b);
+    try std.testing.expectEqual(max_pull_name, cut_a.len);
+    try std.testing.expect(isPlainFileName(cut_a));
+    try std.testing.expect(!std.mem.eql(u8, cut_a, cut_b));
+
+    // Nothing Proxmox would rewrite, hide or read as an option
+    const odd = try pulledTemplateName(a, "-x/y z@sha256:ab");
+    defer a.free(odd);
+    try std.testing.expectEqualStrings("_x_y_z_sha256_ab-", odd[0 .. odd.len - 16]);
+    try std.testing.expect(isPlainFileName(odd));
+}
+
+test "a --filename is one Proxmox leaves as it is" {
+    try std.testing.expect(isPlainFileName("redis-7"));
+    try std.testing.expect(isPlainFileName("my_app.v2"));
+    try std.testing.expect(!isPlainFileName(""));
+    try std.testing.expect(!isPlainFileName("a/b"));
+    try std.testing.expect(!isPlainFileName("redis:7"));
+    try std.testing.expect(!isPlainFileName(".hidden"));
+    try std.testing.expect(!isPlainFileName("-x"));
+    try std.testing.expect(!isPlainFileName("a b"));
+    try std.testing.expect(!isPlainFileName("x" ** (max_pull_name + 1)));
+}
+
 /// Why a registry pull failed, from what pvesh printed. A pull task that
 /// fails still lets pvesh exit 0; skopeo's own message, `level=fatal
 /// msg="..."`, is on stdout, and stderr only says that `skopeo copy` failed.
@@ -1572,9 +1696,9 @@ fn registryOf(reference: []const u8) []const u8 {
 /// Proxmox's pull runs skopeo with no --authfile, and skopeo reads root's
 /// auth file on the node that pulls (#309). A refused login says where it
 /// goes; the file under /run is skopeo's default and gone after a reboot.
-fn reportPullFailure(log: *core.LogContext, reference: []const u8, storage: []const u8, node: []const u8, reason: ?[]const u8) void {
+fn reportPullFailure(log: *core.LogContext, reference: []const u8, storage: []const u8, node: []const u8, volid: []const u8, reason: ?[]const u8) void {
     const why = reason orelse {
-        log.err("the pull of {s} reported success but {s} on {s} holds no new template", .{ reference, storage, node }) catch {};
+        log.err("the pull of {s} reported success but {s} on {s} does not hold {s}", .{ reference, storage, node, volid }) catch {};
         return;
     };
     log.err("pulling {s} into {s} on {s} failed: {s}", .{ reference, storage, node, why }) catch {};

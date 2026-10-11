@@ -12,11 +12,13 @@ const base_command = @import("base_command.zig");
 /// storage both nodes can read, and the other node can create from it.
 ///
 ///     nexcage pull docker.io/library/redis:7 --storage shared-rdma
-///     nexcage create --name r1 --node titan shared-rdma:vztmpl/redis_7.tar
+///     nexcage create --name r1 --node titan \
+///         shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
 ///
-/// The volid it prints is read back from the storage rather than composed from
-/// the reference: the endpoint normalises the file name, and only the storage
-/// knows what it settled on.
+/// nexcage names the file, for the whole reference, and the volid it prints is
+/// that exact file once the storage holds it (pve.zig, pullTemplate). Proxmox's
+/// own name keeps only the last path component and the tag, which cannot say
+/// which registry an image came from.
 pub const PullCommand = struct {
     const Self = @This();
 
@@ -96,16 +98,23 @@ pub const PullCommand = struct {
             "Fetch an OCI image from a registry into a Proxmox storage, where it\n" ++
             "becomes a container template. Prints the volid, which is what\n" ++
             "`create` takes.\n\n" ++
+            "The file is named for the whole reference -- registry, namespace,\n" ++
+            "name and tag -- with a digest of it: docker.io/library/redis:7 is\n" ++
+            "docker.io_library_redis_7-a0ed741ac6ba1c57.tar. `create` from the\n" ++
+            "same reference uses that file and no other. A reference already\n" ++
+            "pulled there is not pulled again: remove it with `rmi` first.\n\n" ++
             "Options:\n" ++
             "  --node <name>      The node to pull on (default: this host)\n" ++
             "  --storage <name>   The storage to pull into (default: local)\n" ++
-            "  --filename <name>  The destination file name; Proxmox normalises it\n" ++
+            "  --filename <name>  The file name instead, before the .tar Proxmox adds:\n" ++
+            "                     letters, digits, '.', '_' and '-'. It must not be\n" ++
+            "                     there already\n" ++
             "  -h, --help         Show this help message\n\n" ++
             "This is how to make `create --node` work: a storage called `local` is\n" ++
             "a different directory on every node, so pull onto a shared storage and\n" ++
             "the other node can read the template.\n\n" ++
-            "  nexcage pull docker.io/library/redis:7 --storage shared-rdma\n" ++
-            "  nexcage create --name r1 --node titan shared-rdma:vztmpl/redis_7.tar\n\n" ++
+            "  volid=$(nexcage pull docker.io/library/redis:7 --storage shared-rdma)\n" ++
+            "  nexcage create --name r1 --node titan \"$volid\"\n\n" ++
             "Needs Proxmox VE 9.1 or later, which is where oci-registry-pull\n" ++
             "arrived. For a private registry, log in as root on the node that\n" ++
             "pulls, into the file Proxmox's pull reads:\n\n" ++
