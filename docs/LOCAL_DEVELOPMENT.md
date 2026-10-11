@@ -98,8 +98,9 @@ nexcage --runtime crun delete --force demo
 ## CI through act
 
 `scripts/dev.sh act` runs, by default, every job a pull request gets on a
-GitHub-hosted runner except those of `security.yml`: `ci.yml` (`build-test`,
-`simulation`, `scripts`), `version-check.yml`, `crun_build.yml` and
+GitHub-hosted runner except `security.yml`'s scanners, which download their
+databases, images and rules: `ci.yml` (`build-test`, `simulation`,
+`scripts`), `security.yml`'s `zizmor`, `version-check.yml`, `crun_build.yml` and
 `memory_leak_check.yml`, plus the crun job of `dependency_check.yml` in its dry
 run. Name jobs to run others, and pass act's own options after `--`:
 

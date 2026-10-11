@@ -158,6 +158,25 @@ jobs:
         with:
           persist-credentials: false
 
+      # Every shell script under scripts/, tests/ and packaging/, found by
+      # name or by its #! line. Errors fail the job; the tree has none.
+      # Warnings are not checked yet.
+      - name: shellcheck, errors only
+        run: |
+          set -euo pipefail
+          command -v shellcheck > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck; }
+          files=()
+          while IFS= read -r f; do
+            case "$f" in
+              *.sh|*.bash) files+=("$f") ;;
+              *) if head -n1 "$f" | grep -qE '^#!.*[/ ](ba|da)?sh( |$)'; then files+=("$f"); fi ;;
+            esac
+          done < <(git ls-files scripts tests packaging)
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::no shell scripts found"; exit 1; }
+          shellcheck --version | sed -n 2p
+          echo "checking ${#files[@]} scripts"
+          shellcheck -S error "${files[@]}"
+
       # Each test runs a copy of a script from scripts/ against fakes of the
       # tools it calls. Nothing is downloaded, and what a test makes outside
       # its scratch directory it removes.

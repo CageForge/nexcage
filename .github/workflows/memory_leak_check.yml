@@ -35,6 +35,9 @@ jobs:
         run: |
           zig build -Doptimize=Debug
 
+      # Valgrind's --error-exitcode fails the step on a memory error. Both
+      # runs used to end in `|| true`, which turned any error into a pass; on
+      # main they report "ERROR SUMMARY: 0 errors" (run 37992572489).
       - name: Run memory leak check with Valgrind
         run: |
           valgrind --leak-check=full \
@@ -42,14 +45,14 @@ jobs:
                   --track-origins=yes \
                   --error-exitcode=1 \
                   --verbose \
-                  ./zig-out/bin/nexcage version || true
+                  ./zig-out/bin/nexcage version
 
       - name: Run long-running memory test
         run: |
           timeout 300 valgrind --leak-check=full \
                               --show-leak-kinds=all \
                               --error-exitcode=1 \
-                              ./zig-out/bin/nexcage --help || true
+                              ./zig-out/bin/nexcage --help
 
       - name: Generate memory report
         if: always()

@@ -22,10 +22,11 @@ DEV=$REPO/zig-out/dev
 BUNDLE=$DEV/bundle
 
 # The jobs `act` runs by default: every job a pull request gets on a
-# GitHub-hosted runner, except security.yml, whose scanners upload to GitHub,
-# plus dependency_check.yml's crun job in its dry run, which reads the
-# repository's issues and the crun releases and writes nothing.
-ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation ci.yml:scripts version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
+# GitHub-hosted runner, except security.yml's scanners, which download their
+# databases, images and rules (its zizmor job is in), plus dependency_check.yml's
+# crun job in its dry run, which reads the repository's issues and the crun
+# releases and writes nothing.
+ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation ci.yml:scripts security.yml:zizmor version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
 
 if [ -t 2 ]; then B=$'\033[1m' R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' N=$'\033[0m'; else B='' R='' G='' Y='' N=''; fi
 say()  { echo "${B}==> $*${N}" >&2; }

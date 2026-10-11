@@ -75,8 +75,9 @@ and no approving review while there is one maintainer
    "Proxmox LXCRI", PCI-DSS, zero trust — the way ADR-001 did before its
    revision. A root binary on a Proxmox host, handed bundles it did not write,
    needs its own: what it trusts, what it refuses, what a bundle can reach.
-   With it, scans that block: all three jobs in `security.yml` are
-   `continue-on-error`. And OpenSSF Scorecards running again. [#320],
+   With it, scans that block: `security.yml`'s scanners now fail on what
+   they find, against baselines with reasons; the threat model decides what
+   those baselines may accept. And OpenSSF Scorecards running again. [#320],
    [#321]
 6. **A support policy**: which minor release receives fixes after 1.0, and
    for how long. [#322]

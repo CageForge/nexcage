@@ -1,27 +1,20 @@
-# Gitleaks configuration for nexcage
+# gitleaks configuration for nexcage: gitleaks' own rules, minus paths that
+# are not this project's text. security.yml fails on any finding.
+#
+# This file used to add [[rules]] entries meant as ignores. A rule without an
+# id is a detection rule, so every line naming zig-out/ was reported as a
+# leak (61 in a run that stayed green behind `|| true`). Ignores are
+# allowlists; a finding accepted on purpose goes in .gitleaksignore, its
+# fingerprint with a comment saying why.
 title = "nexcage"
 
 [extend]
 useDefault = true
 
-# Ignore common false positives
-[[rules]]
-description = "Ignore common false positives"
-regex = '''^(tests/.*|\.gitignore|\.backup/.*|deps/.*|zig-out/.*|\.zig-cache/.*)$'''
-tags = ["ignore"]
-
-# Ignore backup and dependency directories
-[[rules]]
-description = "Ignore backup directories"
-regex = '''\.backup/.*'''
-tags = ["ignore"]
-
-[[rules]]
-description = "Ignore dependency directories"
-regex = '''deps/.*'''
-tags = ["ignore"]
-
-[[rules]]
-description = "Ignore build output directories"
-regex = '''(zig-out|\.zig-cache)/.*'''
-tags = ["ignore"]
+[[allowlists]]
+description = "Not this project's text: vendored code, build output"
+paths = [
+    '''^(?:\./)?deps(?:/|$)''',
+    '''^(?:\./)?zig-out(?:/|$)''',
+    '''^(?:\./)?\.zig-cache(?:/|$)''',
+]
