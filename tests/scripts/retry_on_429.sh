@@ -45,4 +45,24 @@ run 0 "" 0
 if [ "$rc" = 0 ] && [ "$runs" = 1 ] && grep -qx 'done' "$T/out"; then ok "a success runs once, its output shown"
 else bad "a success runs once, its output shown (exit $rc, $runs runs)"; fi
 
+# The command's output and exit status are kept in a file while it runs, and
+# the status is read back to decide. Next to a mktemp file, as "$out.rc", that
+# name could be made first by someone else (a symlink, or a file saying 0).
+# In a directory made by mktemp -d it cannot.
+mkdir -m 0700 "$T/tmp"
+cat > "$T/lister" <<'FAKE'
+#!/bin/sh
+for e in "$TMPDIR"/* "$TMPDIR"/.[!.]*; do
+  if [ -e "$e" ] || [ -L "$e" ]; then stat -c '%F %a %n' "$e"; fi
+done > "$T/seen"
+FAKE
+chmod +x "$T/lister"
+rc=0; TMPDIR="$T/tmp" RETRY_DELAY=0 sh "$RETRY" "$T/lister" > "$T/out" 2>&1 || rc=$?
+if [ "$rc" = 0 ] && ! grep -qv '^directory 700 ' "$T/seen" && [ -z "$(ls -A "$T/tmp")" ]; then
+  ok "while the command runs, what it keeps is in a directory of its own, removed after"
+else
+  bad "while the command runs, what it keeps is in a directory of its own, removed after (exit $rc)"
+  sed 's/^/     in $TMPDIR: /' "$T/seen"; ls -A "$T/tmp" | sed 's/^/     left: /'
+fi
+
 exit "$failed"

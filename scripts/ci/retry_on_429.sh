@@ -13,14 +13,18 @@ set -u
 [ $# -gt 0 ] || { echo "usage: retry_on_429.sh COMMAND [ARG...]" >&2; exit 2; }
 attempts=4
 delay=${RETRY_DELAY:-20}
-out=$(mktemp)
-trap 'rm -f "$out" "$out.rc"' EXIT
+# The output and the status are read back to decide, so they live in a
+# directory of this script's own: a name next to a mktemp file could be made
+# first by someone else.
+dir=$(mktemp -d) || exit 2
+trap 'rm -rf "$dir"' EXIT
+out=$dir/out
 
 attempt=1
 while :; do
     # The command's own status, not tee's.
-    { "$@" 2>&1; echo "$?" > "$out.rc"; } | tee "$out"
-    rc=$(cat "$out.rc")
+    { "$@" 2>&1; echo "$?" > "$dir/rc"; } | tee "$out"
+    rc=$(cat "$dir/rc")
     [ "$rc" = 0 ] && exit 0
     if ! grep -qE '429 Too Many Requests|toomanyrequests' "$out"; then
         exit "$rc"
