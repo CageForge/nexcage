@@ -620,6 +620,10 @@ cfg '{"profiles":{"x":{"runtime":"crun","crun":{"capabilities":{"drop":["NET_RAW
 nx list
 check "a capability not spelt as the spec spells it refuses the file" \
   all 'rc 1' 'err_has "profiles.x.crun.capabilities.drop"' 'err_has "such as \"CAP_NET_RAW\""'
+cfg '{"profiles":{"x":{"runtime":"crun","crun":{"capabilities":{"drop":["CAP_NET_RAW","CAP_SYSADMIN"]}}}}}'
+nx list
+check "a capability the kernel does not have refuses the file, naming it: the typo would drop nothing" \
+  all 'rc 1' 'err_has "profiles.x.crun.capabilities.drop"' "err_has 'names \"CAP_SYSADMIN\"'"
 rm -f "$S/work/config.json" "$S"/nexcage@*
 
 nx --root /run/alt --log "$S/run/ct.json" --log-format json --systemd-cgroup list
