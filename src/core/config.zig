@@ -16,9 +16,14 @@ pub fn setExplicitPath(path: ?[]const u8) void {
     explicit_path = path;
 }
 
-/// Where loadDefault looks when --config names no file, in order.
+/// Where loadDefault looks when --config names no file, in order. Absolute
+/// paths only. ./config.json used to come first, so the directory root ran
+/// nexcage from supplied its configuration: podman runs the runtime in its
+/// caller's directory, and a config.json another user left in /tmp replaced
+/// /etc/nexcage's -- an isolation profile without its requirements,
+/// privileged LXC containers, a log file of their choosing written as root.
+/// A file anywhere else is read when --config names it.
 const default_paths = [_][]const u8{
-    "./config.json",
     "/etc/nexcage/config.json",
     "/etc/nexcage/nexcage.json",
 };
@@ -44,6 +49,24 @@ test "the file in use is the one --config names" {
     setExplicitPath("alt.json");
     defer setExplicitPath(null);
     try std.testing.expectEqualStrings("alt.json", activePath().?);
+}
+
+test "a config.json in the working directory is not read" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(.{ .sub_path = "config.json", .data = "{\"network\":{\"bridge\":\"vmbr666\"},\"proxmox\":{\"unprivileged\":false}}" });
+    var cwd = try std.fs.cwd().openDir(".", .{});
+    defer cwd.close();
+    try tmp.dir.setAsCwd();
+    defer cwd.setAsCwd() catch {};
+
+    setExplicitPath(null);
+    if (activePath()) |path| try std.testing.expect(std.fs.path.isAbsolute(path));
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadDefault();
+    defer cfg.deinit();
+    try std.testing.expect(cfg.proxmox.unprivileged orelse true);
+    if (cfg.network.bridge) |bridge| try std.testing.expect(!std.mem.eql(u8, bridge, "vmbr666"));
 }
 
 test "an explicit path replaces the default search, and must exist" {

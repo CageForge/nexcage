@@ -153,6 +153,15 @@ check "unprivileged=false in config -> --unprivileged 0" all 'rc 0' 'called_re "
 rm -f "$S/work/config.json"
 nx create --name web-7 "$TPL"
 check "no config file -> default bridge, unprivileged, no --rootfs" all 'rc 0' 'called_re "bridge=vmbr0,ip=dhcp --unprivileged 1$"'
+# A config.json in the directory nexcage runs from is not its configuration:
+# podman runs the runtime in its caller's directory, and one that another
+# user left in /tmp made root create privileged containers on their bridge
+# and append its log to a file of their choosing.
+printf '%s\n' '{"log_file":"/run/planted.log","network":{"bridge":"vmbr666"},"proxmox":{"unprivileged":false}}' > "$S/work/config.json"
+SIM_NO_CONFIG=1 nx create --name web-7b "$TPL"
+check "a config.json in the working directory is not read" \
+  all 'rc 0' 'called_re "--hostname web-7b .*bridge=vmbr0,ip=dhcp --unprivileged 1$"' 'not_called_re "vmbr666"' '[ ! -e "$S/run/planted.log" ]'
+rm -f "$S/work/config.json"
 
 # What pct create is usually given (#308): update's limits under update's
 # names and in pct's terms, pct's own names for the rest, net0 in its syntax.
@@ -409,7 +418,7 @@ check "state --runtime crun -> exit 1, no made-up state" all 'rc 1' '[ ! -s "$S/
 echo "=== --config ==="
 printf '%s\n' '{"network":{"bridge":"vmbr77"},"proxmox":{"storage":"alt-store","rootfs_size_gb":3}}' > "$S/work/alt.json"
 nx create --config alt.json --name cf-1 "$TPL"
-check "--config <file> after the command wins over ./config.json" \
+check "--config <file> after the command is the file read" \
   all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname cf-1 .*bridge=vmbr77,ip=dhcp .*--rootfs alt-store:3$"'
 nx --config "$S/work/alt.json" create --name cf-2 "$TPL"
 check "--config before the command, absolute path" all 'rc 0' 'called_re "--hostname cf-2 .*bridge=vmbr77,ip=dhcp"'
@@ -488,10 +497,11 @@ check "--runtime bogus before the command -> exit 2, no leak" rc 2
 # command name, so the engine's very first call answered "unknown command".
 # A container engine runs the runtime from the bundle directory, and a bundle
 # holds a config.json that is an OCI spec. It used to be read as nexcage's own
-# configuration, silently replacing it — routing rules included.
+# configuration, silently replacing it — routing rules included. Nothing in
+# the working directory is read now.
 printf '{"ociVersion":"1.0.0","process":{"args":["/bin/sh"]},"root":{"path":"rootfs"}}' > "$S/work/config.json"
-nx list
-check "an OCI spec in the search path is not read as nexcage's config" \
+SIM_NO_CONFIG=1 nx list
+check "an OCI spec in the working directory is not read as nexcage's config" \
   all 'rc 0' '! err_has "SyntaxError"' '! err_has "invalid configuration"'
 nx --config "$S/work/config.json" list
 check "an OCI spec named with --config is refused, not silently ignored" \
@@ -1126,7 +1136,7 @@ echo "=== health ==="
 # whatever the commands read, and to run `nslookup google.com`.
 cfg '{"proxmox":{"storage":"local-lvm"}}'
 nx health
-check "health reports the config file the commands read" err_has "Config file in use: ./config.json"
+check "health reports the config file the commands read" err_has "Config file in use: $S/work/config.json"
 check "health resolves no outside name" all '! grep -qiE "dns|google" "$S/err"'
 printf '{}\n' > "$S/work/alt.json"
 nx --config alt.json health

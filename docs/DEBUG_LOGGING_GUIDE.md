@@ -229,9 +229,12 @@ export NEXCAGE_LOG_LEVEL=debug
 
 #### Configuration File Locations
 nexcage searches for configuration files in the following order:
-1. `./config.json` (current directory)
-2. `/etc/nexcage/config.json`
-3. `/etc/nexcage/nexcage.json`
+1. `/etc/nexcage/config.json`
+2. `/etc/nexcage/nexcage.json`
+
+`--config <path>` names any other file instead. The current directory is not
+searched: `./config.json` there is read only when `--config ./config.json`
+says so.
 
 #### Configuration File Example
 ```json

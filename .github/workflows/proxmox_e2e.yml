@@ -140,13 +140,19 @@ jobs:
         fi
         echo "Template: $TPL  Storage: $ROOTFS  Snapshot storage: ${SNAPSTORE:-none}  Bridge: $BRIDGE"
 
-        # nexcage reads ./config.json before /etc/nexcage/config.json
-        cat > config.json <<EOF
+        # nexcage reads its configuration from /etc/nexcage or --config, not
+        # from the working directory, and refuses a file that is not root's or
+        # that others can write. So the runner's goes in a directory of root's
+        # and every call names it, the later steps' too.
+        NXCFG=/run/nexcage-e2e/config.json
+        put_config() { $SUDO install -d -m 755 "$(dirname "$1")" && $SUDO tee "$1" >/dev/null && $SUDO chmod 644 "$1"; }
+        put_config "$NXCFG" <<EOF
         {
           "network": { "bridge": "$BRIDGE" },
           "proxmox": { "storage": "$ROOTFS", "rootfs_size_gb": 2 }
         }
         EOF
+        nx() { case " $* " in *" --config "*) $SUDO "$NEXCAGE" "$@" ;; *) $SUDO "$NEXCAGE" --config "$NXCFG" "$@" ;; esac; }
 
         NAME="gh-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         RUN_NAME="$NAME-run"
@@ -397,8 +403,8 @@ jobs:
 
         echo "[E2E] snapshots through pct, on a storage that can: take, list, write a file, roll back, see it gone, delete"
         if [ -n "$SNAPSTORE" ]; then
-          SNAPCFG="$PWD/e2e-snap-config.json"
-          cat > "$SNAPCFG" <<EOF
+          SNAPCFG=/run/nexcage-e2e/snap-config.json
+          put_config "$SNAPCFG" <<EOF
         {
           "network": { "bridge": "$BRIDGE" },
           "proxmox": { "storage": "$SNAPSTORE", "rootfs_size_gb": 2 }
@@ -477,9 +483,9 @@ jobs:
         expect_exit 1 nx state "$NAME"
         expect_exit 1 nx start "$NAME"
 
-        echo "[E2E] run with --config: the named file wins over ./config.json"
-        ALT="$PWD/e2e-alt-config.json"
-        cat > "$ALT" <<EOF
+        echo "[E2E] run with --config: the named file is the one read"
+        ALT=/run/nexcage-e2e/alt-config.json
+        put_config "$ALT" <<EOF
         {
           "network": { "bridge": "$BRIDGE" },
           "proxmox": { "storage": "$ROOTFS", "rootfs_size_gb": 3 }
@@ -540,7 +546,9 @@ jobs:
 
         if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
         NEXCAGE="$PWD/zig-out/bin/nexcage"
-        nx() { $SUDO "$NEXCAGE" "$@"; }
+        # The configuration the lifecycle step wrote: bridge and storage
+        NXCFG=/run/nexcage-e2e/config.json
+        nx() { $SUDO "$NEXCAGE" --config "$NXCFG" "$@"; }
 
         read -r major minor <<<"$($SUDO pveversion | sed -n 's|^pve-manager/\([0-9]*\)\.\([0-9]*\).*|\1 \2|p')"
         if [ "${major:-0}" -lt 9 ] || { [ "${major:-0}" -eq 9 ] && [ "${minor:-0}" -lt 1 ]; }; then
@@ -661,7 +669,9 @@ jobs:
 
         if [ "$(id -u)" -eq 0 ]; then SUDO=; else SUDO='sudo -n'; fi
         NEXCAGE="$PWD/zig-out/bin/nexcage"
-        nx() { $SUDO "$NEXCAGE" "$@"; }
+        # The configuration the lifecycle step wrote: bridge and storage
+        NXCFG=/run/nexcage-e2e/config.json
+        nx() { $SUDO "$NEXCAGE" --config "$NXCFG" "$@"; }
         HERE=$(hostname)
 
         vztmpl_list() { $SUDO pvesm list local --content vztmpl 2>/dev/null | awk 'NR>1 {print $1}' | sort; }
@@ -749,7 +759,9 @@ jobs:
             $SUDO pct destroy "$id" --purge 1 || true
           fi
         done
-        # Bundles and packed templates a failed run can leave behind
+        # Bundles and packed templates a failed run can leave behind, and the
+        # configuration the run wrote
+        $SUDO rm -rf /run/nexcage-e2e
         $SUDO find /var/lib/nexcage/bundles -maxdepth 1 -name 'gh-e2e-*' -exec rm -rf {} + 2>/dev/null || true
         for volid in $($SUDO pvesm list local --content vztmpl 2>/dev/null | awk '$1 ~ /:vztmpl\/nexcage-gh-e2e-/ {print $1}'); do
           echo "[E2E] Final cleanup template $volid"

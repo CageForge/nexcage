@@ -38,15 +38,17 @@ container differently from what was asked.
 Logs go to stderr. stdout carries only command output (`list`, `state`,
 help text).
 
-Without `--config`, configuration comes from the first of `./config.json`,
+Without `--config`, configuration comes from the first of
 `/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json` that exists; see the
-README for the keys.
+README for the keys. Nothing in the working directory is read: up to 0.17.0
+`./config.json` came first, and podman runs the runtime in its caller's
+directory, so a `config.json` another user left in `/tmp` became root's
+configuration — its profiles, `unprivileged: false`, a `log_file` of their
+choosing. Name such a file with `--config` instead.
 
-A file that declares `ociVersion` is not one of them: an OCI bundle holds a
-`config.json` that is a runtime spec, and a container engine runs the runtime
-from the bundle directory, so it would otherwise replace the configuration —
-routing rules included — without saying so. Such a file is skipped in the
-search path, and refused when named with `--config`.
+A file that declares `ociVersion` is not a configuration but an OCI runtime
+spec, the `config.json` a bundle holds. Such a file is skipped in the search,
+and refused when named with `--config`.
 
 `--root` is read before any command touches state, wherever it appears on the
 command line.
@@ -819,8 +821,8 @@ config file; `pgrep nexcage`; and `df -h /`. It resolves no names and asks no
 host outside this one.
 
 It reports the config file the other commands read: the one `--config` names,
-else the first of `./config.json`, `/etc/nexcage/config.json` and
-`/etc/nexcage/nexcage.json` that exists. Like every command, `health` loads
+else the first of `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
+that exists. Like every command, `health` loads
 that file first, and one that is not valid stops it there with exit 1, before
 any check runs.
 

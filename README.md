@@ -151,10 +151,14 @@ On a host that already has a configuration, add the example's `runtime.routing`
 and `profiles` to that file instead of replacing it.
 
 nexcage reads the file given with `--config <path>`, or else the first of
-`./config.json`, `/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json`
-that exists. A file that does not parse is an error; a file declaring
-`ociVersion` is skipped in that search, and refused when named with
-`--config`, because that is an OCI runtime spec and not a configuration.
+`/etc/nexcage/config.json` and `/etc/nexcage/nexcage.json` that exists. It
+does not read `./config.json` from the directory it runs in, as 0.17.0 and
+earlier did: podman runs the runtime in its caller's directory, so a file
+another user left there became root's configuration. Pass
+`--config ./config.json` to read one. A file
+that does not parse is an error; a file declaring `ociVersion` is skipped in
+that search, and refused when named with `--config`, because that is an OCI
+runtime spec and not a configuration.
 
 The table below is every key there is. **Since 0.17.0 anything else refuses the
 file**: a key nexcage does not read, a value of the wrong type, a runtime or

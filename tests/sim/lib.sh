@@ -4,8 +4,9 @@
 # namespace, creates the scratch directory and defines:
 #
 #   reset_sim      empty container db, call log, state and bundles
-#   cfg <json>     write ./config.json for the next nexcage call
-#   nexcage_ns ... run nexcage as uid 0 in its own user and mount namespace
+#   cfg <json>     write the configuration the next nexcage calls read
+#   nexcage_ns ... run nexcage as uid 0 in its own user and mount namespace,
+#                  with --config naming the file cfg wrote, if there is one
 #   stop_inits     kill the fake inits `pct start` left running (on EXIT too)
 #
 # NEXCAGE  binary to run (default zig-out/bin/nexcage)
@@ -63,6 +64,18 @@ reset_sim() {
 }
 cfg() { printf '%s\n' "$1" > "$S/work/config.json"; }
 nexcage_ns() {
+  # nexcage reads no ./config.json: its configuration comes from /etc/nexcage
+  # or --config. So the file cfg wrote is named, unless the call names one
+  # itself -- before a bare --, after which the words are the command exec
+  # runs -- or SIM_NO_CONFIG asks what the binary does without --config.
+  local a named=
+  for a in "$@"; do
+    [ "$a" = -- ] && break
+    case $a in --config|--config=*) named=1; break ;; esac
+  done
+  if [ -z "$named" ] && [ -z "${SIM_NO_CONFIG:-}" ] && [ -f "$SIM/work/config.json" ]; then
+    set -- --config "$SIM/work/config.json" "$@"
+  fi
   # /sys/fs/cgroup is bound from $SIM, not a fresh tmpfs: `pause` writes the
   # freezer and a later `state` has to read what it wrote, and every nx call is
   # its own namespace.

@@ -151,7 +151,7 @@ backend refuses them.
 .TP
 \fBhealth\fR
 Check pct, storage, the network, the configuration file
-(\fI/etc/nexcage/config.json\fR, else \fI./config.json\fR) and the nexcage
+(the one the other commands read; see CONFIGURATION) and the nexcage
 process, print a report on standard error, and exit 1 if any check failed;
 warnings do not fail. The Proxmox API is not checked: its line in the report
 is always a warning.
@@ -220,9 +220,10 @@ carries only command output.
 Without \fB\-\-config\fR, the first of these files that exists and is not an
 OCI runtime spec (one with a top-level ociVersion) is read; a file that does
 not parse is an error:
-.IR ./config.json ,
 .IR /etc/nexcage/config.json ,
 .IR /etc/nexcage/nexcage.json .
+The working directory is not searched; name a file there with
+\fB\-\-config\fR.
 .TP
 .B network.bridge
 Bridge for eth0, which uses DHCP. Default vmbr0.
