@@ -228,8 +228,9 @@ hostUsers: false on the pod". A profile only takes away: a pod's 2Gi limit
 under `hardened` becomes 1G, while a 512M limit stays 512M. `kubectl exec`
 gets no capability the pod's container lacks, and an in-place resize cannot
 take the container above the profile's caps: containerd resends the pod's own
-limit with every resize, so under `hardened` a pod declaring more than 1G
-cannot be resized in place. Declare limits within the profile's.
+limit with every update, so under `hardened` a pod declaring more than 1G
+cannot be resized in place, and the kubelet's CPU manager (static policy)
+cannot move it to other CPUs either. Declare limits within the profile's.
 
 ## From source
 

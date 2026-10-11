@@ -297,7 +297,9 @@ const Caps = struct {
             // libcrun leaves pids.max as it is for a limit of 0.
             else => 0,
         };
-        if (v < lowest) return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for {d}, which is no limit", .{ caps.profile, field.name(), cap, unit, v });
+        // A negative value is "max" to libcrun; a memory.limit of 0 it
+        // writes as it is, and memory.max 0 leaves the container no memory.
+        if (v < lowest) return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for {d}, {s}", .{ caps.profile, field.name(), cap, unit, v, if (v < 0) "which is no limit" else "which is not a usable limit" });
         if (v > cap) return why.set("profile '{s}' caps {s} at {d}{s}, and the update asks for {d}", .{ caps.profile, field.name(), cap, unit, v });
     }
 
@@ -623,6 +625,9 @@ test "update holds a container made under a profile to the caps recorded at crea
     const unlimited = [_]types.ResourceUpdate{.{ .section = "memory", .name = "limit", .value = "-1", .numeric = true }};
     try std.testing.expectError(error.ProfileRefused, boundUpdate(allocator, stored, null, &unlimited, &why));
     try std.testing.expect(std.mem.indexOf(u8, why.text(), "which is no limit") != null);
+    const no_memory = [_]types.ResourceUpdate{.{ .section = "memory", .name = "limit", .value = "0", .numeric = true }};
+    try std.testing.expectError(error.ProfileRefused, boundUpdate(allocator, stored, null, &no_memory, &why));
+    try std.testing.expectEqualStrings("profile 'hardened' caps memory.limit at 67108864 bytes, and the update asks for 0, which is not a usable limit", why.text());
 
     // Within the caps, up to them from below, and what the caps do not name.
     const allowed = [_][]const u8{

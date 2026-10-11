@@ -206,13 +206,17 @@ annotations `io.cageforge.nexcage.profile.memory` and `.pids`. An update
 that would take `memory.limit`, `memory.swap` or `pids.limit` (or the cgroup
 v2 files `memory.max`, `memory.swap.max` and `pids.max` under `unified`)
 above a cap, or to no limit (`-1`, `max`), exits 2 naming the cap and changes
-nothing. A pids limit of 0, which libcrun reads as "leave it", passes. A
+nothing; so does a `memory.limit` of 0, which libcrun writes as a limit of
+zero bytes. A pids limit of 0, which libcrun reads as "leave it", passes. A
 resize within the caps applies as it always did; the caps are the profile's,
 not the limits the container was made with, so a pod that asked for less can
 be resized up to them. A pod whose declared memory limit is above the cap
-cannot be resized in place at all, since every resize resends that limit:
-declare limits within the cap. A container made by an earlier nexcage
-carries no recorded caps and is not held to them.
+cannot be updated in place at all, since containerd rebuilds every update
+from the pod's spec and so resends that limit: an in-place resize is refused,
+and so is the kubelet CPU manager's cpuset update (static policy), which
+leaves the container on the CPUs it had. Declare limits within the cap. A
+container made by an earlier nexcage carries no recorded caps and is not
+held to them.
 
 It is named by the **program name**, `nexcage@<profile>`, or by
 `--profile <profile>`. The program name is how a container engine names one:
