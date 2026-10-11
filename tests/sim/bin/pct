@@ -41,6 +41,51 @@ start_ct() {
     sleep 0.1
   done
 }
+# An mpN value as PVE::JSONSchema::parse_property_string reads it against
+# pve-ct-mountpoint (pve-common, pve-container's LXC/Config.pm): no newline;
+# split on ','; a part without '=' is the volume; key=value parts only for
+# keys the schema has; mp is required; mountoptions from Proxmox's list,
+# ';'-separated; booleans as parse_boolean reads them; and neither path with
+# a "." or ".." component (verify_lxc_mp_string). Errors are pct's words.
+mp_check() {
+  local key=$1 val=$2 part k v vol="" mp=""
+  bad() { echo "400 Parameter verification failed." >&2; echo "$key: $*" >&2; return 1; }
+  case $val in *$'\n'*) bad "invalid format - properties must not contain newlines"; return ;; esac
+  local parts
+  IFS=, read -ra parts <<< "$val"
+  for part in "${parts[@]}"; do
+    [[ $part =~ ^[[:space:]]*$ ]] && continue
+    if [[ $part =~ ^([^=]+)=(.+)$ ]]; then
+      k=${BASH_REMATCH[1]}; v=${BASH_REMATCH[2]}
+      case $k in
+        mp) mp=$v ;;
+        volume) [ -z "$vol" ] || { bad "invalid format - duplicate key in comma-separated list property: volume"; return; }; vol=$v ;;
+        ro|acl|quota|replicate|shared|backup|keepattrs)
+          [[ $v =~ ^(0|1|yes|no|on|off|true|false)$ ]] || { bad "invalid format - format error"$'\n'"$key.$k: type check ('boolean') failed - got '$v'"; return; } ;;
+        mountoptions)
+          [[ $v =~ ^(discard|lazytime|noatime|nodev|noexec|nosuid)(\;(discard|lazytime|noatime|nodev|noexec|nosuid))*$ ]] ||
+            { bad "invalid format - format error"$'\n'"$key.mountoptions: value does not match the regex pattern"; return; } ;;
+        size|idmap) ;;
+        *) bad "invalid format - invalid key in comma-separated list property: $k"; return ;;
+      esac
+    elif [[ $part != *=* ]]; then
+      [ -z "$vol" ] || { bad "invalid format - duplicate key in comma-separated list property: volume"; return; }
+      vol=$part
+    else
+      bad "invalid format - missing key in comma-separated list property"; return
+    fi
+  done
+  [ -n "$mp" ] || { bad "invalid format - format error"$'\n'"$key.mp: property is missing and it is not optional"; return; }
+  # Not a path, so a storage volume (classify_mountpoint), which update
+  # resolves through PVE::Storage::parse_volume_id
+  if [[ $vol != /* && ! $vol =~ ^[a-z][a-z0-9_.-]*[a-z0-9]:.+$ ]]; then
+    echo "unable to parse volume ID '$vol'" >&2; return 1
+  fi
+  for v in "$vol" "$mp"; do
+    if [[ $v =~ /\.\.?/ || $v =~ /\.\.?$ || $v =~ ^\.\./ ]]; then bad "invalid format - $v contains illegal character sequences"; return; fi
+  done
+}
+
 # A snapshot by name in a container's list: "name epoch description..."
 has_snap() { awk -v n="$2" '$1==n {f=1} END {exit !f}' "$SIM/snaps.$1" 2>/dev/null; }
 
@@ -69,11 +114,30 @@ case "$cmd" in
     [ -e "$SIM/fail_create" ] && { cat "$SIM/fail_create" >&2; exit 255; }
     exists "$vmid" && { echo "CT $vmid already exists on node 'pve'" >&2; exit 255; }
     # Like the real pct: the template volume has to exist on the storage.
-    # Archives nexcage packs itself land in $SIM/cache (see fake pvesm path).
+    # A pulled archive can land in $SIM/cache (see fake pvesm path).
     cached="$SIM/cache/${tpl#local:vztmpl/}"
     if [ "${tpl#local:vztmpl/}" != "$tpl" ] && [ -f "$cached" ]; then
       tar --zstd -tvf "$cached" > "$SIM/tarlist.$vmid" 2>&1 \
         || { echo "unable to create CT $vmid - broken archive '$tpl'" >&2; exit 255; }
+    elif [ "${tpl#/}" != "$tpl" ]; then
+      # A file path, which pct takes from root@pam (check_volume_access):
+      # abs_filesystem_path wants a regular file, and tar_compression_option
+      # a name that says how it is compressed. Archives nexcage packs from a
+      # bundle come this way; their mode and their directory's are kept for
+      # the checks.
+      [ -f "$tpl" ] || { echo "unable to create CT $vmid - can't find file '$tpl'" >&2; exit 255; }
+      [[ $tpl =~ \.tar(\.(gz|bz2|xz|lzo|zst))?$ ]] \
+        || { echo "unable to create CT $vmid - file does not look like a template archive: $tpl" >&2; exit 255; }
+      stat -c %a "$tpl" "$(dirname "$tpl")" | paste -sd' ' > "$SIM/tplmode.$vmid"
+      tar --zstd -tvf "$tpl" > "$SIM/tarlist.$vmid" 2>&1 \
+        || { echo "unable to create CT $vmid - broken archive '$tpl'" >&2; exit 255; }
+      # fail_hang holds seconds to stand still, as an unpack does, so a
+      # check can signal nexcage meanwhile; fail_hang.pid gets nexcage's PID
+      # and this one's
+      if [ -e "$SIM/fail_hang" ]; then
+        echo "$PPID $$" > "$SIM/fail_hang.pid"
+        exec sleep "$(cat "$SIM/fail_hang")"
+      fi
     elif ! grep -qxF -- "$tpl" "$SIM/templates" 2>/dev/null; then
       echo "unable to create CT $vmid - volume '$tpl' does not exist" >&2; exit 255
     fi
@@ -132,8 +196,27 @@ case "$cmd" in
     cat "$SIM/conf.$1"
     ;;
   set)
-    exists "$1" || missing "$1"
-    echo "set: $*" >> "$SIM/conf.$1"
+    vmid=$1; shift
+    exists "$vmid" || missing "$vmid"
+    # Mount points are checked as Proxmox's API checks them, all before
+    # anything is written, and land in the config as `mpN: <value>`; other
+    # options are logged as one `set:` line, as before.
+    mps=(); rest=()
+    while [ $# -gt 0 ]; do
+      case $1 in
+        # mp0 to mp255 (MAX_MOUNT_POINTS); Getopt::Long has no other
+        --mp[0-9]*)
+          [ "${1#--mp}" -le 255 ] 2>/dev/null || { echo "Unknown option: ${1#--}" >&2; echo "400 unable to parse option" >&2; exit 255; }
+          mp_check "${1#--}" "$2" || exit 255; mps+=("${1#--}: $2"); shift 2 ;;
+        *) rest+=("$1"); shift ;;
+      esac
+    done
+    # A key is in the config once: a new value replaces the old one
+    for line in "${mps[@]}"; do
+      [ -f "$SIM/conf.$vmid" ] && sed -i "/^${line%%:*}: /d" "$SIM/conf.$vmid"
+      echo "$line" >> "$SIM/conf.$vmid"
+    done
+    if [ ${#rest[@]} -gt 0 ]; then echo "set: $vmid ${rest[*]}" >> "$SIM/conf.$vmid"; fi
     ;;
   # Snapshots: a list per container in $SIM/snaps.<vmid>, "name epoch
   # description". The refusals are pct's own words. $SIM/fail_snapshot holds

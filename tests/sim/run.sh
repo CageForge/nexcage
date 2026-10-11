@@ -596,6 +596,8 @@ check "health names the file read, and the spec passed over" \
 rm -r "${S:?}/etc"
 
 echo "=== create from an OCI bundle ==="
+# A bundle's rootfs is packed into a private directory under $TMPDIR, which
+# lib.sh points at $S/vartmp rather than the host's /var/tmp.
 mkdir -p "$S/bundles/b1/rootfs/bin" "$S/bundles/nocfg/rootfs"
 printf '#!/bin/sh\n' > "$S/bundles/b1/rootfs/bin/busybox"; chmod 755 "$S/bundles/b1/rootfs/bin/busybox"
 ln -s busybox "$S/bundles/b1/rootfs/bin/sh"
@@ -611,18 +613,247 @@ check "a bundle outside nexcage's own directories is accepted and then fails on 
   all 'rc 2' '! err_has "must be an absolute path"' 'not_called_re "^pct create"'
 nx create --name bundle-x /tmp/nexcage-bundles/nocfg
 check "bundle without config.json -> exit 2, no crash" all 'rc 2' 'err_has "config.json"' 'not_called_re "^pct create"'
+# A mount that is not an object left the parser's slot undefined, and freeing
+# it crashed nexcage (root) after pct create had already run.
+mkdir -p "$S/bundles/badmp/rootfs"
+printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":[1,"/srv:/data"]}' > "$S/bundles/badmp/config.json"
+nx create --name bundle-bad /tmp/nexcage-bundles/badmp
+check "bundle whose mounts hold a non-object -> exit 2 before pct create, no crash" \
+  all 'rc 2' 'err_has "not a usable OCI bundle"' '! err_has "General protection"' 'not_called_re "^pct create"'
+# A "mounts" that is not a list was skipped with what it held, and the
+# container created without the mounts the bundle asked for.
+mkdir -p "$S/bundles/objmp/rootfs"
+printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":{"destination":"/data","type":"bind","source":"/srv/data"}}' > "$S/bundles/objmp/config.json"
+nx create --name bundle-objmp /tmp/nexcage-bundles/objmp
+check "bundle whose mounts is an object, not a list -> exit 2 before anything is packed" \
+  all 'rc 2' 'err_has "not a usable OCI bundle"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+rm -f "$S"/tplmode.*
 nx create --name bundle-1 /tmp/nexcage-bundles/b1
-check "bundle: rootfs packed on storage local, pct create uses that volume" \
-  all 'rc 0' 'called_re "^pvesm path local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst$"' \
-      'called_re "^pct create [0-9]+ local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst --hostname bundle-1 "' \
-      '! err_has "No mp entries"'
+# The archive was written to storage local as nexcage-<name>-<time>.tar.zst
+# with tar's umask, 0644: every local user could read the image's 0600 files
+# while pct create ran, and for good if nexcage was interrupted, and it was a
+# template other Proxmox users could use. pct create takes a file from root.
+check "bundle: rootfs packed in a private directory, not the template store; pct create reads that file" \
+  all 'rc 0' 'not_called_re "^pvesm path"' \
+      'called_re "^pct create [0-9]+ /[^ ]+/vartmp/nexcage-bundle-bundle-1-[0-9a-f]{16}/rootfs\.tar\.zst --hostname bundle-1 "' \
+      '! err_has "No mp entries"' '! err_has "not applied on the Proxmox LXC backend"'
+check "bundle: the archive is 0600, in a 0700 directory, while pct create reads it" all '[ "$(cat "$S"/tplmode.*)" = "600 700" ]'
 check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
-check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
-check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_re "^pct set [0-9]+ --features nesting=1,keyctl=1$"
+check "bundle: archive and its directory removed after pct create" all '[ -z "$(ls -A "$S/vartmp")" ]' '[ -z "$(ls -A "$S/cache")" ]'
+# A user namespace in the bundle turned on nesting=1,keyctl=1, and any other
+# namespace list keyctl=1: Proxmox's AppArmor profile loosened and its keyctl
+# filter lifted because a bundle asked for its own namespaces.
+check "bundle: a user namespace turns on no Proxmox features" not_called_re "--features"
+echo "unable to create CT - no space left" > "$S/fail_create"
+nx create --name bundle-f /tmp/nexcage-bundles/b1
+rm -f "$S/fail_create"
+check "bundle: a failed pct create removes the archive too" all '! rc 0' 'called_re "^pct create "' '[ -z "$(ls -A "$S/vartmp")" ]' '[ -z "$(ls -A "$S/cache")" ]'
+# So does a failed pack -- zstd out of space under tar, say -- which ends
+# create before a VMID is taken.
+: > "$S/fail_zstd"
+nx create --name bundle-z /tmp/nexcage-bundles/b1
+rm -f "$S/fail_zstd"
+check "bundle: packing that fails removes the archive and its directory, before pct create" \
+  all '! rc 0' 'err_has "Packing /tmp/nexcage-bundles/b1/rootfs failed"' 'not_called_re "nextid|^pct create"' '[ -z "$(ls -A "$S/vartmp")" ]'
+# Root writes the archive by path, so the directory it is made in must be one
+# where no one else can swap a symlink in: not writable by others unless
+# sticky, as /var/tmp is.
+mkdir -p "$S/opentmp"; chmod 777 "$S/opentmp"
+TMPDIR="$S/opentmp" nx create --name bundle-open /tmp/nexcage-bundles/b1
+check "bundle: a TMPDIR anyone can write to, not sticky -> refused before packing" \
+  all '! rc 0' 'err_has "not a safe place"' '! err_has "Packing"' 'not_called_re "^pct create"' '[ -z "$(ls -A "$S/opentmp")" ]'
+chmod 1777 "$S/opentmp"
+TMPDIR="$S/opentmp" nx create --name bundle-sticky /tmp/nexcage-bundles/b1
+check "bundle: a sticky TMPDIR, as /var/tmp is -> used, and left empty" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/opentmp/nexcage-bundle-bundle-sticky-"' '[ -z "$(ls -A "$S/opentmp")" ]'
+rm -rf "$S/opentmp"
+# Nor one another user owns, as a TMPDIR kept through pam_tmpdir or `sudo -E`
+# can be: its owner could rename the private directory and put another
+# archive where pct create reads as root. Only its owner is wrong here:
+# neither its group nor others can write to it. The namespace maps only the
+# uid the suite runs as, so for a user the host's /usr belongs to the
+# overflow uid. For root -- act runs the suite as root -- /usr is its own,
+# and a directory given to nobody stands in.
+othertmp=/usr
+if [ "$(id -u)" = 0 ]; then othertmp=$S/othertmp; mkdir -p -m 755 "$othertmp"; chown 65534:65534 "$othertmp"; fi
+TMPDIR=$othertmp nx create --name bundle-owner /tmp/nexcage-bundles/b1
+check "bundle: a TMPDIR another user owns -> refused before packing" \
+  all '! rc 0' 'err_has "not a safe place"' '! err_has "Packing"' 'not_called_re "^pct create"'
+rm -rf "$S/othertmp"
+# A symlinked TMPDIR is resolved once, and the directory it leads to is the
+# one checked and used: checked through the link, it could be pointed
+# elsewhere before nexcage made its directory there.
+ln -sfn vartmp "$S/linktmp"
+TMPDIR="$S/linktmp" nx create --name bundle-link /tmp/nexcage-bundles/b1
+check "bundle: a symlinked TMPDIR -> the directory it resolves to is checked and used" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/vartmp/nexcage-bundle-bundle-link-[0-9a-f]{16}/rootfs\.tar\.zst "' 'not_called_re "linktmp"' \
+      '[ -z "$(ls -A "$S/vartmp")" ]'
+rm -f "$S/linktmp"
+# pct create takes a template path of at most 255 characters (ostemplate's
+# maxLength in pve-container) and refused a longer one, after the rootfs had
+# been packed. The archive's path is its directory, the name and 48 more.
+name_of_len() {  # a hostname of exactly $1 characters, in labels of at most 63
+  python3 -c 'import sys; s = ("a" * 62 + ".") * 5; s = s[:int(sys.argv[1])]; print(s[:-1] + "b" if s.endswith(".") else s)' "$1"
+}
+archive_base=$S/vartmp; fit=$((255 - ${#archive_base} - 48))
+nx create --name "$(name_of_len "$((fit + 1))")" /tmp/nexcage-bundles/b1
+check "bundle: a name that makes the archive's path longer than pct create takes -> refused before packing" \
+  all 'rc 2' 'err_has "pct create takes a template path of at most 255"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"' \
+      '[ -z "$(ls -A "$S/vartmp")" ]'
+nx create --name "$(name_of_len "$fit")" /tmp/nexcage-bundles/b1
+check "bundle: a name that makes the archive's path 255 characters -> used" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]{254} --hostname "' '[ -z "$(ls -A "$S/vartmp")" ]'
+# A signal ends nexcage without running its defers. SIGTERM goes to nexcage
+# itself -- the fake pct's parent -- while pct create stands still.
+echo 30 > "$S/fail_hang"; rm -f "$S/fail_hang.pid"
+nexcage_ns create --name bundle-sig /tmp/nexcage-bundles/b1 > "$S/out" 2> "$S/err" & bg=$!
+nexcage_pid=""; pct_pid=""
+if eventually '[ -s "$S/fail_hang.pid" ]'; then read -r nexcage_pid pct_pid < "$S/fail_hang.pid"; fi
+[ -n "$nexcage_pid" ] && kill -TERM "$nexcage_pid"
+RC=0; wait "$bg" || RC=$?
+[ -n "$pct_pid" ] && kill "$pct_pid" 2>/dev/null
+rm -f "$S/fail_hang" "$S/fail_hang.pid"; LAST="nexcage create --name bundle-sig (SIGTERM during pct create)"
+check "bundle: SIGTERM during pct create removes the archive, and nexcage still dies of it" \
+  all 'rc 143' '[ -z "$(ls -A "$S/vartmp")" ]'
+mkdir -p "$S/bundles/ns-pid"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/ns-pid/"
+printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"linux":{"namespaces":[{"type":"pid"},{"type":"mount"}]}}' > "$S/bundles/ns-pid/config.json"
+nx create --name ns-pid /tmp/nexcage-bundles/ns-pid
+check "bundle: namespaces without a user one turn on no keyctl either" all 'rc 0' 'not_called_re "--features"'
+# Proxmox confines every container its own way, and pct cannot take a
+# bundle's seccomp, capabilities and the rest. They were dropped without a
+# word; the container is still created (runc spec puts some in every bundle),
+# with one warning that names them.
+mkdir -p "$S/bundles/conf-sec"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/conf-sec/"
+cat > "$S/bundles/conf-sec/config.json" <<'JSON'
+{"ociVersion":"1.0.2","root":{"path":"rootfs","readonly":true},
+ "process":{"args":["/bin/sh"],"capabilities":{"bounding":["CAP_KILL"]},"noNewPrivileges":true},
+ "linux":{"seccomp":{"defaultAction":"SCMP_ACT_ERRNO"},"maskedPaths":["/proc/kcore"],"readonlyPaths":["/proc/sys"],
+          "devices":[{"path":"/dev/fuse","type":"c","major":10,"minor":229}]}}
+JSON
+nx create --name conf-sec /tmp/nexcage-bundles/conf-sec
+check "bundle confinement the backend cannot apply: created, with one warning naming each field" \
+  all 'rc 0' 'called_re "^pct create "' '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
+      'err_has "process.capabilities, process.noNewPrivileges, root.readonly, linux.seccomp, linux.maskedPaths, linux.readonlyPaths, linux.devices in"' \
+      'err_has "--runtime crun"'
+# With --log the log is a file, and only errors were echoed to stderr: the
+# warning reached the file alone, and whoever ran create never saw it.
+nx --log "$S/run/conf-sec.log" create --name conf-sec-log /tmp/nexcage-bundles/conf-sec
+check "bundle confinement warning with --log: in that file once, and on stderr once" \
+  all 'rc 0' '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/run/conf-sec.log")" = 1 ]' \
+      '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
+      'grep -qE "^nexcage: warning: process\.capabilities, .* --runtime crun applies a bundle.s own$" "$S/err"'
+nx --log "$S/run/conf-sec-quiet.log" --log-level error create --name conf-sec-quiet /tmp/nexcage-bundles/conf-sec
+check "bundle confinement warning with --log-level error: not written" all 'rc 0' '! err_has "not applied"' '! grep -qs "not applied" "$S/run/conf-sec-quiet.log"'
+# The kernel filesystems at /proc, /sys and /dev are LXC's and the init's to
+# mount, so a bundle's options for them are not applied either: its noexec
+# on /dev/shm was dropped at debug level. A bind mount's options are applied.
+mkdir -p "$S/bundles/conf-mnt"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/conf-mnt/"
+cat > "$S/bundles/conf-mnt/config.json" <<'JSON'
+{"ociVersion":"1.0.2","root":{"path":"rootfs"},
+ "mounts":[{"destination":"/proc","type":"proc","source":"proc"},
+           {"destination":"/dev/shm","type":"tmpfs","source":"shm","options":["nosuid","noexec","nodev","mode=1777"]},
+           {"destination":"/data","type":"bind","source":"/srv/data","options":["ro"]}]}
+JSON
+nx create --name conf-mnt /tmp/nexcage-bundles/conf-mnt
+check "bundle mount options LXC's own /dev/shm replaces: created, and named in the one warning" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data,ro=1$"' \
+      '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
+      'err_has "nexcage: mounts[1] (/dev/shm) options in /tmp/nexcage-bundles/conf-mnt/config.json: not applied"' \
+      '! err_has "mounts[0]"' '! err_has "mounts[2]"'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
+# The bundle's mounts become mp entries through `pct set`, which checks them as
+# Proxmox's API does. They were appended to /etc/pve/lxc/<vmid>.conf as raw
+# lines, so a newline in a destination added any config line the bundle liked,
+# and a comma added mp properties. The kernel filesystems a runtime-spec
+# bundle mounts at their usual places are the container's own and left out.
+mp_bundle() {  # <name> <the mounts array>
+  mkdir -p "$S/bundles/$1"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/$1/"
+  printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":%s}' "$2" > "$S/bundles/$1/config.json"
+}
+mp_bundle mp-ok '[{"destination":"/proc","type":"proc","source":"proc"},{"destination":"/dev","type":"tmpfs","source":"tmpfs","options":["nosuid","mode=755"]},
+  {"destination":"/data","type":"bind","source":"/srv/data"}]'
+nx create --name mp-ok /tmp/nexcage-bundles/mp-ok
+check "bundle bind mount -> pct set --mp0 after the create; proc and /dev are the container's own" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data$"' 'not_called_re "--mp1|mp=/proc|mp=/dev"' \
+      'grep -qx "mp0: /srv/data,mp=/data" "$S"/conf.*'
+# Options were dropped, so a mount asked to be read-only and nosuid came out
+# writable and setuid. "rbind" among the options makes a bind mount whatever
+# the type; private propagation is what LXC gives a container's mounts.
+mp_bundle mp-ro '[{"destination":"/ro","type":"bind","source":"/srv/ro","options":["rbind","ro","nosuid","nodev","noexec"]}]'
+nx create --name mp-ro /tmp/nexcage-bundles/mp-ro
+check "bundle mount options ro, nosuid, nodev, noexec reach the mount point, as pct takes them" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/ro,mp=/ro,ro=1,mountoptions=nosuid;nodev;noexec$"' \
+      'grep -qx "mp0: /srv/ro,mp=/ro,ro=1,mountoptions=nosuid;nodev;noexec" "$S"/conf.*'
+mp_bundle mp-rbind '[{"destination":"/rw","type":"none","source":"/srv/rw","options":["rbind","rprivate"]}]'
+nx create --name mp-rbind /tmp/nexcage-bundles/mp-rbind
+check "bundle mount with rbind among its options is a bind mount" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/rw,mp=/rw$"'
+for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\nlxc.apparmor.profile: unconfined" contains a control character' \
+           'mp-nel|{"destination":"/x\u0085lxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\xc2\x85lxc.apparmor.profile: unconfined" contains a control character' \
+           'mp-lsep|{"destination":"/x","type":"bind","source":"/srv/a\u2028b"}|source "/srv/a\xe2\x80\xa8b" contains a line or paragraph separator' \
+           'mp-comma|{"destination":"/x","type":"bind","source":"/srv/a,"}|source "/srv/a," contains '"','"' or '"'='"'' \
+           'mp-equals|{"destination":"/x=y","type":"bind","source":"/srv/a"}|destination "/x=y" contains '"','"' or '"'='"'' \
+           'mp-rel|{"destination":"/x","type":"bind","source":"srv/a"}|source "srv/a" is not an absolute path' \
+           'mp-dots|{"destination":"/data/../etc","type":"bind","source":"/srv/a"}|is not a normalised path' \
+           'mp-root|{"destination":"/","type":"bind","source":"/srv/a"}|cover the container'"'"'s root' \
+           'mp-dev|{"destination":"/disk","type":"bind","source":"/dev/sda1"}|as a device'"'"'s filesystem' \
+           'mp-tmpfs|{"destination":"/data","type":"tmpfs","source":"tmpfs"}|can only bind-mount a host directory' \
+           'mp-nodest|{"type":"bind","source":"/srv/a"}|has no destination' \
+           'mp-shared|{"destination":"/x","type":"bind","source":"/srv/a","options":["rbind","rshared"]}|asks for "rshared", which a Proxmox bind mount cannot do'; do
+  IFS='|' read -r name mount why <<< "$bad"
+  mp_bundle "$name" "[$mount]"
+  nx create --name "$name" "/tmp/nexcage-bundles/$name"
+  check "bundle mount refused before anything is packed: $why" \
+    all 'rc 2' 'err_has "$why"' '! err_has "Packing"' 'not_called_re "nextid|^pct (create|set)"'
+done
+# A container has mount points mp0 to mp255. A 257th bind mount passed
+# nexcage and failed in `pct set`, after the container had been created.
+many_mounts() { python3 -c 'import json,sys; print(json.dumps([{"destination":"/m%d" % i,"type":"bind","source":"/srv/m%d" % i} for i in range(int(sys.argv[1]))]))' "$1"; }
+mp_bundle mp-256 "$(many_mounts 256)"
+nx create --name mp-256 /tmp/nexcage-bundles/mp-256
+check "bundle with 256 bind mounts -> mp0 to mp255 in one pct set" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/m0,mp=/m0 .* --mp255 /srv/m255,mp=/m255$"' 'grep -qx "mp255: /srv/m255,mp=/m255" "$S"/conf.*'
+mp_bundle mp-257 "$(many_mounts 257)"
+nx create --name mp-257 /tmp/nexcage-bundles/mp-257
+check "bundle with 257 bind mounts, more than a container has mount points -> refused before anything is packed" \
+  all 'rc 2' 'err_has "the bundle has 257 bind mounts"' '! err_has "Packing"' 'not_called_re "nextid|^pct (create|set)"'
+# The bundle's linux.resources. memory.limit -1 is the runtime-spec's "no
+# limit", and Proxmox has none, so --memory is left out and pct's default
+# applies. Both values used to be cast unchecked: -1, or shares worth more
+# cores than a u32, aborted nexcage with a panic.
+res_bundle() {  # <name> <the resources object>
+  mkdir -p "$S/bundles/$1"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/$1/"
+  printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"linux":{"resources":%s}}' "$2" > "$S/bundles/$1/config.json"
+}
+res_bundle res-unl '{"memory":{"limit":-1}}'
+nx create --name res-unl /tmp/nexcage-bundles/res-unl
+check "bundle memory.limit -1 (no limit) -> created without --memory, so pct's default" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-unl --cores 1 "'
+res_bundle res-neg '{"memory":{"limit":-5}}'
+nx create --name res-neg /tmp/nexcage-bundles/res-neg
+check "bundle memory.limit -5 -> exit 2 naming it, before anything is packed or a VMID taken" \
+  all 'rc 2' 'err_has "memory.limit -5"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+# Proxmox gives a container 16 MiB at least: a smaller limit became
+# --memory 0 and was refused by pct create, after the rootfs was packed.
+res_bundle res-small '{"memory":{"limit":1048576}}'
+nx create --name res-small /tmp/nexcage-bundles/res-small
+check "bundle memory.limit 1 MiB, below Proxmox's 16 -> exit 2 naming it, before anything is packed" \
+  all 'rc 2' 'err_has "memory.limit 1048576"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+res_bundle res-min '{"memory":{"limit":16777216}}'
+nx create --name res-min /tmp/nexcage-bundles/res-min
+check "bundle memory.limit 16 MiB, Proxmox's minimum -> --memory 16" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-min --memory 16 "'
+res_bundle res-cpu '{"cpu":{"shares":5000000000000}}'
+nx create --name res-cpu /tmp/nexcage-bundles/res-cpu
+check "bundle cpu.shares past the kernel's maximum -> exit 2 naming it, before anything is packed" \
+  all 'rc 2' 'err_has "cpu.shares 5000000000000"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+res_bundle res-max '{"cpu":{"shares":262144}}'
+nx create --name res-max /tmp/nexcage-bundles/res-max
+check "bundle cpu.shares 262144, the kernel's maximum -> --cores 256" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-max --memory 512 --cores 256 "'
 nx --runtime crun create --memory 1G --bundle /tmp/nexcage-bundles/b1 crun-opt
 check "create's Proxmox options on the crun backend: refused, naming the bundle's config.json" \
   all 'rc 1' 'err_has "is for the Proxmox LXC backend"' 'err_has "config.json"'
@@ -632,7 +863,7 @@ echo "=== runtime-spec command line ==="
 # --bundle, its own state directory behind --root.
 nx create spec-1 --bundle /tmp/nexcage-bundles/b1
 check "create <id> --bundle <dir>: the positional word is the id, not the image" \
-  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/nexcage-spec-1-[0-9]+\.tar\.zst --hostname spec-1 "'
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/nexcage-bundle-spec-1-[0-9a-f]{16}/rootfs\.tar\.zst --hostname spec-1 "'
 nx state spec-1
 check "state reports the bundle the container was created from" \
   all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'
@@ -1213,10 +1444,12 @@ check "create --node says the same options to that node's API" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc .*--net0 name=eth0,bridge=vmbr0,ip=dhcp,tag=7 .*--memory 1024 --onboot 1"'
 cfg '{"network":{"bridge":"vmbr0"}}'
 
-# An OCI bundle is packed into a template on *this* host, so it cannot travel.
+# An OCI bundle is packed into a private file on *this* host, so it cannot
+# travel.
 nx create --name there-3 --node titan --bundle /tmp/nexcage-bundles/b1
 check "--node with a bundle is refused, not half-done" \
-  all 'rc 1' 'err_has "packed into a template on this host"'
+  all 'rc 1' 'err_has "packed into a private file on this host, which titan cannot read"' '! err_has "Packing"' \
+      'not_called_re "nextid|^pct create|^pvesh create"'
 
 nx --runtime crun create --node titan --bundle /tmp/nexcage-bundles/b1 there-4
 check "--node on the crun backend says it has nowhere to put it" \

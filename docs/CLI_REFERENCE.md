@@ -151,8 +151,8 @@ Two things `--node` will not do, and refuses rather than half-does:
 
 | | why |
 |---|---|
-| an OCI bundle (`--bundle`) | its rootfs is packed into a template on **this** host's storage, which the other node cannot read unless that storage is shared |
-| a registry image (`docker.io/...`) | the pull lands on this host, for the same reason |
+| an OCI bundle (`--bundle`) | its rootfs is packed into a private file under `$TMPDIR` on **this** host, which the other node cannot read |
+| a registry image (`docker.io/...`) | the pull lands on this host's storage, which the other node cannot read unless that storage is shared, and then only by its template name |
 
 A rootfs on a ZFS storage goes through: `proxmox.storage` reaches that node's
 API as `--rootfs <storage>:<size>`, and Proxmox makes the volume there, so name
@@ -374,11 +374,79 @@ one core unless the options below or the OCI bundle set them. Its root filesyste
 unprivileged unless `proxmox.unprivileged` is `false`; images from a registry
 always run unprivileged.
 
-For an OCI bundle, nexcage packs `rootfs/` with tar into
-`local:vztmpl/nexcage-<name>-<time>.tar.zst`, creates the container from that
-template and deletes the archive. The rootfs is used as it is, so it must boot
-as a system container: an image without an init will not start. Mounts are
-added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
+For an OCI bundle, nexcage packs `rootfs/` with tar into an archive, 0600, in
+a directory of its own that only root can enter,
+`nexcage-bundle-<name>-<random>/` under `$TMPDIR` or else `/var/tmp`. It gives
+`pct create` that file, which Proxmox takes from root, and deletes it and its
+directory afterwards, also when SIGINT, SIGTERM or SIGHUP ends nexcage first
+(a SIGKILL leaves them, still readable by root alone). The archive is never on
+a Proxmox storage, so it is not a template anyone else can see or use.
+`$TMPDIR` has to be an absolute path to a directory owned by root (or by the
+user nexcage runs as), and sticky if its group or anyone else can write to
+it, as `/var/tmp` is; another is refused before anything is packed. A
+symlink in the path is resolved once, and the directory it leads to is the
+one checked and used; the directories above it are not checked. The
+archive's path is 48 characters longer than that directory's and the name
+together, and `pct create` takes one of at most 255: under `/var/tmp` a
+name of up to 199 characters fits, and a longer path is refused (exit 2)
+before anything is packed. The
+rootfs is used as it is, so it must boot as a system container: an image
+without an init will not start. The bundle's namespaces turn on no Proxmox
+features: LXC gives the container its own namespaces, and a user namespace
+when it is unprivileged. Nesting and keyctl, which loosen the container's
+AppArmor profile and seccomp filter, are the host administrator's to give
+with `pct set <vmid> --features`.
+
+Proxmox confines every container with its own AppArmor profile, capability
+set, seccomp filter and device rules, and pct cannot take a bundle's instead.
+`process.capabilities`, `process.noNewPrivileges`, `process.apparmorProfile`,
+`process.selinuxLabel`, `process.rlimits`, `root.readonly`, `linux.seccomp`,
+`linux.maskedPaths`, `linux.readonlyPaths`, `linux.devices` and
+`linux.resources.devices` are therefore not applied: create names the ones a
+bundle sets in one warning and goes ahead. The warning is on stderr, and in
+the `--log` file as well when there is one; `--log-level error` leaves it out.
+A bundle whose confinement has to hold needs `--runtime crun`.
+
+The bundle's bind mounts become the container's mount points `mp0`, `mp1`, ...
+through one `pct set` after the create, which checks each as Proxmox's API
+does. A mount's source and destination must be absolute, normalised paths
+(no empty, `.` or `..` component, no trailing `/`) without control
+characters (ASCII's, or the C1 ones from U+0080 to U+009F), the line and
+paragraph separators U+2028 and U+2029, `,` or `=`; the destination cannot
+be `/`, and a source under
+`/dev/` is refused, since Proxmox would mount the filesystem on that device
+rather than bind it. Proxmox binds directories only: a source that is not a
+directory when the container starts makes the start fail. The kernel
+filesystems a runtime-spec bundle mounts at `/proc`, `/sys`, `/sys/fs/cgroup`,
+`/dev`, `/dev/pts`, `/dev/shm` and `/dev/mqueue` are the container's own, set
+up by LXC and its init, and are left out with their options: the warning
+above names each such mount that has options (a `noexec` on `/dev/shm`, say).
+Any other mount that is not a bind mount is refused. A container has 256
+mount points, `mp0` to `mp255`, so a bundle with more bind mounts than that
+is refused too.
+
+A bind mount's `ro` becomes `ro=1`, which Proxmox checks took effect, and
+`nosuid`, `nodev`, `noexec` and `noatime` become its `mountoptions`. Proxmox
+binds non-recursively, so the container sees the source without the mounts
+below it: `rbind` gives no more than `bind`, and the recursive forms (`rro`,
+`rnosuid`, ...) mean the same as the plain ones. `rw` and the `private` and
+`slave` propagation modes need nothing, since LXC never lets a container's
+mounts propagate to the host. Any other option (`rshared`, `strictatime`,
+`suid`, ...) is refused rather than dropped. A refusal is exit 2, before
+anything is packed or created. What a bind mount can reach is in
+[BACKENDS.md](architecture/BACKENDS.md#a-container-from-an-oci-bundle).
+
+The bundle's `linux.resources.memory.limit`, in bytes, becomes `--memory`. `-1`,
+the runtime-spec's "no limit", leaves `--memory` out, so pct's default of 512
+MiB applies: Proxmox has no unlimited memory for a container.
+`linux.resources.cpu.shares` becomes `--cores`, 1024 shares to a core, up to
+the kernel's maximum of 262144 (256 cores). Another negative limit, a
+limit below the 16 MiB Proxmox gives a container at least, more shares than
+that, or a value that is not an integer is refused (exit 2) before anything
+is packed. So is a `config.json` whose `mounts` is not a list, or
+whose `linux`, `linux.resources`, `memory` or `cpu` is not an object, or
+that holds a mount, argument or environment entry of the wrong type: such a
+part used to be skipped, with the mounts or limits it held.
 
 #### pct options
 

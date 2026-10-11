@@ -45,6 +45,48 @@ flowchart LR
 | pull, images, rmi | `pvesh create /nodes/<node>/storage/<storage>/oci-registry-pull --reference <ref>`; `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` per template storage; `pvesh delete /nodes/<node>/storage/<storage>/content/<volid>` |
 | list, name to VMID | `pvesh get /cluster/resources --type vm` for every node, merged with `pct list` for this one (the cluster view is a cache) |
 
+### A container from an OCI bundle
+
+`create` from a bundle makes a system container of the bundle's `rootfs/`:
+the rootfs is packed into an archive for `pct create`, which takes nothing
+else from `config.json`. The archive is 0600, in a directory only root can
+enter under `$TMPDIR` or `/var/tmp`, outside every Proxmox storage, and is
+deleted once pct create has read it. What the backend then takes from the bundle
+is listed in the [CLI reference](../CLI_REFERENCE.md#create); the rest of
+this section is what that means for the container's confinement.
+
+**Mounts.** Each bind mount becomes a Proxmox mount point, given with
+`pct set <vmid> --mpN <source>,mp=<destination>` once the container exists.
+At every start Proxmox bind-mounts the source directory, as root on the host,
+into the container. Any host directory can be named: like runc and crun,
+nexcage has no list of host paths a bundle may not mount, so whoever writes
+the bundle chooses what of the host the container sees, as `--mp` lets
+whoever runs nexcage choose. What the container can do there is the user
+namespace's to decide. In an unprivileged container (the default) container
+root is uid 100000 on the host, so through the mount it has the access any
+other unprivileged user has: it reads what is world-readable and writes
+nothing root owns, while files owned by the mapped uids are its own. In a
+privileged container (`proxmox.unprivileged: false`) container
+root is host root on whatever the mount shows. Read a bundle's mounts before
+creating a container from it.
+
+**Features.** A bundle turns on no Proxmox features. Its namespaces are
+LXC's to make, and a user namespace in the bundle used to set `nesting=1`
+and `keyctl=1`, loosening the container's AppArmor profile and lifting the
+keyctl filter Proxmox puts on an unprivileged container.
+
+**Confinement.** The container is confined the way Proxmox confines every
+container: its AppArmor profile, LXC's capability drops and seccomp filter,
+its device rules, and the user namespace of an unprivileged container. A
+bundle's own `process.capabilities`, `linux.seccomp`, AppArmor profile,
+`noNewPrivileges`, read-only or masked paths and devices are not applied, nor
+are the options of its mounts at `/proc`, `/sys` and `/dev`, which LXC and the
+container's init mount their own way. So a bundle cannot loosen that
+confinement, and cannot tighten it either. create says which of them a
+bundle sets, in one warning, rather than refusing, since `runc spec` puts
+capabilities, masked paths and `noNewPrivileges` into every bundle. The crun
+backend applies them.
+
 ## crun
 
 The crun backend calls libcrun in the nexcage process, linked from the

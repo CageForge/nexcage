@@ -206,16 +206,16 @@ pub const ProxmoxLxcDriver = struct {
             if (!same) target_node = wanted;
         }
         if (target_node) |node| {
-            // A bundle's rootfs is packed into a template on *this* host's
-            // storage, and a registry pull lands here too. Neither is visible
-            // from another node unless the storage is shared, and nexcage
-            // cannot make it so.
+            // A bundle's rootfs is packed into a private file under *this*
+            // host's $TMPDIR, which no storage can share, and a registry pull
+            // lands on this host's storage, visible from another node only
+            // if that storage is shared -- and then by its template name.
             const image_path = config.image orelse "";
             const is_template = std.mem.indexOf(u8, image_path, ":vztmpl/") != null or
                 std.mem.endsWith(u8, image_path, ".tar.zst");
             if (!is_template) {
                 if (self.logger) |log| {
-                    log.err("--node {s} needs a template that node can read, named <storage>:vztmpl/<file>. An OCI bundle is packed into a template on this host, and a registry image is pulled to this host, so neither reaches {s} unless the storage is shared", .{ node, node }) catch {};
+                    log.err("--node {s} needs a template that node can read, named <storage>:vztmpl/<file>. An OCI bundle is packed into a private file on this host, which {s} cannot read, and a registry image is pulled to this host, so it reaches {s} only as a template on a shared storage", .{ node, node, node }) catch {};
                 }
                 return core.Error.UnsupportedOperation;
             }
@@ -248,9 +248,16 @@ pub const ProxmoxLxcDriver = struct {
         defer if (oci_bundle_path) |bp| self.allocator.free(bp);
         var bundle_config: ?bundle.OciBundleConfig = null;
         defer if (bundle_config) |*bc| bc.deinit();
+        var bundle_resources = oci.OciProcessor.Resources{};
+        // The mp entries the bundle's mounts become, applied after pct create
+        var bundle_mounts: ?[][]u8 = null;
+        defer if (bundle_mounts) |specs| {
+            for (specs) |spec| self.allocator.free(spec);
+            self.allocator.free(specs);
+        };
         // The archive packed from a bundle's rootfs is needed only by pct create
         var bundle_template: ?oci.BundleTemplate = null;
-        defer if (bundle_template) |*bt| bt.remove(self.allocator);
+        defer if (bundle_template) |*bt| bt.remove(self.allocator, self.logger);
 
         if (config.image) |image_path| {
             const is_proxmox_template = std.mem.endsWith(u8, image_path, ".tar.zst") or
@@ -302,8 +309,8 @@ pub const ProxmoxLxcDriver = struct {
                         return err;
                     };
                     oci_bundle_path = safe_path;
-                    // A bundle's mounts become mp entries after the create,
-                    // numbered from mp0, so --mp would be overwritten by them.
+                    // A bundle's mounts take the mp entries from mp0, after
+                    // the create, so --mp would collide with them.
                     if (config.pve.mount_points.len > 0) {
                         if (self.logger) |log| log.err("--mp with an OCI bundle: the bundle's config.json carries the mounts, and they take pct's mp entries", .{}) catch {};
                         return core.Error.InvalidInput;
@@ -313,17 +320,21 @@ pub const ProxmoxLxcDriver = struct {
                     // BundleError is not part of core.Error, the set the
                     // command registry casts every error into: a bundle
                     // without config.json crashed nexcage with "panic:
-                    // invalid error code".
+                    // invalid error code". A config.json with a value of the
+                    // wrong type, such as a mount that is not an object, is
+                    // refused here too, before anything is packed or created.
                     bundle_config = bundle_parser.parseBundle(safe_path) catch |err| {
                         if (err == error.OutOfMemory) return core.Error.OutOfMemory;
-                        if (self.logger) |log| log.err("'{s}' is not a usable OCI bundle ({s}); it needs config.json and rootfs/", .{ safe_path, @errorName(err) }) catch {};
+                        if (self.logger) |log| log.err("'{s}' is not a usable OCI bundle ({s}); it needs rootfs/ and a config.json in the runtime-spec's format", .{ safe_path, @errorName(err) }) catch {};
                         return core.Error.InvalidInput;
                     };
+                    try self.oci_processor.warnUnappliedConfinement(safe_path, bundle_config.?.confinement, bundle_config.?.mounts orelse &.{});
+                    bundle_resources = try self.oci_processor.bundleResources(&bundle_config.?);
+                    bundle_mounts = try self.oci_processor.bundleMountPoints(bundle_config.?.mounts orelse &.{});
 
                     // pct creates containers only from templates. This used to
                     // hand pct a template name that nothing had written.
                     bundle_template = try self.oci_processor.createTemplateFromBundle(bundle_config.?.rootfs_path, config.name);
-                    template_name = try self.allocator.dupe(u8, bundle_template.?.volid);
                 }
             }
         }
@@ -334,7 +345,10 @@ pub const ProxmoxLxcDriver = struct {
 
         // 3. Resolve final template string
         var final_template: []const u8 = undefined;
-        if (template_name) |tname| {
+        if (bundle_template) |bt| {
+            // A file path, which pct create takes from root
+            final_template = try self.allocator.dupe(u8, bt.path);
+        } else if (template_name) |tname| {
             if (std.mem.indexOf(u8, tname, ":") != null) {
                 final_template = try self.allocator.dupe(u8, tname);
             } else if (std.mem.endsWith(u8, tname, ".tar.zst")) {
@@ -377,16 +391,19 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // Resources. --memory and --cores replace the defaults rather than
-        // being given twice (#308); the other limits only add options.
+        // being given twice (#308); the other limits only add options. A
+        // bundle's own limits were checked when it was read. Without
+        // --memory, pct gives the container 512 MiB, the default here too.
         const opts = config.pve;
-        const mem_mb = if (bundle_config) |bc| (bc.memory_limit orelse (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES)) else (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES);
-        if (!hasLimit(opts.limits, "memory", "limit")) {
+        const mem_mb = bundle_resources.memory orelse (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES);
+        if (!hasLimit(opts.limits, "memory", "limit") and !bundle_resources.memory_unlimited) {
             const mem_mb_str = try std.fmt.allocPrint(self.allocator, "{d}", .{mem_mb / (1024 * 1024)});
             try allocated_args.append(mem_mb_str);
             try args_builder.appendSlice(&[_][]const u8{ "--memory", mem_mb_str });
         }
 
-        const cores = if (bundle_config) |bc| @as(u32, @intFromFloat(if (bc.cpu_limit) |l| @max(1.0, l / 1024.0) else (if (config.resources) |r| r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES) else @as(f64, core.constants.DEFAULT_CPU_CORES)))) else @as(u32, @intFromFloat(if (config.resources) |r| r.cpu orelse @as(f64, core.constants.DEFAULT_CPU_CORES) else @as(f64, core.constants.DEFAULT_CPU_CORES)));
+        const default_cpu: f64 = if (config.resources) |r| r.cpu orelse core.constants.DEFAULT_CPU_CORES else core.constants.DEFAULT_CPU_CORES;
+        const cores: u32 = bundle_resources.cores orelse std.math.lossyCast(u32, @max(1.0, default_cpu));
         if (opts.cores) |c| {
             try args_builder.appendSlice(&[_][]const u8{ "--cores", c });
         } else {
@@ -477,16 +494,13 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // 7. Post-creation setup
-        if (oci_bundle_path) |bp| {
-            try self.applyMountsToLxcConfig(vmid, bp);
-            // Only a bundle with mounts can have mp entries to look for; every
-            // other bundle logged "No mp entries visible" on create.
-            const has_mounts = if (bundle_config) |bc| (if (bc.mounts) |m| m.len > 0 else false) else false;
-            if (has_mounts) try self.verifyMountsInConfig(vmid);
-            if (bundle_config) |bc| {
-                if (bc.namespaces) |ns| try self.applyNamespacesToLxcConfig(vmid, ns);
-            }
-        }
+        // A bundle's namespaces turn on no Proxmox features: LXC gives the
+        // container its own namespaces, and a user namespace when it is
+        // unprivileged, whatever the bundle lists. A user namespace used to
+        // set nesting=1,keyctl=1, and any namespace list keyctl=1, which
+        // loosen Proxmox's AppArmor profile and lift its keyctl filter --
+        // confinement taken away because a bundle asked for confinement.
+        if (oci_bundle_path != null) try self.oci_processor.applyMountPoints(vmid, bundle_mounts orelse &.{});
 
         const bundle_ptr: ?*const bundle.OciBundleConfig = if (bundle_config) |*bc| bc else null;
         try self.persistRuntimeMetadata(config.name, vmid, bundle_ptr, net_runtime.items);
@@ -614,36 +628,6 @@ pub const ProxmoxLxcDriver = struct {
         try file.writeAll(buffer.items);
 
         if (self.logger) |log| log.debug("Persisted runtime metadata for {s} at {s}", .{ container_name, metadata_path }) catch {};
-    }
-
-    /// Validate that mounts in bundle config point to existing host paths or valid Proxmox storage refs
-    fn validateBundleVolumes(self: *Self, bundle_path: []const u8) !void {
-        return self.oci_processor.validateBundleVolumes(bundle_path, &self.pve_client);
-    }
-
-    /// Append mounts from bundle config to /etc/pve/lxc/<vmid>.conf using mpX syntax
-    fn applyMountsToLxcConfig(self: *Self, vmid: []const u8, bundle_path: []const u8) !void {
-        return self.oci_processor.applyMountsToLxcConfig(vmid, bundle_path);
-    }
-
-    /// Apply namespaces from OCI bundle to LXC container via pct set --features
-    /// Maps OCI namespace types to LXC features where applicable
-    /// Apply namespaces from OCI bundle to LXC container via pct set --features
-    fn applyNamespacesToLxcConfig(self: *Self, vmid: []const u8, namespaces: []const oci_spec.runtime.bundle.NamespaceConfig) !void {
-        return self.oci_processor.applyNamespacesToLxcConfig(vmid, namespaces);
-    }
-
-    /// Verify config contains mp entries via pct config
-    fn verifyMountsInConfig(self: *Self, vmid: []const u8) !void {
-        const args = [_][]const u8{ "pct", "config", vmid };
-        const res = try self.runCommand(&args);
-        defer self.allocator.free(res.stdout);
-        defer self.allocator.free(res.stderr);
-        if (res.exit_code != 0) return core.Error.OperationFailed;
-        // Presence of "mp" lines indicates success (best-effort)
-        if (std.mem.indexOf(u8, res.stdout, "mp0:") == null and std.mem.indexOf(u8, res.stdout, "mp1:") == null) {
-            if (self.logger) |log| log.warn("No mp entries visible in pct config after update", .{}) catch {};
-        }
     }
 
     /// Start LXC container using pct command
