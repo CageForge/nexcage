@@ -145,6 +145,7 @@ fn narrow(allocator: std.mem.Allocator, spec_json: []const u8, profile: *const P
         const resources = try child(arena, linux, "resources");
         if (profile.memory_limit) |limit| try lowerMemory(try child(arena, resources, "memory"), limit);
         if (profile.pids_limit) |limit| try lowerTo(try child(arena, resources, "pids"), "limit", limit);
+        try lowerUnified(arena, resources, profile);
     }
 
     // Looked up again, not kept from above: adding a key to the root may
@@ -591,6 +592,42 @@ fn lowerTo(obj: *std.json.ObjectMap, key: []const u8, limit: i64) !void {
     try obj.put(key, .{ .integer = limit });
 }
 
+/// linux.resources.unified names cgroup v2 files and their values, and
+/// libcrun writes them after everything else, so they win: "memory.max":
+/// "max" undid the memory limit above. Each file a profile limits is lowered
+/// as lowerTo lowers the spec's field, the profile's value unless the bundle
+/// gives one no higher; memory.high, where the kernel starts to hold memory
+/// back, goes with memory.max. Left alone: memory.swap.max, which is swap
+/// alone in cgroup v2, since a profile keeps the swap the bundle asked for
+/// (lowerMemory), even no limit at all; and memory.min and memory.low, which
+/// protect memory only up to what memory.max allows.
+fn lowerUnified(arena: std.mem.Allocator, resources: *std.json.ObjectMap, profile: *const Profile) !void {
+    const unified = resources.getPtr("unified") orelse return;
+    // libcrun reads one that is not an object as none.
+    if (unified.* != .object) return;
+    if (profile.memory_limit) |limit| {
+        try lowerFile(arena, &unified.object, "memory.max", limit);
+        try lowerFile(arena, &unified.object, "memory.high", limit);
+    }
+    if (profile.pids_limit) |limit| try lowerFile(arena, &unified.object, "pids.max", limit);
+}
+
+/// Sets unified[file] to `limit` unless it already holds a number no higher,
+/// written as the kernel takes it, in plain digits. "max", a value with a
+/// suffix and anything that is not a string get the limit, as lowerTo gives
+/// it to a value it cannot compare. 0 is kept: in a cgroup file it is a
+/// limit of nothing, not the spec's "unset".
+fn lowerFile(arena: std.mem.Allocator, unified: *std.json.ObjectMap, file: []const u8, limit: i64) !void {
+    const v = unified.get(file) orelse return;
+    if (v == .string and v.string.len > 0 and v.string.len <= 18) {
+        const digits = for (v.string) |c| {
+            if (c < '0' or c > '9') break false;
+        } else true;
+        if (digits and (std.fmt.parseInt(i64, v.string, 10) catch unreachable) <= limit) return;
+    }
+    try unified.put(file, .{ .string = try std.fmt.allocPrint(arena, "{d}", .{limit}) });
+}
+
 /// lowerTo for memory.limit, keeping the swap the bundle allowed. OCI's
 /// memory.swap is memory plus swap, so lowering the limit alone would turn
 /// the difference into swap: containerd sets swap to the limit to mean none,
@@ -961,4 +998,54 @@ test "a user namespace joined by path is read from inside it, and one that leave
         return err;
     };
     std.testing.allocator.free(out);
+}
+
+test "linux.resources.unified does not undo a profile's limits" {
+    const profile = Profile{ .name = "p", .memory_limit = 64 << 20, .pids_limit = 50 };
+    const spec =
+        \\{"linux":{"resources":{"memory":{"limit":67108864},"pids":{"limit":50},
+        \\ "unified":{"memory.max":"max","memory.high":"1073741824","pids.max":"max",
+        \\  "memory.swap.max":"max","memory.min":"1048576","io.weight":"100"}}}}
+    ;
+    var why: Refusal = .{};
+    const out = try narrow(std.testing.allocator, spec, &profile, &why);
+    defer std.testing.allocator.free(out);
+    var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, out, .{});
+    defer parsed.deinit();
+    const unified = parsed.value.object.get("linux").?.object.get("resources").?.object.get("unified").?.object;
+    try std.testing.expectEqualStrings("67108864", unified.get("memory.max").?.string);
+    try std.testing.expectEqualStrings("67108864", unified.get("memory.high").?.string);
+    try std.testing.expectEqualStrings("50", unified.get("pids.max").?.string);
+    // Swap is the bundle's under a profile, as memory.swap is; the rest is
+    // nothing a profile limits.
+    try std.testing.expectEqualStrings("max", unified.get("memory.swap.max").?.string);
+    try std.testing.expectEqualStrings("1048576", unified.get("memory.min").?.string);
+    try std.testing.expectEqualStrings("100", unified.get("io.weight").?.string);
+
+    // Lower than the profile: the bundle's. Unreadable to a comparison: the
+    // profile's, as for the spec's own fields.
+    const cases = [_]struct { value: []const u8, want: []const u8 }{
+        .{ .value = "\"33554432\"", .want = "33554432" },
+        .{ .value = "\"0\"", .want = "0" },
+        .{ .value = "\"67108865\"", .want = "67108864" },
+        .{ .value = "\"32M\"", .want = "67108864" },
+        .{ .value = "\" 1024\"", .want = "67108864" },
+        .{ .value = "\"-1\"", .want = "67108864" },
+        .{ .value = "\"99999999999999999999\"", .want = "67108864" },
+        .{ .value = "1024", .want = "67108864" },
+    };
+    for (cases) |c| {
+        var buf: [200]u8 = undefined;
+        const json = try std.fmt.bufPrint(&buf, "{{\"linux\":{{\"resources\":{{\"unified\":{{\"memory.max\":{s}}}}}}}}}", .{c.value});
+        const narrowed = try narrow(std.testing.allocator, json, &.{ .name = "p", .memory_limit = 64 << 20 }, &why);
+        defer std.testing.allocator.free(narrowed);
+        var p = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, narrowed, .{});
+        defer p.deinit();
+        try std.testing.expectEqualStrings(c.want, p.value.object.get("linux").?.object.get("resources").?.object.get("unified").?.object.get("memory.max").?.string);
+    }
+
+    // A profile without a pids limit leaves pids.max to the bundle.
+    const memory_only = try narrow(std.testing.allocator, "{\"linux\":{\"resources\":{\"unified\":{\"pids.max\":\"max\"}}}}", &.{ .name = "p", .memory_limit = 64 << 20 }, &why);
+    defer std.testing.allocator.free(memory_only);
+    try std.testing.expect(std.mem.indexOf(u8, memory_only, "\"pids.max\":\"max\"") != null);
 }

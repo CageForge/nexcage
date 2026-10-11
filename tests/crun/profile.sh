@@ -82,7 +82,7 @@ ln -s "$NEXCAGE" "$WORK/nexcage@hardened"
 nx() { "$NEXCAGE" --config "$CFG" "$@"; }
 cleanup() {
     cd /
-    for id in "$ID" "$ID-s" "$ID-u" "$ID-a" "$ID-z" "$ID-c" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
+    for id in "$ID" "$ID-s" "$ID-u" "$ID-a" "$ID-z" "$ID-c" "$ID-v" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
         nx delete --force "$id" >/dev/null 2>&1 || true
     done
     umount "$WORK/userns-pin" 2>/dev/null || true
@@ -160,6 +160,19 @@ if [ -f "$cg/memory.swap.max" ]; then
 else
     echo "skipped: no memory.swap.max here (no swap accounting), so swap is not checked"
 fi
+
+# libcrun writes linux.resources.unified last, and it wins: "max" there undid
+# the profile's limits after they were written.
+spec "" ""
+sed -i 's/"swap": 1073741824 } }/"swap": 1073741824 }, "unified": { "memory.max": "max", "memory.high": "max", "pids.max": "max" } }/' "$BUNDLE/config.json"
+grep -q '"unified"' "$BUNDLE/config.json" || fail "the bundle did not get its unified section"
+"$WORK/nexcage@hardened" --config "$CFG" create --bundle "$BUNDLE" "$ID-v" 2>"$WORK/err" || fail "create with unified: $(tail -1 "$WORK/err")"
+nx start "$ID-v" 2>"$WORK/err" || fail "start with unified: $(tail -1 "$WORK/err")"
+cgv=/sys/fs/cgroup$(sed -n 's/^0:://p' "/proc/$(pid_of "$ID-v")/cgroup")
+[ "$(cat "$cgv/memory.max")" = 67108864 ] || fail "unified's memory.max undid the profile's limit: memory.max is $(cat "$cgv/memory.max")"
+[ "$(cat "$cgv/pids.max")" = 50 ] || fail "unified's pids.max undid the profile's limit: pids.max is $(cat "$cgv/pids.max")"
+[ "$(cat "$cgv/memory.high")" = 67108864 ] || fail "unified's memory.high is $(cat "$cgv/memory.high"), above the profile's limit"
+echo "ok: unified asking \"max\" leaves memory.max 67108864, memory.high 67108864, pids.max 50"
 
 # A second "process" behind a NUL: the profile checked the first, and
 # libcrun, which reads "process\u0000" as "process" and keeps the last, would
