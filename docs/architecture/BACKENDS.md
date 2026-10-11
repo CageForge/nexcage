@@ -25,25 +25,25 @@ flowchart LR
   driver --> zfs["zfs.zig<br/>optional datasets"]
   pve -->|runs| tools[("pct, pvesh, pveversion, pveam")]
   zfs -->|runs| ztools[("zfs, zpool")]
-  driver -->|writes| state[("/run/nexcage/NAME/state.json")]
+  driver -->|writes| state[("/run/nexcage/NAME/state.json<br/>under --root DIR: DIR/.proxmox-lxc/NAME")]
 ```
 
 | Operation | What the driver runs |
 |---|---|
-| create | `pvesh get /cluster/nextid`, then `pct create <vmid> <template> --hostname <name> ...`. On Proxmox VE 9.1+ a registry image not already on the storage is pulled first with `pvesh create .../oci-registry-pull`. With `--node` naming another node: only a `<storage>:vztmpl/<file>` template is accepted, `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` checks that node has it, then `pvesh create /nodes/<node>/lxc --vmid <vmid> --ostemplate <template> --hostname <name> ...` |
+| create | `pvesh get /cluster/nextid`, then `pct create <vmid> <template> --hostname <name> ...`. On Proxmox VE 9.1+ a registry image not already on the storage is pulled first with `pvesh create .../oci-registry-pull`. With `--node` naming another node: only a `<storage>:vztmpl/<file>` template is accepted, `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` checks that node has it, then `pvesh create /nodes/<node>/lxc --vmid <vmid> --ostemplate <template> --hostname <name> ...`. The `state.json` record is written as soon as that has succeeded, so a create that fails afterwards leaves a CT `delete --force <name>` removes |
 | start | `pct start <vmid>`; on another node `pvesh create /nodes/<node>/lxc/<vmid>/status/start` |
-| stop | `pct shutdown <vmid> --timeout 60 --forceStop 1`; on another node `pvesh create /nodes/<node>/lxc/<vmid>/status/shutdown --timeout 60 --forceStop 1` |
-| delete | `pct destroy <vmid>`; on another node `pvesh delete /nodes/<node>/lxc/<vmid>`. With `--force`, a running container is stopped first |
-| kill | `kill(2)` to the container's init from the host, with the PID from `pct status --verbose` — `pct exec` cannot deliver SIGKILL to a namespace's init; refused for a container on another node |
+| stop | `pct config <vmid>` to check the hostname is still the name resolved, then `pct shutdown <vmid> --timeout 60 --forceStop 1`; on another node `pvesh get /nodes/<node>/lxc/<vmid>/config`, then `pvesh create /nodes/<node>/lxc/<vmid>/status/shutdown --timeout 60 --forceStop 1` |
+| delete | the same hostname check, then `pct destroy <vmid>`; on another node `pvesh delete /nodes/<node>/lxc/<vmid>`. With `--force`, a running container is stopped first, and the check is made again before the destroy. `--force` of a container nexcage has a record of and no node has any more removes the record and runs nothing, unless the cluster lists a container it has no name for, which may be that one: then it exits 1 and keeps the record |
+| kill | the same hostname check, then `kill(2)` to the container's init from the host, with the PID from `pct status --verbose` — `pct exec` cannot deliver SIGKILL to a namespace's init; refused for a container on another node |
 | exec | `pct exec <vmid> -- <argv>`, stdio inherited; refused for a container on another node, and with `--process` or `--detach` |
 | pause, resume | writes `1` / `0` to `/sys/fs/cgroup/lxc/<vmid>/cgroup.freeze` (not `pct suspend`); refused for a container on another node |
 | update | `pct set <vmid>` with `--memory`/`--swap`/`--cpulimit`/`--cpuunits`; on another node `pvesh set /nodes/<node>/lxc/<vmid>/config` with the same options. Any other setting, in flags or a `--resources` document, and a value pct cannot say as asked (a quota under a hundredth of a core, memory under 16 MiB), is refused by name before pct is asked |
 | snapshot | `pct snapshot <vmid> <name> [--description ...]`; on another node `pvesh create /nodes/<node>/lxc/<vmid>/snapshot --snapname <name> [--description ...]` |
-| rollback | `pct rollback <vmid> <name> [--start 1]`; on another node `pvesh create /nodes/<node>/lxc/<vmid>/snapshot/<name>/rollback [--start 1]` |
+| rollback | the same hostname check, then `pct rollback <vmid> <name> [--start 1]`; on another node `pvesh create /nodes/<node>/lxc/<vmid>/snapshot/<name>/rollback [--start 1]` |
 | delsnapshot | `pct delsnapshot <vmid> <name>`; on another node `pvesh delete /nodes/<node>/lxc/<vmid>/snapshot/<name>` |
 | snapshots | `pvesh get /nodes/<node>/lxc/<vmid>/snapshot`, for a container here as well as elsewhere |
 | pull, images, rmi | `pvesh create /nodes/<node>/storage/<storage>/oci-registry-pull --reference <ref>`; `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` per template storage; `pvesh delete /nodes/<node>/storage/<storage>/content/<volid>` |
-| list, name to VMID | `pvesh get /cluster/resources --type vm` for every node, merged with `pct list` for this one (the cluster view is a cache) |
+| list, name to VMID | `pvesh get /cluster/resources --type vm` for every node, merged with `pct list` for this one (the cluster view is a cache). Either failing is an error, not a listing of this host alone, and never "no such container". An id is matched as a name; as a VMID too only with `--runtime lxc`, since nexcage's record of a container is of its name. A miss while the cluster lists a container without a name (one made seconds ago, or any on a node down for five minutes) is an error, not "no such container", except to `create` |
 
 ### A container from an OCI bundle
 

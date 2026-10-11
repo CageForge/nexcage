@@ -257,6 +257,8 @@ crun_checks() {
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/rexec.sh
   say "--systemd-cgroup before the command reaches libcrun"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/systemd_cgroup.sh
+  say "a Proxmox LXC container under --root stays the Proxmox backend's"
+  privileged -v "$REPO/tests/sim/bin:/sim/bin:ro" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/lxc_root.sh
 }
 
 # Always through crun_image: an image left from older sources would test them.

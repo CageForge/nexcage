@@ -244,14 +244,18 @@ nx state web-1
 check "state of created container: exit 0, stdout is pure JSON" all 'rc 0' 'json_ok "$S/out"'
 check "state of a container never started: id, status created, pid 0, ociVersion" \
   all '[ "$(json_get "$S/out" id)" = web-1 ]' '[ "$(json_get "$S/out" status)" = created ]' '[ "$(json_get "$S/out" pid)" = 0 ]' '[ "$(json_get "$S/out" ociVersion)" = 1.3.0 ]'
-nx state 100;  check "state by VMID works" all 'rc 0' '[ "$(json_get "$S/out" status)" = created ]'
-nx state nope; check "state of missing container -> exit 1, not found" all 'rc 1' 'err_has "not found"'
+# A VMID is not a name nexcage has a record of, so it reaches the Proxmox
+# backend only when asked to: an id nothing has a record of does not exist.
+nx --runtime lxc state 100;  check "state by VMID works, with --runtime lxc" all 'rc 0' '[ "$(json_get "$S/out" status)" = created ]'
+nx state 100;  check "a bare VMID without --runtime lxc does not exist, and nothing is asked" \
+  all 'rc 1' 'err_has "does not exist"' 'err_has "--runtime lxc"' 'not_called_re "^(pct|pvesh)"'
+nx state nope; check "state of missing container -> exit 1, does not exist" all 'rc 1' 'err_has "does not exist"'
 nx state;      check "state without name -> exit 2" rc 2
 echo "backup" > "$S/lock.100"
 nx state web-1; check "locked container still resolves by name" all 'rc 0' '[ "$(json_get "$S/out" id)" = web-1 ]'
 rm -f "$S/lock.100"
 echo "Permission denied" > "$S/fail_all"
-nx state web-1; check "state with the host failing -> exit 1, the tool's message logged" all 'rc 1' 'err_has "permission denied"' 'err_has "pct command failed"'
+nx state web-1; check "state with the host failing -> exit 1, the tool's message logged" all 'rc 1' 'err_has "permission denied"' 'err_has "/cluster/resources) failed"'
 rm -f "$S/fail_all"
 
 echo "=== list ==="
@@ -274,7 +278,7 @@ status_is web-1 running
 check "state reports running with the init's host PID from pct status --verbose" \
   all 'rc 0' '[ "$(json_get "$S/out" status)" = running ]' '[ "$(json_get "$S/out" pid)" = "$(init_pid 100)" ]' 'called "pct status 100 --verbose"'
 nx start web-1;  check "start an already running container -> exit 1" rc 1
-nx start nope;   check "start missing -> exit 1, not found" all 'rc 1' 'err_has "not found"'
+nx start nope;   check "start missing -> exit 1, does not exist" all 'rc 1' 'err_has "does not exist"'
 nx start;        check "start without name -> exit 2" rc 2
 nx start --name web-2; check "start --name <id> (form in 'start --help')" all 'rc 0' 'called "pct start 101"'
 
@@ -314,7 +318,8 @@ nx exec nope echo hi;          check "exec on a missing container -> exit 1, not
 # A container engine writes a flag either way, and the choice is not ours:
 # containerd sends `--root <dir>`, CRI-O sends `--root=<dir>`. CRI-O's first
 # call came back as `unknown command '--root=/run/nexcage-crio'`.
-nx --root=/tmp/sim-root-eq state web-1
+# web-1's record is under the default root, so --runtime lxc names its backend
+nx --root=/tmp/sim-root-eq --runtime lxc state web-1
 check "--flag=value is a flag, not a command name" all 'rc 0' 'out_has "\"id\": \"web-1\""'
 nx --version
 check "--version, which is how CRI-O asks" all 'rc 0' 'out_has "nexcage version"'
@@ -408,12 +413,13 @@ check "ps is refused on the LXC backend, where it would answer another question"
 # The log goes under /run, which is bind-mounted from $S: the sandbox mounts a
 # fresh tmpfs on /tmp, so a file written there disappears with the namespace and
 # the check cannot see it.
+# Under /run/x no backend has a record of web-1, which is the reason given.
 rm -f "$S/run/nexcage-ps.log"
 nx --root /run/x --log /run/nexcage-ps.log --log-format json ps --format json web-1
 check "the shape containerd sends is read as ps, not as a command name" \
-  all 'rc 1' '! err_has "unknown command"' 'grep -q "runtime crun" "$S/run/nexcage-ps.log"'
+  all 'rc 1' '! err_has "unknown command"' 'grep -q "does not exist" "$S/run/nexcage-ps.log"'
 check "and the reason is on stderr as well, where the engine reads it" \
-  all 'err_has "runtime crun"' '! err_has "\"level\""'
+  all 'err_has "does not exist"' '! err_has "\"level\""'
 nx --runtime crun ps --format yaml web-1
 check "ps --format takes json or table" all 'rc 2' 'err_has "json or table"'
 nx ps --help
@@ -442,6 +448,27 @@ nx state web-1;  check "state after delete -> exit 1" rc 1
 nx list;         check "list after delete has no row" all 'rc 0' '! listed web-1'
 nx start web-1;  check "start after delete -> exit 1" rc 1
 nx delete nope;  check "delete missing -> exit 1" rc 1
+# An id no backend has a record of does not exist, and delete --force of it
+# succeeds, as it does with crun and runc: an engine cleans up that way once a
+# reboot has emptied /run. Such an id used to go to the Proxmox backend, which
+# matched it against every CT in the cluster by name or VMID -- a second
+# delete --force of a crun container named like a VMID destroyed that CT.
+echo "905 stopped tenant-b-db" >> "$S/db"
+nx delete --force 905
+check "delete --force of an id nexcage has no record of exits 0 and touches no CT" \
+  all 'rc 0' 'not_called_re "^(pct|pvesh)"' 'grep -q "^905 stopped tenant-b-db$" "$S/db"'
+nx delete --force tenant-b-db
+check "nor does it touch a CT nexcage did not create, named by its hostname, and it says so" \
+  all 'rc 0' 'not_called_re "^(pct|pvesh)"' 'grep -q "^905 stopped tenant-b-db$" "$S/db"' 'err_has "--runtime lxc"'
+nx delete --force 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+check "an engine's id that libcrun no longer has: delete --force exits 0" \
+  all 'rc 0' 'not_called_re "^(pct|pvesh)"'
+nx delete 905
+check "delete of it without --force says it does not exist, as crun does" \
+  all 'rc 1' 'err_has "does not exist"' 'not_called_re "^(pct|pvesh)"'
+nx --runtime lxc delete --force tenant-b-db
+check "--runtime lxc reaches a CT nexcage did not create" \
+  all 'rc 0' 'called "pct destroy 905"' '! grep -q "tenant-b-db" "$S/db"'
 nx delete;       check "delete without name -> exit 2" rc 2
 
 echo "=== run ==="
@@ -779,6 +806,22 @@ check "bundle mount options LXC's own /dev/shm replaces: created, and named in t
       '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
       'err_has "nexcage: mounts[1] (/dev/shm) options in /tmp/nexcage-bundles/conf-mnt/config.json: not applied"' \
       '! err_has "mounts[0]"' '! err_has "mounts[2]"'
+# A create can fail after pct create has made the CT: a bundle's namespaces
+# are a `pct set` of their own ($SIM/fail_set). An engine cleans that up with
+# delete --force. nexcage's record was written last, so there was none, and
+# delete --force said there was nothing to delete: the CT stayed, and the
+# engine's next create of the name was refused.
+echo "can't lock file '/run/lock/lxc/pve-config-0.lock' - got timeout" > "$S/fail_set"
+nx create --name half-1 /tmp/nexcage-bundles/b1
+check "a create that fails after pct create exits 1 and says how to remove the CT" \
+  all 'rc 1' 'called_re "^pct create [0-9]+ .*--hostname half-1 "' 'err_has "delete --force half-1"'
+rm -f "$S/fail_set"
+half=$(awk '$3=="half-1" {print $1}' "$S/db")
+nx delete --force half-1
+check "and delete --force, as an engine cleans up, destroys that CT" \
+  all 'rc 0' "called 'pct destroy ${half:-none}'" '! grep -q " half-1$" "$S/db"' '[ ! -e "$S/run/nexcage/half-1" ]'
+nx create --name half-1 /tmp/nexcage-bundles/b1
+check "so the name can be created again" all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname half-1 "'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
@@ -898,7 +941,32 @@ nx --root /run/alt list
 check "--root before the command is not read as the command" all 'rc 0' '! err_has "unknown command"'
 nx create --root /run/alt --name rooted-1 "$TPL"
 check "--root: state goes under the given directory, not /run/nexcage" \
-  all 'rc 0' '[ -f "$S/run/alt/rooted-1/state.json" ]' '[ ! -e "$S/run/nexcage/rooted-1" ]'
+  all 'rc 0' '[ -f "$S/run/alt/.proxmox-lxc/rooted-1/state.json" ]' '[ ! -e "$S/run/nexcage/rooted-1" ]'
+# libcrun keeps its containers in --root itself, one directory per id. The
+# Proxmox backend's state.json used to go there too, and in a build with crun
+# every later command took the container for libcrun's: delete removed the
+# directory, said it had succeeded, and left the CT in Proxmox.
+check "--root: the Proxmox backend's state is not where libcrun keeps its containers" \
+  all '[ ! -e "$S/run/alt/rooted-1" ]'
+# --root is normalised before it is compared with the default: /run/nexcage/
+# is the default root, where from-tpl has its record, and not a caller's root
+# with the records under .proxmox-lxc.
+nx --root /run/nexcage/ start from-tpl
+check "--root naming the default with a trailing slash is the default" all 'rc 0' 'called_re "^pct start [0-9]+$"'
+nx stop from-tpl >/dev/null 2>&1   # stopped, as the checks further down expect it
+nx --root /run/alt delete --force rooted-1
+check "--root: delete --force reaches Proxmox and removes the state" \
+  all 'rc 0' 'called_re "^pct destroy [0-9]+$"' '[ ! -e "$S/run/alt/.proxmox-lxc/rooted-1" ]'
+# One id, one backend: with a record on each side, every later command would
+# reach only one of the two containers. This build has no crun backend, so a
+# status file under /run/crun is another runtime's container, which nexcage
+# never reaches, and it holds no create up. tests/crun/lxc_root.sh checks the
+# refusal in a build that has crun.
+mkdir -p "$S/run/crun/both-1" && : > "$S/run/crun/both-1/status"
+nx create --name both-1 "$TPL"
+check "without the crun backend, another runtime's crun container does not hold up a create" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname both-1 "'
+rm -rf "$S/run/crun"
 nx --root relative list
 check "--root with a relative path -> exit 2" all 'rc 2' 'err_has "absolute"'
 nx --root
@@ -1150,7 +1218,7 @@ nx state lag-1
 check "and state finds it too" all 'rc 0' '[ "$(json_get "$S/out" id)" = lag-1 ]'
 nx start no-such-container-anywhere
 check "while a container that exists nowhere is still not found" \
-  all 'rc 1' 'err_has "not found"'
+  all 'rc 1' 'err_has "does not exist"'
 : > "$S/stale_cluster"
 
 # The cache can also be *wrong* rather than empty: for a few seconds after a
@@ -1426,7 +1494,7 @@ nx --runtime crun snapshots sn-1
 check "so is the listing" all 'rc 1' 'err_has "Proxmox VE operation"' 'not_called_re "^pvesh"'
 nx snapshot no-such-sn-$$ x
 check "snapshot of a container that does not exist is an error naming it" \
-  all 'rc 1' 'err_has "not found"' 'not_called_re "^pct snapshot"'
+  all 'rc 1' 'err_has "does not exist"' 'not_called_re "^pct snapshot"'
 
 echo "=== the cluster ==="
 # A container on another node. `pct` cannot see it -- that is what the fourth
@@ -1434,6 +1502,11 @@ echo "=== the cluster ==="
 # before this, every one of them answered "not found".
 reset_sim
 echo "200 running remote-1 titan" >> "$S/db"
+# nexcage did not create remote-1, so it has no record of it: every command
+# but create names the backend with --runtime lxc.
+nx start remote-1
+check "a container nexcage has no record of is not looked up without --runtime lxc" \
+  all 'rc 1' 'err_has "does not exist"' 'not_called_re "^(pct|pvesh)"'
 
 nx list
 check "list shows a container on another node, with the node" \
@@ -1446,43 +1519,43 @@ check "and it is the cluster that was asked, not this host" \
 check "a virtual machine is not listed as a container" \
   all '! out_has a-virtual-machine' '! grep -q 9999 "$S/out"'
 
-nx start remote-1
+nx --runtime lxc start remote-1
 check "start on another node goes through that node's API, not pct" \
   all 'rc 0' 'called "pvesh create /nodes/titan/lxc/200/status/start"' 'not_called_re "^pct start"'
 
-nx state remote-1
+nx --runtime lxc state remote-1
 check "state names the node it is on" \
   all 'rc 0' 'out_has "\"io.cageforge.nexcage.node\": \"titan\""'
 check "and reports no PID, because a PID there is not a PID here" \
   out_has '"pid": 0'
 
-nx exec remote-1 echo hi
+nx --runtime lxc exec remote-1 echo hi
 check "exec on another node is refused, and says where to run it" \
   all 'rc 1' 'err_has "runs on titan"' 'not_called_re "^pct exec"'
-nx kill remote-1
+nx --runtime lxc kill remote-1
 check "kill on another node is refused: a signal comes from the host" \
   all 'rc 1' 'err_has "runs on titan"'
-nx pause remote-1
+nx --runtime lxc pause remote-1
 check "pause on another node is refused: the freezer is that host's filesystem" \
   all 'rc 1' 'err_has "runs on titan"'
 # `update` is the one thing on this list the API does have: a container's
 # options are a `set` on its node's config.
-nx update --memory 1G remote-1
+nx --runtime lxc update --memory 1G remote-1
 check "update on another node goes through that node's API, not pct" \
   all 'rc 0' 'called_re "^pvesh set /nodes/[^/]+/lxc/[0-9]+/config --memory 1024$"' 'not_called_re "^pct set"'
 
 # Snapshots are the API's as well: /nodes/<node>/lxc/<vmid>/snapshot.
-nx snapshot remote-1 s1 --description there
+nx --runtime lxc snapshot remote-1 s1 --description there
 check "snapshot on another node goes through that node's API, not pct" \
   all 'rc 0' 'called "pvesh create /nodes/titan/lxc/200/snapshot --snapname s1 --description there"' 'not_called_re "^pct snapshot"'
-nx snapshots remote-1
+nx --runtime lxc snapshots remote-1
 check "snapshots on another node reads that node's list" \
   all 'rc 0' 'called "pvesh get /nodes/titan/lxc/200/snapshot --output-format json"' 'out_has s1'
-nx stop remote-1 >/dev/null 2>&1
-nx rollback remote-1 s1 --start
+nx --runtime lxc stop remote-1 >/dev/null 2>&1
+nx --runtime lxc rollback remote-1 s1 --start
 check "rollback on another node goes through that node's API, with --start" \
   all 'rc 0' 'called "pvesh create /nodes/titan/lxc/200/snapshot/s1/rollback --start 1"' 'not_called_re "^pct rollback"'
-nx delsnapshot remote-1 s1
+nx --runtime lxc delsnapshot remote-1 s1
 check "delsnapshot on another node goes through that node's API" \
   all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200/snapshot/s1"' 'not_called_re "^pct delsnapshot"'
 
@@ -1490,14 +1563,252 @@ nx create --name remote-1 "$TPL"
 check "a name taken on another node is not free" \
   all 'rc 1' 'err_has "already exists on node titan"' 'not_called_re "^pct create"'
 
-nx stop remote-1
+nx --runtime lxc stop remote-1
 check "stop on another node goes through that node's API" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc/200/status/shutdown"'
-nx delete remote-1
+nx --runtime lxc delete remote-1
 check "delete on another node goes through that node's API" \
   all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200"'
-nx state remote-1
+nx --runtime lxc state remote-1
 check "and afterwards it is gone from the cluster" rc 1
+
+echo "--- the cluster's listing, large or failing ---"
+# /cluster/resources has an entry for every guest on every node. A few
+# thousand of them are more than the 1 MiB nexcage read from a tool, and what
+# did not fit was taken for "the cluster cannot be asked": lookups fell back
+# to this host's `pct list`, so a container on another node was "not found",
+# list was silently short, and create's cluster-wide check passed a name
+# another node had.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "200 running remote-1 titan" >> "$S/db"
+awk 'BEGIN { for (i = 1000; i < 3500; i++) printf "%d running filler-%d-%0440d titan\n", i, i, 0 }' >> "$S/db"
+nx list
+check "list on a cluster whose listing is over 1 MiB still shows the other node's container" \
+  all 'rc 0' 'listed remote-1'
+nx --runtime lxc stop remote-1
+check "and a container on another node is still found" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc/200/status/shutdown"'
+nx create --name remote-1 "$TPL"
+check "and a name another node has is still taken" \
+  all 'rc 1' 'err_has "already exists on node titan"' 'not_called_re "^pct create"'
+
+# A cluster that cannot answer at all is an error that says so. It was the
+# same quiet fallback to this host.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name here-9 "$TPL" >/dev/null 2>&1
+echo "200 stopped remote-9 titan" >> "$S/db"
+echo "ipcc_send_rec[1] failed: Connection refused" > "$S/fail_resources"
+nx list
+check "a cluster listing that fails is an error naming it, not this host's list in its place" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'err_has "connection refused"' '! out_has "here-9"'
+nx start here-9
+check "and so is a lookup, even of a container on this host" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct start"'
+nx create --name remote-9 "$TPL"
+check "create refuses a name it cannot check across the cluster" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct create"'
+# Whatever words the failure has. A tool's "not found" or "No such file or
+# directory" is read as a missing container, which is right for a call about
+# one container; for a listing it made create take the name for free.
+echo "ipcc_send_rec[1] failed: No such file or directory" > "$S/fail_resources"
+nx create --name remote-9 "$TPL"
+check "a failing cluster listing that reads like a miss is still no answer to create" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct create"'
+rm -f "$S/fail_resources"
+echo "No such file or directory" > "$S/fail_list"
+nx create --name remote-9 "$TPL"
+check "nor is a failing pct list" all 'rc 1' 'err_has "pct list"' 'not_called_re "^pct create"'
+rm -f "$S/fail_list"
+
+echo "--- which container a command acts on ---"
+# A name before a VMID. One pass took the first row matching either, and the
+# fake now lists rows as Proxmox does, VMIDs sorted as strings: the container
+# with VMID 1000 comes before the one named 1000 at VMID 150.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "149 stopped filler" > "$S/db"
+nx create --name 1000 "$TPL" >/dev/null 2>&1
+awk '$3!="filler"' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"; echo "999 stopped filler" >> "$S/db"
+nx create --name db-prod "$TPL" >/dev/null 2>&1
+awk '$3!="filler"' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"
+check "(two containers: one named 1000, and one with VMID 1000)" \
+  all 'grep -qx "150 stopped 1000" "$S/db"' 'grep -qx "1000 stopped db-prod" "$S/db"'
+nx delete 1000
+check "delete <name> destroys the container of that name, not the one with that VMID" \
+  all 'rc 0' 'called "pct destroy 150"' 'grep -qx "1000 stopped db-prod" "$S/db"' \
+      '[ ! -e "$S/run/nexcage/1000" ]' '[ -f "$S/run/nexcage/db-prod/state.json" ]'
+nx --runtime lxc delete 1000
+check "and the state removed is the destroyed container's, not the typed word's" \
+  all 'rc 0' 'called "pct destroy 1000"' '[ ! -e "$S/run/nexcage/db-prod" ]'
+
+# A name two containers have is refused, naming both. The first in the
+# listing used to win, and that was another node's as readily as this one's.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "149 stopped filler" > "$S/db"
+nx create --name web-1 "$TPL" >/dev/null 2>&1
+awk '$3!="filler"' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"
+echo "1000 running web-1 titan" >> "$S/db"
+nx delete --force web-1
+check "a name two containers have is refused, naming both, and neither is touched" \
+  all 'rc 1' 'err_has "VMID 1000 on titan"' 'err_has "VMID 150"' \
+      'not_called_re "^(pct (shutdown|destroy)|pvesh (create|delete) /nodes/)"'
+nx state web-1
+check "state refuses it the same way" all 'rc 1' 'err_has "names more than one container"'
+nx --runtime lxc delete 150
+check "while a VMID still addresses one of them" all 'rc 0' 'called "pct destroy 150"' 'grep -q "^1000 running web-1 titan$" "$S/db"'
+
+# A VMID can change hands between finding a container and acting on it, and
+# Proxmox gives a freed VMID to the next container created. The cluster's
+# listing keeps the old name for a few seconds after that ($SIM/stale_name).
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "200 running web-new titan" >> "$S/db"
+echo "200 web-old" > "$S/stale_name"
+nx --runtime lxc stop web-old
+check "a container whose VMID has gone to another one is not stopped in its place" \
+  all 'rc 1' 'err_has "no longer '"'"'web-old'"'"'"' 'not_called_re "^pvesh create /nodes/titan/lxc/200/status/"' \
+      'grep -q "^200 running web-new titan$" "$S/db"'
+nx --runtime lxc delete --force web-old
+check "nor destroyed in its place" \
+  all 'rc 1' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/200"' 'grep -q "^200 running web-new titan$" "$S/db"'
+echo "s1 0" > "$S/snaps.200"
+nx --runtime lxc rollback web-old s1
+check "nor rolled back in its place" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pvesh create /nodes/titan/lxc/200/snapshot/"' \
+      'grep -q "^200 running web-new titan$" "$S/db"'
+rm -f "$S/stale_name"
+# On this host `pct list` is current, and its name wins over the cache's.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name web-new "$TPL" >/dev/null 2>&1
+echo "100 web-old" > "$S/stale_name"
+nx --runtime lxc start web-old
+check "a name the cluster's cache still gives a reused VMID here does not find the new container" \
+  all 'rc 1' 'not_called_re "^pct start"'
+nx start web-new
+check "(which its own name does)" all 'rc 0' 'called "pct start 100"'
+rm -f "$S/stale_name"
+# kill reaches for the init from the host. A VMID that changes hands after
+# the listing ($SIM/meanwhile.list runs once, right after `pct list`) is the
+# same race as stop's, and SIGKILL is as final as a destroy.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name web-old "$TPL" >/dev/null 2>&1
+nx start web-old >/dev/null 2>&1
+cat > "$S/meanwhile.list" <<'SH'
+# web-old is destroyed elsewhere and web-new takes VMID 100
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx kill web-old TERM
+check "a container whose VMID changed hands after it was found is not sent the signal" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pct status"' '! grep -qx SIGTERM "$S/sig.100"'
+rm -f "$S/meanwhile.list"
+# The window that matters most: a forced delete waits for the shutdown, and
+# the VMID is free once something else has destroyed the container.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name web-old "$TPL" >/dev/null 2>&1
+nx start web-old >/dev/null 2>&1
+cat > "$S/meanwhile" <<'SH'
+# web-old is destroyed elsewhere and web-new takes VMID 100
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx delete --force web-old
+check "a VMID that changed hands during delete --force's shutdown is not destroyed" \
+  all 'rc 1' 'called_re "^pct shutdown 100 "' 'not_called_re "^pct destroy"' \
+      'grep -q "^100 stopped web-new$" "$S/db"' 'err_has "no longer"'
+rm -f "$S/meanwhile"
+
+# A container named after its own VMID: on a fresh host `create --name 100`
+# gets VMID 100, the next free one. A name equal to the VMID was taken for no
+# name at all, so the container counted as found by VMID: its record was not
+# written by start or stop, nor removed by delete, and nothing confirmed it
+# was still the same container before it was destroyed.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name 100 "$TPL" >/dev/null 2>&1
+check "(a container named 100, at VMID 100)" grep -qx "100 stopped 100" "$S/db"
+nx start 100 >/dev/null 2>&1; nx stop 100 >/dev/null 2>&1
+check "a container named after its VMID: state after stop says stopped" status_is 100 stopped
+nx delete 100
+check "and delete removes its record with it" all 'rc 0' 'called "pct destroy 100"' '[ ! -e "$S/run/nexcage/100" ]'
+nx create --name 100 "$TPL" >/dev/null 2>&1
+nx start 100 >/dev/null 2>&1
+cat > "$S/meanwhile" <<'SH'
+# the container named 100 is destroyed elsewhere and web-new takes VMID 100
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx delete --force 100
+check "and a VMID that changed hands during its delete --force's shutdown is not destroyed" \
+  all 'rc 1' 'called_re "^pct shutdown 100 "' 'not_called_re "^pct destroy"' \
+      'grep -q "^100 stopped web-new$" "$S/db"' 'err_has "no longer"'
+rm -f "$S/meanwhile"
+
+# nexcage's record proves it made a container with that name, and says
+# nothing about a VMID. A record whose container has gone -- destroyed from
+# the GUI or with pct, or renamed -- still unlocked a lookup by VMID, and a
+# CT nexcage never made, holding that number now, was the one destroyed.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name 250 "$TPL" >/dev/null 2>&1
+check "(a container named 250, at VMID 100)" grep -qx "100 stopped 250" "$S/db"
+# destroyed outside nexcage, and VMID 250 is a CT nexcage did not create
+echo "250 stopped tenant-b-db" > "$S/db"
+nx state 250
+check "through its record a numeric id is a name, not the CT with that VMID: state" \
+  all 'rc 1' '[ ! -s "$S/out" ]' 'err_has "not found"'
+nx delete 250
+check "nor delete" all 'rc 1' 'not_called_re "^pct destroy"' 'grep -qx "250 stopped tenant-b-db" "$S/db"'
+echo "250 stopped tenant-b-db" > "$S/db"   # each check on its own, whatever the last one did
+nx delete --force 250
+check "nor delete --force, which touches neither the CT nor anything else" \
+  all 'not_called_re "^(pct (shutdown|destroy)|pvesh (create|delete) /nodes/)"' 'grep -qx "250 stopped tenant-b-db" "$S/db"'
+# What is left of a container that is gone is its record, and delete --force
+# is how an engine forgets one. It failed, and the record stayed until a
+# reboot, keeping the id from the crun backend as well.
+check "and exits 0, forgetting the record of the container that is gone" \
+  all 'rc 0' '[ ! -e "$S/run/nexcage/250" ]' 'err_has "no container is named"'
+echo "250 stopped tenant-b-db" > "$S/db"
+nx --runtime lxc delete 250
+check "while --runtime lxc still reaches the CT by its VMID" all 'rc 0' 'called "pct destroy 250"'
+# Only a container no node has is forgotten that way. A listing that fails
+# says nothing about it, whatever words the failure has.
+nx create --name web-9 "$TPL" >/dev/null 2>&1
+echo "ipcc_send_rec[1] failed: No such file or directory" > "$S/fail_resources"
+nx delete --force web-9
+check "a record is not forgotten when the cluster could not be asked" \
+  all 'rc 1' 'err_has "/cluster/resources"' '[ -f "$S/run/nexcage/web-9/state.json" ]'
+rm -f "$S/fail_resources"
+# Nor while the cluster lists a container without a name ($SIM/noname): one
+# its node made seconds ago, or any of a node down for five minutes. It may be
+# the one, and forgetting the record left it running with nexcage told it was
+# gone.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "titan $TPL" >> "$S/node_templates"
+nx create --name rem-1 --node titan "$TPL" >/dev/null 2>&1
+nx start rem-1 >/dev/null 2>&1
+rem=$(awk '$3=="rem-1" {print $1}' "$S/db")
+check "(rem-1, made through nexcage and running on titan)" grep -qx "${rem:-none} running rem-1 titan" "$S/db"
+echo "$rem" > "$S/noname"
+nx delete --force rem-1
+check "a record is not forgotten while the cluster lists a container without a name" \
+  all 'rc 1' "err_has 'CT ${rem:-none} on titan has no name'" 'err_has "try again"' \
+      '[ -f "$S/run/nexcage/rem-1/state.json" ]' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/"'
+nx create --name rem-2 "$TPL"
+check "while a create is not held up by it, or a node that is down would stop every create" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname rem-2 "'
+# An empty id, an unset shell variable, matched the container without a name
+nx --runtime lxc delete --force ''
+check "and an empty id is not taken for that container: nothing is stopped or destroyed" \
+  all 'rc 1' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/"' "grep -qx '${rem:-none} running rem-1 titan' \"\$S/db\""
+rm -f "$S/noname"
+nx delete --force rem-1
+check "and once the cluster names it, delete --force destroys it" \
+  all 'rc 0' "called 'pvesh delete /nodes/titan/lxc/${rem:-none}'" '[ ! -e "$S/run/nexcage/rem-1" ]'
 
 echo "--- create --node ---"
 reset_sim
@@ -1593,6 +1904,20 @@ check "images --node narrows it to that node" \
 nx images --node no-such-node
 check "images on a node the cluster does not have is an error, not an empty list" \
   all 'rc 1' 'err_has "no node called"' 'err_has "titan"'
+
+# A node that does not answer fails the listing and is named: a listing
+# without its templates would read as "it has none". It was a bare
+# "operation failed".
+echo "500 Can't connect to 192.0.2.7:8006 (No route to host)" > "$S/fail_storage.titan"
+nx images
+check "images with a node that does not answer is an error naming the node" \
+  all 'rc 1' 'err_has "node titan"' 'err_has "No route to host"'
+nx images --node "$HOST"
+check "and --node lists a node that does" all 'rc 0' 'out_has "local:vztmpl/debian-13.tar.zst"'
+nx images --node titan
+check "images --node on the node that does not answer names it too" \
+  all 'rc 1' 'err_has "node titan"'
+rm -f "$S/fail_storage.titan"
 
 nx --runtime crun images
 check "images on the crun backend says templates are not its business" \

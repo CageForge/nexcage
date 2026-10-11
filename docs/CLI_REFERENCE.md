@@ -27,7 +27,7 @@ own, and an argument there keeps its `=`.
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
 | `--systemd-cgroup` | `create` on the crun backend has systemd place the container, as crun and runc do: libcrun asks systemd, over D-Bus, for a scope under the slice the bundle's `cgroupsPath` names (`<slice>:<prefix>:<name>`). containerd sends it for a handler with `SystemdCgroup = true`; CRI-O and podman send it whenever their cgroup manager is systemd, their default. It has to match the kubelet's cgroup driver: without it, a `cgroupsPath` in that form becomes a cgroup of that very name at the root of the hierarchy, outside the pod's. Where systemd cannot be reached, `create` fails with libcrun's `cannot open sd-bus`, as crun's does. Later commands follow the manager the container was created with; `delete --force` under it leaves `/sys/fs/cgroup/<id>` alone (see [delete](#delete)). On the Proxmox LXC backend it changes nothing: Proxmox puts the container's cgroup at `/lxc/<vmid>` |
 | `--rootless <value>` | Accepted and ignored, as crun does. go-runc sends `--rootless=<true\|false>` when its caller sets one, and to runc it means "ignore cgroup permission errors"; libcrun decides that for itself, and as root it ignores none |
-| `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
+| `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute; it is normalised first, so `/run/nexcage/` is the default. The crun backend's state is `<dir>/<id>`, libcrun's own; the Proxmox LXC backend's is `<dir>/.proxmox-lxc/<name>`, so the two never share a directory. It used to be `<dir>/<name>`, which a build with crun took for libcrun's; a record an older version left there is not read, and its container takes `--runtime lxc` once |
 | `--profile <name>` | Create the container under the isolation profile `<name>` from the configuration file; see [Isolation profiles](#isolation-profiles). Only `create` reads it, and `run` refuses it |
 | `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
 
@@ -111,6 +111,11 @@ ID    IMAGE     COMMAND  CREATED   STATUS   BACKEND      NODE        NAMES
 $ nexcage start web-2        # on titan, from here
 ```
 
+That `start` needs nexcage's record of `web-2` on this host, which `create`
+writes on the host that runs it — `--node titan` included. A container created
+from another host, or by hand, takes `--runtime lxc` here the first time; that
+command writes the record here, and later ones need no `--runtime`.
+
 `start`, `stop`, `delete` and `state` work on any node: for a container on this
 host they run `pct`, and for one elsewhere they go through that node's API. The
 `state` of a container on another node carries it as an annotation:
@@ -161,18 +166,54 @@ a storage the target node has.
 `--node` naming the host nexcage is running on is not "another node": it takes
 the ordinary local path, `pct` and all.
 
-On a host that is not in a cluster, or where `pvesh` cannot be reached, nexcage
-falls back to `pct` and behaves exactly as it did: this host's containers, and
-no others.
+A host that is not in a cluster answers `/cluster/resources` with its own
+containers, so nothing changes there. **A cluster listing that cannot be read is
+an error** (exit 1) naming the cause — `pvesh` failing, its output not being
+JSON, or more of it than nexcage reads (64 MiB, room for tens of thousands of
+guests). It used to be a quiet fallback to `pct`, which sees this host alone: a
+container on another node was then "not found", `list` was short without
+saying so, and `create`'s check that a name is free across the cluster passed a
+name another node had. `images` likewise fails, naming the node, when a node
+cannot be asked for its storages; `images --node <name>` lists the nodes that
+answer one at a time.
 
 **The cluster's listing is a cache**, refreshed by `pvestatd` every few seconds,
 and nexcage is built around that in two places. A container created a moment ago
 is not in it yet, so a name missing there means "keep looking on this host"
 rather than "no such container" — otherwise `create` followed straight away by
 `start` fails. And for a container on this host, `pct` is the current answer
-while the cluster's copy can be seconds stale, so `list` and `state` take the
-status from `pct` and keep from the cluster the one thing only it knows: which
-node a container elsewhere is on.
+while the cluster's copy can be seconds stale, so `list`, `state` and every
+lookup take the status and the name from `pct` and keep from the cluster the
+one thing only it knows: which node a container elsewhere is on.
+
+**A container the cluster has no report for has no name in its listing.**
+Proxmox takes a container's name from its node's reports, so one made on
+another node a few seconds ago has none yet, and nor does any container of a
+node that has been down for five minutes. `list` shows `-` for its name. A name
+that matches nothing while such a container is listed may still be that one, so
+it is not "no such container": the command exits 1 naming the unnamed CT and
+its node, does nothing, and can be tried again once the cluster names it.
+`create` is the exception, or a node that is down would stop every create; two
+creates of one name on different nodes seconds apart can therefore both
+succeed, and every later lookup of the name refuses it.
+
+**Which container a name means.** A name is looked for before a VMID, so a
+container named `1000` is the one `1000` finds even when another container has
+VMID 1000. A VMID finds its container only with `--runtime lxc`, and only when
+no container has that name: without `--runtime` the command reached the Proxmox
+backend through nexcage's record of a container with that name, which says
+nothing about a VMID. A name
+that more than one container has — two nodes' creates racing, or a duplicate
+made outside nexcage — is refused with exit 1 and the containers listed, never
+resolved to whichever the listing put first; address one by its VMID, with
+`--runtime lxc`. `create` checks both the cluster's listing and this host's
+`pct list` for the name, and refuses when the cluster cannot be asked.
+
+**A VMID can change hands.** Proxmox gives a destroyed container's VMID to the
+next container created, so right before `stop`, `delete` (and the stop
+`--force` does first), `rollback` and `kill`, nexcage reads the container's
+hostname from its config again — `pct config`, or the node's API — and refuses,
+touching nothing, when the VMID now belongs to a container with another name.
 
 ## Backend selection
 
@@ -180,9 +221,41 @@ node a container elsewhere is on.
 rules in the config file, Proxmox LXC by default; `features` asks that backend
 too. Every other command — `start`, `stop`, `delete`, `kill`, `exec`, `state`,
 `pause`, `resume`, `update`, `ps` and the snapshot commands — goes to the
-backend that has the container: the crun backend when libcrun's state
-directory (`--root`, else `/run/crun`) has it, Proxmox LXC otherwise. A rule
-changed after `create` does not move a container (since 0.17.0, #372).
+backend that has a record of the container: the crun backend when libcrun's
+`status` file for it exists (under `--root`, else `/run/crun`), Proxmox LXC
+when nexcage's own `state.json` for it does — written when nexcage creates the
+container, in `/run/nexcage/<name>` (`<root>/.proxmox-lxc/<name>` under
+`--root`). A rule changed after `create` does not move a container (since
+0.17.0, #372).
+
+**An id neither backend has a record of does not exist.** The command exits 1
+saying so, without asking Proxmox anything, and `delete --force` exits 0, as it
+does with crun and runc — a container engine cleans up that way. Such an id
+used to go to the Proxmox backend, which matched it against every container in
+the cluster by name or VMID, so a second `delete --force` of a crun container
+named like a VMID destroyed that Proxmox container. A Proxmox container nexcage
+did not create, one addressed by its VMID, and one whose record a reboot
+cleared from `/run` are reached with `--runtime lxc`; a command that changes
+one (start, stop, pause, resume, rollback) writes the record again under its
+name, so the next command needs no `--runtime`.
+
+**A record is of a name, not a VMID.** Through it, an id finds the container
+with that name and nothing else: a record of `250` whose container was
+destroyed outside nexcage does not reach whatever container has VMID 250 now.
+Such a record — its container destroyed from the GUI or with `pct`, or renamed
+— is forgotten by `delete --force`, which then exits 0 and does nothing else;
+any other command exits 1 saying no container has that name. A cluster that
+cannot be asked is an error, never taken for "no such container", so a record
+is not forgotten on a failed listing.
+
+**One id, one backend.** `create` and `run` refuse, with exit 1, an id the
+other backend already has a record of, since every later command would reach
+only one of the two containers. In a binary built without crun, a `status`
+file under `/run/crun` is another runtime's container and holds nothing up.
+For the same reason a command run with `--runtime lxc` writes no record of a
+Proxmox container whose name libcrun has: it says so, and that container is
+reached with `--runtime lxc` from then on.
+
 `--runtime <lxc|crun>` overrides that for one command, before or after the
 command name; `--runtime lxc` for a container the crun backend has exits 2.
 
@@ -448,6 +521,11 @@ whose `linux`, `linux.resources`, `memory` or `cpu` is not an object, or
 that holds a mount, argument or environment entry of the wrong type: such a
 part used to be skipped, with the mounts or limits it held.
 
+nexcage records the container as soon as `pct create` has made it. A create
+that fails after that point, while applying the bundle's mounts or namespaces
+for instance, exits 1 naming the CT. `delete --force <name>`, which is how a
+container engine cleans up a failed create, then destroys it.
+
 #### pct options
 
 What `pct create` is usually given, on the Proxmox LXC backend. Each maps onto
@@ -521,6 +599,15 @@ Destroys the container with `pct destroy` and removes its state directory.
 A running container must be stopped first, unless `--force` is given: that
 shuts it down and then destroys it, as `runc delete --force` does. A container
 engine sends `--force` once it has given up waiting for a clean shutdown.
+`delete --force` of a container no backend has a record of exits 0, and so is
+safe to repeat; plain `delete` of one exits 1 (see
+[Backend selection](#backend-selection)). So does `delete --force` of a
+container nexcage has a record of but no node has any more: it forgets the
+record and touches nothing else. Not while the cluster lists a container it has
+no name for, which may be that one (see [Clusters](#clusters)): `delete` then
+exits 1 and keeps the record. If a node stays down and the container is known
+to be gone, its record is the directory `/run/nexcage/<name>`
+(`<root>/.proxmox-lxc/<name>` under `--root`), which can be removed by hand.
 
 On `--runtime crun`, `--force` also cleans up after a `create` that was killed
 half way: libcrun's state directory is there without its status file, and the

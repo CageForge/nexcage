@@ -522,6 +522,10 @@ delete <id>
 delete --force <id>
 ```
 
+`delete --force <id>` of a container libcrun no longer has — a second delete,
+or one after a reboot emptied `/run` — exits 0, as crun's and runc's does. It
+used to go to the Proxmox backend and fail on a node without Proxmox.
+
 Two things in that list were worth naming. The `exec` line is the shape stage 4
 added for containerd, `--detach` included: without it `kubectl exec` would have
 failed here. And `ps --format json` was asked for and did not exist — nexcage

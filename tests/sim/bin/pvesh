@@ -14,6 +14,10 @@ HERE=${SIM_NODE:-$(hostname)}
 
 case "$1 $2" in
   "get /cluster/resources")
+    # $SIM/fail_resources holds what pvesh says when the cluster cannot answer
+    # -- pmxcfs down, this node out of quorum -- while `pct list`, which reads
+    # this host's configs, still works. Only both together were modelled.
+    [ -e "$SIM/fail_resources" ] && { cat "$SIM/fail_resources" >&2; exit 255; }
     # The real API's --type enumeration is vm, storage, node, sdn. It rejects
     # anything else, and nexcage asked for "lxc" for three releases: every
     # lookup failed and fell back to `pct list`, which is right for a container
@@ -50,9 +54,27 @@ case "$1 $2" in
         old_status=$(awk -v n="$name" '$1==n {print $2}' "$SIM/stale_status" 2>/dev/null)
         [ -n "$old_status" ] && status=$old_status
       fi
+      # $SIM/stale_name holds "vmid name" lines: the name pvestatd last saw
+      # for a VMID, which the listing keeps for a few seconds after the VMID
+      # has gone to another container.
+      if [ -s "$SIM/stale_name" ]; then
+        old_name=$(awk -v v="$vmid" '$1==v {print $2}' "$SIM/stale_name" 2>/dev/null)
+        [ -n "$old_name" ] && name=$old_name
+      fi
+      # $SIM/noname lists VMIDs the cluster has no report for: a container
+      # its node made seconds ago, or any container of a node down for five
+      # minutes, whose reports pmxcfs has dropped. PVE::API2Tools::
+      # extract_vm_stats then gives the entry no name and status "unknown".
+      if [ -s "$SIM/noname" ] && grep -qxF "$vmid" "$SIM/noname"; then
+        printf ',{"vmid":%s,"node":"%s","status":"unknown","type":"lxc"}' "$vmid" "${node:-$HERE}"
+        continue
+      fi
       printf ',{"vmid":%s,"name":"%s","node":"%s","status":"%s","type":"lxc"}' \
         "$vmid" "$name" "${node:-$HERE}" "$status"
-    done < "$SIM/db"
+    # In Proxmox's order: Cluster.pm walks `sort keys %$idlist`, a string
+    # sort, so VMID 1000 comes before 150. Rows used to come in the order
+    # they were made, and a lookup that took the first match was right by luck.
+    done < <(LC_ALL=C sort -k1,1 "$SIM/db")
     printf ']\n'
     ;;
   "get /nodes")
@@ -73,6 +95,9 @@ case "$1 $2" in
   "get /nodes/"*/storage)
     # $SIM/node_storages holds "node storage shared" lines.
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage|\1|p')
+    # A node that does not answer: the API proxies the call to it, and its
+    # failure comes back. $SIM/fail_storage.<node> holds what was said.
+    [ -e "$SIM/fail_storage.$node" ] && { cat "$SIM/fail_storage.$node" >&2; exit 255; }
     printf '['
     sep=""
     if [ -s "$SIM/node_storages" ]; then
@@ -260,8 +285,18 @@ case "$1 $2" in
     # a container elsewhere. Recorded like every call; nothing more to model.
     ;;
   "get /nodes/"*/lxc/*/config)
-    # What `update --memory-swap` reads when no --memory came with it.
-    echo '{"memory":512,"swap":512,"cores":1}'
+    # A container's config, as its node's API gives it: what `update
+    # --memory-swap` reads when no --memory came with it, and the hostname a
+    # command checks right before it stops or destroys the container.
+    # Only the node the container is on has its config: the API proxies the
+    # call to the node in the path, and that node reads its own
+    # nodes/<node>/lxc/<vmid>.conf. Answering for any node let a check that
+    # asked the wrong one pass.
+    node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/lxc/.*|\1|p')
+    vmid=$(echo "$2" | sed -n 's|.*/lxc/\([0-9]*\)/config|\1|p')
+    host=$(awk -v v="$vmid" -v n="$node" -v h="$HERE" '$1==v && ($4==n || ($4=="" && n==h)) {print $3; f=1} END {exit !f}' "$SIM/db") || {
+      echo "Configuration file 'nodes/$node/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    printf '{"cores":1,"hostname":"%s","memory":512,"swap":512}\n' "$host"
     ;;
   *) echo "fake pvesh: unsupported $*" >&2; exit 99 ;;
 esac

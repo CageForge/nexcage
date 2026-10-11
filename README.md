@@ -22,7 +22,7 @@ As of **0.17.0**, on amd64, running on the Proxmox VE host as root:
 
 | | |
 |---|---|
-| **Proxmox LXC** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `exec` — on any node of the cluster, except `kill` and `exec`, which work on the host the container is on. `create --node` places a container on a chosen one; `run` (create, then start) always creates on this host |
+| **Proxmox LXC** | `create`, `start`, `stop`, `delete`, `list`, `state`, `kill`, `exec` — on any node of the cluster, except `kill` and `exec`, which work on the host the container is on. `create --node` places a container on a chosen one; `run` (create, then start) always creates on this host. nexcage's record of a container is kept on the host that created it, so from any other host it takes `--runtime lxc` once |
 | **Templates** | `images`, `pull`, `rmi` for what a container is created from |
 | **Freezing, resizing** | `pause` and `resume`, the cgroup freezer, on both backends — on Proxmox LXC only on the host the container is on; `state` reports `paused`, which `pct status` cannot, for a container on this host (one frozen on another node shows as `running`). `update` changes a running container's limits — through libcrun, or `pct set` in its own terms |
 | **As an OCI runtime** | the runtime-spec command line — `create --bundle`, `start`, `state`, `kill`, `delete`, `exec`, `ps`, `features`, `update`, with `--root`, `--console-socket`, `--pid-file`, `--log`. Verified against podman, `ctr`, containerd's CRI, CRI-O and a kubelet |
@@ -97,9 +97,11 @@ nexcage create --name web-2 --node titan shared-rdma:vztmpl/redis_7.tar
 ```
 
 Containers are addressed by name, which becomes the hostname and must be unique
-across the cluster; `state` also accepts a VMID. `exec`, `kill`, `pause`,
-`resume` and the `pid` in `state` work on the host the container is on, and
-say so for one elsewhere.
+across the cluster. A VMID, or a container nexcage did not create, takes
+`--runtime lxc`: without it, a name nexcage has no record of does not exist,
+and a record finds its container by name only, never by VMID.
+`exec`, `kill`, `pause`, `resume` and the `pid` in `state` work on the host
+the container is on, and say so for one elsewhere.
 Exit status is `0` for success, `1` when the operation failed, `2` for invalid
 usage — except `exec`, which exits with the status of the command it ran.
 

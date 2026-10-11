@@ -102,12 +102,17 @@ done
 cmd=$1; shift
 case "$cmd" in
   list)
+    # this host's listing failing on its own, while pvesh still answers
+    [ -e "$SIM/fail_list" ] && { cat "$SIM/fail_list" >&2; exit 2; }
     printf "%-10s %-10s %-12s %-20s\n" VMID Status Lock Name
     sort -n "$DB" | while read -r v s n node; do
       [ -z "$node" ] || [ "$node" = "$THIS_NODE" ] || continue
       lock=""; [ -e "$SIM/lock.$v" ] && lock=$(cat "$SIM/lock.$v")
       printf "%-10s %-10s %-12s %-20s\n" "$v" "$s" "$lock" "$n"
     done
+    # Something else on the host acting right after the listing was read,
+    # once: $SIM/meanwhile.list is a script, run and removed.
+    if [ -e "$SIM/meanwhile.list" ]; then bash "$SIM/meanwhile.list"; rm -f "$SIM/meanwhile.list"; fi
     ;;
   create)
     vmid=$1; tpl=$2; shift 2
@@ -159,6 +164,9 @@ case "$cmd" in
     [ "$(status_of "$1")" = running ] || { echo "CT $1 not running" >&2; exit 255; }
     stop_init "$1"
     set_status "$1" stopped
+    # Something else on the host acting while nexcage waited for the
+    # shutdown, once: $SIM/meanwhile is a script, run and removed.
+    if [ -e "$SIM/meanwhile" ]; then bash "$SIM/meanwhile"; rm -f "$SIM/meanwhile"; fi
     ;;
   destroy)
     exists "$1" || missing "$1"
@@ -193,11 +201,19 @@ case "$cmd" in
     ;;
   config)
     exists "$1" || missing "$1"
-    cat "$SIM/conf.$1"
+    # pct prints the config's keys sorted, and the hostname is one of them
+    name=$(awk -v v="$1" '$1==v {print $3}' "$DB")
+    [ -n "$name" ] && echo "hostname: $name"
+    # a container seeded straight into the db has no file of extra lines
+    [ ! -e "$SIM/conf.$1" ] || cat "$SIM/conf.$1"
     ;;
   set)
     vmid=$1; shift
     exists "$vmid" || missing "$vmid"
+    # A change pct refuses on a container that exists -- create has made it
+    # and a bundle's options follow as calls of their own. $SIM/fail_set
+    # holds what pct says; it exits 255, as pct does when it dies.
+    [ -e "$SIM/fail_set" ] && { cat "$SIM/fail_set" >&2; exit 255; }
     # Mount points are checked as Proxmox's API checks them, all before
     # anything is written, and land in the config as `mpN: <value>`; other
     # options are logged as one `set:` line, as before.
