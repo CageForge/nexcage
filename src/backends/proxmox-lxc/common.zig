@@ -102,11 +102,13 @@ const StartError = posix.ExecveError || error{
 /// to nexcage's life, through PR_SET_PDEATHSIG set between fork and exec,
 /// where Child has no hook.
 ///
-/// nexcage installs no signal handlers. A wrapper that kills it -- Python's
-/// subprocess.run(timeout=), Go's exec.CommandContext, a systemd unit with
-/// KillMode=process -- signals nexcage alone, and a child ran on without it:
+/// nexcage passes no signal on to a child: the one handler it has, armed
+/// while a bundle's archive exists, removes the archive and dies of the
+/// signal. A wrapper that kills it -- Python's subprocess.run(timeout=), Go's
+/// exec.CommandContext, a systemd unit with KillMode=process -- signals
+/// nexcage alone, and a child ran on without it:
 /// a `pct create` whose caller was killed still made the container, later,
-/// with no state.json and none of the bundle's mounts or features, under a
+/// with no state.json and none of the bundle's mounts, under a
 /// name a retry was then refused. Otherwise this runs the program as Child.run
 /// does: the same arguments and environment, stdin on /dev/null, and stdout
 /// and stderr collected up to `max_output_bytes`.

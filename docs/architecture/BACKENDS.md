@@ -30,7 +30,7 @@ flowchart LR
 
 | Operation | What the driver runs |
 |---|---|
-| create | `pvesh get /cluster/nextid`, then `pct create <vmid> <template> --hostname <name> ...`. On Proxmox VE 9.1+ a registry image is pulled first with `pvesh create .../oci-registry-pull --filename <name>`, the name derived from the whole reference, unless the storage already holds exactly that file; no other template is taken for it. With `--node` naming another node: only a `<storage>:vztmpl/<file>` template is accepted, `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` checks that node has it, then `pvesh create /nodes/<node>/lxc --vmid <vmid> --ostemplate <template> --hostname <name> ...`. The `state.json` record is written as soon as that has succeeded, so a create that fails afterwards leaves a CT `delete --force <name>` removes |
+| create | `pvesh get /cluster/nextid`, then `pct create <vmid> <template> --hostname <name> ...`. On Proxmox VE 9.1+ a registry image is pulled first with `pvesh create .../oci-registry-pull --filename <name>`, the name derived from the whole reference, unless the storage already holds exactly that file; no other template is taken for it. With `--node` naming another node: only a `<storage>:vztmpl/<file>` template is accepted, `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` checks that node has it, then `pvesh create /nodes/<node>/lxc --vmid <vmid> --ostemplate <template> --hostname <name> ...`. The `state.json` record is written as soon as that has succeeded; a create that fails afterwards destroys the CT and the record, and keeps the record only if that destroy fails, so that `delete --force <name>` removes the CT |
 | start | `pct start <vmid>`; on another node `pvesh create /nodes/<node>/lxc/<vmid>/status/start` |
 | stop | `pct config <vmid>` to check the hostname is still the name resolved, then `pct shutdown <vmid> --timeout 60 --forceStop 1`; on another node `pvesh get /nodes/<node>/lxc/<vmid>/config`, then `pvesh create /nodes/<node>/lxc/<vmid>/status/shutdown --timeout 60 --forceStop 1` |
 | delete | the same hostname check, then `pct destroy <vmid>`; on another node `pvesh delete /nodes/<node>/lxc/<vmid>`. With `--force`, a running container is stopped first, and the check is made again before the destroy. `--force` of a container nexcage has a record of and no node has any more removes the record and runs nothing, unless the cluster lists a container it has no name for, which may be that one: then it exits 1 and keeps the record |
@@ -45,11 +45,12 @@ flowchart LR
 | pull, images, rmi | `pvesh create /nodes/<node>/storage/<storage>/oci-registry-pull --reference <ref> --filename <name>`, then `pvesh get /nodes/<node>/storage/<storage>/content --content vztmpl` must list exactly `<storage>:vztmpl/<name>.tar` (a listing that fails is an error); for `images` the same listing per template storage, a storage that cannot be listed left out with a warning; `pvesh delete /nodes/<node>/storage/<storage>/content/<volid>` |
 | list, name to VMID | `pvesh get /cluster/resources --type vm` for every node, merged with `pct list` for this one (the cluster view is a cache). Either failing is an error, not a listing of this host alone, and never "no such container". An id is matched as a name; as a VMID too only with `--runtime lxc`, since nexcage's record of a container is of its name. A miss while the cluster lists a container without a name (one made seconds ago, or any on a node down for five minutes) is an error, not "no such container", except to `create` |
 
-A `create` step after `pct create` that fails — `pct set --features`
-refused, the state not written — destroys the container it made
+A `create` step after `pct create` that fails — the bundle's `pct set
+--mpN` refused, the state not written — destroys the container it made
 (`pct destroy <vmid>`, or the node's API with `--node`) and the state written
-for it, as runc and crun do, so the name is free for a retry. Every tool runs
-as a child that gets `SIGTERM` when nexcage dies (`PR_SET_PDEATHSIG`): a
+for it, as runc and crun do, so the name is free for a retry. Every tool but
+`exec`'s `pct exec` runs as a child that gets `SIGTERM` when nexcage dies
+(`PR_SET_PDEATHSIG`): a
 nexcage killed on its own, by a timeout in its caller, no longer leaves
 `pct create` finishing a container nobody asked for any more. TERM, not KILL,
 because `pct create` passes a TERM on to its task worker, which aborts and

@@ -536,15 +536,14 @@ that holds a mount, argument or environment entry of the wrong type: such a
 part used to be skipped, with the mounts or limits it held.
 
 nexcage records the container as soon as `pct create` has made it. A create
-that fails after that point, while applying the bundle's mounts or namespaces
-for instance, exits 1 naming the CT. `delete --force <name>`, which is how a
-container engine cleans up a failed create, then destroys it.
-
-A create that fails after `pct create` — a `pct set` refused, the state not
-written — destroys the container it made before it exits 1, as `runc create`
-does, so the same name can be created again. If nexcage itself is killed while
-`pct create` runs, pct gets `SIGTERM` and aborts the create; Proxmox removes
-what it had made.
+that fails after that point — the `pct set` that applies the bundle's mounts
+refused, the record not written — destroys the container it made, and that
+record, before it exits 1, as `runc create` does, so the same name can be
+created again. Should that `pct destroy` fail too, create says so, naming the
+CT, and keeps the record: `delete --force <name>`, which is how a container
+engine cleans up a failed create, then destroys it. If nexcage itself is
+killed while `pct create` runs, pct gets `SIGTERM` and aborts the create;
+Proxmox removes what it had made.
 
 #### pct options
 
