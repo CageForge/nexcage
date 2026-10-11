@@ -22,6 +22,10 @@ and
 Containers are created from Proxmox templates, OCI bundle directories or, on
 Proxmox VE 9.1 and later, OCI registry images.
 .PP
+It is also an OCI runtime that containerd, CRI\-O and podman drive, as they
+drive runc or crun: its crun backend, built on libcrun and in the same binary,
+runs their containers from the bundle they give it.
+.PP
 Containers are addressed by name, which becomes the container hostname and
 must be unique in the cluster. VMIDs are allocated with
 .BR "pvesh get /cluster/nextid" .
@@ -52,8 +56,7 @@ backend only).
 default local; the root filesystem goes on \fBproxmox.storage\fR.
 \fB\-\-console\-socket\fR and \fB\-\-pid\-file\fR need the crun backend (\fB\-\-runtime crun\fR):
 the Proxmox LXC backend refuses them, because \fBpct create\fR starts no
-process. The crun backend is not built into this package's binary; it is in
-the separate \-crun release binary.
+process.
 What \fBpct create\fR is usually given: \fB\-\-memory\fR, \fB\-\-memory\-swap\fR,
 \fB\-\-cpu\-quota\fR, \fB\-\-cpu\-period\fR and \fB\-\-cpu\-share\fR as for
 \fBupdate\fR; \fB\-\-cores\fR; \fB\-\-ip\fR, \fB\-\-gw\fR, \fB\-\-vlan\fR and
@@ -81,8 +84,10 @@ Without \fB\-\-force\fR such an id is an error.
 Send a signal (default SIGTERM) to the container's init process from the host.
 The signal is a name in any case, with or without SIG, or a number from 1 to 64.
 Init receives it only if it handles that signal, except SIGKILL and SIGSTOP;
-SIGKILL always stops the container. \fB\-\-all\fR is accepted for runc
-compatibility and does not walk the cgroup: only SIGKILL reaches every process.
+SIGKILL always stops the container. \fB\-\-all\fR signals every process in the
+container's cgroup on the crun backend. On the Proxmox LXC backend nexcage can
+signal only the init, and says so when \fB\-\-all\fR is given: there only
+SIGKILL reaches every process.
 .TP
 \fBexec\fR \fIname\fR \fIcommand\fR [\fIargs\fR...], \fBexec\fR \fIname\fR \fB\-\-\fR \fIcommand\fR [\fIargs\fR...]
 Run a command inside a running container and exit with its status, as an OCI
@@ -232,8 +237,7 @@ container's record. \fBproxmox\-lxc\fR is the same as \fBlxc\fR.
 \fB\-\-runtime lxc\fR reaches a Proxmox container nexcage has no record of,
 or one named by its VMID; a command that changes one (start, stop, pause,
 resume, rollback) writes the record again under its name. For a container the
-crun backend has, \fB\-\-runtime lxc\fR exits 2. The crun backend is not built into
-this package's binary, so a command sent to it fails.
+crun backend has, \fB\-\-runtime lxc\fR exits 2.
 .TP
 .B \-\-systemd\-cgroup
 Before or after the command: \fBcreate\fR on the crun backend has systemd place
