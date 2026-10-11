@@ -9,6 +9,8 @@
 # libcrun: state and start failed on a missing status file, and delete --force
 # removed the directory, exited 0, and left the container in Proxmox. The
 # simulator builds without crun and could not see it; this image has both.
+# For the same reason the checks that one id is one backend's, both ways, are
+# here: neither backend is given an id the other has.
 #
 # The Proxmox tools are tests/sim's fakes, mounted at /sim/bin; their call log
 # is the check.
@@ -62,6 +64,17 @@ nx delete --force web >/dev/null 2>"$SIM/err" || fail "delete --force: $(tail -1
 called "pct destroy 100" || fail "delete --force exited 0 without destroying the container"
 [ ! -s "$SIM/db" ] || fail "the container is still there: $(cat "$SIM/db")"
 echo "ok: delete --force destroys it"
+
+# The other way round: the Proxmox backend is not given an id libcrun has.
+# Only a build with crun can show it; in the simulator's, a status file under
+# /run/crun is another runtime's and holds nothing up.
+nx --runtime crun create --bundle "$SIM/bundle" ctr >/dev/null 2>"$SIM/err" || fail "crun create of ctr: $(tail -1 "$SIM/err")"
+[ -e "$ROOT/ctr/status" ] || fail "libcrun did not record ctr in $ROOT"
+rc=0; nx create --name ctr "$TPL" >/dev/null 2>"$SIM/err" || rc=$?
+! grep -q -- "--hostname ctr " "$SIM/calls" || fail "pct was asked to create ctr, which libcrun has (rc=$rc)"
+[ "$rc" != 0 ] || fail "a Proxmox LXC create of ctr, which libcrun has, exited 0"
+grep -q "already exists on the crun backend" "$SIM/err" || fail "refused, but not for that: $(tail -1 "$SIM/err")"
+echo "ok: the Proxmox backend is not given an id libcrun has"
 
 rm -rf "$SIM" "$ROOT"
 echo "PASS: a Proxmox LXC container under --root stays the Proxmox backend's"

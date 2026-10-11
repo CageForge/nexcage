@@ -132,11 +132,13 @@ pub const BackendRouter = struct {
 
         // One id, one backend. Every later command goes where the record is,
         // and with a record on each side the second container could only be
-        // reached by removing the first.
+        // reached by removing the first. A build without crun has no crun
+        // backend to have the id: a status file under /run/crun is another
+        // runtime's, and findBackend does not look at it either.
         if (operation == .create or operation == .run) {
             const other: ?[]const u8 = switch (runtime_type) {
                 .crun => if (hasLxcRecord(container_id)) "Proxmox LXC" else null,
-                .lxc, .proxmox_lxc => if (hasCrunState(container_id)) "crun" else null,
+                .lxc, .proxmox_lxc => if (backends.isCrunEnabled() and hasCrunState(container_id)) "crun" else null,
             };
             if (other) |name| {
                 if (self.logger) |log| log.err("'{s}' already exists on the {s} backend; one id names one container", .{ container_id, name }) catch {};

@@ -116,7 +116,8 @@ jobs:
       # A Proxmox LXC container made under --root stays that backend's in a
       # binary that has crun too: its state.json once went where libcrun
       # keeps its own containers, and every later command went to libcrun.
-      # The simulator builds without crun; its fake Proxmox tools do here.
+      # And one id is one backend's, both ways. The simulator builds without
+      # crun; its fake Proxmox tools do here.
       - name: a Proxmox LXC container under --root stays the Proxmox backend's
         run: |
           set -eux

@@ -203,6 +203,11 @@ any other command exits 1 saying no container has that name. A cluster that
 cannot be asked is an error, never taken for "no such container", so a record
 is not forgotten on a failed listing.
 
+**One id, one backend.** `create` and `run` refuse, with exit 1, an id the
+other backend already has a record of, since every later command would reach
+only one of the two containers. In a binary built without crun, a `status`
+file under `/run/crun` is another runtime's container and holds nothing up.
+
 `--runtime <lxc|crun>` overrides that for one command, before or after the
 command name; `--runtime lxc` for a container the crun backend has exits 2.
 

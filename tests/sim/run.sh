@@ -533,11 +533,14 @@ nx --root /run/alt delete --force rooted-1
 check "--root: delete --force reaches Proxmox and removes the state" \
   all 'rc 0' 'called_re "^pct destroy [0-9]+$"' '[ ! -e "$S/run/alt/.proxmox-lxc/rooted-1" ]'
 # One id, one backend: with a record on each side, every later command would
-# reach only one of the two containers.
+# reach only one of the two containers. This build has no crun backend, so a
+# status file under /run/crun is another runtime's container, which nexcage
+# never reaches, and it holds no create up. tests/crun/lxc_root.sh checks the
+# refusal in a build that has crun.
 mkdir -p "$S/run/crun/both-1" && : > "$S/run/crun/both-1/status"
 nx create --name both-1 "$TPL"
-check "create refuses an id the crun backend already has" \
-  all 'rc 1' 'err_has "already exists on the crun backend"' 'not_called_re "^pct create"'
+check "without the crun backend, another runtime's crun container does not hold up a create" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname both-1 "'
 rm -rf "$S/run/crun"
 nx --root relative list
 check "--root with a relative path -> exit 2" all 'rc 2' 'err_has "absolute"'
