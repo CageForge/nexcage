@@ -8,8 +8,11 @@ on:
     - cron: '0 2 * * 1' # Every Monday at 2 AM UTC
   workflow_dispatch:
 
-# Read-only at the top, as scorecard-action's workflow check asks; the job
-# below adds what publishing its results needs.
+# Read-only at the top, as scorecard-action's workflow check asks (its API
+# rejects results from a workflow with any write permission at this level).
+# read-all, as in the action's own example, writes nothing, and the job's
+# block below replaces it with exactly what publishing its results needs;
+# zizmor's auditor persona flags it all the same.
 permissions: read-all
 
 jobs:
