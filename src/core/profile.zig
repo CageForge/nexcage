@@ -216,7 +216,7 @@ fn checkCapabilityNames(caps: ?std.json.ObjectMap, at: []const u8, why: *Refusal
             if (item != .string)
                 return why.set("{s}.{s} holds a JSON {s}, where only capability names go, such as \"CAP_NET_RAW\"", .{ at, set_name, kindOf(item) });
             if (!isCapabilityName(item.string))
-                return why.set("{s}.{s} lists \"{s}\", which is not a capability name as the kernel spells it, such as \"CAP_NET_RAW\"; libcrun could read it as one the profile does not see", .{ at, set_name, item.string });
+                return why.set("{s}.{s} lists \"{f}\", which is not a capability name as the kernel spells it, such as \"CAP_NET_RAW\"; libcrun could read it as one the profile does not see", .{ at, set_name, shown(item.string) });
         }
     }
 }
@@ -365,6 +365,24 @@ const Path = struct {
         self.len += n;
     }
 };
+
+/// A string from the bundle, as a refusal shows it with `{f}`: a control
+/// character is written escaped, a newline as \u000a, as Path writes one in a
+/// key, so that a bundle cannot start a line of its own, or move the cursor,
+/// in the log the engine keeps of the message.
+const Shown = struct {
+    s: []const u8,
+
+    pub fn format(self: Shown, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        for (self.s) |c| {
+            if (c >= 0x20) try w.writeByte(c) else try w.print("\\u{x:0>4}", .{c});
+        }
+    }
+};
+
+fn shown(s: []const u8) Shown {
+    return .{ .s = s };
+}
 
 /// The object under `key`, made when it is not there. The pointer is good
 /// until the next key is added to `obj`.
@@ -522,24 +540,24 @@ fn checkJoined(path: std.json.Value, profile: *const Profile, why: *Refusal) err
     // Every namespace is a file of one filesystem, nsfs. Nothing off it is
     // opened: a device or a FIFO could do something on open.
     if (named.dev != own.dev)
-        return why.set("profile '{s}' requires a user namespace, and the bundle joins {s}, which is not a namespace", .{ profile.name, p });
+        return why.set("profile '{s}' requires a user namespace, and the bundle joins {f}, which is not a namespace", .{ profile.name, shown(p) });
     if (named.ino == own.ino)
-        return why.set("profile '{s}' requires a user namespace of the container's own, and the bundle joins {s}, which is nexcage's", .{ profile.name, p });
+        return why.set("profile '{s}' requires a user namespace of the container's own, and the bundle joins {f}, which is nexcage's", .{ profile.name, shown(p) });
 
     const fd = std.posix.open(p, .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NONBLOCK = true }, 0) catch |err| return unchecked(profile, p, err, why);
     defer std.posix.close(fd);
     const opened = std.posix.fstat(fd) catch |err| return unchecked(profile, p, err, why);
     if (opened.dev != named.dev or opened.ino != named.ino)
-        return why.set("profile '{s}' requires a user namespace nexcage can check, and {s} changed while it was checked", .{ profile.name, p });
+        return why.set("profile '{s}' requires a user namespace nexcage can check, and {f} changed while it was checked", .{ profile.name, shown(p) });
     if (os.ioctl(fd, ns_get_nstype, 0) != os.CLONE.NEWUSER)
-        return why.set("profile '{s}' requires a user namespace, and the bundle joins {s}, which is another kind of namespace", .{ profile.name, p });
+        return why.set("profile '{s}' requires a user namespace, and the bundle joins {f}, which is another kind of namespace", .{ profile.name, shown(p) });
 
     const inside = Inside.join(fd) catch |err| return unchecked(profile, p, err, why);
     defer inside.leave();
     var file: [64]u8 = undefined;
     const joined = std.posix.fstatat(std.posix.AT.FDCWD, std.fmt.bufPrint(&file, "/proc/{d}/ns/user", .{inside.pid}) catch unreachable, 0) catch |err| return unchecked(profile, p, err, why);
     if (joined.dev != named.dev or joined.ino != named.ino)
-        return why.set("profile '{s}' requires a user namespace nexcage can check, and {s} changed while it was checked", .{ profile.name, p });
+        return why.set("profile '{s}' requires a user namespace nexcage can check, and {f} changed while it was checked", .{ profile.name, shown(p) });
     var buf: [16 * 1024]u8 = undefined;
     for ([_][]const u8{ "uid_map", "gid_map" }) |name| {
         const map = std.fs.cwd().readFile(std.fmt.bufPrint(&file, "/proc/{d}/{s}", .{ inside.pid, name }) catch unreachable, &buf) catch |err| return unchecked(profile, p, err, why);
@@ -547,14 +565,14 @@ fn checkJoined(path: std.json.Value, profile: *const Profile, why: *Refusal) err
         // A full buffer may be a cut one; the kernel allows 340 lines.
         const verdict = if (map.len == buf.len) null else mapsZero(map);
         const zero = verdict orelse
-            return why.set("profile '{s}' requires a user namespace nexcage can check, and the {s} of the one the bundle joins, {s}, does not read as a map", .{ profile.name, name, p });
+            return why.set("profile '{s}' requires a user namespace nexcage can check, and the {s} of the one the bundle joins, {f}, does not read as a map", .{ profile.name, name, shown(p) });
         if (zero)
-            return why.set("profile '{s}' requires a user namespace that does not map host {s} 0, and the one the bundle joins, {s}, maps it: root in the container would be root on the host", .{ profile.name, id, p });
+            return why.set("profile '{s}' requires a user namespace that does not map host {s} 0, and the one the bundle joins, {f}, maps it: root in the container would be root on the host", .{ profile.name, id, shown(p) });
     }
 }
 
 fn unchecked(profile: *const Profile, path: []const u8, err: anyerror, why: *Refusal) error{ProfileRefused} {
-    return why.set("profile '{s}' requires a user namespace nexcage can check, and it cannot read the one the bundle joins, {s} ({s})", .{ profile.name, path, @errorName(err) });
+    return why.set("profile '{s}' requires a user namespace nexcage can check, and it cannot read the one the bundle joins, {f} ({s})", .{ profile.name, shown(path), @errorName(err) });
 }
 
 /// The ioctl that says which kind of namespace a file is (<linux/nsfs.h>).
@@ -1216,4 +1234,28 @@ test "a bundle that keeps nexcage's own groups does not meet a profile that requ
     std.testing.allocator.free(try narrow(std.testing.allocator, userns ++ "\"0\"}}", &profile, &why));
     // Without the requirement, the groups are the bundle's to keep.
     std.testing.allocator.free(try narrow(std.testing.allocator, userns ++ "\"1\"}}", &.{ .name = "p" }, &why));
+}
+
+test "a refusal shows the bundle's strings with control characters escaped: it writes no line of its own into a log" {
+    // A newline, a forged log line, and the escape that erases a line.
+    const forged = "\\n[INFO] nexcage: create completed\\u001b[2K";
+    const cases = [_]struct { []const u8, Profile }{
+        .{ "{\"process\":{\"capabilities\":{\"bounding\":[\"CAP_X" ++ forged ++ "\"]}}}", .{ .name = "h" } },
+        .{
+            \\{"linux":{"uidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
+            \\ "gidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
+            \\ "namespaces":[{"type":"user","path":"/nonexistent
+            ++ forged ++ "\"}]}}",
+            .{ .name = "h", .require_user_namespace = true },
+        },
+    };
+    for (cases) |c| {
+        var why: Refusal = .{};
+        try std.testing.expectError(error.ProfileRefused, narrow(std.testing.allocator, c[0], &c[1], &why));
+        const text = why.text();
+        if (std.mem.indexOfAny(u8, text, "\n\x1b") != null or std.mem.indexOf(u8, text, "\\u000a[INFO] nexcage: create completed\\u001b[2K") == null) {
+            std.debug.print("got: {s}\n", .{text});
+            return error.TestUnexpectedRefusal;
+        }
+    }
 }
