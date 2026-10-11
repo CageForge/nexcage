@@ -481,6 +481,13 @@ nx create --name ww-3 "$TPL"
 check "a sticky directory, as /tmp is, lets nobody else replace it" \
   all 'rc 0' 'called_re "--hostname ww-3 .*bridge=vmbr666"'
 chmod 755 "$S/work"; rm -f "$S/work/config.json"
+# Opening a FIFO waits for a writer; one in the file's place is refused at once.
+mkfifo "$S/work/fifo.json"
+printf '#!/bin/sh\nexec timeout 10 %s "$@"\n' "$NEXCAGE" > "$S/timed-nexcage"; chmod +x "$S/timed-nexcage"
+NEXCAGE=$S/timed-nexcage nx --config fifo.json list
+check "a FIFO named as the config file is refused, not waited on" \
+  all 'rc 1' 'err_has "fifo.json: it is not a regular file"'
+rm -f "$S/work/fifo.json" "$S/timed-nexcage"
 # Host root's files are nobody's in the simulator's namespace.
 nx --config /etc/passwd list
 check "a config file owned by somebody else is refused, naming the owner" \

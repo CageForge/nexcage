@@ -238,6 +238,19 @@ test "a large file that is not a spec is refused, saying so" {
     try std.testing.expectEqualStrings(files.paths[0], activePath().?);
 }
 
+test "a FIFO where the configuration should be is refused, not waited on" {
+    var files = try TrustedFiles.init(&.{});
+    defer files.deinit();
+    const rc = std.os.linux.mknodat(files.tmp.dir.fd, "fifo.json", std.os.linux.S.IFIFO | 0o644, 0);
+    try std.testing.expectEqual(@as(usize, 0), rc);
+    const path = try files.tmp.dir.realpathAlloc(std.testing.allocator, "fifo.json");
+    defer std.testing.allocator.free(path);
+
+    var loader = ConfigLoader.init(std.testing.allocator);
+    try std.testing.expectError(types.Error.InvalidConfig, loader.search(&.{path}));
+    try std.testing.expectEqualStrings("it is not a regular file", loader.problem().?);
+}
+
 test "a spec is a whole JSON document declaring ociVersion at the top, however the key is written" {
     var files = try TrustedFiles.init(&.{
         .{ .name = "escaped.json", .data = "{\"oci\\u0056ersion\":\"1.0.0\"}" },
@@ -361,10 +374,13 @@ pub const ConfigLoader = struct {
             else => return self.refuse("cannot open its directory ({s})", .{@errorName(err)}),
         };
         defer dir.close();
-        const file = dir.openFile(std.fs.path.basename(path), .{}) catch |err| switch (err) {
+        // O_NONBLOCK: a FIFO in the file's place opens at once, to be refused
+        // below, rather than hanging every call until something writes to it.
+        const fd = std.posix.openat(dir.fd, std.fs.path.basename(path), .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NOCTTY = true, .NONBLOCK = true }, 0) catch |err| switch (err) {
             error.FileNotFound => return types.Error.FileNotFound,
             else => return self.refuse("cannot open it ({s})", .{@errorName(err)}),
         };
+        const file = std.fs.File{ .handle = fd };
         errdefer file.close();
 
         const euid = std.posix.geteuid();
