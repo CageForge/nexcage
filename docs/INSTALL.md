@@ -247,11 +247,12 @@ cp /usr/share/doc/nexcage/examples/config.json /etc/nexcage/config.json   # .deb
 # or: cp packaging/config/config.json /etc/nexcage/config.json            # source tree
 ```
 
-nexcage keeps a record of each container it creates in `/run/nexcage`, and
-acts on a container by name only when it has one. A container made in the GUI
-or with `pct`, one addressed by VMID, and one whose record a reboot cleared
-(`/run` is a tmpfs) take `--runtime lxc`, as in `nexcage --runtime lxc start
-web-1`; that start writes the record again.
+nexcage keeps a record of each container it creates in `/run/nexcage` on the
+host that ran `create`, and acts on a container by name only when it has one. A
+container made in the GUI or with `pct`, one created from another node, one
+addressed by VMID, and one whose record a reboot cleared (`/run` is a tmpfs)
+take `--runtime lxc`, as in `nexcage --runtime lxc start web-1`; that start
+writes the record again.
 
 2. **For a container engine (containerd, CRI-O, a kubelet):**
 

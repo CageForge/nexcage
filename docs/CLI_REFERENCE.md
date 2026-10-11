@@ -26,7 +26,7 @@ inside the container keeps its `=`.
 | `--log <path>` | The runtime's own log goes to `<path>` instead of stderr, as an OCI runtime's does. A container engine reads it back to report why the runtime failed |
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
 | `--systemd-cgroup` | Accepted anywhere, so that an engine sending it is not refused. Only after `create`, on the crun backend, does it reach libcrun's context; anywhere else it has no effect |
-| `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute; it is normalised first, so `/run/nexcage/` is the default. The crun backend's state is `<dir>/<id>`, libcrun's own; the Proxmox LXC backend's is `<dir>/.proxmox-lxc/<name>`, so the two never share a directory. It used to be `<dir>/<name>`, which a build with crun took for libcrun's |
+| `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute; it is normalised first, so `/run/nexcage/` is the default. The crun backend's state is `<dir>/<id>`, libcrun's own; the Proxmox LXC backend's is `<dir>/.proxmox-lxc/<name>`, so the two never share a directory. It used to be `<dir>/<name>`, which a build with crun took for libcrun's; a record an older version left there is not read, and its container takes `--runtime lxc` once |
 | `--profile <name>` | Create the container under the isolation profile `<name>` from the configuration file; see [Isolation profiles](#isolation-profiles). Only `create` reads it, and `run` refuses it |
 | `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
 
@@ -65,6 +65,11 @@ ID    IMAGE     COMMAND  CREATED   STATUS   BACKEND      NODE        NAMES
 
 $ nexcage start web-2        # on titan, from here
 ```
+
+That `start` needs nexcage's record of `web-2` on this host, which `create`
+writes on the host that runs it — `--node titan` included. A container created
+from another host, or by hand, takes `--runtime lxc` here the first time; that
+command writes the record here, and later ones need no `--runtime`.
 
 `start`, `stop`, `delete` and `state` work on any node: for a container on this
 host they run `pct`, and for one elsewhere they go through that node's API. The
