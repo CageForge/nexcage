@@ -132,9 +132,24 @@ and nexcage is built around that in two places. A container created a moment ago
 is not in it yet, so a name missing there means "keep looking on this host"
 rather than "no such container" — otherwise `create` followed straight away by
 `start` fails. And for a container on this host, `pct` is the current answer
-while the cluster's copy can be seconds stale, so `list` and `state` take the
-status from `pct` and keep from the cluster the one thing only it knows: which
-node a container elsewhere is on.
+while the cluster's copy can be seconds stale, so `list`, `state` and every
+lookup take the status and the name from `pct` and keep from the cluster the
+one thing only it knows: which node a container elsewhere is on.
+
+**Which container a name means.** A name is looked for before a VMID, so a
+container named `1000` is the one `1000` finds even when another container has
+VMID 1000; a VMID finds its container when no container has that name. A name
+that more than one container has — two nodes' creates racing, or a duplicate
+made outside nexcage — is refused with exit 1 and the containers listed, never
+resolved to whichever the listing put first; address one by its VMID, with
+`--runtime lxc`. `create` checks both the cluster's listing and this host's
+`pct list` for the name, and refuses when the cluster cannot be asked.
+
+**A VMID can change hands.** Proxmox gives a destroyed container's VMID to the
+next container created, so right before `stop`, `delete` (and the stop
+`--force` does first) and `rollback`, nexcage reads the container's hostname
+from its config again — `pct config`, or the node's API — and refuses, touching
+nothing, when the VMID now belongs to a container with another name.
 
 ## Backend selection
 

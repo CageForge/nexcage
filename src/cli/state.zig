@@ -136,52 +136,50 @@ pub const StateCommand = struct {
 
                 // Containers are addressed by name everywhere else (create
                 // sets the hostname, start/stop/delete resolve it), so match
-                // the name first; a bare VMID is accepted as well.
+                // the name first; a bare VMID is accepted as well. This took
+                // the first entry matching either, so a container named 1000
+                // was reported as the one with VMID 1000 when the listing put
+                // that first, and one of two sharing a name as if it were
+                // the only one.
                 const here = backend.nodeName() catch null;
                 defer if (here) |h| allocator.free(h);
 
-                for (containers) |*c| {
-                    if (std.mem.eql(u8, c.name, container_id) or std.mem.eql(u8, c.id, container_id)) {
-                        // A container on another node of the cluster has an
-                        // init, but its PID belongs to that node's process
-                        // table. Reporting it here would name whatever holds
-                        // that number on this host.
-                        const elsewhere = if (c.node) |n| (if (here) |h| !std.mem.eql(u8, h, n) else false) else false;
+                const c = &containers[try backend.choose(containers, container_id)];
 
-                        // OCI state requires the PID while the container runs;
-                        // it used to be 0 always. A failure to read it on this
-                        // host is an error rather than a 0: a running container
-                        // with pid 0 is a lie a caller cannot see through.
-                        const pid = if (elsewhere or !std.mem.eql(u8, c.status, "running"))
-                            0
-                        else
-                            try backend.initPid(c.id) orelse 0;
+                // A container on another node of the cluster has an init, but
+                // its PID belongs to that node's process table. Reporting it
+                // here would name whatever holds that number on this host.
+                const elsewhere = if (c.node) |n| (if (here) |h| !std.mem.eql(u8, h, n) else false) else false;
 
-                        // `pct status` says "running" for a frozen container:
-                        // Proxmox has no notion of the state, so the freezer
-                        // itself is the only thing that knows. Only for a
-                        // container on this host -- the cgroup filesystem of
-                        // another node is not ours to read.
-                        const frozen = if (elsewhere) false else (backend.isFrozen(c.id) orelse false);
-                        return .{
-                            .info = core.ContainerInfo{
-                                .allocator = allocator,
-                                .id = try allocator.dupe(u8, c.id),
-                                .name = try allocator.dupe(u8, c.name),
-                                .status = try allocator.dupe(u8, c.status),
-                                .backend_type = try allocator.dupe(u8, c.backend_type),
-                                .created = if (c.created) |created| try allocator.dupe(u8, created) else null,
-                                .image = if (c.image) |img| try allocator.dupe(u8, img) else null,
-                                .runtime = if (c.runtime) |rt| try allocator.dupe(u8, rt) else null,
-                                .node = if (c.node) |n| try allocator.dupe(u8, n) else null,
-                            },
-                            .pid = pid,
-                            .frozen = frozen,
-                        };
-                    }
-                }
+                // OCI state requires the PID while the container runs; it used
+                // to be 0 always. A failure to read it on this host is an error
+                // rather than a 0: a running container with pid 0 is a lie a
+                // caller cannot see through.
+                const pid = if (elsewhere or !std.mem.eql(u8, c.status, "running"))
+                    0
+                else
+                    try backend.initPid(c.id) orelse 0;
 
-                return types.Error.NotFound;
+                // `pct status` says "running" for a frozen container: Proxmox
+                // has no notion of the state, so the freezer itself is the
+                // only thing that knows. Only for a container on this host --
+                // the cgroup filesystem of another node is not ours to read.
+                const frozen = if (elsewhere) false else (backend.isFrozen(c.id) orelse false);
+                return .{
+                    .info = core.ContainerInfo{
+                        .allocator = allocator,
+                        .id = try allocator.dupe(u8, c.id),
+                        .name = try allocator.dupe(u8, c.name),
+                        .status = try allocator.dupe(u8, c.status),
+                        .backend_type = try allocator.dupe(u8, c.backend_type),
+                        .created = if (c.created) |created| try allocator.dupe(u8, created) else null,
+                        .image = if (c.image) |img| try allocator.dupe(u8, img) else null,
+                        .runtime = if (c.runtime) |rt| try allocator.dupe(u8, rt) else null,
+                        .node = if (c.node) |n| try allocator.dupe(u8, n) else null,
+                    },
+                    .pid = pid,
+                    .frozen = frozen,
+                };
             },
             .crun => {
                 // crun is handled above, by libcrun itself. This used to print

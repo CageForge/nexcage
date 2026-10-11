@@ -658,9 +658,7 @@ pub const ProxmoxLxcDriver = struct {
         try self.pve_client.start(loc.vmid, loc.remote());
 
         const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
-        const kept_bundle = self.persistedBundle(container_id);
-        defer if (kept_bundle) |b| self.allocator.free(b);
-        self.writeOciState(container_id, "running", init_pid, kept_bundle) catch {};
+        self.record(&loc, "running", init_pid);
     }
 
     /// Stop LXC container using pct command
@@ -672,10 +670,9 @@ pub const ProxmoxLxcDriver = struct {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
 
+        try self.pve_client.confirm(&loc);
         try self.pve_client.stop(loc.vmid, loc.remote());
-        const kept_bundle = self.persistedBundle(container_id);
-        defer if (kept_bundle) |b| self.allocator.free(b);
-        self.writeOciState(container_id, "stopped", 0, kept_bundle) catch {};
+        self.record(&loc, "stopped", 0);
     }
 
     /// Delete LXC container using pct command
@@ -698,27 +695,35 @@ pub const ProxmoxLxcDriver = struct {
             // container the cluster can perfectly well stop.
             if (!loc.local or (self.pve_client.initPid(vmid, loc.remote()) catch null) != null) {
                 if (self.logger) |log| log.info("Stopping {s} before delete (--force)", .{container_id}) catch {};
+                try self.pve_client.confirm(&loc);
                 self.pve_client.stop(vmid, loc.remote()) catch |err| {
                     if (self.logger) |log| log.warn("forced stop of {s} failed: {s}", .{ container_id, @errorName(err) }) catch {};
                 };
             }
         }
 
+        // Last, because a forced stop can take a minute and the VMID can change
+        // hands in it.
+        try self.pve_client.confirm(&loc);
         try self.pve_client.delete(vmid, loc.remote());
 
-        // Drop the state nexcage persisted for this container. The name matched
-        // a pct hostname, but never let it address anything above the state root.
-        if (std.mem.indexOfScalar(u8, container_id, '/') == null and
-            !std.mem.eql(u8, container_id, ".") and !std.mem.eql(u8, container_id, ".."))
+        // Drop the state nexcage persisted for this container: the container
+        // just destroyed, under its own name. The typed argument used to be
+        // used, and `delete 1000` that resolved to the container with VMID
+        // 1000 removed the record of another one, named 1000. Never let the
+        // name address anything above the state root.
+        const name = loc.name orelse return;
+        if (std.mem.indexOfScalar(u8, name, '/') == null and
+            !std.mem.eql(u8, name, ".") and !std.mem.eql(u8, name, ".."))
         {
-            const state_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ core.state_root.get(), container_id });
+            const state_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ core.state_root.get(), name });
             defer self.allocator.free(state_path);
             std.fs.cwd().deleteTree(state_path) catch {};
         }
 
         // ZFS cleanup if needed (renaming with -delete suffix was a specific feature)
         if (self.config.zfs_pool) |pool| {
-            const dataset_name = try std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ pool, container_id, vmid });
+            const dataset_name = try std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ pool, name, vmid });
             defer self.allocator.free(dataset_name);
             const delete_name = try std.mem.concat(self.allocator, u8, &.{ dataset_name, "-delete" });
             defer self.allocator.free(delete_name);
@@ -731,9 +736,7 @@ pub const ProxmoxLxcDriver = struct {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
         try self.pve_client.freeze(loc.vmid, true, loc.remote());
-        const kept = self.persistedBundle(container_id);
-        defer if (kept) |b| self.allocator.free(b);
-        self.writeOciState(container_id, "paused", 0, kept) catch {};
+        self.record(&loc, "paused", 0);
     }
 
     /// Change a container's resource limits through `pct set`, or through the
@@ -751,9 +754,7 @@ pub const ProxmoxLxcDriver = struct {
         defer loc.deinit();
         try self.pve_client.freeze(loc.vmid, false, loc.remote());
         const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
-        const kept = self.persistedBundle(container_id);
-        defer if (kept) |b| self.allocator.free(b);
-        self.writeOciState(container_id, "running", init_pid, kept) catch {};
+        self.record(&loc, "running", init_pid);
     }
 
     /// Snapshots, through Proxmox: it holds the container's volumes and knows
@@ -776,18 +777,19 @@ pub const ProxmoxLxcDriver = struct {
     pub fn rollback(self: *Self, container_id: []const u8, name: []const u8, start_after: bool) !void {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        // A rollback stops the container and replaces its volumes: as
+        // destructive as a delete, so the same check before it.
+        try self.pve_client.confirm(&loc);
         try self.pve_client.rollback(loc.vmid, name, start_after, loc.remote());
-        const kept = self.persistedBundle(container_id);
-        defer if (kept) |b| self.allocator.free(b);
         if (start_after) {
             const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
-            self.writeOciState(container_id, "running", init_pid, kept) catch {};
+            self.record(&loc, "running", init_pid);
             return;
         }
-        const was = self.persistedStatus(container_id);
+        const was = if (loc.name) |n| self.persistedStatus(n) else null;
         defer if (was) |s| self.allocator.free(s);
         if (was != null and !std.mem.eql(u8, was.?, "created")) {
-            self.writeOciState(container_id, "stopped", 0, kept) catch {};
+            self.record(&loc, "stopped", 0);
         }
     }
 
@@ -836,6 +838,25 @@ pub const ProxmoxLxcDriver = struct {
     /// List LXC containers using pct command
     pub fn list(self: *Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
         return self.pve_client.list(allocator);
+    }
+
+    /// The one container of `containers` that `name_or_vmid` names, the way
+    /// every other command finds one: a name before a VMID, and a name two
+    /// containers share refused.
+    pub fn choose(self: *Self, containers: []const core.ContainerInfo, name_or_vmid: []const u8) !usize {
+        return self.pve_client.choose(containers, name_or_vmid);
+    }
+
+    /// Rewrite nexcage's record of a container it has just acted on, under
+    /// the container's own name. Not under what the caller typed: a VMID there
+    /// made a record named after whichever container holds that VMID next.
+    /// Best effort, as it always was -- the container has already changed.
+    fn record(self: *Self, loc: *const pve.PveClient.Location, status: []const u8, pid: i32) void {
+        const name = loc.name orelse return;
+        if (std.mem.indexOfScalar(u8, name, '/') != null or std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return;
+        const kept = self.persistedBundle(name);
+        defer if (kept) |b| self.allocator.free(b);
+        self.writeOciState(name, status, pid, kept) catch {};
     }
 
     /// The bundle path this container was created from, as the last state

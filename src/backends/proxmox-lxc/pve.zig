@@ -431,6 +431,11 @@ pub const PveClient = struct {
         vmid: []u8,
         node: []u8,
         local: bool,
+        /// The container's name when it was found, or null when the listing
+        /// had none to give -- a container addressed by VMID that pvestatd
+        /// has not named yet. What `confirm` checks the container against, and
+        /// the name nexcage keeps its state under, whatever the caller typed.
+        name: ?[]u8,
 
         /// The node to address through the API, or null when `pct` will do.
         pub fn remote(self: *const Location) ?[]const u8 {
@@ -440,97 +445,165 @@ pub const PveClient = struct {
         pub fn deinit(self: *Location) void {
             self.allocator.free(self.vmid);
             self.allocator.free(self.node);
+            if (self.name) |n| self.allocator.free(n);
         }
     };
 
+    /// Which of `containers` an identifier names.
+    ///
+    /// A name is looked for first, across every entry, and a VMID only when no
+    /// container has that name. One pass taking the first entry that matched
+    /// either let a container *named* 1000 lose to the one with VMID 1000
+    /// whenever the listing put that one first -- and Proxmox sorts VMIDs as
+    /// strings, so "1000" comes before "150". Two containers with the name is
+    /// no answer at all: which of them came first was the listing's choice,
+    /// and acting on it destroyed another node's container as readily as the
+    /// one meant.
+    pub const Pick = union(enum) { none, one: usize, many };
+
+    pub fn pick(containers: []const core.ContainerInfo, name_or_vmid: []const u8) Pick {
+        var found: ?usize = null;
+        for (containers, 0..) |c, i| {
+            if (!std.mem.eql(u8, c.name, name_or_vmid)) continue;
+            if (found) |f| {
+                if (!std.mem.eql(u8, containers[f].id, c.id)) return .many;
+            } else found = i;
+        }
+        if (found) |f| return .{ .one = f };
+        for (containers, 0..) |c, i| {
+            if (std.mem.eql(u8, c.id, name_or_vmid)) return .{ .one = i };
+        }
+        return .none;
+    }
+
+    /// The one container among `containers` that `name_or_vmid` names, or
+    /// NotFound. A name more than one container has is refused, and the
+    /// message names each of them.
+    pub fn choose(self: *const Self, containers: []const core.ContainerInfo, name_or_vmid: []const u8) !usize {
+        switch (pick(containers, name_or_vmid)) {
+            .one => |i| return i,
+            .none => return core.Error.NotFound,
+            .many => {
+                if (self.logger) |log| {
+                    var buf: [512]u8 = undefined;
+                    var w = std.Io.Writer.fixed(&buf);
+                    var first = true;
+                    for (containers) |c| {
+                        if (!std.mem.eql(u8, c.name, name_or_vmid)) continue;
+                        w.print("{s}VMID {s} on {s}", .{ if (first) "" else ", ", c.id, c.node orelse "this host" }) catch break;
+                        first = false;
+                    }
+                    log.err("'{s}' names more than one container: {s}. Nothing was done; address one by its VMID, with --runtime lxc", .{ name_or_vmid, w.buffered() }) catch {};
+                }
+                return core.Error.OperationFailed;
+            },
+        }
+    }
+
     /// Find a container by name or VMID anywhere in the cluster.
     ///
-    /// A cluster that cannot be asked is an error that says why. It used to be
-    /// a quiet fallback to `pct list`, which answers for this host alone: a
-    /// container on another node was then "not found", and create's
-    /// cluster-wide check passed a name another node had.
+    /// Both sources are read: the cluster's listing, which knows every node,
+    /// and `pct list`, which is current for this one -- the listing is a cache
+    /// pvestatd refreshes every few seconds, so a container created a moment
+    /// ago is missing from it and one whose VMID was just reused can still
+    /// carry the old name there. `list` merges the two, this host's word
+    /// winning for its own containers. A cluster that cannot be asked is an
+    /// error that says why; it used to be a quiet fallback to `pct list`,
+    /// which answers for this host alone, so a container on another node was
+    /// "not found" and create's cluster-wide check passed a name another node
+    /// had.
     pub fn locate(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8) !Location {
+        const all = try self.list(self.allocator);
+        defer {
+            for (all) |*c| c.deinit();
+            self.allocator.free(all);
+        }
+        const c = all[try self.choose(all, name_or_vmid)];
+
         const here = self.getNodeName() catch null;
         defer if (here) |h| self.allocator.free(h);
+        // `pct list` rows carry this host's name, or none when it is unknown
+        const local = if (c.node) |n| (if (here) |h| std.mem.eql(u8, h, n) else false) else true;
+        const node = c.node orelse here orelse "localhost";
+        // A listing with no name for a container gives its VMID in its place
+        const named = c.name.len > 0 and !std.mem.eql(u8, c.name, c.id);
 
-        // The cluster first, because only it knows which node a container is on.
-        //
-        // Its "not found" is not an answer, though: /cluster/resources is a
-        // cached view that pvestatd refreshes every few seconds, so a container
-        // created a moment ago is not in it yet while `pct list` sees it at
-        // once. Treating that as missing made `create` followed straight away by
-        // `start` fail on a real host. So a miss here means keep looking, and
-        // only both sources coming up empty is a container that does not exist.
-        if (self.clusterLookup(allocator, name_or_vmid, here)) |found| {
-            return found;
-        } else |err| {
-            if (err != core.Error.NotFound) return err;
-            if (self.logger) |log| log.debug("'{s}' is not in the cluster's listing yet; asking this host", .{name_or_vmid}) catch {};
-        }
-
-        // getVmidByName allocates with the client's allocator; the Location owns
-        // a copy made with the caller's. Both exist for a moment and only one
-        // was being freed -- a leak the GPA reported on every start, stop, pause
-        // and resume that came through this path.
-        const vmid = try self.getVmidByName(name_or_vmid);
-        defer self.allocator.free(vmid);
-
-        const vmid_owned = try allocator.dupe(u8, vmid);
+        const vmid_owned = try allocator.dupe(u8, c.id);
         errdefer allocator.free(vmid_owned);
+        const node_owned = try allocator.dupe(u8, node);
+        errdefer allocator.free(node_owned);
         return Location{
             .allocator = allocator,
             .vmid = vmid_owned,
-            .node = try allocator.dupe(u8, here orelse "localhost"),
-            .local = true,
+            .node = node_owned,
+            .local = local,
+            .name = if (named) try allocator.dupe(u8, c.name) else null,
         };
     }
 
-    /// /cluster/resources, which lists every container on every node.
-    fn clusterLookup(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8, here: ?[]const u8) !Location {
-        // `--type vm`, not `--type lxc`: the API's enumeration is vm, storage,
-        // node, sdn, and it rejects anything else with "400 Parameter
-        // verification failed". Containers come back under vm with their own
-        // `type` field set to lxc, which is what the filter below reads.
-        //
-        // This was `--type lxc` when cluster support was written, so every
-        // lookup failed and fell back to `pct list` -- which works for a
-        // container on this host and answers "not found" for one anywhere else,
-        // the exact thing the cluster support was for. The simulator's fake
-        // accepted the wrong flag, so the tests agreed with the mistake.
-        const parsed = try self.clusterResources();
-        defer parsed.deinit();
-
-        for (parsed.value.array.items) |item| {
-            if (item != .object) continue;
-            const obj = item.object;
-            if (!isLxcEntry(obj)) continue;
-
-            const vmid_num = switch (obj.get("vmid") orelse continue) {
-                .integer => |i| i,
-                .float => |f| @as(i64, @intFromFloat(f)),
-                .string => |str| std.fmt.parseInt(i64, str, 10) catch continue,
-                else => continue,
-            };
-            var vmid_buf: [24]u8 = undefined;
-            const vmid_str = std.fmt.bufPrint(&vmid_buf, "{d}", .{vmid_num}) catch continue;
-
-            const name = if (obj.get("name")) |n| (if (n == .string) n.string else "") else "";
-            if (!std.mem.eql(u8, name, name_or_vmid) and !std.mem.eql(u8, vmid_str, name_or_vmid)) continue;
-
-            const node = if (obj.get("node")) |n| (if (n == .string) n.string else "") else "";
-            if (node.len == 0) return core.Error.OperationFailed;
-
-            const vmid_owned = try allocator.dupe(u8, vmid_str);
-            errdefer allocator.free(vmid_owned);
-            return Location{
-                .allocator = allocator,
-                .vmid = vmid_owned,
-                .node = try allocator.dupe(u8, node),
-                .local = if (here) |h| std.mem.eql(u8, h, node) else false,
-            };
-        }
-
+    /// Refuse unless the container at `loc` is still the one that was found.
+    ///
+    /// A command finds a container by name and acts on its VMID a moment
+    /// later -- behind a 60-second shutdown, a minute later -- and Proxmox
+    /// hands a destroyed container's VMID to the very next one created:
+    /// /cluster/nextid answers the lowest free one. A retried `delete --force
+    /// web-old` destroyed web-new that way, which had taken web-old's VMID in
+    /// between. So the hostname is read again from the container's own config,
+    /// which is current, right before anything that stops or destroys it.
+    /// Found by VMID with no name to compare, the VMID is what was asked for.
+    pub fn confirm(self: *const Self, loc: *const Location) !void {
+        const expected = loc.name orelse return;
+        const now = try self.hostnameOf(loc.vmid, loc.remote());
+        defer self.allocator.free(now);
+        if (std.mem.eql(u8, now, expected)) return;
+        if (self.logger) |log| log.err("CT {s} is no longer '{s}' but '{s}': the container was replaced after nexcage found it, and nothing was done to it", .{ loc.vmid, expected, now }) catch {};
         return core.Error.NotFound;
+    }
+
+    /// A container's hostname, from its config: `pct config` here, the node's
+    /// API elsewhere. Proxmox calls a container without one CT<vmid> in its
+    /// listings, and so does this.
+    fn hostnameOf(self: *const Self, vmid: []const u8, node: ?[]const u8) ![]u8 {
+        if (node) |n| {
+            const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}/config", .{ n, vmid });
+            defer self.allocator.free(path);
+            const args = [_][]const u8{ "pvesh", "get", path, "--output-format", "json" };
+            const res = try common.runCommand(self.allocator, self.logger, &args);
+            defer {
+                self.allocator.free(res.stdout);
+                self.allocator.free(res.stderr);
+            }
+            if (res.exit_code != 0) {
+                if (self.logger) |log| log.err("pvesh get {s} failed: {s}", .{ path, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
+                return errorFor(res.stderr);
+            }
+            const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch |err| {
+                if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+                if (self.logger) |log| log.err("the config of CT {s} on {s} is not JSON: {s}", .{ vmid, n, @errorName(err) }) catch {};
+                return core.Error.OperationFailed;
+            };
+            defer parsed.deinit();
+            if (parsed.value == .object) {
+                if (parsed.value.object.get("hostname")) |h| {
+                    if (h == .string and h.string.len > 0) return try self.allocator.dupe(u8, h.string);
+                }
+            }
+        } else {
+            const args = [_][]const u8{ "pct", "config", vmid };
+            const res = try common.runCommand(self.allocator, self.logger, &args);
+            defer {
+                self.allocator.free(res.stdout);
+                self.allocator.free(res.stderr);
+            }
+            if (res.exit_code != 0) return self.mapPctError(res.stderr);
+            var lines = std.mem.splitScalar(u8, res.stdout, '\n');
+            while (lines.next()) |line| {
+                if (!std.mem.startsWith(u8, line, "hostname:")) continue;
+                const h = std.mem.trim(u8, line["hostname:".len..], " \t\r");
+                if (h.len > 0) return try self.allocator.dupe(u8, h);
+            }
+        }
+        return try std.fmt.allocPrint(self.allocator, "CT{s}", .{vmid});
     }
 
     /// /cluster/resources, parsed: every guest on every node. Whatever keeps
@@ -539,6 +612,16 @@ pub const PveClient = struct {
     /// what pvesh said -- because every caller used to take any failure for
     /// "ask this host instead".
     fn clusterResources(self: *const Self) !std.json.Parsed(std.json.Value) {
+        // `--type vm`, not `--type lxc`: the API's enumeration is vm, storage,
+        // node, sdn, and it rejects anything else with "400 Parameter
+        // verification failed". Containers come back under vm with their own
+        // `type` field set to lxc, which is what isLxcEntry reads.
+        //
+        // This was `--type lxc` when cluster support was written, so every
+        // lookup failed and fell back to `pct list` -- which works for a
+        // container on this host and answers "not found" for one anywhere else,
+        // the exact thing the cluster support was for. The simulator's fake
+        // accepted the wrong flag, so the tests agreed with the mistake.
         const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json" };
         const res = common.runCommandMax(self.allocator, self.logger, &args, common.cluster_max_output) catch |err| {
             if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) could not be read", .{}) catch {};
@@ -960,14 +1043,23 @@ pub const PveClient = struct {
         // a moment ago is still "stopped" there. So a local entry replaces the
         // cluster's for the same VMID rather than being dropped as a duplicate,
         // which is what made `state` say stopped right after a successful start
-        // while `list` said running. The cluster stays authoritative for the one
-        // thing only it knows: which node a container on another host is on.
+        // while `list` said running. The name is replaced too: the cache keeps
+        // a destroyed container's name for a VMID the next one has taken, and a
+        // lookup of the old name found the new container. The cluster stays
+        // authoritative for the one thing only it knows: which node a container
+        // on another host is on.
         for (local) |*c| {
             var replaced = false;
             for (merged.items) |*m| {
                 if (!std.mem.eql(u8, m.id, c.id)) continue;
+                const status = try allocator.dupe(u8, c.status);
                 allocator.free(m.status);
-                m.status = try allocator.dupe(u8, c.status);
+                m.status = status;
+                if (c.name.len > 0) {
+                    const name = try allocator.dupe(u8, c.name);
+                    allocator.free(m.name);
+                    m.name = name;
+                }
                 replaced = true;
             }
             if (replaced) continue;
@@ -985,7 +1077,7 @@ pub const PveClient = struct {
     }
 
     fn clusterList(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
-        // `--type vm` and a filter, for the reason spelt out in clusterLookup.
+        // `--type vm` and a filter, for the reason spelt out in clusterResources.
         const parsed = try self.clusterResources();
         defer parsed.deinit();
 
@@ -1686,6 +1778,27 @@ test "findVmidByName matches whole names only" {
     try std.testing.expectEqualStrings("1000", findVmidByName(output, "db").?);
     try std.testing.expect(findVmidByName(output, "web") == null);
     try std.testing.expect(findVmidByName(output, "backup") == null);
+}
+
+fn testEntry(vmid: []const u8, name: []const u8, node: []const u8) core.ContainerInfo {
+    return .{ .allocator = std.testing.allocator, .id = vmid, .name = name, .status = "stopped", .backend_type = "proxmox-lxc", .node = node };
+}
+
+test "a name wins over a VMID, whichever the listing puts first" {
+    // Proxmox lists VMIDs in string order, so 1000 comes before 150
+    const rows = [_]core.ContainerInfo{ testEntry("1000", "db-prod", "pve"), testEntry("150", "1000", "pve") };
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "1000"));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 0 }, PveClient.pick(&rows, "db-prod"));
+    // a VMID no container is named after still finds its container
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "150"));
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "web"));
+}
+
+test "a name two containers share is no answer" {
+    const rows = [_]core.ContainerInfo{ testEntry("100", "web-1", "titan"), testEntry("101", "web-1", "pve"), testEntry("102", "web-2", "pve") };
+    try std.testing.expectEqual(PveClient.Pick.many, PveClient.pick(&rows, "web-1"));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "101"));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 2 }, PveClient.pick(&rows, "web-2"));
 }
 
 test "parsePctStatus reads the init's host PID of a running container" {

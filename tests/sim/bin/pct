@@ -95,6 +95,9 @@ case "$cmd" in
     [ "$(status_of "$1")" = running ] || { echo "CT $1 not running" >&2; exit 255; }
     stop_init "$1"
     set_status "$1" stopped
+    # Something else on the host acting while nexcage waited for the
+    # shutdown, once: $SIM/meanwhile is a script, run and removed.
+    if [ -e "$SIM/meanwhile" ]; then bash "$SIM/meanwhile"; rm -f "$SIM/meanwhile"; fi
     ;;
   destroy)
     exists "$1" || missing "$1"
@@ -129,7 +132,11 @@ case "$cmd" in
     ;;
   config)
     exists "$1" || missing "$1"
-    cat "$SIM/conf.$1"
+    # pct prints the config's keys sorted, and the hostname is one of them
+    name=$(awk -v v="$1" '$1==v {print $3}' "$DB")
+    [ -n "$name" ] && echo "hostname: $name"
+    # a container seeded straight into the db has no file of extra lines
+    [ ! -e "$SIM/conf.$1" ] || cat "$SIM/conf.$1"
     ;;
   set)
     exists "$1" || missing "$1"

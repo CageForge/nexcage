@@ -1016,6 +1016,86 @@ check "create refuses a name it cannot check across the cluster" \
   all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct create"'
 rm -f "$S/fail_resources"
 
+echo "--- which container a command acts on ---"
+# A name before a VMID. One pass took the first row matching either, and the
+# fake now lists rows as Proxmox does, VMIDs sorted as strings: the container
+# with VMID 1000 comes before the one named 1000 at VMID 150.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "149 stopped filler" > "$S/db"
+nx create --name 1000 "$TPL" >/dev/null 2>&1
+awk '$3!="filler"' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"; echo "999 stopped filler" >> "$S/db"
+nx create --name db-prod "$TPL" >/dev/null 2>&1
+awk '$3!="filler"' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"
+check "(two containers: one named 1000, and one with VMID 1000)" \
+  all 'grep -qx "150 stopped 1000" "$S/db"' 'grep -qx "1000 stopped db-prod" "$S/db"'
+nx delete 1000
+check "delete <name> destroys the container of that name, not the one with that VMID" \
+  all 'rc 0' 'called "pct destroy 150"' 'grep -qx "1000 stopped db-prod" "$S/db"' \
+      '[ ! -e "$S/run/nexcage/1000" ]' '[ -f "$S/run/nexcage/db-prod/state.json" ]'
+nx --runtime lxc delete 1000
+check "and the state removed is the destroyed container's, not the typed word's" \
+  all 'rc 0' 'called "pct destroy 1000"' '[ ! -e "$S/run/nexcage/db-prod" ]'
+
+# A name two containers have is refused, naming both. The first in the
+# listing used to win, and that was another node's as readily as this one's.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "149 stopped filler" > "$S/db"
+nx create --name web-1 "$TPL" >/dev/null 2>&1
+awk '$3!="filler"' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"
+echo "1000 running web-1 titan" >> "$S/db"
+nx delete --force web-1
+check "a name two containers have is refused, naming both, and neither is touched" \
+  all 'rc 1' 'err_has "VMID 1000 on titan"' 'err_has "VMID 150"' \
+      'not_called_re "^(pct (shutdown|destroy)|pvesh (create|delete) /nodes/)"'
+nx state web-1
+check "state refuses it the same way" all 'rc 1' 'err_has "names more than one container"'
+nx --runtime lxc delete 150
+check "while a VMID still addresses one of them" all 'rc 0' 'called "pct destroy 150"' 'grep -q "^1000 running web-1 titan$" "$S/db"'
+
+# A VMID can change hands between finding a container and acting on it, and
+# Proxmox gives a freed VMID to the next container created. The cluster's
+# listing keeps the old name for a few seconds after that ($SIM/stale_name).
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "200 running web-new titan" >> "$S/db"
+echo "200 web-old" > "$S/stale_name"
+nx --runtime lxc stop web-old
+check "a container whose VMID has gone to another one is not stopped in its place" \
+  all 'rc 1' 'err_has "no longer '"'"'web-old'"'"'"' 'not_called_re "^pvesh create /nodes/titan/lxc/200/status/"' \
+      'grep -q "^200 running web-new titan$" "$S/db"'
+nx --runtime lxc delete --force web-old
+check "nor destroyed in its place" \
+  all 'rc 1' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/200"' 'grep -q "^200 running web-new titan$" "$S/db"'
+rm -f "$S/stale_name"
+# On this host `pct list` is current, and its name wins over the cache's.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name web-new "$TPL" >/dev/null 2>&1
+echo "100 web-old" > "$S/stale_name"
+nx --runtime lxc start web-old
+check "a name the cluster's cache still gives a reused VMID here does not find the new container" \
+  all 'rc 1' 'not_called_re "^pct start"'
+nx start web-new
+check "(which its own name does)" all 'rc 0' 'called "pct start 100"'
+rm -f "$S/stale_name"
+# The window that matters most: a forced delete waits for the shutdown, and
+# the VMID is free once something else has destroyed the container.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name web-old "$TPL" >/dev/null 2>&1
+nx start web-old >/dev/null 2>&1
+cat > "$S/meanwhile" <<'SH'
+# web-old is destroyed elsewhere and web-new takes VMID 100
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx delete --force web-old
+check "a VMID that changed hands during delete --force's shutdown is not destroyed" \
+  all 'rc 1' 'called_re "^pct shutdown 100 "' 'not_called_re "^pct destroy"' \
+      'grep -q "^100 stopped web-new$" "$S/db"' 'err_has "no longer"'
+rm -f "$S/meanwhile"
+
 echo "--- create --node ---"
 reset_sim
 : > "$S/node_templates"

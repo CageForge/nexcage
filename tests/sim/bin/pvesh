@@ -54,9 +54,19 @@ case "$1 $2" in
         old_status=$(awk -v n="$name" '$1==n {print $2}' "$SIM/stale_status" 2>/dev/null)
         [ -n "$old_status" ] && status=$old_status
       fi
+      # $SIM/stale_name holds "vmid name" lines: the name pvestatd last saw
+      # for a VMID, which the listing keeps for a few seconds after the VMID
+      # has gone to another container.
+      if [ -s "$SIM/stale_name" ]; then
+        old_name=$(awk -v v="$vmid" '$1==v {print $2}' "$SIM/stale_name" 2>/dev/null)
+        [ -n "$old_name" ] && name=$old_name
+      fi
       printf ',{"vmid":%s,"name":"%s","node":"%s","status":"%s","type":"lxc"}' \
         "$vmid" "$name" "${node:-$HERE}" "$status"
-    done < "$SIM/db"
+    # In Proxmox's order: Cluster.pm walks `sort keys %$idlist`, a string
+    # sort, so VMID 1000 comes before 150. Rows used to come in the order
+    # they were made, and a lookup that took the first match was right by luck.
+    done < <(LC_ALL=C sort -k1,1 "$SIM/db")
     printf ']\n'
     ;;
   "get /nodes")
@@ -267,8 +277,13 @@ case "$1 $2" in
     # a container elsewhere. Recorded like every call; nothing more to model.
     ;;
   "get /nodes/"*/lxc/*/config)
-    # What `update --memory-swap` reads when no --memory came with it.
-    echo '{"memory":512,"swap":512,"cores":1}'
+    # A container's config, as its node's API gives it: what `update
+    # --memory-swap` reads when no --memory came with it, and the hostname a
+    # command checks right before it stops or destroys the container.
+    vmid=$(echo "$2" | sed -n 's|.*/lxc/\([0-9]*\)/config|\1|p')
+    host=$(awk -v v="$vmid" '$1==v {print $3; f=1} END {exit !f}' "$SIM/db") || {
+      echo "Configuration file 'nodes/x/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    printf '{"cores":1,"hostname":"%s","memory":512,"swap":512}\n' "$host"
     ;;
   *) echo "fake pvesh: unsupported $*" >&2; exit 99 ;;
 esac
