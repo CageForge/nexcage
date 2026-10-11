@@ -366,6 +366,7 @@ pub const ProxmoxLxcDriver = struct {
                         return core.Error.InvalidInput;
                     };
                     try self.oci_processor.warnUnappliedConfinement(safe_path, bundle_config.?.confinement, bundle_config.?.mounts orelse &.{});
+                    try self.oci_processor.warnUnappliedResources(safe_path, bundle_config.?.other_resources orelse &.{});
                     bundle_resources = try self.oci_processor.bundleResources(&bundle_config.?);
                     bundle_mounts = try self.oci_processor.bundleMountPoints(bundle_config.?.mounts orelse &.{});
 

@@ -269,6 +269,7 @@ pub const OciBundleParser = struct {
                         }
 
                         if (resources_obj.get("devices")) |v| bundle_config.confinement.@"linux.resources.devices" = asksFor(v);
+                        bundle_config.other_resources = try self.otherResources(resources_obj);
                     }
                 }
 
@@ -574,6 +575,56 @@ pub const OciBundleParser = struct {
         }
     }
 
+    /// What a linux.resources object sets besides memory.limit, cpu.shares
+    /// and devices, which are read above, by name: "memory.swap",
+    /// "pids.limit", "unified". A null, an empty list or an empty object sets
+    /// nothing. Recorded so that a backend that applies the other two alone
+    /// can say what it leaves out; they were dropped without a word.
+    fn otherResources(self: *OciBundleParser, resources: std.json.ObjectMap) BundleError!?[]const []const u8 {
+        var names = std.ArrayListUnmanaged([]const u8){};
+        errdefer {
+            for (names.items) |n| self.allocator.free(n);
+            names.deinit(self.allocator);
+        }
+        var sections = resources.iterator();
+        while (sections.next()) |sec| {
+            const section = sec.key_ptr.*;
+            if (setsNothing(sec.value_ptr.*) or std.mem.eql(u8, section, "devices")) continue;
+            // A list (hugepageLimits) or a bare value is a setting of its
+            // own; an object's fields are each one.
+            if (sec.value_ptr.* != .object) {
+                const name = try self.allocator.dupe(u8, section);
+                errdefer self.allocator.free(name);
+                try names.append(self.allocator, name);
+                continue;
+            }
+            var fields = sec.value_ptr.object.iterator();
+            while (fields.next()) |f| {
+                const field = f.key_ptr.*;
+                if (setsNothing(f.value_ptr.*)) continue;
+                if (std.mem.eql(u8, section, "memory") and std.mem.eql(u8, field, "limit")) continue;
+                if (std.mem.eql(u8, section, "cpu") and std.mem.eql(u8, field, "shares")) continue;
+                const name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ section, field });
+                errdefer self.allocator.free(name);
+                try names.append(self.allocator, name);
+            }
+        }
+        if (names.items.len == 0) {
+            names.deinit(self.allocator);
+            return null;
+        }
+        return try names.toOwnedSlice(self.allocator);
+    }
+
+    fn setsNothing(v: std.json.Value) bool {
+        return switch (v) {
+            .null => true,
+            .array => |a| a.items.len == 0,
+            .object => |o| o.count() == 0,
+            else => false,
+        };
+    }
+
     /// A copy of a JSON array of strings. Any other element refuses the
     /// bundle: these arrays were allocated whole and only their string
     /// elements written, so `"args": ["/bin/sh", 1]` left a slot undefined
@@ -638,6 +689,8 @@ pub const OciBundleConfig = struct {
     memory_limit: ?i64 = null,
     /// linux.resources.cpu.shares, the cgroup v1 weight
     cpu_shares: ?u64 = null,
+    /// What else linux.resources sets, by name under it, as "memory.swap"
+    other_resources: ?[]const []const u8 = null,
     capabilities: ?[]const u8 = null,
     seccomp_profile: ?[]const u8 = null,
 
@@ -685,6 +738,10 @@ pub const OciBundleConfig = struct {
                 m.deinit();
             }
             self.allocator.free(mounts);
+        }
+        if (self.other_resources) |names| {
+            for (names) |n| self.allocator.free(n);
+            self.allocator.free(names);
         }
         if (self.capabilities) |caps| self.allocator.free(caps);
         if (self.seccomp_profile) |profile| self.allocator.free(profile);

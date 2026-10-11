@@ -294,6 +294,24 @@ pub const OciProcessor = struct {
         return res;
     }
 
+    /// Says, in one warning, which of a bundle's linux.resources this backend
+    /// leaves out: everything but memory.limit and cpu.shares, which become
+    /// --memory and --cores. memory.swap, cpu.quota, pids.limit, unified and
+    /// the rest were dropped without a word, while update refuses the same
+    /// document by name. Not refused here: what a bundle asks of pct create is
+    /// as it was, and only said now.
+    pub fn warnUnappliedResources(self: *const Self, bundle_path: []const u8, names: []const []const u8) !void {
+        if (names.len == 0) return;
+        const log = self.logger orelse return;
+        const joined = try std.mem.join(self.allocator, ", linux.resources.", names);
+        defer self.allocator.free(joined);
+        const message = "linux.resources.{s} in {s}/config.json: not applied on the Proxmox LXC backend, which takes memory.limit and cpu.shares from a bundle; create's --memory-swap, --cpu-quota and --cpu-period give pct a swap and a CPU limit. --runtime crun applies a bundle's own";
+        log.warn(message, .{ joined, bundle_path }) catch {};
+        // To stderr as well, as the confinement warning is: with --log only
+        // errors are echoed there
+        log.echoWarning(message, .{ joined, bundle_path });
+    }
+
     /// Says, in one warning, which of the confinement a bundle asks for this
     /// backend does not apply. Proxmox confines every container with its own
     /// AppArmor profile, capability set, seccomp filter and device rules, and

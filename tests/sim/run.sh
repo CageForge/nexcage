@@ -1126,6 +1126,17 @@ res_bundle res-max '{"cpu":{"shares":262144}}'
 nx create --name res-max /tmp/nexcage-bundles/res-max
 check "bundle cpu.shares 262144, the kernel's maximum -> --cores 256" \
   all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-max --memory 512 --cores 256 "'
+# Only memory.limit and cpu.shares reach pct create. The rest of a bundle's
+# linux.resources -- swap and a CPU quota, which Proxmox has, and a pids limit,
+# which it does not -- was dropped without a word, where update refuses the
+# same document by name. create still goes ahead, and says what it left out.
+res_bundle res-rest '{"memory":{"limit":268435456,"swap":268435456},"pids":{"limit":100},"cpu":{"shares":1024,"quota":50000,"period":100000},"devices":[]}'
+nx create --name res-rest /tmp/nexcage-bundles/res-rest
+check "a bundle's linux.resources besides memory.limit and cpu.shares are named as not applied" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-rest --memory 256 --cores 1 "' \
+      'err_has "linux.resources.memory.swap, linux.resources.pids.limit, linux.resources.cpu.quota, linux.resources.cpu.period in /tmp/nexcage-bundles/res-rest/config.json: not applied"'
+nx create --name res-only /tmp/nexcage-bundles/res-min
+check "and a bundle that sets only those two gets no such warning" all 'rc 0' '! err_has "not applied"'
 nx --runtime crun create --memory 1G --bundle /tmp/nexcage-bundles/b1 crun-opt
 check "create's Proxmox options on the crun backend: refused, naming the bundle's config.json" \
   all 'rc 1' 'err_has "is for the Proxmox LXC backend"' 'err_has "config.json"'
