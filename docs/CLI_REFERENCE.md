@@ -579,8 +579,9 @@ before Proxmox is asked anything: it goes into pvesh paths, and for another node
 pvesh passes the path to that node's shell.
 
 `--filename <name>` names the file instead, before the `.tar` Proxmox adds. It
-takes letters, digits, `.`, `_` and `-`, not first a `.` or `-`, so that
-Proxmox keeps it as it is; anything else is a usage error (exit 2). A file of
+takes letters, digits, `.`, `_` and `-`, not first a `.` or `-` and without
+`..`, so that Proxmox keeps it as it is and `rmi` takes it; anything else is a
+usage error (exit 2). A file of
 that name already on the storage is an error (exit 1) rather than an answer: the
 name says nothing about which image it holds.
 
@@ -625,10 +626,10 @@ A template that is not there is an error (exit 1), not a no-op: a mistyped volid
 should not look like a successful removal. A malformed name is a usage error
 (exit 2), before Proxmox is asked anything: the volid has to be exactly
 `<storage>:vztmpl/<file>`, with a Proxmox storage ID and the file in letters,
-digits, `.`, `_` and `-`, without `..`. Proxmox gives every template it writes
-such a name; a file named otherwise was put on the storage by hand, and is
-removed on its node (`pveam remove`, or the file itself). The volid goes into
-the delete's pvesh path, which for another node reaches that node's shell.
+digits, `.`, `_` and `-`, without `..` — the characters Proxmox's own uploads,
+downloads and pulls write. A template named otherwise is removed on its node
+(`pveam remove`). The volid goes into the delete's pvesh path, which for another
+node reaches that node's shell.
 
 Removing a template does not affect containers created from it — a template is
 copied when a container is made, not referenced.

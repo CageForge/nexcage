@@ -107,8 +107,8 @@ pub const PullCommand = struct {
             "  --node <name>      The node to pull on (default: this host)\n" ++
             "  --storage <name>   The storage to pull into (default: local)\n" ++
             "  --filename <name>  The file name instead, before the .tar Proxmox adds:\n" ++
-            "                     letters, digits, '.', '_' and '-'. It must not be\n" ++
-            "                     there already\n" ++
+            "                     letters, digits, '.', '_' and '-', without '..'.\n" ++
+            "                     It must not be there already\n" ++
             "  -h, --help         Show this help message\n\n" ++
             "This is how to make `create --node` work: a storage called `local` is\n" ++
             "a different directory on every node, so pull onto a shared storage and\n" ++

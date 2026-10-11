@@ -307,7 +307,7 @@ pub const PveClient = struct {
         // Before any pvesh call: the volid goes into the delete's path whole.
         const storage = templateVolidStorage(volid) orelse {
             if (self.logger) |log| {
-                log.err("a template is named <storage>:vztmpl/<file>, the file in letters, digits, '.', '_' and '-' without '..', got '{s}'. Proxmox names every template it writes that way; a file named otherwise was put there by hand, and is removed on its node", .{volid}) catch {};
+                log.err("a template is named <storage>:vztmpl/<file>, the file in letters, digits, '.', '_' and '-' without '..', got '{s}'. A template named otherwise is removed on its node (pveam remove)", .{volid}) catch {};
             }
             return core.Error.InvalidInput;
         };
@@ -1590,9 +1590,13 @@ fn pulledTemplateName(allocator: std.mem.Allocator, reference: []const u8) ![]u8
 
     const name = try allocator.alloc(u8, readable.len + 1 + hex.len);
     for (readable, 0..) |c, i| {
-        // A leading '.' would hide the file from the storage's listing, and a
-        // leading '-' reads as an option.
-        name[i] = if (isFileNameChar(c) and !(i == 0 and (c == '.' or c == '-'))) c else '_';
+        // A leading '.' would hide the file from the storage's listing, a
+        // leading '-' reads as an option, and ".." -- which a tag may hold --
+        // is what `rmi` refuses in a volid.
+        const keep = isFileNameChar(c) and
+            !(i == 0 and (c == '.' or c == '-')) and
+            !(c == '.' and i > 0 and name[i - 1] == '.');
+        name[i] = if (keep) c else '_';
     }
     name[readable.len] = '-';
     @memcpy(name[readable.len + 1 ..], &hex);
@@ -1606,10 +1610,13 @@ fn isFileNameChar(c: u8) bool {
 }
 
 /// A file name `pull --filename` may give: one Proxmox's normalisation leaves
-/// as it is, so that the file is known to be exactly <name>.tar afterwards.
+/// as it is, so that the file is known to be exactly <name>.tar afterwards,
+/// and one `rmi` takes.
 fn isPlainFileName(name: []const u8) bool {
     if (name.len == 0 or name.len > max_pull_name) return false;
     if (name[0] == '.' or name[0] == '-') return false;
+    // `rmi` refuses ".." in a volid, so a template is not named with it
+    if (std.mem.indexOf(u8, name, "..") != null) return false;
     for (name) |c| {
         if (!isFileNameChar(c)) return false;
     }
@@ -1749,11 +1756,19 @@ test "a pulled template is named for the whole reference, and two references nev
     try std.testing.expect(isPlainFileName(cut_a));
     try std.testing.expect(!std.mem.eql(u8, cut_a, cut_b));
 
-    // Nothing Proxmox would rewrite, hide or read as an option
+    // Nothing Proxmox would rewrite, hide or read as an option, and nothing
+    // rmi would refuse
     const odd = try pulledTemplateName(a, "-x/y z@sha256:ab");
     defer a.free(odd);
     try std.testing.expectEqualStrings("_x_y_z_sha256_ab-", odd[0 .. odd.len - 16]);
     try std.testing.expect(isPlainFileName(odd));
+    const dots = try pulledTemplateName(a, "registry.example/app:1...2");
+    defer a.free(dots);
+    try std.testing.expectEqualStrings("registry.example_app_1._.2-", dots[0 .. dots.len - 16]);
+    try std.testing.expect(isPlainFileName(dots));
+    const volid = try std.fmt.allocPrint(a, "local:vztmpl/{s}.tar", .{dots});
+    defer a.free(volid);
+    try std.testing.expect(templateVolidStorage(volid) != null);
 }
 
 test "a --filename is one Proxmox leaves as it is" {
@@ -1765,6 +1780,7 @@ test "a --filename is one Proxmox leaves as it is" {
     try std.testing.expect(!isPlainFileName(".hidden"));
     try std.testing.expect(!isPlainFileName("-x"));
     try std.testing.expect(!isPlainFileName("a b"));
+    try std.testing.expect(!isPlainFileName("a..b"));
     try std.testing.expect(!isPlainFileName("x" ** (max_pull_name + 1)));
 }
 

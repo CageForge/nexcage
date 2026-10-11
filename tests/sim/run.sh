@@ -1198,6 +1198,12 @@ nx rmi not-a-volid
 check "rmi wants <storage>:vztmpl/<file>" all 'rc 2' 'err_has "vztmpl"'
 nx rmi "local:vztmpl/../../x.tar"
 check "rmi refuses a volid that climbs out of vztmpl/, before any pvesh" all 'rc 2' 'not_called_re "^pvesh"'
+# A tag may hold "..": the name a pull is written under does not keep it, so
+# what pull prints, rmi takes.
+nx pull docker.io/library/nginx:1..2
+nx rmi "$(cat "$S/out")"
+check "rmi takes the volid pull printed, for a tag with '..' in it too" \
+  all 'rc 0' 'out_has "removed from"' 'called_re "^pvesh delete /nodes/[^/]+/storage/local/content/local:vztmpl/docker\.io_library_nginx_1\._2-[0-9a-f]{16}\.tar$"'
 # A file named by hand on a storage is listed as it is, and its volid went
 # into the delete's path: for another node, into that node's shell.
 echo "titan local:vztmpl/evil;id>pwn.tar.zst" >> "$S/node_templates"
