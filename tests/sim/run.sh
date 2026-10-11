@@ -751,6 +751,16 @@ check "bundle confinement warning with --log: in that file once, and on stderr o
   all 'rc 0' '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/run/conf-sec.log")" = 1 ]' \
       '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
       'grep -qE "^nexcage: warning: process\.capabilities, .* --runtime crun applies a bundle.s own$" "$S/err"'
+# That stderr line is written beside the logger, and it carries the bundle's
+# path, which is the caller's text: it is escaped as an echoed error is, so a
+# newline in the path cannot add a line of nexcage's own.
+inj=$'conf-inj\nnexcage: forged'
+mkdir -p "$S/bundles/$inj"; cp -a "$S/bundles/conf-sec/rootfs" "$S/bundles/conf-sec/config.json" "$S/bundles/$inj/"
+nx --log "$S/run/conf-inj.log" create --name conf-inj "/tmp/nexcage-bundles/$inj"
+check "bundle confinement warning on stderr: a newline in the bundle's path is written escaped, adding no line" \
+  all 'rc 0' '! grep -q "^nexcage: forged" "$S/err"' \
+      'grep -qF "nexcage: warning: process.capabilities, process.noNewPrivileges, root.readonly, linux.seccomp, linux.maskedPaths, linux.readonlyPaths, linux.devices in /tmp/nexcage-bundles/conf-inj\\nnexcage: forged/config.json: not applied" "$S/err"'
+rm -rf "${S:?}/bundles/$inj"
 nx --log "$S/run/conf-sec-quiet.log" --log-level error create --name conf-sec-quiet /tmp/nexcage-bundles/conf-sec
 check "bundle confinement warning with --log-level error: not written" all 'rc 0' '! err_has "not applied"' '! grep -qs "not applied" "$S/run/conf-sec-quiet.log"'
 # The kernel filesystems at /proc, /sys and /dev are LXC's and the init's to

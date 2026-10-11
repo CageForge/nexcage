@@ -313,15 +313,9 @@ pub const OciProcessor = struct {
         // With --log the log is a file and only errors are echoed to stderr,
         // so whoever ran create never saw this one. It is about protection
         // the container does not have: it goes to stderr as well, unless
-        // --log-level asked for errors only.
-        if (log.echo) |echo| if (@intFromEnum(log.level) <= @intFromEnum(core.LogLevel.warn)) {
-            var buffer: [1024]u8 = undefined;
-            var writer = echo.writerStreaming(&buffer);
-            // A line that cannot be written must not fail the create, as in
-            // the logger itself
-            writer.interface.print("{s}: warning: " ++ message ++ "\n", .{ log.component, names, bundle_path }) catch {};
-            writer.interface.flush() catch {};
-        };
+        // --log-level asked for errors only, escaped as an echoed error is,
+        // since the bundle's path is the caller's text.
+        log.echoWarning(message, .{ names, bundle_path });
     }
 
     /// The mount points a bundle's mounts become: one pct property string
