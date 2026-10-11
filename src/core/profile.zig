@@ -21,8 +21,9 @@ pub const Profile = struct {
     name: []const u8,
     runtime: types.RuntimeType = .crun,
     /// Refuse a bundle without a user namespace and uid/gid mappings, or with
-    /// one that maps host uid or gid 0. Nothing is added: who owns the root
-    /// filesystem is the engine's to arrange.
+    /// one that maps host uid or gid 0, or that keeps nexcage's own groups.
+    /// Nothing is added: who owns the root filesystem is the engine's to
+    /// arrange.
     require_user_namespace: bool = false,
     /// Refuse a bundle without a seccomp filter that refuses some system
     /// call, or with a precompiled program libcrun would install instead.
@@ -137,7 +138,10 @@ fn narrow(allocator: std.mem.Allocator, spec_json: []const u8, profile: *const P
 
     const linux = try child(arena, root, "linux");
 
-    if (profile.require_user_namespace) try checkUserNamespace(linux, profile, why);
+    if (profile.require_user_namespace) {
+        try checkUserNamespace(linux, profile, why);
+        try refuseKeptGroups(root, profile, why);
+    }
 
     if (profile.require_seccomp) {
         try checkSeccomp(linux, profile, why);
@@ -461,6 +465,21 @@ fn checkUserNamespace(linux: *const std.json.ObjectMap, profile: *const Profile,
         if (!isUserNamespace(ns)) continue;
         if (ns.object.get("path")) |path| try checkJoined(path, profile, why);
     }
+}
+
+/// libcrun's annotation for keeping the caller's supplementary groups: with
+/// any value but "0" it skips setgroups, and the container's process keeps
+/// nexcage's own groups in place of process.user's.
+const keep_groups = "run.oci.keep_original_groups";
+
+/// require_user_namespace, the other way in: a supplementary group is a host
+/// gid, which no gid_map limits. nexcage's own, gid 0 among them when it runs
+/// from a root shell, would follow the container into a namespace that leaves
+/// host gid 0 out, and open what the host's group 0 may open.
+fn refuseKeptGroups(root: *const std.json.ObjectMap, profile: *const Profile, why: *Refusal) error{ProfileRefused}!void {
+    const keep = annotationOf(root, keep_groups) orelse return;
+    if (keep == .string and std.mem.eql(u8, keep.string, "0")) return;
+    return why.set("profile '{s}' requires a user namespace that leaves host gid 0 out, and the bundle's annotation {s} keeps nexcage's own supplementary groups, which are host gids, in the container", .{ profile.name, keep_groups });
 }
 
 fn isUserNamespace(ns: std.json.Value) bool {
@@ -1178,4 +1197,23 @@ test "a precompiled seccomp program does not meet a profile that requires a filt
     , &profile, &why));
     // A profile that requires no filter does not judge which one is installed.
     std.testing.allocator.free(try narrow(std.testing.allocator, smuggled, &.{ .name = "p" }, &why));
+}
+
+test "a bundle that keeps nexcage's own groups does not meet a profile that requires a user namespace" {
+    const profile = Profile{ .name = "h", .require_user_namespace = true };
+    const userns =
+        \\{"linux":{"namespaces":[{"type":"user"}],
+        \\ "uidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
+        \\ "gidMappings":[{"containerID":0,"hostID":100000,"size":65536}]},
+        \\ "annotations":{"run.oci.keep_original_groups":
+    ;
+    // libcrun skips setgroups for anything but "0".
+    for ([_][]const u8{ "\"1\"", "\"\"", "\"false\"", "0" }) |value| {
+        var buf: [400]u8 = undefined;
+        try expectRefused(try std.fmt.bufPrint(&buf, "{s}{s}}}}}", .{ userns, value }), profile, "annotation run.oci.keep_original_groups keeps nexcage's own supplementary groups");
+    }
+    var why: Refusal = .{};
+    std.testing.allocator.free(try narrow(std.testing.allocator, userns ++ "\"0\"}}", &profile, &why));
+    // Without the requirement, the groups are the bundle's to keep.
+    std.testing.allocator.free(try narrow(std.testing.allocator, userns ++ "\"1\"}}", &.{ .name = "p" }, &why));
 }

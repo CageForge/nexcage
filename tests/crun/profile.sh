@@ -82,7 +82,7 @@ ln -s "$NEXCAGE" "$WORK/nexcage@hardened"
 nx() { "$NEXCAGE" --config "$CFG" "$@"; }
 cleanup() {
     cd /
-    for id in "$ID" "$ID-s" "$ID-sa" "$ID-sf" "$ID-sb" "$ID-u" "$ID-a" "$ID-z" "$ID-c" "$ID-v" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
+    for id in "$ID" "$ID-s" "$ID-sa" "$ID-sf" "$ID-sb" "$ID-u" "$ID-g" "$ID-a" "$ID-z" "$ID-c" "$ID-v" "$ID-m" "$ID-o" "$ID-j0" "$ID-j1" "$ID-jp" "$ID-h0" "$ID-h1"; do
         nx delete --force "$id" >/dev/null 2>&1 || true
     done
     umount "$WORK/userns-pin" 2>/dev/null || true
@@ -273,6 +273,24 @@ if [ "$rc" = 0 ]; then
 fi
 grep -q 'does not map host uid 0, and linux.uidMappings\[0\] maps it' "$WORK/err" || fail "the refusal does not name the mapping: $(tail -1 "$WORK/err")"
 echo "ok: a user namespace whose mappings include host uid 0 is refused"
+
+# run.oci.keep_original_groups has libcrun skip setgroups, so the container
+# keeps nexcage's own supplementary groups: host gids, which no gid_map
+# limits. nexcage gets gid 0 among them here, as it has from a root shell.
+command -v setpriv >/dev/null || fail "setpriv (util-linux) is needed to give nexcage a supplementary group"
+spec "$(mappings 1 65536)" ', "annotations": { "run.oci.keep_original_groups": "1" }' ', { "type": "user" }'
+rc=0; setpriv --groups 0 "$NEXCAGE" --config "$CFG" --profile needs-userns create --bundle "$BUNDLE" "$ID-g" 2>"$WORK/err" || rc=$?
+if [ "$rc" = 0 ]; then
+    nx start "$ID-g" 2>"$WORK/err" || fail "a bundle keeping nexcage's groups passed the profile, and start failed: $(tail -1 "$WORK/err")"
+    groups=$(sed -n 's/^Groups:[[:space:]]*//p' "/proc/$(pid_of "$ID-g")/status")
+    case " $groups " in
+        *" 0 "*) fail "run.oci.keep_original_groups passed the profile: the container holds host gid 0 (Groups: $groups), which its gid_map leaves out" ;;
+    esac
+    fail "a bundle keeping nexcage's groups passed the profile (Groups: $groups)"
+fi
+grep -q 'annotation run.oci.keep_original_groups keeps nexcage' "$WORK/err" || fail "the refusal does not name the annotation: $(tail -1 "$WORK/err")"
+[ ! -e "/run/crun/$ID-g" ] || fail "a refused create left state behind"
+echo "ok: run.oci.keep_original_groups is refused under a required user namespace"
 
 # Two sandboxes made without a profile: one mapping host uid 0, one not.
 spec "$(mappings 0 1)" "" ', { "type": "user" }'
