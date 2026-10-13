@@ -1,7 +1,7 @@
 # Roadmap
 
 Where nexcage goes after 0.17.0, and what it deliberately will not do.
-Reviewed against `main` on 2026-10-09.
+Reviewed against `main` on 2026-10-13.
 
 This file says what comes next and why, not when. The `Roadmap/` directory it
 replaces was removed in September 2026 because it held a sprint plan due in
@@ -43,8 +43,11 @@ nexcage is one binary with two faces
 
 Everything a kubelet's containerd asks a runtime is answered, the suites
 that define a runtime have been asked, and a pod can be given less than the
-engine asked for. What is left is what makes a 1.0 a promise rather than a
-number.
+engine asked for. Two things are not on record yet. Nobody has measured what
+a workload gains from any of it. And what each way of running a container
+isolates is checked only in part. 0.18.0 puts both on record. 0.19.0 makes a
+profile carry what a workload is sized by. Then 1.0 turns all of it into a
+promise rather than a number.
 
 ## Not code: protect `main`
 
@@ -54,7 +57,48 @@ required checks of `ci.yml` and `crun_build.yml`, no force push or deletion,
 and no approving review while there is one maintainer
 ([MAINTAINERS.md](MAINTAINERS.md)). [#305]
 
-## Next: 1.0 — what the number promises
+## Next: 0.18.0 — measured, not claimed
+
+An outside review in October 2026 read the repository's description,
+"hybrid isolation, pure performance", and took it for what nexcage does. No
+test showed either. This release says only what is measured, and it measures
+what users ask about first.
+
+- **A description that says what the README says.** The About line and the
+  topics were corrected on 2026-10-13. `docs/index.md` still points readers
+  to two binaries, although 0.17.0 ships one. [#389]
+- **Workload benchmarks.** `tests/perf/` measures what nexcage adds to each
+  command. What a workload gains is a different question:
+  - PostgreSQL, Redis and a build agent;
+  - on crun, run through nexcage and through crun itself;
+  - on a Proxmox container, made by nexcage and by `pct`;
+  - on bare metal, with the raw samples in the repository.
+
+  A result that does not favour nexcage is published as it is. [#390]
+- **An isolation matrix, read back from the kernel.** One probe runs in each
+  way nexcage runs a container:
+  - crun as the engine asked;
+  - crun under a profile;
+  - Proxmox LXC, unprivileged and privileged.
+
+  The probe prints a table, and the docs say when each mode is enough. All
+  four share the host's kernel. The threat model for 1.0 ([#320]) builds on
+  this table. [#391]
+
+## Then: 0.19.0 — a profile carries what a workload is sized by
+
+- **`limits.cpu` in a profile**, lowered the way `limits.memory` is. [#392]
+- **Two example profiles, `hardened` and `build-agent`.** They ship with
+  their handlers and `RuntimeClass`es, and the isolation matrix runs both.
+  There is no `database` profile on crun: what a database needs is storage,
+  and on Kubernetes that belongs to the CSI driver. [#393]
+- **A profile that names Proxmox LXC, for the command line only.** It names a
+  set of storage, size, bridge, cores and memory for `nexcage run --profile`,
+  and an engine handed one fails at `create`. *This waits for a decision:*
+  [ADR-006](docs/architecture/ADR-006-LXC-Driven-By-An-Engine.md) keeps
+  `runtime: lxc` refused. [#394]
+
+## After that: 1.0 — what the number promises
 
 1.0 is a compatibility promise, not a feature count. Proposed criteria:
 
@@ -80,6 +124,16 @@ and no approving review while there is one maintainer
    [#321]
 6. **A support policy**: which minor release receives fixes after 1.0, and
    for how long. [#322]
+7. **Failure on record.** What a running container goes through in each of
+   these cases:
+   - the node reboots;
+   - the engine or the kubelet restarts;
+   - pmxcfs or quorum is lost;
+   - the storage fills;
+   - nexcage is killed partway through a command.
+
+   The expected behaviour is written down first, then tested, and the result
+   goes in the docs. [#396]
 
 ## Later, when asked
 
@@ -92,6 +146,9 @@ and no approving review while there is one maintainer
   say.
 - **Backup, restore and migration through pct** — `vzdump`, `pct restore`,
   `pct migrate` — by name on any node, the way snapshots went. [#324]
+- **`clone`, from a snapshot or a template, through pct.** A linked clone,
+  the fast kind on ZFS, is only made from a template, and `pct template`
+  cannot be undone. [#390] can first measure whether that pays. [#395]
 - **A Proxmox LXC container driven by an engine.**
   [ADR-006](docs/architecture/ADR-006-LXC-Driven-By-An-Engine.md) shows it can
   be done. Its costs fall on every pod:
@@ -114,6 +171,7 @@ asks" needs a place to be asked.
 | | Why |
 |---|---|
 | A runc backend, or a fallback between backends | [ADR-001](docs/architecture/ADR-001-Container-Runtime-Selection.md): libcrun answers the same interface, and a container is one thing on one backend |
+| A profile chosen by the pod's annotation | [ADR-005](docs/architecture/ADR-005-Isolation-Profiles.md): the value would come from the pod's author rather than the node's administrator, and each engine would need an allowlist per handler. The handler's program name, `nexcage@<profile>`, is what picks one |
 | Virtual machines through `qm` | The stub backend went in 0.14.0. It can come back with a test behind it and someone who needs it |
 | Proxmox VE 8 | Earlier releases ran on it, but no test ever did, and Proxmox ended its own support for 8.x in August 2026. nexcage does not refuse an 8.x host; it no longer promises anything there |
 | A daemon or a remote API | nexcage is an OCI runtime. A kubelet runs on each node and calls the binary there, as it calls runc |
@@ -140,3 +198,11 @@ asks" needs a place to be asked.
 [#322]: https://github.com/CageForge/nexcage/issues/322
 [#323]: https://github.com/CageForge/nexcage/issues/323
 [#324]: https://github.com/CageForge/nexcage/issues/324
+[#389]: https://github.com/CageForge/nexcage/issues/389
+[#390]: https://github.com/CageForge/nexcage/issues/390
+[#391]: https://github.com/CageForge/nexcage/issues/391
+[#392]: https://github.com/CageForge/nexcage/issues/392
+[#393]: https://github.com/CageForge/nexcage/issues/393
+[#394]: https://github.com/CageForge/nexcage/issues/394
+[#395]: https://github.com/CageForge/nexcage/issues/395
+[#396]: https://github.com/CageForge/nexcage/issues/396
