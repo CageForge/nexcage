@@ -135,7 +135,9 @@ CageForge/nexcage, so keep `--input dry_run=true` when running act on it by
 hand; without a gh login `dev.sh` skips the job and says so. It skips it too,
 and says so, where `deps/crun` is not checked out — in a worktree, say — since
 with `--bind` the workflow's `submodules: recursive` checks nothing out:
-`git submodule update --init --depth 1 deps/crun` first.
+`git submodule update --init --depth 1 deps/crun` first. The image builds
+leave `deps/crun` out of their context (`.dockerignore`), since the Dockerfile
+clones crun itself, so a checked-out one does not get in their way.
 
 Three things act runs differently from GitHub's runners:
 
