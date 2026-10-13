@@ -512,6 +512,14 @@ check "an option exec does not have, written with =, is a usage error" \
 nx exec web-1 --tty=false echo hi
 check "and so is a value for one that takes none, not a command" \
   all 'rc 2' "err_has \"'--tty=false': exec has no option '--tty' that takes a value\"" 'not_called_re "^pct exec"'
+# nexcage has no --env: a command takes its variables on its own line ('env
+# FOO=1 <command>'). Were -e parsed, pct exec would run the command without
+# them, so it is refused as an option exec does not have.
+for flag in -e --env; do
+  nx exec $flag FOO=bar web-1 true
+  check "exec $flag is a usage error: nexcage has no --env" \
+    all 'rc 2' "err_has \"unknown option '$flag'\"" 'not_called_re "^pct exec"'
+done
 
 # `exec --process <file>` hands over an OCI process spec: an identity to become,
 # an environment, a terminal. `pct exec` takes a command and returns when it

@@ -289,7 +289,6 @@ pub const RuntimeOptions = struct {
     tty: bool = false,
     user: ?[]const u8 = null,
     workdir: ?[]const u8 = null,
-    env: ?[]const []const u8 = null,
     args: ?[]const []const u8 = null,
     /// `exec --process <file>`: a file holding an OCI process spec, which
     /// is the shape a container engine sends an exec in.
@@ -344,12 +343,6 @@ pub const RuntimeOptions = struct {
         if (co.mount_points.len > 0) self.allocator.free(co.mount_points);
         if (self.console_socket) |cs| self.allocator.free(cs);
         if (self.pid_file) |pf| self.allocator.free(pf);
-        if (self.env) |e| {
-            for (e) |env_var| {
-                // env vars are not allocated, just referenced
-                _ = env_var;
-            }
-        }
         if (self.args) |a| {
             for (a) |arg| {
                 // args are not allocated, just referenced

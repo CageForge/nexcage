@@ -384,7 +384,6 @@ pub const BackendRouter = struct {
                 crun_backend.exec_tty = exec_cfg.tty;
                 crun_backend.exec_cwd = exec_cfg.cwd;
                 crun_backend.exec_user = exec_cfg.user;
-                crun_backend.exec_env = exec_cfg.env;
                 try crun_backend.exec(container_id, exec_cfg.argv, exec_cfg.process_file);
             },
             .run => return self.notImplemented("run", "crun"),
@@ -574,7 +573,6 @@ pub const ExecConfig = struct {
     tty: bool = false,
     cwd: ?[]const u8 = null,
     user: ?[]const u8 = null,
-    env: ?[]const []const u8 = null,
     console_socket: ?[]const u8 = null,
     pid_file: ?[]const u8 = null,
 };

@@ -500,7 +500,6 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         .tty = false,
         .user = null,
         .workdir = null,
-        .env = null,
         .args = null,
     };
     errdefer options.deinit();
