@@ -58,7 +58,8 @@ user namespace by default; there, run
 `.github/workflows/proxmox_e2e.yml` runs on a self-hosted Proxmox VE runner:
 
 1. builds nexcage and runs `--help` / `version`
-2. writes `./config.json` with the runner's bridge and storage
+2. writes a configuration with the runner's bridge and storage, root's and
+   not writable by others, and names it with `--config` on every call
 3. `create` from a template → `state` is `created` → `pct config` shows the
    hostname, the bridge and a 2 GB rootfs on the configured storage
 4. a duplicate `create` exits 1; an invalid name and an unknown `--runtime`

@@ -257,12 +257,13 @@ predicting `ps` and `features` that containerd never asked for:
    number; Go's `time.Time` wants RFC 3339. `src/core/rfc3339.zig` formats it.
 
 Then a fourth, which podman had hidden: **an OCI bundle's `config.json`
-shadowed nexcage's own.** `./config.json` is first in the configuration search
-path, a bundle holds a `config.json` that is a runtime spec, and containerd
-runs the runtime from the bundle directory — so the routing rules were replaced
-by a file that is not a configuration at all, silently. A file declaring
-`ociVersion` is skipped in the search path now, and refused outright when named
-with `--config`.
+shadowed nexcage's own.** `./config.json` was first in the configuration
+search path, a bundle holds a `config.json` that is a runtime spec, and
+containerd runs the runtime from the bundle directory — so the routing rules
+were replaced by a file that is not a configuration at all, silently. A file
+declaring `ociVersion` is skipped in the search path now, and refused outright
+when named with `--config`; and after 0.17.0 the working directory is not
+searched at all.
 
 **A CRI pod runs on nexcage.** The runtime handler is the one a kubelet would
 name, and `crictl` drives the same interface the kubelet drives:
@@ -560,11 +561,11 @@ with Kubernetes, and both would have looked like runtime bugs:
 The script removes the k3s it installed unless `--keep` is passed (or
 `KEEP=1`), because that node is the E2E runner. `/etc/nexcage/config.json`,
 which routes everything to crun, is written only when absent and removed again
-by the run that wrote it. Any nexcage on that node that finds no
-`./config.json` first reads that file, and a default build has no crun
-backend. On a node that already had k3s, the containerd template with the
-`nexcage` runtime (pointing at `/nexcage-traced`, which is removed) and
-`RuntimeClass/nexcage` are left in place.
+by the run that wrote it. Any nexcage on that node run without `--config`
+reads that file, and a default build has no crun backend. On a node that
+already had k3s, the containerd template with the `nexcage` runtime (pointing
+at `/nexcage-traced`, which is removed) and `RuntimeClass/nexcage` are left in
+place.
 
 `k8s_e2e.yml` runs the script on the E2E node (#312) on release tags, on
 demand, and on a pull request that changes `tests/k8s/` or the node files

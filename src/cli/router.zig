@@ -364,8 +364,9 @@ pub const BackendRouter = struct {
         }
     }
 
-    /// The error must belong to core.types.Error: the command registry
-    /// @errorCast's into that set, and anything outside it panics.
+    /// A core.types.Error, so that it reaches main as itself: the command
+    /// registry turns an error outside that set into OperationFailed, with
+    /// only its name logged.
     fn backendNotBuilt(self: *Self, name: []const u8) types.Error {
         if (self.logger) |log| {
             log.err("The {s} backend is not built into this binary; rebuild with -Denable-backend-{s}=true", .{ name, name }) catch {};

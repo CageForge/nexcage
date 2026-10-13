@@ -37,11 +37,13 @@ pub const HealthCommand = struct {
             \\  nexcage health                    # Run full system integrity check
             \\
             \\The health check verifies:
-            \\  - Proxmox connectivity (pct command; the API check always warns)
-            \\  - Storage integrity (directories, ZFS pools)
-            \\  - Network integrity (interfaces)
-            \\  - Configuration (the file the other commands read, --config included)
-            \\  - Process integrity (nexcage process, system resources)
+            \\  - pct works ('pct list'); a failure fails the check
+            \\  - the state directory (/run/nexcage, or --root) is writable, and
+            \\    /etc/pve/lxc is there; either missing fails it, except a state
+            \\    directory not made yet, which the first create makes
+            \\  - ZFS pools ('zpool status -x'): a warning unless all are healthy
+            \\  - Configuration (the file the other commands read, --config
+            \\    included), and any OCI runtime spec passed over in the search
             \\
             \\Exit codes:
             \\  0  - No check failed (warnings are reported but do not fail)
