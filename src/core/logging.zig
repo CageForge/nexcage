@@ -236,6 +236,29 @@ pub const LogContext = struct {
         try self.log(.fatal, format, args);
     }
 
+    /// Writes a warning to `echo` the way an error is echoed there: one
+    /// plain line, escaped. Only errors are echoed by themselves; a caller
+    /// whose warning is about protection the command did not give uses this
+    /// beside warn(), so whoever ran the command sees it when --log sends
+    /// the log to a file. Nothing is written without an echo, or when
+    /// --log-level asked for errors only.
+    pub fn echoWarning(self: *LogContext, comptime format: []const u8, args: anytype) void {
+        const echo = self.echo orelse return;
+        if (@intFromEnum(LogLevel.warn) < @intFromEnum(self.level)) return;
+        const whole: ?[]u8 = std.fmt.allocPrint(self.allocator, format, args) catch null;
+        defer if (whole) |m| self.allocator.free(m);
+        var fallback: [json_message_max]u8 = undefined;
+        const text = whole orelse cut(&fallback, format, args);
+
+        var echo_buffer: [1024]u8 = undefined;
+        var echo_writer = echo.writerStreaming(&echo_buffer);
+        const out = &echo_writer.interface;
+        out.print("{s}: warning: ", .{self.component}) catch {};
+        writeEscaped(out, text) catch {};
+        out.writeAll("\n") catch {};
+        out.flush() catch {};
+    }
+
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
         if (@intFromEnum(level) < @intFromEnum(self.level)) return;
         if (rerun_from_copy and @intFromEnum(level) < @intFromEnum(LogLevel.warn)) return;
@@ -427,6 +450,28 @@ test "a logged value cannot add a line or a terminal escape" {
             try tmp.dir.readFile("stderr", &buf),
         );
     }
+}
+
+test "a warning echoed on purpose is one escaped line, as an echoed error is" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const log_file = try tmp.dir.createFile("log", .{});
+    defer log_file.close();
+    const echo_file = try tmp.dir.createFile("stderr", .{});
+    defer echo_file.close();
+
+    var logger = LogContext.init(std.testing.allocator, log_file, .info, "nexcage");
+    logger.echo = echo_file;
+    logger.echoWarning("linux.seccomp in {s}/config.json: not applied", .{"/b/x\nnexcage: forged\x1b[2J\u{85}"});
+    // --log-level error: not written
+    logger.level = .@"error";
+    logger.echoWarning("quiet", .{});
+
+    var buf: [512]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        "nexcage: warning: linux.seccomp in /b/x\\nnexcage: forged\\x1b[2J\\xc2\\x85/config.json: not applied\n",
+        try tmp.dir.readFile("stderr", &buf),
+    );
 }
 
 test "the re-executed copy leaves out the lines below warn until it is told it has caught up" {

@@ -146,18 +146,79 @@ check "a text log line cannot be forged from what pct prints" \
       'err_has "unable to create CT\n[1790000000] ERROR nexcage: forged\x1b]0;t\x07\xc2\x9b2J\xc2\x85[1790000000] ERROR nexcage: nel"'
 rm -f "$S/fail_create"
 
+# Nor does a create carry on once its caller is gone. nexcage installs no
+# signal handlers, and a wrapper that kills it -- a timeout in Python or Go, a
+# unit with KillMode=process -- kills it alone: pct used to finish the
+# container by itself, with no state, under a name a retry was then refused.
+# Its children get SIGTERM when it dies now; fake pct models what real pct
+# does with that, and with a KILL, which would not stop the create. The work
+# is held until the check has looked, so a create that carries on is still
+# there to be seen however slowly anything runs. It used to be given two
+# seconds, and a loaded machine let it finish before the signal came.
+echo 0 > "$S/slow_create"; touch "$S/hold_create"
+before=$(wc -l < "$S/calls")
+nexcage_ns create --name slow-1 "$TPL" > "$S/out" 2> "$S/err" &
+bg=$!
+for _ in $(seq 1 100); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
+worker=$(cat "$S/create_worker" 2>/dev/null)
+kill -KILL "$(cat "$S/create_caller")"
+RC=0; wait "$bg" || RC=$?
+tail -n +"$((before + 1))" "$S/calls" > "$S/calls.last"; LAST="nexcage create --name slow-1 $TPL, killed during pct create"
+check "nexcage killed during pct create: the create does not carry on without it" \
+  all 'rc 137' 'called_re "^pct create [0-9]+ .*--hostname slow-1 "' '[ -n "$worker" ]' 'eventually "! kill -0 $worker 2>/dev/null"'
+# A create that carries on is stopped here, rather than let into the db
+[ -n "$worker" ] && kill -KILL -- "-$worker" 2>/dev/null
+rm -f "$S/hold_create" "$S/slow_create" "$S/create_caller" "$S/create_worker"
+
 nx create --name nginx-1 docker.io/library/nginx:latest
 check "registry image on PVE 8.4 -> exit 1 with a version message, nothing pulled" \
   all 'rc 1' 'err_has "9.1"' 'not_called_re "^pvesh create"' 'not_called_re "^pct create"'
 echo 9.1.0 > "$S/pvever"
+# nexcage names a pulled file for the whole reference. The name is derived here
+# as well, apart from nexcage's code (pve.zig, pulledTemplateName): `pulled` is
+# the name pvesh is given, `pulled_re` the template's file as a regex. Past 110
+# characters the reference is cut, and the digest is still of all of it.
+pulled()    { printf '%s-%s' "$(printf '%s' "${1:0:110}" | tr -c 'A-Za-z0-9_.-' _)" "$(printf '%s' "$1" | sha256sum | cut -c1-16)"; }
+pulled_re() { printf '%s\\.tar' "$(pulled "$1" | sed 's/\./\\./g')"; }
 nx create --name nginx-1 docker.io/library/nginx:latest
 check "registry image on PVE 9.1 -> pvesh oci-registry-pull, then an unprivileged pct create with the .tar" \
-  all 'rc 0' "called 'pvesh create /nodes/$(hostname)/storage/local/oci-registry-pull --reference docker.io/library/nginx:latest'" \
-      'called_re "^pct create [0-9]+ local:vztmpl/nginx_latest.tar --hostname nginx-1 .*--unprivileged 1( |$)"' 'not_called_re "--ostype"'
+  all 'rc 0' "called 'pvesh create /nodes/$(hostname)/storage/local/oci-registry-pull --reference docker.io/library/nginx:latest --filename $(pulled docker.io/library/nginx:latest)'" \
+      'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/nginx:latest) --hostname nginx-1 .*--unprivileged 1( |$)"' 'not_called_re "--ostype"'
 cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_size_gb":2,"unprivileged":false}}'
 nx create --name redis-1 docker.io/library/redis:7
 check "registry image with unprivileged=false: no --unprivileged 0, which pct rejects, and a warning" \
-  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/redis_7.tar --hostname redis-1 "' 'not_called_re "--unprivileged"' 'err_has "always run unprivileged"'
+  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/redis:7) --hostname redis-1 "' 'not_called_re "--unprivileged"' 'err_has "always run unprivileged"'
+# Reuse is of that exact file and nothing else. Any template whose name held
+# the image's last path component and its tag used to do: Proxmox's own system
+# template, a file someone uploaded, the same name from another registry -- and
+# with unprivileged=false a .tar.zst among them ran privileged.
+nx create --name deb-1 docker.io/library/debian:12
+check "a registry image is pulled, not taken from a system template whose name contains it" \
+  all 'rc 0' 'called_re "oci-registry-pull --reference docker.io/library/debian:12 --filename "' \
+      'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/debian:12) "' 'not_called_re "^pct create [0-9]+ local:vztmpl/debian-12"'
+echo "$(hostname) local:vztmpl/postgres-16-custom.tar.zst" >> "$S/node_templates"
+echo "local:vztmpl/postgres-16-custom.tar.zst" >> "$S/templates"
+nx create --name pg-1 docker.io/library/postgres:16
+check "nor from an uploaded file whose name contains it, which would run privileged" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/postgres:16) "' \
+      'not_called_re "postgres-16-custom"' 'not_called_re "--unprivileged 0"'
+nx pull ghcr.io/someone/valkey:8 >/dev/null 2>&1
+nx create --name vk-1 docker.io/library/valkey:8
+check "nor from the same name pulled from another registry" \
+  all 'rc 0' 'called_re "oci-registry-pull --reference docker.io/library/valkey:8 "' \
+      'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/valkey:8) "'
+# The pulled file is the one nexcage named, never whatever appeared on the
+# storage meanwhile -- here another create's bundle archive -- and a listing
+# that fails is an error, not an empty storage: read as empty, the listing
+# before the pull made every template already there look new.
+echo "local:vztmpl/nexcage-tenant-b-1791664000.tar.zst" > "$S/also_lands"
+nx create --name mc-1 docker.io/library/memcached:1.6
+check "a file another writer adds during the pull is not taken for the image" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/memcached:1.6) "' 'not_called_re "nexcage-tenant-b"'
+echo 2 > "$S/fail_list_in"
+nx create --name hp-1 docker.io/library/haproxy:3
+check "a storage listing that fails during create is an error, and nothing is created" \
+  all 'rc 1' 'err_has "could not be listed"' 'not_called_re "^pct create"'
 cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","rootfs_size_gb":2}}'
 touch "$S/fail_pull"
 nx create --name nginx-2 docker.io/library/nginx:1.27
@@ -168,13 +229,13 @@ rm -f "$S/fail_pull"
 # call the endpoint every time and then guess the volid from the reference.
 nx create --name nginx-3 docker.io/library/nginx:latest
 check "a registry image already on the storage is reused, not pulled again" \
-  all 'rc 0' 'not_called_re "oci-registry-pull"' 'called_re "^pct create [0-9]+ local:vztmpl/nginx_latest\.tar "'
+  all 'rc 0' 'not_called_re "oci-registry-pull"' 'called_re "^pct create [0-9]+ local:vztmpl/$(pulled_re docker.io/library/nginx:latest) "'
 # --storage names where the pull lands, as it does for `pull`, and what pct is
 # given is what that storage holds afterwards.
 nx create --name nginx-4 --storage shared-rdma docker.io/library/nginx:1.26
 check "create --storage pulls into that storage and creates from what it holds" \
   all 'rc 0' 'called_re "^pvesh create /nodes/[^/]+/storage/shared-rdma/oci-registry-pull --reference docker.io/library/nginx:1.26"' \
-      'called_re "^pct create [0-9]+ shared-rdma:vztmpl/nginx_1\.26\.tar "'
+      'called_re "^pct create [0-9]+ shared-rdma:vztmpl/$(pulled_re docker.io/library/nginx:1.26) "'
 rm -f "$S/fail_pull" "$S/pvever"
 
 cfg '{"network":{"bridge":"vmbr50"},"proxmox":{"storage":"local-lvm","ostype":"debian","unprivileged":true}}'
@@ -219,6 +280,14 @@ check "--memory-swap is memory plus swap: below the default memory it is refused
 nx create --name opt-2 --pids-limit 100 "$TPL"
 check "a limit Proxmox has no setting for is refused by name, as update refuses it" \
   all 'rc 1' 'err_has "pids.limit has no Proxmox setting"' 'not_called_re "^pct create"'
+nx create --name opt-3 --memory 9223372036854775807 "$TPL"
+check "a memory limit past what Proxmox holds is a usage error naming it, not a trap" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct create"'
+nx create --name opt-4 --cpu-quota 50 "$TPL"
+check "a quota pct would say as cpulimit 0, no limit, is refused, as update refuses it" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct create"'
+nx create --name opt-5 --memory 0 "$TPL"
+check "and memory 0 is not made 16 MiB" all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct create"'
 nx create --name opt-2 --vlan 5000 "$TPL"
 check "--vlan outside 1-4094 is a usage error" all 'rc 2' 'err_has "VLAN tag"' 'not_called_re "^pct create"'
 nx create --name opt-2 --ip 10.0.0.5/24,hwaddr=02:00:00:00:00:01 "$TPL"
@@ -236,14 +305,18 @@ nx state web-1
 check "state of created container: exit 0, stdout is pure JSON" all 'rc 0' 'json_ok "$S/out"'
 check "state of a container never started: id, status created, pid 0, ociVersion" \
   all '[ "$(json_get "$S/out" id)" = web-1 ]' '[ "$(json_get "$S/out" status)" = created ]' '[ "$(json_get "$S/out" pid)" = 0 ]' '[ "$(json_get "$S/out" ociVersion)" = 1.3.0 ]'
-nx state 100;  check "state by VMID works" all 'rc 0' '[ "$(json_get "$S/out" status)" = created ]'
-nx state nope; check "state of missing container -> exit 1, not found" all 'rc 1' 'err_has "not found"'
+# A VMID is not a name nexcage has a record of, so it reaches the Proxmox
+# backend only when asked to: an id nothing has a record of does not exist.
+nx --runtime lxc state 100;  check "state by VMID works, with --runtime lxc" all 'rc 0' '[ "$(json_get "$S/out" status)" = created ]'
+nx state 100;  check "a bare VMID without --runtime lxc does not exist, and nothing is asked" \
+  all 'rc 1' 'err_has "does not exist"' 'err_has "--runtime lxc"' 'not_called_re "^(pct|pvesh)"'
+nx state nope; check "state of missing container -> exit 1, does not exist" all 'rc 1' 'err_has "does not exist"'
 nx state;      check "state without name -> exit 2" rc 2
 echo "backup" > "$S/lock.100"
 nx state web-1; check "locked container still resolves by name" all 'rc 0' '[ "$(json_get "$S/out" id)" = web-1 ]'
 rm -f "$S/lock.100"
 echo "Permission denied" > "$S/fail_all"
-nx state web-1; check "state with the host failing -> exit 1, the tool's message logged" all 'rc 1' 'err_has "permission denied"' 'err_has "pct command failed"'
+nx state web-1; check "state with the host failing -> exit 1, the tool's message logged" all 'rc 1' 'err_has "permission denied"' 'err_has "/cluster/resources) failed"'
 rm -f "$S/fail_all"
 
 echo "=== list ==="
@@ -266,7 +339,7 @@ status_is web-1 running
 check "state reports running with the init's host PID from pct status --verbose" \
   all 'rc 0' '[ "$(json_get "$S/out" status)" = running ]' '[ "$(json_get "$S/out" pid)" = "$(init_pid 100)" ]' 'called "pct status 100 --verbose"'
 nx start web-1;  check "start an already running container -> exit 1" rc 1
-nx start nope;   check "start missing -> exit 1, not found" all 'rc 1' 'err_has "not found"'
+nx start nope;   check "start missing -> exit 1, does not exist" all 'rc 1' 'err_has "does not exist"'
 nx start;        check "start without name -> exit 2" rc 2
 nx start --name web-2; check "start --name <id> (form in 'start --help')" all 'rc 0' 'called "pct start 101"'
 
@@ -280,7 +353,48 @@ nx kill web-1 10;              check "kill <name> 10 (runc form, a number)" all 
 nx kill web-1 --signal USR2;   check "kill <name> --signal USR2"      all 'rc 0' 'got_signal 100 SIGUSR2'
 check "kill never runs pct exec" all '! grep -q "^pct exec" "$S/calls"'
 check "the init survives the signals it handles" status_is web-1 running
-nx kill web-1 'TERM;id';       check "kill: bad signal -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
+# The PID comes from `pct status`, another process, a moment before the
+# signal: the init can exit in between and its PID go to an unrelated process,
+# which kill(2) as root used to hit, reporting success. The signal goes through
+# a pidfd now, and only to a process in the container's cgroup. A stand-in for
+# the unrelated process records what it is sent.
+python3 "$(dirname "$0")/fake_init.py" "$S/sig.stranger" </dev/null >/dev/null 2>&1 &
+stranger=$!
+eventually 'grep -qx READY "$S/sig.stranger" 2>/dev/null'
+echo "$stranger" > "$S/reused_pid.100"
+nx kill web-1 TERM
+check "kill: a PID that is not the container's any more is not signalled; the container is not running" \
+  all 'rc 1' 'err_has "not running"' '! got_signal stranger SIGTERM'
+nx kill web-1 KILL; sleep 0.3
+check "kill KILL: the unrelated process holding the PID lives on" \
+  all 'rc 1' 'st=$(awk "{print \$3}" "/proc/$stranger/stat" 2>/dev/null); [ -n "$st" ] && [ "$st" != Z ]'
+rm -f "$S/reused_pid.100" "$S/sig.stranger"; kill -9 "$stranger" 2>/dev/null; wait "$stranger" 2>/dev/null
+nx kill web-1 CONT
+check "and the container's own init is signalled as before" all 'rc 0' 'got_signal 100 SIGCONT'
+# The tree under lxc/<vmid>/ns is the container's: its root makes cgroups
+# there, and one that cannot be read -- a threaded cgroup's cgroup.procs
+# fails with EOPNOTSUPP, one systemd removes mid-walk with ENODEV -- made kill
+# fail on a live container, so an engine's TERM-then-KILL never landed. Here
+# the cgroup's list is longer than kill reads. It has to be met before the
+# init's, and the walk goes in directory order, which is not the same on any
+# two filesystems: names that happened to come first on one did not on ext4's
+# hash order. So two cgroups sit side by side. The one `ls -f` lists first
+# cannot be read, the init moves into the other -- leaving ns/ itself with an
+# empty list, as cgroup v2 has it -- and the walk is through the first before
+# it reaches the second.
+cg_ns=$S/cgroup/lxc/100/ns
+mkdir "$cg_ns/a" "$cg_ns/b"
+unread=$(ls -f "$cg_ns" | grep -Ex '[ab]' | head -1)
+init_cg=a; [ "$unread" = a ] && init_cg=b
+truncate -s 17M "$cg_ns/$unread/cgroup.procs"
+mv "$cg_ns/cgroup.procs" "$cg_ns/$init_cg/cgroup.procs" && : > "$cg_ns/cgroup.procs"
+: > "$S/sig.100"
+nx kill web-1 USR1
+check "kill: a cgroup in the container that cannot be read is passed over; the init is signalled" \
+  all '[ "$(stat -c %s "$cg_ns/$unread/cgroup.procs")" -gt 16777216 ]' '[ ! -s "$cg_ns/cgroup.procs" ]' \
+      'grep -qx "$(init_pid 100)" "$cg_ns/$init_cg/cgroup.procs"' 'rc 0' 'got_signal 100 SIGUSR1'
+mv "$cg_ns/$init_cg/cgroup.procs" "$cg_ns/cgroup.procs" && rm -rf "${cg_ns:?}/a" "${cg_ns:?}/b"
+nx kill web-1 'TERM;id';      check "kill: bad signal -> exit 2, nothing sent" all 'rc 2' 'err_has "unknown signal"' 'not_called_re "^pct"'
 nx kill web-1 0;               check "kill: signal 0 -> exit 2"       all 'rc 2' 'not_called_re "^pct"'
 nx kill web-1 65;              check "kill: signal 65 -> exit 2"      all 'rc 2' 'not_called_re "^pct"'
 # Digits only: "1_5" read as 15 here and as 1 by libcrun's strtol on crun
@@ -294,10 +408,19 @@ check "kill KILL: the init dies and the container stops" all 'rc 0' "eventually 
 
 echo "=== exec ==="
 nx exec web-1 echo hello;      check "exec runs the command and its output reaches stdout" \
-                                 all 'rc 0' 'out_has hello' 'called "pct exec 100 -- echo hello"'
+                                 all 'rc 0' 'out_has hello' 'called "pct exec 100 --keep-env 0 -- echo hello"'
 nx exec web-1 sh -c 'exit 7';  check "exec exits with the status of the command, as runc does" rc 7
+# The command gets LXC's clean environment, not the caller's: pct exec keeps
+# the environment unless told not to, and handed every variable of the shell
+# or job that ran nexcage -- API tokens, cloud keys -- to a binary from the
+# image. Fake pct records what the command starts with.
+SIM_EXEC_SECRET=from-the-callers-shell nx exec web-1 -- sh -c 'echo "env:[${SIM_EXEC_SECRET-}] path:[$PATH]"'
+check "exec: the caller's environment does not reach the command in the container" \
+  all 'rc 0' 'out_has "env:[] path:[/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin]"' \
+      'called_re "^pct exec 100 --keep-env 0 -- "' '! grep -q SIM_EXEC_SECRET "$S/exec_env.100"' \
+      'grep -qx container=lxc "$S/exec_env.100"'
 nx exec web-1 -- echo dashed;  check "exec <name> -- <cmd>: the separator is not passed to pct" \
-                                 all 'rc 0' 'out_has dashed' 'called "pct exec 100 -- echo dashed"'
+                                 all 'rc 0' 'out_has dashed' 'called "pct exec 100 --keep-env 0 -- echo dashed"'
 nx exec web-1 -- sh -c 'echo x 1>&2; exit 3'
                                check "exec: stderr passes through and a non-zero status survives it" all 'rc 3' 'err_has x'
 nx exec nope echo hi;          check "exec on a missing container -> exit 1, nothing run" \
@@ -306,7 +429,8 @@ nx exec nope echo hi;          check "exec on a missing container -> exit 1, not
 # A container engine writes a flag either way, and the choice is not ours:
 # containerd sends `--root <dir>`, CRI-O sends `--root=<dir>`. CRI-O's first
 # call came back as `unknown command '--root=/run/nexcage-crio'`.
-nx --root=/tmp/sim-root-eq state web-1
+# web-1's record is under the default root, so --runtime lxc names its backend
+nx --root=/tmp/sim-root-eq --runtime lxc state web-1
 check "--flag=value is a flag, not a command name" all 'rc 0' 'out_has "\"id\": \"web-1\""'
 nx --version
 check "--version, which is how CRI-O asks" all 'rc 0' 'out_has "nexcage version"'
@@ -314,19 +438,19 @@ check "--version, which is how CRI-O asks" all 'rc 0' 'out_has "nexcage version"
 # inside the container, where FOO=bar is an argument and not a flag.
 nx exec web-1 -- env FOO=bar
 check "an = after -- survives untouched" \
-  all 'rc 0' 'called "pct exec 100 -- env FOO=bar"'
+  all 'rc 0' 'called "pct exec 100 --keep-env 0 -- env FOO=bar"'
 
 # Nor does nexcage read its own flags there: --config used to make it load
 # the command's argument as its configuration.
 nx exec web-1 -- echo --config /nonexistent --runtime bogus --profile nope --root /x
 check "nexcage's flags after -- belong to the command, not to nexcage" \
-  all 'rc 0' 'called "pct exec 100 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
+  all 'rc 0' 'called "pct exec 100 --keep-env 0 -- echo --config /nonexistent --runtime bogus --profile nope --root /x"'
 # Its logging flags neither: root created the file the command named and wrote
 # nexcage's own log into it.
 nx exec web-1 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug
 check "nexcage's logging flags after -- belong to the command too" \
   all 'rc 0' '[ ! -e "$S/run/exec-x.log" ]' '[ ! -e "$S/run/exec-y.log" ]' '! err_has "DEBUG"' \
-      'called "pct exec 100 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug"'
+      'called "pct exec 100 --keep-env 0 -- echo --log /run/exec-x.log --log-file /run/exec-y.log --debug"'
 # Nor without --, the form `exec --help` shows: the command starts at the word
 # after the container id, and every word of it is the command's, `=` and all.
 # Each of these failed the call, made root write its log into the file named,
@@ -337,16 +461,16 @@ mkdir -p "$S/etc/nexcage"
 nx exec web-1 echo --config /nonexistent --root rel --runtime bogus --profile nope --log /run/exec-z.log --debug --color=auto
 check "the command's words are its own without -- too" \
   all 'rc 0' '[ ! -e "$S/run/exec-z.log" ]' '! err_has "DEBUG"' \
-      'called "pct exec 100 -- echo --config /nonexistent --root rel --runtime bogus --profile nope --log /run/exec-z.log --debug --color=auto"'
+      'called "pct exec 100 --keep-env 0 -- echo --config /nonexistent --root rel --runtime bogus --profile nope --log /run/exec-z.log --debug --color=auto"'
 rm -r "${S:?}/etc"
 # nexcage's own options before the command are still nexcage's, in either
 # spelling
 nx exec web-1 --log /run/exec-own.log echo hi
 check "and nexcage's options before the command are still read" \
-  all 'rc 0' '[ -e "$S/run/exec-own.log" ]' 'called "pct exec 100 -- echo hi"'
+  all 'rc 0' '[ -e "$S/run/exec-own.log" ]' 'called "pct exec 100 --keep-env 0 -- echo hi"'
 nx exec web-1 --log=/run/exec-eq.log echo hi
 check "an option's value after = is the option's, not the command" \
-  all 'rc 0' '[ -e "$S/run/exec-eq.log" ]' 'called "pct exec 100 -- echo hi"'
+  all 'rc 0' '[ -e "$S/run/exec-eq.log" ]' 'called "pct exec 100 --keep-env 0 -- echo hi"'
 rm -f "$S/run/exec-own.log" "$S/run/exec-eq.log"
 # An option exec does not have, or one that takes no value, given a value
 # after =: what was meant cannot be told -- the `true` of --tty=true was run as
@@ -400,12 +524,13 @@ check "ps is refused on the LXC backend, where it would answer another question"
 # The log goes under /run, which is bind-mounted from $S: the sandbox mounts a
 # fresh tmpfs on /tmp, so a file written there disappears with the namespace and
 # the check cannot see it.
+# Under /run/x no backend has a record of web-1, which is the reason given.
 rm -f "$S/run/nexcage-ps.log"
 nx --root /run/x --log /run/nexcage-ps.log --log-format json ps --format json web-1
 check "the shape containerd sends is read as ps, not as a command name" \
-  all 'rc 1' '! err_has "unknown command"' 'grep -q "runtime crun" "$S/run/nexcage-ps.log"'
+  all 'rc 1' '! err_has "unknown command"' 'grep -q "does not exist" "$S/run/nexcage-ps.log"'
 check "and the reason is on stderr as well, where the engine reads it" \
-  all 'err_has "runtime crun"' '! err_has "\"level\""'
+  all 'err_has "does not exist"' '! err_has "\"level\""'
 nx --runtime crun ps --format yaml web-1
 check "ps --format takes json or table" all 'rc 2' 'err_has "json or table"'
 nx ps --help
@@ -434,6 +559,27 @@ nx state web-1;  check "state after delete -> exit 1" rc 1
 nx list;         check "list after delete has no row" all 'rc 0' '! listed web-1'
 nx start web-1;  check "start after delete -> exit 1" rc 1
 nx delete nope;  check "delete missing -> exit 1" rc 1
+# An id no backend has a record of does not exist, and delete --force of it
+# succeeds, as it does with crun and runc: an engine cleans up that way once a
+# reboot has emptied /run. Such an id used to go to the Proxmox backend, which
+# matched it against every CT in the cluster by name or VMID -- a second
+# delete --force of a crun container named like a VMID destroyed that CT.
+echo "905 stopped tenant-b-db" >> "$S/db"
+nx delete --force 905
+check "delete --force of an id nexcage has no record of exits 0 and touches no CT" \
+  all 'rc 0' 'not_called_re "^(pct|pvesh)"' 'grep -q "^905 stopped tenant-b-db$" "$S/db"'
+nx delete --force tenant-b-db
+check "nor does it touch a CT nexcage did not create, named by its hostname, and it says so" \
+  all 'rc 0' 'not_called_re "^(pct|pvesh)"' 'grep -q "^905 stopped tenant-b-db$" "$S/db"' 'err_has "--runtime lxc"'
+nx delete --force 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+check "an engine's id that libcrun no longer has: delete --force exits 0" \
+  all 'rc 0' 'not_called_re "^(pct|pvesh)"'
+nx delete 905
+check "delete of it without --force says it does not exist, as crun does" \
+  all 'rc 1' 'err_has "does not exist"' 'not_called_re "^(pct|pvesh)"'
+nx --runtime lxc delete --force tenant-b-db
+check "--runtime lxc reaches a CT nexcage did not create" \
+  all 'rc 0' 'called "pct destroy 905"' '! grep -q "tenant-b-db" "$S/db"'
 nx delete;       check "delete without name -> exit 2" rc 2
 
 echo "=== run ==="
@@ -443,7 +589,70 @@ check "run: create then start the same VMID" all 'rc 0' 'called_re "^pct create 
   "grep -q \"^pct start \$(awk '\$3==\"app-1\" {print \$1}' \$S/db)\$\" \"\$S/calls.last\""
 check "run: rootfs/bridge from config" called_re "bridge=vmbr50,ip=dhcp .*--rootfs local-lvm:2$"
 check "run: state reports running" status_is app-1 running
-nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start" all 'rc 1' 'not_called_re "^pct start"'
+nx run --name app-1 "$TPL"; check "run duplicate -> exit 1, no start, and the existing one is not destroyed" \
+  all 'rc 1' 'not_called_re "^pct start"' 'not_called_re "^pct destroy"' 'grep -q " app-1$" "$S/db"'
+# A start that fails takes the container run made with it, as `runc run` does;
+# it used to stay behind, created, and the next run of the name was refused.
+echo "startup for container failed" > "$S/fail_start"
+nx run --name app-f "$TPL"
+app_f=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails -> exit 1, and the container it made is destroyed" \
+  all 'rc 1' '[ -n "$app_f" ]' 'called "pct start $app_f"' 'called "pct destroy $app_f"' \
+      '! grep -q " app-f$" "$S/db"' '[ ! -e "$S/run/nexcage/app-f" ]'
+rm -f "$S/fail_start"
+nx run --name app-f "$TPL"; check "and a run of the same name then succeeds" all 'rc 0' 'status_is app-f running'
+# The undo goes by the VMID run made, not by the name again. Another caller's
+# container of the same name, made while pct create ran and listed first, used
+# to be the one run started -- "already running" -- then stopped and
+# destroyed, while run's own stayed behind. hold_create keeps pct create's
+# work waiting while that one appears, started as pct starts one and in a
+# namespace as nexcage's, so that its cgroup lands in $S/cgroup. Its calls are
+# not run's, and are left out of calls.last.
+pct_ns() { unshare -rm bash -c 'mount --bind "$SIM/cgroup" /sys/fs/cgroup && exec "$BIN/pct" "$@"' pct "$@" > /dev/null 2>&1; }
+echo 0 > "$S/slow_create"; touch "$S/hold_create"
+before=$(wc -l < "$S/calls")
+nexcage_ns run --name dup "$TPL" > "$S/out" 2> "$S/err" &
+bg=$!
+for _ in $(seq 1 100); do [ -s "$S/create_caller" ] && break; sleep 0.1; done
+mid=$(wc -l < "$S/calls")
+echo "90 stopped dup" >> "$S/db"
+pct_ns start 90
+echo "startup for container failed" > "$S/fail_start"
+held=$(wc -l < "$S/calls")
+rm -f "$S/hold_create"
+RC=0; wait "$bg" || RC=$?
+{ sed -n "$((before + 1)),${mid}p" "$S/calls"; tail -n +"$((held + 1))" "$S/calls"; } > "$S/calls.last"
+LAST="nexcage run --name dup $TPL, while another dup is made and started"
+dup=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails destroys the VMID it made, not a container of the same name made meanwhile" \
+  all 'rc 1' '[ -n "$dup" ]' '[ "$dup" != 90 ]' 'called "pct start $dup"' 'called "pct destroy $dup"' \
+      '! grep -q "^$dup " "$S/db"' '[ ! -e "$S/run/nexcage/dup" ]' \
+      'not_called_re "^pct [a-z]+ 90( |$)"' 'grep -qx "90 running dup" "$S/db"' 'kill -0 "$(init_pid 90)"'
+rm -f "$S/fail_start" "$S/slow_create" "$S/create_caller" "$S/create_worker"
+pct_ns shutdown 90; pct_ns destroy 90
+# A start can also fail once the init is up, and pct destroy refuses a
+# running container: run stops it first, by the VMID it made.
+echo "startup for container failed" > "$S/fail_after_start"
+nx run --name app-g "$TPL"
+app_g=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails with the init up stops, then destroys, the container it made" \
+  all 'rc 1' '[ -n "$app_g" ]' 'called "pct start $app_g"' 'called_re "^pct shutdown $app_g "' 'called "pct destroy $app_g"' \
+      '! grep -q "^$app_g " "$S/db"' '[ ! -e "$S/run/nexcage/app-g" ]' '! kill -0 "$(init_pid "$app_g")" 2>/dev/null'
+# The undo checks that the VMID is still the container run made, as stop and
+# delete check one they found: while pct start ran, the CT can have been
+# destroyed through its record and its VMID taken by the next container made,
+# which is neither stopped nor destroyed in its place.
+cat > "$S/meanwhile.start" <<'SH'
+# app-h is destroyed elsewhere and other-h takes its VMID
+awk '$3=="app-h" {$3="other-h"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx run --name app-h "$TPL"
+app_h=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "run whose start fails leaves alone a VMID that changed hands during the start" \
+  all 'rc 1' '[ -n "$app_h" ]' 'called "pct start $app_h"' 'err_has "no longer"' 'not_called_re "^pct (shutdown|destroy) "' \
+      'grep -qx "$app_h running other-h" "$S/db"' 'kill -0 "$(init_pid "$app_h")"'
+rm -f "$S/fail_after_start" "$S/meanwhile.start"
+pct_ns shutdown "$app_h"; pct_ns destroy "$app_h"; rm -rf "${S:?}/run/nexcage/app-h"
 nx run --name app-2;        check "run without image -> exit 2" rc 2
 # run used to accept these and drop them: --node made the container on this
 # host, and a caller passing --console-socket waited for a pty that never came.
@@ -596,6 +805,8 @@ check "health names the file read, and the spec passed over" \
 rm -r "${S:?}/etc"
 
 echo "=== create from an OCI bundle ==="
+# A bundle's rootfs is packed into a private directory under $TMPDIR, which
+# lib.sh points at $S/vartmp rather than the host's /var/tmp.
 mkdir -p "$S/bundles/b1/rootfs/bin" "$S/bundles/nocfg/rootfs"
 printf '#!/bin/sh\n' > "$S/bundles/b1/rootfs/bin/busybox"; chmod 755 "$S/bundles/b1/rootfs/bin/busybox"
 ln -s busybox "$S/bundles/b1/rootfs/bin/sh"
@@ -611,18 +822,297 @@ check "a bundle outside nexcage's own directories is accepted and then fails on 
   all 'rc 2' '! err_has "must be an absolute path"' 'not_called_re "^pct create"'
 nx create --name bundle-x /tmp/nexcage-bundles/nocfg
 check "bundle without config.json -> exit 2, no crash" all 'rc 2' 'err_has "config.json"' 'not_called_re "^pct create"'
+# A mount that is not an object left the parser's slot undefined, and freeing
+# it crashed nexcage (root) after pct create had already run.
+mkdir -p "$S/bundles/badmp/rootfs"
+printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":[1,"/srv:/data"]}' > "$S/bundles/badmp/config.json"
+nx create --name bundle-bad /tmp/nexcage-bundles/badmp
+check "bundle whose mounts hold a non-object -> exit 2 before pct create, no crash" \
+  all 'rc 2' 'err_has "not a usable OCI bundle"' '! err_has "General protection"' 'not_called_re "^pct create"'
+# A "mounts" that is not a list was skipped with what it held, and the
+# container created without the mounts the bundle asked for.
+mkdir -p "$S/bundles/objmp/rootfs"
+printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":{"destination":"/data","type":"bind","source":"/srv/data"}}' > "$S/bundles/objmp/config.json"
+nx create --name bundle-objmp /tmp/nexcage-bundles/objmp
+check "bundle whose mounts is an object, not a list -> exit 2 before anything is packed" \
+  all 'rc 2' 'err_has "not a usable OCI bundle"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+rm -f "$S"/tplmode.*
 nx create --name bundle-1 /tmp/nexcage-bundles/b1
-check "bundle: rootfs packed on storage local, pct create uses that volume" \
-  all 'rc 0' 'called_re "^pvesm path local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst$"' \
-      'called_re "^pct create [0-9]+ local:vztmpl/nexcage-bundle-1-[0-9]+\.tar\.zst --hostname bundle-1 "' \
-      '! err_has "No mp entries"'
+# The archive was written to storage local as nexcage-<name>-<time>.tar.zst
+# with tar's umask, 0644: every local user could read the image's 0600 files
+# while pct create ran, and for good if nexcage was interrupted, and it was a
+# template other Proxmox users could use. pct create takes a file from root.
+check "bundle: rootfs packed in a private directory, not the template store; pct create reads that file" \
+  all 'rc 0' 'not_called_re "^pvesm path"' \
+      'called_re "^pct create [0-9]+ /[^ ]+/vartmp/nexcage-bundle-bundle-1-[0-9a-f]{16}/rootfs\.tar\.zst --hostname bundle-1 "' \
+      '! err_has "No mp entries"' '! err_has "not applied on the Proxmox LXC backend"'
+check "bundle: the archive is 0600, in a 0700 directory, while pct create reads it" all '[ "$(cat "$S"/tplmode.*)" = "600 700" ]'
 check "bundle: archive keeps the executable bit and symlinks" \
   all 'grep -qE "^-rwxr-xr-x .* \./bin/busybox$" "$S"/tarlist.*' 'grep -qE "^lrwxrwxrwx .* \./bin/sh -> busybox$" "$S"/tarlist.*'
-check "bundle: archive removed after pct create" all '[ -z "$(ls -A "$S/cache")" ]'
-check "bundle: user namespace -> pct set --features nesting=1,keyctl=1" called_re "^pct set [0-9]+ --features nesting=1,keyctl=1$"
+check "bundle: archive and its directory removed after pct create" all '[ -z "$(ls -A "$S/vartmp")" ]' '[ -z "$(ls -A "$S/cache")" ]'
+# A user namespace in the bundle turned on nesting=1,keyctl=1, and any other
+# namespace list keyctl=1: Proxmox's AppArmor profile loosened and its keyctl
+# filter lifted because a bundle asked for its own namespaces.
+check "bundle: a user namespace turns on no Proxmox features" not_called_re "--features"
+echo "unable to create CT - no space left" > "$S/fail_create"
+nx create --name bundle-f /tmp/nexcage-bundles/b1
+rm -f "$S/fail_create"
+check "bundle: a failed pct create removes the archive too" all '! rc 0' 'called_re "^pct create "' '[ -z "$(ls -A "$S/vartmp")" ]' '[ -z "$(ls -A "$S/cache")" ]'
+# So does a failed pack -- zstd out of space under tar, say -- which ends
+# create before a VMID is taken.
+: > "$S/fail_zstd"
+nx create --name bundle-z /tmp/nexcage-bundles/b1
+rm -f "$S/fail_zstd"
+check "bundle: packing that fails removes the archive and its directory, before pct create" \
+  all '! rc 0' 'err_has "Packing /tmp/nexcage-bundles/b1/rootfs failed"' 'not_called_re "nextid|^pct create"' '[ -z "$(ls -A "$S/vartmp")" ]'
+# Root writes the archive by path, so the directory it is made in must be one
+# where no one else can swap a symlink in: not writable by others unless
+# sticky, as /var/tmp is.
+mkdir -p "$S/opentmp"; chmod 777 "$S/opentmp"
+TMPDIR="$S/opentmp" nx create --name bundle-open /tmp/nexcage-bundles/b1
+check "bundle: a TMPDIR anyone can write to, not sticky -> refused before packing" \
+  all '! rc 0' 'err_has "not a safe place"' '! err_has "Packing"' 'not_called_re "^pct create"' '[ -z "$(ls -A "$S/opentmp")" ]'
+chmod 1777 "$S/opentmp"
+TMPDIR="$S/opentmp" nx create --name bundle-sticky /tmp/nexcage-bundles/b1
+check "bundle: a sticky TMPDIR, as /var/tmp is -> used, and left empty" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/opentmp/nexcage-bundle-bundle-sticky-"' '[ -z "$(ls -A "$S/opentmp")" ]'
+rm -rf "$S/opentmp"
+# Nor one another user owns, as a TMPDIR kept through pam_tmpdir or `sudo -E`
+# can be: its owner could rename the private directory and put another
+# archive where pct create reads as root. Only its owner is wrong here:
+# neither its group nor others can write to it. The namespace maps only the
+# uid the suite runs as, so for a user the host's /usr belongs to the
+# overflow uid. For root -- act runs the suite as root -- /usr is its own,
+# and a directory given to nobody stands in.
+othertmp=/usr
+if [ "$(id -u)" = 0 ]; then othertmp=$S/othertmp; mkdir -p -m 755 "$othertmp"; chown 65534:65534 "$othertmp"; fi
+TMPDIR=$othertmp nx create --name bundle-owner /tmp/nexcage-bundles/b1
+check "bundle: a TMPDIR another user owns -> refused before packing" \
+  all '! rc 0' 'err_has "not a safe place"' '! err_has "Packing"' 'not_called_re "^pct create"'
+rm -rf "$S/othertmp"
+# A symlinked TMPDIR is resolved once, and the directory it leads to is the
+# one checked and used: checked through the link, it could be pointed
+# elsewhere before nexcage made its directory there.
+ln -sfn vartmp "$S/linktmp"
+TMPDIR="$S/linktmp" nx create --name bundle-link /tmp/nexcage-bundles/b1
+check "bundle: a symlinked TMPDIR -> the directory it resolves to is checked and used" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/vartmp/nexcage-bundle-bundle-link-[0-9a-f]{16}/rootfs\.tar\.zst "' 'not_called_re "linktmp"' \
+      '[ -z "$(ls -A "$S/vartmp")" ]'
+rm -f "$S/linktmp"
+# pct create takes a template path of at most 255 characters (ostemplate's
+# maxLength in pve-container) and refused a longer one, after the rootfs had
+# been packed. The archive's path is its directory, the name and 48 more.
+name_of_len() {  # a hostname of exactly $1 characters, in labels of at most 63
+  python3 -c 'import sys; s = ("a" * 62 + ".") * 5; s = s[:int(sys.argv[1])]; print(s[:-1] + "b" if s.endswith(".") else s)' "$1"
+}
+archive_base=$S/vartmp; fit=$((255 - ${#archive_base} - 48))
+nx create --name "$(name_of_len "$((fit + 1))")" /tmp/nexcage-bundles/b1
+check "bundle: a name that makes the archive's path longer than pct create takes -> refused before packing" \
+  all 'rc 2' 'err_has "pct create takes a template path of at most 255"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"' \
+      '[ -z "$(ls -A "$S/vartmp")" ]'
+nx create --name "$(name_of_len "$fit")" /tmp/nexcage-bundles/b1
+check "bundle: a name that makes the archive's path 255 characters -> used" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]{254} --hostname "' '[ -z "$(ls -A "$S/vartmp")" ]'
+# A signal ends nexcage without running its defers. SIGTERM goes to nexcage
+# itself -- the fake pct's parent -- while pct create stands still.
+echo 30 > "$S/fail_hang"; rm -f "$S/fail_hang.pid"
+nexcage_ns create --name bundle-sig /tmp/nexcage-bundles/b1 > "$S/out" 2> "$S/err" & bg=$!
+nexcage_pid=""; pct_pid=""
+if eventually '[ -s "$S/fail_hang.pid" ]'; then read -r nexcage_pid pct_pid < "$S/fail_hang.pid"; fi
+[ -n "$nexcage_pid" ] && kill -TERM "$nexcage_pid"
+RC=0; wait "$bg" || RC=$?
+[ -n "$pct_pid" ] && kill "$pct_pid" 2>/dev/null
+rm -f "$S/fail_hang" "$S/fail_hang.pid"; LAST="nexcage create --name bundle-sig (SIGTERM during pct create)"
+check "bundle: SIGTERM during pct create removes the archive, and nexcage still dies of it" \
+  all 'rc 143' '[ -z "$(ls -A "$S/vartmp")" ]'
+mkdir -p "$S/bundles/ns-pid"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/ns-pid/"
+printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"linux":{"namespaces":[{"type":"pid"},{"type":"mount"}]}}' > "$S/bundles/ns-pid/config.json"
+nx create --name ns-pid /tmp/nexcage-bundles/ns-pid
+check "bundle: namespaces without a user one turn on no keyctl either" all 'rc 0' 'not_called_re "--features"'
+# Proxmox confines every container its own way, and pct cannot take a
+# bundle's seccomp, capabilities and the rest. They were dropped without a
+# word; the container is still created (runc spec puts some in every bundle),
+# with one warning that names them.
+mkdir -p "$S/bundles/conf-sec"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/conf-sec/"
+cat > "$S/bundles/conf-sec/config.json" <<'JSON'
+{"ociVersion":"1.0.2","root":{"path":"rootfs","readonly":true},
+ "process":{"args":["/bin/sh"],"capabilities":{"bounding":["CAP_KILL"]},"noNewPrivileges":true},
+ "linux":{"seccomp":{"defaultAction":"SCMP_ACT_ERRNO"},"maskedPaths":["/proc/kcore"],"readonlyPaths":["/proc/sys"],
+          "devices":[{"path":"/dev/fuse","type":"c","major":10,"minor":229}]}}
+JSON
+nx create --name conf-sec /tmp/nexcage-bundles/conf-sec
+check "bundle confinement the backend cannot apply: created, with one warning naming each field" \
+  all 'rc 0' 'called_re "^pct create "' '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
+      'err_has "process.capabilities, process.noNewPrivileges, root.readonly, linux.seccomp, linux.maskedPaths, linux.readonlyPaths, linux.devices in"' \
+      'err_has "--runtime crun"'
+# With --log the log is a file, and only errors were echoed to stderr: the
+# warning reached the file alone, and whoever ran create never saw it.
+nx --log "$S/run/conf-sec.log" create --name conf-sec-log /tmp/nexcage-bundles/conf-sec
+check "bundle confinement warning with --log: in that file once, and on stderr once" \
+  all 'rc 0' '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/run/conf-sec.log")" = 1 ]' \
+      '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
+      'grep -qE "^nexcage: warning: process\.capabilities, .* --runtime crun applies a bundle.s own$" "$S/err"'
+# That stderr line is written beside the logger, and it carries the bundle's
+# path, which is the caller's text: it is escaped as an echoed error is, so a
+# newline in the path cannot add a line of nexcage's own.
+inj=$'conf-inj\nnexcage: forged'
+mkdir -p "$S/bundles/$inj"; cp -a "$S/bundles/conf-sec/rootfs" "$S/bundles/conf-sec/config.json" "$S/bundles/$inj/"
+nx --log "$S/run/conf-inj.log" create --name conf-inj "/tmp/nexcage-bundles/$inj"
+check "bundle confinement warning on stderr: a newline in the bundle's path is written escaped, adding no line" \
+  all 'rc 0' '! grep -q "^nexcage: forged" "$S/err"' \
+      'grep -qF "nexcage: warning: process.capabilities, process.noNewPrivileges, root.readonly, linux.seccomp, linux.maskedPaths, linux.readonlyPaths, linux.devices in /tmp/nexcage-bundles/conf-inj\\nnexcage: forged/config.json: not applied" "$S/err"'
+rm -rf "${S:?}/bundles/$inj"
+nx --log "$S/run/conf-sec-quiet.log" --log-level error create --name conf-sec-quiet /tmp/nexcage-bundles/conf-sec
+check "bundle confinement warning with --log-level error: not written" all 'rc 0' '! err_has "not applied"' '! grep -qs "not applied" "$S/run/conf-sec-quiet.log"'
+# The kernel filesystems at /proc, /sys and /dev are LXC's and the init's to
+# mount, so a bundle's options for them are not applied either: its noexec
+# on /dev/shm was dropped at debug level. A bind mount's options are applied.
+mkdir -p "$S/bundles/conf-mnt"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/conf-mnt/"
+cat > "$S/bundles/conf-mnt/config.json" <<'JSON'
+{"ociVersion":"1.0.2","root":{"path":"rootfs"},
+ "mounts":[{"destination":"/proc","type":"proc","source":"proc"},
+           {"destination":"/dev/shm","type":"tmpfs","source":"shm","options":["nosuid","noexec","nodev","mode=1777"]},
+           {"destination":"/data","type":"bind","source":"/srv/data","options":["ro"]}]}
+JSON
+nx create --name conf-mnt /tmp/nexcage-bundles/conf-mnt
+check "bundle mount options LXC's own /dev/shm replaces: created, and named in the one warning" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data,ro=1$"' \
+      '[ "$(grep -c "not applied on the Proxmox LXC backend" "$S/err")" = 1 ]' \
+      'err_has "nexcage: mounts[1] (/dev/shm) options in /tmp/nexcage-bundles/conf-mnt/config.json: not applied"' \
+      '! err_has "mounts[0]"' '! err_has "mounts[2]"'
 nx create --name bundle-mp --mp 'local-lvm:1,mp=/data' /tmp/nexcage-bundles/b1
 check "--mp with a bundle is refused: the bundle's mounts take the mp entries" \
   all 'rc 2' 'err_has "--mp with an OCI bundle"' 'not_called_re "^pct create"'
+# The bundle's mounts become mp entries through `pct set`, which checks them as
+# Proxmox's API does. They were appended to /etc/pve/lxc/<vmid>.conf as raw
+# lines, so a newline in a destination added any config line the bundle liked,
+# and a comma added mp properties. The kernel filesystems a runtime-spec
+# bundle mounts at their usual places are the container's own and left out.
+mp_bundle() {  # <name> <the mounts array>
+  mkdir -p "$S/bundles/$1"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/$1/"
+  printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"mounts":%s}' "$2" > "$S/bundles/$1/config.json"
+}
+mp_bundle mp-ok '[{"destination":"/proc","type":"proc","source":"proc"},{"destination":"/dev","type":"tmpfs","source":"tmpfs","options":["nosuid","mode=755"]},
+  {"destination":"/data","type":"bind","source":"/srv/data"}]'
+nx create --name mp-ok /tmp/nexcage-bundles/mp-ok
+check "bundle bind mount -> pct set --mp0 after the create; proc and /dev are the container's own" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data$"' 'not_called_re "--mp1|mp=/proc|mp=/dev"' \
+      'grep -qx "mp0: /srv/data,mp=/data" "$S"/conf.*'
+# Options were dropped, so a mount asked to be read-only and nosuid came out
+# writable and setuid. "rbind" among the options makes a bind mount whatever
+# the type; private propagation is what LXC gives a container's mounts.
+mp_bundle mp-ro '[{"destination":"/ro","type":"bind","source":"/srv/ro","options":["rbind","ro","nosuid","nodev","noexec"]}]'
+nx create --name mp-ro /tmp/nexcage-bundles/mp-ro
+check "bundle mount options ro, nosuid, nodev, noexec reach the mount point, as pct takes them" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/ro,mp=/ro,ro=1,mountoptions=nosuid;nodev;noexec$"' \
+      'grep -qx "mp0: /srv/ro,mp=/ro,ro=1,mountoptions=nosuid;nodev;noexec" "$S"/conf.*'
+mp_bundle mp-rbind '[{"destination":"/rw","type":"none","source":"/srv/rw","options":["rbind","rprivate"]}]'
+nx create --name mp-rbind /tmp/nexcage-bundles/mp-rbind
+check "bundle mount with rbind among its options is a bind mount" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/rw,mp=/rw$"'
+# A create can fail after pct create has made the CT: a bundle's bind mounts
+# are a `pct set` of their own ($SIM/fail_set). The CT stayed behind, with
+# perhaps half its mount points, and a retry under the same name was refused
+# with "already exists". create now destroys it, with nexcage's record of it
+# and the packed rootfs, before it exits 1. The refusal is pct's own for a
+# bind mount asked for by someone other than root@pam, and not a lock, which
+# would refuse the undo's pct destroy as well.
+mp_bundle rb-1 '[{"destination":"/data","type":"bind","source":"/srv/data"}]'
+echo "Permission check failed (mount point type bind is only allowed for root@pam)" > "$S/fail_set"
+nx create --name rb-1 /tmp/nexcage-bundles/rb-1
+rb_vmid=$(sed -n 's/^pct create \([0-9]*\) .*/\1/p' "$S/calls.last")
+check "a failure after pct create destroys the container it made, its record and the packed rootfs" \
+  all 'rc 1' '[ -n "$rb_vmid" ]' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data$"' 'called "pct destroy $rb_vmid"' \
+      '! grep -q " rb-1$" "$S/db"' '[ ! -e "$S/run/nexcage/rb-1" ]' '[ -z "$(ls -A "$S/vartmp")" ]'
+rm -f "$S/fail_set"
+nx create --name rb-1 /tmp/nexcage-bundles/rb-1
+check "and the same name can be created again" all 'rc 0' 'grep -q " rb-1$" "$S/db"'
+# A lock pct set cannot take refuses the undo's pct destroy too
+# ($SIM/fail_destroy). Then nexcage's record of the CT, written as soon as
+# pct create made it, is kept: an engine cleans up a failed create with
+# delete --force, and with the record written last, or removed with the
+# CT still there, delete --force said there was nothing to delete and the
+# engine's next create of the name was refused.
+mp_bundle half-1 '[{"destination":"/data","type":"bind","source":"/srv/data"}]'
+echo "can't lock file '/run/lock/lxc/pve-config-0.lock' - got timeout" > "$S/fail_set"
+cp "$S/fail_set" "$S/fail_destroy"
+nx create --name half-1 /tmp/nexcage-bundles/half-1
+check "a create whose undo cannot destroy the CT exits 1, keeps its record and says how to remove it" \
+  all 'rc 1' 'called_re "^pct create [0-9]+ .*--hostname half-1 "' 'called_re "^pct set [0-9]+ --mp0 /srv/data,mp=/data$"' \
+      'called_re "^pct destroy [0-9]+$"' 'grep -q " half-1$" "$S/db"' '[ -e "$S/run/nexcage/half-1/state.json" ]' \
+      'err_has "delete --force half-1"' '[ -z "$(ls -A "$S/vartmp")" ]'
+rm -f "$S/fail_set" "$S/fail_destroy"
+half=$(awk '$3=="half-1" {print $1}' "$S/db")
+nx delete --force half-1
+check "and delete --force, as an engine cleans up, destroys that CT" \
+  all 'rc 0' "called 'pct destroy ${half:-none}'" '! grep -q " half-1$" "$S/db"' '[ ! -e "$S/run/nexcage/half-1" ]'
+nx create --name half-1 /tmp/nexcage-bundles/half-1
+check "so the name can be created again" all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname half-1 "'
+# The refusal quotes a path with Zig's escapes, \n or \xc2, and stderr writes
+# each backslash in a message as \\: the reasons below are as stderr has them.
+for bad in 'mp-nl|{"destination":"/x\nlxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\\nlxc.apparmor.profile: unconfined" contains a control character' \
+           'mp-nel|{"destination":"/x\u0085lxc.apparmor.profile: unconfined","type":"bind","source":"/srv/a"}|destination "/x\\xc2\\x85lxc.apparmor.profile: unconfined" contains a control character' \
+           'mp-lsep|{"destination":"/x","type":"bind","source":"/srv/a\u2028b"}|source "/srv/a\\xe2\\x80\\xa8b" contains a line or paragraph separator' \
+           'mp-comma|{"destination":"/x","type":"bind","source":"/srv/a,"}|source "/srv/a," contains '"','"' or '"'='"'' \
+           'mp-equals|{"destination":"/x=y","type":"bind","source":"/srv/a"}|destination "/x=y" contains '"','"' or '"'='"'' \
+           'mp-rel|{"destination":"/x","type":"bind","source":"srv/a"}|source "srv/a" is not an absolute path' \
+           'mp-dots|{"destination":"/data/../etc","type":"bind","source":"/srv/a"}|is not a normalised path' \
+           'mp-root|{"destination":"/","type":"bind","source":"/srv/a"}|cover the container'"'"'s root' \
+           'mp-dev|{"destination":"/disk","type":"bind","source":"/dev/sda1"}|as a device'"'"'s filesystem' \
+           'mp-tmpfs|{"destination":"/data","type":"tmpfs","source":"tmpfs"}|can only bind-mount a host directory' \
+           'mp-nodest|{"type":"bind","source":"/srv/a"}|has no destination' \
+           'mp-shared|{"destination":"/x","type":"bind","source":"/srv/a","options":["rbind","rshared"]}|asks for "rshared", which a Proxmox bind mount cannot do'; do
+  IFS='|' read -r name mount why <<< "$bad"
+  mp_bundle "$name" "[$mount]"
+  nx create --name "$name" "/tmp/nexcage-bundles/$name"
+  check "bundle mount refused before anything is packed: $why" \
+    all 'rc 2' 'err_has "$why"' '! err_has "Packing"' 'not_called_re "nextid|^pct (create|set)"'
+done
+# A container has mount points mp0 to mp255. A 257th bind mount passed
+# nexcage and failed in `pct set`, after the container had been created.
+many_mounts() { python3 -c 'import json,sys; print(json.dumps([{"destination":"/m%d" % i,"type":"bind","source":"/srv/m%d" % i} for i in range(int(sys.argv[1]))]))' "$1"; }
+mp_bundle mp-256 "$(many_mounts 256)"
+nx create --name mp-256 /tmp/nexcage-bundles/mp-256
+check "bundle with 256 bind mounts -> mp0 to mp255 in one pct set" \
+  all 'rc 0' 'called_re "^pct set [0-9]+ --mp0 /srv/m0,mp=/m0 .* --mp255 /srv/m255,mp=/m255$"' 'grep -qx "mp255: /srv/m255,mp=/m255" "$S"/conf.*'
+mp_bundle mp-257 "$(many_mounts 257)"
+nx create --name mp-257 /tmp/nexcage-bundles/mp-257
+check "bundle with 257 bind mounts, more than a container has mount points -> refused before anything is packed" \
+  all 'rc 2' 'err_has "the bundle has 257 bind mounts"' '! err_has "Packing"' 'not_called_re "nextid|^pct (create|set)"'
+# The bundle's linux.resources. memory.limit -1 is the runtime-spec's "no
+# limit", and Proxmox has none, so --memory is left out and pct's default
+# applies. Both values used to be cast unchecked: -1, or shares worth more
+# cores than a u32, aborted nexcage with a panic.
+res_bundle() {  # <name> <the resources object>
+  mkdir -p "$S/bundles/$1"; cp -a "$S/bundles/b1/rootfs" "$S/bundles/$1/"
+  printf '{"ociVersion":"1.0.2","root":{"path":"rootfs"},"linux":{"resources":%s}}' "$2" > "$S/bundles/$1/config.json"
+}
+res_bundle res-unl '{"memory":{"limit":-1}}'
+nx create --name res-unl /tmp/nexcage-bundles/res-unl
+check "bundle memory.limit -1 (no limit) -> created without --memory, so pct's default" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-unl --cores 1 "'
+res_bundle res-neg '{"memory":{"limit":-5}}'
+nx create --name res-neg /tmp/nexcage-bundles/res-neg
+check "bundle memory.limit -5 -> exit 2 naming it, before anything is packed or a VMID taken" \
+  all 'rc 2' 'err_has "memory.limit -5"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+# Proxmox gives a container 16 MiB at least: a smaller limit became
+# --memory 0 and was refused by pct create, after the rootfs was packed.
+res_bundle res-small '{"memory":{"limit":1048576}}'
+nx create --name res-small /tmp/nexcage-bundles/res-small
+check "bundle memory.limit 1 MiB, below Proxmox's 16 -> exit 2 naming it, before anything is packed" \
+  all 'rc 2' 'err_has "memory.limit 1048576"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+res_bundle res-min '{"memory":{"limit":16777216}}'
+nx create --name res-min /tmp/nexcage-bundles/res-min
+check "bundle memory.limit 16 MiB, Proxmox's minimum -> --memory 16" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-min --memory 16 "'
+res_bundle res-cpu '{"cpu":{"shares":5000000000000}}'
+nx create --name res-cpu /tmp/nexcage-bundles/res-cpu
+check "bundle cpu.shares past the kernel's maximum -> exit 2 naming it, before anything is packed" \
+  all 'rc 2' 'err_has "cpu.shares 5000000000000"' '! err_has "Packing"' 'not_called_re "nextid|^pct create"'
+res_bundle res-max '{"cpu":{"shares":262144}}'
+nx create --name res-max /tmp/nexcage-bundles/res-max
+check "bundle cpu.shares 262144, the kernel's maximum -> --cores 256" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname res-max --memory 512 --cores 256 "'
 nx --runtime crun create --memory 1G --bundle /tmp/nexcage-bundles/b1 crun-opt
 check "create's Proxmox options on the crun backend: refused, naming the bundle's config.json" \
   all 'rc 1' 'err_has "is for the Proxmox LXC backend"' 'err_has "config.json"'
@@ -632,12 +1122,30 @@ echo "=== runtime-spec command line ==="
 # --bundle, its own state directory behind --root.
 nx create spec-1 --bundle /tmp/nexcage-bundles/b1
 check "create <id> --bundle <dir>: the positional word is the id, not the image" \
-  all 'rc 0' 'called_re "^pct create [0-9]+ local:vztmpl/nexcage-spec-1-[0-9]+\.tar\.zst --hostname spec-1 "'
+  all 'rc 0' 'called_re "^pct create [0-9]+ /[^ ]+/nexcage-bundle-spec-1-[0-9a-f]{16}/rootfs\.tar\.zst --hostname spec-1 "'
 nx state spec-1
 check "state reports the bundle the container was created from" \
   all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'
 nx start spec-1; nx state spec-1
 check "start keeps the bundle in state" all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]'
+# state.json is replaced, never rewritten in place: a write that fails part
+# way -- /run full, an I/O error -- leaves the record as it was. It used to be
+# truncated first, so one failed start lost the bundle path for good, and a
+# `state` reading in between found an empty file. A file size limit of 0 on
+# nexcage alone stands in for the full /run; the fake tools lift it again.
+W=$S/wrapbin; rm -rf "$W"; mkdir -p "$W"
+for t in "$BIN"/*; do
+  printf '#!/bin/bash\nulimit -S -f unlimited\nexec %q "$@"\n' "$t" > "$W/${t##*/}"; chmod +x "$W/${t##*/}"
+done
+printf '#!/bin/bash\ntrap "" XFSZ\nulimit -S -f 0\nexec %q "$@"\n' "$NEXCAGE" > "$W/nexcage"; chmod +x "$W/nexcage"
+nx create spec-w --bundle /tmp/nexcage-bundles/b1
+NEXCAGE=$W/nexcage BIN=$W nx start spec-w
+check "start with /run full: pct start runs, and start does not fail on the bookkeeping" all 'rc 0' 'called_re "^pct start [0-9]+$"'
+nx state spec-w
+check "a state write that fails keeps the record it was to replace: the bundle survives" \
+  all 'rc 0' '[ "$(json_get "$S/out" bundle)" = /tmp/nexcage-bundles/b1 ]' \
+      '[ "$(ls -A "$S/run/nexcage/spec-w" | tr "\n" " ")" = "runtime-metadata.json state.json " ]'
+rm -rf "$W"
 nx create tpl-1 --bundle /tmp/nexcage-bundles/b1 >/dev/null 2>&1 || true
 nx create --name from-tpl "$TPL"; nx state from-tpl
 check "a container created from a template reports bundle null" \
@@ -647,7 +1155,32 @@ nx --root /run/alt list
 check "--root before the command is not read as the command" all 'rc 0' '! err_has "unknown command"'
 nx create --root /run/alt --name rooted-1 "$TPL"
 check "--root: state goes under the given directory, not /run/nexcage" \
-  all 'rc 0' '[ -f "$S/run/alt/rooted-1/state.json" ]' '[ ! -e "$S/run/nexcage/rooted-1" ]'
+  all 'rc 0' '[ -f "$S/run/alt/.proxmox-lxc/rooted-1/state.json" ]' '[ ! -e "$S/run/nexcage/rooted-1" ]'
+# libcrun keeps its containers in --root itself, one directory per id. The
+# Proxmox backend's state.json used to go there too, and in a build with crun
+# every later command took the container for libcrun's: delete removed the
+# directory, said it had succeeded, and left the CT in Proxmox.
+check "--root: the Proxmox backend's state is not where libcrun keeps its containers" \
+  all '[ ! -e "$S/run/alt/rooted-1" ]'
+# --root is normalised before it is compared with the default: /run/nexcage/
+# is the default root, where from-tpl has its record, and not a caller's root
+# with the records under .proxmox-lxc.
+nx --root /run/nexcage/ start from-tpl
+check "--root naming the default with a trailing slash is the default" all 'rc 0' 'called_re "^pct start [0-9]+$"'
+nx stop from-tpl >/dev/null 2>&1   # stopped, as the checks further down expect it
+nx --root /run/alt delete --force rooted-1
+check "--root: delete --force reaches Proxmox and removes the state" \
+  all 'rc 0' 'called_re "^pct destroy [0-9]+$"' '[ ! -e "$S/run/alt/.proxmox-lxc/rooted-1" ]'
+# One id, one backend: with a record on each side, every later command would
+# reach only one of the two containers. This build has no crun backend, so a
+# status file under /run/crun is another runtime's container, which nexcage
+# never reaches, and it holds no create up. tests/crun/lxc_root.sh checks the
+# refusal in a build that has crun.
+mkdir -p "$S/run/crun/both-1" && : > "$S/run/crun/both-1/status"
+nx create --name both-1 "$TPL"
+check "without the crun backend, another runtime's crun container does not hold up a create" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname both-1 "'
+rm -rf "$S/run/crun"
 nx --root relative list
 check "--root with a relative path -> exit 2" all 'rc 2' 'err_has "absolute"'
 nx --root
@@ -899,7 +1432,7 @@ nx state lag-1
 check "and state finds it too" all 'rc 0' '[ "$(json_get "$S/out" id)" = lag-1 ]'
 nx start no-such-container-anywhere
 check "while a container that exists nowhere is still not found" \
-  all 'rc 1' 'err_has "not found"'
+  all 'rc 1' 'err_has "does not exist"'
 : > "$S/stale_cluster"
 
 # The cache can also be *wrong* rather than empty: for a few seconds after a
@@ -989,6 +1522,27 @@ check "quota -1 lifts the limit: cpulimit 0" \
 nx update --cpu-share 1024 up-1
 check "shares become the cgroup v2 weight runc would set" \
   all 'rc 0' 'called "pct set 100 --cpuunits 39"'
+# A value pct cannot say faithfully is refused, not made a different limit:
+# cpulimit 0 is no limit at all, and 16 MiB is pct's least memory.
+nx update --cpu-quota 50 up-1
+check "a quota below a hundredth of a core is refused, not made cpulimit 0 (no limit)" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+nx update --cpu-quota 0 up-1
+check "so is a quota of 0" all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+nx update --cpu-quota 1000 up-1
+check "the kernel's 1 ms in pct's 100 ms period is still a limit: cpulimit 0.01" \
+  all 'rc 0' 'called "pct set 100 --cpulimit 0.01"'
+nx update --memory 0 up-1
+check "memory 0 is refused, not made a 16 MiB limit" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+nx update --memory 4M up-1
+check "so is a memory limit below pct's 16 MiB" \
+  all 'rc 2' 'err_has "16 MiB"' 'not_called_re "^pct set"'
+nx update --memory 16M up-1
+check "16 MiB itself is pct's least, and taken" all 'rc 0' 'called "pct set 100 --memory 16"'
+nx update --cpu-share 0 up-1
+check "shares 0 is refused, not made the lowest weight" \
+  all 'rc 2' 'err_has "cpu.shares"' 'not_called_re "^pct set"'
 nx update --pids-limit 100 up-1
 check "a limit Proxmox cannot express is refused by name, not dropped" \
   all 'rc 1' 'err_has "pids.limit has no Proxmox setting"' 'not_called_re "^pct set"'
@@ -998,6 +1552,26 @@ check "a size that is not one is a usage error before any backend" \
 nx update up-1
 check "update with nothing to change is a usage error" all 'rc 2'
 
+# Values at the top of i64 overflowed the arithmetic into pct's terms, and
+# the root process died on the trap (exit 134). Each is now converted
+# exactly or refused, naming the setting, before pct is asked.
+nx update --memory 9223372036854775807 up-1
+check "a memory limit whose MiB Proxmox cannot turn back into bytes is a usage error" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+nx update --cpu-quota 9223372036854776 up-1
+check "a quota whose cores overflow is a usage error" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+nx update --cpu-share 1000000000000000 up-1
+check "shares past the kernel's most are its most: weight 10000, as before" \
+  all 'rc 0' 'called "pct set 100 --cpuunits 10000"'
+# pct keeps memory in MiB and the swap is worked out from it in bytes; a
+# config Proxmox holds can have more MiB than 64 bits of bytes.
+echo "memory: 8796093022208" >> "$S/conf.100"
+nx update --memory-swap 1G up-1
+check "a config's memory past 64 bits of bytes is an error, not a trap" \
+  all 'rc 1' 'err_has "8796093022208 MiB"' 'not_called_re "^pct set"'
+sed -i '/^memory: /d' "$S/conf.100"
+
 # The shape an engine sends: a linux.resources document. Applied through
 # the same arithmetic, and `-` is stdin, which is how containerd sends a
 # resize (`update --resources=- <id>`).
@@ -1005,12 +1579,44 @@ printf '{"memory":{"limit":536870912},"cpu":{"quota":50000,"period":100000}}' > 
 nx update --resources /run/res.json up-1
 check "--resources: the linux.resources document an engine sends, applied through pct" \
   all 'rc 0' 'called "pct set 100 --memory 512 --cpulimit 0.5"'
-printf '{"memory":{"limit":268435456}}' | nx update --resources=- up-1
+# A document on stdin through a redirect: `printf | nx` runs nx in a subshell,
+# and the RC a check reads is then the previous command's.
+resize() { printf '%s' "$1" > "$S/run/doc.json"; nx update --resources=- up-1 < "$S/run/doc.json"; }
+resize '{"memory":{"limit":268435456}}'
 check "--resources=- reads the document from stdin, as containerd sends it" \
   all 'rc 0' 'called "pct set 100 --memory 256"'
 nx update --memory 1G --resources /run/res.json up-1
 check "--resources together with value flags is a usage error" \
   all 'rc 2' 'not_called_re "^pct set"'
+# A number in a document is a whole one in 64 bits, as libcrun reads it too.
+# A float was cast: 1.5 became a limit of 1 byte, and 1e300 a trap.
+resize '{"memory":{"limit":1e300}}'
+check "a number in a document past i64 is refused by name, not cast" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+resize '{"memory":{"limit":1.5}}'
+check "and a fraction is not cut off into a limit" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+resize '{"cpu":{"quota":9223372036854775807}}'
+check "a document's quota whose cores overflow is refused by name" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+resize '{"cpu":{"quota":500,"period":1000000}}'
+check "a document's quota below a hundredth of a core is refused, not made no limit" \
+  all 'rc 2' 'err_has "cpu.quota"' 'not_called_re "^pct set"'
+resize '{"memory":{"limit":0}}'
+check "and its memory 0 is not made a 16 MiB limit" \
+  all 'rc 2' 'err_has "memory.limit"' 'not_called_re "^pct set"'
+# What the values leave out of a document was dropped: the rest was applied
+# and the update reported success. Now it is refused by name, as pids.limit
+# is, and nothing is half-applied.
+resize '{"memory":{"swappiness":0}}'
+check "a document's setting Proxmox has no option for is refused by name, not dropped" \
+  all 'rc 1' 'err_has "memory.swappiness has no Proxmox setting"' 'not_called_re "^pct set"'
+resize '{"memory":{"limit":536870912},"unified":{"memory.high":"536870912"}}'
+check "beside one it applies too, so nothing is half-applied" \
+  all 'rc 1' 'err_has "unified.memory.high has no Proxmox setting"' 'not_called_re "^pct set"'
+resize '{"memory":{"limit":536870912,"swappiness":null},"devices":[],"unified":{}}'
+check "a setting that is null or empty sets nothing, and the rest applies" \
+  all 'rc 0' 'called "pct set 100 --memory 512"'
 nx update --memory 1G no-such-up-$$
 check "update on a container that does not exist is an error" all 'rc 1' 'not_called_re "^pct set"'
 
@@ -1043,7 +1649,13 @@ check "snapshots --format takes json or table only" all 'rc 2' 'not_called_re "^
 nx snapshot sn-1 before
 check "a name already used is pct's refusal, passed on" all 'rc 1' 'err_has "already used"'
 nx snapshot sn-1 current
-check "'current' is Proxmox's reserved name, and the refusal is pct's" all 'rc 1' 'err_has reserved'
+check "'current' is Proxmox's reserved name: refused before pct" all 'rc 2' 'err_has reserved' 'not_called_re "^pct snapshot"'
+# Proxmox's rule for the name (pve-configid), checked by nexcage before any pct
+# or pvesh call: for a container on another node the name goes into a pvesh
+# path, and that path reaches the node's shell.
+nx snapshot sn-1 'a/b'
+check "a snapshot name outside Proxmox's rule is a usage error, before pct" \
+  all 'rc 2' 'err_has "not a snapshot name"' 'not_called_re "^pct snapshot"'
 nx snapshot sn-1
 check "snapshot without a name is a usage error, before any pct" all 'rc 2' 'not_called_re "^pct snapshot"'
 nx snapshot sn-1 two words
@@ -1095,14 +1707,14 @@ check "and the list no longer has it, while the other stays" \
 nx delsnapshot sn-1 before
 check "deleting it twice is an error" all 'rc 1' 'err_has "does not exist"'
 
-nx --runtime crun snapshot sn-1 x
+nx --runtime crun snapshot sn-1 xx
 check "snapshot on the crun backend is refused as a Proxmox operation, before any pct" \
   all 'rc 1' 'err_has "Proxmox VE operation"' 'not_called_re "^pct"'
 nx --runtime crun snapshots sn-1
 check "so is the listing" all 'rc 1' 'err_has "Proxmox VE operation"' 'not_called_re "^pvesh"'
-nx snapshot no-such-sn-$$ x
+nx snapshot no-such-sn-$$ xx
 check "snapshot of a container that does not exist is an error naming it" \
-  all 'rc 1' 'err_has "not found"' 'not_called_re "^pct snapshot"'
+  all 'rc 1' 'err_has "does not exist"' 'not_called_re "^pct snapshot"'
 
 echo "=== the cluster ==="
 # A container on another node. `pct` cannot see it -- that is what the fourth
@@ -1110,6 +1722,11 @@ echo "=== the cluster ==="
 # before this, every one of them answered "not found".
 reset_sim
 echo "200 running remote-1 titan" >> "$S/db"
+# nexcage did not create remote-1, so it has no record of it: every command
+# but create names the backend with --runtime lxc.
+nx start remote-1
+check "a container nexcage has no record of is not looked up without --runtime lxc" \
+  all 'rc 1' 'err_has "does not exist"' 'not_called_re "^(pct|pvesh)"'
 
 nx list
 check "list shows a container on another node, with the node" \
@@ -1122,58 +1739,306 @@ check "and it is the cluster that was asked, not this host" \
 check "a virtual machine is not listed as a container" \
   all '! out_has a-virtual-machine' '! grep -q 9999 "$S/out"'
 
-nx start remote-1
+nx --runtime lxc start remote-1
 check "start on another node goes through that node's API, not pct" \
   all 'rc 0' 'called "pvesh create /nodes/titan/lxc/200/status/start"' 'not_called_re "^pct start"'
 
-nx state remote-1
+nx --runtime lxc state remote-1
 check "state names the node it is on" \
   all 'rc 0' 'out_has "\"io.cageforge.nexcage.node\": \"titan\""'
 check "and reports no PID, because a PID there is not a PID here" \
   out_has '"pid": 0'
 
-nx exec remote-1 echo hi
+nx --runtime lxc exec remote-1 echo hi
 check "exec on another node is refused, and says where to run it" \
   all 'rc 1' 'err_has "runs on titan"' 'not_called_re "^pct exec"'
-nx kill remote-1
+nx --runtime lxc kill remote-1
 check "kill on another node is refused: a signal comes from the host" \
   all 'rc 1' 'err_has "runs on titan"'
-nx pause remote-1
+nx --runtime lxc pause remote-1
 check "pause on another node is refused: the freezer is that host's filesystem" \
   all 'rc 1' 'err_has "runs on titan"'
 # `update` is the one thing on this list the API does have: a container's
 # options are a `set` on its node's config.
-nx update --memory 1G remote-1
+nx --runtime lxc update --memory 1G remote-1
 check "update on another node goes through that node's API, not pct" \
   all 'rc 0' 'called_re "^pvesh set /nodes/[^/]+/lxc/[0-9]+/config --memory 1024$"' 'not_called_re "^pct set"'
 
 # Snapshots are the API's as well: /nodes/<node>/lxc/<vmid>/snapshot.
-nx snapshot remote-1 s1 --description there
+nx --runtime lxc snapshot remote-1 s1 --description there
 check "snapshot on another node goes through that node's API, not pct" \
   all 'rc 0' 'called "pvesh create /nodes/titan/lxc/200/snapshot --snapname s1 --description there"' 'not_called_re "^pct snapshot"'
-nx snapshots remote-1
+nx --runtime lxc snapshots remote-1
 check "snapshots on another node reads that node's list" \
   all 'rc 0' 'called "pvesh get /nodes/titan/lxc/200/snapshot --output-format json"' 'out_has s1'
-nx stop remote-1 >/dev/null 2>&1
-nx rollback remote-1 s1 --start
+nx --runtime lxc stop remote-1 >/dev/null 2>&1
+nx --runtime lxc rollback remote-1 s1 --start
 check "rollback on another node goes through that node's API, with --start" \
   all 'rc 0' 'called "pvesh create /nodes/titan/lxc/200/snapshot/s1/rollback --start 1"' 'not_called_re "^pct rollback"'
-nx delsnapshot remote-1 s1
+nx --runtime lxc delsnapshot remote-1 s1
 check "delsnapshot on another node goes through that node's API" \
   all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200/snapshot/s1"' 'not_called_re "^pct delsnapshot"'
+# pvesh hands the path of a call for another node to that node's shell over
+# ssh, unquoted: a snapshot name there was a command run as root on titan. One
+# without '/', since a '/' splits the path and pvesh then finds no handler to
+# pass it to.
+nx --runtime lxc rollback remote-1 'x;touch${IFS}pwn;'
+check "a snapshot name that is a shell command never reaches another node's pvesh path" \
+  all 'rc 2' 'err_has "not a snapshot name"' 'not_called_re "^pvesh create /nodes/.*/snapshot/"'
+nx --runtime lxc delsnapshot remote-1 '../../201/snapshot/s'
+check "nor does one that climbs out of the container's snapshots" \
+  all 'rc 2' 'not_called_re "^pvesh delete"'
 
 nx create --name remote-1 "$TPL"
 check "a name taken on another node is not free" \
   all 'rc 1' 'err_has "already exists on node titan"' 'not_called_re "^pct create"'
 
-nx stop remote-1
+nx --runtime lxc stop remote-1
 check "stop on another node goes through that node's API" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc/200/status/shutdown"'
-nx delete remote-1
+nx --runtime lxc delete remote-1
 check "delete on another node goes through that node's API" \
   all 'rc 0' 'called "pvesh delete /nodes/titan/lxc/200"'
-nx state remote-1
+nx --runtime lxc state remote-1
 check "and afterwards it is gone from the cluster" rc 1
+
+echo "--- the cluster's listing, large or failing ---"
+# /cluster/resources has an entry for every guest on every node. A few
+# thousand of them are more than the 1 MiB nexcage read from a tool, and what
+# did not fit was taken for "the cluster cannot be asked": lookups fell back
+# to this host's `pct list`, so a container on another node was "not found",
+# list was silently short, and create's cluster-wide check passed a name
+# another node had.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "200 running remote-1 titan" >> "$S/db"
+awk 'BEGIN { for (i = 1000; i < 3500; i++) printf "%d running filler-%d-%0440d titan\n", i, i, 0 }' >> "$S/db"
+nx list
+check "list on a cluster whose listing is over 1 MiB still shows the other node's container" \
+  all 'rc 0' 'listed remote-1'
+nx --runtime lxc stop remote-1
+check "and a container on another node is still found" \
+  all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc/200/status/shutdown"'
+nx create --name remote-1 "$TPL"
+check "and a name another node has is still taken" \
+  all 'rc 1' 'err_has "already exists on node titan"' 'not_called_re "^pct create"'
+
+# A cluster that cannot answer at all is an error that says so. It was the
+# same quiet fallback to this host.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name here-9 "$TPL" >/dev/null 2>&1
+echo "200 stopped remote-9 titan" >> "$S/db"
+echo "ipcc_send_rec[1] failed: Connection refused" > "$S/fail_resources"
+nx list
+check "a cluster listing that fails is an error naming it, not this host's list in its place" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'err_has "connection refused"' '! out_has "here-9"'
+nx start here-9
+check "and so is a lookup, even of a container on this host" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct start"'
+nx create --name remote-9 "$TPL"
+check "create refuses a name it cannot check across the cluster" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct create"'
+# Whatever words the failure has. A tool's "not found" or "No such file or
+# directory" is read as a missing container, which is right for a call about
+# one container; for a listing it made create take the name for free.
+echo "ipcc_send_rec[1] failed: No such file or directory" > "$S/fail_resources"
+nx create --name remote-9 "$TPL"
+check "a failing cluster listing that reads like a miss is still no answer to create" \
+  all 'rc 1' 'err_has "/cluster/resources"' 'not_called_re "^pct create"'
+rm -f "$S/fail_resources"
+echo "No such file or directory" > "$S/fail_list"
+nx create --name remote-9 "$TPL"
+check "nor is a failing pct list" all 'rc 1' 'err_has "pct list"' 'not_called_re "^pct create"'
+rm -f "$S/fail_list"
+
+echo "--- which container a command acts on ---"
+# A name before a VMID. One pass took the first row matching either, and the
+# fake now lists rows as Proxmox does, VMIDs sorted as strings: the container
+# with VMID 1000 comes before the one named 1000 at VMID 150.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "149 stopped filler" > "$S/db"
+nx create --name 1000 "$TPL" >/dev/null 2>&1
+awk '$3!="filler"' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"; echo "999 stopped filler" >> "$S/db"
+nx create --name db-prod "$TPL" >/dev/null 2>&1
+awk '$3!="filler"' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"
+check "(two containers: one named 1000, and one with VMID 1000)" \
+  all 'grep -qx "150 stopped 1000" "$S/db"' 'grep -qx "1000 stopped db-prod" "$S/db"'
+nx delete 1000
+check "delete <name> destroys the container of that name, not the one with that VMID" \
+  all 'rc 0' 'called "pct destroy 150"' 'grep -qx "1000 stopped db-prod" "$S/db"' \
+      '[ ! -e "$S/run/nexcage/1000" ]' '[ -f "$S/run/nexcage/db-prod/state.json" ]'
+nx --runtime lxc delete 1000
+check "and the state removed is the destroyed container's, not the typed word's" \
+  all 'rc 0' 'called "pct destroy 1000"' '[ ! -e "$S/run/nexcage/db-prod" ]'
+
+# A name two containers have is refused, naming both. The first in the
+# listing used to win, and that was another node's as readily as this one's.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "149 stopped filler" > "$S/db"
+nx create --name web-1 "$TPL" >/dev/null 2>&1
+awk '$3!="filler"' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"
+echo "1000 running web-1 titan" >> "$S/db"
+nx delete --force web-1
+check "a name two containers have is refused, naming both, and neither is touched" \
+  all 'rc 1' 'err_has "VMID 1000 on titan"' 'err_has "VMID 150"' \
+      'not_called_re "^(pct (shutdown|destroy)|pvesh (create|delete) /nodes/)"'
+nx state web-1
+check "state refuses it the same way" all 'rc 1' 'err_has "names more than one container"'
+nx --runtime lxc delete 150
+check "while a VMID still addresses one of them" all 'rc 0' 'called "pct destroy 150"' 'grep -q "^1000 running web-1 titan$" "$S/db"'
+
+# A VMID can change hands between finding a container and acting on it, and
+# Proxmox gives a freed VMID to the next container created. The cluster's
+# listing keeps the old name for a few seconds after that ($SIM/stale_name).
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "200 running web-new titan" >> "$S/db"
+echo "200 web-old" > "$S/stale_name"
+nx --runtime lxc stop web-old
+check "a container whose VMID has gone to another one is not stopped in its place" \
+  all 'rc 1' 'err_has "no longer '"'"'web-old'"'"'"' 'not_called_re "^pvesh create /nodes/titan/lxc/200/status/"' \
+      'grep -q "^200 running web-new titan$" "$S/db"'
+nx --runtime lxc delete --force web-old
+check "nor destroyed in its place" \
+  all 'rc 1' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/200"' 'grep -q "^200 running web-new titan$" "$S/db"'
+echo "s1 0" > "$S/snaps.200"
+nx --runtime lxc rollback web-old s1
+check "nor rolled back in its place" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pvesh create /nodes/titan/lxc/200/snapshot/"' \
+      'grep -q "^200 running web-new titan$" "$S/db"'
+rm -f "$S/stale_name"
+# On this host `pct list` is current, and its name wins over the cache's.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name web-new "$TPL" >/dev/null 2>&1
+echo "100 web-old" > "$S/stale_name"
+nx --runtime lxc start web-old
+check "a name the cluster's cache still gives a reused VMID here does not find the new container" \
+  all 'rc 1' 'not_called_re "^pct start"'
+nx start web-new
+check "(which its own name does)" all 'rc 0' 'called "pct start 100"'
+rm -f "$S/stale_name"
+# kill reaches for the init from the host. A VMID that changes hands after
+# the listing ($SIM/meanwhile.list runs once, right after `pct list`) is the
+# same race as stop's, and SIGKILL is as final as a destroy.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name web-old "$TPL" >/dev/null 2>&1
+nx start web-old >/dev/null 2>&1
+cat > "$S/meanwhile.list" <<'SH'
+# web-old is destroyed elsewhere and web-new takes VMID 100
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx kill web-old TERM
+check "a container whose VMID changed hands after it was found is not sent the signal" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pct status"' '! grep -qx SIGTERM "$S/sig.100"'
+rm -f "$S/meanwhile.list"
+# The window that matters most: a forced delete waits for the shutdown, and
+# the VMID is free once something else has destroyed the container.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name web-old "$TPL" >/dev/null 2>&1
+nx start web-old >/dev/null 2>&1
+cat > "$S/meanwhile" <<'SH'
+# web-old is destroyed elsewhere and web-new takes VMID 100
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx delete --force web-old
+check "a VMID that changed hands during delete --force's shutdown is not destroyed" \
+  all 'rc 1' 'called_re "^pct shutdown 100 "' 'not_called_re "^pct destroy"' \
+      'grep -q "^100 stopped web-new$" "$S/db"' 'err_has "no longer"'
+rm -f "$S/meanwhile"
+
+# A container named after its own VMID: on a fresh host `create --name 100`
+# gets VMID 100, the next free one. A name equal to the VMID was taken for no
+# name at all, so the container counted as found by VMID: its record was not
+# written by start or stop, nor removed by delete, and nothing confirmed it
+# was still the same container before it was destroyed.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name 100 "$TPL" >/dev/null 2>&1
+check "(a container named 100, at VMID 100)" grep -qx "100 stopped 100" "$S/db"
+nx start 100 >/dev/null 2>&1; nx stop 100 >/dev/null 2>&1
+check "a container named after its VMID: state after stop says stopped" status_is 100 stopped
+nx delete 100
+check "and delete removes its record with it" all 'rc 0' 'called "pct destroy 100"' '[ ! -e "$S/run/nexcage/100" ]'
+nx create --name 100 "$TPL" >/dev/null 2>&1
+nx start 100 >/dev/null 2>&1
+cat > "$S/meanwhile" <<'SH'
+# the container named 100 is destroyed elsewhere and web-new takes VMID 100
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+nx delete --force 100
+check "and a VMID that changed hands during its delete --force's shutdown is not destroyed" \
+  all 'rc 1' 'called_re "^pct shutdown 100 "' 'not_called_re "^pct destroy"' \
+      'grep -q "^100 stopped web-new$" "$S/db"' 'err_has "no longer"'
+rm -f "$S/meanwhile"
+
+# nexcage's record proves it made a container with that name, and says
+# nothing about a VMID. A record whose container has gone -- destroyed from
+# the GUI or with pct, or renamed -- still unlocked a lookup by VMID, and a
+# CT nexcage never made, holding that number now, was the one destroyed.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+nx create --name 250 "$TPL" >/dev/null 2>&1
+check "(a container named 250, at VMID 100)" grep -qx "100 stopped 250" "$S/db"
+# destroyed outside nexcage, and VMID 250 is a CT nexcage did not create
+echo "250 stopped tenant-b-db" > "$S/db"
+nx state 250
+check "through its record a numeric id is a name, not the CT with that VMID: state" \
+  all 'rc 1' '[ ! -s "$S/out" ]' 'err_has "not found"'
+nx delete 250
+check "nor delete" all 'rc 1' 'not_called_re "^pct destroy"' 'grep -qx "250 stopped tenant-b-db" "$S/db"'
+echo "250 stopped tenant-b-db" > "$S/db"   # each check on its own, whatever the last one did
+nx delete --force 250
+check "nor delete --force, which touches neither the CT nor anything else" \
+  all 'not_called_re "^(pct (shutdown|destroy)|pvesh (create|delete) /nodes/)"' 'grep -qx "250 stopped tenant-b-db" "$S/db"'
+# What is left of a container that is gone is its record, and delete --force
+# is how an engine forgets one. It failed, and the record stayed until a
+# reboot, keeping the id from the crun backend as well.
+check "and exits 0, forgetting the record of the container that is gone" \
+  all 'rc 0' '[ ! -e "$S/run/nexcage/250" ]' 'err_has "no container is named"'
+echo "250 stopped tenant-b-db" > "$S/db"
+nx --runtime lxc delete 250
+check "while --runtime lxc still reaches the CT by its VMID" all 'rc 0' 'called "pct destroy 250"'
+# Only a container no node has is forgotten that way. A listing that fails
+# says nothing about it, whatever words the failure has.
+nx create --name web-9 "$TPL" >/dev/null 2>&1
+echo "ipcc_send_rec[1] failed: No such file or directory" > "$S/fail_resources"
+nx delete --force web-9
+check "a record is not forgotten when the cluster could not be asked" \
+  all 'rc 1' 'err_has "/cluster/resources"' '[ -f "$S/run/nexcage/web-9/state.json" ]'
+rm -f "$S/fail_resources"
+# Nor while the cluster lists a container without a name ($SIM/noname): one
+# its node made seconds ago, or any of a node down for five minutes. It may be
+# the one, and forgetting the record left it running with nexcage told it was
+# gone.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "titan $TPL" >> "$S/node_templates"
+nx create --name rem-1 --node titan "$TPL" >/dev/null 2>&1
+nx start rem-1 >/dev/null 2>&1
+rem=$(awk '$3=="rem-1" {print $1}' "$S/db")
+check "(rem-1, made through nexcage and running on titan)" grep -qx "${rem:-none} running rem-1 titan" "$S/db"
+echo "$rem" > "$S/noname"
+nx delete --force rem-1
+check "a record is not forgotten while the cluster lists a container without a name" \
+  all 'rc 1' "err_has 'CT ${rem:-none} on titan has no name'" 'err_has "try again"' \
+      '[ -f "$S/run/nexcage/rem-1/state.json" ]' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/"'
+nx create --name rem-2 "$TPL"
+check "while a create is not held up by it, or a node that is down would stop every create" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ .*--hostname rem-2 "'
+# An empty id, an unset shell variable, matched the container without a name
+nx --runtime lxc delete --force ''
+check "and an empty id is not taken for that container: nothing is stopped or destroyed" \
+  all 'rc 1' 'not_called_re "^pvesh (create|delete) /nodes/titan/lxc/"' "grep -qx '${rem:-none} running rem-1 titan' \"\$S/db\""
+rm -f "$S/noname"
+nx delete --force rem-1
+check "and once the cluster names it, delete --force destroys it" \
+  all 'rc 0' "called 'pvesh delete /nodes/titan/lxc/${rem:-none}'" '[ ! -e "$S/run/nexcage/rem-1" ]'
 
 echo "--- create --node ---"
 reset_sim
@@ -1196,6 +2061,13 @@ nx list
 check "and it is listed on that node" \
   all 'rc 0' 'awk -F"\t" '"'"'$8=="there-1" && $7=="titan" {f=1} END {exit !f}'"'"' "$S/out"'
 
+# The volid's storage goes into a pvesh path on that node, and that path
+# reaches the node's shell: only a <storage>:vztmpl/<file> in Proxmox's
+# characters gets that far.
+nx create --name there-x --node titan 'x;id;:vztmpl/a.tar'
+check "create --node refuses a template volid that is not one, before that node is asked" \
+  all 'rc 2' 'err_has "vztmpl"' 'not_called_re "^pvesh get /nodes/titan/storage/"'
+
 # The template check is the point: a node that cannot see it is told so, and
 # nothing is created.
 nx create --name there-2 --node otherhost "$TPL"
@@ -1213,10 +2085,12 @@ check "create --node says the same options to that node's API" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/lxc .*--net0 name=eth0,bridge=vmbr0,ip=dhcp,tag=7 .*--memory 1024 --onboot 1"'
 cfg '{"network":{"bridge":"vmbr0"}}'
 
-# An OCI bundle is packed into a template on *this* host, so it cannot travel.
+# An OCI bundle is packed into a private file on *this* host, so it cannot
+# travel.
 nx create --name there-3 --node titan --bundle /tmp/nexcage-bundles/b1
 check "--node with a bundle is refused, not half-done" \
-  all 'rc 1' 'err_has "packed into a template on this host"'
+  all 'rc 1' 'err_has "packed into a private file on this host, which titan cannot read"' '! err_has "Packing"' \
+      'not_called_re "nextid|^pct create|^pvesh create"'
 
 nx --runtime crun create --node titan --bundle /tmp/nexcage-bundles/b1 there-4
 check "--node on the crun backend says it has nowhere to put it" \
@@ -1268,6 +2142,20 @@ nx images --node no-such-node
 check "images on a node the cluster does not have is an error, not an empty list" \
   all 'rc 1' 'err_has "no node called"' 'err_has "titan"'
 
+# A node that does not answer fails the listing and is named: a listing
+# without its templates would read as "it has none". It was a bare
+# "operation failed".
+echo "500 Can't connect to 192.0.2.7:8006 (No route to host)" > "$S/fail_storage.titan"
+nx images
+check "images with a node that does not answer is an error naming the node" \
+  all 'rc 1' 'err_has "node titan"' 'err_has "No route to host"'
+nx images --node "$HOST"
+check "and --node lists a node that does" all 'rc 0' 'out_has "local:vztmpl/debian-13.tar.zst"'
+nx images --node titan
+check "images --node on the node that does not answer names it too" \
+  all 'rc 1' 'err_has "node titan"'
+rm -f "$S/fail_storage.titan"
+
 nx --runtime crun images
 check "images on the crun backend says templates are not its business" \
   all 'rc 1' 'err_has "already there"'
@@ -1275,13 +2163,87 @@ check "images on the crun backend says templates are not its business" \
 # Pulling needs PVE 9.1+, which is where oci-registry-pull arrived.
 echo 9.1.0 > "$S/pvever"
 nx pull docker.io/library/nginx:1.27
-check "pull answers with the volid the storage ended up holding" \
-  all 'rc 0' 'called_re "^pvesh create /nodes/.*/storage/local/oci-registry-pull --reference docker.io/library/nginx:1.27"' \
-      'grep -q "^local:vztmpl/nginx_1.27.tar$" "$S/out"'
+check "pull names the file for the whole reference and answers with exactly that volid" \
+  all 'rc 0' "called 'pvesh create /nodes/$HOST/storage/local/oci-registry-pull --reference docker.io/library/nginx:1.27 --filename $(pulled docker.io/library/nginx:1.27)'" \
+      'grep -qxE "local:vztmpl/$(pulled_re docker.io/library/nginx:1.27)" "$S/out"'
 nx pull docker.io/library/nginx:1.27 --node titan --storage shared-rdma
 check "pull --node --storage puts it where create --node can read it" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/storage/shared-rdma/oci-registry-pull"' \
-      'grep -q "^shared-rdma:vztmpl/nginx_1.27.tar$" "$S/out"'
+      'grep -qxE "shared-rdma:vztmpl/$(pulled_re docker.io/library/nginx:1.27)" "$S/out"'
+# Proxmox will not write over a file: a reference pulled before is that file.
+nx pull docker.io/library/nginx:1.27
+check "pulling a reference already there answers with its file" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re docker.io/library/nginx:1.27)" "$S/out"'
+# A name the caller chose says nothing about what the file holds: one that is
+# there already is an error. It used to be answered with any template whose
+# name held the image and the tag.
+nx pull docker.io/library/redis:7 --filename mine >/dev/null 2>&1
+nx pull docker.io/library/nginx:1.27 --filename mine
+check "pull --filename onto a file that is there is an error, not some other template" \
+  all 'rc 1' 'err_has "already on local"' '[ ! -s "$S/out" ]'
+nx pull docker.io/library/nginx:1.27 --filename "a b"
+check "pull --filename that Proxmox would rewrite is refused before pvesh" \
+  all 'rc 2' 'not_called_re "^pvesh create"'
+# Proxmox adds ".tar" to the name, so one ending in '.' was pulled as
+# <name>..tar and printed, and then rmi and create --node refused that volid
+# for its "..".
+nx pull docker.io/library/redis:7 --node titan --storage shared-rdma --filename myredis.
+check "pull --filename ending in '.' is refused before pvesh, since rmi could not take its file" \
+  all 'rc 2' "err_has \"not ending in '.'\"" 'not_called_re "^pvesh create"' '[ ! -s "$S/out" ]'
+# The tight limit on the name is the pull's task: Proxmox names the task's log
+# for a UPID holding the node and the file, one file name of 255 bytes at most.
+# A long reference written out whole made that UPID too long, and the pull
+# failed where Proxmox's own short name had worked. The name has to leave room
+# for any node's name, and a hostname may have 64 characters.
+long_ref=europe-west3-docker.pkg.dev/my-gcp-project-123456/my-artifact-repo/platform-team/payments/service-name:2026.10.11-main-0123456789abcdef0123456789abcdef01234567
+long_node=pve-$(printf 'n%.0s' {1..60})
+nx pull "$long_ref"
+check "pull of a long reference leaves room for its task's log, and answers with its file" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re "$long_ref")" "$S/out"'
+nx pull "$long_ref" --node "$long_node"
+check "and so on a node whose name is as long as a hostname can be" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re "$long_ref")" "$S/out"'
+nx pull docker.io/library/nginx:1.27 --filename "$(printf 'x%.0s' {1..128})"
+check "pull --filename too long for a task's log on every node is refused before pvesh" \
+  all 'rc 2' 'err_has "at most 127"' 'not_called_re "^pvesh create"'
+# `create` takes the file under a reference's derived name for that reference,
+# so a pull of another one must not be written there by name.
+nx pull ghcr.io/someone/redis:7 --filename "$(pulled docker.io/library/redis:7)"
+check "pull --filename with the name of another reference's pull is refused before pvesh" \
+  all 'rc 2' 'err_has "16 hex digits"' 'not_called_re "^pvesh create"'
+nx create --name redis-2 docker.io/library/redis:7
+check "and create of that reference pulls it, not ghcr.io's image" \
+  all 'rc 0' 'called_re "^pvesh create .*oci-registry-pull --reference docker.io/library/redis:7 --filename "'
+# Another pull's file landing meanwhile is not this one, and a listing that
+# fails is an error: the listing before the pull failing once used to make the
+# first template on the storage the answer.
+echo "local:vztmpl/alpine_3.20.tar" > "$S/also_lands"
+nx pull docker.io/library/nginx:1.24
+check "pull: another file landing during the pull is not reported as this one" \
+  all 'rc 0' 'grep -qxE "local:vztmpl/$(pulled_re docker.io/library/nginx:1.24)" "$S/out"'
+echo 1 > "$S/fail_list_in"
+nx pull docker.io/library/nginx:1.23
+check "pull: a storage listing that fails is an error, not some template's volid" \
+  all 'rc 1' 'err_has "could not be listed"' '[ ! -s "$S/out" ]'
+nx pull docker.io/library/nginx:1.27 --node titan --storage 'x;id;'
+check "pull refuses a storage that is not a Proxmox storage ID, before pvesh" \
+  all 'rc 2' 'err_has "storage name"' 'not_called_re "^pvesh"'
+# Proxmox takes a reference with a tag and nothing else. The fake pvesh pulled
+# any, and so the sim said an empty reference or one pinned by a digest gave a
+# template, which on Proxmox they never do.
+nx pull ''
+check "pull of an empty reference is Proxmox's error, and no template" \
+  all 'rc 1' 'err_has "reference: value does not match"' '[ ! -s "$S/out" ]'
+nx pull "docker.io/library/redis@sha256:$(printf 'ab%.0s' {1..32})"
+check "nor is one pinned by a digest, which Proxmox's pattern does not take" \
+  all 'rc 1' 'err_has "reference: value does not match"' '[ ! -s "$S/out" ]'
+# The first listing is this host's local: it is left out and named, and the
+# other storages are still shown.
+echo 1 > "$S/fail_list_in"
+nx images
+check "images leaves out a storage it cannot list, and says which" \
+  all 'rc 0' "err_has 'storage local on $HOST could not be listed'" '! out_has "debian-13.tar.zst"' \
+      'out_has "local:vztmpl/alpine-3.22.tar.zst"' 'out_has "shared-rdma:vztmpl/redis_7.tar"'
 
 # Proxmox's pvesh exits 0 when its pull task fails, with skopeo's reason on
 # stdout (#309). A refused login is reported with that reason, and with where
@@ -1323,6 +2285,20 @@ nx rmi not-a-volid
 # 2, not 1: a malformed name is a usage error, and nexcage keeps that apart
 # from "the thing is not there", which is 1.
 check "rmi wants <storage>:vztmpl/<file>" all 'rc 2' 'err_has "vztmpl"'
+nx rmi "local:vztmpl/../../x.tar"
+check "rmi refuses a volid that climbs out of vztmpl/, before any pvesh" all 'rc 2' 'not_called_re "^pvesh"'
+# A tag may hold "..": the name a pull is written under does not keep it, so
+# what pull prints, rmi takes.
+nx pull docker.io/library/nginx:1..2
+nx rmi "$(cat "$S/out")"
+check "rmi takes the volid pull printed, for a tag with '..' in it too" \
+  all 'rc 0' 'out_has "removed from"' 'called_re "^pvesh delete /nodes/[^/]+/storage/local/content/local:vztmpl/docker\.io_library_nginx_1\._2-[0-9a-f]{16}\.tar$"'
+# A file named by hand on a storage is listed as it is, and its volid went
+# into the delete's path: for another node, into that node's shell.
+echo "titan local:vztmpl/evil;id>pwn.tar.zst" >> "$S/node_templates"
+nx rmi "local:vztmpl/evil;id>pwn.tar.zst" --node titan
+check "rmi refuses a volid outside Proxmox's file name characters, before any pvesh" \
+  all 'rc 2' 'not_called_re "^pvesh"'
 
 # On a shared storage the file goes for every node, and that is said.
 nx rmi "shared-rdma:vztmpl/redis_7.tar" --node titan

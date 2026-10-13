@@ -49,7 +49,9 @@ pub const ListCommand = struct {
         try stdout.writeAll("  <id>    <img>   <cmd>    <time>   <state> <type>   <node> <name>\n");
         try stdout.writeAll("\n  NODE is the cluster node a Proxmox LXC container is on, or \"-\" when it\n");
         try stdout.writeAll("  is not known. Containers on other nodes of the cluster are\n");
-        try stdout.writeAll("  listed too, which `pct list` on one host cannot do.\n");
+        try stdout.writeAll("  listed too, which `pct list` on one host cannot do. NAMES is \"-\" for one\n");
+        try stdout.writeAll("  the cluster has no report for: made on another node seconds ago, or on a\n");
+        try stdout.writeAll("  node that has been down for five minutes.\n");
     }
 
     pub fn execute(self: *Self, options: core.types.RuntimeOptions, allocator: std.mem.Allocator) !void {
@@ -86,7 +88,9 @@ pub const ListCommand = struct {
             // "-" rather than blank: a column that is sometimes empty is
             // hard to read, and every Proxmox LXC row has a node.
             const node = container.node orelse "-";
-            const names = container.name;
+            // A container on another node that the cluster has no report
+            // for has no name to show
+            const names = if (container.name.len > 0) container.name else "-";
 
             // Simple output without allocPrint to avoid allocator issues
             _ = try stdout.writeAll(id);
@@ -168,7 +172,8 @@ pub const ListCommand = struct {
             "  NAMES    - Container names\n\n" ++
             "Notes:\n" ++
             "  Proxmox LXC containers are listed via 'pvesh get /cluster/resources'\n" ++
-            "  merged with 'pct list'; list fails only when both fail.\n");
+            "  merged with 'pct list'; list fails when either fails, rather than\n" ++
+            "  show part of the cluster as if it were all of it.\n");
     }
 
     pub fn validate(self: *Self, args: []const []const u8) !void {

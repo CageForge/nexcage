@@ -27,7 +27,7 @@ own, and an argument there keeps its `=`.
 | `--log-format <text\|json>` | `json` writes one object per line — `level`, `msg` and an RFC 3339 `time` — which is what an engine parses |
 | `--systemd-cgroup` | `create` on the crun backend has systemd place the container, as crun and runc do: libcrun asks systemd, over D-Bus, for a scope under the slice the bundle's `cgroupsPath` names (`<slice>:<prefix>:<name>`). containerd sends it for a handler with `SystemdCgroup = true`; CRI-O and podman send it whenever their cgroup manager is systemd, their default. It has to match the kubelet's cgroup driver: without it, a `cgroupsPath` in that form becomes a cgroup of that very name at the root of the hierarchy, outside the pod's. Where systemd cannot be reached, `create` fails with libcrun's `cannot open sd-bus`, as crun's does. Later commands follow the manager the container was created with; `delete --force` under it leaves `/sys/fs/cgroup/<id>` alone (see [delete](#delete)). On the Proxmox LXC backend it changes nothing: Proxmox puts the container's cgroup at `/lxc/<vmid>` |
 | `--rootless <value>` | Accepted and ignored, as crun does. go-runc sends `--rootless=<true\|false>` when its caller sets one, and to runc it means "ignore cgroup permission errors"; libcrun decides that for itself, and as root it ignores none |
-| `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute |
+| `--root <dir>` | Keep per-container state under `<dir>` instead of `/run/nexcage`. An OCI runtime takes this from its caller: containerd gives each namespace its own directory, so two callers on one host do not see each other's containers. Must be absolute; it is normalised first, so `/run/nexcage/` is the default. The crun backend's state is `<dir>/<id>`, libcrun's own; the Proxmox LXC backend's is `<dir>/.proxmox-lxc/<name>`, so the two never share a directory. It used to be `<dir>/<name>`, which a build with crun took for libcrun's; a record an older version left there is not read, and its container takes `--runtime lxc` once |
 | `--profile <name>` | Create the container under the isolation profile `<name>` from the configuration file; see [Isolation profiles](#isolation-profiles). Only `create` reads it, and `run` refuses it |
 | `--version` | The same output as the `version` command. CRI-O asks a runtime its version this way before it will use one |
 
@@ -111,6 +111,11 @@ ID    IMAGE     COMMAND  CREATED   STATUS   BACKEND      NODE        NAMES
 $ nexcage start web-2        # on titan, from here
 ```
 
+That `start` needs nexcage's record of `web-2` on this host, which `create`
+writes on the host that runs it — `--node titan` included. A container created
+from another host, or by hand, takes `--runtime lxc` here the first time; that
+command writes the record here, and later ones need no `--runtime`.
+
 `start`, `stop`, `delete` and `state` work on any node: for a container on this
 host they run `pct`, and for one elsewhere they go through that node's API. The
 `state` of a container on another node carries it as an annotation:
@@ -145,14 +150,17 @@ resolves a name and two containers sharing one would make that ambiguous. Then
 the template is checked **on the target node**, before a VMID is taken: a storage
 called `local` is a different directory on every node unless it is shared, so a
 volid that exists here may simply not be there. The message names the node and
-the storage rather than leaving the API to say "volume does not exist".
+the storage rather than leaving the API to say "volume does not exist". The
+template has to be a `<storage>:vztmpl/<file>` volid in the characters Proxmox
+names templates with, as for [`rmi`](#rmi); anything else is a usage error
+(exit 2) before that node is asked.
 
 Two things `--node` will not do, and refuses rather than half-does:
 
 | | why |
 |---|---|
-| an OCI bundle (`--bundle`) | its rootfs is packed into a template on **this** host's storage, which the other node cannot read unless that storage is shared |
-| a registry image (`docker.io/...`) | the pull lands on this host, for the same reason |
+| an OCI bundle (`--bundle`) | its rootfs is packed into a private file under `$TMPDIR` on **this** host, which the other node cannot read |
+| a registry image (`docker.io/...`) | the pull lands on this host's storage, which the other node cannot read unless that storage is shared, and then only by its template name |
 
 A rootfs on a ZFS storage goes through: `proxmox.storage` reaches that node's
 API as `--rootfs <storage>:<size>`, and Proxmox makes the volume there, so name
@@ -161,18 +169,54 @@ a storage the target node has.
 `--node` naming the host nexcage is running on is not "another node": it takes
 the ordinary local path, `pct` and all.
 
-On a host that is not in a cluster, or where `pvesh` cannot be reached, nexcage
-falls back to `pct` and behaves exactly as it did: this host's containers, and
-no others.
+A host that is not in a cluster answers `/cluster/resources` with its own
+containers, so nothing changes there. **A cluster listing that cannot be read is
+an error** (exit 1) naming the cause — `pvesh` failing, its output not being
+JSON, or more of it than nexcage reads (64 MiB, room for tens of thousands of
+guests). It used to be a quiet fallback to `pct`, which sees this host alone: a
+container on another node was then "not found", `list` was short without
+saying so, and `create`'s check that a name is free across the cluster passed a
+name another node had. `images` likewise fails, naming the node, when a node
+cannot be asked for its storages; `images --node <name>` lists the nodes that
+answer one at a time.
 
 **The cluster's listing is a cache**, refreshed by `pvestatd` every few seconds,
 and nexcage is built around that in two places. A container created a moment ago
 is not in it yet, so a name missing there means "keep looking on this host"
 rather than "no such container" — otherwise `create` followed straight away by
 `start` fails. And for a container on this host, `pct` is the current answer
-while the cluster's copy can be seconds stale, so `list` and `state` take the
-status from `pct` and keep from the cluster the one thing only it knows: which
-node a container elsewhere is on.
+while the cluster's copy can be seconds stale, so `list`, `state` and every
+lookup take the status and the name from `pct` and keep from the cluster the
+one thing only it knows: which node a container elsewhere is on.
+
+**A container the cluster has no report for has no name in its listing.**
+Proxmox takes a container's name from its node's reports, so one made on
+another node a few seconds ago has none yet, and nor does any container of a
+node that has been down for five minutes. `list` shows `-` for its name. A name
+that matches nothing while such a container is listed may still be that one, so
+it is not "no such container": the command exits 1 naming the unnamed CT and
+its node, does nothing, and can be tried again once the cluster names it.
+`create` is the exception, or a node that is down would stop every create; two
+creates of one name on different nodes seconds apart can therefore both
+succeed, and every later lookup of the name refuses it.
+
+**Which container a name means.** A name is looked for before a VMID, so a
+container named `1000` is the one `1000` finds even when another container has
+VMID 1000. A VMID finds its container only with `--runtime lxc`, and only when
+no container has that name: without `--runtime` the command reached the Proxmox
+backend through nexcage's record of a container with that name, which says
+nothing about a VMID. A name
+that more than one container has — two nodes' creates racing, or a duplicate
+made outside nexcage — is refused with exit 1 and the containers listed, never
+resolved to whichever the listing put first; address one by its VMID, with
+`--runtime lxc`. `create` checks both the cluster's listing and this host's
+`pct list` for the name, and refuses when the cluster cannot be asked.
+
+**A VMID can change hands.** Proxmox gives a destroyed container's VMID to the
+next container created, so right before `stop`, `delete` (and the stop
+`--force` does first), `rollback` and `kill`, nexcage reads the container's
+hostname from its config again — `pct config`, or the node's API — and refuses,
+touching nothing, when the VMID now belongs to a container with another name.
 
 ## Backend selection
 
@@ -180,9 +224,41 @@ node a container elsewhere is on.
 rules in the config file, Proxmox LXC by default; `features` asks that backend
 too. Every other command — `start`, `stop`, `delete`, `kill`, `exec`, `state`,
 `pause`, `resume`, `update`, `ps` and the snapshot commands — goes to the
-backend that has the container: the crun backend when libcrun's state
-directory (`--root`, else `/run/crun`) has it, Proxmox LXC otherwise. A rule
-changed after `create` does not move a container (since 0.17.0, #372).
+backend that has a record of the container: the crun backend when libcrun's
+`status` file for it exists (under `--root`, else `/run/crun`), Proxmox LXC
+when nexcage's own `state.json` for it does — written when nexcage creates the
+container, in `/run/nexcage/<name>` (`<root>/.proxmox-lxc/<name>` under
+`--root`). A rule changed after `create` does not move a container (since
+0.17.0, #372).
+
+**An id neither backend has a record of does not exist.** The command exits 1
+saying so, without asking Proxmox anything, and `delete --force` exits 0, as it
+does with crun and runc — a container engine cleans up that way. Such an id
+used to go to the Proxmox backend, which matched it against every container in
+the cluster by name or VMID, so a second `delete --force` of a crun container
+named like a VMID destroyed that Proxmox container. A Proxmox container nexcage
+did not create, one addressed by its VMID, and one whose record a reboot
+cleared from `/run` are reached with `--runtime lxc`; a command that changes
+one (start, stop, pause, resume, rollback) writes the record again under its
+name, so the next command needs no `--runtime`.
+
+**A record is of a name, not a VMID.** Through it, an id finds the container
+with that name and nothing else: a record of `250` whose container was
+destroyed outside nexcage does not reach whatever container has VMID 250 now.
+Such a record — its container destroyed from the GUI or with `pct`, or renamed
+— is forgotten by `delete --force`, which then exits 0 and does nothing else;
+any other command exits 1 saying no container has that name. A cluster that
+cannot be asked is an error, never taken for "no such container", so a record
+is not forgotten on a failed listing.
+
+**One id, one backend.** `create` and `run` refuse, with exit 1, an id the
+other backend already has a record of, since every later command would reach
+only one of the two containers. In a binary built without crun, a `status`
+file under `/run/crun` is another runtime's container and holds nothing up.
+For the same reason a command run with `--runtime lxc` writes no record of a
+Proxmox container whose name libcrun has: it says so, and that container is
+reached with `--runtime lxc` from then on.
+
 `--runtime <lxc|crun>` overrides that for one command, before or after the
 command name; `--runtime lxc` for a container the crun backend has exits 2.
 
@@ -327,6 +403,17 @@ line that explains it.
 way `runc exec` does, so 1 and 2 from that command mean whatever the command
 means by them.
 
+On the Proxmox LXC backend the tools nexcage runs (`pct`, `pvesh`, `pvesm`,
+`tar`, `zfs`; not `exec`'s `pct exec`) get `SIGTERM` when nexcage dies, and
+`pct` passes it on to its task. A command whose nexcage is killed — by a
+caller's timeout, say — is cut short rather than finishing behind its back. A
+`pct create` cut short is removed by Proxmox, but `stop`, `delete` and `pull`
+stop where they were, and a `pct destroy` cut short can leave a container half
+removed. Run the command again (`delete --force` for a delete) to finish it.
+Work on another node — `create --node`, or any command on a container that
+lives there — is not cut short: `pvesh` hands it over ssh to that node's
+`pvesh`, which a `SIGTERM` here does not reach.
+
 ## Commands
 
 ### create
@@ -346,7 +433,7 @@ unique in the cluster. The VMID comes from `pvesh get /cluster/nextid`. `--image
 |---|---|---|
 | Proxmox template | `local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst` | Any `<storage>:vztmpl/…` volume |
 | Template file name | `debian-12-standard_12.7-1_amd64.tar.zst` | Looked up as `local:vztmpl/<file>` |
-| OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only. Found on `--storage` (default `local`) if already pulled, else pulled there through `oci-registry-pull`; the volid is read back from the storage, never guessed from the reference |
+| OCI registry reference | `docker.io/library/redis:7` | Proxmox VE 9.1+ only. Pulled onto `--storage` (default `local`) through `oci-registry-pull` into a file named for the whole reference, as [`pull`](#pull) names it, and created from exactly that file. A file already there under that name is used rather than pulled again; no other template is, whatever its name |
 | OCI bundle directory | `/var/lib/nexcage/bundles/web` | Any absolute path, containing `config.json` and `rootfs/`; a relative path is a usage error (exit 2) |
 
 `--console-socket <path>` is where the runtime sends the master end of the
@@ -374,11 +461,90 @@ one core unless the options below or the OCI bundle set them. Its root filesyste
 unprivileged unless `proxmox.unprivileged` is `false`; images from a registry
 always run unprivileged.
 
-For an OCI bundle, nexcage packs `rootfs/` with tar into
-`local:vztmpl/nexcage-<name>-<time>.tar.zst`, creates the container from that
-template and deletes the archive. The rootfs is used as it is, so it must boot
-as a system container: an image without an init will not start. Mounts are
-added as `mpX` entries, and the user namespace maps to `nesting=1,keyctl=1`.
+For an OCI bundle, nexcage packs `rootfs/` with tar into an archive, 0600, in
+a directory of its own that only root can enter,
+`nexcage-bundle-<name>-<random>/` under `$TMPDIR` or else `/var/tmp`. It gives
+`pct create` that file, which Proxmox takes from root, and deletes it and its
+directory afterwards, also when SIGINT, SIGTERM or SIGHUP ends nexcage first
+(a SIGKILL leaves them, still readable by root alone). The archive is never on
+a Proxmox storage, so it is not a template anyone else can see or use.
+`$TMPDIR` has to be an absolute path to a directory owned by root (or by the
+user nexcage runs as), and sticky if its group or anyone else can write to
+it, as `/var/tmp` is; another is refused before anything is packed. A
+symlink in the path is resolved once, and the directory it leads to is the
+one checked and used; the directories above it are not checked. The
+archive's path is 48 characters longer than that directory's and the name
+together, and `pct create` takes one of at most 255: under `/var/tmp` a
+name of up to 199 characters fits, and a longer path is refused (exit 2)
+before anything is packed. The
+rootfs is used as it is, so it must boot as a system container: an image
+without an init will not start. The bundle's namespaces turn on no Proxmox
+features: LXC gives the container its own namespaces, and a user namespace
+when it is unprivileged. Nesting and keyctl, which loosen the container's
+AppArmor profile and seccomp filter, are the host administrator's to give
+with `pct set <vmid> --features`.
+
+Proxmox confines every container with its own AppArmor profile, capability
+set, seccomp filter and device rules, and pct cannot take a bundle's instead.
+`process.capabilities`, `process.noNewPrivileges`, `process.apparmorProfile`,
+`process.selinuxLabel`, `process.rlimits`, `root.readonly`, `linux.seccomp`,
+`linux.maskedPaths`, `linux.readonlyPaths`, `linux.devices` and
+`linux.resources.devices` are therefore not applied: create names the ones a
+bundle sets in one warning and goes ahead. The warning is on stderr, and in
+the `--log` file as well when there is one; `--log-level error` leaves it out.
+A bundle whose confinement has to hold needs `--runtime crun`.
+
+The bundle's bind mounts become the container's mount points `mp0`, `mp1`, ...
+through one `pct set` after the create, which checks each as Proxmox's API
+does. A mount's source and destination must be absolute, normalised paths
+(no empty, `.` or `..` component, no trailing `/`) without control
+characters (ASCII's, or the C1 ones from U+0080 to U+009F), the line and
+paragraph separators U+2028 and U+2029, `,` or `=`; the destination cannot
+be `/`, and a source under
+`/dev/` is refused, since Proxmox would mount the filesystem on that device
+rather than bind it. Proxmox binds directories only: a source that is not a
+directory when the container starts makes the start fail. The kernel
+filesystems a runtime-spec bundle mounts at `/proc`, `/sys`, `/sys/fs/cgroup`,
+`/dev`, `/dev/pts`, `/dev/shm` and `/dev/mqueue` are the container's own, set
+up by LXC and its init, and are left out with their options: the warning
+above names each such mount that has options (a `noexec` on `/dev/shm`, say).
+Any other mount that is not a bind mount is refused. A container has 256
+mount points, `mp0` to `mp255`, so a bundle with more bind mounts than that
+is refused too.
+
+A bind mount's `ro` becomes `ro=1`, which Proxmox checks took effect, and
+`nosuid`, `nodev`, `noexec` and `noatime` become its `mountoptions`. Proxmox
+binds non-recursively, so the container sees the source without the mounts
+below it: `rbind` gives no more than `bind`, and the recursive forms (`rro`,
+`rnosuid`, ...) mean the same as the plain ones. `rw` and the `private` and
+`slave` propagation modes need nothing, since LXC never lets a container's
+mounts propagate to the host. Any other option (`rshared`, `strictatime`,
+`suid`, ...) is refused rather than dropped. A refusal is exit 2, before
+anything is packed or created. What a bind mount can reach is in
+[BACKENDS.md](architecture/BACKENDS.md#a-container-from-an-oci-bundle).
+
+The bundle's `linux.resources.memory.limit`, in bytes, becomes `--memory`. `-1`,
+the runtime-spec's "no limit", leaves `--memory` out, so pct's default of 512
+MiB applies: Proxmox has no unlimited memory for a container.
+`linux.resources.cpu.shares` becomes `--cores`, 1024 shares to a core, up to
+the kernel's maximum of 262144 (256 cores). Another negative limit, a
+limit below the 16 MiB Proxmox gives a container at least, more shares than
+that, or a value that is not an integer is refused (exit 2) before anything
+is packed. So is a `config.json` whose `mounts` is not a list, or
+whose `linux`, `linux.resources`, `memory` or `cpu` is not an object, or
+that holds a mount, argument or environment entry of the wrong type: such a
+part used to be skipped, with the mounts or limits it held.
+
+nexcage records the container as soon as `pct create` has made it. A create
+that fails after that point — the `pct set` that applies the bundle's mounts
+refused, the record not written — destroys the container it made, and that
+record, before it exits 1, as `runc create` does, so the same name can be
+created again. It checks the VMID's hostname first, as `delete` does. Should
+that check or the `pct destroy` fail, create says so, naming the CT, and
+keeps the record: `delete --force <name>`, which is how a container
+engine cleans up a failed create, then destroys it. If nexcage itself is
+killed while `pct create` runs, pct gets `SIGTERM` and aborts the create;
+Proxmox removes what it had made.
 
 #### pct options
 
@@ -389,10 +555,10 @@ nexcage's, for memory, cores and the network).
 
 | Option | pct | Notes |
 |---|---|---|
-| `--memory <size>` | `memory` | As for `update`: bytes, or with K, M or G. MiB, rounded up |
+| `--memory <size>` | `memory` | As for `update`: bytes, or with K, M or G. MiB, rounded up; at least 16 MiB |
 | `--memory-swap <size>` | `swap` | As for `update`, runc's meaning: memory plus swap. pct's `swap` is the difference, so it cannot be less than the memory |
-| `--cpu-quota <us>`, `--cpu-period <us>` | `cpulimit` | Quota over period, in cores; the period defaults to 100000 |
-| `--cpu-share <n>` | `cpuunits` | cgroup v1 shares converted to the v2 weight, as runc converts them |
+| `--cpu-quota <us>`, `--cpu-period <us>` | `cpulimit` | Quota over period, in cores; the period defaults to 100000. At least a hundredth of a core, as for `update` |
+| `--cpu-share <n>` | `cpuunits` | cgroup v1 shares converted to the v2 weight, as runc converts them; at least 1 |
 | `--cores <n>` | `cores` | The cores the container sees |
 | `--ip <cidr>` | `net0` `ip=` | `dhcp` by default; `manual` leaves it unset |
 | `--gw <address>` | `net0` `gw=` | |
@@ -421,7 +587,14 @@ nexcage create --name web-1 --memory 2G --cores 2 --ip 10.0.0.5/24 --gw 10.0.0.1
 nexcage run --name <name> <image>
 ```
 
-`create` followed by `start`, on this host. `--node` is refused (exit 1): to
+`create` followed by `start`, on this host. If `start` fails, the container
+`create` made is destroyed again before `run` exits 1, as `runc run` does, so
+nothing is left under the name. `run` starts and destroys it by the VMID
+`create` made, never by the name, which another container may have taken in
+the meantime; and as `stop` and `delete` do, it first checks that the VMID's
+hostname is still that name. A VMID that went to another container while
+`pct start` ran is left alone, and so is the record, which `delete --force
+<name>` then clears. `--node` is refused (exit 1): to
 make the container on another node, `create --node`, then `start`.
 `--console-socket` and `--pid-file` are refused as `create` refuses them, since
 `pct start` runs the container's init itself; and the crun backend does not
@@ -453,6 +626,15 @@ Destroys the container with `pct destroy` and removes its state directory.
 A running container must be stopped first, unless `--force` is given: that
 shuts it down and then destroys it, as `runc delete --force` does. A container
 engine sends `--force` once it has given up waiting for a clean shutdown.
+`delete --force` of a container no backend has a record of exits 0, and so is
+safe to repeat; plain `delete` of one exits 1 (see
+[Backend selection](#backend-selection)). So does `delete --force` of a
+container nexcage has a record of but no node has any more: it forgets the
+record and touches nothing else. Not while the cluster lists a container it has
+no name for, which may be that one (see [Clusters](#clusters)): `delete` then
+exits 1 and keeps the record. If a node stays down and the container is known
+to be gone, its record is the directory `/run/nexcage/<name>`
+(`<root>/.proxmox-lxc/<name>` under `--root`), which can be removed by hand.
 
 On `--runtime crun`, `--force` also cleans up after a `create` that was killed
 half way: libcrun's state directory is there without its status file, and the
@@ -471,8 +653,15 @@ nexcage kill [-s|--signal SIGNAL] [--all] <name>
 ```
 
 Sends `SIGNAL` to the container's init process from the host, as an OCI runtime
-does: nexcage reads the init's host PID from `pct status <vmid> --verbose` and
-calls `kill(2)`. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
+does: nexcage reads the init's host PID from `pct status <vmid> --verbose`,
+opens a pidfd for it, checks that the process is in the container's cgroup
+(under `/sys/fs/cgroup/lxc/<vmid>/`) and sends the signal through the pidfd. A
+PID that is not the container's any more — the init exited after `pct status`
+read it, and the PID went to another process — is not signalled; the container
+is reported as not running (exit 1). A cgroup in that tree that cannot be read
+— a threaded cgroup made inside the container, one removed while nexcage looks
+— is passed over as one without the init, rather than failing the kill of a
+live container. `SIGNAL` is a name in any case, with or without `SIG` (`TERM`,
 `SIGKILL`, `usr1`), or a number from 1 to 64 in decimal digits and nothing else
 (`1_5` is refused, as runc refuses it); the default is `SIGTERM`. On
 `--runtime crun` libcrun is given the number nexcage read, not the text, so
@@ -532,11 +721,20 @@ guessed at: `exec web-1 --tty=false sh` asked for a terminal in 0.17.0, and took
 stdin, stdout and stderr are connected straight to the process in the
 container; nexcage does not buffer the output.
 
-On the Proxmox LXC backend this runs `pct exec <vmid> -- <command>`, so the
-command has to exist in the container's image — an image without a shell has no
-`sh` for `exec` to call. A container that is not running is an error (exit 1),
-as is one that does not exist; `exec` without a command is a usage error
-(exit 2).
+On the Proxmox LXC backend this runs `pct exec <vmid> --keep-env 0 -- <command>`,
+so the command has to exist in the container's image — an image without a
+shell has no `sh` for `exec` to call. A container that is not running is an
+error (exit 1), as is one that does not exist; `exec` without a command is a
+usage error (exit 2).
+
+The command starts with LXC's clean environment there: `PATH` set to
+`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
+`container=lxc` and the container's own `lxc.environment`. The environment
+nexcage was run with does not reach it — `pct exec` would otherwise hand every
+variable of the caller's shell or CI job, tokens and keys included, to a binary
+from the image. `TERM` is not passed either, so a `--tty` session starts
+without it. To give the command a variable, say so on its command line:
+`nexcage exec web-1 -- env TERM=xterm FOO=1 <command>`.
 
 `--process`, `--detach`, `--user`, `--cwd`, `--console-socket` and
 `--pid-file` are refused there rather than ignored (exit 1): `pct exec` takes a
@@ -632,7 +830,7 @@ each one is on:
 ```
 NODE        STORAGE      SHARED  SIZE   TEMPLATE
 prox-home   local        no      129M   local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst
-prox-home   shared-rdma  yes     31M    shared-rdma:vztmpl/redis_7.tar
+prox-home   shared-rdma  yes     31M    shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
 titan       local        no      98M    local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz
 ```
 
@@ -641,6 +839,9 @@ what `create --node` checks, so this is where to look before placing a container
 elsewhere. **A storage marked `SHARED` carries the same files on every node** and
 is listed once rather than once per node — counting a template twice is worse
 than not showing it.
+
+A storage that cannot be listed — an NFS mount that is offline, say — is left
+out with a warning that names it, rather than hiding every other template.
 
 Proxmox LXC only: the crun backend is handed a bundle whose rootfs is already
 there, so it has nothing to list.
@@ -656,8 +857,8 @@ container template, and prints the volid — which is what `create` takes:
 
 ```bash
 $ nexcage pull docker.io/library/redis:7 --storage shared-rdma
-shared-rdma:vztmpl/redis_7.tar
-$ nexcage create --name r1 --node titan shared-rdma:vztmpl/redis_7.tar
+shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
+$ nexcage create --name r1 --node titan shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
 ```
 
 That pair is the point. `create` pulls too when given a registry reference, but
@@ -666,9 +867,51 @@ only on this host, onto `local` unless `--storage` names another, and `create
 shared storage with `pull`, then creating from the volid it prints, is how
 `create --node` gets a registry image.
 
-The volid is read back from the storage rather than composed from the reference:
-the endpoint normalises the file name, and only the storage knows what it
-settled on.
+**The file is named for the whole reference**: registry, namespace, name and
+tag, with every character a file name cannot have as `_`, then `-` and 16 hex
+digits of the reference's SHA-256, plus the `.tar` Proxmox adds. The digest tells
+apart references that read the same once `/` and `:` are `_`. Past 110
+characters the reference is cut, and the digest still covers all of it: Proxmox
+names the pull's task log for an ID that holds the node and the file, and that
+has to fit in one file name on any node. Proxmox's own name kept only the last
+path component and the tag, so `docker.io/library/redis:7` and
+`ghcr.io/someone/redis:7` were both `redis_7.tar`. nexcage prints the volid
+once the storage holds exactly that file, and fails otherwise — a storage that
+cannot be listed is an error, and a file someone else writes during the pull is
+not taken for it. `create` from a registry reference uses the same name, and
+uses a template already on the storage only when it is that exact file.
+
+Proxmox takes a reference that ends in a tag. One pinned by a digest
+(`...@sha256:...`) or with no tag it refuses ("reference: value does not match
+the regex pattern"), and nexcage exits 1 with that message.
+
+A reference pulled there before is not pulled again: Proxmox does not write over
+a file, and the volid of the one there is printed. To fetch it afresh, `rmi` it
+first. Templates an earlier nexcage pulled have Proxmox's short names
+(`redis_7.tar`): `create` pulls the image once more rather than guess what they
+hold, and `rmi` removes the old file.
+
+`--storage` has to be a Proxmox storage ID — a letter, then letters, digits,
+`-`, `_` or `.` — for `pull` and for `create`, or it is a usage error (exit 2)
+before Proxmox is asked anything: it goes into pvesh paths, and for another node
+pvesh passes the path to that node's shell.
+
+`--filename <name>` names the file instead, before the `.tar` Proxmox adds. It
+takes letters, digits, `.`, `_` and `-`, not first a `.` or `-`, not last a `.`
+and without `..`, so that Proxmox keeps it as it is and `rmi` and `create
+--node` take the volid `pull` prints (a last `.` and the `.tar` Proxmox adds
+would make `..`), and at most 127
+characters, which leaves room for the task's log; anything else is a usage error
+(exit 2). So is a name ending in `-` and 16 lower-case hex digits, the shape of
+a name nexcage derives: `create` would take that file for the reference the name
+was derived from, whatever image was pulled into it. A file of that name already
+on the storage is an error (exit 1) rather than an answer: the name says nothing
+about which image it holds.
+
+Whoever can write templates to the storage (`Datastore.AllocateTemplate`) can
+put a file under any name, this one included, and Proxmox's upload writes over
+an existing file. Those users are trusted with every image created from that
+storage.
 
 Needs **Proxmox VE 9.1 or later** on the target node, which is where
 `oci-registry-pull` arrived. nexcage checks the version of the host it runs on,
@@ -704,7 +947,12 @@ named, and the output says so rather than leaving someone to discover it.
 
 A template that is not there is an error (exit 1), not a no-op: a mistyped volid
 should not look like a successful removal. A malformed name is a usage error
-(exit 2).
+(exit 2), before Proxmox is asked anything: the volid has to be exactly
+`<storage>:vztmpl/<file>`, with a Proxmox storage ID and the file in letters,
+digits, `.`, `_` and `-`, without `..` — the characters Proxmox's own uploads,
+downloads and pulls write. A template named otherwise is removed on its node
+(`pveam remove`). The volid goes into the delete's pvesh path, which for another
+node reaches that node's shell.
 
 Removing a template does not affect containers created from it — a template is
 copied when a container is made, not referenced.
@@ -771,7 +1019,9 @@ parser would read as something else, or nested deeper than 64 levels (see
 `--resources <file>` is a runtime-spec `linux.resources` object, and `-` reads
 it from stdin. **That is how containerd sends an in-place resize**:
 `update --resources=- <id>` with the document on stdin. It cannot be combined
-with the value flags.
+with the value flags. A number in it is a whole one of at most
+9223372036854775807, as libcrun reads it too: one with a fraction or an
+exponent (`1.5`, `1e9`) is refused, naming the setting (exit 2).
 
 On the crun backend everything reaches libcrun, except what would take a
 container made under an isolation profile above the profile's memory or pids
@@ -780,11 +1030,21 @@ On the Proxmox LXC backend the settings are said to `pct set`, in its terms:
 
 | runc's words | pct's |
 |---|---|
-| `--memory <bytes>` | `--memory <MiB>`, rounded up |
+| `--memory <bytes>` | `--memory <MiB>`, rounded up. Less than pct's least, 16 MiB, is refused rather than raised to it — `0` included, which runc reads as "unchanged". Proxmox works the bytes out again from the MiB in 64 bits, so a size past that is refused too |
 | `--memory-swap <bytes>` (memory plus swap) | `--swap <MiB>`, the difference from the memory limit — this call's, or the config's |
-| `--cpu-quota` / `--cpu-period` | `--cpulimit <cores>`, quota over period; a quota of `-1` is `0`, no limit |
-| `--cpu-share <shares>` | `--cpuunits <weight>`, converted the way runc converts cgroup v1 shares to a v2 weight (1024 → 39) |
-| anything else | refused, naming the setting, because a limit asked for and silently not applied is the worst answer |
+| `--cpu-quota` / `--cpu-period` | `--cpulimit <cores>`, quota over period; a quota of `-1` is `0`, no limit. pct reads `0` as no limit, so a quota of `0`, or one below a hundredth of a core — the least Proxmox can set, 1 ms in its 100 ms period — is refused rather than said as `0`. So is a quota so large that its cores overflow |
+| `--cpu-share <shares>` | `--cpuunits <weight>`, converted the way runc converts cgroup v1 shares to a v2 weight (1024 → 39); 262144 and above are 10000. `0`, runc's "unchanged", and below are refused |
+| anything else | refused, naming the setting, because a limit asked for and silently not applied is the worst answer (exit 1) |
+
+"Anything else" includes every setting a `--resources` document gives besides
+the ones above — `memory.swappiness`, `unified`, a `devices` or
+`hugepageLimits` list — so the whole document is refused, and nothing in it is
+applied. A setting that is `null`, an empty list or an empty object sets
+nothing and is not refused.
+
+A value refused above is a usage error naming the setting (exit 2), before pct
+is asked: a limit pct cannot say as it was asked is not turned into a
+different one.
 
 A container on another node is updated through that node's API
 (`pvesh set /nodes/<node>/lxc/<vmid>/config`), which takes the same options.
@@ -818,8 +1078,12 @@ adds is the container by name, found on any node of the cluster.
 The storage has to be one that can snapshot: zfs, lvm-thin, or a directory
 storage holding qcow2. A raw volume on a directory storage cannot, and the
 answer is then pct's refusal plus one line saying which storages can. The
-snapshot's name is Proxmox's: letters, digits, `-` and `_`, not `current`, and
-not one already used.
+snapshot's name is Proxmox's: a letter, then letters, digits, `-` or `_`, 2 to
+40 characters, not `current`, and not one already used. nexcage checks the rule
+itself, for `snapshot`, `rollback` and `delsnapshot`, before it looks the
+container up or asks Proxmox anything, and anything else is a usage error (exit
+2): for a container on another node the name goes into a pvesh path, and pvesh
+passes that path to the node's shell over ssh without quoting it.
 
 `rollback` of a running container stops it first: Proxmox kills it, as `pct
 rollback` does, and it stays stopped unless `--start`, which brings it up

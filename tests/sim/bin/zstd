@@ -1,0 +1,16 @@
+#!/bin/bash
+# Fake zstd: the one `tar --zstd` runs when nexcage packs a bundle's rootfs.
+# It is the real zstd, found on the PATH without this directory, unless
+# $SIM/fail_zstd exists: then it fails as zstd does on a full disk, so a
+# check can see what a failed pack leaves behind. It logs no call, being
+# tar's helper rather than a tool nexcage runs.
+if [ -e "${SIM:?}/fail_zstd" ]; then
+  echo "zstd: error 70 : Write error : cannot write block : No space left on device" >&2
+  exit 1
+fi
+here=$(cd "$(dirname "$0")" && pwd)
+path=
+IFS=: read -ra dirs <<< "$PATH"
+for d in "${dirs[@]}"; do [ "$d" = "$here" ] || path=${path:+$path:}$d; done
+export PATH=$path
+exec zstd "$@"

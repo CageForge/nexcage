@@ -111,14 +111,43 @@ pub const BackendRouter = struct {
         };
         const runtime_type = switch (operation) {
             .create, .run => if (profile) |p| p.runtime else runtime orelse cfg.getRoutedRuntime(container_id),
-            else => try backendOf(container_id, runtime, self.logger),
+            else => try findBackend(container_id, runtime, self.logger) orelse {
+                // delete --force of a container that is gone succeeds, as it
+                // does with crun and runc: an engine cleans up that way after
+                // a reboot emptied /run or a create was rolled back, and a
+                // failure there leaves it a container it cannot forget.
+                // Said, though: a person deleting a Proxmox container nexcage
+                // did not create would otherwise see success and the container
+                // still there.
+                if (operation == .delete and operation.delete.force) {
+                    if (self.logger) |log| log.warn("no backend has a record of '{s}', so there is nothing to delete; a Proxmox container nexcage did not create is deleted with --runtime lxc", .{container_id}) catch {};
+                    return;
+                }
+                return doesNotExist(container_id, self.logger);
+            },
         };
         if (self.logger) |log| {
             log.debug("Routing container '{s}' to runtime: {s}", .{ container_id, @tagName(runtime_type) }) catch {};
         }
 
+        // One id, one backend. Every later command goes where the record is,
+        // and with a record on each side the second container could only be
+        // reached by removing the first. A build without crun has no crun
+        // backend to have the id: a status file under /run/crun is another
+        // runtime's, and findBackend does not look at it either.
+        if (operation == .create or operation == .run) {
+            const other: ?[]const u8 = switch (runtime_type) {
+                .crun => if (hasLxcRecord(container_id)) "Proxmox LXC" else null,
+                .lxc, .proxmox_lxc => if (backends.isCrunEnabled() and hasCrunState(container_id)) "crun" else null,
+            };
+            if (other) |name| {
+                if (self.logger) |log| log.err("'{s}' already exists on the {s} backend; one id names one container", .{ container_id, name }) catch {};
+                return types.Error.OperationFailed;
+            }
+        }
+
         switch (runtime_type) {
-            .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, config, &cfg),
+            .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, runtime != null, config, &cfg),
             .crun => try self.executeCrun(operation, container_id, config, profile),
         }
     }
@@ -150,7 +179,10 @@ pub const BackendRouter = struct {
         return p;
     }
 
-    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, config: ?Config, cfg: *const config_module.Config) !void {
+    /// `asked` is whether --runtime chose this backend. Only then does the
+    /// id find a container by VMID as well as by name: otherwise it came here
+    /// through nexcage's record, which proves a name and no VMID.
+    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, asked: bool, config: ?Config, cfg: *const config_module.Config) !void {
         const sandbox_config = try self.createSandboxConfig(operation, container_id, .proxmox_lxc, config);
         defer self.cleanupSandboxConfig(operation, &sandbox_config);
 
@@ -171,6 +203,7 @@ pub const BackendRouter = struct {
 
         if (self.logger) |log| proxmox_backend.setLogger(log);
         proxmox_backend.setDebugMode(self.debug_mode);
+        proxmox_backend.by = if (asked) .name_or_vmid else .name;
 
         // --console-socket and --pid-file mean what the runtime-spec means by
         // them: create leaves the container's process alive on a pty, and the
@@ -230,7 +263,7 @@ pub const BackendRouter = struct {
             // the backend's answer is carried out to main rather than dropped.
             .pause => try proxmox_backend.pause(container_id),
             .resume_ => try proxmox_backend.unpause(container_id),
-            .update => |up| try proxmox_backend.update(container_id, up.values),
+            .update => |up| try proxmox_backend.update(container_id, up.resources_json, up.values),
             .snapshot => |s| try proxmox_backend.snapshot(container_id, s.name, s.description),
             .rollback => |r| try proxmox_backend.rollback(container_id, r.name, r.start),
             .delsnapshot => |s| try proxmox_backend.deleteSnapshot(container_id, s.name),
@@ -270,10 +303,11 @@ pub const BackendRouter = struct {
                 }
                 core.exit_status.propagated = try proxmox_backend.exec(container_id, exec_cfg.argv);
             },
-            .run => {
-                try proxmox_backend.create(sandbox_config);
-                try proxmox_backend.start(container_id);
-            },
+            // Create, then start, and a start that fails removes the
+            // container again, as `runc run` does. The driver does both: only
+            // it knows the VMID create made, and the undo must go by that, not
+            // by the name, which another container can have taken meanwhile.
+            .run => try proxmox_backend.run(sandbox_config),
             .state => {
                 // State operation handled by command, backend returns info
                 // Router just ensures backend is initialized
@@ -383,15 +417,29 @@ pub const BackendRouter = struct {
     }
 };
 
-/// The backend an existing container is on (#372, ADR-005 decision 3). The
+/// The backend an existing container is on (#372, ADR-005 decision 3), or
+/// the error saying it does not exist.
+pub fn backendOf(container_id: []const u8, explicit: ?types.RuntimeType, logger: ?*core.LogContext) types.Error!types.RuntimeType {
+    return try findBackend(container_id, explicit, logger) orelse doesNotExist(container_id, logger);
+}
+
+/// The backend an existing container is on, or null when neither has it. The
 /// container decides, not the configuration: routing is read only when a
 /// container is created, so a rule changed since then cannot send `kill` or
-/// `delete` to the other backend. libcrun keeps a directory per container
-/// under its state root, which costs a stat to look for; anything not there
-/// is the Proxmox backend's to find, or to report missing. An explicit
-/// --runtime naming the other backend for a container libcrun has is
-/// refused rather than obeyed.
-pub fn backendOf(container_id: []const u8, explicit: ?types.RuntimeType, logger: ?*core.LogContext) types.Error!types.RuntimeType {
+/// `delete` to the other backend.
+///
+/// A backend has a container when its own record of it is on disk, which
+/// costs a stat to look for: libcrun's status file, or the state.json the
+/// Proxmox backend writes when it creates one. Anything else used to be sent
+/// to the Proxmox backend "to find, or to report missing", and it could do
+/// neither safely. On a node without Proxmox it failed an engine's cleanup of
+/// a container libcrun no longer had ("pvesh not found"), where crun and runc
+/// exit 0; on a Proxmox host it matched the id against every CT in the
+/// cluster, by name or VMID, so a second `delete --force 105` of a crun
+/// container destroyed CT 105. A Proxmox container nexcage did not create is
+/// reached with --runtime lxc. An explicit --runtime naming the other backend
+/// for a container libcrun has is refused rather than obeyed.
+fn findBackend(container_id: []const u8, explicit: ?types.RuntimeType, logger: ?*core.LogContext) types.Error!?types.RuntimeType {
     const on_crun = backends.isCrunEnabled() and hasCrunState(container_id);
     if (explicit) |rt| {
         if (on_crun and rt != .crun) {
@@ -400,18 +448,24 @@ pub fn backendOf(container_id: []const u8, explicit: ?types.RuntimeType, logger:
         }
         return rt;
     }
-    return if (on_crun) .crun else .proxmox_lxc;
+    if (on_crun) return .crun;
+    if (hasLxcRecord(container_id)) return .proxmox_lxc;
+    return null;
 }
 
-fn hasCrunState(container_id: []const u8) bool {
-    // An id is one path component; anything else is not libcrun's.
-    if (container_id.len == 0 or std.mem.indexOfScalar(u8, container_id, '/') != null) return false;
-    if (std.mem.eql(u8, container_id, ".") or std.mem.eql(u8, container_id, "..")) return false;
-    var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = std.fmt.bufPrint(&buf, "{s}/{s}", .{ core.state_root.crun(), container_id }) catch return false;
-    std.fs.cwd().access(path, .{}) catch return false;
-    return true;
+/// "does not exist" is what an engine looks for in a runtime's error, and
+/// what crun and runc say. The rest is for a person: a Proxmox container
+/// whose record is gone -- /run is emptied at boot -- still exists.
+fn doesNotExist(container_id: []const u8, logger: ?*core.LogContext) types.Error {
+    if (logger) |log| log.err("container '{s}' does not exist: no backend has a record of it. A Proxmox container nexcage did not create, or whose record in {s} a reboot cleared, is reached with --runtime lxc", .{ container_id, core.state_root.get() }) catch {};
+    return types.Error.NotFound;
 }
+
+/// libcrun's own record of the container, and the Proxmox LXC backend's.
+/// In core.state_root, because the Proxmox backend asks too, before it
+/// writes a record (ProxmoxLxcDriver.record).
+const hasCrunState = core.state_root.crunHas;
+const hasLxcRecord = core.state_root.lxcHas;
 
 pub const Operation = union(enum) {
     create: CreateConfig,
@@ -448,7 +502,8 @@ pub const RollbackConfig = struct {
 
 /// `update`: the linux.resources document an engine sent, for a backend that
 /// reads one (libcrun), and the settings in it -- or the ones the command line
-/// named -- for a backend that cannot (Proxmox LXC, which says them to pct).
+/// named -- for a backend that cannot (Proxmox LXC, which says them to pct,
+/// and refuses what in the document they leave out).
 pub const UpdateConfig = struct {
     resources_json: ?[]const u8 = null,
     values: []const types.ResourceUpdate = &.{},
@@ -526,3 +581,57 @@ pub const Config = struct {
     network: ?types.NetworkConfig = null,
     resources: ?types.ResourceLimits = null,
 };
+
+test "a Proxmox LXC container's state under --root is not taken for libcrun's" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    try core.state_root.set(root);
+    defer core.state_root.set("/run/nexcage") catch unreachable;
+
+    // What the Proxmox backend writes for a container, wherever it puts it
+    try tmp.dir.makePath("web");
+    try tmp.dir.writeFile(.{ .sub_path = "web/state.json", .data = "{}" });
+    try tmp.dir.writeFile(.{ .sub_path = "web/runtime-metadata.json", .data = "{}" });
+    try std.testing.expect(!hasCrunState("web"));
+
+    // and what libcrun writes for one at create
+    try tmp.dir.makePath("ctr");
+    try tmp.dir.writeFile(.{ .sub_path = "ctr/status", .data = "" });
+    try std.testing.expect(hasCrunState("ctr"));
+}
+
+test "under --root the Proxmox LXC records are in their own directory" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    try core.state_root.set(root);
+    defer core.state_root.set("/run/nexcage") catch unreachable;
+
+    try tmp.dir.makePath(".proxmox-lxc/web");
+    try tmp.dir.writeFile(.{ .sub_path = ".proxmox-lxc/web/state.json", .data = "{}" });
+    try std.testing.expect(hasLxcRecord("web"));
+    try std.testing.expect(!hasCrunState("web"));
+    try std.testing.expect(!hasLxcRecord(".."));
+    try std.testing.expect(!hasLxcRecord("web/../web"));
+}
+
+test "an id with no backend's record is in neither backend" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    try core.state_root.set(root);
+    defer core.state_root.set("/run/nexcage") catch unreachable;
+
+    try std.testing.expectEqual(@as(?types.RuntimeType, null), try findBackend("105", null, null));
+    try std.testing.expectError(types.Error.NotFound, backendOf("105", null, null));
+    // --runtime lxc reaches a Proxmox container nexcage has no record of
+    try std.testing.expectEqual(@as(?types.RuntimeType, .lxc), try findBackend("105", .lxc, null));
+
+    try tmp.dir.makePath(".proxmox-lxc/web-1");
+    try tmp.dir.writeFile(.{ .sub_path = ".proxmox-lxc/web-1/state.json", .data = "{}" });
+    try std.testing.expectEqual(types.RuntimeType.proxmox_lxc, try backendOf("web-1", null, null));
+}

@@ -514,21 +514,44 @@ jobs:
         fi
 
         echo "[E2E] create <id> --bundle <dir>, and state reports that bundle"
-        $SUDO mkdir -p "$BUNDLE/rootfs"
+        $SUDO mkdir -p "$BUNDLE/rootfs" "$BUNDLE/shared"
         $SUDO tar -xpf "$($SUDO pvesm path "$TPL")" -C "$BUNDLE/rootfs"
-        echo '{"ociVersion":"1.0.2","process":{"args":["/sbin/init"],"cwd":"/"},"root":{"path":"rootfs"}}' \
+        # One bind mount, read-only and nosuid: the only place the real
+        # `pct set --mpN` that gives a container a bundle's mounts is run
+        printf '{"ociVersion":"1.0.2","process":{"args":["/sbin/init"],"cwd":"/"},"root":{"path":"rootfs"},"mounts":[{"destination":"/mnt/shared","type":"bind","source":"%s","options":["rbind","ro","nosuid"]}]}' "$BUNDLE/shared" \
           | $SUDO tee "$BUNDLE/config.json" >/dev/null
         # The runtime-spec form: the id positionally, the bundle behind --bundle
         nx create "$OCI_NAME" --bundle "$BUNDLE"
         expect_status "$OCI_NAME" created
         got=$(nx state "$OCI_NAME" | sed -n 's/.*"bundle": "\(.*\)".*/\1/p')
         [ "$got" = "$BUNDLE" ] || { echo "::error::state reported bundle '$got', expected $BUNDLE"; exit 1; }
-        if $SUDO pvesm list local --content vztmpl | grep -q "vztmpl/nexcage-$OCI_NAME-"; then
-          echo "::error::the template packed from the bundle is still on storage local"
-          exit 1
-        fi
+        # The rootfs is packed into a private directory under $TMPDIR, which
+        # sudo clears, so /var/tmp, and pct create is given that file. It
+        # never goes to storage local, and is removed once pct create has
+        # read it.
+        for d in /var/tmp "${TMPDIR:-/var/tmp}"; do
+          if compgen -G "$d/nexcage-bundle-$OCI_NAME-*" >/dev/null; then
+            echo "::error::the archive packed from the bundle is still in $d"
+            exit 1
+          fi
+        done
+        # Proxmox writes the mount point back with its keys in its own order
+        OCI_ID=$(vmid_of "$OCI_NAME")
+        conf_has "$OCI_ID" "^mp0: $BUNDLE/shared,"
+        for prop in mp=/mnt/shared ro=1 mountoptions=nosuid; do
+          conf_has "$OCI_ID" "^mp0: .*,$prop(,|\$)"
+        done
         nx start "$OCI_NAME"
         expect_status "$OCI_NAME" running
+        # ... and the kernel has the mount read-only and nosuid in there
+        opts=$($SUDO pct exec "$OCI_ID" -- awk '$2 == "/mnt/shared" {print $4}' /proc/mounts)
+        for want in ro nosuid; do
+          case ",$opts," in
+            *",$want,"*) ;;
+            *) echo "::error::/mnt/shared in $OCI_NAME is mounted '$opts', without $want"; exit 1 ;;
+          esac
+        done
+        echo "[E2E] /mnt/shared in $OCI_NAME: $opts"
         nx stop "$OCI_NAME"
         expect_status "$OCI_NAME" stopped
         nx delete "$OCI_NAME"

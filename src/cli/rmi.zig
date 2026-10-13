@@ -91,7 +91,9 @@ pub const RmiCommand = struct {
         return allocator.dupe(u8, "Usage: nexcage rmi <template> [--node <name>]\n\n" ++
             "Remove a container template from the storage it is on. The template is\n" ++
             "named the way `images` lists it and `pull` prints it, as\n" ++
-            "<storage>:vztmpl/<file>.\n\n" ++
+            "<storage>:vztmpl/<file>, the file in letters, digits, '.', '_' and\n" ++
+            "'-' without '..'. A template named otherwise is removed on its node\n" ++
+            "with `pveam remove`.\n\n" ++
             "Options:\n" ++
             "  --node <name>   The node to remove it from (default: this host)\n" ++
             "  -h, --help      Show this help message\n\n" ++

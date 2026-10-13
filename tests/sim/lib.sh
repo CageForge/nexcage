@@ -3,7 +3,7 @@
 # nexcage against. Source it from bash; it checks the machine can host the
 # namespace, creates the scratch directory and defines:
 #
-#   reset_sim      empty container db, call log, state and bundles
+#   reset_sim      empty container db, call log, state, bundles and $TMPDIR
 #   cfg <json>     write the configuration the next nexcage calls read
 #   nexcage_ns ... run nexcage as uid 0 in its own user and mount namespace,
 #                  with --config naming the file cfg wrote, if there is one
@@ -41,6 +41,12 @@ mkdir -p "$SIM/run" "$SIM/work" "$SIM/bundles" "$SIM/cache" "$SIM/cgroup"
 # the namespace and get root's umask, not the one a desktop session gives.
 umask 022
 chmod go-w "$SIM/work"
+# create packs a bundle's rootfs into a private directory under $TMPDIR, else
+# /var/tmp. In the namespace the host's /var/tmp belongs to the overflow uid,
+# which nexcage refuses, and a run should leave nothing on the host either:
+# every run of either suite packs into a directory of its own, which
+# reset_sim empties.
+export TMPDIR=$SIM/vartmp
 
 # Fake pct start leaves a fake init running per started container
 stop_inits() {
@@ -55,8 +61,12 @@ trap stop_inits EXIT
 
 reset_sim() {
   stop_inits
-  rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/* "$S"/cgroup/* "$S/etc"
+  rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/* "$S"/cgroup/* "$S/etc" "$S/vartmp"
   mkdir -p "$S/cache"
+  # What a run interrupted while it packed left here would make the checks
+  # that the archive is gone fail in every later run. 755: nexcage takes only
+  # a directory others cannot write to, or a sticky one.
+  mkdir -m 755 "$S/vartmp"
   : > "$S/db"; : > "$S/calls"
   rm -f "$S"/fail_* "$S/pvever" "$S"/lock.* "$S"/conf.* "$S"/tarlist.* "$S"/sig.* "$S"/snaps.*
   printf "%s\n" "$TPL" local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz local:vztmpl/debian-12.tar.zst > "$S/templates"

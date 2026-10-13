@@ -108,7 +108,9 @@ pub const ExecCommand = struct {
             \\Notes:
             \\  - The container must be running.
             \\  - On the Proxmox LXC backend this runs 'pct exec', so the
-            \\    command has to exist in the container's image.
+            \\    command has to exist in the container's image. It starts with
+            \\    LXC's clean environment, not the caller's; give it a variable
+            \\    on its command line: 'env FOO=1 <command>'.
             \\  - On the crun backend a command typed here is written out as a
             \\    process spec for libcrun. It carries a default PATH, because
             \\    a process with no PATH cannot find 'ls'.
@@ -117,7 +119,7 @@ pub const ExecCommand = struct {
             \\
             \\Examples:
             \\  nexcage exec web-1 ps aux
-            \\  nexcage exec web-1 -- sh -c 'echo $HOSTNAME'
+            \\  nexcage exec web-1 -- env FOO=1 sh -c 'echo $FOO'
             \\  nexcage --runtime crun exec --process /run/p.json abc123
             \\
         );
