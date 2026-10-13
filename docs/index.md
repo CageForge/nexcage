@@ -10,12 +10,14 @@ later — OCI registry images.
 
 **An OCI runtime a container engine drives**, the way runc and crun are driven.
 podman, `ctr`, containerd's CRI and CRI-O all run containers on it, and
-Kubernetes schedules pods onto it with a `RuntimeClass`.
+Kubernetes schedules pods onto it with a `RuntimeClass`. A `RuntimeClass` can
+also pick an isolation profile that the node's administrator defined.
 
 ## Start here
 
-- [Install](INSTALL.md) — releases, source builds, and which of the two
-  published binaries you want
+- [Install](INSTALL.md) — the `.deb` or the binary from a release (one
+  binary with both backends since 0.17.0), a Kubernetes node, and source
+  builds
 - [CLI Reference](CLI_REFERENCE.md) — every command, option and exit code
 - [Kubernetes integration](KUBERNETES_INTEGRATION.md) — the runtime-spec command
   line, the engines it was verified against, and a pod on a real node

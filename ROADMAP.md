@@ -64,9 +64,9 @@ An outside review in October 2026 read the repository's description,
 test showed either. This release says only what is measured, and it measures
 what users ask about first.
 
-- **A description that says what the README says.** The About line and the
-  topics were corrected on 2026-10-13. `docs/index.md` still points readers
-  to two binaries, although 0.17.0 ships one. [#389]
+- **A description that says what the README says.** The About line, the
+  topics and `docs/index.md`, which still pointed readers to two binaries,
+  were corrected on 2026-10-13. [#389]
 - **Workload benchmarks.** `tests/perf/` measures what nexcage adds to each
   command. What a workload gains is a different question:
   - PostgreSQL, Redis and a build agent;
