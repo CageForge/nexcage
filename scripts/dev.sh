@@ -316,6 +316,73 @@ exec bash'
 
 # --- act -----------------------------------------------------------------------
 
+# The images a workflow builds under a short name, `docker build -t
+# nexcage:ci` say, and then uses by that name.
+short_names() { { grep -oE -- '-t [a-z0-9][a-z0-9._-]*:[A-Za-z0-9_.-]+' "$1" || true; } | sed 's/^-t //' | sort -u; }
+
+# Whether the store act's jobs use, the one DOCKER_HOST names, has IMAGE.
+api_has_image() {
+  local rc=0
+  podman --url "$DOCKER_HOST" image exists "$1" || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) die "cannot ask $DOCKER_HOST whether it has $1 (podman exit $rc)" ;;
+  esac
+}
+
+# The short names of NAME... that podman has as both localhost/NAME and
+# docker.io/library/NAME.
+both_names() {
+  local n
+  for n in "$@"; do
+    if api_has_image "localhost/$n" && api_has_image "docker.io/library/$n"; then echo "$n"; fi
+  done
+}
+
+# act_images "NAME..." CMD...: CMD is an act run of a workflow that builds
+# images and then uses them by these short names, as crun_build.yml builds
+# nexcage:ci, runs it, and builds its CRI and runtime-spec images FROM it.
+# Through podman's Docker API a short name is localhost/NAME when that exists
+# and docker.io/library/NAME otherwise, for `docker build -t` and `docker run`
+# alike, so the job runs what it built. A build's FROM, though, takes
+# docker.io/library/NAME first. With both names there, the job builds
+# localhost/nexcage:ci and runs its checks on it, but builds its CRI image on
+# whatever an earlier run left as docker.io/library/nexcage:ci, and critest
+# tests that. So a run is refused while a name is there twice, and fails if
+# one is there twice after it: the job writes only the name it resolves to, so
+# the other came from something that built the same name while it ran. Such
+# runs take turns, too: two at once would build the same names in the middle
+# of each other's steps. No image is renamed or removed here.
+act_images() (
+  local names=$1 n rc=0 twice; shift
+  exec 9>"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/nexcage-dev-act-images.lock"
+  if ! flock -n 9; then
+    say "another act run that builds images under short names is going on; waiting for it to end"
+    flock 9
+  fi
+  if [ "$ENGINE" = podman ]; then
+    # shellcheck disable=SC2086  # one word per name
+    twice=$(both_names $names)
+    if [ -n "$twice" ]; then
+      for n in $twice; do
+        echo "${R}dev.sh:${N} podman has both localhost/$n and docker.io/library/$n. The job's 'docker build -t $n' and 'docker run $n' take the first, while a build FROM $n takes the second, so the job could test an image it did not build. Remove the name you do not use; dev.sh's own commands use the localhost/ ones, and an earlier act run most likely left the other: podman rmi docker.io/library/$n" >&2
+      done
+      return 1
+    fi
+  fi
+  "$@" || rc=$?
+  if [ "$ENGINE" = podman ]; then
+    # shellcheck disable=SC2086
+    twice=$(both_names $names)
+    for n in $twice; do
+      echo "${R}dev.sh:${N} localhost/$n and docker.io/library/$n are both there now, and were not when the job started: something else built $n while it ran, so the job's steps after that may have used that image instead of its own. Run the job again while nothing else builds $n" >&2
+      rc=1
+    done
+  fi
+  return "$rc"
+)
+
 act_jobs() {
   have "$ACT" || die "act is not installed; see scripts/dev.sh doctor"
   act_env
@@ -341,7 +408,7 @@ act_jobs() {
   [ "$ENGINE" != podman ] || extra=(--env DOCKER_BUILDKIT=0 "${extra[@]}")
   mkdir -p "$DEV/act-artifacts"
   for a in "${jobs[@]}"; do
-    local wf=${a%%:*} job=${a#*:} event=pull_request
+    local wf=${a%%:*} job=${a#*:} event=pull_request names
     local -a run=("$ACT") with=()
     [ -f ".github/workflows/$wf" ] || die "no workflow .github/workflows/$wf"
     [ "$job" != "$a" ] || die "'$a': name a job as WORKFLOW:JOB, e.g. ci.yml:simulation"
@@ -365,6 +432,8 @@ act_jobs() {
         # shellcheck disable=SC2016  # the inner shell expands these
         run=(bash -c 'GITHUB_TOKEN=$(gh auth token) exec "$0" "$@"' "$ACT") ;;
     esac
+    names=$(short_names ".github/workflows/$wf" | tr '\n' ' ')
+    [ -z "$names" ] || run=(act_images "${names% }" "${run[@]}")
     step "act-${wf%.yml}-$job" "${run[@]}" "$event" -W ".github/workflows/$wf" -j "$job" \
       --artifact-server-path "$DEV/act-artifacts" "${with[@]}" "${extra[@]}"
   done

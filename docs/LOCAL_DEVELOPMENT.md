@@ -61,11 +61,11 @@ Ubuntu 24.04 and later AppArmor forbids mounts there by default;
 ## Containers
 
 `crun`, `cri`, `shell` and `perf --suite crun` build `localhost/nexcage:ci`
-from the repository's `Dockerfile` — the same image `crun_build.yml` builds —
-which clones vendored crun at its pin and builds the crun backend. With
-unchanged sources the engine's layer cache makes a rebuild take seconds. The
-CRI image `localhost/nexcage:cri-test` adds containerd, crictl and the CNI
-plugins on top of it.
+from the repository's `Dockerfile`, as `crun_build.yml` builds its
+`nexcage:ci`; the Dockerfile clones vendored crun at its pin and builds the
+crun backend. With unchanged sources the engine's layer cache makes a rebuild
+take seconds. The CRI image `localhost/nexcage:cri-test` adds containerd,
+crictl and the CNI plugins on top of it.
 
 The tests run in a privileged container with its own cgroup namespace. Under
 rootless podman two things differ from CI's rootful Docker, and the tests
@@ -120,7 +120,7 @@ scripts/dev.sh act crun_build.yml:docker -- --verbose
 `.actrc` maps `ubuntu-latest`, `ubuntu-24.04` and `ubuntu-22.04` to
 `localhost/nexcage-act:latest` — catthehacker's act image plus `gh`, built from
 `.github/act` — turns pulling off, and adds `--bind`, because act's copy of the
-checkout drops the submodule's `.git` file. `dev.sh` adds three things act
+checkout drops the submodule's `.git` file. `dev.sh` adds four things act
 cannot know:
 
 - `DOCKER_HOST` pointing at podman's socket.
@@ -132,6 +132,27 @@ cannot know:
 - In a linked `git worktree`, a read-only mount of the main repository's
   `.git`, which the worktree's `.git` file points into and which is otherwise
   outside the container.
+- For a workflow that builds images and then uses them by short name, as
+  `crun_build.yml` builds `nexcage:ci`, runs its checks on it and builds its
+  CRI and runtime-spec images `FROM` it: under podman, the job's
+  `docker build -t nexcage:ci` and `docker run nexcage:ci` both take
+  `localhost/nexcage:ci` when that exists, and `docker.io/library/nexcage:ci`
+  otherwise. The first is the name `crun`, `cri` and `shell` give their
+  image, so the job's build takes it over; they build theirs again before
+  they use it. A build `FROM nexcage:ci`, though, takes
+  `docker.io/library/nexcage:ci` first. With both names there, the job runs
+  its checks on its own build but builds its CRI image on whatever an earlier
+  run left as `docker.io/library/nexcage:ci`, and critest tests that. So
+  `dev.sh` refuses the job while one of its images has both names, and says
+  which to remove (`podman rmi docker.io/library/nexcage:ci`, most likely an
+  earlier act run's), and fails it if one has both when it ends: something
+  else built that name while it ran. It renames and removes nothing itself.
+  It also runs one such job at a time: a second, from another worktree say,
+  waits for the first rather than building the same names in the middle of
+  its steps. `crun`, `cri` and `shell` build `localhost/nexcage:ci`,
+  `:builder` and `:cri-test` as well and take no turn, so one of them in
+  another checkout while such a job runs can still change what it tests:
+  run them one at a time.
 
 `dependency_check.yml` is scheduled, so `dev.sh` dispatches it, with
 `dry_run=true` and the token `gh auth token` holds: the job reads the
@@ -145,13 +166,8 @@ with `--bind` the workflow's `submodules: recursive` checks nothing out:
 leave `deps/crun` out of their context (`.dockerignore`), since the Dockerfile
 clones crun itself, so a checked-out one does not get in their way.
 
-Three things act runs differently from GitHub's runners:
+Two things act runs differently from GitHub's runners:
 
-- `crun_build.yml`'s `docker build -t nexcage:ci` and `--target builder -t
-  nexcage:builder` go to podman, which names the results
-  `localhost/nexcage:ci` and `localhost/nexcage:builder` in your image store:
-  the same tags `crun`, `cri` and `shell` build and use. Running that job
-  replaces them, and two runs at once race on them, so run it one at a time.
 - `ci.yml`'s `build-test` fails at its last step, "Upload binary
   (ReleaseSafe)": act 0.2.89's artifact server answers
   `actions/upload-artifact@v6` with "Error unauthorized". Every step before it
