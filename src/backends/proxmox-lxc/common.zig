@@ -85,7 +85,7 @@ test "output past the cap is an error, not a short answer" {
 /// path, which removes what it had made. A KILL reaches pct alone: the worker
 /// carries on creating the container until it next writes to the pipe pct
 /// held, and then dies of SIGPIPE half-way, leaving a CT locked in "create".
-/// Every other child -- tar, pvesm, pvesh get, zfs -- ends on TERM as on KILL.
+/// Every other child -- tar, pvesm, pvesh get -- ends on TERM as on KILL.
 const parent_death_signal = posix.SIG.TERM;
 
 /// What can stop a child before its program runs, reported from the child.

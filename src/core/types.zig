@@ -419,7 +419,6 @@ pub const ProxmoxSettings = struct {
 pub const ProxmoxLxcBackendConfig = struct {
     allocator: std.mem.Allocator,
     // Optional overrides from config file
-    zfs_pool: ?[]const u8 = null,
     default_memory_mb: ?u32 = null,
     default_cores: ?u32 = null,
     default_bridge: ?[]const u8 = null,
@@ -429,7 +428,6 @@ pub const ProxmoxLxcBackendConfig = struct {
     rootfs_size_gb: ?u32 = null,
 
     pub fn deinit(self: *ProxmoxLxcBackendConfig) void {
-        if (self.zfs_pool) |p| self.allocator.free(p);
         if (self.default_bridge) |b| self.allocator.free(b);
         if (self.default_ostype) |o| self.allocator.free(o);
         if (self.default_storage) |s| self.allocator.free(s);

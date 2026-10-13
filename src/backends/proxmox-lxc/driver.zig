@@ -1,13 +1,11 @@
 const std = @import("std");
 const core = @import("core");
 const build_options = @import("build_options");
-const zfs = @import("zfs.zig");
 const pve = @import("pve.zig");
 const oci = @import("oci.zig");
 const common = @import("common.zig");
 const oci_spec = @import("oci_spec");
 const bundle = oci_spec.runtime.bundle;
-const template_manager = @import("template_manager.zig");
 
 /// Proxmox LXC backend driver
 pub const ProxmoxLxcDriver = struct {
@@ -17,8 +15,6 @@ pub const ProxmoxLxcDriver = struct {
     config: core.types.ProxmoxLxcBackendConfig,
     logger: ?*core.LogContext = null,
     debug_mode: bool = false,
-    template_manager: template_manager.TemplateManager,
-    zfs_mgr: zfs.ZfsManager,
     pve_client: pve.PveClient,
     oci_processor: oci.OciProcessor,
     /// What a command's id may be taken for: a name, unless the caller
@@ -33,15 +29,9 @@ pub const ProxmoxLxcDriver = struct {
     pub fn init(allocator: std.mem.Allocator, config: core.types.ProxmoxLxcBackendConfig) !*Self {
         const driver = try allocator.alloc(Self, 1);
 
-        // Initialize template manager with cache directory
-        const cache_dir = "/tmp/nexcage-template-cache";
-        const template_mgr = template_manager.TemplateManager.init(allocator, null, cache_dir);
-
         driver[0] = Self{
             .allocator = allocator,
             .config = config,
-            .template_manager = template_mgr,
-            .zfs_mgr = zfs.ZfsManager.init(allocator, null, config.zfs_pool),
             .pve_client = pve.PveClient.init(allocator, null),
             .oci_processor = oci.OciProcessor.init(allocator, null, config),
         };
@@ -50,15 +40,12 @@ pub const ProxmoxLxcDriver = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.template_manager.deinit();
         self.allocator.destroy(self);
     }
 
     /// Set logger
     pub fn setLogger(self: *Self, logger: *core.LogContext) void {
         self.logger = logger;
-        self.template_manager.logger = logger;
-        self.zfs_mgr.logger = logger;
         self.pve_client.logger = logger;
         self.oci_processor.logger = logger;
     }
@@ -74,53 +61,6 @@ pub const ProxmoxLxcDriver = struct {
             return @as(?bundle.Logger, @ptrCast(log));
         }
         return null;
-    }
-
-    /// No-op: direct ZFS CLI integration (no wrapper/client)
-    pub fn setZFSClient(self: *Self) void {
-        _ = self;
-    }
-
-    /// List all cached templates
-    pub fn listTemplates(self: *Self) ![][]const u8 {
-        return self.template_manager.listTemplates();
-    }
-
-    /// Verify template integrity
-    pub fn verifyTemplate(self: *Self, template_name: []const u8) !bool {
-        return self.template_manager.verifyTemplate(template_name);
-    }
-
-    /// Prune old templates
-    pub fn pruneTemplates(self: *Self, max_age_days: u32) !void {
-        return self.template_manager.pruneTemplates(max_age_days);
-    }
-
-    /// Get template information
-    pub fn getTemplateInfo(self: *Self, template_name: []const u8) ?template_manager.TemplateInfo {
-        return self.template_manager.getTemplate(template_name);
-    }
-
-    /// Check if ZFS is available (via CLI)
-    pub fn isZFSAvailable(self: *Self) bool {
-        return self.zfs_mgr.isZFSAvailable();
-    }
-
-    /// Check if ZFS pool exists
-    fn poolExists(self: *Self, pool_name: []const u8) bool {
-        return self.zfs_mgr.poolExists(pool_name);
-    }
-
-    fn datasetExists(self: *Self, dataset_name: []const u8) bool {
-        return self.zfs_mgr.datasetExists(dataset_name);
-    }
-
-    fn getParentDataset(self: *Self, dataset_name: []const u8) ?[]const u8 {
-        return self.zfs_mgr.getParentDataset(dataset_name);
-    }
-
-    fn isZfsCompatible(self: *Self, min_major: u32, min_minor: u32) bool {
-        return self.zfs_mgr.isZfsCompatible(min_major, min_minor);
     }
 
     /// Get Proxmox VE version using pveversion command
@@ -142,25 +82,6 @@ pub const ProxmoxLxcDriver = struct {
 
     fn getNodeName(self: *Self) ![]const u8 {
         return self.pve_client.getNodeName();
-    }
-
-    pub fn setZFSPool(self: *Self, pool: []const u8) !void {
-        try self.zfs_mgr.setPool(pool);
-    }
-
-    /// Create ZFS dataset for container
-    pub fn createContainerDataset(self: *Self, container_name: []const u8, vmid: []const u8) !?[]const u8 {
-        return self.zfs_mgr.createContainerDataset(container_name, vmid);
-    }
-
-    /// Destroy ZFS dataset for container
-    pub fn destroyContainerDataset(self: *Self, dataset_name: []const u8) !void {
-        return self.zfs_mgr.destroyContainerDataset(dataset_name);
-    }
-
-    /// Get ZFS dataset mountpoint for container
-    pub fn getContainerDatasetMountpoint(self: *Self, dataset_name: []const u8) !?[]const u8 {
-        return self.zfs_mgr.getContainerDatasetMountpoint(dataset_name);
     }
 
     fn parseBundleImageFromConfig(self: *Self, config: *const bundle.OciBundleConfig) !?[]const u8 {
@@ -252,22 +173,6 @@ pub const ProxmoxLxcDriver = struct {
             if (!is_template) {
                 if (self.logger) |log| {
                     log.err("--node {s} needs a template that node can read, named <storage>:vztmpl/<file>. An OCI bundle is packed into a private file on this host, which {s} cannot read, and a registry image is pulled to this host, so it reaches {s} only as a template on a shared storage", .{ node, node, node }) catch {};
-                }
-                return core.Error.UnsupportedOperation;
-            }
-
-            // A dataset nexcage makes itself, in the pool createContainerDataset
-            // is given, is in this host's pool, and the container would be
-            // created elsewhere with a rootfs it cannot reach. No configuration
-            // key sets that pool today, so this does not fire with a shipped
-            // config. It used to ask whether `zfs version` works, which says
-            // only that the tools are installed -- and Proxmox VE installs them,
-            // so --node was refused on every stock host (#327). A rootfs on a
-            // ZFS storage is not this case: proxmox.storage reaches the node's
-            // API as --rootfs, and Proxmox makes the volume there.
-            if (self.zfs_mgr.pool_config != null) {
-                if (self.logger) |log| {
-                    log.err("--node {s} cannot be used with a ZFS pool of nexcage's own: the dataset would be made in this host's pool, which {s} cannot reach. Name a storage {s} has in proxmox.storage instead; Proxmox makes the volume there", .{ node, node, node }) catch {};
                 }
                 return core.Error.UnsupportedOperation;
             }
@@ -401,14 +306,7 @@ pub const ProxmoxLxcDriver = struct {
         }
         defer self.allocator.free(final_template);
 
-        // 4. Handle ZFS dataset
-        var zfs_dataset: ?[]const u8 = null;
-        defer if (zfs_dataset) |ds| self.allocator.free(ds);
-        if (self.zfs_mgr.isZFSAvailable()) {
-            zfs_dataset = try self.zfs_mgr.createContainerDataset(config.name, vmid);
-        }
-
-        // 5. Build pct create command
+        // 4. Build pct create command
         var args_builder = std.array_list.Managed([]const u8).init(self.allocator);
         defer args_builder.deinit();
         var allocated_args = std.array_list.Managed([]const u8).init(self.allocator);
@@ -485,9 +383,7 @@ pub const ProxmoxLxcDriver = struct {
             if (self.logger) |log| log.warn("OCI images always run unprivileged; ignoring proxmox.unprivileged=false", .{}) catch {};
         }
 
-        if (zfs_dataset) |ds| {
-            try args_builder.appendSlice(&[_][]const u8{ "--rootfs", ds });
-        } else if (self.config.default_storage) |storage| {
+        if (self.config.default_storage) |storage| {
             // A new volume on a Proxmox storage is "<storage>:<size in GiB>"
             const rootfs = try std.fmt.allocPrint(self.allocator, "{s}:{d}", .{ storage, self.config.rootfs_size_gb orelse core.constants.DEFAULT_ROOTFS_SIZE_GB });
             try allocated_args.append(rootfs);
@@ -512,7 +408,7 @@ pub const ProxmoxLxcDriver = struct {
             try args_builder.appendSlice(&[_][]const u8{ flag, spec });
         }
 
-        // 6. Execute create
+        // 5. Execute create
         const result = try common.runCommand(self.allocator, self.logger, args_builder.items);
         defer {
             self.allocator.free(result.stdout);
@@ -523,11 +419,6 @@ pub const ProxmoxLxcDriver = struct {
         // used to be let through, reporting success for a container that was
         // never created.
         if (result.exit_code != 0) {
-            if (zfs_dataset) |ds| {
-                const failed = try std.mem.concat(self.allocator, u8, &.{ ds, "-failed" });
-                defer self.allocator.free(failed);
-                _ = common.runCommand(self.allocator, self.logger, &.{ "zfs", "rename", "-r", ds, failed }) catch {};
-            }
             return self.pve_client.mapPctError(result.stderr);
         }
 
@@ -553,7 +444,7 @@ pub const ProxmoxLxcDriver = struct {
         }
         try self.writeOciState(config.name, "created", 0, oci_bundle_path);
 
-        // 7. Post-creation setup
+        // 6. Post-creation setup
         // A bundle's namespaces turn on no Proxmox features: LXC gives the
         // container its own namespaces, and a user namespace when it is
         // unprivileged, whatever the bundle lists. A user namespace used to
@@ -857,15 +748,6 @@ pub const ProxmoxLxcDriver = struct {
         // 1000 removed the record of another one, named 1000.
         const name = loc.name orelse return;
         _ = self.forget(name);
-
-        // ZFS cleanup if needed (renaming with -delete suffix was a specific feature)
-        if (self.config.zfs_pool) |pool| {
-            const dataset_name = try std.fmt.allocPrint(self.allocator, "{s}/{s}-{s}", .{ pool, name, vmid });
-            defer self.allocator.free(dataset_name);
-            const delete_name = try std.mem.concat(self.allocator, u8, &.{ dataset_name, "-delete" });
-            defer self.allocator.free(delete_name);
-            _ = common.runCommand(self.allocator, self.logger, &.{ "zfs", "rename", "-r", dataset_name, delete_name }) catch {};
-        }
     }
 
     /// Freeze the container's processes, and thaw them again.

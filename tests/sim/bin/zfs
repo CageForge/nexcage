@@ -1,8 +1,10 @@
 #!/bin/bash
-# Fake zfs. Proxmox VE installs the zfs tools, so `zfs version` succeeds, as it
-# does on a stock host; a fake that answered "not installed" hid that
-# create --node was refused wherever they are (#327). Nothing else succeeds,
-# so nexcage never reaches a pool.
+# Fake zfs. nexcage runs no zfs command: a rootfs on ZFS is Proxmox's to make,
+# through proxmox.storage. Each call is logged all the same, so a check sees
+# one. Proxmox VE installs the zfs tools, so `zfs version` succeeds, as it does
+# on a stock host; a fake that answered "not installed" hid that create --node
+# was refused wherever they are (#327). Nothing else succeeds, so nexcage never
+# reaches a pool.
 echo "zfs $*" >> "${SIM:?}/calls"
 [ "${1:-}" = version ] && { echo "zfs-2.3.4-pve1"; echo "zfs-kmod-2.3.4-pve1"; exit 0; }
 exit 1

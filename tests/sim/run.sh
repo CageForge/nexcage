@@ -109,6 +109,9 @@ check "create checks the name across the cluster first, then asks for a VMID" \
 check "pct create argv: vmid, template, hostname, bridge, rootfs from config" \
   called_re "^pct create 100 $TPL --hostname web-1 --memory [0-9]+ --cores [0-9]+ --net0 name=eth0,bridge=vmbr50,ip=dhcp --unprivileged 1 --rootfs local-lvm:2$"
 check "no --ostype unless configured" not_called_re "--ostype"
+# A rootfs on ZFS is Proxmox's to make, through proxmox.storage. nexcage has no
+# pool of its own, and asked `zfs version` twice per create all the same.
+check "create runs no zfs command" not_called_re "^zfs "
 check "state.json written, valid, status created" \
   all 'json_ok "$S/run/nexcage/web-1/state.json"' '[ "$(json_get "$S/run/nexcage/web-1/state.json" status)" = created ]'
 check "runtime-metadata.json valid, vmid 100" \
