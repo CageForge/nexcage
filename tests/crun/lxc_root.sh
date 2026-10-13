@@ -86,6 +86,17 @@ echo "101 stopped ctr" >> "$SIM/db"
 nx --runtime lxc start 101 >/dev/null 2>"$SIM/err" || fail "--runtime lxc start 101: $(tail -1 "$SIM/err")"
 called "pct start 101" || fail "--runtime lxc start 101 did not reach pct"
 [ ! -e "$ROOT/.proxmox-lxc/ctr" ] || fail "CT 101 was recorded under ctr, an id libcrun has"
+# The warning says how the CT is reached now, and that has to work: by its
+# name, --runtime lxc is refused, since libcrun has the name. A snapshot,
+# because the fake init does not run here, so the CT does not stay up.
+grep -q "reach the CT by its VMID: nexcage --runtime lxc <command> 101" "$SIM/err" \
+    || fail "the warning does not say the CT is reached by its VMID: $(grep WARN "$SIM/err" | tail -1)"
+rc=0; nx --runtime lxc snapshot ctr s1 >/dev/null 2>"$SIM/err" || rc=$?
+[ "$rc" = 2 ] || fail "--runtime lxc snapshot ctr s1, by a name libcrun has, exited $rc, not 2"
+! called "pct snapshot 101 s1" || fail "--runtime lxc snapshot ctr s1 reached CT 101 by a name libcrun has"
+nx --runtime lxc snapshot 101 s1 >/dev/null 2>"$SIM/err" || fail "--runtime lxc snapshot 101 s1, as the warning says: $(tail -1 "$SIM/err")"
+called "pct snapshot 101 s1" || fail "--runtime lxc snapshot 101 s1 did not reach pct"
+echo "ok: the CT is reached by its VMID, as the warning says, and not by the name libcrun has"
 nx delete --force ctr >/dev/null 2>"$SIM/err" || fail "delete --force ctr: $(tail -1 "$SIM/err")"
 [ ! -e "$ROOT/ctr" ] || fail "libcrun's ctr is still there after delete --force"
 nx delete --force ctr >/dev/null 2>"$SIM/err" || fail "a second delete --force ctr: $(tail -1 "$SIM/err")"

@@ -1049,9 +1049,11 @@ pub const ProxmoxLxcDriver = struct {
         // here too -- `--runtime lxc start <vmid>` of a CT with that hostname
         // wrote one -- sent the id to this backend once libcrun's container
         // was gone, and an engine's second delete --force of it destroyed
-        // the CT: the very thing records are there to prevent.
+        // the CT: the very thing records are there to prevent. The CT is
+        // reached by its VMID: by the name, --runtime lxc is refused, as it
+        // is for any id the crun backend has (router.findBackend).
         if (build_options.enable_backend_crun and core.state_root.crunHas(name)) {
-            if (self.logger) |log| log.warn("'{s}' is a container on the crun backend, so nexcage keeps no record of CT {s} under that name; reach the CT with --runtime lxc", .{ name, vmid }) catch {};
+            if (self.logger) |log| log.warn("'{s}' is a container on the crun backend, so nexcage keeps no record of CT {s} under that name; reach the CT by its VMID: nexcage --runtime lxc <command> {s}", .{ name, vmid, vmid }) catch {};
             return;
         }
         const kept = self.persistedBundle(name);
