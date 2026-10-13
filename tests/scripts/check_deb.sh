@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # scripts/ci/check_deb.sh is the release's last word on a .deb: it packs the
-# files it should, its binary is a PIE, and that binary has the crun backend
-# -- `features` is answered by libcrun, so a binary without it fails there.
+# files it should, its man page names its version, its binary is a PIE, and
+# that binary has the crun backend -- `features` is answered by libcrun, so a
+# binary without it fails there.
 # A check that cannot fail proves nothing, so this runs it on packages that
 # should be refused as well as on one that should pass.
 #
@@ -26,14 +27,16 @@ failed=0
 ok()  { echo "ok   $*"; }
 bad() { echo "FAIL $*"; failed=1; }
 
-# mk_deb NAME ELF: a package with everything check_deb.sh looks for, whose
-# usr/bin/nexcage is a copy of ELF.
+# mk_deb NAME ELF [MANVERSION]: a package with everything check_deb.sh looks
+# for, whose usr/bin/nexcage is a copy of ELF and whose man page's header
+# names MANVERSION, by default the package's own, 0.0.0.
 mk_deb() {
   local root=$T/pkg-$1
   install -D -m 0755 "$2" "$root/usr/bin/nexcage"
-  for f in usr/share/man/man1/nexcage.1.gz usr/share/bash-completion/completions/nexcage; do
-    install -D -m 0644 /dev/null "$root/$f"
-  done
+  mkdir -p "$root/usr/share/man/man1"
+  printf '.TH NEXCAGE 1 "October 2026" "nexcage %s" "User Commands"\n.SH NAME\nnexcage\n' "${3:-0.0.0}" \
+    | gzip -9n > "$root/usr/share/man/man1/nexcage.1.gz"
+  install -D -m 0644 /dev/null "$root/usr/share/bash-completion/completions/nexcage"
   for f in config.json config.oci.example.json; do
     mkdir -p "$root/usr/share/doc/nexcage/examples"; echo '{}' > "$root/usr/share/doc/nexcage/examples/$f"
   done
@@ -97,6 +100,7 @@ run() {
 
 mk_deb pie "$pie"
 mk_deb nopie "$nopie"
+mk_deb oldman "$pie" 0.13.0
 
 run pie fake-crun
 if [ "$rc" = 0 ]; then ok "a package whose PIE binary has the crun backend passes"
@@ -109,5 +113,9 @@ else bad "a binary whose features fails, built without the crun backend, is refu
 run nopie fake-crun
 if [ "$rc" != 0 ] && grep -q 'not position-independent' "$T/out-nopie-fake-crun"; then ok "a binary that is not a PIE is refused"
 else bad "a binary that is not a PIE is refused (exit $rc)"; fi
+
+run oldman fake-crun
+if [ "$rc" != 0 ] && grep -q 'does not name version 0.0.0' "$T/out-oldman-fake-crun"; then ok "a man page that names another version than the package's is refused"
+else bad "a man page that names another version than the package's is refused (exit $rc)"; fi
 
 exit "$failed"

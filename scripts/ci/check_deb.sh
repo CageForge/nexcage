@@ -27,6 +27,16 @@ for f in ./usr/bin/nexcage \
     echo "$payload" | grep -qx "$f" || { echo "check_deb.sh: $f missing from $NAME" >&2; exit 1; }
 done
 
+# The man page's header names the package's version: build_deb_local.sh
+# writes it there from VERSION, and the page once said 0.13.0 for several
+# releases after that one.
+version=$(dpkg-deb -f "$DEB" Version)
+th=$(dpkg-deb --fsys-tarfile "$DEB" | tar -xO ./usr/share/man/man1/nexcage.1.gz | gzip -dc | sed -n 1p)
+case "$th" in
+    *"\"nexcage ${version%-*}\""*) echo "man page in $NAME: $th" ;;
+    *) echo "check_deb.sh: the man page in $NAME does not name version ${version%-*}: ${th:-unreadable}" >&2; exit 1 ;;
+esac
+
 # Position-independent, so the kernel loads it at a random address: it runs as
 # root and parses bundles in libcrun's C code. build.zig asks for a PIE; Zig's
 # default for an executable is not one.
