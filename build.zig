@@ -114,21 +114,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Utils module
-    const utils_mod = b.addModule("utils", .{
-        .root_source_file = b.path("src/utils/mod.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-            .{ .name = "oci_spec", .module = oci_spec_mod },
-        },
-    });
-
     // Backends module
     const backends_mod = b.addModule("backends", .{
         .root_source_file = b.path("src/backends/mod.zig"),
         .imports = &.{
             .{ .name = "core", .module = core_mod },
-            .{ .name = "utils", .module = utils_mod },
             .{ .name = "oci_spec", .module = oci_spec_mod },
         },
     });
@@ -141,7 +131,6 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "core", .module = core_mod },
             .{ .name = "backends", .module = backends_mod },
-            .{ .name = "utils", .module = utils_mod },
         },
     });
 
@@ -290,7 +279,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("core", core_mod);
     exe.root_module.addImport("cli", cli_mod);
     exe.root_module.addImport("backends", backends_mod);
-    exe.root_module.addImport("utils", utils_mod);
 
     // Install the executable
     b.installArtifact(exe);
@@ -344,7 +332,6 @@ pub fn build(b: *std.Build) void {
     test_exe.root_module.addImport("core", core_mod);
     test_exe.root_module.addImport("cli", cli_mod);
     test_exe.root_module.addImport("backends", backends_mod);
-    test_exe.root_module.addImport("utils", utils_mod);
 
     const run_test = b.addRunArtifact(test_exe);
 
@@ -389,7 +376,6 @@ pub fn build(b: *std.Build) void {
             file_mod.addImport("core", core_mod);
             file_mod.addImport("cli", cli_mod);
             file_mod.addImport("backends", backends_mod);
-            file_mod.addImport("utils", utils_mod);
             // The Proxmox backend's bundle translation imports the parser
             file_mod.addImport("oci_spec", oci_spec_mod);
 
