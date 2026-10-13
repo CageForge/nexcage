@@ -1,12 +1,15 @@
 //! Isolation profiles (ADR-005): a name, the backend, and that backend's
 //! parameters, defined in the configuration file on the node. An engine names
 //! one by the program name, `nexcage@<profile>`; a person with `--profile`.
-//! Only `create` reads a profile, and a profile only narrows what the engine's
+//! Only `create` reads a profile, and `run`, which creates on Proxmox LXC.
+//! A profile only narrows what the engine's
 //! bundle grants: it drops capabilities and lowers limits, and refuses a
 //! bundle that lacks what it requires. It never adds anything.
 //!
-//! Profiles on the crun backend only, so far (#315); the Proxmox LXC backend
-//! driven by an engine is #316.
+//! A profile on the Proxmox LXC backend (#394) is for the command line: a
+//! named set of what the `proxmox` and `network` sections say, for the
+//! containers made under it. An engine cannot drive that backend (ADR-006), so
+//! an engine handed such a profile is refused at create.
 
 const std = @import("std");
 const os = std.os.linux;
@@ -43,11 +46,31 @@ pub const Profile = struct {
     memory_limit: ?i64 = null,
     /// linux.resources.pids.limit: the bundle's when lower.
     pids_limit: ?i64 = null,
+    /// The Proxmox LXC parameters, when `runtime` is lxc.
+    lxc: Lxc = .{},
+
+    /// A profile on Proxmox LXC overrides the `proxmox` and `network`
+    /// sections for the containers made under it. What it leaves unset
+    /// comes from those sections, as for a container made without one.
+    pub const Lxc = struct {
+        storage: ?[]const u8 = null,
+        rootfs_size_gb: ?u32 = null,
+        bridge: ?[]const u8 = null,
+        ostype: ?[]const u8 = null,
+        /// Only ever true: a profile cannot make a container privileged.
+        unprivileged: ?bool = null,
+        /// The container's cores and memory (bytes) when the command names
+        /// none, and the most it may name: `--cores` or `--memory` above
+        /// them is refused, and a bundle's is lowered to them.
+        cores: ?u32 = null,
+        memory: ?i64 = null,
+    };
 
     pub fn deinit(self: *Profile, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
         for (self.drop_capabilities) |cap| allocator.free(cap);
         allocator.free(self.drop_capabilities);
+        inline for (.{ self.lxc.storage, self.lxc.bridge, self.lxc.ostype }) |s| if (s) |v| allocator.free(v);
     }
 };
 

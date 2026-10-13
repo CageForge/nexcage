@@ -50,7 +50,9 @@ pub const CreateCommand = struct {
             try out.writeAll("    --bundle <dir>  OCI bundle directory, an absolute path (config.json and rootfs/), in\n");
             try out.writeAll("                    place of an image; the first positional word is then the container id\n");
             try out.writeAll("                    (create <id> --bundle <dir>)\n");
-            try out.writeAll("    --profile <p>   Isolation profile from the configuration file (crun only; ADR-005).\n");
+            try out.writeAll("    --profile <p>   Isolation profile from the configuration file (ADR-005). On crun it\n");
+            try out.writeAll("                    narrows the bundle; on Proxmox LXC it names the storage, bridge,\n");
+            try out.writeAll("                    cores and memory, and --cores and --memory may only ask for less.\n");
             try out.writeAll("                    The program name nexcage@<p> names it the same way\n");
             try out.writeAll("    --console-socket <path>, --pid-file <path>\n");
             try out.writeAll("                    crun only; refused on Proxmox LXC, where pct create starts no process\n");

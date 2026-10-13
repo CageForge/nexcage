@@ -737,7 +737,18 @@ pub const ConfigLoader = struct {
         var it = obj.iterator();
         while (it.next()) |entry| {
             var p = profile_mod.Profile{ .name = try self.allocator.dupe(u8, entry.key_ptr.*) };
-            errdefer self.allocator.free(p.name);
+            errdefer p.deinit(self.allocator);
+            if (std.mem.eql(u8, entry.value_ptr.object.get("runtime").?.string, "lxc")) p.runtime = .lxc;
+            if (entry.value_ptr.object.get("lxc")) |lxc| {
+                const l = lxc.object;
+                if (l.get("storage")) |v| p.lxc.storage = try self.allocator.dupe(u8, v.string);
+                if (l.get("bridge")) |v| p.lxc.bridge = try self.allocator.dupe(u8, v.string);
+                if (l.get("ostype")) |v| p.lxc.ostype = try self.allocator.dupe(u8, v.string);
+                if (l.get("rootfs_size_gb")) |v| p.lxc.rootfs_size_gb = @intCast(v.integer);
+                if (l.get("unprivileged")) |v| p.lxc.unprivileged = v.bool;
+                if (l.get("cores")) |v| p.lxc.cores = @intCast(v.integer);
+                if (l.get("memory")) |v| p.lxc.memory = sizeOf(v).?;
+            }
             if (entry.value_ptr.object.get("crun")) |crun| {
                 const c = crun.object;
                 p.require_user_namespace = c.get("user_namespace") != null;
@@ -780,7 +791,7 @@ pub const ConfigLoader = struct {
     /// refused rather than skipped: a misspelt key did nothing without a word,
     /// and so did keys that were parsed and never used -- `security.seccomp:
     /// true` turned nothing on (#371).
-    const Kind = enum { section, string, boolean, size_gb, log_level, runtime, rules, profiles, profile_runtime, require, capabilities, size, count };
+    const Kind = enum { section, string, boolean, size_gb, log_level, runtime, rules, profiles, profile_runtime, require, capabilities, size, count, cores, only_true, ct_memory };
     const Key = struct { name: []const u8, kind: Kind, keys: []const Key = &.{} };
 
     const rule_keys = [_]Key{
@@ -813,7 +824,9 @@ pub const ConfigLoader = struct {
     };
 
     /// One profile under `profiles` (ADR-005). Every crun parameter only
-    /// narrows what the engine's bundle grants.
+    /// narrows what the engine's bundle grants. The lxc parameters are the
+    /// `proxmox` and `network` sections' keys (#394), plus the cores and
+    /// memory a container is sized by; `unprivileged` can only be true.
     const profile_keys = [_]Key{
         .{ .name = "runtime", .kind = .profile_runtime },
         .{ .name = "crun", .kind = .section, .keys = &.{
@@ -826,6 +839,15 @@ pub const ConfigLoader = struct {
                 .{ .name = "memory", .kind = .size },
                 .{ .name = "pids", .kind = .count },
             } },
+        } },
+        .{ .name = "lxc", .kind = .section, .keys = &.{
+            .{ .name = "storage", .kind = .string },
+            .{ .name = "rootfs_size_gb", .kind = .size_gb },
+            .{ .name = "bridge", .kind = .string },
+            .{ .name = "ostype", .kind = .string },
+            .{ .name = "unprivileged", .kind = .only_true },
+            .{ .name = "cores", .kind = .cores },
+            .{ .name = "memory", .kind = .ct_memory },
         } },
     };
 
@@ -894,7 +916,12 @@ pub const ConfigLoader = struct {
                         switch (entry.value_ptr.*) {
                             .object => |p| {
                                 try self.validateObject(p, &profile_keys, sub);
-                                if (p.get("runtime") == null) return self.refuse("'{s}' has no \"runtime\"", .{sub});
+                                const runtime = p.get("runtime") orelse return self.refuse("'{s}' has no \"runtime\"", .{sub});
+                                // A profile's parameters are its backend's: the
+                                // other backend's would be read and do nothing.
+                                const other = if (std.mem.eql(u8, runtime.string, "lxc")) "crun" else "lxc";
+                                if (p.get(other) != null)
+                                    return self.refuse("'{s}.{s}' does not go with \"runtime\": \"{s}\"; a profile takes its own backend's parameters", .{ sub, other, runtime.string });
                             },
                             else => return self.refuse("'{s}' must be an object", .{sub}),
                         }
@@ -904,12 +931,19 @@ pub const ConfigLoader = struct {
             },
             .profile_runtime => switch (value) {
                 .string => |s| {
-                    if (std.mem.eql(u8, s, "crun")) return;
-                    if (std.mem.eql(u8, s, "lxc"))
-                        return self.refuse("'{s}': profiles on the Proxmox LXC backend are not there yet (#316); a profile names crun", .{path});
-                    return self.refuse("'{s}' is \"{s}\"; a profile names crun", .{ path, s });
+                    if (std.mem.eql(u8, s, "crun") or std.mem.eql(u8, s, "lxc")) return;
+                    return self.refuse("'{s}' is \"{s}\"; a profile names crun or lxc", .{ path, s });
                 },
-                else => return self.refuse("'{s}' must be \"crun\"", .{path}),
+                else => return self.refuse("'{s}' must be \"crun\" or \"lxc\"", .{path}),
+            },
+            // pct's own bounds for --cores.
+            .cores => switch (value) {
+                .integer => |n| if (n < 1 or n > 8192) return self.refuse("'{s}' must be a whole number of cores, 1 to 8192", .{path}),
+                else => return self.refuse("'{s}' must be a whole number of cores, 1 to 8192", .{path}),
+            },
+            .only_true => switch (value) {
+                .bool => |b| if (!b) return self.refuse("'{s}' is false: a profile only narrows, and cannot make a container privileged; leave it out to take proxmox.unprivileged", .{path}),
+                else => return self.refuse("'{s}' must be true", .{path}),
             },
             .require => switch (value) {
                 .string => |s| if (!std.mem.eql(u8, s, "require")) return self.refuse("'{s}' is \"{s}\"; the only value is \"require\"", .{ path, s }),
@@ -927,6 +961,13 @@ pub const ConfigLoader = struct {
                 else => return self.refuse("'{s}' must be a list of capability names", .{path}),
             },
             .size => if (sizeOf(value) == null) return self.refuse("'{s}' must be a size, such as \"512M\" or \"2G\"", .{path}),
+            // Proxmox's own least memory for a container: below it pct
+            // create would refuse every container made under the profile.
+            .ct_memory => {
+                const bytes = sizeOf(value) orelse return self.refuse("'{s}' must be a size, such as \"512M\" or \"2G\"", .{path});
+                if (bytes < resources_mod.min_memory_mib * 1024 * 1024)
+                    return self.refuse("'{s}' is less than {d}M, the least memory Proxmox gives a container", .{ path, resources_mod.min_memory_mib });
+            },
             .count => switch (value) {
                 .integer => |n| if (n < 1) return self.refuse("'{s}' must be a whole number, 1 or more", .{path}),
                 else => return self.refuse("'{s}' must be a whole number, 1 or more", .{path}),
@@ -1418,6 +1459,39 @@ test "a profile is read with its crun parameters" {
     try std.testing.expect(cfg.findProfile("missing") == null);
 }
 
+test "a profile on Proxmox LXC is read with its parameters, and leaves the rest to the file" {
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadFromString(
+        \\{ "proxmox": { "storage": "local-lvm", "rootfs_size_gb": 8 },
+        \\  "profiles": { "pg": { "runtime": "lxc", "lxc": {
+        \\    "storage": "local-zfs", "rootfs_size_gb": 32, "bridge": "vmbr1", "ostype": "debian",
+        \\    "unprivileged": true, "cores": 4, "memory": "8G" } },
+        \\  "small": { "runtime": "lxc" } } }
+    );
+    defer cfg.deinit();
+
+    const pg = cfg.findProfile("pg").?;
+    try std.testing.expectEqual(types.RuntimeType.lxc, pg.runtime);
+    try std.testing.expectEqualStrings("local-zfs", pg.lxc.storage.?);
+    try std.testing.expectEqualStrings("vmbr1", pg.lxc.bridge.?);
+    try std.testing.expectEqualStrings("debian", pg.lxc.ostype.?);
+    try std.testing.expectEqual(@as(?u32, 32), pg.lxc.rootfs_size_gb);
+    try std.testing.expectEqual(@as(?bool, true), pg.lxc.unprivileged);
+    try std.testing.expectEqual(@as(?u32, 4), pg.lxc.cores);
+    try std.testing.expectEqual(@as(?i64, 8 * 1024 * 1024 * 1024), pg.lxc.memory);
+    // Nothing of the crun side, and nothing of pg's in the file's sections.
+    try std.testing.expect(!pg.require_seccomp and pg.memory_limit == null);
+    try std.testing.expectEqualStrings("local-lvm", cfg.proxmox.storage.?);
+
+    const small = cfg.findProfile("small").?;
+    try std.testing.expectEqual(types.RuntimeType.lxc, small.runtime);
+    try std.testing.expect(small.lxc.storage == null and small.lxc.cores == null and small.lxc.unprivileged == null);
+
+    var crun_cfg = try loader.loadFromString("{ \"profiles\": { \"c\": { \"runtime\": \"crun\" } } }");
+    defer crun_cfg.deinit();
+    try std.testing.expectEqual(types.RuntimeType.crun, crun_cfg.findProfile("c").?.runtime);
+}
+
 test "a profile drops any of the kernel's capabilities, the newest included" {
     var loader = ConfigLoader.init(std.testing.allocator);
     var cfg = try loader.loadFromString(
@@ -1432,7 +1506,17 @@ test "a profile that is misspelt, mis-named or names what it cannot do refuses t
     const cases = [_]struct { file: []const u8, says: []const u8 }{
         .{ .file = "{ \"profiles\": { \"Hardened\": { \"runtime\": \"crun\" } } }", .says = "a profile name is lower-case letters" },
         .{ .file = "{ \"profiles\": { \"h\": { \"crun\": {} } } }", .says = "'profiles.h' has no \"runtime\"" },
-        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\" } } }", .says = "not there yet (#316)" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"runc\" } } }", .says = "a profile names crun or lxc" },
+        // The other backend's parameters would be read and do nothing.
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\", \"crun\": { \"seccomp\": \"require\" } } } }", .says = "'profiles.h.crun' does not go with \"runtime\": \"lxc\"" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"lxc\": { \"cores\": 2 } } } }", .says = "'profiles.h.lxc' does not go with \"runtime\": \"crun\"" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\", \"lxc\": { \"unprivileged\": false } } } }", .says = "cannot make a container privileged" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\", \"lxc\": { \"cores\": 0 } } } }", .says = "1 to 8192" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\", \"lxc\": { \"cores\": 1000000000000 } } } }", .says = "1 to 8192" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\", \"lxc\": { \"rootfs_size_gb\": 0 } } } }", .says = "whole number of GB" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\", \"lxc\": { \"memory\": \"lots\" } } } }", .says = "must be a size" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\", \"lxc\": { \"memory\": \"8M\" } } } }", .says = "less than 16M" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"lxc\", \"lxc\": { \"storge\": \"local-zfs\" } } } }", .says = "'profiles.h.lxc.storge' is not a key nexcage reads" },
         .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"seccomp\": \"yes\" } } } }", .says = "the only value is \"require\"" },
         .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"user_namspace\": \"require\" } } } }", .says = "'profiles.h.crun.user_namspace' is not a key nexcage reads" },
         .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"capabilities\": { \"drop\": [\"NET_RAW\"] } } } } }", .says = "capability names, such as" },
