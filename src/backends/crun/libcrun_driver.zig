@@ -305,12 +305,6 @@ pub const CrunDriver = struct {
         }
     }
 
-    pub fn run(self: *Self, config: core.types.SandboxConfig) !void {
-        try self.create(config);
-        errdefer self.delete(config.name) catch {};
-        try self.start(config.name);
-    }
-
     /// Start an OCI container using libcrun
     pub fn start(self: *Self, container_id: []const u8) !void {
         if (self.logger) |log| {

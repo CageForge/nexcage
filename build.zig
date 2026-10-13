@@ -383,6 +383,19 @@ pub fn build(b: *std.Build) void {
             file_test.linkSystemLibrary("c");
             file_test.addIncludePath(.{ .cwd_relative = "/usr/include" });
             file_test.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+            // With the crun backend on, a test that reaches its driver --
+            // tests/declarations_test.zig reaches all of it -- calls into
+            // libcrun, and links it as the binary does.
+            if (libcrun_lib) |lib| {
+                file_test.root_module.linkLibrary(lib);
+                file_test.root_module.linkSystemLibrary("systemd", .{ .use_pkg_config = .no, .needed = true });
+                file_test.linkSystemLibrary("cap");
+                file_test.linkSystemLibrary("seccomp");
+                file_test.linkSystemLibrary("json-c");
+                file_test.linkSystemLibrary("pthread");
+                file_test.linkSystemLibrary("dl");
+                file_test.linkSystemLibrary("rt");
+            }
 
             test_step.dependOn(&b.addRunArtifact(file_test).step);
         }

@@ -172,15 +172,6 @@ pub const SimpleAdvancedLogging = struct {
         }
     }
 
-    /// Log performance metrics
-    pub fn logPerformance(self: *Self, operation: []const u8, duration_ms: u64, details: ?[]const u8) !void {
-        try self.info("Performance: {s} took {d}ms", .{ operation, duration_ms });
-
-        if (self.debug_mode and details) |d| {
-            try self.debug("Performance details: {s}", .{d});
-        }
-    }
-
     /// Log system information
     pub fn logSystemInfo(self: *Self) !void {
         if (self.debug_mode) {

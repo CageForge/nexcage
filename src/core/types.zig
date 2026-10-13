@@ -43,14 +43,6 @@ pub const SandboxConfig = struct {
     /// `create --memory`, `--cores`, `--ip` and the rest (#308): what pct
     /// create is usually given. Borrowed the same way.
     pve: ProxmoxCreateOptions = .{},
-
-    pub fn deinit(self: *SandboxConfig) void {
-        self.allocator.free(self.name);
-        if (self.resources) |*r| r.deinit();
-        if (self.security) |*s| s.deinit();
-        if (self.network) |*n| n.deinit(self.allocator);
-        if (self.storage) |*s| s.deinit(self.allocator);
-    }
 };
 
 /// What `create` says to pct beyond the image and the name, on the Proxmox LXC
@@ -171,22 +163,6 @@ pub const StorageConfig = struct {
     rootfs: ?[]const u8 = null,
     volumes: ?[]const Volume = null,
     tmpfs: ?[]const TmpfsMount = null,
-
-    pub fn deinit(self: *StorageConfig, allocator: std.mem.Allocator) void {
-        if (self.rootfs) |r| allocator.free(r);
-        if (self.volumes) |v| {
-            for (v) |*vol| {
-                vol.deinit(allocator);
-            }
-            allocator.free(v);
-        }
-        if (self.tmpfs) |t| {
-            for (t) |*tmp| {
-                tmp.deinit(allocator);
-            }
-            allocator.free(t);
-        }
-    }
 };
 
 /// Volume mount
@@ -195,12 +171,6 @@ pub const Volume = struct {
     destination: []const u8,
     read_only: bool = false,
     options: ?[]const u8 = null,
-
-    pub fn deinit(self: *Volume, allocator: std.mem.Allocator) void {
-        // source, destination, options are not allocated, just referenced
-        _ = self;
-        _ = allocator;
-    }
 };
 
 /// Tmpfs mount
@@ -208,12 +178,6 @@ pub const TmpfsMount = struct {
     destination: []const u8,
     size: ?u64 = null,
     mode: ?u32 = null,
-
-    pub fn deinit(self: *TmpfsMount, allocator: std.mem.Allocator) void {
-        // destination is not allocated, just referenced
-        _ = self;
-        _ = allocator;
-    }
 };
 
 /// Command enumeration

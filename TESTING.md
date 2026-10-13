@@ -22,6 +22,7 @@ Tests that exercise real code live next to it:
 | `src/core/signals.zig` | Signal names and numbers `kill` accepts |
 | `src/core/rfc3339.zig` | Timestamps in the JSON log |
 | `src/core/validation.zig` | The hostname rule a Proxmox LXC container's name is held to |
+| `tests/declarations_test.zig` | That every public declaration of `core`, `backends` and `cli` compiles, called or not: Zig compiles only what is referred to, so code nothing calls yet can otherwise stop compiling unseen |
 
 ## Running against fake Proxmox tools
 
