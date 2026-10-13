@@ -769,6 +769,11 @@ pub const ProxmoxLxcDriver = struct {
 
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        // Every command that acts on a container it found checks the VMID
+        // is still that container's first (PveClient.confirm): Proxmox gives
+        // a freed VMID to the next container created, and the cluster's
+        // listing keeps the old name for a few seconds after.
+        try self.pve_client.confirm(&loc);
         try self.startVmid(loc.name, loc.vmid, loc.remote());
     }
 
@@ -867,6 +872,9 @@ pub const ProxmoxLxcDriver = struct {
     pub fn pause(self: *Self, container_id: []const u8) !void {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        // On another node freezing is refused before anything is touched,
+        // so there is nothing there to confirm.
+        if (loc.local) try self.pve_client.confirm(&loc);
         try self.pve_client.freeze(loc.vmid, true, loc.remote());
         self.record(&loc, "paused", 0);
     }
@@ -895,12 +903,15 @@ pub const ProxmoxLxcDriver = struct {
         }
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        // Else this sets the limits of whichever container took the VMID.
+        try self.pve_client.confirm(&loc);
         try self.pve_client.setResources(loc.vmid, values, loc.remote());
     }
 
     pub fn unpause(self: *Self, container_id: []const u8) !void {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        if (loc.local) try self.pve_client.confirm(&loc);
         try self.pve_client.freeze(loc.vmid, false, loc.remote());
         const init_pid = (self.pve_client.initPid(loc.vmid, loc.remote()) catch null) orelse 0;
         self.record(&loc, "running", init_pid);
@@ -913,6 +924,7 @@ pub const ProxmoxLxcDriver = struct {
     pub fn snapshot(self: *Self, container_id: []const u8, name: []const u8, description: ?[]const u8) !void {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        try self.pve_client.confirm(&loc);
         try self.pve_client.snapshot(loc.vmid, name, description, loc.remote());
     }
 
@@ -947,6 +959,9 @@ pub const ProxmoxLxcDriver = struct {
     pub fn deleteSnapshot(self: *Self, container_id: []const u8, name: []const u8) !void {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        // Else this deletes, for good, a snapshot of whichever container took
+        // the VMID.
+        try self.pve_client.confirm(&loc);
         try self.pve_client.deleteSnapshot(loc.vmid, name, loc.remote());
     }
 
@@ -978,6 +993,9 @@ pub const ProxmoxLxcDriver = struct {
     pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8) !u8 {
         var loc = try self.resolveLocation(container_id);
         defer loc.deinit();
+        // Else the command runs as root in whichever container took the VMID.
+        // On another node exec is refused before it reaches the container.
+        if (loc.local) try self.pve_client.confirm(&loc);
         return self.pve_client.exec(loc.vmid, argv, loc.remote());
     }
 

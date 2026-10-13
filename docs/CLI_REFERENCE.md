@@ -219,10 +219,13 @@ resolved to whichever the listing put first; address one by its VMID, with
 `pct list` for the name, and refuses when the cluster cannot be asked.
 
 **A VMID can change hands.** Proxmox gives a destroyed container's VMID to the
-next container created, so right before `stop`, `delete` (and the stop
-`--force` does first), `rollback` and `kill`, nexcage reads the container's
-hostname from its config again — `pct config`, or the node's API — and refuses,
-touching nothing, when the VMID now belongs to a container with another name.
+next container created, so right before every command that acts on the
+container it found — `start`, `stop`, `delete` (and the stop `--force` does
+first), `kill`, `exec`, `pause`, `resume`, `update`, `snapshot`, `delsnapshot`
+and `rollback` — nexcage reads the container's hostname from its config again —
+`pct config`, or the node's API — and refuses, touching nothing, when the VMID
+now belongs to a container with another name. `exec`, `pause` and `resume`
+check on this node only, the one place they act.
 
 ## Backend selection
 

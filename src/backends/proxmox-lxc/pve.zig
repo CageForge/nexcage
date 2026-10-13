@@ -714,7 +714,9 @@ pub const PveClient = struct {
     /// /cluster/nextid answers the lowest free one. A retried `delete --force
     /// web-old` destroyed web-new that way, which had taken web-old's VMID in
     /// between. So the hostname is read again from the container's own config,
-    /// which is current, right before anything that stops or destroys it.
+    /// which is current, right before any command acts on the container:
+    /// stops, destroys or starts it, signals, freezes or thaws it, runs a
+    /// command in it, or changes its limits or its snapshots.
     /// Found by VMID with no name to compare, the VMID is what was asked for.
     pub fn confirm(self: *const Self, loc: *const Location) !void {
         const expected = loc.name orelse return;

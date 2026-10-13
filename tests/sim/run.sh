@@ -1975,6 +1975,68 @@ nx kill web-old TERM
 check "a container whose VMID changed hands after it was found is not sent the signal" \
   all 'rc 1' 'err_has "no longer"' 'not_called_re "^pct status"' '! grep -qx SIGTERM "$S/sig.100"'
 rm -f "$S/meanwhile.list"
+# And for every other command that acts on the container it found: a
+# command run as root, a limit, a freeze, a thaw, a start, a snapshot taken
+# or deleted -- each in the container that took the VMID. The listing names
+# web-old, and VMID 100 is web-new's by the time the command acts.
+reused_after_list() {
+  cat > "$S/meanwhile.list" <<'SH'
+awk '$1==100 {$3="web-new"} {print}' "$SIM/db" > "$SIM/db.tmp" && mv "$SIM/db.tmp" "$SIM/db"
+SH
+}
+# web-old again, for the next command
+web_old_again() { rm -f "$S/meanwhile.list"; awk '$1==100 {$3="web-old"} {print}' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"; }
+web_old_again
+echo "s1 0" > "$S/snaps.100"
+reused_after_list; nx exec web-old id
+check "exec does not run the command in the container that took the VMID after the listing" \
+  all 'rc 1' 'err_has "no longer"' 'called "pct config 100"' 'not_called_re "^pct exec"'
+web_old_again; reused_after_list; nx update --memory 1G web-old
+check "update does not set the limits of the container that took the VMID" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pct set"'
+web_old_again; reused_after_list; nx pause web-old
+check "pause does not freeze it" \
+  all 'rc 1' 'err_has "no longer"' '[ "$(cat "$S/cgroup/lxc/100/cgroup.freeze")" = 0 ]'
+web_old_again; echo 1 > "$S/cgroup/lxc/100/cgroup.freeze"; reused_after_list; nx resume web-old
+check "resume does not thaw it" \
+  all 'rc 1' 'err_has "no longer"' '[ "$(cat "$S/cgroup/lxc/100/cgroup.freeze")" = 1 ]'
+echo 0 > "$S/cgroup/lxc/100/cgroup.freeze"
+web_old_again; reused_after_list; nx snapshot web-old s2
+check "snapshot does not snapshot it" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pct snapshot"' '! grep -q "^s2 " "$S/snaps.100"'
+web_old_again; reused_after_list; nx delsnapshot web-old s1
+check "delsnapshot does not delete its snapshot" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pct delsnapshot"' 'grep -q "^s1 " "$S/snaps.100"'
+web_old_again; nx stop web-old >/dev/null 2>&1; reused_after_list; nx start web-old
+check "start does not start it" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pct start"' 'grep -qx "100 stopped web-new" "$S/db"'
+web_old_again
+nx start web-old
+check "(and with the VMID still web-old's, start and exec act as before)" all 'rc 0' 'called "pct config 100"' 'called "pct start 100"'
+nx exec web-old true
+check "(exec too)" all 'rc 0' 'called "pct exec 100 --keep-env 0 -- true"'
+# On another node, through the API: the cluster's listing still names the
+# VMID's old container.
+reset_sim
+cfg '{"network":{"bridge":"vmbr0"}}'
+echo "200 running web-new titan" >> "$S/db"
+echo "200 web-old" > "$S/stale_name"
+echo "s1 0" > "$S/snaps.200"
+nx --runtime lxc update --memory 1G web-old
+check "on another node, update does not set the limits of the container that took the VMID" \
+  all 'rc 1' 'err_has "no longer"' 'called "pvesh get /nodes/titan/lxc/200/config --output-format json"' \
+      'not_called_re "^pvesh set /nodes/titan/lxc/200/"'
+nx --runtime lxc start web-old
+check "nor start it" all 'rc 1' 'err_has "no longer"' 'not_called_re "^pvesh create /nodes/titan/lxc/200/status/"'
+nx --runtime lxc snapshot web-old s2
+check "nor snapshot it" all 'rc 1' 'err_has "no longer"' 'not_called_re "^pvesh create /nodes/titan/lxc/200/snapshot"'
+nx --runtime lxc delsnapshot web-old s1
+check "nor delete its snapshot" \
+  all 'rc 1' 'err_has "no longer"' 'not_called_re "^pvesh delete /nodes/titan/lxc/200/snapshot/"' 'grep -q "^s1 " "$S/snaps.200"'
+nx --runtime lxc exec web-old true
+check "exec there is refused as before, without asking the node first" \
+  all 'rc 1' 'err_has "Run nexcage on titan"' 'not_called_re "^pvesh get /nodes/titan/lxc/200/config"'
+rm -f "$S/stale_name"
 # The window that matters most: a forced delete waits for the shutdown, and
 # the VMID is free once something else has destroyed the container.
 reset_sim
