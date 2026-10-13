@@ -234,11 +234,13 @@ rules in the config file, Proxmox LXC by default; `features` asks that backend
 too. Every other command — `start`, `stop`, `delete`, `kill`, `exec`, `state`,
 `pause`, `resume`, `update`, `ps` and the snapshot commands — goes to the
 backend that has a record of the container: the crun backend when libcrun's
-`status` file for it exists (under `--root`, else `/run/crun`), Proxmox LXC
-when nexcage's own `state.json` for it does — written when nexcage creates the
-container, in `/run/nexcage/<name>` (`<root>/.proxmox-lxc/<name>` under
-`--root`). A rule changed after `create` does not move a container (since
-0.17.0, #372).
+state for it is in `<root>/<id>` (`/run/crun/<id>` without `--root`) — its
+`status` file, or, from a `create` killed half way, the copy of the bundle's
+`config.json` libcrun writes first, with no `state.json` beside it — and
+Proxmox LXC when nexcage's own `state.json` for it exists, written when
+nexcage creates the container, in `/run/nexcage/<name>`
+(`<root>/.proxmox-lxc/<name>` under `--root`). A rule changed after `create`
+does not move a container (since 0.17.0, #372).
 
 **An id neither backend has a record of does not exist.** The command exits 1
 saying so, without asking Proxmox anything, and `delete --force` exits 0, as it
@@ -262,8 +264,8 @@ is not forgotten on a failed listing.
 
 **One id, one backend.** `create` and `run` refuse, with exit 1, an id the
 other backend already has a record of, since every later command would reach
-only one of the two containers. In a binary built without crun, a `status`
-file under `/run/crun` is another runtime's container and holds nothing up.
+only one of the two containers. In a binary built without crun, libcrun's
+state under `/run/crun` is another runtime's container and holds nothing up.
 For the same reason a command run with `--runtime lxc` writes no record of a
 Proxmox container whose name libcrun has: it says so, and that container is
 reached with `--runtime lxc` from then on.
@@ -652,9 +654,11 @@ exits 1 and keeps the record. If a node stays down and the container is known
 to be gone, its record is the directory `/run/nexcage/<name>`
 (`<root>/.proxmox-lxc/<name>` under `--root`), which can be removed by hand.
 
-On `--runtime crun`, `--force` also cleans up after a `create` that was killed
+On the crun backend, `--force` also cleans up after a `create` that was killed
 half way: libcrun's state directory is there without its status file, and the
-cgroup create had made would otherwise stay behind, one per attempt. nexcage
+cgroup create had made would otherwise stay behind, one per attempt. Such an
+id is the crun backend's (see [Backend selection](#backend-selection)), so an
+engine's `delete --force`, which names no backend, reaches libcrun. nexcage
 removes that cgroup only when it is the default one, `/sys/fs/cgroup/<id>`
 (the config libcrun kept names no `cgroupsPath`, and `delete` was not given
 `--systemd-cgroup`, under which libcrun puts a container in a systemd scope

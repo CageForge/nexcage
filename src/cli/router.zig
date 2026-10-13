@@ -429,16 +429,18 @@ pub fn backendOf(container_id: []const u8, explicit: ?types.RuntimeType, logger:
 /// `delete` to the other backend.
 ///
 /// A backend has a container when its own record of it is on disk, which
-/// costs a stat to look for: libcrun's status file, or the state.json the
-/// Proxmox backend writes when it creates one. Anything else used to be sent
-/// to the Proxmox backend "to find, or to report missing", and it could do
-/// neither safely. On a node without Proxmox it failed an engine's cleanup of
-/// a container libcrun no longer had ("pvesh not found"), where crun and runc
-/// exit 0; on a Proxmox host it matched the id against every CT in the
-/// cluster, by name or VMID, so a second `delete --force 105` of a crun
-/// container destroyed CT 105. A Proxmox container nexcage did not create is
-/// reached with --runtime lxc. An explicit --runtime naming the other backend
-/// for a container libcrun has is refused rather than obeyed.
+/// costs a stat or two to look for: libcrun's status file, or the config of a
+/// create of libcrun's that was killed half way (core.state_root.crunHas), or
+/// the state.json the Proxmox backend writes when it creates one. Anything
+/// else used to be sent to the Proxmox backend "to find, or to report
+/// missing", and it could do neither safely. On a node without Proxmox it
+/// failed an engine's cleanup of a container libcrun no longer had ("pvesh
+/// not found"), where crun and runc exit 0; on a Proxmox host it matched the
+/// id against every CT in the cluster, by name or VMID, so a second
+/// `delete --force 105` of a crun container destroyed CT 105. A Proxmox
+/// container nexcage did not create is reached with --runtime lxc. An
+/// explicit --runtime naming the other backend for a container libcrun has is
+/// refused rather than obeyed.
 fn findBackend(container_id: []const u8, explicit: ?types.RuntimeType, logger: ?*core.LogContext) types.Error!?types.RuntimeType {
     const on_crun = backends.isCrunEnabled() and hasCrunState(container_id);
     if (explicit) |rt| {

@@ -142,4 +142,6 @@ with the vendored header field by field. What nexcage does around libcrun:
 - **`delete --force` removes the cgroup an unfinished `create` left**: the
   default `/sys/fs/cgroup/<id>`, when libcrun's state for the id has no status
   file and `delete` was not given `--systemd-cgroup`, and with `rmdir` alone
-  (see `delete` in the [CLI reference](../CLI_REFERENCE.md#delete)).
+  (see `delete` in the [CLI reference](../CLI_REFERENCE.md#delete)). The
+  config libcrun kept routes such an id here (`core/state_root.zig`
+  `crunHas`), so an engine's `delete --force`, without `--runtime`, gets this.

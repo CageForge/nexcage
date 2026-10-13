@@ -7,10 +7,10 @@
 /// containers.
 ///
 /// Two backends keep state under it, and they must never share a directory.
-/// The router tells them apart by what is on disk -- libcrun's `status` file
-/// for a crun container, nexcage's `state.json` for a Proxmox LXC one -- and
-/// while both lived in `<root>/<id>`, an LXC container made under --root was
-/// taken for libcrun's: every later command went to libcrun, and `delete`
+/// The router tells them apart by what is on disk -- libcrun's own files for
+/// a crun container (crunHas), nexcage's `state.json` for a Proxmox LXC one --
+/// and while both lived in `<root>/<id>`, an LXC container made under --root
+/// was taken for libcrun's: every later command went to libcrun, and `delete`
 /// removed the directory and reported success with the Proxmox container
 /// still there. So under a caller's root the Proxmox LXC backend keeps its
 /// records one level down, in a directory whose name starts with a dot:
@@ -70,12 +70,28 @@ pub fn crun() []const u8 {
     return if (isDefault()) "/run/crun" else root;
 }
 
-/// Whether libcrun has a container `id` here: the `status` file it writes
-/// at create, not merely a directory with the id's name. A directory proved
-/// nothing -- under --root the Proxmox backend kept its state.json in one of
-/// the same name, and every command after an LXC create went to libcrun.
+/// Whether libcrun has a container `id` here: the `status` file its create
+/// writes last, or the copy of the bundle's config.json that create writes
+/// first, with no state.json beside it.
+///
+/// The copy alone is a create killed half way -- SIGKILL, the OOM killer --
+/// which leaves the directory, that copy and the cgroup it made, and no
+/// status file. libcrun's delete --force removes all three
+/// (CrunDriver.createDidNotFinish), so such an id has to reach it. With the
+/// status file as the only evidence, an engine's delete --force of it found
+/// no backend and exited 0, and the id stayed: create said it existed and
+/// state that it did not.
+///
+/// A directory alone proves nothing, and nor does one with a state.json in
+/// it. Under --root the Proxmox backend kept its records in <root>/<id>, as
+/// state.json and runtime-metadata.json, before they moved to
+/// <root>/.proxmox-lxc, and runc, whose root an engine's can be, keeps a
+/// state.json there too; taking such a directory for libcrun's sent every
+/// command after an LXC create to libcrun. Neither writes a config.json
+/// there, and a state.json rules the directory out whatever else it holds.
 pub fn crunHas(id: []const u8) bool {
-    return has(crun(), id, "status");
+    if (has(crun(), id, "status")) return true;
+    return has(crun(), id, "config.json") and !has(crun(), id, "state.json");
 }
 
 /// Whether the Proxmox LXC backend has a record of a container named `id`:
@@ -102,6 +118,38 @@ test "a root that only looks different is still the default" {
         try std.testing.expectEqualStrings("/run/crun", crun());
         try std.testing.expectEqualStrings("/run/nexcage", get());
     }
+}
+
+test "a create libcrun did not finish is libcrun's, and a directory with a state.json never is" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(dir);
+    try set(dir);
+    defer set(default_root) catch unreachable;
+
+    // What a create killed half way leaves: libcrun's copy of the config, no status
+    try tmp.dir.makePath("half");
+    try tmp.dir.writeFile(.{ .sub_path = "half/config.json", .data = "{}" });
+    try std.testing.expect(crunHas("half"));
+    // A finished one
+    try tmp.dir.makePath("done");
+    try tmp.dir.writeFile(.{ .sub_path = "done/config.json", .data = "{}" });
+    try tmp.dir.writeFile(.{ .sub_path = "done/status", .data = "{}" });
+    try std.testing.expect(crunHas("done"));
+    // A Proxmox record from before they moved to .proxmox-lxc, and runc's state
+    try tmp.dir.makePath("lxc-old");
+    try tmp.dir.writeFile(.{ .sub_path = "lxc-old/state.json", .data = "{}" });
+    try tmp.dir.writeFile(.{ .sub_path = "lxc-old/runtime-metadata.json", .data = "{}" });
+    try std.testing.expect(!crunHas("lxc-old"));
+    try tmp.dir.makePath("both");
+    try tmp.dir.writeFile(.{ .sub_path = "both/config.json", .data = "{}" });
+    try tmp.dir.writeFile(.{ .sub_path = "both/state.json", .data = "{}" });
+    try std.testing.expect(!crunHas("both"));
+    // and a directory with nothing in it
+    try tmp.dir.makePath("empty");
+    try std.testing.expect(!crunHas("empty"));
+    try std.testing.expect(!crunHas("missing"));
 }
 
 test "under a caller's root the Proxmox LXC records are not in libcrun's directory" {
