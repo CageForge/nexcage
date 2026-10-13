@@ -62,7 +62,7 @@ jobs:
           NEXCAGE_BIN=nexcage.bin bash scripts/build_deb_local.sh
 
       - name: Upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: nexcage-deb-k8s-e2e
           path: dist/nexcage-*-amd64.deb
