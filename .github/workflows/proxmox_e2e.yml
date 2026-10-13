@@ -446,7 +446,8 @@ jobs:
             echo "::error::e2e-before is still there after delsnapshot"; exit 1
           fi
           nx delete --force "$SNAP_NAME"
-          rm -f "$SNAPCFG"
+          # root's file in root's directory, as put_config made it
+          $SUDO rm -f "$SNAPCFG"
         else
           echo "::warning::snapshot checks skipped: no lvm-thin or ZFS storage on this node; 03-prepare-runner-host.sh makes a ZFS pool on a file for them"
         fi
