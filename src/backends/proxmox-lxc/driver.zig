@@ -188,7 +188,7 @@ pub const ProxmoxLxcDriver = struct {
         // answered "Invalid container name/hostname" to podman's very first
         // create. An id is not a hostname anywhere but here.
         core.validation.SecurityValidation.validateHostname(config.name) catch {
-            if (self.logger) |log| log.err("'{s}' cannot be a container hostname; the Proxmox LXC backend uses the name as one, so it must be RFC-1123 (letters, digits and hyphens, at most 63 per label)", .{config.name}) catch {};
+            if (self.logger) |log| log.err("'{s}' cannot be a container hostname; the Proxmox LXC backend uses the name as one, so it must be RFC-1123 (letters, digits and hyphens, at most 63 per label, none starting or ending in a hyphen)", .{config.name}) catch {};
             return core.Error.InvalidInput;
         };
 

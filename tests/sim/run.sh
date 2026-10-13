@@ -118,6 +118,7 @@ nx create --name web-1 "$TPL"
 check "duplicate name -> exit 1, no second pct create" all 'rc 1' 'err_has "already exists"' 'not_called_re "^pct create"'
 nx create --name bad_name "$TPL";  check "invalid hostname (underscore) -> exit 2" all 'rc 2' 'not_called_re "^pct create"'
 nx create --name -lead "$TPL";     check "invalid hostname (leading dash) -> refused" all '[ "$RC" != 0 ]' 'not_called_re "^pct create"'
+nx create --name trail- "$TPL";    check "invalid hostname (trailing dash) -> exit 2" all 'rc 2' 'err_has "ending in a hyphen"' 'not_called_re "^pct create"'
 nx create "$TPL";                  check "missing --name -> exit 2" all 'rc 2' 'not_called_re "^pct"'
 nx create --name web-x;            check "missing image -> exit 2" all 'rc 2' 'not_called_re "^pct"'
 
