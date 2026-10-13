@@ -10,7 +10,7 @@ directly.
 
 ```bash
 scripts/dev.sh setup        # once: podman socket, act's runner image, a busybox rootfs
-scripts/dev.sh check        # before a commit: zig fmt, unit tests, the simulator
+scripts/dev.sh check        # before a commit: zig fmt, unit tests, the simulator, the script tests
 scripts/dev.sh all          # before a pull request: check, then every CI job through act
 ```
 
@@ -23,7 +23,7 @@ scripts/dev.sh all          # before a pull request: check, then every CI job th
 | `build` | `build` (Debug only) | Debug to `zig-out/bin`, ReleaseSafe to `zig-out/release/bin` | zig 0.15.1 | seconds |
 | `test` | `check` | `zig fmt --check`, unit tests | zig | 6 s |
 | `sim` | `sim` | Every command against fake `pct`/`pvesh`/`pvesm` ([TESTING.md](../TESTING.md#running-against-fake-proxmox-tools)) | zig, unshare, python3, tar, zstd | 12 s |
-| `check` | | `test` + `sim` | | 20 s |
+| `check` | | `test` + `sim` + `tests/scripts/run.sh`, the tests of the shell scripts in `scripts/` | jq, dpkg-deb, readelf for the script tests | 20 s |
 | `crun` | | The crun-backend image and what `crun_build.yml` checks on it, in its order: `version`, the features ABI, the features document, `ps` against crun, `update`'s flags, a Proxmox LXC container under `--root`, an isolation profile, `--systemd-cgroup`, a bundle from a foreign working directory, `kill`, `exec`'s process spec, a profile's limits on `update`, memory values, the re-execution. Not the `.deb`, the runtime-spec suite or critest, which only `act crun_build.yml:docker` runs, nor the pod, which is `cri` | a container engine | 3 min first, then a minute |
 | `cri` | | A pod through containerd's CRI with nexcage as the runtime handler: sandbox, CNI address, container, `exec`, `update`, removal | a container engine | 5 s, plus the images |
 | `e2e` | `e2e` | `sim` + `crun` + `cri` | | |
@@ -100,8 +100,9 @@ nexcage --runtime crun delete --force demo
 ## CI through act
 
 `scripts/dev.sh act` runs, by default, every job a pull request gets on a
-GitHub-hosted runner except those of `security.yml`: `ci.yml` (`build-test`,
-`simulation`), `version-check.yml`, `crun_build.yml` and
+GitHub-hosted runner except `security.yml`'s scanners, which download their
+databases, images and rules: `ci.yml` (`build-test`, `simulation`,
+`scripts`), `security.yml`'s `zizmor`, `version-check.yml`, `crun_build.yml` and
 `memory_leak_check.yml`, plus the crun job of `dependency_check.yml` in its dry
 run. Name jobs to run others, and pass act's own options after `--`:
 
@@ -221,6 +222,7 @@ python3 tests/perf/report.py zig-out/dev/perf/latest/samples.tsv \
 | `tests/perf/lxc_sim.sh`, `tests/perf/crun.sh` | The perf suites; each writes samples |
 | `tests/perf/report.py` | Summary, comparison, regression verdict |
 | `tests/crun/features_check.py` | The features document check, shared with `crun_build.yml` |
+| `tests/scripts/` | Tests of the shell scripts in `scripts/`, against fakes of the tools they call |
 | `zig-out/dev/` | Logs, the busybox bundle, act's artifacts, perf runs (`make clean` removes it) |
 
 After `make clean`, run `git worktree prune` if `perf --against` had created a

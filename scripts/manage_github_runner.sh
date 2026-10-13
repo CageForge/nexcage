@@ -103,26 +103,40 @@ show_logs() {
 }
 
 # Function to remove runner
+# Deregisters the runner through the GitHub API from this machine, with gh
+# logged in as a repository admin, rather than with config.sh on the host:
+# that needs a removal token fetched here (gh is not installed on the host)
+# and refuses to run as root, so `remove` used to stop the service, fail, and
+# leave the runner registered and its service enabled to come back at boot.
+# The service is disabled first, so nothing below can leave it that way.
 remove_runner() {
     echo -e "${BLUE}🗑️ Removing GitHub Actions runner...${NC}"
-    
-    # Stop service
-    ssh "$PVE_USER@$PVE_HOST" "systemctl stop github-runner"
-    
-    # Unregister from GitHub
-    if command -v gh &> /dev/null; then
-        echo -e "${YELLOW}Unregistering from GitHub...${NC}"
-        ssh "$PVE_USER@$PVE_HOST" "cd /opt/github-runner && ./config.sh remove --token \$(gh api repos/$GITHUB_REPO/actions/runners/registration-token --method POST --jq '.token')"
-    else
-        echo -e "${YELLOW}⚠️ GitHub CLI not available, please unregister manually${NC}"
+
+    if ! command -v gh &> /dev/null; then
+        echo -e "${RED}❌ gh is not installed here; it deregisters the runner (gh auth login as a repository admin)${NC}"
+        exit 1
     fi
-    
+
+    # Stop the service and keep it from starting again
+    ssh "$PVE_USER@$PVE_HOST" "systemctl disable --now github-runner"
+
+    # Unregister from GitHub
+    echo -e "${YELLOW}Unregistering from GitHub...${NC}"
+    local id
+    id=$(gh api --paginate "repos/$GITHUB_REPO/actions/runners" --jq ".runners[] | select(.name == \"$RUNNER_NAME\") | .id")
+    if [ -n "$id" ]; then
+        gh api -X DELETE "repos/$GITHUB_REPO/actions/runners/$id"
+        echo -e "${GREEN}✅ Runner $RUNNER_NAME (id $id) deregistered${NC}"
+    else
+        echo -e "${YELLOW}⚠️ No runner named $RUNNER_NAME is registered with $GITHUB_REPO${NC}"
+    fi
+
     # Remove service
-    ssh "$PVE_USER@$PVE_HOST" "systemctl disable github-runner && rm -f /etc/systemd/system/github-runner.service && systemctl daemon-reload"
-    
-    # Remove runner directory
+    ssh "$PVE_USER@$PVE_HOST" "rm -f /etc/systemd/system/github-runner.service && systemctl daemon-reload"
+
+    # Remove runner directory, with the registration's credentials in it
     ssh "$PVE_USER@$PVE_HOST" "rm -rf /opt/github-runner"
-    
+
     echo -e "${GREEN}✅ Runner removed successfully${NC}"
 }
 

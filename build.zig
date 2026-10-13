@@ -213,6 +213,9 @@ pub fn build(b: *std.Build) void {
         libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
         libcrun_module.addIncludePath(.{ .cwd_relative = "src/backends/crun" });
+        // Linked into a PIE (exe.pie below), so compiled as position-
+        // independent code rather than relying on the default for a library.
+        libcrun_module.pic = true;
         const libcrun_compile = b.addLibrary(.{
             .name = "libcrun_vendor",
             .root_module = libcrun_module,
@@ -251,6 +254,13 @@ pub fn build(b: *std.Build) void {
         .name = "nexcage",
         .root_module = main_mod,
     });
+    // Position-independent, so the kernel loads it at a random address. The
+    // binary runs as root and links libcrun and libocispec, C code that
+    // parses a bundle's config.json; without this their code and data sit at
+    // the same fixed address in every run, and a memory-safety bug in them
+    // needs no address leak to be exploited. Zig's default for a Linux
+    // executable is not PIE.
+    exe.pie = true;
 
     // Link system libraries
     exe.linkSystemLibrary("c");
@@ -258,8 +268,6 @@ pub fn build(b: *std.Build) void {
     // Add include paths
     exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
     exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-    exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
-    exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
     exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });
@@ -328,8 +336,6 @@ pub fn build(b: *std.Build) void {
 
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/include" });
     test_exe.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-    test_exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src" });
-    test_exe.addIncludePath(.{ .cwd_relative = "./crun-1.23.1/src/libcrun" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/src" });
     test_exe.addIncludePath(.{ .cwd_relative = "deps/crun/libocispec/src" });

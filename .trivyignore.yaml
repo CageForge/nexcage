@@ -1,0 +1,33 @@
+# Trivy findings accepted on purpose, each for the files named and for the
+# reason given. security.yml fails on any other HIGH or CRITICAL finding.
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - "Dockerfile"
+      - ".github/act/Dockerfile"
+      - "tests/cri/Dockerfile"
+      - "tests/runtime-tools/Dockerfile"
+    statement: >-
+      Root in the image is the point. These images build nexcage, run it as an
+      OCI runtime, or run containerd and the runtime-spec suite, privileged,
+      in CI; none is published. An OCI runtime runs as root.
+  - id: DS-0029
+    paths:
+      - "Dockerfile"
+    statement: >-
+      The builder relies on recommended packages (ca-certificates for git and
+      wget over https among them), and the runtime stage is a test image that
+      is not published. Dropping recommends would change what is built and
+      tested, not harden anything that ships.
+  - id: KSV-0014
+    paths:
+      - "deploy/kubernetes/tenant-nexcage/job-build-test.yaml"
+    statement: >-
+      A one-off build job in the project's own tenant: it installs packages
+      and builds nexcage in its root filesystem.
+  - id: KSV-0118
+    paths:
+      - "deploy/kubernetes/tenant-nexcage/job-build-test.yaml"
+    statement: >-
+      The same build job runs apt-get as root; a restrictive security
+      context would stop it from doing its work.

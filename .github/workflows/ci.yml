@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -40,11 +42,50 @@ jobs:
         # while: nothing checked.
         run: zig fmt --check src/ tests/
 
+      - name: build.zig's include paths exist
+        # build.zig named ./crun-1.23.1 for a release after vendored crun had
+        # moved to deps/crun, and a stray directory of that name would have
+        # been searched. A path inside a submodule counts: this checkout does
+        # not fetch submodules.
+        run: |
+          set -eu
+          subs=$(git config -f .gitmodules --get-regexp '\.path$' | awk '{print $2}')
+          paths=$(sed -n 's/.*\.cwd_relative = "\([^"]*\)".*/\1/p' build.zig | sort -u)
+          [ -n "$paths" ] || { echo "::error::no include paths read from build.zig"; exit 1; }
+          bad=0
+          for p in $paths; do
+            case $p in /*) continue ;; esac
+            p=${p#./}
+            [ -e "$p" ] && continue
+            in_sub=no
+            for s in $subs; do case "$p/" in "$s"/*) in_sub=yes ;; esac; done
+            [ "$in_sub" = yes ] && continue
+            echo "::error::build.zig names the include path $p, which does not exist"; bad=1
+          done
+          exit "$bad"
+
+      - name: The Dockerfile builds the crun deps/crun pins
+        # Releases are built through the Dockerfile, which clones crun by a
+        # hash of its own; dependency_check.yml reports the submodule's.
+        run: sh scripts/ci/check_crun_pin.sh
+
       - name: Build (Debug)
         run: zig build --summary all
 
       - name: Build (ReleaseSafe)
         run: zig build -Doptimize=ReleaseSafe -p zig-out-release
+
+      - name: The release build is position-independent
+        # nexcage runs as root and, with the crun backend, parses bundles in
+        # libcrun's C code. Only a PIE is loaded at a random address; Zig's
+        # default for an executable is not one.
+        run: |
+          type=$(readelf -h zig-out-release/bin/nexcage | sed -n 's/^ *Type: *//p')
+          echo "ELF type: ${type:-unreadable}"
+          case "$type" in
+            DYN*) ;;
+            *) echo "::error::zig-out-release/bin/nexcage is not position-independent"; exit 1 ;;
+          esac
 
       - name: Unit tests
         run: zig build test --summary all
@@ -94,6 +135,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -112,3 +155,39 @@ jobs:
 
       - name: Run tests/sim/run.sh
         run: tests/sim/run.sh
+
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Every shell script under scripts/, tests/ and packaging/, found by
+      # name or by its #! line. Errors fail the job; the tree has none.
+      # Warnings are not checked yet.
+      - name: shellcheck, errors only
+        run: |
+          set -euo pipefail
+          command -v shellcheck > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck; }
+          files=()
+          while IFS= read -r f; do
+            case "$f" in
+              *.sh|*.bash) files+=("$f") ;;
+              *) if head -n1 "$f" | grep -qE '^#!.*[/ ](ba|da)?sh( |$)'; then files+=("$f"); fi ;;
+            esac
+          done < <(git ls-files scripts tests packaging)
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::no shell scripts found"; exit 1; }
+          shellcheck --version | sed -n 2p
+          echo "checking ${#files[@]} scripts"
+          shellcheck -S error "${files[@]}"
+
+      # Each test runs a copy of a script from scripts/ against fakes of the
+      # tools it calls. Nothing is downloaded, and what a test makes outside
+      # its scratch directory it removes.
+      - name: tests/scripts/run.sh
+        run: tests/scripts/run.sh

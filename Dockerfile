@@ -39,28 +39,20 @@ ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu:${LD_LIBR
 ENV LIBRARY_PATH="/usr/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu:${LIBRARY_PATH}"
 ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}"
 
-# Install Zig 0.15.1 by querying the download index
-RUN set -ex && \
-    ZIG_VERSION="0.15.1" && \
-    ZIG_TARGET="zig-x86_64-linux" && \
-    echo "Fetching Zig download URL for version ${ZIG_VERSION}..." && \
-    ZIG_URL=$(wget -qO- https://ziglang.org/download/index.json | \
-              grep -F "${ZIG_TARGET}" | \
-              grep -F "${ZIG_VERSION}" | \
-              awk '{print $2}' | \
-              sed 's/[",]//g' | head -1) && \
-    if [ -z "$ZIG_URL" ]; then \
-        echo "ERROR: Could not find Zig ${ZIG_VERSION} download URL"; \
-        exit 1; \
-    fi && \
-    echo "Downloading Zig from: ${ZIG_URL}" && \
-    ZIG_ARCHIVE=$(basename "$ZIG_URL") && \
-    wget --progress=dot:mega -O "${ZIG_ARCHIVE}" "${ZIG_URL}" && \
-    echo "Extracting ${ZIG_ARCHIVE}..." && \
-    tar xf "${ZIG_ARCHIVE}" && \
-    ZIG_DIR=$(basename "${ZIG_ARCHIVE}" .tar.xz) && \
-    mv "${ZIG_DIR}" /usr/local/zig && \
-    rm "${ZIG_ARCHIVE}" && \
+# Zig 0.15.1, checked against the sha256 that ziglang.org publishes for this
+# tarball (https://ziglang.org/download/index.json) before it is unpacked. CI
+# installs Zig with setup-zig, which checks the tarball's signature; the
+# release binary is built here, and this used to take whatever URL a grep of
+# the index found and run the download unchecked.
+RUN set -eu; \
+    version=0.15.1; \
+    sha256=c61c5da6edeea14ca51ecd5e4520c6f4189ef5250383db33d01848293bfafe05; \
+    archive="zig-x86_64-linux-${version}.tar.xz"; \
+    wget --progress=dot:mega -O "/tmp/${archive}" "https://ziglang.org/download/${version}/${archive}"; \
+    echo "${sha256}  /tmp/${archive}" | sha256sum -c -; \
+    tar -xJf "/tmp/${archive}" -C /tmp; \
+    mv "/tmp/zig-x86_64-linux-${version}" /usr/local/zig; \
+    rm "/tmp/${archive}"; \
     /usr/local/zig/zig version
 
 ENV PATH="/usr/local/zig:${PATH}"
@@ -74,7 +66,9 @@ COPY . .
 # .dockerignore excludes .git and .gitmodules, so submodule commands can
 # never work inside this image — the previous `git init || true && git
 # submodule update` was a no-op that `|| true` made look harmless. Clone the
-# dependency explicitly at its pinned commit instead.
+# dependency explicitly at its pinned commit instead. The hash is the deps/crun
+# submodule's; scripts/ci/check_crun_pin.sh fails CI and the release when they
+# differ.
 RUN git clone https://github.com/CageForge/crun.git deps/crun && \
     git -C deps/crun checkout -q 7d6f69551c5ccc0cbc3bc67bfd6674847d75787b && \
     git -C deps/crun submodule update --init libocispec && \

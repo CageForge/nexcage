@@ -1,13 +1,12 @@
 name: Security
 
+# Every pull request, documentation included: a credential committed in a
+# Markdown file is still a credential.
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
   schedule:
     - cron: '0 0 * * 0' # Run weekly on Sunday
 
@@ -16,11 +15,24 @@ concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The SARIF upload steps below are disabled, so nothing needs
-# security-events: write. Re-add it together with an upload.
+# Nothing is uploaded as SARIF (Advanced Security is not enabled), so nothing
+# needs security-events: write. What a scanner finds is in its job's log, and
+# the job fails.
 permissions:
   contents: read
 
+# Every job can fail, and fails on what it finds. Until #321 each was
+# continue-on-error, gitleaks ended in `|| true` and Trivy had no exit code,
+# so the check was green whatever the tree held: gitleaks reported 61 "leaks"
+# (its own configuration's) and passed, and Semgrep either hit Docker Hub's
+# rate limit or crashed on today's rules, and passed. A finding accepted on
+# purpose goes in a baseline with its reason: .trivyignore.yaml,
+# .gitleaksignore, a `# nosemgrep: <rule> -- reason` comment (on the line
+# above the finding in a Dockerfile, where a line cannot end in a comment), or
+# .github/zizmor.yml. The two scanners that cannot be run outside GitHub here
+# first show they find a planted secret, so a scanner that quietly scans
+# nothing turns the job red.
+#
 # Every job runs on a GitHub-hosted runner. They used to target "runner0",
 # which no runner has, so those jobs sat queued until GitHub cancelled them,
 # and the self-hosted Proxmox runner. Container actions such as Semgrep and
@@ -31,30 +43,95 @@ permissions:
 #
 # There is no CodeQL job. It analysed C/C++, and outside the ignored deps/
 # the repository has one header, so every run failed with "No source files
-# found"; CodeQL does not analyse Zig.
+# found"; CodeQL does not analyse Zig. None of these scanners reads Zig
+# either: they cover the workflows, scripts, Dockerfiles, manifests and
+# anything committed by mistake.
 jobs:
-  semgrep:
-    name: Semgrep SAST
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 20
+  zizmor:
+    name: zizmor (the workflows)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
         with:
-          config: >-
-            p/ci
-            p/security-audit
-            p/secrets
+          persist-credentials: false
+
+      # By version and hash; zizmor has no dependencies.
+      - name: Install zizmor
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zizmor"
+          "$RUNNER_TEMP/zizmor/bin/pip" install --require-hashes --only-binary :all: -r .github/requirements/zizmor.txt
+
+      # The workflows, dependabot.yml and .github/zizmor.yml's policy: third-
+      # party actions pinned by commit, least-privilege tokens, no expression
+      # spliced into a script. --strict-collection: a workflow that does not
+      # parse is an error, not a file quietly left out. Offline: the audits
+      # that need GitHub's API (impostor commits, known-vulnerable actions)
+      # are not run.
+      - name: zizmor
+        run: |
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --offline --strict-collection --format plain .
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # semgrep-action, which this used, is archived; its agent image is a
+      # 2023 Semgrep that crashes on the registry's rules today and exits 0.
+      SEMGREP_IMAGE: semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Semgrep runs as the runner's user, so the checkout is its own to git
+      # and what it writes is the runner's.
+      - name: Pull Semgrep
+        run: sh scripts/ci/retry_on_429.sh docker pull "$SEMGREP_IMAGE"
+
+      # A scan whose rules failed to load, or whose severity filter matches
+      # nothing, finds nothing and passes. This one has to find the key.
+      - name: Semgrep finds a planted secret
+        run: |
+          set -eu
+          canary="$RUNNER_TEMP/canary"
+          mkdir -p "$canary"
+          printf 'aws_access_key_id = AKIA%s\n' Z7Q3WXYV5LMN2PQR > "$canary/creds.ini"
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$canary:/src" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan --config p/secrets --metrics off --disable-version-check \
+              --json-output=/src/semgrep.json .
+          found=$(jq '[.results[] | select(.extra.severity | IN("ERROR", "HIGH", "CRITICAL"))] | length' "$canary/semgrep.json")
+          if [ "$found" -lt 1 ]; then
+            echo "::error::Semgrep did not report the planted AWS key; it scans nothing"
+            exit 1
+          fi
+
+      # ERROR (in newer rules HIGH and CRITICAL) fails the job; the rest is
+      # in the log. With no .semgrepignore at the root, Semgrep leaves out its
+      # built-in list, tests/ among them, so the test images and scripts are
+      # Trivy's and shellcheck's to check, not Semgrep's.
+      - name: Semgrep
+        run: |
+          set -eu
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan --config p/ci --config p/security-audit --config p/secrets \
+              --metrics off --disable-version-check --text --json-output=/src/semgrep.json .
+          blocking=$(jq '[.results[] | select(.extra.severity | IN("ERROR", "HIGH", "CRITICAL"))] | length' semgrep.json)
+          jq -r '.results[] | select(.extra.severity | IN("ERROR", "HIGH", "CRITICAL")) | "::error file=\(.path),line=\(.start.line)::\(.check_id): \(.extra.message | split("\n")[0])"' semgrep.json
+          if [ "$blocking" -gt 0 ]; then
+            echo "::error::Semgrep: $blocking finding(s) at ERROR or above"
+            exit 1
+          fi
 
   trivy-fs:
     name: Trivy FS Scan
-    runs-on: ubuntu-latest
-    continue-on-error: true
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Run Trivy (filesystem)
         # Pinned to the v0.36.0 commit, not a tag. On 2026-03-19 76 of 77
         # trivy-action tags, 0.20.0 among them, were force-pushed to
@@ -64,36 +141,55 @@ jobs:
         with:
           scan-type: 'fs'
           scan-ref: '.'
-          scanners: 'config,secret,license,vuln'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          scanners: 'misconfig,secret,license,vuln'
+          format: 'table'
+          exit-code: '1'
           severity: 'HIGH,CRITICAL'
           vuln-type: 'os,library'
           ignore-unfixed: true
-      - name: Upload Trivy SARIF
-        if: false  # Disabled: Advanced Security not enabled in repo
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-results.sarif
-        continue-on-error: true
+          # Findings accepted on purpose, each with its reason.
+          trivyignores: '.trivyignore.yaml'
+          version: 'v0.75.0'
 
   gitleaks:
     name: Gitleaks Secrets Scan
-    runs-on: ubuntu-latest
-    continue-on-error: true
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Install gitleaks
-        run: |
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz | tar xz
-          sudo mv gitleaks /usr/local/bin/
-      - name: Run gitleaks (filesystem)
-        run: |
-          gitleaks detect --no-git --redact --report-format sarif --report-path gitleaks.sarif || true
-      - name: Upload Gitleaks SARIF
-        if: false  # Disabled: Advanced Security not enabled in repo
-        uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: gitleaks.sarif
-        continue-on-error: true
+          persist-credentials: false
+
+      # By version and sha256 (the release's checksums.txt, and GitHub's
+      # digest of the asset), into the runner's temporary directory.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -eu
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tarball" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$tarball" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP/gitleaks" gitleaks
+
+      # With this repository's .gitleaks.toml, so a configuration that turns
+      # the rules off turns this red.
+      - name: gitleaks finds a planted secret
+        run: |
+          set -u
+          canary="$RUNNER_TEMP/canary"
+          mkdir -p "$canary"
+          printf 'aws_access_key_id = AKIA%s\n' Z7Q3WXYV5LMN2PQR > "$canary/creds.ini"
+          rc=0
+          "$RUNNER_TEMP/gitleaks/gitleaks" dir --no-banner --redact --config .gitleaks.toml "$canary" || rc=$?
+          if [ "$rc" != 1 ]; then
+            echo "::error::gitleaks did not report the planted AWS key (exit $rc)"
+            exit 1
+          fi
+
+      - name: gitleaks
+        run: |
+          "$RUNNER_TEMP/gitleaks/gitleaks" dir --no-banner --redact --verbose --config .gitleaks.toml .
