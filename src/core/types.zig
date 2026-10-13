@@ -97,13 +97,6 @@ pub const RuntimeType = enum {
     proxmox_lxc,
 };
 
-/// Container type enumeration
-pub const ContainerType = enum {
-    lxc,
-    crun,
-    proxmox_lxc,
-};
-
 /// Resource limits
 pub const ResourceLimits = struct {
     memory: ?u64 = null,
@@ -388,8 +381,6 @@ pub const RoutingRule = struct {
 
 /// Container configuration
 pub const ContainerConfig = struct {
-    default_container_type: ContainerType,
-
     // Which backend a container goes to, by name: first matching rule wins.
     // A pattern is a glob unless it starts with ^ or ends with $, in which
     // case it is a regular expression. This is the only routing there is;

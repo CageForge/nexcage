@@ -440,7 +440,7 @@ pub const ConfigLoader = struct {
                 else => err,
             };
         }
-        return try Config.init(self.allocator, .lxc);
+        return try Config.init(self.allocator);
     }
 
     /// The most a configuration file may hold. Far above any real one; an OCI
@@ -685,7 +685,7 @@ pub const ConfigLoader = struct {
         // Everything below relies on the names and types validate checked.
         try self.validate(value);
 
-        var config = try Config.init(self.allocator, .lxc);
+        var config = try Config.init(self.allocator);
         errdefer config.deinit();
         const root = value.object;
 
@@ -1025,16 +1025,9 @@ pub const Config = struct {
     const Self = @This();
 
     allocator: std.mem.Allocator,
-    runtime_type: types.RuntimeType,
-    default_runtime: []const u8,
     log_level: logging.LogLevel,
     log_file: ?[]const u8,
-    data_dir: []const u8,
-    cache_dir: []const u8,
-    temp_dir: []const u8,
     network: types.NetworkConfig,
-    security: types.SecurityConfig,
-    resources: types.ResourceLimits,
     container_config: types.ContainerConfig,
     proxmox: types.ProxmoxSettings = .{},
     /// The file names "runc" as a runtime. The backend was removed in 0.13.0;
@@ -1047,49 +1040,21 @@ pub const Config = struct {
     /// Isolation profiles by name (ADR-005); only create reads them.
     profiles: []profile_mod.Profile = &.{},
 
-    pub fn init(allocator: std.mem.Allocator, runtime_type: types.RuntimeType) !Config {
+    pub fn init(allocator: std.mem.Allocator) !Config {
         return Config{
             .allocator = allocator,
-            .runtime_type = runtime_type,
-            .default_runtime = try allocator.dupe(u8, "proxmox-lxc"),
             .log_level = logging.LogLevel.info,
             .log_file = null,
-            .data_dir = try allocator.dupe(u8, "/var/lib/nexcage"),
-            .cache_dir = try allocator.dupe(u8, "/var/cache/nexcage"),
-            .temp_dir = try allocator.dupe(u8, "/tmp/nexcage"),
             .network = types.NetworkConfig{
                 // Proxmox's own bridge; lxcbr0 belongs to plain LXC and does not exist on PVE
                 .bridge = try allocator.dupe(u8, constants.DEFAULT_BRIDGE_NAME),
                 .ip = null,
                 .gateway = null,
             },
-            .security = types.SecurityConfig{
-                .seccomp = null,
-                .apparmor = null,
-                .capabilities = null,
-                .read_only = null,
-            },
-            .resources = types.ResourceLimits{
-                .memory = null,
-                .cpu = null,
-                .disk = null,
-                .network_bandwidth = null,
-            },
             .container_config = types.ContainerConfig{
-                .default_container_type = .lxc,
                 .routing = &[_]types.RoutingRule{},
                 .default_runtime = .lxc,
             },
-        };
-    }
-
-    pub fn getContainerType(self: *const Self, container_name: []const u8) types.ContainerType {
-        // Try new routing system first
-        const runtime_type = self.getRoutedRuntime(container_name);
-        return switch (runtime_type) {
-            .lxc => .lxc,
-            .crun => .crun,
-            .proxmox_lxc => .proxmox_lxc,
         };
     }
 
@@ -1141,19 +1106,11 @@ pub const Config = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        // Always free default_runtime - it's always allocated dynamically in init() or parseConfig()
-        self.allocator.free(self.default_runtime);
-
         if (self.log_file) |log_file| {
             // Always free log_file - it's allocated by parseConfig
             self.allocator.free(log_file);
         }
-        self.allocator.free(self.data_dir);
-        self.allocator.free(self.cache_dir);
-        self.allocator.free(self.temp_dir);
         self.network.deinit(self.allocator);
-        self.security.deinit();
-        self.resources.deinit();
         self.container_config.deinit(self.allocator);
         self.proxmox.deinit(self.allocator);
         for (self.profiles) |*p| p.deinit(self.allocator);
@@ -1347,7 +1304,7 @@ test "a root filesystem size below 1 GiB is rejected" {
 }
 
 test "without a config file the defaults target a Proxmox host" {
-    var cfg = try Config.init(std.testing.allocator, .lxc);
+    var cfg = try Config.init(std.testing.allocator);
     defer cfg.deinit();
 
     try std.testing.expectEqualStrings(constants.DEFAULT_BRIDGE_NAME, cfg.network.bridge.?);
