@@ -349,12 +349,27 @@ case "$1 $2" in
     if [ ${#upid} -gt 255 ]; then
       echo "unable to create file '/var/log/pve/tasks/1/$upid' - File name too long" >&2; exit 36
     fi
+    # A file written to a storage is listed by the node that wrote it, and
+    # by every node of a shared storage: pve-storage's `shared` says the
+    # storage holds the same files whichever node reads it -- the NFS or
+    # CephFS mount behind it is one -- so a pull on one node is in every
+    # node's content listing at once, as a removal is gone from all of them
+    # (the delete case below). The fake listed the file for the pulling node
+    # alone, and the documented pull-then-create --node failed here, not on
+    # Proxmox.
+    lands() {  # <volid>
+      local n
+      echo "$node $1" >> "$SIM/node_templates"
+      for n in $(awk -v s="${1%%:*}" -v me="$node" '$2==s && $3=="1" && $1!=me {print $1}' "$SIM/node_storages" 2>/dev/null); do
+        echo "$n $1" >> "$SIM/node_templates"
+      done
+    }
     # $SIM/also_lands holds volids another writer puts on the storage while
     # this pull runs: a second pull, an upload, another create's bundle archive.
     if [ -s "$SIM/also_lands" ]; then
       while read -r other; do
         echo "$other" >> "$SIM/templates"
-        echo "$node $other" >> "$SIM/node_templates"
+        lands "$other"
       done < "$SIM/also_lands"
       rm -f "$SIM/also_lands"
     fi
@@ -362,7 +377,7 @@ case "$1 $2" in
     # used to write local: whatever the path said, so a correct --storage on
     # create failed against the fake at pct create, not against Proxmox.
     echo "$volid" >> "$SIM/templates"
-    echo "$node $volid" >> "$SIM/node_templates"
+    lands "$volid"
     # What pvesh prints for the task it ran, as captured on PVE 9.2
     echo "$upid"
     ;;

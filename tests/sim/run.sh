@@ -2318,6 +2318,17 @@ nx pull docker.io/library/nginx:1.27 --node titan --storage shared-rdma
 check "pull --node --storage puts it where create --node can read it" \
   all 'rc 0' 'called_re "^pvesh create /nodes/titan/storage/shared-rdma/oci-registry-pull"' \
       'grep -qxE "shared-rdma:vztmpl/$(pulled_re docker.io/library/nginx:1.27)" "$S/out"'
+# The pair CLI_REFERENCE.md gives under pull, word for word: pull onto a
+# shared storage here, then create on titan from the volid pull printed,
+# which titan lists, the storage being one set of files.
+nx pull docker.io/library/redis:7 --storage shared-rdma
+check "pull <ref> --storage <shared> prints the volid the documentation shows" \
+  all 'rc 0' 'grep -qx "shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar" "$S/out"'
+nx create --name r1 --node titan shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar
+check "and create --name r1 --node titan <that volid> makes r1 on titan from it" \
+  all 'rc 0' 'called_re "^pvesh get /nodes/titan/storage/shared-rdma/content( |$)"' \
+      'called_re "^pvesh create /nodes/titan/lxc --vmid [0-9]+ --ostemplate shared-rdma:vztmpl/docker\.io_library_redis_7-a0ed741ac6ba1c57\.tar --hostname r1( |$)"' \
+      'grep -qE "^[0-9]+ stopped r1 titan$" "$S/db"'
 # Proxmox will not write over a file: a reference pulled before is that file.
 nx pull docker.io/library/nginx:1.27
 check "pulling a reference already there answers with its file" \
