@@ -38,53 +38,6 @@ pub const ErrorHandler = struct {
         }
         return CliError.InvalidInput;
     }
-
-    /// Log and return CommandNotFound error
-    pub fn commandNotFound(self: *const ErrorHandler, command: []const u8) CliError {
-        if (self.logger) |log| {
-            log.err("Command '{s}' not found", .{command}) catch {};
-        }
-        return CliError.CommandNotFound;
-    }
-
-    /// Log and return UnsupportedOperation error with context
-    pub fn unsupportedOperation(self: *const ErrorHandler, operation: []const u8, context: []const u8) CliError {
-        if (self.logger) |log| {
-            log.err("Operation '{s}' not supported: {s}", .{ operation, context }) catch {};
-        }
-        return CliError.UnsupportedOperation;
-    }
-
-    /// Log and return OperationFailed error with context
-    pub fn operationFailed(self: *const ErrorHandler, operation: []const u8, reason: []const u8) CliError {
-        if (self.logger) |log| {
-            log.err("Operation '{s}' failed: {s}", .{ operation, reason }) catch {};
-        }
-        return CliError.OperationFailed;
-    }
-
-    /// Convert core errors to CLI errors
-    pub fn fromCoreError(core_error: anyerror) CliError {
-        return switch (core_error) {
-            core.Error.InvalidInput => CliError.InvalidInput,
-            core.Error.UnsupportedOperation => CliError.UnsupportedOperation,
-            core.types.Error.InvalidInput => CliError.InvalidInput,
-            core.types.Error.NotFound => CliError.CommandNotFound,
-            core.types.Error.OperationFailed => CliError.OperationFailed,
-            else => CliError.SystemError,
-        };
-    }
-
-    /// Convert any error to CLI error with logging
-    pub fn handleError(self: *const ErrorHandler, err: anyerror, context: []const u8) CliError {
-        const cli_error = fromCoreError(err);
-
-        if (self.logger) |log| {
-            log.err("Error in {s}: {any}", .{ context, err }) catch {};
-        }
-
-        return cli_error;
-    }
 };
 
 /// Create a standardized error handler for a command

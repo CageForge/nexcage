@@ -101,8 +101,3 @@ pub const RunCommand = struct {
         try validation.ValidationUtils.requireImageInArgs(args);
     }
 };
-
-/// Create a run command instance
-pub fn createRunCommand() RunCommand {
-    return RunCommand{};
-}

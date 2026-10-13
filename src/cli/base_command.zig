@@ -47,37 +47,3 @@ pub const BaseCommand = struct {
         try self.logInfo("{s} {s}", .{ operation, target });
     }
 };
-
-/// Helper macro for embedding BaseCommand in CLI command structs
-/// Usage: const base = LoggerMixin(@This());
-pub fn LoggerMixin(comptime CommandType: type) type {
-    return struct {
-        pub fn setLogger(self: *CommandType, logger: *core.LogContext) void {
-            self.base.setLogger(logger);
-        }
-
-        pub fn logInfo(self: *const CommandType, comptime format: []const u8, args: anytype) !void {
-            try self.base.logInfo(format, args);
-        }
-
-        pub fn logWarn(self: *const CommandType, comptime format: []const u8, args: anytype) !void {
-            try self.base.logWarn(format, args);
-        }
-
-        pub fn logError(self: *const CommandType, comptime format: []const u8, args: anytype) !void {
-            try self.base.logError(format, args);
-        }
-
-        pub fn logCommandStart(self: *const CommandType, command_name: []const u8) !void {
-            try self.base.logCommandStart(command_name);
-        }
-
-        pub fn logCommandComplete(self: *const CommandType, command_name: []const u8) !void {
-            try self.base.logCommandComplete(command_name);
-        }
-
-        pub fn logOperation(self: *const CommandType, operation: []const u8, target: []const u8) !void {
-            try self.base.logOperation(operation, target);
-        }
-    };
-}

@@ -83,27 +83,6 @@ pub const CommandRegistry = struct {
     }
 };
 
-// Global registry instance
-var global_registry: ?CommandRegistry = null;
-
-/// Initialize the global command registry
-pub fn initGlobalRegistry(allocator: std.mem.Allocator) !void {
-    global_registry = CommandRegistry.init(allocator);
-}
-
-/// Get the global command registry
-pub fn getGlobalRegistry() ?*CommandRegistry {
-    return if (global_registry) |*registry| registry else null;
-}
-
-/// Deinitialize the global command registry
-pub fn deinitGlobalRegistry() void {
-    if (global_registry) |*registry| {
-        registry.deinit();
-        global_registry = null;
-    }
-}
-
 // Static command instances
 var run_cmd = run.RunCommand{};
 var help_cmd = help.HelpCommand{};
@@ -153,53 +132,6 @@ fn narrow(logger: ?*core.LogContext, command: []const u8, err: anyerror) interfa
 /// The command's logger, set by registerCommandWithLogger, if it has one.
 fn loggerOf(comptime CommandType: type, cmd: *CommandType) ?*core.LogContext {
     return if (@hasField(CommandType, "base")) cmd.base.logger else null;
-}
-
-/// Generic command registration helper
-fn registerCommand(
-    registry: *CommandRegistry,
-    cmd: anytype,
-    comptime CommandType: type,
-) !void {
-    const iface = try registry.allocator.create(interfaces.CommandInterface);
-
-    // Wrapper to extract ctx from iface and pass as self to concrete command
-    const execute_wrapper = struct {
-        fn wrap(self_iface: *interfaces.CommandInterface, options: types.RuntimeOptions, allocator: std.mem.Allocator) interfaces.Error!void {
-            const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
-            CommandType.execute(ctx_ptr, options, allocator) catch |err| {
-                return narrow(loggerOf(CommandType, ctx_ptr), self_iface.name, err);
-            };
-        }
-    }.wrap;
-
-    const help_wrapper = struct {
-        fn wrap(self_iface: *interfaces.CommandInterface, allocator: std.mem.Allocator) interfaces.Error![]const u8 {
-            const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
-            return CommandType.help(ctx_ptr, allocator) catch |err| {
-                return narrow(loggerOf(CommandType, ctx_ptr), self_iface.name, err);
-            };
-        }
-    }.wrap;
-
-    const validate_wrapper = struct {
-        fn wrap(self_iface: *interfaces.CommandInterface, args: []const []const u8) interfaces.Error!void {
-            const ctx_ptr: *CommandType = @ptrCast(@alignCast(self_iface.ctx));
-            CommandType.validate(ctx_ptr, args) catch |err| {
-                return narrow(loggerOf(CommandType, ctx_ptr), self_iface.name, err);
-            };
-        }
-    }.wrap;
-
-    iface.* = .{
-        .name = cmd.name,
-        .description = cmd.description,
-        .ctx = cmd,
-        .execute = execute_wrapper,
-        .help = help_wrapper,
-        .validate = validate_wrapper,
-    };
-    try registry.register(iface);
 }
 
 fn registerCommandWithLogger(
@@ -253,34 +185,6 @@ fn registerCommandWithLogger(
     };
 
     try registry.register(iface);
-}
-
-/// Register all built-in commands
-pub fn registerBuiltinCommands(registry: *CommandRegistry) !void {
-    try registerCommand(registry, &run_cmd, run.RunCommand);
-    try registerCommand(registry, &help_cmd, help.HelpCommand);
-    try registerCommand(registry, &version_cmd, version.VersionCommand);
-    try registerCommand(registry, &create_cmd, create.CreateCommand);
-    try registerCommand(registry, &start_cmd, start.StartCommand);
-    try registerCommand(registry, &stop_cmd, stop.StopCommand);
-    try registerCommand(registry, &delete_cmd, delete.DeleteCommand);
-    try registerCommand(registry, &list_cmd, list.ListCommand);
-    try registerCommand(registry, &health_cmd, health.HealthCommand);
-    try registerCommand(registry, &state_cmd, state.StateCommand);
-    try registerCommand(registry, &kill_cmd, kill.KillCommand);
-    try registerCommand(registry, &exec_cmd, exec.ExecCommand);
-    try registerCommand(registry, &features_cmd, features.FeaturesCommand);
-    try registerCommand(registry, &ps_cmd, ps.PsCommand);
-    try registerCommand(registry, &images_cmd, images.ImagesCommand);
-    try registerCommand(registry, &pull_cmd, pull.PullCommand);
-    try registerCommand(registry, &rmi_cmd, rmi.RmiCommand);
-    try registerCommand(registry, &pause_cmd, pause_cmd_mod.PauseCommand);
-    try registerCommand(registry, &resume_cmd, resume_cmd_mod.ResumeCommand);
-    try registerCommand(registry, &update_cmd, update_cmd_mod.UpdateCommand);
-    try registerCommand(registry, &snapshot_cmd, snapshot_cmd_mod.SnapshotCommand);
-    try registerCommand(registry, &snapshots_cmd, snapshot_cmd_mod.SnapshotsCommand);
-    try registerCommand(registry, &rollback_cmd, snapshot_cmd_mod.RollbackCommand);
-    try registerCommand(registry, &delsnapshot_cmd, snapshot_cmd_mod.DelsnapshotCommand);
 }
 
 /// Register all built-in commands with logger
