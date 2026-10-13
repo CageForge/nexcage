@@ -206,12 +206,13 @@ jobs:
         SNAP_NAME="$NAME-snap"
         OPT_NAME="$NAME-opt"
         ALT_NAME="$NAME-rooted"
+        PROF_NAME="$NAME-prof"
         BUNDLE="/var/lib/nexcage/bundles/$OCI_NAME"
 
         vmid_of() { $SUDO pct list 2>/dev/null | awk -v n="$1" 'NR>1 && $NF==n {print $1}'; }
         cleanup() {
           set +e
-          for n in "$NAME" "$RUN_NAME" "$OCI_NAME" "$SNAP_NAME" "$OPT_NAME" "$ALT_NAME"; do
+          for n in "$NAME" "$RUN_NAME" "$OCI_NAME" "$SNAP_NAME" "$OPT_NAME" "$ALT_NAME" "$PROF_NAME" "$PROF_NAME-eng"; do
             id=$(vmid_of "$n")
             [ -z "$id" ] && continue
             echo "[E2E] Cleanup $n vmid=$id"
@@ -565,6 +566,57 @@ jobs:
           echo "::error::pct still lists $RUN_NAME after delete --force"
           exit 1
         fi
+
+        echo "[E2E] a profile on Proxmox LXC (#394): run takes its storage, size, bridge, cores and memory over the file's"
+        # The file names another bridge where the node has one, and the
+        # profile names $BRIDGE: a container on $BRIDGE then shows the profile
+        # won. The storage is one that can snapshot, where there is one, for
+        # the same reason against $ROOTFS.
+        PSTORE=${SNAPSTORE:-$ROOTFS}
+        OTHER_BRIDGE=$(ip -br link | awk -v b="$BRIDGE" '$1 ~ /^vmbr[0-9]+$/ && $1 != b {print $1; exit}') || true
+        PROFCFG=/run/nexcage-e2e/profile-config.json
+        put_config "$PROFCFG" <<EOF
+        {
+          "network": { "bridge": "${OTHER_BRIDGE:-$BRIDGE}" },
+          "proxmox": { "storage": "$ROOTFS", "rootfs_size_gb": 2 },
+          "profiles": { "e2e-small": { "runtime": "lxc", "lxc": {
+            "storage": "$PSTORE", "rootfs_size_gb": 3, "bridge": "$BRIDGE",
+            "cores": 2, "memory": "256M", "unprivileged": true } } }
+        }
+        EOF
+        nx --config "$PROFCFG" run --profile e2e-small --name "$PROF_NAME" "$TPL"
+        expect_status "$PROF_NAME" running
+        PID_CT=$(vmid_of "$PROF_NAME")
+        conf_has "$PID_CT" "^net0: .*bridge=$BRIDGE(,|\$)"
+        conf_has "$PID_CT" "^rootfs: $PSTORE:.*size=3G"
+        conf_has "$PID_CT" "^cores: 2\$"
+        conf_has "$PID_CT" "^memory: 256\$"
+        conf_has "$PID_CT" "^unprivileged: 1\$"
+
+        echo "[E2E] state names the profile, after stop as well"
+        nx state "$PROF_NAME" | grep -q '"io.cageforge.nexcage.profile": "e2e-small"' \
+          || { echo "::error::state of $PROF_NAME does not name profile e2e-small"; nx state "$PROF_NAME"; exit 1; }
+        nx stop "$PROF_NAME"
+        expect_status "$PROF_NAME" stopped
+        nx state "$PROF_NAME" | grep -q '"io.cageforge.nexcage.profile": "e2e-small"' \
+          || { echo "::error::stop lost the profile from the state of $PROF_NAME"; exit 1; }
+
+        echo "[E2E] --cores above the profile's is refused, and nothing is made"
+        expect_exit 2 nx --config "$PROFCFG" create --profile e2e-small --cores 4 --name "$PROF_NAME-eng" "$TPL"
+
+        echo "[E2E] an engine handed the profile fails at create, by the profile's name"
+        $SUDO ln -sfn "$NEXCAGE" /run/nexcage-e2e/nexcage@e2e-small
+        rc=0
+        $SUDO /run/nexcage-e2e/nexcage@e2e-small --config "$PROFCFG" create --name "$PROF_NAME-eng" \
+          --pid-file /run/nexcage-e2e/eng.pid "$TPL" > eng.err 2>&1 || rc=$?
+        if [ "$rc" -ne 1 ] || ! grep -q "profile 'e2e-small' is on Proxmox LXC, which is for the command line" eng.err; then
+          echo "::error::expected exit 1 naming the profile, got $rc:"; cat eng.err; exit 1
+        fi
+        if [ -n "$(vmid_of "$PROF_NAME-eng")" ]; then
+          echo "::error::the engine's create made a container"; exit 1
+        fi
+        $SUDO rm -f /run/nexcage-e2e/nexcage@e2e-small
+        nx delete "$PROF_NAME"
 
         echo "[E2E] create <id> --bundle <dir>, and state reports that bundle"
         $SUDO mkdir -p "$BUNDLE/rootfs" "$BUNDLE/shared"
