@@ -33,6 +33,12 @@ test-reports/*
 /features.json
 /bundle/
 
+# conmon writes an empty file named oom into podman's working directory when a
+# process in a container is killed for lack of memory, as critest makes
+# happen. scripts/dev.sh runs containers from zig-out/dev; a run by hand from
+# the checkout leaves it here.
+/oom
+
 # Tool binaries and logs dropped at the repository root
 /gitleaks
 /*.log

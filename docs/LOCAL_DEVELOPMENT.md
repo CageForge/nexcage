@@ -82,6 +82,12 @@ handle both:
   `restrict_oom_score_adj` and `disable_apparmor`, as containerd's own startup
   warning asks.
 
+conmon, which watches each of podman's containers, writes an empty file named
+`oom` into podman's working directory when a process in the container is
+killed for lack of memory, as critest makes happen. `dev.sh` runs containers
+from `zig-out/dev`, so the file lands there; `.gitignore` names `/oom` for a
+run by hand from the checkout.
+
 `scripts/dev.sh shell` leaves you in that container with the checkout at
 `/src` (read-only) and a busybox bundle at `/bundle`, its processes already
 moved out of the root cgroup as the tests do — otherwise containers get no

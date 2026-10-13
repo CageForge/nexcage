@@ -237,7 +237,12 @@ sim()     { need_zig; "$ZIG" build && bash tests/sim/run.sh; }
 # The Dockerfile clones vendored crun at its pin and builds from a clean tree;
 # the engine's layer cache makes a rebuild with unchanged sources quick.
 crun_image() { say "crun image $CRUN_IMAGE"; engine_build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t "$CRUN_IMAGE" .; }
-privileged() { "$ENGINE" run --rm --privileged --cgroupns=private "$@"; }
+# conmon, which watches each of podman's containers, writes an empty file named
+# oom into podman's working directory when a process in the container is killed
+# for lack of memory, as critest makes happen. Run from the checkout, that file
+# landed in it, so containers are run from zig-out/dev.
+in_dev() { mkdir -p "$DEV"; (cd "$DEV" && "$@"); }
+privileged() { in_dev "$ENGINE" run --rm --privileged --cgroupns=private "$@"; }
 
 # What crun_build.yml checks, in the same order, on the same scripts, but for
 # four of its steps: the .deb, the runtime-spec suite and critest, which only
@@ -246,12 +251,12 @@ privileged() { "$ENGINE" run --rm --privileged --cgroupns=private "$@"; }
 # handed to the container (it prints a skip: line saying so).
 crun_checks() {
   engine; crun_image; fetch_bundle
-  say "the binary runs";   "$ENGINE" run --rm "$CRUN_IMAGE" version
+  say "the binary runs";   in_dev "$ENGINE" run --rm "$CRUN_IMAGE" version
   say "the features ABI still matches the vendored header"
   engine_build --target builder -t localhost/nexcage:builder .
-  "$ENGINE" run --rm -v "$REPO/scripts:/s:ro" localhost/nexcage:builder sh /s/check_features_abi.sh
+  in_dev "$ENGINE" run --rm -v "$REPO/scripts:/s:ro" localhost/nexcage:builder sh /s/check_features_abi.sh
   say "the features document comes from this build's libcrun"
-  "$ENGINE" run --rm "$CRUN_IMAGE" --runtime crun features > "$DEV/features.json"
+  in_dev "$ENGINE" run --rm "$CRUN_IMAGE" --runtime crun features > "$DEV/features.json"
   python3 tests/crun/features_check.py "$DEV/features.json"
   say "ps reports the container's processes, and crun agrees"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/ps.sh
@@ -293,7 +298,7 @@ shell() {
   cri_image; fetch_bundle
   local run=(run --rm --privileged --cgroupns=private -v "$REPO:/src:ro" -v "$BUNDLE:/bundle" -w /src --entrypoint /bin/bash)
   if [ $# -gt 0 ]; then
-    "$ENGINE" "${run[@]}" -i "$CRI_IMAGE" -c "$SHELL_INIT"'
+    in_dev "$ENGINE" "${run[@]}" -i "$CRI_IMAGE" -c "$SHELL_INIT"'
 exec "$@"' bash "$@"
     return
   fi
@@ -305,7 +310,7 @@ ${B}A privileged container with nexcage (crun backend), crun, containerd and cri
   /src/tests/cri/pod_on_nexcage.sh          a pod through containerd's CRI
   /src/tests/perf/crun.sh -n 5              the crun perf suite
 EOF
-  "$ENGINE" "${run[@]}" -it "$CRI_IMAGE" -c "$SHELL_INIT"'
+  in_dev "$ENGINE" "${run[@]}" -it "$CRI_IMAGE" -c "$SHELL_INIT"'
 exec bash'
 }
 
