@@ -159,12 +159,13 @@ jobs:
         OCI_NAME="$NAME-oci"
         SNAP_NAME="$NAME-snap"
         OPT_NAME="$NAME-opt"
+        ALT_NAME="$NAME-rooted"
         BUNDLE="/var/lib/nexcage/bundles/$OCI_NAME"
 
         vmid_of() { $SUDO pct list 2>/dev/null | awk -v n="$1" 'NR>1 && $NF==n {print $1}'; }
         cleanup() {
           set +e
-          for n in "$NAME" "$RUN_NAME" "$OCI_NAME" "$SNAP_NAME" "$OPT_NAME"; do
+          for n in "$NAME" "$RUN_NAME" "$OCI_NAME" "$SNAP_NAME" "$OPT_NAME" "$ALT_NAME"; do
             id=$(vmid_of "$n")
             [ -z "$id" ] && continue
             echo "[E2E] Cleanup $n vmid=$id"
@@ -464,12 +465,18 @@ jobs:
         nx state "$NAME" | grep -q '"bundle": null' \
           || { echo "::error::a template-created container should report bundle null"; exit 1; }
 
-        echo "[E2E] --root keeps state out of /run/nexcage"
+        echo "[E2E] --root keeps state out of /run/nexcage, and the Proxmox record out of libcrun's directory"
+        # Under --root the Proxmox LXC backend keeps its record of a container
+        # in <root>/.proxmox-lxc/<name>. <root>/<id> is where libcrun keeps a
+        # container's state, and a record there was taken for libcrun's.
+        # Read through $SUDO: the record and its directory are root's.
         ALTROOT=$(mktemp -d)
-        ALT_NAME="$NAME-rooted"
         nx --root "$ALTROOT" create --name "$ALT_NAME" "$TPL"
-        [ -f "$ALTROOT/$ALT_NAME/state.json" ] \
-          || { echo "::error::--root $ALTROOT holds no state for $ALT_NAME"; ls -R "$ALTROOT"; exit 1; }
+        $SUDO test -f "$ALTROOT/.proxmox-lxc/$ALT_NAME/state.json" \
+          || { echo "::error::--root $ALTROOT holds no record of $ALT_NAME in $ALTROOT/.proxmox-lxc"; $SUDO ls -laR "$ALTROOT"; exit 1; }
+        if $SUDO test -e "$ALTROOT/$ALT_NAME"; then
+          echo "::error::$ALTROOT/$ALT_NAME exists: the Proxmox backend wrote into libcrun's directory"; $SUDO ls -laR "$ALTROOT"; exit 1
+        fi
         [ ! -e "/run/nexcage/$ALT_NAME" ] \
           || { echo "::error::--root was given but state also landed in /run/nexcage"; exit 1; }
         nx --root "$ALTROOT" delete "$ALT_NAME"
