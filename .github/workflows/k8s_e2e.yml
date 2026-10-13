@@ -44,7 +44,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # As release.yml builds it: the Dockerfile brings the submodules and
       # libcrun's generated headers, -Dcpu=baseline keeps the binary from
@@ -62,7 +62,7 @@ jobs:
           NEXCAGE_BIN=nexcage.bin bash scripts/build_deb_local.sh
 
       - name: Upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: nexcage-deb-k8s-e2e
           path: dist/nexcage-*-amd64.deb
@@ -78,10 +78,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download the .deb
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nexcage-deb-k8s-e2e
           path: dist

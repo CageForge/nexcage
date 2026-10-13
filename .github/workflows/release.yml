@@ -150,13 +150,13 @@ jobs:
           EOF
 
       - name: Upload the binary
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: nexcage-${{ needs.build.outputs.version }}-amd64
           path: dist/nexcage-${{ needs.build.outputs.version }}-amd64
 
       - name: Upload SBOMs
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: nexcage-${{ needs.build.outputs.version }}-amd64.sbom
           path: |
@@ -187,7 +187,7 @@ jobs:
           EOF
 
       - name: Upload provenance
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: nexcage-${{ needs.build.outputs.version }}-amd64.provenance
           path: dist/provenance.json
@@ -205,7 +205,7 @@ jobs:
           ref: ${{ github.event.inputs.version || github.ref }}
 
       - name: The binary the release publishes
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: nexcage-${{ needs.build.outputs.version }}-amd64
           path: bin
@@ -218,7 +218,7 @@ jobs:
         run: sh scripts/ci/check_deb.sh dist/nexcage-${{ needs.build.outputs.version }}-amd64.deb
 
       - name: Upload .deb
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: nexcage-${{ needs.build.outputs.version }}-amd64.deb
           path: dist/*.deb
@@ -235,7 +235,7 @@ jobs:
           ref: ${{ github.event.inputs.version || github.ref }}
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
