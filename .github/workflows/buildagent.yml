@@ -94,7 +94,7 @@ jobs:
           rm -rf "$root"
 
       - name: Upload the .deb
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: nexcage-deb-debian13
           path: dist/nexcage-*-amd64.deb
