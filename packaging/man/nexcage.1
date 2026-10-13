@@ -11,6 +11,7 @@ nexcage \- manage LXC containers on a Proxmox VE host
 [\fB\-\-config\fR \fIpath\fR]
 [\fB\-\-root\fR \fIdir\fR]
 [\fB\-\-runtime\fR \fBlxc\fR|\fBcrun\fR]
+[\fB\-\-profile\fR \fIname\fR]
 \fIcommand\fR [\fIoptions\fR]
 .SH DESCRIPTION
 .B nexcage
@@ -62,9 +63,13 @@ What \fBpct create\fR is usually given: \fB\-\-memory\fR, \fB\-\-memory\-swap\fR
 \fBupdate\fR; \fB\-\-cores\fR; \fB\-\-ip\fR, \fB\-\-gw\fR, \fB\-\-vlan\fR and
 \fB\-\-firewall\fR, net0's ip=, gw=, tag= and firewall=1; \fB\-\-onboot\fR;
 \fB\-\-tags\fR; and \fB\-\-mp\fR \fIspec\fR, repeatable, in pct's syntax.
+A create that fails after \fBpct create\fR has made the container destroys
+it, and its record, as \fBrunc create\fR does, so the name can be created
+again.
 .TP
 \fBrun \-\-name\fR \fIname\fR \fIimage\fR
-Create a container on this node and start it. \fB\-\-node\fR,
+Create a container on this node and start it. If the start fails, the
+container is destroyed again, as \fBrunc run\fR does. \fB\-\-node\fR,
 \fB\-\-console\-socket\fR and \fB\-\-pid\-file\fR are refused; to make the
 container on another node, use \fBcreate \-\-node\fR, then \fBstart\fR.
 .TP
@@ -240,6 +245,15 @@ or one named by its VMID; a command that changes one (start, stop, pause,
 resume, rollback) writes the record again under its name. For a container the
 crun backend has, \fB\-\-runtime lxc\fR exits 2.
 .TP
+\fB\-\-profile\fR \fIname\fR
+Create the container under the isolation profile \fIname\fR from the
+configuration file (see \fBprofiles\fR under CONFIGURATION). Only
+\fBcreate\fR reads it, and \fBrun\fR refuses it. Run as
+\fBnexcage@\fR\fIname\fR, through a symlink, nexcage takes the profile from
+its program name, which is how a container engine names one. A profile the
+configuration does not define exits 2, and so do a program name and
+\fB\-\-profile\fR naming different profiles.
+.TP
 .B \-\-systemd\-cgroup
 Before or after the command: \fBcreate\fR on the crun backend has systemd place
 the container, as crun and runc do. libcrun asks systemd, over D\-Bus, for a
@@ -314,6 +328,23 @@ later does not move one. A pattern
 is a glob unless it starts with ^ or ends with $, so \&.* matches nothing; use
 *. Those two make it a limited regular expression, and one that starts with ^
 must match the whole name: ^web\- matches web\- alone, ^web\-.* matches web\-1.
+.TP
+.B profiles
+Isolation profiles for the crun backend, by name:
+.RS
+.nf
+{"hardened": {"runtime": "crun", "crun": {
+  "user_namespace": "require", "seccomp": "require",
+  "capabilities": {"drop": ["CAP_NET_RAW"]},
+  "limits": {"memory": "512M", "pids": 256}}}}
+.fi
+.RE
+.IP
+\fBcreate\fR applies one to the bundle: it refuses a bundle without what the
+profile requires, drops the capabilities from every set and lowers the limits.
+A profile never adds a capability or raises a limit, and the container stays
+held to it: an \fBupdate\fR above its limits is refused, and the capabilities
+of an \fBexec\fR are cut to the container's.
 .SH EXIT STATUS
 .TP
 .B 0
