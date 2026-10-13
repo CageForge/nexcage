@@ -75,8 +75,10 @@ pub const ListCommand = struct {
         try self.listFromBackend(allocator, .crun, &all_containers);
 
         // Print aggregated results (similar to runc list format)
-        const stdout = std.fs.File.stdout();
-        try stdout.writeAll("ID\tIMAGE\tCOMMAND\tCREATED\tSTATUS\tBACKEND\tNODE\tNAMES\n");
+        var buf: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&buf);
+        const out = &stdout_writer.interface;
+        try out.writeAll("ID\tIMAGE\tCOMMAND\tCREATED\tSTATUS\tBACKEND\tNODE\tNAMES\n");
 
         for (all_containers.items) |*container| {
             const id = container.id;
@@ -92,24 +94,15 @@ pub const ListCommand = struct {
             // for has no name to show
             const names = if (container.name.len > 0) container.name else "-";
 
-            // Simple output without allocPrint to avoid allocator issues
-            _ = try stdout.writeAll(id);
-            _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(image);
-            _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(command);
-            _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(created);
-            _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(status);
-            _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(backend);
-            _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(node);
-            _ = try stdout.writeAll("\t");
-            _ = try stdout.writeAll(names);
-            _ = try stdout.writeAll("\n");
+            // Every cell is what a backend listed -- a name, a node, an id
+            // -- and is escaped, so that it stays in its cell and sends the
+            // terminal nothing (core.logging.cell).
+            const cell = core.logging.cell;
+            try out.print("{f}\t{f}\t{f}\t{f}\t{f}\t{f}\t{f}\t{f}\n", .{
+                cell(id), cell(image), cell(command), cell(created), cell(status), cell(backend), cell(node), cell(names),
+            });
         }
+        try out.flush();
 
         // Command completed
     }

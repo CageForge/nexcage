@@ -7,6 +7,19 @@ echo "pvesh $*" >> "$SIM/calls"
 # makes the difference between the two tools visible here.
 HERE=${SIM_NODE:-$(hostname)}
 
+# A string as Proxmox's API writes it in JSON: a quote, a backslash and a
+# control character escaped, anything else as it is. Text someone else set --
+# a snapshot's description, a name -- was printed raw between quotes here, so
+# a control character in it made the answer invalid JSON, which the real API
+# never gives, and nexcage's handling of such text could not be checked.
+jstr() {
+  case $1 in
+    *[\"\\[:cntrl:]]*)
+      python3 -c 'import json, sys; sys.stdout.buffer.write(json.dumps(sys.argv[1], ensure_ascii=False).encode("utf-8", "surrogateescape"))' "$1" ;;
+    *) printf '"%s"' "$1" ;;
+  esac
+}
+
 # fail_all means the host cannot answer at all, and that has to include pvesh:
 # the checks that inject it are about nexcage refusing rather than guessing, and
 # they stop meaning anything if one of the two tools still answers.
@@ -69,8 +82,8 @@ case "$1 $2" in
         printf ',{"vmid":%s,"node":"%s","status":"unknown","type":"lxc"}' "$vmid" "${node:-$HERE}"
         continue
       fi
-      printf ',{"vmid":%s,"name":"%s","node":"%s","status":"%s","type":"lxc"}' \
-        "$vmid" "$name" "${node:-$HERE}" "$status"
+      printf ',{"vmid":%s,"name":%s,"node":"%s","status":"%s","type":"lxc"}' \
+        "$vmid" "$(jstr "$name")" "${node:-$HERE}" "$status"
     # In Proxmox's order: Cluster.pm walks `sort keys %$idlist`, a string
     # sort, so VMID 1000 comes before 150. Rows used to come in the order
     # they were made, and a lookup that took the first match was right by luck.
@@ -133,7 +146,7 @@ case "$1 $2" in
       [ "$n" = "$node" ] || continue
       # a volid is "<storage>:vztmpl/<file>", so it belongs to one storage
       [ "${volid%%:*}" = "$want_storage" ] || continue
-      printf '%s{"volid":"%s","content":"vztmpl","format":"tzst"}' "$sep" "$volid"
+      printf '%s{"volid":%s,"content":"vztmpl","format":"tzst"}' "$sep" "$(jstr "$volid")"
       sep=","
     done < "${SIM}/node_templates" 2>/dev/null
     printf ']\n'
@@ -165,15 +178,15 @@ case "$1 $2" in
     if [ -s "$SIM/snaps.$vmid" ]; then
       while read -r name t desc; do
         [ -n "$name" ] || continue
-        printf '{"name":"%s","snaptime":%s' "$name" "$t"
-        [ -n "$desc" ] && printf ',"description":"%s"' "$desc"
-        [ -n "$parent" ] && printf ',"parent":"%s"' "$parent"
+        printf '{"name":%s,"snaptime":%s' "$(jstr "$name")" "$t"
+        [ -n "$desc" ] && printf ',"description":%s' "$(jstr "$desc")"
+        [ -n "$parent" ] && printf ',"parent":%s' "$(jstr "$parent")"
         printf '},'
         parent=$name
       done < "$SIM/snaps.$vmid"
     fi
     printf '{"name":"current","description":"You are here!"'
-    [ -n "$parent" ] && printf ',"parent":"%s"' "$parent"
+    [ -n "$parent" ] && printf ',"parent":%s' "$(jstr "$parent")"
     printf ',"running":0}]\n'
     ;;
   "create /nodes/"*/lxc/*/snapshot/*/rollback)

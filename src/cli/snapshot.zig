@@ -312,10 +312,14 @@ pub const SnapshotsCommand = struct {
             }
             try w.writeAll(if (list.len == 0) "]\n" else "\n]\n");
         } else {
+            // The names and descriptions are whoever took the snapshot's
+            // text, and reach the terminal of whoever lists them; escaped,
+            // each stays in its cell (core.logging.cell). The JSON is
+            // escaped as JSON.
             try w.writeAll("NAME\tCREATED\tDESCRIPTION\n");
             for (list) |s| {
                 const created = if (s.snaptime) |t| backends.proxmox_lxc.pve.formatUtc(&when, t) else "";
-                try w.print("{s}\t{s}\t{s}\n", .{ s.name, created, s.description });
+                try w.print("{f}\t{s}\t{f}\n", .{ core.logging.cell(s.name), created, core.logging.cell(s.description) });
             }
         }
         try stdout.writeAll(out.items);

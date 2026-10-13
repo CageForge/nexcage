@@ -64,6 +64,11 @@ sys.exit(0 if any(o.get("level") == "error" and o["msg"].startswith(sys.argv[2])
 PYEOF
 }
 json_get()  { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2" 2>/dev/null; }
+# Nothing in stdout a terminal acts on: C0 but tab and newline, DEL, and C1 as
+# UTF-8, which xterm and VTE take as they take ESC sequences.
+no_controls_out() {
+  python3 -c 'import re, sys; sys.exit(1 if re.search(rb"[\x00-\x08\x0b-\x1f\x7f]|\xc2[\x80-\x9f]", open(sys.argv[1], "rb").read()) else 0)' "$S/out"
+}
 # NAMES is the last column, after NODE was added for the cluster.
 listed()    { awk -F'\t' -v n="$1" 'NR>1 && $8==n {f=1} END {exit !f}' "$S/out"; }
 status_is() { nx state "$1"; [ "$RC" = 0 ] && [ "$(json_get "$S/out" status)" = "$2" ]; }
@@ -330,6 +335,14 @@ check "list row fields: vmid/status/backend/node" awk -F'\t' '$8=="web-1" && $1=
 echo "backup" > "$S/lock.101"
 nx list; check "list with a locked container keeps the right name" all 'listed web-2' '! listed backup'
 rm -f "$S/lock.101"
+# A name is the cluster's text, and reaches the terminal of whoever lists
+# the containers: escaped, it stays in its cell and moves no cursor.
+printf '121 stopped ab\033]0;pwned\007cd\302\2332J\n' >> "$S/db"
+nx list
+check "list escapes the control characters in a name it is given" \
+  all 'rc 0' 'no_controls_out' 'out_has "ab\x1b]0;pwned\x07cd\xc2\x9b2J"' \
+      '[ "$(awk -F"\t" "\$1==121 {print NF}" "$S/out")" = 8 ]'
+awk '$1!=121' "$S/db" > "$S/db.tmp" && mv "$S/db.tmp" "$S/db"
 echo "Permission denied" > "$S/fail_all"
 nx list; check "list with the host failing -> exit 1 with the reason, not an empty list" all 'rc 1' 'err_has "permission denied"' '! out_has "NAMES"'
 rm -f "$S/fail_all"
@@ -1743,6 +1756,19 @@ check "delsnapshot removes it through pct" all 'rc 0' 'called "pct delsnapshot 1
 nx snapshots sn-1
 check "and the list no longer has it, while the other stays" \
   all 'rc 0' '! out_has before' 'out_has early'
+# A description is whoever took the snapshot's text -- anyone with
+# VM.Snapshot on the CT -- and reaches the terminal of whoever lists them: a
+# title sequence (ESC ] ... BEL), CSI as UTF-8, and a tab, which would start
+# a column of its own.
+printf 'odd %s d1\033]0;pwned\007\302\2332J\tforged\n' "$(date +%s)" >> "$S/snaps.100"
+nx snapshots sn-1
+check "snapshots escapes a description: one row of three cells, nothing for the terminal" \
+  all 'rc 0' 'no_controls_out' 'out_has "d1\x1b]0;pwned\x07\xc2\x9b2J\tforged"' \
+      '[ "$(awk -F"\t" "\$1==\"odd\" {print NF}" "$S/out")" = 3 ]'
+nx snapshots --format json sn-1
+check "and --format json gives the description as it is, as JSON" \
+  all 'rc 0' 'json_ok "$S/out"' \
+      "python3 -c 'import json,sys; sys.exit([x for x in json.load(open(sys.argv[1])) if x[\"name\"]==\"odd\"][0][\"description\"] != \"d1\x1b]0;pwned\x07\u009b2J\tforged\")' \"$S/out\""
 nx delsnapshot sn-1 before
 check "deleting it twice is an error" all 'rc 1' 'err_has "does not exist"'
 
@@ -2249,6 +2275,12 @@ check "a template on a shared storage is listed once, not once per node" \
   [ "$(grep -c 'shared-rdma:vztmpl/redis_7.tar' "$S/out")" = 1 ]
 check "and the shared storage is marked as shared" \
   awk -F'\t' '$5 ~ /shared-rdma/ && $3=="yes" {f=1} END {exit !f}' "$S/out"
+# A file name on a storage is whoever put the file there's text
+printf '%s local:vztmpl/x\033]0;pwned\007\302\2332J.tar.zst\n' "$HOST" >> "$S/node_templates"
+nx images
+check "images escapes the control characters in a template's name" \
+  all 'rc 0' 'no_controls_out' 'out_has "local:vztmpl/x\x1b]0;pwned\x07\xc2\x9b2J.tar.zst"'
+grep -v pwned "$S/node_templates" > "$S/nt.tmp" && mv "$S/nt.tmp" "$S/node_templates"
 
 nx images --node titan
 check "images --node narrows it to that node" \

@@ -70,14 +70,17 @@ pub const ImagesCommand = struct {
         defer out.deinit(allocator);
         const w = out.writer(allocator);
 
+        // What the cluster lists, escaped so that a file name on a storage
+        // stays in its cell and sends the terminal nothing
+        // (core.logging.cell).
         try w.writeAll("NODE\tSTORAGE\tSHARED\tSIZE\tTEMPLATE\n");
         for (templates) |t| {
-            try w.print("{s}\t{s}\t{s}\t{s}\t{s}\n", .{
-                t.node,
-                t.storage,
+            try w.print("{f}\t{f}\t{s}\t{s}\t{f}\n", .{
+                core.logging.cell(t.node),
+                core.logging.cell(t.storage),
                 if (t.shared) "yes" else "no",
                 humanSize(t.size),
-                t.volid,
+                core.logging.cell(t.volid),
             });
         }
         try stdout.writeAll(out.items);
