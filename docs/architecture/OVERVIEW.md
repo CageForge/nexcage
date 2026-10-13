@@ -40,8 +40,9 @@ sequenceDiagram
   U->>C: nexcage start web-1
   C->>R: route web-1
   R->>D: start(web-1)
-  D->>P: pvesh get /cluster/resources (pct list if web-1 is not in it or pvesh fails)
+  D->>P: pvesh get /cluster/resources, and pct list for this host
   P-->>D: web-1 is VMID 101
+  D->>P: pct config 101: is its hostname still web-1?
   D->>P: pct start 101
   P-->>D: exit 0
   D-->>C: ok, state.json says running

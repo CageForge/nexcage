@@ -1023,10 +1023,6 @@ pub const ProxmoxLxcDriver = struct {
         return self.pve_client.pullTemplate(allocator, node, storage, reference, filename);
     }
 
-    pub fn getVmidByName(self: *Self, name: []const u8) ![]u8 {
-        return self.pve_client.getVmidByName(name);
-    }
-
     /// Name → where the container is, for commands that act on an existing
     /// one. Looks across the cluster, so a container on another node resolves
     /// instead of being reported as missing; the not-found case is logged under
@@ -1046,25 +1042,6 @@ pub const ProxmoxLxcDriver = struct {
             .name_or_vmid => log.err("Container '{s}' not found on any node", .{container_id}) catch {},
             .name => log.err("Container '{s}' not found on any node: no container has that name. nexcage's record finds a container by its name; a VMID is reached with --runtime lxc", .{container_id}) catch {},
         }
-    }
-
-    /// Name → VMID for commands that act on an existing container, with the
-    /// not-found case logged under the name the user typed.
-    fn resolveVmid(self: *Self, container_id: []const u8) ![]u8 {
-        return self.pve_client.getVmidByName(container_id) catch |err| {
-            if (err == core.Error.NotFound) {
-                if (self.logger) |log| log.err("Container '{s}' not found", .{container_id}) catch {};
-            }
-            return err;
-        };
-    }
-
-    pub fn vmidExists(self: *Self, vmid: []const u8) !bool {
-        return self.pve_client.vmidExists(vmid);
-    }
-
-    fn mapPctError(self: *Self, exit_code: u8, stderr: []const u8) core.Error {
-        return self.pve_client.mapPctError(exit_code, stderr);
     }
 
     pub fn runCommand(self: *Self, args: []const []const u8) !common.CommandResult {
