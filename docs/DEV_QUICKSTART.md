@@ -46,7 +46,9 @@ paths:
 ```
 
 A command on one container stops before that: `start web-1` says that no
-backend has a record of `web-1`, which only a `create` writes.
+backend has a record of `web-1`. nexcage writes that record when it creates a
+container; a Proxmox container it did not create is reached with
+`--runtime lxc`, which then needs the Proxmox tools too.
 
 ## Build options
 

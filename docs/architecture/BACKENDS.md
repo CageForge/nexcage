@@ -6,8 +6,13 @@ The CLI router (`src/cli/router.zig`) sends `create` and `run` to a backend
 according to the routing rules in the config file, Proxmox LXC without rules.
 Every other command goes to the backend that has a record of the container —
 libcrun's `status` file, or the `state.json` nexcage writes for a Proxmox LXC
-container — and an id neither has a record of does not exist; `--runtime`
-overrides both. See
+container — and an id neither has a record of does not exist. `--runtime`
+overrides the rules for `create` and `run`, and for any other command names
+the backend of a container without a record: a Proxmox container nexcage did
+not create, one named by its VMID, or one whose record a reboot cleared from
+`/run`. A command that changes such a container (start, stop, pause, resume,
+rollback) writes its record again. `--runtime lxc` is refused for an id
+libcrun has a record of. See
 [CLI_REFERENCE.md](../CLI_REFERENCE.md#backend-selection).
 
 | Backend | Build option | Default | State |
@@ -52,7 +57,8 @@ flowchart LR
 A `create` step after `pct create` that fails — the bundle's `pct set
 --mpN` refused, the state not written — destroys the container it made
 (`pct destroy <vmid>`, or the node's API with `--node`) and the state written
-for it, as runc and crun do, so the name is free for a retry. Every tool but
+for it, as runc and crun do, so the name is free for a retry; so does a `run`
+whose `pct start` fails, by the VMID its `create` made. Every tool but
 `exec`'s `pct exec` runs as a child that gets `SIGTERM` when nexcage dies
 (`PR_SET_PDEATHSIG`): a
 nexcage killed on its own, by a timeout in its caller, no longer leaves
@@ -74,16 +80,21 @@ is listed in the [CLI reference](../CLI_REFERENCE.md#create); the rest of
 this section is what that means for the container's confinement.
 
 **Mounts.** Each bind mount becomes a Proxmox mount point, given with
-`pct set <vmid> --mpN <source>,mp=<destination>` once the container exists.
+`pct set <vmid> --mpN <source>,mp=<destination>` once the container exists,
+with `ro=1` for the mount's `ro` and `mountoptions` for its `nosuid`,
+`nodev`, `noexec` and `noatime`. A source or destination that is relative or
+holds a comma, `=` or a control character, and an option Proxmox cannot
+apply, refuse the bundle ([CLI reference](../CLI_REFERENCE.md#create)).
 At every start Proxmox bind-mounts the source directory, as root on the host,
 into the container. Any host directory can be named: like runc and crun,
 nexcage has no list of host paths a bundle may not mount, so whoever writes
 the bundle chooses what of the host the container sees, as `--mp` lets
-whoever runs nexcage choose. What the container can do there is the user
-namespace's to decide. In an unprivileged container (the default) container
-root is uid 100000 on the host, so through the mount it has the access any
-other unprivileged user has: it reads what is world-readable and writes
-nothing root owns, while files owned by the mapped uids are its own. In a
+whoever runs nexcage choose. Within those options, what the container can do
+there is the user namespace's to decide. In an unprivileged container (the
+default) container root is uid 100000 on the host, so through the mount it
+has the access any other unprivileged user has: it reads what is
+world-readable and writes nothing root owns, while files owned by the mapped
+uids are its own. In a
 privileged container (`proxmox.unprivileged: false`) container
 root is host root on whatever the mount shows. Read a bundle's mounts before
 creating a container from it.
