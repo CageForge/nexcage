@@ -171,9 +171,11 @@ clones crun itself, so a checked-out one does not get in their way.
 Two things act runs differently from GitHub's runners:
 
 - `ci.yml`'s `build-test` fails at its last step, "Upload binary
-  (ReleaseSafe)": act 0.2.89's artifact server answers
-  `actions/upload-artifact@v6` with "Error unauthorized". Every step before it
-  is what CI runs; the job's FAIL comes from that one step.
+  (ReleaseSafe)": act 0.2.89's artifact server does not know the
+  `mime_type` field `actions/upload-artifact@v7` sends, and the step fails
+  with "Failed to CreateArtifact: ... Unexpected end of JSON input" after five
+  attempts. Every step before it is what CI runs; the job's FAIL comes from
+  that one step.
 - `crun_build.yml`'s runtime-spec suite: `tests/runtime-tools/known-failures`
   is the list for rootful Docker, and under rootless podman five tests differ
   from it, so the step fails here
