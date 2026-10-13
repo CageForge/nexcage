@@ -22,10 +22,11 @@ DEV=$REPO/zig-out/dev
 BUNDLE=$DEV/bundle
 
 # The jobs `act` runs by default: every job a pull request gets on a
-# GitHub-hosted runner, except security.yml's scanners, which download their
-# databases, images and rules (its zizmor job is in), plus dependency_check.yml's
-# crun job in its dry run, which reads the repository's issues and the crun
-# releases and writes nothing.
+# GitHub-hosted runner, except security.yml's Semgrep, Trivy and gitleaks
+# jobs, which download their rules, databases and images, and the two that
+# build a binary only for a self-hosted job (proxmox_e2e.yml's binary,
+# k8s_e2e.yml's build); plus dependency_check.yml's crun job in its dry run,
+# which reads the repository's issues and the crun releases and writes nothing.
 ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation ci.yml:scripts security.yml:zizmor version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
 
 if [ -t 2 ]; then B=$'\033[1m' R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' N=$'\033[0m'; else B='' R='' G='' Y='' N=''; fi

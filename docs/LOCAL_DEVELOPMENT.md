@@ -106,11 +106,13 @@ nexcage --runtime crun delete --force demo
 ## CI through act
 
 `scripts/dev.sh act` runs, by default, every job a pull request gets on a
-GitHub-hosted runner except `security.yml`'s scanners, which download their
-databases, images and rules: `ci.yml` (`build-test`, `simulation`,
-`scripts`), `security.yml`'s `zizmor`, `version-check.yml`, `crun_build.yml` and
-`memory_leak_check.yml`, plus the crun job of `dependency_check.yml` in its dry
-run. Name jobs to run others, and pass act's own options after `--`:
+GitHub-hosted runner except `security.yml`'s Semgrep, Trivy and gitleaks
+jobs, which download their rules, databases and images, and the two that
+build a binary only for a self-hosted job: `ci.yml` (`build-test`,
+`simulation`, `scripts`), `security.yml`'s `zizmor`, `version-check.yml`,
+`crun_build.yml` and `memory_leak_check.yml`, plus the crun job of
+`dependency_check.yml` in its dry run. Name jobs to run others, and pass
+act's own options after `--`:
 
 ```bash
 scripts/dev.sh act ci.yml:simulation
@@ -177,8 +179,11 @@ Two things act runs differently from GitHub's runners:
   from it, so the step fails here
   ([RUNTIME_SPEC_VALIDATION.md](RUNTIME_SPEC_VALIDATION.md) names them).
 
-Not in the default set: `proxmox_e2e.yml` and `buildagent.yml`, which need
-self-hosted runners, and `security.yml`.
+Not in the default set: the jobs of `proxmox_e2e.yml`, `k8s_e2e.yml` and
+`buildagent.yml` that need self-hosted runners, and the two GitHub-hosted ones
+that only build for them, `proxmox_e2e.yml`'s `binary` and `k8s_e2e.yml`'s
+`build`; and `security.yml`'s Semgrep, Trivy and gitleaks jobs, which
+download their rules, databases and images.
 
 ## The Proxmox E2E
 
