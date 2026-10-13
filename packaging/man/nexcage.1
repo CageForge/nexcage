@@ -342,9 +342,13 @@ Isolation profiles for the crun backend, by name:
 .IP
 \fBcreate\fR applies one to the bundle: it refuses a bundle without what the
 profile requires, drops the capabilities from every set and lowers the limits.
-A profile never adds a capability or raises a limit, and the container stays
-held to it: an \fBupdate\fR above its limits is refused, and the capabilities
-of an \fBexec\fR are cut to the container's.
+A profile never adds a capability, nor raises a limit the bundle wrote in
+plain decimal digits, except a \fBmemory.limit\fR of 0, which libcrun writes
+as a limit of zero bytes. That one, and a limit written otherwise, such as 32M
+in \fBlinux.resources.unified\fR, becomes the profile's, even where it meant
+less. The container stays held to the profile: an \fBupdate\fR above its
+limits is refused, and the capabilities of an \fBexec\fR are cut to the
+container's.
 .SH EXIT STATUS
 .TP
 .B 0
