@@ -847,10 +847,13 @@ pub const CrunDriver = struct {
     ///
     /// Both end in libcrun_container_exec_process_file, which takes the path of
     /// a file holding the OCI process spec. For `--process` that is the
-    /// caller's own file, handed over untouched; for a command line nexcage
-    /// writes the same shape to a file of its own in the container's state
-    /// directory and removes it afterwards (writeSpecFile). See the binding
-    /// for why a path rather than the struct entry points.
+    /// caller's own file, handed over as it is -- or, for a container made
+    /// under a profile, a copy with every capability set cut to the
+    /// container's bounding set (boundProcessFile). For a command line
+    /// nexcage writes the same shape to a file of its own. Either file of
+    /// nexcage's is in the container's state directory and removed afterwards
+    /// (writeSpecFile). See the binding for why a path rather than the struct
+    /// entry points.
     pub fn exec(self: *Self, container_id: []const u8, argv: []const []const u8, process_file: ?[]const u8) !void {
         // Before the process spec is written: a re-execution would leave it.
         try self.runFromSealedCopy();

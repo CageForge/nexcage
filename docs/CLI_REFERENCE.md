@@ -491,8 +491,13 @@ takes the terminal, working directory and user from the file, not from
 
 On the crun backend both forms go to `libcrun_container_exec_process_file`,
 which takes the path of a file holding the process spec. `--process` hands the
-caller's file over untouched; a command typed on the command line is written to
-a temporary spec, which nexcage removes afterwards. That spec carries a default
+caller's file over as it is, unless the container was made under an isolation
+profile: then every capability set of the process is cut to the container's
+bounding set, and libcrun is handed that copy, written to the container's
+state directory and removed afterwards (see
+[Isolation profiles](#isolation-profiles)). A command typed on the command
+line is written to a temporary spec there, which nexcage removes afterwards
+too. That spec carries a default
 `PATH`, because a process with no `PATH` cannot find `ls` and nothing would say
 why. It carries no other environment: nexcage has no `--env`.
 

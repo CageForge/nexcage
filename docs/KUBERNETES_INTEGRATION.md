@@ -326,8 +326,11 @@ JSON schema and which is far larger than the two structs whose hand-written
 mirror had just put a features document at the wrong offset. The third takes the
 path of a file holding that process as JSON, and libcrun's own parser builds the
 struct — a path has no layout to get wrong. So `--process <file>` hands the
-engine's own file over untouched, and a command typed on a command line is
-written to a temporary spec of the same shape.
+engine's own file over as it is, and a command typed on a command line is
+written to a temporary spec of the same shape. A container made under an
+isolation profile is the exception: libcrun gets a copy of the engine's file
+with every capability set cut to the container's bounding set (see
+[CLI_REFERENCE.md](CLI_REFERENCE.md#isolation-profiles)).
 
 Parsing `--process` mattered more than adding the call. Without it the flag fell
 through as an unknown option and its *value* became the container id, so
