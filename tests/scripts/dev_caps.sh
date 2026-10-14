@@ -34,10 +34,15 @@ FAKE
 chmod +x "$T/bin/podman" "$T/bin/act"
 export T
 
+# DOCKER_HOST and XDG_RUNTIME_DIR are the scratch tree's, so the test needs no
+# podman API socket and takes no lock of the machine it runs on: a CI runner
+# has neither socket nor runtime directory.
+mkdir -p "$T/run"
 devsh() {
   : > "$T/calls"
   rc=0
   env PATH="$T/bin:$PATH" CONTAINER_ENGINE=podman ACT="$T/bin/act" \
+    DOCKER_HOST="unix://$T/run/podman.sock" XDG_RUNTIME_DIR="$T/run" \
     bash "$T/repo/scripts/dev.sh" "$@" > "$T/out" 2>&1 || rc=$?
 }
 caps='--memory 2g --memory-swap 2g --pids-limit 4096'
@@ -81,7 +86,7 @@ fi
 
 # A cap given in the environment is the one used.
 : > "$T/calls"; rc=0
-env PATH="$T/bin:$PATH" CONTAINER_ENGINE=podman CONTAINER_MEMORY=512m \
+env PATH="$T/bin:$PATH" CONTAINER_ENGINE=podman CONTAINER_MEMORY=512m XDG_RUNTIME_DIR="$T/run" \
   bash "$T/repo/scripts/dev.sh" shell true > "$T/out" 2>&1 || rc=$?
 if grep -q '^run --memory 512m --memory-swap 512m ' "$T/calls"; then ok "CONTAINER_MEMORY=512m is the cap used"
 else bad "CONTAINER_MEMORY=512m not used: $(grep '^run ' "$T/calls" | head -1)"; fi
