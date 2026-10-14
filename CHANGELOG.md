@@ -7,8 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-The fixes of the 2026-10 hardening audit: 77 findings, 69 of them fixed here
-and 5 in part ([report](docs/audits/2026-10-hardening-audit.md)). What nexcage trusts,
+The fixes of the 2026-10 hardening audit: 77 findings, 66 of them fixed here
+and 8 in part ([report](docs/audits/2026-10-hardening-audit.md)). What nexcage trusts,
 refuses and isolates is now written down with the code and tests behind each
 claim ([ADR-003](docs/architecture/ADR-003-Security-Architecture.md),
 [ISOLATION.md](docs/architecture/ISOLATION.md)).
