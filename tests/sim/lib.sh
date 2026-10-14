@@ -4,8 +4,9 @@
 # namespace, creates the scratch directory and defines:
 #
 #   reset_sim      empty container db, call log, state and bundles
-#   cfg <json>     write ./config.json for the next nexcage call
-#   nexcage_ns ... run nexcage as uid 0 in its own user and mount namespace
+#   cfg <json>     write the configuration the next nexcage calls read
+#   nexcage_ns ... run nexcage as uid 0 in its own user and mount namespace,
+#                  with --config naming the file cfg wrote, if there is one
 #   stop_inits     kill the fake inits `pct start` left running (on EXIT too)
 #
 # NEXCAGE  binary to run (default zig-out/bin/nexcage)
@@ -35,6 +36,11 @@ if ! unshare -rm bash -c 'mount -t tmpfs tmpfs /tmp' 2>/dev/null; then
   exit 2
 fi
 mkdir -p "$SIM/run" "$SIM/work" "$SIM/bundles" "$SIM/cache" "$SIM/cgroup"
+# nexcage refuses a configuration file that group or others can write, or
+# that sits in a directory they can write. Files made here are root's inside
+# the namespace and get root's umask, not the one a desktop session gives.
+umask 022
+chmod go-w "$SIM/work"
 
 # Fake pct start leaves a fake init running per started container
 stop_inits() {
@@ -49,7 +55,7 @@ trap stop_inits EXIT
 
 reset_sim() {
   stop_inits
-  rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/* "$S"/cgroup/*
+  rm -rf "${S:?}"/run/* "$S"/work/* "$S/cache" "$S"/bundles/* "$S"/cgroup/* "$S/etc"
   mkdir -p "$S/cache"
   : > "$S/db"; : > "$S/calls"
   rm -f "$S"/fail_* "$S/pvever" "$S"/lock.* "$S"/conf.* "$S"/tarlist.* "$S"/sig.* "$S"/snaps.*
@@ -63,13 +69,55 @@ reset_sim() {
 }
 cfg() { printf '%s\n' "$1" > "$S/work/config.json"; }
 nexcage_ns() {
+  # nexcage reads no ./config.json: its configuration comes from /etc/nexcage
+  # or --config. So the file cfg wrote is named, unless the call names one
+  # itself -- before a bare --, after which the words are the command exec
+  # runs -- or SIM_NO_CONFIG asks what the binary does without --config.
+  # Where exec's command starts without --, after the container id, only
+  # nexcage knows: a --config there counts here too, so a call that has one
+  # there gets no file and reads /etc/nexcage, and makes $S/etc/nexcage for it.
+  local a named=
+  for a in "$@"; do
+    [ "$a" = -- ] && break
+    case $a in --config|--config=*) named=1; break ;; esac
+  done
+  if [ -z "$named" ] && [ -z "${SIM_NO_CONFIG:-}" ] && [ -f "$SIM/work/config.json" ]; then
+    set -- --config "$SIM/work/config.json" "$@"
+  fi
   # /sys/fs/cgroup is bound from $SIM, not a fresh tmpfs: `pause` writes the
   # freezer and a later `state` has to read what it wrote, and every nx call is
-  # its own namespace.
-  unshare -rm bash -c '
-    mount --bind "$SIM/run" /run &&
+  # its own namespace. $SIM/etc/nexcage, when a check makes one, is what
+  # nexcage finds at /etc/nexcage; see etc_nexcage.
+  unshare -rm bash -c "$(declare -f etc_nexcage)"'
     mount -t tmpfs tmpfs /tmp &&
+    { [ ! -d "$SIM/etc/nexcage" ] || etc_nexcage; } &&
+    mount --bind "$SIM/run" /run &&
     mkdir /tmp/nexcage-bundles && mount --bind "$SIM/bundles" /tmp/nexcage-bundles &&
     mount --bind "$SIM/cgroup" /sys/fs/cgroup &&
     cd "$SIM/work" && exec env PATH="$BIN:/usr/bin:/bin" "$NEXCAGE" "$@"' nexcage "$@"
+}
+# Run inside nexcage_ns's namespace once /tmp is its own: puts $SIM/etc/nexcage
+# at /etc/nexcage without writing the real /etc. /etc becomes a tmpfs holding
+# a symlink to each of the host's entries, which stay reachable under /tmp,
+# and a bind mount of $SIM/etc/nexcage. An overlay of $SIM/etc on /etc did the
+# same where overlayfs allows it, which is neither in rootless podman's
+# containers -- where act runs the CI jobs, as root -- nor on an /etc that is
+# on overlayfs itself. A step that fails says so and nexcage does not run, so
+# a check that needs /etc/nexcage fails rather than passing on the host's.
+etc_nexcage() {
+  local e links=() others=()
+  {
+    mkdir /tmp/host-etc && mount --rbind /etc /tmp/host-etc &&
+    mount -t tmpfs -o mode=755 tmpfs /etc &&
+    shopt -s nullglob dotglob &&
+    for e in /tmp/host-etc/*; do
+      [ "${e##*/}" = nexcage ] && continue
+      # A relative symlink, as /etc/os-release often is, is copied as it is,
+      # so that it resolves from /etc as before
+      if [ -L "$e" ]; then links+=("$e"); else others+=("$e"); fi
+    done &&
+    { [ ${#others[@]} = 0 ] || ln -s "${others[@]}" /etc/; } &&
+    { [ ${#links[@]} = 0 ] || cp -P "${links[@]}" /etc/; } &&
+    mkdir /etc/nexcage && mount --bind "$SIM/etc/nexcage" /etc/nexcage
+  } || { echo "nexcage_ns: cannot put $SIM/etc/nexcage at /etc/nexcage; nexcage not run" >&2; return 125; }
 }

@@ -43,7 +43,7 @@ pub const ListCommand = struct {
         try stdout.writeAll("EXAMPLES:\n");
         try stdout.writeAll("  nexcage list                    # List all containers\n");
         try stdout.writeAll("  nexcage list --debug            # List with debug logging\n");
-        try stdout.writeAll("  nexcage list --log-file /tmp/log # List with custom log file\n\n");
+        try stdout.writeAll("  nexcage list --log-file /var/log/nexcage/list.log  # Also log to a file\n\n");
         try stdout.writeAll("OUTPUT FORMAT:\n");
         try stdout.writeAll("  ID      IMAGE   COMMAND  CREATED  STATUS  BACKEND  NODE   NAMES\n");
         try stdout.writeAll("  <id>    <img>   <cmd>    <time>   <state> <type>   <node> <name>\n");

@@ -77,7 +77,9 @@ compatibility and does not walk the cgroup: only SIGKILL reaches every process.
 .TP
 \fBexec\fR \fIname\fR \fIcommand\fR [\fIargs\fR...], \fBexec\fR \fIname\fR \fB\-\-\fR \fIcommand\fR [\fIargs\fR...]
 Run a command inside a running container and exit with its status, as an OCI
-runtime does. Use \-\- where the command starts with a dash. The container must
+runtime does. The command starts at the first word after \fIname\fR that is
+not an option, and nexcage reads none of its own options from it; use \-\- where
+the command starts with a dash. The container must
 be running and the command must exist in its image. It runs as root through
 \fBpct exec\fR, so \fB\-\-user\fR, \fB\-\-cwd\fR, \fB\-\-console\-socket\fR,
 \fB\-\-pid\-file\fR, \fB\-\-process\fR and \fB\-\-detach\fR are refused, and
@@ -150,11 +152,10 @@ Only the crun backend answers \fBfeatures\fR and \fBps\fR; the Proxmox LXC
 backend refuses them.
 .TP
 \fBhealth\fR
-Check pct, storage, the network, the configuration file
-(\fI/etc/nexcage/config.json\fR, else \fI./config.json\fR) and the nexcage
-process, print a report on standard error, and exit 1 if any check failed;
-warnings do not fail. The Proxmox API is not checked: its line in the report
-is always a warning.
+Check that pct list works, the state directory and /etc/pve/lxc, the ZFS pools
+and the configuration file (the one the other commands read; see
+CONFIGURATION), print a report on standard error, and exit 1 if any check
+failed; warnings do not fail.
 .TP
 \fBversion\fR, \fBhelp\fR
 Print the version or the list of commands.
@@ -194,7 +195,9 @@ The format of the runtime's own log lines, the ones \fB\-\-log\fR redirects:
 \fB\-\-config\fR \fIpath\fR
 Read configuration from
 .I path
-only. A missing or invalid file is an error.
+only. A missing or invalid file is an error, and so is a directory or a file
+that someone other than root or the user running nexcage could have written;
+see CONFIGURATION.
 .TP
 \fB\-\-root\fR \fIdir\fR
 Keep per-container state under
@@ -233,9 +236,17 @@ carries only command output.
 Without \fB\-\-config\fR, the first of these files that exists and is not an
 OCI runtime spec (one with a top-level ociVersion) is read; a file that does
 not parse is an error:
-.IR ./config.json ,
 .IR /etc/nexcage/config.json ,
 .IR /etc/nexcage/nexcage.json .
+The working directory is not searched; name a file there with
+\fB\-\-config\fR.
+A file that is not owned by root or by the user running nexcage, that group or
+others can write, or whose directory they can write without the sticky bit or
+anyone else owns, is refused; for a symlink, so is a file in such a directory
+that the link leads to. A pipe, as \fB\-\-config\fR <(...) or
+\fB\-\-config\fR /dev/stdin fed by one gives, is read once, up to 1 MiB; a
+command that acts on a container reads the configuration again and finds it
+empty, as in 0.17.0.
 .TP
 .B network.bridge
 Bridge for eth0, which uses DHCP. Default vmbr0.

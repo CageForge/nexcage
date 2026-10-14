@@ -146,7 +146,9 @@ if [ "$rc" = 0 ]; then
     [ "$(bit 13)" = 0 ] || fail "an exec'd process got CAP_NET_RAW back through \"capabilities\\u0000\" (CapBnd $capbnd)"
     fail "exec --process with a NUL in a key ran (CapBnd $capbnd)"
 fi
-grep -q 'the process spec has a NUL in the key at capabilities\\u0000' "$WORK/err" || fail "the NUL refusal does not say where: $(tail -1 "$WORK/err")"
+# The refusal writes the key as JSON does, capabilities\u0000, and stderr
+# writes each backslash in a message as \\.
+grep -q 'the process spec has a NUL in the key at capabilities\\\\u0000' "$WORK/err" || fail "the NUL refusal does not say where: $(tail -1 "$WORK/err")"
 echo "ok: exec --process with \"capabilities\\u0000\" is refused"
 
 cg=/sys/fs/cgroup$(sed -n 's/^0:://p' "/proc/$pid/cgroup")
@@ -189,7 +191,7 @@ if [ "$rc" = 0 ]; then
     [ "$(bit 13)" = 0 ] && [ "$(bit 27)" = 0 ] || fail "the second \"process\" behind a NUL was applied: CapBnd $capbnd holds NET_RAW or MKNOD, which the profile drops"
     fail "a bundle with a NUL in a key was created (CapBnd $capbnd)"
 fi
-grep -q 'has a NUL in the key at process\\u0000' "$WORK/err" || fail "the NUL refusal does not say where: $(tail -1 "$WORK/err")"
+grep -q 'has a NUL in the key at process\\\\u0000' "$WORK/err" || fail "the NUL refusal does not say where: $(tail -1 "$WORK/err")"
 [ ! -e "/run/crun/$ID-z" ] || fail "a refused create left state behind"
 echo "ok: a second \"process\" behind a NUL is refused, and nothing is created"
 

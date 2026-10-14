@@ -73,8 +73,10 @@ pub const ExecCommand = struct {
             \\  nexcage exec <name> -- <command> [args...]
             \\  nexcage exec --process <file> <name>
             \\
-            \\Use "--" when the command starts with a dash, so nexcage does not
-            \\read it as one of its own options.
+            \\The command starts at the first word after <name> that is not an
+            \\option. nexcage reads its own options before it and none after, so
+            \\"exec web grep --config x" runs grep with --config. Use "--" when
+            \\the command itself starts with a dash.
             \\
             \\Options:
             \\  --process <file>   An OCI process spec, which is how a container
