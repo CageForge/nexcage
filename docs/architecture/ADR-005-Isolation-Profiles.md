@@ -1,7 +1,8 @@
 # ADR-005: Isolation profiles
 
 - Status: **Accepted** 2026-10-09 — the maintainer's answers are under *Decided on review*.
-  The Proxmox LXC side is not built: [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md)
+  On Proxmox LXC, profiles are built for the command line only (2026-10-13, [#394](https://github.com/CageForge/nexcage/issues/394)).
+  An engine cannot drive that backend: [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md)
 - Date: 2026-10-09
 - Issue: [#314](https://github.com/CageForge/nexcage/issues/314); implementation in
   [#315](https://github.com/CageForge/nexcage/issues/315) (crun) and
@@ -112,6 +113,20 @@ the configuration file on the node. Nothing in a bundle defines or changes one.
   today (`storage`, `rootfs_size_gb`, `unprivileged`, `ostype`, `bridge`), with
   the same meaning, so a profile is a named override of those sections. #316
   decides what more an engine-driven LXC container needs.
+
+  *Built for the command line, 2026-10-13 (#394).* A person or a script names
+  the profile with `--profile`, for `create` and `run`. Four things differ
+  from the sketch above:
+  - `cores` and `memory` are added. They are the container's when the command
+    names none, and the most it may name. `--cores` or `--memory` above them is
+    refused, and a bundle's are lowered to them.
+  - `unprivileged` takes only `true`. `false` refuses the file, because of
+    decision 4.
+  - A profile's section must be its own backend's: `crun` under `lxc`, or
+    the reverse, refuses the file.
+  - An engine handed such a profile fails at `create`, by the profile's name.
+    It always passes `--pid-file`, and `pct create` starts no process
+    (ADR-006).
 - The `profiles` section is read **strictly**: an unknown key, backend or
   parameter, a value of the wrong type, or a name that is not a DNS label makes
   nexcage refuse the whole file (exit 1, as for a file that is not JSON,
@@ -240,7 +255,7 @@ edited later, running containers keep what they were made with.
 | A profile is named that the file does not define | `create` exits 2, naming it and listing the defined ones | No fallback to weaker isolation |
 | A misspelt key or parameter in `profiles` | The whole file is refused | Strict reading, decision 1 |
 | **A wrapper script `exec`s nexcage without `exec -a "$0"`** | The program name is lost; the container is made **without the profile**, by routing | Cannot be detected by nexcage. Documented next to the engine configuration, and the tests' trace wrappers use `exec -a`. A wrapper can pass `--profile` instead |
-| The bundle lacks what a requirement asks (no user namespace, or one that maps host root; no seccomp filter, or one that refuses no call) | `create` fails; the pod stays in `ContainerCreating` with the reason in `kubectl describe` | For a missing user namespace or filter, and a filter that refuses no call, the reason names the pod field that fixes it: `hostUsers: false`, `securityContext.seccompProfile.type: RuntimeDefault` (`src/core/profile.zig:559-571`, `:613`). A mapping of host root, a joined namespace, `run.oci.keep_original_groups` and `run.oci.seccomp_bpf_data` are named as what was refused, with no field to set |
+| The bundle lacks what a requirement asks (no user namespace, or one that maps host root; no seccomp filter, or one that refuses no call) | `create` fails; the pod stays in `ContainerCreating` with the reason in `kubectl describe` | For a missing user namespace or filter, and a filter that refuses no call, the reason names the pod field that fixes it: `hostUsers: false`, `securityContext.seccompProfile.type: RuntimeDefault` (`src/core/profile.zig:582-594`, `:636`). A mapping of host root, a joined namespace, `run.oci.keep_original_groups` and `run.oci.seccomp_bpf_data` are named as what was refused, with no field to set |
 | A requirement breaks the pod's sandbox (pause) container | The pod never starts | Assumption 4: #315's test runs a whole pod, sandbox included, under `hardened` |
 | A bundle carries `io.cageforge.nexcage.profile` | Refused | Otherwise `state` could report a profile that was not applied |
 | A profile's parameters are edited while its containers run | Running containers keep the old parameters; `state` shows the same name | The name means "as defined at create"; documented |

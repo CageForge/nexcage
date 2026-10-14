@@ -107,6 +107,7 @@ pub const BackendRouter = struct {
         // (ADR-005); it is resolved here, against the file in use.
         const profile: ?*const core.profile.Profile = switch (operation) {
             .create => |c| if (c.profile) |name| try self.findProfile(&cfg, name, runtime) else null,
+            .run => |r| if (r.profile) |name| try self.findProfile(&cfg, name, runtime) else null,
             else => null,
         };
         const runtime_type = switch (operation) {
@@ -147,7 +148,7 @@ pub const BackendRouter = struct {
         }
 
         switch (runtime_type) {
-            .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, runtime != null, config, &cfg),
+            .lxc, .proxmox_lxc => try self.executeProxmoxLxc(operation, container_id, runtime != null, config, &cfg, profile),
             .crun => try self.executeCrun(operation, container_id, config, profile),
         }
     }
@@ -179,23 +180,68 @@ pub const BackendRouter = struct {
         return p;
     }
 
+    /// A profile on Proxmox LXC sizes the containers made under it, and the
+    /// command line may ask for less, never more: --cores or --memory above
+    /// the profile's is refused rather than lowered without a word, and so is
+    /// --memory -1, which asks for no limit at all.
+    fn withinProfile(self: *Self, p: *const core.profile.Profile, pve: types.ProxmoxCreateOptions) types.Error!void {
+        if (p.lxc.cores) |most| if (pve.cores) |v| {
+            const n = std.fmt.parseInt(u32, v, 10) catch most + 1;
+            if (n > most) {
+                if (self.logger) |log| log.err("--cores {s} is more than profile '{s}' allows: {d}", .{ v, p.name, most }) catch {};
+                return types.Error.InvalidInput;
+            }
+        };
+        if (p.lxc.memory) |most| for (pve.limits) |u| {
+            if (!std.mem.eql(u8, u.section, "memory") or !std.mem.eql(u8, u.name, "limit")) continue;
+            const bytes = std.fmt.parseInt(i64, u.value, 10) catch -1;
+            if (bytes < 0 or bytes > most) {
+                if (self.logger) |log| log.err("--memory {s} is more than profile '{s}' allows: {d} bytes", .{ u.value, p.name, most }) catch {};
+                return types.Error.InvalidInput;
+            }
+        };
+    }
+
     /// `asked` is whether --runtime chose this backend. Only then does the
     /// id find a container by VMID as well as by name: otherwise it came here
     /// through nexcage's record, which proves a name and no VMID.
-    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, asked: bool, config: ?Config, cfg: *const config_module.Config) !void {
+    fn executeProxmoxLxc(self: *Self, operation: Operation, container_id: []const u8, asked: bool, config: ?Config, cfg: *const config_module.Config, profile: ?*const core.profile.Profile) !void {
+        // An engine reaches this backend through a profile only by its
+        // handler's program name, nexcage@<profile>, and every engine passes
+        // --pid-file to create. Said before anything else, and by the
+        // profile's name: "use --runtime crun" means nothing to someone who
+        // pointed an engine at a profile.
+        if (profile) |p| if (operation == .create) {
+            const cc = operation.create;
+            if (cc.console_socket != null or cc.pid_file != null) {
+                const which = if (cc.console_socket != null) "--console-socket" else "--pid-file";
+                if (self.logger) |log| {
+                    log.err("profile '{s}' is on Proxmox LXC, which is for the command line: {s} comes from a container engine, and pct create starts no process to hand over. Point the engine's handler at a crun profile", .{ p.name, which }) catch {};
+                }
+                return types.Error.UnsupportedOperation;
+            }
+            try self.withinProfile(p, cc.pve);
+        };
+
         const sandbox_config = try self.createSandboxConfig(operation, container_id, .proxmox_lxc, config);
         defer self.cleanupSandboxConfig(operation, &sandbox_config);
 
         // Strings are borrowed from cfg, which routeAndExecute keeps alive
         // until the backend is gone. Before this, nothing from the config file
         // reached the backend: the bridge was always the compiled-in default.
+        // A profile overrides the file for the containers made under it
+        // (#394); a caller's own network overrides both.
+        const lxc: core.profile.Profile.Lxc = if (profile) |p| p.lxc else .{};
         const proxmox_config = types.ProxmoxLxcBackendConfig{
             .allocator = self.allocator,
-            .default_bridge = if (config) |c| (if (c.network) |net| net.bridge else null) else cfg.network.bridge,
-            .default_storage = cfg.proxmox.storage,
-            .rootfs_size_gb = cfg.proxmox.rootfs_size_gb,
-            .default_ostype = cfg.proxmox.ostype,
-            .default_unprivileged = cfg.proxmox.unprivileged,
+            .default_bridge = if (config) |c| (if (c.network) |net| net.bridge else null) else lxc.bridge orelse cfg.network.bridge,
+            .default_storage = lxc.storage orelse cfg.proxmox.storage,
+            .rootfs_size_gb = lxc.rootfs_size_gb orelse cfg.proxmox.rootfs_size_gb,
+            .default_ostype = lxc.ostype orelse cfg.proxmox.ostype,
+            .default_unprivileged = lxc.unprivileged orelse cfg.proxmox.unprivileged,
+            .profile = if (profile) |p| p.name else null,
+            .profile_cores = lxc.cores,
+            .profile_memory = lxc.memory,
         };
 
         const proxmox_backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(self.allocator, proxmox_config);
@@ -539,6 +585,9 @@ pub const RunConfig = struct {
     node: ?[]const u8 = null,
     console_socket: ?[]const u8 = null,
     pid_file: ?[]const u8 = null,
+    /// The isolation profile's name. run creates only on Proxmox LXC, so a
+    /// profile it can use is one on that backend (#394).
+    profile: ?[]const u8 = null,
 };
 
 pub const KillConfig = struct {

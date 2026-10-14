@@ -1,6 +1,6 @@
 # ADR-006: The Proxmox LXC backend driven by a container engine
 
-- Status: **Accepted** 2026-10-09. The answers are under *Decided on review*: alternative D, and `runtime: lxc` stays refused.
+- Status: **Accepted** 2026-10-09. The answers are under *Decided on review*: alternative D, and `runtime: lxc` stays refused for an engine. Since 2026-10-13 it is accepted for the command line ([#394](https://github.com/CageForge/nexcage/issues/394), point 5).
 - Date: 2026-10-09
 - Issue: [#316](https://github.com/CageForge/nexcage/issues/316)
 - Builds on: [ADR-005](ADR-005-Isolation-Profiles.md), Isolation profiles
@@ -163,6 +163,18 @@ If the maintainer names the need, A is built in these steps, each with its own c
 
 A profile that names `"runtime": "lxc"` keeps refusing the configuration file,
 as #371 made it do. ADR-005's `lxc` keys are not implemented.
+
+5. **2026-10-13: a profile on Proxmox LXC, for the command line only**
+   ([#394](https://github.com/CageForge/nexcage/issues/394)).
+   - The reasons above are all about an engine: E1–E7, the holding process,
+     pmxcfs on every pod's path, a privileged container. A person or a script
+     that runs `nexcage run --profile pg` needs none of them.
+   - So `"runtime": "lxc"` is read again, with ADR-005's `lxc` keys plus
+     `cores` and `memory`, and is used by `create` and `run`.
+   - An engine handed such a profile through `nexcage@<profile>` is still
+     refused. It passes `--pid-file`, which this backend has always refused,
+     and the message names the profile.
+   - #316, an engine driving a Proxmox container, is unchanged.
 
 ## Verification of this ADR
 

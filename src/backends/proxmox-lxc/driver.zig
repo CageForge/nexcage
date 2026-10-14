@@ -332,6 +332,17 @@ pub const ProxmoxLxcDriver = struct {
         // bundle's own limits were checked when it was read. Without
         // --memory, pct gives the container 512 MiB, the default here too.
         const opts = config.pve;
+        // An isolation profile's cores and memory (#394) are the container's
+        // when nothing names them, and the most a bundle's may be: lowered to
+        // them, as a profile lowers a bundle's on crun. The command line's
+        // were held to them before this (router.withinProfile). Memory is
+        // said to pct in whole MiB, rounded down, so never above the cap.
+        if (self.config.profile_memory) |most| {
+            const cap: u64 = @intCast(most);
+            bundle_resources.memory = @min(bundle_resources.memory orelse cap, cap);
+            bundle_resources.memory_unlimited = false;
+        }
+        if (self.config.profile_cores) |most| bundle_resources.cores = @min(bundle_resources.cores orelse most, most);
         const mem_mb = bundle_resources.memory orelse (if (config.resources) |r| r.memory orelse core.constants.DEFAULT_MEMORY_BYTES else core.constants.DEFAULT_MEMORY_BYTES);
         if (!hasLimit(opts.limits, "memory", "limit") and !bundle_resources.memory_unlimited) {
             const mem_mb_str = try std.fmt.allocPrint(self.allocator, "{d}", .{mem_mb / (1024 * 1024)});
@@ -443,7 +454,7 @@ pub const ProxmoxLxcDriver = struct {
             if (self.logger) |log| log.warn("create of {s} failed after pct create; destroying vmid {s}", .{ config.name, vmid }) catch {};
             self.undoCreate(config.name, vmid, target_node);
         }
-        try self.writeOciState(config.name, "created", 0, oci_bundle_path);
+        try self.writeOciState(config.name, "created", 0, oci_bundle_path, self.config.profile);
 
         // 6. Post-creation setup
         // A bundle's namespaces turn on no Proxmox features: LXC gives the
@@ -941,7 +952,9 @@ pub const ProxmoxLxcDriver = struct {
         }
         const kept = self.persistedBundle(name);
         defer if (kept) |b| self.allocator.free(b);
-        self.writeOciState(name, status, pid, kept) catch {};
+        const profile = self.persistedProfile(name);
+        defer if (profile) |p| self.allocator.free(p);
+        self.writeOciState(name, status, pid, kept, profile) catch {};
     }
 
     /// The bundle path this container was created from, as the last state
@@ -957,8 +970,21 @@ pub const ProxmoxLxcDriver = struct {
         return self.persistedString(container_id, "status");
     }
 
+    /// The isolation profile the container was made under, as create
+    /// recorded it (#394). Carried forward like the bundle: start and stop
+    /// rewrite the file, and `state` reports it after both.
+    fn persistedProfile(self: *Self, container_id: []const u8) ?[]u8 {
+        return self.persistedIn(container_id, "annotations", core.profile.annotation);
+    }
+
     /// One string field of the container's state.json, or null.
     fn persistedString(self: *Self, container_id: []const u8, key: []const u8) ?[]u8 {
+        return self.persistedIn(container_id, null, key);
+    }
+
+    /// One string field of the container's state.json, at the top or in one
+    /// of its objects, or null.
+    fn persistedIn(self: *Self, container_id: []const u8, object: ?[]const u8, key: []const u8) ?[]u8 {
         if (std.mem.indexOfScalar(u8, container_id, '/') != null) return null;
         const path = std.fmt.allocPrint(self.allocator, "{s}/{s}/state.json", .{ core.state_root.get(), container_id }) catch return null;
         defer self.allocator.free(path);
@@ -967,7 +993,13 @@ pub const ProxmoxLxcDriver = struct {
         const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, data, .{}) catch return null;
         defer parsed.deinit();
         if (parsed.value != .object) return null;
-        const value = parsed.value.object.get(key) orelse return null;
+        var fields = parsed.value.object;
+        if (object) |name| {
+            const inner = fields.get(name) orelse return null;
+            if (inner != .object) return null;
+            fields = inner.object;
+        }
+        const value = fields.get(key) orelse return null;
         if (value != .string) return null;
         return self.allocator.dupe(u8, value.string) catch null;
     }
@@ -978,7 +1010,9 @@ pub const ProxmoxLxcDriver = struct {
     /// so one empty read used to lose the bundle path until the container was
     /// deleted. Those callers go on when this fails -- Proxmox has done what
     /// was asked -- so the failure is said here rather than dropped.
-    fn writeOciState(self: *Self, container_id: []const u8, status: []const u8, pid: i32, bundle_path: ?[]const u8) !void {
+    /// `profile` is the isolation profile the container was made under, as
+    /// `state` reports it (ADR-005, decision 5).
+    fn writeOciState(self: *Self, container_id: []const u8, status: []const u8, pid: i32, bundle_path: ?[]const u8, profile: ?[]const u8) !void {
         const state_dir = core.state_root.get();
         errdefer |err| if (self.logger) |log| log.warn("state of {s} not recorded under {s}: {s}", .{ container_id, state_dir, @errorName(err) }) catch {};
         try std.fs.cwd().makePath(state_dir);
@@ -994,7 +1028,13 @@ pub const ProxmoxLxcDriver = struct {
         try core.json.writeString(writer, container_id);
         try writer.print(",\n  \"status\": \"{s}\",\n  \"pid\": {d},\n  \"bundle\": ", .{ status, pid });
         if (bundle_path) |bp| try core.json.writeString(writer, bp) else try writer.writeAll("null");
-        try writer.writeAll(",\n  \"annotations\": {}\n}\n");
+        if (profile) |name| {
+            try writer.writeAll(",\n  \"annotations\": {\n    \"" ++ core.profile.annotation ++ "\": ");
+            try core.json.writeString(writer, name);
+            try writer.writeAll("\n  }\n}\n");
+        } else {
+            try writer.writeAll(",\n  \"annotations\": {}\n}\n");
+        }
 
         try common.writeFileAtomic(container_dir, "state.json", json_buf.items);
     }

@@ -46,13 +46,6 @@ pub const RunCommand = struct {
 
         try self.logCommandStart("run");
 
-        // Only create reads a profile (ADR-005), and run does not reach crun:
-        // taken here and ignored, it would make the container without it.
-        if (options.profile) |name| {
-            if (self.base.logger) |log| log.err("run takes no profile ('{s}'): a profile applies to create; use create, then start", .{name}) catch {};
-            return types.Error.InvalidInput;
-        }
-
         // Validate required options using validation utility
         const validated = try validation.ValidationUtils.requireContainerIdAndImage(options, self.base.logger, "run");
         const container_id = validated.container_id;
@@ -61,12 +54,15 @@ pub const RunCommand = struct {
         // Use router for backend selection and execution
         var backend_router = router.BackendRouter.init(allocator, self.base.logger);
 
+        // A profile on crun reaches crun, which has no run, and is refused
+        // there rather than dropped here.
         const operation = router.Operation{ .run = router.RunConfig{
             .image = image,
             .storage = options.storage_name,
             .node = options.node,
             .console_socket = options.console_socket,
             .pid_file = options.pid_file,
+            .profile = options.profile,
         } };
         try backend_router.routeAndExecute(operation, container_id, options.runtime_type, null);
 
@@ -88,6 +84,8 @@ pub const RunCommand = struct {
             "Options:\n" ++
             "  --name <name>   Container name, used as its hostname (required)\n" ++
             "  --storage <s>   Storage a registry image is found on or pulled to (default: local)\n" ++
+            "  --profile <p>   A profile on Proxmox LXC from the configuration file: its storage,\n" ++
+            "                  bridge, cores and memory, for this container\n" ++
             "  --bundle <dir>  OCI bundle directory, an absolute path, in place of <image>;\n" ++
             "                  the first positional word is then the container name\n" ++
             "                  (run <name> --bundle <dir>)\n" ++

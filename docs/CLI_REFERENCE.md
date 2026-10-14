@@ -308,6 +308,8 @@ A profile is a name in the configuration file for what a container on this
 node may not exceed (since 0.17.0; [ADR-005](architecture/ADR-005-Isolation-Profiles.md)).
 `create` applies it to the bundle, and only `create`: the container keeps what
 it was made with, and every later command finds it without the profile.
+A profile on crun is described first. A profile on Proxmox LXC is for the
+command line, and is described [after it](#a-profile-on-proxmox-lxc-for-the-command-line).
 
 ```json
 { "profiles": {
@@ -320,7 +322,7 @@ it was made with, and every later command finds it without the profile.
 
 | Key | What it does to the bundle |
 |---|---|
-| `runtime` | The backend: `crun`. `lxc` refuses the file until profiles reach that backend (#316) |
+| `runtime` | The backend: `crun`, or `lxc` for [a profile on Proxmox LXC](#a-profile-on-proxmox-lxc-for-the-command-line). A profile takes only its own backend's parameters: an `lxc` section under `crun`, or a `crun` section under `lxc`, refuses the file |
 | `crun.user_namespace: "require"` | Refuses a bundle without a user namespace with uid and gid mappings, or whose mappings include host uid or gid 0. A user namespace joined by path, as a pod's containers join the sandbox's (`/proc/<pid>/ns/user`, or CRI-O's bind mount), must not be nexcage's own and must leave host uid and gid 0 out: nexcage reads its maps from inside it, and refuses one it cannot read. A bundle with the annotation `run.oci.keep_original_groups` (other than `"0"`) is refused too: libcrun would leave the container nexcage's own supplementary groups, which are host gids. In Kubernetes, `hostUsers: false` on the pod |
 | `crun.seccomp: "require"` | Refuses a bundle without `linux.seccomp`, or with a filter that refuses no system call by itself: one whose default action and every rule are `SCMP_ACT_ALLOW`, `SCMP_ACT_LOG`, `SCMP_ACT_NOTIFY` or `SCMP_ACT_TRACE`. A notifier at `listenerPath` decides in user space, so it does not count. Which calls a filter refuses is not judged, nor whether a rule's `args` conditions can ever be met. A bundle with the annotation `run.oci.seccomp_bpf_data` is refused too: libcrun installs that precompiled program in place of `linux.seccomp`, and nexcage cannot judge it. In Kubernetes, `securityContext.seccompProfile.type: RuntimeDefault` |
 | `crun.capabilities.drop` | Removes these from every capability set of the process. Spelt as the kernel spells them, `CAP_NET_RAW`: a name the kernel does not have, such as `CAP_SYSADMIN`, refuses the file, since it would drop nothing |
@@ -391,14 +393,60 @@ names are not read as one.
 
 - A profile the configuration file does not define exits 2, naming the
   ones it does. It never falls back to no profile.
-- So do the program name and `--profile` naming different profiles, a
-  `--runtime` the profile disagrees with, and `run` given a profile.
+- So do the program name and `--profile` naming different profiles, and a
+  `--runtime` the profile disagrees with. `run` under a profile on crun exits
+  1, because crun has no `run`.
 - A bundle the profile refuses exits 2 with the reason, and nothing is
   created.
 - `state` reports the profile as the annotation
   `io.cageforge.nexcage.profile`, and its caps under the same prefix. A
   bundle that carries an annotation of that name or under it is refused, with
   a profile or without one: `state` would report a profile nothing applied.
+
+### A profile on Proxmox LXC, for the command line
+
+A profile can name the Proxmox LXC backend instead (#394). It is a named set
+of what the `proxmox` and `network` sections say, plus the cores and memory a
+container is sized by, for the containers `create` and `run` make under it.
+It is for a person or a script, which name it with `--profile`.
+
+```json
+{ "proxmox": { "storage": "local-lvm" },
+  "profiles": {
+    "pg": { "runtime": "lxc", "lxc": {
+      "storage": "local-zfs", "rootfs_size_gb": 32, "bridge": "vmbr1",
+      "cores": 4, "memory": "8G", "unprivileged": true } } } }
+```
+
+```bash
+nexcage run --profile pg --name db-1 local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst
+```
+
+| Key | What it does |
+|---|---|
+| `lxc.storage`, `lxc.rootfs_size_gb`, `lxc.ostype` | As `proxmox.storage`, `proxmox.rootfs_size_gb` and `proxmox.ostype`, for this profile's containers |
+| `lxc.bridge` | As `network.bridge` |
+| `lxc.unprivileged` | Only `true`, which makes the container unprivileged even where `proxmox.unprivileged` is `false`. `false` refuses the file: a profile only narrows, and cannot make a container privileged |
+| `lxc.cores` | The cores the container sees, 1 to 8192, when the command does not name fewer |
+| `lxc.memory` | Its memory, in bytes or `512M`, `8G`, when the command does not name less. Proxmox gives a container at least 16M, and less refuses the file |
+
+What the profile leaves out comes from the file's sections, as for a container
+made without a profile.
+
+- **`--cores` and `--memory` may ask for less, never more.** Above the
+  profile's value they exit 2, naming the profile and its value, and so does
+  `--memory -1`, which asks for no limit. Nothing is created.
+- **A bundle's limits are lowered.** A bundle's `memory.limit` or CPU shares
+  above the profile's value are lowered to it, as a profile on crun lowers
+  them. A bundle's `-1`, no limit, gets the profile's memory.
+- **`state` names the profile** as `io.cageforge.nexcage.profile`, after
+  `start` and `stop` as well.
+- **A container engine cannot use one.** An engine always passes
+  `--pid-file`, and `pct create` starts no process
+  ([ADR-006](architecture/ADR-006-LXC-Driven-By-An-Engine.md)). An engine
+  whose handler is `nexcage@<profile>` for a profile on Proxmox LXC fails at
+  `create` (exit 1) with a message that names the profile and says to point
+  the handler at a profile on crun.
 
 ## Exit status
 
@@ -618,7 +666,8 @@ make the container on another node, `create --node`, then `start`.
 `--console-socket` and `--pid-file` are refused as `create` refuses them, since
 `pct start` runs the container's init itself; and the crun backend does not
 implement `run` (exit 1). `<image>`, `--bundle` and `--storage` work as for
-`create`.
+`create`, and so does `--profile` with
+[a profile on Proxmox LXC](#a-profile-on-proxmox-lxc-for-the-command-line).
 
 ### start
 

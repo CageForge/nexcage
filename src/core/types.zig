@@ -390,6 +390,13 @@ pub const ProxmoxLxcBackendConfig = struct {
     default_unprivileged: ?bool = null,
     default_storage: ?[]const u8 = null,
     rootfs_size_gb: ?u32 = null,
+    /// The isolation profile create applies (#394), borrowed. Its name is
+    /// recorded as io.cageforge.nexcage.profile; its cores and memory (bytes)
+    /// are a container's when nothing else names them, and the most a
+    /// bundle's are allowed.
+    profile: ?[]const u8 = null,
+    profile_cores: ?u32 = null,
+    profile_memory: ?i64 = null,
 
     pub fn deinit(self: *ProxmoxLxcBackendConfig) void {
         if (self.default_bridge) |b| self.allocator.free(b);

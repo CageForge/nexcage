@@ -19,6 +19,14 @@ can write is refused, an id nexcage has no record of no longer reaches
 Proxmox without `--runtime lxc`, and a bundle's mounts and namespaces are
 held to what Proxmox can apply. They are under *Changed*.
 
+### Added
+- **A profile on Proxmox LXC, for the command line** (#394). A profile with `"runtime": "lxc"` names the `storage`, `rootfs_size_gb`, `bridge`, `ostype`, `cores` and `memory` for the containers that `create --profile` and `run --profile` make under it. What it leaves out comes from the `proxmox` and `network` sections.
+  - `--cores` and `--memory` may ask for less than the profile's values, never more. A bundle's limits above them are lowered.
+  - `state` names the profile as `io.cageforge.nexcage.profile`.
+  - `unprivileged` takes only `true`: a profile cannot make a container privileged.
+  - An engine cannot drive this backend (ADR-006). An engine whose handler names such a profile fails at `create` with a message that names the profile.
+  - `run` takes `--profile`; it used to refuse any profile. A profile on crun still fails there, because crun has no `run`.
+
 ### Security
 - **crun, isolation profiles.**
   - A bundle with a NUL in a key or a string, or nested deeper than 64 levels, is refused with or without a profile: libcrun's parser read a second `"process\u0000"` as the one to apply, past every check (F002, F021).

@@ -1374,12 +1374,76 @@ check "--profile and the program name disagreeing -> exit 2" all 'rc 2' 'err_has
 nx --profile hardened --runtime lxc create --name prof-5 "$TPL"
 check "--runtime that disagrees with the profile -> exit 2, not a quiet override" all 'rc 2' 'not_called_re "^(pct|pvesh)"'
 nx --profile hardened run --name prof-6 "$TPL"
-check "run refuses a profile instead of running without it" \
-  all 'rc 2' 'err_has "run takes no profile"' 'not_called_re "^(pct|pvesh)"'
-cfg '{"profiles":{"lxc-hardened":{"runtime":"lxc"}}}'
+check "run under a crun profile reaches crun, which has no run: refused, nothing made" \
+  all '[ "$RC" != 0 ]' 'not_called_re "^(pct|pvesh)"'
+
+# A profile on Proxmox LXC (#394) is for the command line: a named set of the
+# proxmox and network sections, plus the cores and memory a container is
+# sized by. The command line may ask for less, never more; a bundle's is
+# lowered. An engine, which always passes --pid-file, is refused by name.
+cfg '{"proxmox":{"storage":"local-lvm","rootfs_size_gb":2},"profiles":{"pg":{"runtime":"lxc","lxc":{"storage":"local-zfs","rootfs_size_gb":32,"bridge":"vmbr1","cores":4,"memory":"8G","unprivileged":true}},"bare":{"runtime":"lxc"}}}'
+ln -sfn "$NEXCAGE" "$S/nexcage@pg"
+nx --profile pg create --name lxp-1 "$TPL"
+check "--profile on LXC: pct create gets the profile's storage, size, bridge, cores and memory" \
+  all 'rc 0' "called_re '^pct create [0-9]+ $TPL --hostname lxp-1 --memory 8192 --cores 4 --net0 name=eth0,bridge=vmbr1,ip=dhcp --unprivileged 1 --rootfs local-zfs:32$'"
+nx state lxp-1
+check "state names the profile the container was made under" \
+  all 'rc 0' 'out_has "\"io.cageforge.nexcage.profile\": \"pg\""'
+nx start lxp-1
+nx state lxp-1
+check "start rewrites the record and keeps the profile in it" \
+  all 'rc 0' 'out_has "\"status\": \"running\""' 'out_has "\"io.cageforge.nexcage.profile\": \"pg\""'
+nx --profile bare create --name lxp-bare "$TPL"
+check "a profile that sets nothing leaves the file's sections in force" \
+  all 'rc 0' "called_re '^pct create [0-9]+ $TPL --hostname lxp-bare .*--rootfs local-lvm:2$'"
+nx create --name lxp-plain "$TPL"
+nx state lxp-plain
+check "a container made without a profile has none in state" all 'rc 0' '! out_has "nexcage.profile"'
+nx --profile pg create --name lxp-2 --cores 2 --memory 1G "$TPL"
+check "--cores and --memory below the profile's are taken as asked" \
+  all 'rc 0' "called_re '^pct create [0-9]+ $TPL --hostname lxp-2 --cores 2 .* --memory 1024( |$)'" 'not_called_re "--memory 8192"'
+nx --profile pg create --name lxp-3 --cores 8 "$TPL"
+check "--cores above the profile's -> exit 2, naming the profile, nothing made" \
+  all 'rc 2' "err_has \"--cores 8 is more than profile 'pg' allows: 4\"" 'not_called_re "nextid|^pct create"'
+nx --profile pg create --name lxp-4 --memory 16G "$TPL"
+check "--memory above the profile's -> exit 2, nothing made" \
+  all 'rc 2' "err_has \"is more than profile 'pg' allows\"" 'not_called_re "nextid|^pct create"'
+res_bundle lxp-big '{"memory":{"limit":17179869184}}'
+nx --profile pg create --name lxp-big /tmp/nexcage-bundles/lxp-big
+check "a bundle's memory above the profile's is lowered to it" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname lxp-big --memory 8192 --cores 4 "'
+res_bundle lxp-unl '{"memory":{"limit":-1}}'
+nx --profile pg create --name lxp-unl /tmp/nexcage-bundles/lxp-unl
+check "a bundle's \"no limit\" under a profile is the profile's memory, not pct's default" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname lxp-unl --memory 8192 "'
+res_bundle lxp-cpu '{"cpu":{"shares":16384}}'
+nx --profile pg create --name lxp-cpu /tmp/nexcage-bundles/lxp-cpu
+check "a bundle's CPU shares worth more cores than the profile's are lowered to its cores" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname lxp-cpu --memory 8192 --cores 4 "'
+nx --profile pg create --name lxp-6 --memory -1 "$TPL"
+check "--memory -1, no limit, under a profile with memory -> exit 2, nothing made" \
+  all 'rc 2' "err_has \"is more than profile 'pg' allows\"" 'not_called_re "nextid|^pct create"'
+res_bundle lxp-small '{"memory":{"limit":1073741824}}'
+nx --profile pg create --name lxp-small /tmp/nexcage-bundles/lxp-small
+check "a bundle's memory below the profile's is kept" \
+  all 'rc 0' 'called_re "^pct create [0-9]+ [^ ]+ --hostname lxp-small --memory 1024 "'
+nx --profile pg run --name lxp-run "$TPL"
+check "run takes a profile on LXC: created with its options, then started" \
+  all 'rc 0' "called_re '^pct create [0-9]+ $TPL --hostname lxp-run .*bridge=vmbr1.*--rootfs local-zfs:32$'" 'called_re "^pct start "'
+NEXCAGE=$S/nexcage@pg nx create lxp-eng --bundle /tmp/nexcage-bundles/b1 --pid-file /run/lxp.pid
+check "an engine handed an LXC profile is refused at create, by the profile's name" \
+  all 'rc 1' "err_has \"profile 'pg' is on Proxmox LXC, which is for the command line\"" 'err_has "crun profile"' 'not_called_re "nextid|^pct create"'
+nx --profile pg --runtime crun create --name lxp-5 "$TPL"
+check "--runtime crun against an LXC profile -> exit 2" \
+  all 'rc 2' "err_has \"disagrees with profile 'pg'\"" 'not_called_re "^(pct|pvesh) create"'
+cfg '{"profiles":{"p":{"runtime":"lxc","lxc":{"unprivileged":false}}}}'
 nx list
-check "a profile on the LXC backend refuses the file: not there yet" \
-  all 'rc 1' 'err_has "profiles.lxc-hardened.runtime"' 'err_has "#316"'
+check "a profile that would make containers privileged refuses the file" \
+  all 'rc 1' 'err_has "profiles.p.lxc.unprivileged"' 'err_has "cannot make a container privileged"'
+cfg '{"profiles":{"p":{"runtime":"lxc","crun":{"seccomp":"require"}}}}'
+nx list
+check "a profile on LXC with crun's parameters refuses the file: they would do nothing" \
+  all 'rc 1' "err_has \"'profiles.p.crun' does not go with\""
 cfg '{"profiles":{"x":{"runtime":"crun","crun":{"capabilities":{"drop":["NET_RAW"]}}}}}'
 nx list
 check "a capability not spelt as the spec spells it refuses the file" \

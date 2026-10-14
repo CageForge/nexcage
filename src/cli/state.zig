@@ -82,8 +82,12 @@ pub const StateCommand = struct {
 
         // The bundle a container was created from, as nexcage recorded it. An
         // OCI caller reads this back to find the config.json it handed over.
-        const bundle_path = persistedBundle(allocator, found.info.name);
+        const bundle_path = persisted(allocator, found.info.name, null, "bundle");
         defer if (bundle_path) |bp| allocator.free(bp);
+        // The isolation profile it was made under, as create recorded it
+        // (ADR-005, decision 5; #394).
+        const profile = persisted(allocator, found.info.name, "annotations", core.profile.annotation);
+        defer if (profile) |p| allocator.free(p);
 
         var out = std.ArrayListUnmanaged(u8){};
         defer out.deinit(allocator);
@@ -100,13 +104,18 @@ pub const StateCommand = struct {
         // The runtime-spec has no field for a node, and annotations are where
         // a runtime puts what the spec does not name. A caller that finds a
         // pid of 0 on a running container can see here why.
-        if (found.info.node) |node| {
-            try writer.writeAll(",\n  \"annotations\": {\n    \"io.cageforge.nexcage.node\": ");
-            try core.json.writeString(writer, node);
-            try writer.writeAll("\n  }\n}\n");
-        } else {
-            try writer.writeAll(",\n  \"annotations\": {}\n}\n");
-        }
+        const annotations = [_]struct { key: []const u8, value: ?[]const u8 }{
+            .{ .key = "io.cageforge.nexcage.node", .value = found.info.node },
+            .{ .key = core.profile.annotation, .value = profile },
+        };
+        try writer.writeAll(",\n  \"annotations\": {");
+        var first = true;
+        for (annotations) |a| if (a.value) |value| {
+            try writer.print("{s}\n    \"{s}\": ", .{ if (first) "" else ",", a.key });
+            try core.json.writeString(writer, value);
+            first = false;
+        };
+        try writer.writeAll(if (first) "}\n}\n" else "\n  }\n}\n");
         try stdout.writeAll(out.items);
     }
 
@@ -208,8 +217,9 @@ pub const StateCommand = struct {
             "    the cluster. On crun, while it is created, running or paused; 0 once stopped\n" ++
             "  - bundle: Bundle path (null if unknown)\n" ++
             "  - annotations: on Proxmox LXC, io.cageforge.nexcage.node, the cluster node\n" ++
-            "    the container is on (empty object when the node is not known); on crun,\n" ++
-            "    libcrun prints the bundle's own annotations\n\n" ++
+            "    the container is on, and io.cageforge.nexcage.profile, the profile it was\n" ++
+            "    made under (each left out when not known); on crun, libcrun prints the\n" ++
+            "    bundle's own annotations\n\n" ++
             "On the crun backend the JSON is libcrun's own, as 'crun state' prints it,\n" ++
             "which also carries rootfs, created and owner.\n\n" ++
             "Examples:\n" ++
@@ -232,9 +242,9 @@ fn ociStatus(status: []const u8) []const u8 {
     return "unknown";
 }
 
-/// The bundle path from nexcage's own record, or null when there is none.
-/// Allocated; the caller frees it.
-fn persistedBundle(allocator: std.mem.Allocator, name: []const u8) ?[]u8 {
+/// One string field of nexcage's own record, at the top or in one of its
+/// objects, or null when there is none. Allocated; the caller frees it.
+fn persisted(allocator: std.mem.Allocator, name: []const u8, object: ?[]const u8, key: []const u8) ?[]u8 {
     if (name.len == 0 or std.mem.indexOfScalar(u8, name, '/') != null or
         std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return null;
 
@@ -246,7 +256,13 @@ fn persistedBundle(allocator: std.mem.Allocator, name: []const u8) ?[]u8 {
     const parsed = std.json.parseFromSlice(std.json.Value, allocator, data, .{}) catch return null;
     defer parsed.deinit();
     if (parsed.value != .object) return null;
-    const value = parsed.value.object.get("bundle") orelse return null;
+    var fields = parsed.value.object;
+    if (object) |o| {
+        const inner = fields.get(o) orelse return null;
+        if (inner != .object) return null;
+        fields = inner.object;
+    }
+    const value = fields.get(key) orelse return null;
     if (value != .string) return null;
     return allocator.dupe(u8, value.string) catch null;
 }
