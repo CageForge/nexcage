@@ -153,8 +153,9 @@ pub const ProxmoxLxcDriver = struct {
         }
 
         // --node: make the container on another node of the cluster, through
-        // that node's API. Three things in the path below are local by
-        // construction, and each is refused rather than half-done.
+        // that node's API. Two things in the path below are local by
+        // construction, a bundle's rootfs and a registry pull, and both are
+        // refused rather than half-done.
         var target_node: ?[]const u8 = null;
         if (config.node) |wanted| {
             const here = self.pve_client.getNodeName() catch null;
@@ -1006,7 +1007,6 @@ pub const ProxmoxLxcDriver = struct {
     }
 
     /// The templates the cluster can create from; `only_node` narrows it.
-    /// Distinct from `listTemplates`, which reads this host's template cache.
     pub fn listClusterTemplates(self: *Self, allocator: std.mem.Allocator, only_node: ?[]const u8) ![]pve.PveClient.Template {
         return self.pve_client.listTemplates(allocator, only_node);
     }
