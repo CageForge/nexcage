@@ -3,7 +3,7 @@
 An audit of nexcage 0.17.0 for security and robustness, and the fixes that
 came out of it, from 2026-10-10 to 2026-10-14. It found 77 defects: 2
 critical, 6 high, 26 medium, 33 low and 10 of no direct consequence (info).
-71 are fixed on the branches below, 3 partly, and 3 wait for steps only the
+70 are fixed on the branches below, 4 partly, and 3 wait for steps only the
 maintainer can take in GitHub's settings and on a machine.
 
 What nexcage trusts and refuses after this work is
@@ -58,10 +58,10 @@ execution mode isolates is [ISOLATION.md](../architecture/ISOLATION.md).
    findings. Every test or check a unit added had to be seen to fail first:
    red on the base commit or on a mutant of the fix, then green, with the
    output quoted in the commit message. An independent reviewer read each
-   unit, for up to three rounds. Eight units ended approved; the last review
-   of two (`cli-config-core`, `lxc-bundle`) asked for one more change, which
-   the integrator checked was made (c7215b49, 9f4b4492). Dead code
-   (`pr/cleanup`) and documentation (`pr/docs`) came after.
+   unit, for up to four rounds, and all ten ended approved:
+   `cli-config-core` and `lxc-bundle` after a fourth round, at cd70b005 and
+   531e03a3. Dead code (`pr/cleanup`) and documentation (`pr/docs`) came
+   after.
 6. **Integration.** The units were merged into the themed branches. Logic
    two units had written twice was made one: the NUL and depth walk of a
    document (54de5d9a), the quoting of bundle text in a refusal (df7d7279,
@@ -90,8 +90,8 @@ execution mode isolates is [ISOLATION.md](../architecture/ISOLATION.md).
 | crun-profile | F002 F007 F019 F020 F021 F028 F058 | 17 | 3, approved |
 | crun-driver | F004 F006 F014 F045 F061 G004 G005 | 16 | 3, approved |
 | systemd-cgroup | G001 G002 | 2 | 1, approved |
-| cli-config-core | F005 F018 F034 F036 F037 F038 F042 F043 F044 F062 F063 | 24 | 3, one change asked, made in c7215b49 |
-| lxc-bundle | F001 F009 F010 F024 F025 F026 F027, and F066 with F001 | 23 | 3, one change asked, made in 9f4b4492 |
+| cli-config-core | F005 F018 F034 F036 F037 F038 F042 F043 F044 F062 F063 | 29 | 4, approved at cd70b005 |
+| lxc-bundle | F001 F009 F010 F024 F025 F026 F027, and F066 with F001 | 27 | 4, approved at 531e03a3 |
 | lxc-resources | F011 F041 F046 | 3 | 1, approved |
 | lxc-identity-routing | F008 F016 F017 F022 F029 F030 F040 | 18 | 3, approved |
 | lxc-images | F012 F013 F039 | 10 | 3, approved |
@@ -100,16 +100,18 @@ execution mode isolates is [ISOLATION.md](../architecture/ISOLATION.md).
 | dead code (`pr/cleanup`) | F035 F047 F059 F060 F067 F068 G008 | 12 | none; the gates of the stack |
 | documentation (`pr/docs`) | F015 | — | — |
 
-Five commits of `cli-config-core` came after its last review (c7215b49,
-534de327, 4c12974d, 8996db47, cd70b005). They passed every gate and the
-integration verification's cross-review, but no unit reviewer read them.
-
 ## Behaviour changes
 
 Fixing some findings changed what a user sees. The maintainer approved each
-of these; nothing else changes visible behaviour, beyond inputs that should
-never have been accepted, which are now refused. The
-[CHANGELOG](https://github.com/CageForge/nexcage/blob/main/CHANGELOG.md) has them in full.
+of these. Beyond them, inputs that should never have been accepted are now
+refused, and one input is now accepted: `--rootless <bool>`, which go-runc
+adds after the global options when its caller sets one, is ignored before
+the command and after it, as crun does, where it used to be read as the
+command's name (G001, 235e12d0). It is listed under change 4 below; whether
+decision 4 covers it is for the maintainer to confirm (item 20 of the
+residual risks). The
+[CHANGELOG](https://github.com/CageForge/nexcage/blob/main/CHANGELOG.md) has
+them in full.
 
 1. Configuration only from `/etc/nexcage` or `--config`; a group- or
    other-writable or foreign-owned file is refused; a pipe still works (F005,
@@ -119,12 +121,14 @@ never have been accepted, which are now refused. The
    `--runtime lxc`; `delete --force` of an unknown id exits 0; records under
    `--root` are in `<root>/.proxmox-lxc` (F016, F017, F029).
 4. `--systemd-cgroup` before the command is honoured; the shipped Kubernetes
-   configurations set `SystemdCgroup` (G001, G002).
+   configurations set `SystemdCgroup` (G001, G002). `--rootless <bool>` is
+   accepted and ignored there, as crun does (G001).
 5. A pulled template is named for the whole reference, and only that file is
    used (F012, F013).
-6. A name means one container: several matches are an error, a name wins
-   over a VMID, identity is checked again before acting, and `create` fails
-   when the cluster cannot be asked (F008, F029, F030).
+6. A name is acted on only when one container has it: several matches are
+   an error, a name wins over a VMID, identity is checked again before
+   acting, and `create` fails when the cluster cannot be asked (F008, F029,
+   F030). The check at `create` holds no lock (residual item 8).
 7. A Proxmox LXC bundle's mounts are checked strictly, and `ro`, `nosuid`,
    `nodev` and `noexec` are applied or refused (F001, F024).
 8. No quiet fallback to this host's listing when the cluster's fails (F008,
@@ -142,9 +146,15 @@ never have been accepted, which are now refused. The
 ## Findings
 
 Location is where the finding was, at `8d373127`; some of those files are
-gone. Commits are every commit on the stack whose message names the finding
-in an `Audit:` line, oldest first. The regression tests are the main ones;
-the commits name the rest. `tests/sim/run.sh:N` is the line of a simulator
+gone. Commits are the non-merge commits from `8d373127` to `pr/cleanup`
+(237eecd5) whose message names the finding in an `Audit:` line, oldest
+first. Left out are the merges of the units into the themed branches, four
+of which repeat their units' `Audit:` lines (77053bbd, ab4ad6f1, 00fd76cc,
+3d4ea91f), and this documentation's own commits, but for F015, which this
+documentation fixes (dfdc86dc). F066 was fixed by 1e19a8b0, whose `Audit:`
+line names F001 only. A finding marked partially fixed has what is left
+among the residual risks below. The regression tests are the main ones; the
+commits name the rest. `tests/sim/run.sh:N` is the line of a simulator
 check.
 
 | ID | Severity | Category | Finding | Location (at 8d373127) | Status | Commits | Regression tests |
@@ -156,7 +166,7 @@ check.
 | F005 | high | security | `./config.json` in the working directory was loaded as root's configuration, ahead of `/etc/nexcage` | `src/core/config.zig:21` | fixed | 68365301 142eda2c 87864396 a70c30b7 611ab50c c2ee8058 4aa29c6e | `config.zig` test "a config.json in the working directory is not read"; `tests/sim/run.sh:269`, `:1255` |
 | F006 | medium | security | `exec`'s process spec had a predictable `/tmp` name; a planted directory aborted every exec into a profiled container | `src/backends/crun/libcrun_driver.zig:733` | fixed | 531ed336 54577176 | `libcrun_driver.zig` test "exec's process spec is a new 0600 file in the container's own state directory"; `tests/crun/exec_spec.sh` |
 | F007 | high | isolation | `capabilities.drop` compared names, while libcap also reads lowercase and numeric spellings | `src/core/profile.zig:239` | fixed | ede7acf6 8cfba539 2c6b5c35 37b1fb72 df7d7279 | `profile.zig` tests "a capability spelt otherwise than the kernel spells it is refused ...", "the capability names are the kernel's, by number"; `tests/crun/profile.sh` |
-| F008 | medium | stability | `create`'s cluster-wide name check was unlocked, against a lagging cache that failed open | `src/backends/proxmox-lxc/driver.zig:185` | fixed | 77189e77 9803be3b 4a3aabca dea3d6bf 8da2bad1 a796bbf9 | `pve.zig` tests "a name two containers share is no answer", "a miss is no answer while a container has no name"; `tests/sim/run.sh:1962`, `:1917`, `:2167` |
+| F008 | medium | stability | `create`'s cluster-wide name check failed open, read a lagging cache and held no lock, and the duplicate names it let through made later commands act on the other container. Fixed: it fails closed, reads this node's `pct list` too, and an ambiguous name is refused. Not fixed: nothing holds the name until `pct create` has run, and another node's newest container can be missing from the cache (residual 8) | `src/backends/proxmox-lxc/driver.zig:185` | partially fixed | 77189e77 9803be3b 4a3aabca dea3d6bf 8da2bad1 a796bbf9 | `pve.zig` tests "a name two containers share is no answer", "a miss is no answer while a container has no name"; `tests/sim/run.sh:1962`, `:1917`, `:2167` |
 | F009 | medium | stability | A non-object entry in `mounts` freed an undefined pointer in the root process | `deps/oci-spec-zig/src/runtime/bundle.zig:213` | fixed | a53d37f4 b7350d91 | `oci.zig` test "a config.json with a mount, arg or env entry of the wrong type is refused, not crashed on"; `tests/sim/run.sh:871` |
 | F010 | medium | stability | A bundle's `cpu.shares` and `memory.limit` crashed `create` (unchecked casts) | `src/backends/proxmox-lxc/driver.zig:389` | fixed | a142b312 b7350d91 1fae4db1 631b93f2 fd752225 | `oci.zig` tests "cpu.shares past the kernel's maximum is refused, not cast", "memory.limit -1 is no limit ..."; `tests/sim/run.sh:1138`, `:1152` |
 | F011 | low | stability | `update` and `create` limit arithmetic overflowed and panicked on large values | `src/core/resources.zig:31` | fixed | 75a2552f | `resources.zig` test "limits at the top of i64 are converted or refused, never a trap"; `tests/sim/run.sh:297` |
@@ -188,7 +198,7 @@ check.
 | F037 | low | quality | The `ociVersion` skip was silent, and errors named the wrong file | `src/core/config.zig:29` | fixed | 6cf179c0 c7215b49 | `config.zig` test "an error behind a spec names the file that has it, not the spec"; `tests/sim/run.sh:844` |
 | F038 | medium | security | Configuration files were trusted without an owner or mode check | `src/core/config.zig:124` | fixed | 23276d28 c576ed95 a3dca77c b8160100 e209dc82 bd0d1a9c c7215b49 534de327 4c12974d 4aa29c6e | `config.zig` tests "a configuration others can write, or replace in its directory, is refused", "a symlink to a configuration is trusted only where the file it leads to is"; `tests/sim/run.sh:759`, `:819` |
 | F039 | medium | security | Snapshot names and `rmi` volids reached `pvesh` paths and `pct` unchecked | `src/backends/proxmox-lxc/pve.zig:1445` | fixed | 01982a2d 839f0910 3a1007b5 330b37b8 99a9894e 65dbb94f a0aab549 | `pve.zig` tests "snapshot names as Proxmox takes them, and not 'current'", "a template volid is <storage>:vztmpl/<file> and nothing more"; `tests/sim/run.sh:1863`, `:2460` |
-| F040 | low | stability | `images` failed outright when one node was unreachable | `src/backends/proxmox-lxc/pve.zig:664` | fixed | 77189e77 | `tests/sim/run.sh:2310`, `:2313` |
+| F040 | low | stability | `images` failed with a bare "operation failed", naming nothing, when a node was unreachable. It is still an error, by decision 8; the message names the node, and `--node` lists a node that answers | `src/backends/proxmox-lxc/pve.zig:664` | fixed | 77189e77 | `tests/sim/run.sh:2310`, `:2313` |
 | F041 | low | correctness | Degenerate `update` values became other limits: a tiny quota became no limit, memory 0 became 16 MiB | `src/core/resources.zig:51` | fixed | 4af41a23 631b93f2 | `resources.zig` test "a quota below a hundredth of a core is refused, not made no limit"; `tests/sim/run.sh:1589` |
 | F042 | low | stability | Log files were opened without `O_APPEND` and followed symlinks | `src/main.zig:75` | fixed | afae3779 e31c5d1f d22a2bf3 | `logging.zig` tests "two writers to one log file keep each other's lines", "a log path whose last component is a symlink is not followed"; `tests/sim/run.sh:1419` |
 | F043 | low | correctness | A JSON log line lost its whole message past 2048 bytes | `src/core/logging.zig:104` | fixed | c317618d | `logging.zig` test "a json message longer than the line allows keeps its start, and says it was cut"; `tests/sim/run.sh:144` |
@@ -214,7 +224,7 @@ check.
 | F063 | low | quality | `health` ran checks that could not pass or could not fail | `src/core/integrity.zig:68` | fixed | fc770bf5 46291930 3181575b | `integrity.zig` test "a zpool check passes only when zpool says every pool is healthy"; `tests/sim/run.sh:2497` |
 | F064 | info | docs | `buildagent.yml` targets a runner that is gone, so its Debian 13 job never runs | `.github/workflows/buildagent.yml:37` | maintainer action (#339) | 628a1144 | None: the workflow and `docs/CI_CD_SETUP.md` say so |
 | F065 | low | quality | `manage_github_runner.sh remove` could not deregister the Proxmox-host runner | `scripts/manage_github_runner.sh:115` | fixed | 637cf04b 92f9d9db 60d306fe | `tests/scripts/manage_github_runner.sh` |
-| F066 | info | quality | `validateBundleVolumes` was dead; `create` checked no bundle mount | `src/backends/proxmox-lxc/driver.zig:620` | fixed | 1e19a8b0 | as F001 |
+| F066 | info | quality | `validateBundleVolumes` was dead; `create` checked no bundle mount | `src/backends/proxmox-lxc/driver.zig:620` | fixed | 1e19a8b0 | as F001. 1e19a8b0 removes `validateBundleVolumes`, and its `Audit:` line names F001 only |
 | F067 | info | quality | A dead command-registration path and helpers, one with a latent compile error | `src/cli/registry.zig:235` | fixed | 54daefad 8978effd | `tests/declarations_test.zig` |
 | F068 | info | quality | `tests/*.zig` were placeholders that tested no nexcage code | `tests/simple_integration_test.zig:5` | fixed | 2b8c7722 e8537b1c | `tests/declarations_test.zig`; `validation.zig` test "a hostname is RFC 1123's ..." |
 | F069 | info | quality | `build.zig` added include paths that do not exist | `build.zig:215` | fixed | 1488829f | `ci.yml` step "build.zig's include paths exist" |
@@ -241,7 +251,7 @@ issue, drafted below. No issue was opened by this work.
 | 5 | **F052.** `provenance.json` is written by the workflow about itself, unsigned, and the CycloneDX SBOM lists no components. The binary and the `.deb` are attested (c05ad477), which a tag run has yet to show | Build-generated provenance and a real SBOM | [#318](https://github.com/CageForge/nexcage/issues/318), [#333](https://github.com/CageForge/nexcage/issues/333) |
 | 6 | **F051.** The scanners fail on findings now, but Semgrep and Gitleaks never ran outside GitHub here: their first run, canaries included, has to be watched. Semgrep's rules are fetched unpinned, so a new rule can turn the job red. None of the scanners reads Zig or libcrun's C | Watch the first runs; the README badge | [#321](https://github.com/CageForge/nexcage/issues/321) |
 | 7 | **F050**, the rest: the actions-runner tarballs (`scripts/setup_secure_runner.sh`, `deploy/kubernetes/tenant-nexcage/pve-template/03-prepare-runner-host.sh`, `scripts/manage_github_runner.sh update`) and the Proxmox keyring in `deploy/kubernetes/tenant-nexcage/pve-template/02-install-pve.sh` are downloaded unchecked | Pin their checksums | Proposed issue A |
-| 8 | **F008, F017.** Two overlapping `create --name x` on one node can both succeed; every later command then refuses the name. A record proves a name, not a VMID: a CT destroyed outside nexcage and replaced by an unrelated one with the same hostname is destroyed by `delete --force` through the record | A per-name lock; the VMID in the record | Proposed issue B |
+| 8 | **F008, F017.** Nothing holds a name from `create`'s check until `pct create` has run: two overlapping `create --name x`, on one node or on two, can both succeed, and so can a create while the node of a container with that name is down; every later command then refuses the name. A record proves a name, not a VMID: a CT destroyed outside nexcage and replaced by an unrelated one with the same hostname is destroyed by `delete --force` through the record | A per-name lock; the VMID in the record | Proposed issue B |
 | 9 | **F013.** Anyone with `Datastore.AllocateTemplate` can put a file under the name nexcage derives for a reference, and `create` uses it without pulling; no digest is kept | Documented trust in the storage's writers (ISOLATION.md) | Proposed issue C |
 | 10 | **F019** and `exec --process`: libcrun opens a joined user namespace's path again after nexcage checked it; and an exec spec without capabilities under a profile is read again by libcrun from the engine's file | Give libcrun what was checked (an fd, the bytes) | Proposed issue D |
 | 11 | `run.oci.*` annotations libcrun honours with or without a profile: `seccomp.plugins` (`dlopen`), `hooks.stdout` and `.stderr` (files created as root), `seccomp.receiver`, `pidfd_receiver`, `mount_context_type` | Documented in ISOLATION.md; whether a profile should refuse them is a decision | Proposed issue E |
@@ -253,7 +263,7 @@ issue, drafted below. No issue was opened by this work.
 | 17 | Where nexcage still differs from crun: `exec` of a missing executable exits 1 (crun 255), an unknown signal 2 (crun 1), an unknown option 2 (crun 64); `create <id>` without `--bundle` does not take the working directory; INFO lines on stderr show in podman's output | A compatibility pass | Proposed issue J |
 | 18 | runtime-tools' `linux_ns_itype` fails with nexcage under rootless podman (`mknodat /dev/null: Operation not permitted`) and passes with crun | Recorded in `docs/RUNTIME_SPEC_VALIDATION.md` | Proposed issue K |
 | 19 | Proxmox LXC `create` truncates a bundle's `memory.limit` to MiB where `update` rounds up, and refuses `cpu.shares` past 262144 where `update` clamps it | Make them one rule (a visible change) | Proposed issue L |
-| 20 | Two choices made in fixing **G004** and **F031**, with their reasons in the commits, that nobody has confirmed: the sealed copy is made for `create` and `exec` only, not on every run; a child of nexcage gets SIGTERM, not SIGKILL, when nexcage dies, so `pct create`'s worker removes what it made | Confirm | Maintainer |
+| 20 | Three choices made in fixing **G004**, **F031** and **G001**, with their reasons in the commits, that nobody has confirmed: the sealed copy is made for `create` and `exec` only, not on every run; a child of nexcage gets SIGTERM, not SIGKILL, when nexcage dies, so `pct create`'s worker removes what it made; `--rootless <bool>` is accepted and ignored, which no approved decision names | Confirm | Maintainer |
 | 21 | Accepted as they are: the directories above a configuration file are not checked (F038); writers of a record are not serialised, the last one wins (F049); a JSON log line keeps the head of a long message (F043); `kill` walks a cgroup tree the tenant shapes, and a PID reused inside the same container passes (F023); `pct exec` is not bound to nexcage's life, and SIGKILL leaves a bundle's archive, readable by root only (F031) | Documented where the code does it, and F038 in ADR-003's assumptions | Maintainer, if any should change |
 
 ### Proposed issues
@@ -271,14 +281,16 @@ is not the pinned one, and a test shows it refusing a changed file.
 
 **B. One container per name, and a record that knows its VMID.** `create`
 checks that a name is free across the cluster, but nothing holds the name
-until `pct create` has run, so two overlapping creates of one name on a node
-both succeed (later commands then refuse the name, so nothing acts on the
-wrong one). And `delete --force` through a record finds the CT by hostname
-alone: one destroyed outside nexcage and replaced by an unrelated CT with the
-same hostname is destroyed in its place. Done when a lock under the state
-root holds a name from the check until the record is written, the record
-carries the VMID, and a command acting through a record refuses a CT whose
-VMID differs; each shown in the simulator, red first.
+until `pct create` has run, so two overlapping creates of one name, on one
+node or on two, both succeed (later commands then refuse the name, so
+nothing acts on the wrong one). And `delete --force` through a record finds
+the CT by hostname alone: one destroyed outside nexcage and replaced by an
+unrelated CT with the same hostname is destroyed in its place. Done when a
+lock holds a name from the check until the record is written (across the
+cluster, for example a pmxcfs lock directory as F008 suggested, not only
+under this node's state root), the record carries the VMID, and a command
+acting through a record refuses a CT whose VMID differs; each shown in the
+simulator, red first.
 
 **C. Keep an image's digest with its template.** A pulled template is used
 again when the storage has a file of the derived name. Anyone with
@@ -298,8 +310,11 @@ namespace fd and the checked process spec, with a test that swaps the path
 or the file after the check.
 
 **E. Decide what a profile does with `run.oci.*` annotations.** libcrun
-acts on `run.oci.seccomp.plugins` (`dlopen` in the runtime process, in builds
-with dlopen), `run.oci.hooks.stdout` and `.stderr` (files created as root at
+acts on `run.oci.seccomp.plugins` (`dlopen` in nexcage's process as root,
+at an `exec` without `--detach` into a container with a seccomp filter; the
+release build has the code, see
+[ISOLATION.md](../architecture/ISOLATION.md#crun-with-the-engines-bundle-as-it-is)),
+`run.oci.hooks.stdout` and `.stderr` (files created as root at
 the bundle's paths), `run.oci.seccomp.receiver`, `run.oci.pidfd_receiver` and
 `run.oci.mount_context_type`, for any bundle. Under Kubernetes a pod reaches
 them only through an annotation allowlist, and the shipped handlers have none;
@@ -373,13 +388,14 @@ FAIL the workflow token's default is write, and approving pull requests is true;
    the runners: read its `.github/`, `scripts/`, `build.zig` and `Makefile`
    changes first.
 2. **Deregister `proxmox-runner`**, the runner on the Proxmox VE host
-   mgr.cp.if.ua: `scripts/manage_github_runner.sh remove`, or `gh api -X
-   DELETE repos/CageForge/nexcage/actions/runners/<id>`, then stop its service
-   on the host. No workflow uses it, and a pull request's own workflow could.
+   [CI_CD_SETUP.md](../CI_CD_SETUP.md#self-hosted-runners-and-forks) names:
+   `scripts/manage_github_runner.sh remove`, or `gh api -X DELETE
+   repos/CageForge/nexcage/actions/runners/<id>`, then stop its service on
+   the host. No workflow uses it, and a pull request's own workflow could.
 3. **Delete `PVE_HOST`, `PVE_PASSWORD`, `PROXMOX_SSH_KEY` and `GH_TOKEN`,
    and rotate what they held**: remove the key from root's `authorized_keys`
-   on mgr.cp.if.ua, change that host's root password, and revoke the
-   personal access token. Deleting a secret does not undo a read.
+   on that host, change its root password, and revoke the personal access
+   token. Deleting a secret does not undo a read.
 4. **Restrict the runners**: put `nexcage-e2e`, the build agent, and any
    organization runner this repository can use into a runner group whose
    Workflow access names `proxmox_e2e.yml` and `k8s_e2e.yml` at
