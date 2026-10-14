@@ -19,18 +19,19 @@ commit 7d6f6955 (crun 1.30.1, unchanged). Simulator checks are named as
 
 | Mode | How it is made | Who can make it |
 |---|---|---|
-| Proxmox LXC from a template or a registry image | `create --name <n> <storage>:vztmpl/<file>`, `create --name <n> <registry ref>`, `run` | A person or a script, as root. A container engine cannot: it always passes `--pid-file`, which LXC `create` and `run` refuse (`src/cli/router.zig:213-241`; `tests/sim/run.sh:1446` for `create`, `:700`-`:705` for `run`) |
+| Proxmox LXC from a template or a registry image | `create --name <n> <storage>:vztmpl/<file>`, `create --name <n> <registry ref>`, `run` | A person or a script, as root. A container engine cannot: it always passes `--pid-file`, which LXC `create` and `run` refuse (`src/cli/router.zig:259-287`; `tests/sim/run.sh:1510` for `create`, `:700`-`:705` for `run`) |
 | Proxmox LXC from an OCI bundle | `create <id> --bundle <dir>` routed to LXC, without `--pid-file` | The same: a person or a script |
 | crun, with the engine's bundle as it is | `create <id> --bundle <dir>` routed to crun (`--runtime crun`, a routing rule in `/etc/nexcage/config.json`, or `container_config.default_runtime: "crun"` there) | A container engine, or root at the command line |
 | crun under an isolation profile | the same, with the program name `nexcage@<profile>` or `--profile <profile>` | The same; an engine picks it through the handler's `BinaryName` / `runtime_path` |
+| Proxmox LXC under an isolation profile | `create --profile <p>` or `run --profile <p>` with a template or a registry image, where `<p>` has `"runtime": "lxc"` (#394) | A person or a script, as root. An engine handed such a profile is refused at `create`, by the profile's name (`src/cli/router.zig:214-224`; `tests/sim/run.sh:1434`) |
 
 `create` picks the backend: a profile first, then `--runtime`, then the
 routing rules, then the configuration's `container_config.default_runtime`,
-which is Proxmox LXC unless the file sets it (`src/cli/router.zig:112-113`;
-`getRoutedRuntime`, `src/core/config.zig:1065-1072`, the default at `:1056`,
+which is Proxmox LXC unless the file sets it (`src/cli/router.zig:113-114`;
+`getRoutedRuntime`, `src/core/config.zig:1106-1113`, the default at `:1097`,
 read at `:719`). Every later
 command goes to the backend whose record of the container is on disk
-(`findBackend`, `src/cli/router.zig:443-455`), so a container stays in the
+(`findBackend`, `src/cli/router.zig:489-501`), so a container stays in the
 mode it was made in.
 
 ## Proxmox LXC from a template or a registry image
@@ -43,12 +44,12 @@ Proxmox's confinement and takes nothing away.
 
 | What | Enforced by | Test |
 |---|---|---|
-| Unprivileged unless the configuration says `proxmox.unprivileged: false` | `src/backends/proxmox-lxc/driver.zig:373-385` | `tests/sim/run.sh:262` "no config file -> default bridge, unprivileged, no --rootfs"; `:259` |
-| A registry image's template is always unprivileged: `--unprivileged 0` is never sent for one, and the setting is named in a warning | `src/backends/proxmox-lxc/driver.zig:374-385` | `tests/sim/run.sh:202` |
-| No Proxmox feature (`nesting`, `keyctl`, ...) and no raw `lxc.*` key is set by nexcage; the `pct create` argument vector is built from the name, the template, the configuration's bridge, storage, size and OS type, and the operator's own options | `src/backends/proxmox-lxc/driver.zig:319-410` | `tests/sim/run.sh:109` "pct create argv: vmid, template, hostname, bridge, rootfs from config" |
+| Unprivileged unless the configuration says `proxmox.unprivileged: false` | `src/backends/proxmox-lxc/driver.zig:384-396` | `tests/sim/run.sh:262` "no config file -> default bridge, unprivileged, no --rootfs"; `:259` |
+| A registry image's template is always unprivileged: `--unprivileged 0` is never sent for one, and the setting is named in a warning | `src/backends/proxmox-lxc/driver.zig:385-396` | `tests/sim/run.sh:202` |
+| No Proxmox feature (`nesting`, `keyctl`, ...) and no raw `lxc.*` key is set by nexcage; the `pct create` argument vector is built from the name, the template, the configuration's bridge, storage, size and OS type, and the operator's own options | `src/backends/proxmox-lxc/driver.zig:319-421` | `tests/sim/run.sh:109` "pct create argv: vmid, template, hostname, bridge, rootfs from config" |
 | A registry reference is pulled under a file name derived from the whole reference, and only that exact file is used; a template whose name merely contains the image's, or one another writer adds during the pull, is never taken | `findTemplate`, `pullTemplate`, `pullVolid`, `src/backends/proxmox-lxc/pve.zig:286-396`; `pulledTemplateName`, `:1991-2013` | `pve.zig` test "a pulled template is named for the whole reference, and two references never share a name"; `tests/sim/run.sh:209`, `:215`, `:220`, `:229`, `:233` |
-| The name is a hostname (RFC 1123), and no container the cluster's listing names has it at `create`; a cluster that cannot be asked refuses the create (the check holds no lock: see "A unique name" below) | `src/backends/proxmox-lxc/driver.zig:111-153`, `src/core/validation.zig:25-57` | `validation.zig` test "a hostname is RFC 1123's ..."; `tests/sim/run.sh:121`-`:124`, `:313`, `:1917` |
-| A create that fails after `pct create` destroys the CT and its record | `src/backends/proxmox-lxc/driver.zig:442-446`, `undoCreate` `:516-544` | `tests/sim/run.sh:1065`, `:1070`, `:1081` |
+| The name is a hostname (RFC 1123), and no container the cluster's listing names has it at `create`; a cluster that cannot be asked refuses the create (the check holds no lock: see "A unique name" below) | `src/backends/proxmox-lxc/driver.zig:111-153`, `src/core/validation.zig:25-57` | `validation.zig` test "a hostname is RFC 1123's ..."; `tests/sim/run.sh:121`-`:124`, `:313`, `:1981` |
+| A create that fails after `pct create` destroys the CT and its record | `src/backends/proxmox-lxc/driver.zig:453-457`, `undoCreate` `:527-555` | `tests/sim/run.sh:1065`, `:1070`, `:1081` |
 
 **Not guaranteed**
 
@@ -62,13 +63,13 @@ Proxmox's confinement and takes nothing away.
   long enough for the cluster to list its containers without names
   (`src/backends/proxmox-lxc/driver.zig:116-126`). Every later command then
   refuses the name, naming both containers, and touches neither
-  (`tests/sim/run.sh:1962`). The audit's
+  (`tests/sim/run.sh:2026`). The audit's
   [residual item 8](../audits/2026-10-hardening-audit.md#residual-risks-and-open-items)
   proposes a lock.
 - **The operator's options.** `--mp`, `--tags` and the other `pct` options
-  of `create` reach pct as written (`src/backends/proxmox-lxc/driver.zig:404-410`;
+  of `create` reach pct as written (`src/backends/proxmox-lxc/driver.zig:415-421`;
   `tests/sim/run.sh:287`), but for `--ip`, `--gw` and `--vlan`, which are
-  checked first (`src/cli/create.zig:127-150`). `--mp /,mp=/host` binds the
+  checked first (`src/cli/create.zig:129-152`). `--mp /,mp=/host` binds the
   host's root directory. Whoever runs nexcage is root already.
 - **The template's contents.** nexcage checks a template's name, not what is
   in it. Anyone with `Datastore.AllocateTemplate` on the storage can upload a
@@ -100,7 +101,7 @@ mounts, `memory.limit` and `cpu.shares`, and nothing else
 | Only bind mounts become mount points. A source and a destination have to be absolute, normalised paths with no control character (C0, DEL, C1), no U+2028/U+2029, no `,` and no `=`; a destination of `/`, a source under `/dev/`, more than 256 bind mounts, and a mount of any other type are refused, before anything is packed; the kernel filesystems a runtime-spec bundle mounts at their usual places (`/proc`, `/sys`, `/dev`, ...) are left to LXC | `bundleMountPoints`, `mountPathProblem`, `src/backends/proxmox-lxc/oci.zig:358-405`, `:566-584` | `oci.zig` tests "a mount path goes into a pct property string only when absolute, normalised and free of separators", "a mount pct cannot take as a bind mount is refused, and nothing leaks", "more bind mounts than a container has mount points are refused, and nothing leaks"; `tests/sim/run.sh:1110`, `:1118`, `:1122` |
 | A bind mount's `ro`, `nosuid`, `nodev`, `noexec` and `noatime`, and each one's recursive `r` form, reach the mount point (`ro=1`, `mountoptions=`). `bind`, `rbind`, `rw`, `rrw`, `private`, `rprivate`, `slave` and `rslave` are accepted and change nothing (see *Mount semantics* below). Any other option is refused, not dropped | `mountPointSpec`, `bindOption`, `src/backends/proxmox-lxc/oci.zig:418-446`, `:532`, `:541-550` | `oci.zig` tests "a bind mount's ro, nosuid, nodev and noexec reach its mount point" and "a bind mount option Proxmox has nothing for is refused, not dropped"; `tests/sim/run.sh:1047` |
 | The mount points are given to `pct set --mpN` once the CT exists, so Proxmox parses each property string; nothing is written to `/etc/pve/lxc/<vmid>.conf` by nexcage | `applyMountPoints`, `src/backends/proxmox-lxc/oci.zig:459-486` | `tests/sim/run.sh:1039` |
-| The bundle's namespaces turn on no Proxmox feature (`nesting`, `keyctl`) | `src/backends/proxmox-lxc/driver.zig:448-455` (no `pct set --features` anywhere in `src/`) | `tests/sim/run.sh:897`, `:972` |
+| The bundle's namespaces turn on no Proxmox feature (`nesting`, `keyctl`) | `src/backends/proxmox-lxc/driver.zig:459-466` (no `pct set --features` anywhere in `src/`) | `tests/sim/run.sh:897`, `:972` |
 | These confinement fields of a bundle, which this backend does not apply, are named in one warning on stderr and in the log (neither under `--log-level error`): `process.capabilities`, `noNewPrivileges`, `apparmorProfile`, `selinuxLabel`, `rlimits`, `root.readonly`, `linux.seccomp`, `maskedPaths`, `readonlyPaths`, `devices`, `resources.devices`, and the options of mounts left to LXC. A user namespace under `proxmox.unprivileged: false` is not among them: see *Namespaces* below | `warnUnappliedConfinement`, `src/backends/proxmox-lxc/oci.zig:325-337`; `Confinement`, `deps/oci-spec-zig/src/runtime/bundle.zig:803-815` | `oci.zig` test "the confinement a bundle asks for is named, and a bundle that asks for none gets no list"; `tests/sim/run.sh:985`, `:992`, `:1019` |
 | So are the `linux.resources` it does not apply | `warnUnappliedResources`, `src/backends/proxmox-lxc/oci.zig:303-313` | `tests/sim/run.sh:1164`, `:1168` |
 | `memory.limit` and `cpu.shares` are checked before they reach pct: a negative limit other than -1, one below Proxmox's 16 MiB, and shares past the kernel's 262144 are refused | `bundleResources`, `src/backends/proxmox-lxc/oci.zig:267-295` | `oci.zig` tests "memory.limit -1 is no limit ...", "a memory.limit below the 16 MiB ...", "cpu.shares past the kernel's maximum is refused, not cast"; `tests/sim/run.sh:1134`-`:1156` |
@@ -128,7 +129,7 @@ mounts, `memory.limit` and `cpu.shares`, and nothing else
   rights of the host ids it runs as. In an unprivileged container those are
   Proxmox's default map, container ids 0 to 65535 as host ids 100000 to
   165535; nexcage sets no other map (no raw `lxc.*` key,
-  `src/backends/proxmox-lxc/driver.zig:319-410`), so every unprivileged
+  `src/backends/proxmox-lxc/driver.zig:319-421`), so every unprivileged
   container on the node has the same ids. The container reads and writes
   what any user may, world-writable files and directories that root owns
   included, and has an owner's rights over every file those ids own: a
@@ -155,6 +156,37 @@ creating a container from it: a host path, another container's volume, and
 a world-writable directory are all reachable. Keep `proxmox.unprivileged` at
 its default.
 
+## Proxmox LXC under an isolation profile
+
+A profile with `"runtime": "lxc"` is a named set of the `proxmox` and
+`network` settings for the containers `create --profile` and `run --profile`
+make under it: storage, root filesystem size, bridge, OS type, cores and
+memory (#394; [ADR-005](ADR-005-Isolation-Profiles.md)). It is for the
+command line. Everything said above for a template or a registry image holds
+as well; a profile chooses among the settings an administrator wrote, and
+adds no confinement of its own.
+
+**Guaranteed, in addition**
+
+| What | Enforced by | Test |
+|---|---|---|
+| `pct create` gets the profile's storage, size, bridge, cores and memory; what the profile leaves out comes from the file's `proxmox` and `network` sections | `src/cli/router.zig:234-245` | `tests/sim/run.sh:1387`, `:1397` |
+| A profile cannot make a container privileged: `unprivileged` takes only `true`, and `false` refuses the whole file | `src/core/config.zig:848`, `:944-947` | `tests/sim/run.sh:1441` |
+| `--cores` and `--memory` may ask for less than the profile's values; more, or `--memory -1`, exits 2 naming the profile, and nothing is made | `withinProfile`, `src/cli/router.zig:187-203` | `tests/sim/run.sh:1403`, `:1406`, `:1409`, `:1424` |
+| A bundle's memory and CPU shares above the profile's are lowered to it, and a bundle's "no limit" gets the profile's memory | `src/backends/proxmox-lxc/driver.zig:340-345` | `tests/sim/run.sh:1413`, `:1417`, `:1421`, `:1428` |
+| `state` names the profile the container was made under, from the record `create` writes; `start` and `stop` carry it forward | `writeOciState`, `persistedProfile`, `src/backends/proxmox-lxc/driver.zig:1015-1040`, `:976` | `tests/sim/run.sh:1390`, `:1394`, `:1401` |
+| A profile's section must be its own backend's: `crun` parameters under `"runtime": "lxc"`, which would do nothing, refuse the file | `src/core/config.zig:924` | `tests/sim/run.sh:1445`; `config.zig` test "a profile that is misspelt, mis-named or names what it cannot do refuses the file" |
+
+**Not guaranteed**
+
+- **An unprivileged container, unless the profile says so.** A profile that
+  leaves `unprivileged` out takes the file's `proxmox.unprivileged`, which
+  may be `false` (`src/cli/router.zig:241`).
+- **Anything a bundle asks for beyond its limits.** The bundle's own
+  hardening is not applied, as in the previous section.
+- **An engine.** A container engine cannot use such a profile; its handler
+  has to name a profile on crun ([ADR-006](ADR-006-LXC-Driven-By-An-Engine.md)).
+
 ## crun, with the engine's bundle as it is
 
 libcrun makes the container from the engine's `config.json`, in the nexcage
@@ -169,14 +201,14 @@ after admission; Pod Security Admission decides what is in it, not nexcage.
 | The container id is 1 to 64 of `[A-Za-z0-9_-]`, on every driver entry, and one path component in every state lookup | `validateContainerId`, `src/core/validation.zig:8-22`, called at `src/backends/crun/libcrun_driver.zig:202`, `:315`, `:352`, `:394`, `:478`, `:636`, `:781`, `:808`, `:853`; `src/core/state_root.zig:103-106` | None for the id's characters; the lookups' refusal of `..` and `/` by `router.zig` test "under --root the Proxmox LXC records are in their own directory" |
 | The bundle path is absolute and resolved | `validateBundlePath`, `src/core/validation.zig:83-89`, called at `src/backends/crun/libcrun_driver.zig:217` | None on crun. `tests/sim/run.sh:859` refuses a relative path through the Proxmox LXC backend's call of the same function (`src/backends/proxmox-lxc/driver.zig:248`) |
 | libcrun is given the bytes nexcage read and checked, never the bundle's `config.json` to read again | `src/backends/crun/libcrun_driver.zig:242-274` (`libcrun_container_load_from_memory`) | `tests/crun/memory_values.sh`: "create hands libcrun the spec it checked, and libcrun does not read the bundle's file again" |
-| A key or a string with a NUL, or nesting deeper than 64 levels, is refused in the spec, an update's resources document and the stored config, with or without a profile: libcrun's parser would read another document than the one checked | `parse`, `checkDocument`, `src/core/profile.zig:418-486`; `checkUnclaimed` `:130-134`; `checkMemoryJson`, `src/backends/crun/libcrun_driver.zig:756-778` | `profile.zig` tests "a key or a string with a NUL in it is refused ..." and "a NUL in a key or a string, or nesting past any runtime spec, is refused in every document read"; `tests/crun/memory_values.sh` |
-| A bundle cannot carry `io.cageforge.nexcage.profile` or an annotation under it | `refuseClaim`, `src/core/profile.zig:433-440` | `profile.zig` test "without a profile, a bundle may not claim one, nor hide a claim in a duplicate key" |
+| A key or a string with a NUL, or nesting deeper than 64 levels, is refused in the spec, an update's resources document and the stored config, with or without a profile: libcrun's parser would read another document than the one checked | `parse`, `checkDocument`, `src/core/profile.zig:441-509`; `checkUnclaimed` `:153-157`; `checkMemoryJson`, `src/backends/crun/libcrun_driver.zig:756-778` | `profile.zig` tests "a key or a string with a NUL in it is refused ..." and "a NUL in a key or a string, or nesting past any runtime spec, is refused in every document read"; `tests/crun/memory_values.sh` |
+| A bundle cannot carry `io.cageforge.nexcage.profile` or an annotation under it | `refuseClaim`, `src/core/profile.zig:456-463` | `profile.zig` test "without a profile, a bundle may not claim one, nor hide a claim in a duplicate key" |
 | Memory values libcrun's int64 arithmetic would overflow on (UBSan traps in the release build) are refused on create and update | `checkMemory`, `src/backends/crun/libcrun_driver.zig:728-748`; `build.zig:154-162` | `libcrun_driver.zig` test "memory values libcrun would overflow on are refused before it sees them"; `tests/crun/memory_values.sh` |
 | `create` and `exec` re-execute from a sealed copy of the binary first (the CVE-2019-5736 protection) | `runFromSealedCopy`, `src/backends/crun/libcrun_driver.zig:178-192`; libcrun's constructor compiled out, `build.zig:171-198` | `tests/crun/rexec.sh` |
 | The process spec an `exec` writes is a new 0600 file with a random name in the container's 0700 state directory, created `O_EXCL\|O_NOFOLLOW`, and removed afterwards | `writeSpecFile`, `src/backends/crun/libcrun_driver.zig:952-997` | `libcrun_driver.zig` test "exec's process spec is a new 0600 file in the container's own state directory"; `tests/crun/exec_spec.sh` |
 | `--systemd-cgroup` reaches libcrun wherever an engine puts it, before the command or after it, and the shipped handlers set `SystemdCgroup`, which has to match the kubelet's cgroup driver: a container is placed under its pod's cgroup and limits, not at the root of the hierarchy | `findCommand`, `src/main.zig:423-477`, folded in at `:253-260`; `deploy/kubernetes/node/containerd.toml:17`, `deploy/kubernetes/node/k3s-config-v3.toml.tmpl:21` | `main.zig` test "findCommand: --systemd-cgroup before the command is recorded, in each engine's order"; `tests/crun/systemd_cgroup.sh`; on a node, `in_pod_cgroup` in `tests/k8s/pod_on_node.sh:205` (`k8s_e2e.yml`) |
 | A signal is validated once and libcrun gets its number | `src/backends/crun/libcrun_driver.zig:363-373`, `src/core/signals.zig:57-73` | `tests/crun/kill.sh` |
-| One id is one backend's: a crun create of an id the Proxmox backend has is refused, and the reverse | `src/cli/router.zig:138-147` | `tests/crun/lxc_root.sh` |
+| One id is one backend's: a crun create of an id the Proxmox backend has is refused, and the reverse | `src/cli/router.zig:139-148` | `tests/crun/lxc_root.sh` |
 
 **Not guaranteed**: libcrun honours the bundle, so a bundle can ask for, and
 get:
@@ -258,21 +290,21 @@ get:
 
 The profile is applied to the parsed bundle at `create`, and libcrun is given
 the result, serialised again, so libcrun and the checks read the same
-document (`narrow`, `src/core/profile.zig:138-176`). Everything in the
+document (`narrow`, `src/core/profile.zig:161-199`). Everything in the
 previous section holds as well.
 
 **Guaranteed, in addition**
 
 | What | Enforced by | Test |
 |---|---|---|
-| A profile that is named and not defined, a program name and `--profile` that disagree, a `--runtime` the profile does not name, and `run` with a profile all exit 2 and create nothing; there is no fallback to no profile | `src/main.zig:280-293`; `findProfile`, `src/cli/router.zig:158-180`; `run`'s refusal, `src/cli/run.zig:49-53` | `tests/sim/run.sh:1359`, `:1368`, `:1371`, `:1373`, `:1375`, `:1377` |
-| `capabilities.drop` removes those names from all five capability sets. The drop list must be the kernel's names, and so must every capability in the bundle: libcap would read `cap_net_raw`, `13` or `CAP_NET_RAW2` as `CAP_NET_RAW` past a drop that compares names | `dropCapabilities`, `checkCapabilityNames`, `src/core/profile.zig:807-816`, `:221-234`; `src/core/config.zig:918-928` | `profile.zig` tests "a profile drops capabilities from every set ...", "a capability spelt otherwise than the kernel spells it is refused ..."; `config.zig` test "a profile that is misspelt, mis-named or names what it cannot do refuses the file"; `tests/crun/profile.sh` (CapBnd from `/proc`) |
-| `user_namespace: "require"`: a user namespace with uid and gid mappings, none of which maps host id 0. A namespace joined by `path` has to be on nsfs, a user namespace, not nexcage's own, and leave host uid and gid 0 out, read from inside it; one that cannot be read is refused. `run.oci.keep_original_groups` other than `"0"` is refused | `checkUserNamespace`, `checkJoined`, `refuseKeptGroups`, `src/core/profile.zig:612-726`, `:651-655` | `profile.zig` tests "a user namespace that leaves the container's root the host's is refused", "a user namespace joined by path is read from inside it ...", "a bundle that keeps nexcage's own groups ..."; `tests/crun/profile.sh` |
-| `seccomp: "require"`: a filter that refuses some system call by itself, by its default action or a rule naming a call (`KILL`, `KILL_PROCESS`, `KILL_THREAD`, `TRAP`, `ERRNO`); `run.oci.seccomp_bpf_data` is refused | `checkSeccomp`, `refusePrecompiledSeccomp`, `src/core/profile.zig:557-596` | `profile.zig` tests "a seccomp filter that refuses no system call does not meet a profile that requires one", "a precompiled seccomp program does not meet ..."; `tests/crun/profile.sh` |
-| `limits.memory` and `limits.pids` lower `memory.limit` and `pids.limit`, and set them when absent; `memory.swap` keeps only the swap the bundle asked for; `memory.max`, `memory.high` and `pids.max` under `linux.resources.unified` are lowered too | `lowerTo`, `lowerMemory`, `lowerUnified`, `src/core/profile.zig:836-892` | `profile.zig` tests "lowering the memory limit keeps the swap the bundle allowed, and no more", "linux.resources.unified does not undo a profile's limits"; `tests/crun/profile.sh` (cgroup files) |
-| `update` cannot take memory or pids above the caps recorded at create, or to no limit | `boundUpdate`, `src/core/profile.zig:250-315`; `holdToProfile`, `src/backends/crun/libcrun_driver.zig:697-715` | `profile.zig` test "update holds a container made under a profile to the caps recorded at create"; `tests/crun/profile_update.sh` |
-| `exec --process` into the container gets every capability set cut to the container's bounding set, from the config libcrun stored at create | `boundExec`, `src/core/profile.zig:185-212`; `boundProcessFile`, `src/backends/crun/libcrun_driver.zig:901-926` | `profile.zig` test "an exec into a container made under a profile gets no capability the container lacks"; `tests/crun/profile.sh`, `tests/crun/exec_spec.sh` |
-| `state` reports the profile it was made under: nexcage writes the profile's name into the spec libcrun stores at create, and libcrun's `state` prints that stored config's annotations | `src/core/profile.zig:169-174`; `libcrun_container_state`, `container.c:3294-3299` | `tests/crun/profile.sh` |
+| A profile that is named and not defined, a program name and `--profile` that disagree, and a `--runtime` the profile does not name exit 2 and create nothing; `run` with a crun profile fails, as crun has no `run`, and creates nothing; there is no fallback to no profile | `src/main.zig:280-293`; `findProfile`, `src/cli/router.zig:159-181`; crun's `run`, `src/cli/router.zig:435` | `tests/sim/run.sh:1359`, `:1368`, `:1371`, `:1373`, `:1375`, `:1377` |
+| `capabilities.drop` removes those names from all five capability sets. The drop list must be the kernel's names, and so must every capability in the bundle: libcap would read `cap_net_raw`, `13` or `CAP_NET_RAW2` as `CAP_NET_RAW` past a drop that compares names | `dropCapabilities`, `checkCapabilityNames`, `src/core/profile.zig:830-839`, `:244-257`; `src/core/config.zig:952-962` | `profile.zig` tests "a profile drops capabilities from every set ...", "a capability spelt otherwise than the kernel spells it is refused ..."; `config.zig` test "a profile that is misspelt, mis-named or names what it cannot do refuses the file"; `tests/crun/profile.sh` (CapBnd from `/proc`) |
+| `user_namespace: "require"`: a user namespace with uid and gid mappings, none of which maps host id 0. A namespace joined by `path` has to be on nsfs, a user namespace, not nexcage's own, and leave host uid and gid 0 out, read from inside it; one that cannot be read is refused. `run.oci.keep_original_groups` other than `"0"` is refused | `checkUserNamespace`, `checkJoined`, `refuseKeptGroups`, `src/core/profile.zig:635-749`, `:674-678` | `profile.zig` tests "a user namespace that leaves the container's root the host's is refused", "a user namespace joined by path is read from inside it ...", "a bundle that keeps nexcage's own groups ..."; `tests/crun/profile.sh` |
+| `seccomp: "require"`: a filter that refuses some system call by itself, by its default action or a rule naming a call (`KILL`, `KILL_PROCESS`, `KILL_THREAD`, `TRAP`, `ERRNO`); `run.oci.seccomp_bpf_data` is refused | `checkSeccomp`, `refusePrecompiledSeccomp`, `src/core/profile.zig:580-619` | `profile.zig` tests "a seccomp filter that refuses no system call does not meet a profile that requires one", "a precompiled seccomp program does not meet ..."; `tests/crun/profile.sh` |
+| `limits.memory` and `limits.pids` lower `memory.limit` and `pids.limit`, and set them when absent; `memory.swap` keeps only the swap the bundle asked for; `memory.max`, `memory.high` and `pids.max` under `linux.resources.unified` are lowered too | `lowerTo`, `lowerMemory`, `lowerUnified`, `src/core/profile.zig:859-915` | `profile.zig` tests "lowering the memory limit keeps the swap the bundle allowed, and no more", "linux.resources.unified does not undo a profile's limits"; `tests/crun/profile.sh` (cgroup files) |
+| `update` cannot take memory or pids above the caps recorded at create, or to no limit | `boundUpdate`, `src/core/profile.zig:273-338`; `holdToProfile`, `src/backends/crun/libcrun_driver.zig:697-715` | `profile.zig` test "update holds a container made under a profile to the caps recorded at create"; `tests/crun/profile_update.sh` |
+| `exec --process` into the container gets every capability set cut to the container's bounding set, from the config libcrun stored at create | `boundExec`, `src/core/profile.zig:208-235`; `boundProcessFile`, `src/backends/crun/libcrun_driver.zig:901-926` | `profile.zig` test "an exec into a container made under a profile gets no capability the container lacks"; `tests/crun/profile.sh`, `tests/crun/exec_spec.sh` |
+| `state` reports the profile it was made under: nexcage writes the profile's name into the spec libcrun stores at create, and libcrun's `state` prints that stored config's annotations | `src/core/profile.zig:192-197`; `libcrun_container_state`, `container.c:3294-3299` | `tests/crun/profile.sh` |
 
 **Not covered by a profile**
 
@@ -288,12 +320,12 @@ section describes:
   refused above.
 - **Swap.** A bundle's `memory.swap` of -1 or none, and unified
   `memory.swap.max`, are left as they are (`lowerMemory`,
-  `src/core/profile.zig:883-892`).
+  `src/core/profile.zig:906-915`).
 - **What a filter refuses.** One refused call by its own action is enough;
   which call, a rule's `args`, and calls the kernel lacks are not judged
-  (`src/core/profile.zig:548-556`).
+  (`src/core/profile.zig:571-579`).
 - **A joined user namespace after the check.** libcrun opens the path again
-  after nexcage read it (`src/core/profile.zig:684-686`).
+  after nexcage read it (`src/core/profile.zig:707-709`).
 - **An `exec --process` spec without capabilities**, which libcrun reads again
   from the engine's file and gives the container's capabilities; and the
   rest of any exec spec: its user, `noNewPrivileges`, AppArmor profile,
