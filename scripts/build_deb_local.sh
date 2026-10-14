@@ -56,8 +56,19 @@ fi
 GLIBC=$(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -1)
 
 install -D -m 0755 "$BIN" "$ROOT/usr/bin/nexcage"
-install -D -m 0644 packaging/man/nexcage.1 "$ROOT/usr/share/man/man1/nexcage.1"
-gzip -9n "$ROOT/usr/share/man/man1/nexcage.1"
+# The man page's header names the version it documents. It is written from
+# VERSION here, so that a release cannot carry a page that names an older
+# one: the page said 0.13.0 for several releases after that one.
+MAN="$ROOT/usr/share/man/man1/nexcage.1"
+mkdir -p "$(dirname "$MAN")"
+sed "1s/\"nexcage [^\"]*\"/\"nexcage $VERSION\"/" packaging/man/nexcage.1 > "$MAN"
+case "$(head -1 "$MAN")" in
+    ".TH "*"\"nexcage $VERSION\""*) ;;
+    *) echo "build_deb_local.sh: packaging/man/nexcage.1's first line is not a .TH line naming \"nexcage <version>\"" >&2
+       exit 1 ;;
+esac
+chmod 0644 "$MAN"
+gzip -9n "$MAN"
 install -D -m 0644 packaging/completion/nexcage.bash "$ROOT/usr/share/bash-completion/completions/nexcage"
 install -D -m 0644 packaging/config/config.json "$ROOT/usr/share/doc/$PACKAGE/examples/config.json"
 install -D -m 0644 packaging/config/config.oci.example.json "$ROOT/usr/share/doc/$PACKAGE/examples/config.oci.example.json"

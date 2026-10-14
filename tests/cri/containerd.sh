@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 # Sourced, not run: containerd serving the CRI with nexcage as its runtime
 # handler, on a CNI bridge, for pod_on_nexcage.sh and critest.sh. Every call
 # the engine makes to the runtime is recorded in $TRACE.

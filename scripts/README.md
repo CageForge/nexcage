@@ -4,6 +4,8 @@
 |---|---|---|
 | `dev.sh` | `make doctor`, `dev-setup`, `e2e`, `act`, `local-ci`, `perf`, `dev-shell` | Local development: tools, builds, the simulator, the crun and CRI tests, CI jobs through act, performance ([docs/LOCAL_DEVELOPMENT.md](../docs/LOCAL_DEVELOPMENT.md)) |
 | `build_deb_local.sh` | `release.yml`, `make deb` | Build `dist/nexcage-<version>-amd64.deb` with `dpkg-deb` |
+| `ci/check_crun_pin.sh` | `ci.yml`, `release.yml`, `dependency_check.yml` | Check that the crun commit the `Dockerfile` clones is the one `deps/crun` pins |
+| `ci/retry_on_429.sh` | `crun_build.yml`, `release.yml`, `k8s_e2e.yml`, `proxmox_e2e.yml`, `security.yml`, `ci/check_deb.sh` | Run a docker command again when a registry answers 429 Too Many Requests, and only then |
 | `ci/check_version.sh` | `version-check.yml` | Check that `VERSION` is semver, matches `build.zig.zon` and appears in `nexcage --help` |
 | `gen_crun_headers_local.sh` | Dockerfile, crun build notes | Generate vendored crun `config.h` and `git-version.h` |
 | `gen_crun_headers_docker.sh` | `make crun-headers` | The same, inside Docker |
@@ -11,5 +13,6 @@
 | `mkdocs_build.sh`, `mkdocs_serve.sh` | `make docs-build`, `make docs-serve` | Build or serve the documentation site |
 | `setup_secure_runner.sh` | `docs/SECURITY_SELF_HOSTED_RUNNER.md` | Install a hardened self-hosted GitHub Actions runner |
 | `fix_runner_service.sh` | run by hand on the runner | Repair the runner's systemd service |
-| `manage_github_runner.sh` | run by hand | Start, stop or restart the runner over SSH |
+| `manage_github_runner.sh` | run by hand | Start, stop or restart the runner on the Proxmox VE host `proxmox-runner` lived on, over SSH; `remove` deregisters it through the API (gh, as a repository admin) and deletes its service and directory |
+| `check_runner_exposure.sh` | run by hand, gh as an organization owner with `admin:org` | Check the GitHub settings that keep pull requests' code off the self-hosted runners, the runner groups among them, stale secrets out of reach and the workflow token read-only by default (docs/CI_CD_SETUP.md) |
 | `register_e2e_runner.sh` | run by hand on the E2E node (piped over ssh, token on stdin) | Register the GitHub Actions runner with labels `proxmox,pve9,nexcage-e2e` and install it as a service with `svc.sh` |

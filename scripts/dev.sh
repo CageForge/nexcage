@@ -19,13 +19,18 @@ CRUN_IMAGE=${CRUN_IMAGE:-localhost/nexcage:ci}
 CRI_IMAGE=${CRI_IMAGE:-localhost/nexcage:cri-test}
 BUSYBOX=docker.io/library/busybox:1.36
 DEV=$REPO/zig-out/dev
+# Caps for every container and podman build this script starts; see container().
+CONTAINER_MEMORY=${CONTAINER_MEMORY:-2g}
+BUILD_MEMORY=${BUILD_MEMORY:-4g}
 BUNDLE=$DEV/bundle
 
 # The jobs `act` runs by default: every job a pull request gets on a
-# GitHub-hosted runner, except security.yml, whose scanners upload to GitHub,
-# plus dependency_check.yml's crun job in its dry run, which reads the
-# repository's issues and the crun releases and writes nothing.
-ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
+# GitHub-hosted runner, except security.yml's Semgrep, Trivy and gitleaks
+# jobs, which download their rules, databases and images, and the two that
+# build a binary only for a self-hosted job (proxmox_e2e.yml's binary,
+# k8s_e2e.yml's build); plus dependency_check.yml's crun job in its dry run,
+# which reads the repository's issues and the crun releases and writes nothing.
+ACT_JOBS_DEFAULT="ci.yml:build-test ci.yml:simulation ci.yml:scripts security.yml:zizmor version-check.yml:version crun_build.yml:docker memory_leak_check.yml:memory-leak-check dependency_check.yml:check-crun"
 
 if [ -t 2 ]; then B=$'\033[1m' R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' N=$'\033[0m'; else B='' R='' G='' Y='' N=''; fi
 say()  { echo "${B}==> $*${N}" >&2; }
@@ -45,7 +50,7 @@ Build and test (no containers)
   build             Debug build (zig-out/bin) and ReleaseSafe (zig-out/release/bin)
   test              zig fmt --check and the unit tests
   sim               every command against fake Proxmox tools (tests/sim)
-  check             test + sim: the quick gate before a commit
+  check             test + sim + the tests of scripts/: the quick gate before a commit
 
 Containers (rootless podman or Docker)
   crun              the crun-backend image, and what crun_build.yml checks on it
@@ -84,7 +89,9 @@ engine() {
   die "no container engine answers. Install podman (preferred: rootless, storage under ~) or start Docker, or set CONTAINER_ENGINE"
 }
 # podman's default image format drops fields Docker's has; ask for Docker's.
-engine_build() { engine; if [ "$ENGINE" = podman ]; then podman build --format docker "$@"; else docker build "$@"; fi; }
+# A podman build's RUN steps are capped like the containers below; docker
+# build under BuildKit takes no --memory.
+engine_build() { engine; if [ "$ENGINE" = podman ]; then podman build --format docker --memory "$BUILD_MEMORY" "$@"; else docker build "$@"; fi; }
 image_exists() { engine; "$ENGINE" image inspect "$1" >/dev/null 2>&1; }
 
 podman_socket() { echo "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"; }
@@ -153,6 +160,13 @@ doctor() {
   fi
   if [ -x /usr/bin/time ]; then ok "GNU time" "perf reports peak memory"
   else opt "GNU time" "optional: apt install time, for peak memory in perf"; fi
+
+  # tests/scripts: jq applies gh's --jq filters in the fake gh, dpkg-deb and
+  # readelf build and read the packages check_deb.sh is tried on.
+  echo "${B}check (the tests of scripts/)${N}"
+  for t in jq dpkg-deb readelf; do
+    if have "$t"; then ok "$t" "$(command -v "$t")"; else miss "$t" "install it with the system package manager (jq, dpkg, binutils)"; fi
+  done
 
   echo "${B}crun, cri, e2e, shell, perf --suite crun${N}"
   local e found=''
@@ -229,7 +243,19 @@ sim()     { need_zig; "$ZIG" build && bash tests/sim/run.sh; }
 # The Dockerfile clones vendored crun at its pin and builds from a clean tree;
 # the engine's layer cache makes a rebuild with unchanged sources quick.
 crun_image() { say "crun image $CRUN_IMAGE"; engine_build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t "$CRUN_IMAGE" .; }
-privileged() { "$ENGINE" run --rm --privileged --cgroupns=private "$@"; }
+# conmon, which watches each of podman's containers, writes an empty file named
+# oom into podman's working directory when a process in the container is killed
+# for lack of memory, as critest makes happen. Run from the checkout, that file
+# landed in it, so containers are run from zig-out/dev.
+in_dev() { mkdir -p "$DEV"; (cd "$DEV" && "$@"); }
+# Every container started here is capped. critest runs a container out of
+# memory on purpose, and this is someone's workstation: without a cap, a limit
+# that does not take hold inside the container takes the desktop down instead
+# (it happened, 2026-10-13). Rootless podman can set these only where systemd
+# delegates the memory and pids controllers to the user, which it does by
+# default.
+container() { in_dev "$ENGINE" run --memory "$CONTAINER_MEMORY" --memory-swap "$CONTAINER_MEMORY" --pids-limit 4096 "$@"; }
+privileged() { container --rm --privileged --cgroupns=private "$@"; }
 
 # What crun_build.yml checks, in the same order, on the same scripts, but for
 # four of its steps: the .deb, the runtime-spec suite and critest, which only
@@ -238,12 +264,12 @@ privileged() { "$ENGINE" run --rm --privileged --cgroupns=private "$@"; }
 # handed to the container (it prints a skip: line saying so).
 crun_checks() {
   engine; crun_image; fetch_bundle
-  say "the binary runs";   "$ENGINE" run --rm "$CRUN_IMAGE" version
+  say "the binary runs";   container --rm "$CRUN_IMAGE" version
   say "the features ABI still matches the vendored header"
   engine_build --target builder -t localhost/nexcage:builder .
-  "$ENGINE" run --rm -v "$REPO/scripts:/s:ro" localhost/nexcage:builder sh /s/check_features_abi.sh
+  container --rm -v "$REPO/scripts:/s:ro" localhost/nexcage:builder sh /s/check_features_abi.sh
   say "the features document comes from this build's libcrun"
-  "$ENGINE" run --rm "$CRUN_IMAGE" --runtime crun features > "$DEV/features.json"
+  container --rm "$CRUN_IMAGE" --runtime crun features > "$DEV/features.json"
   python3 tests/crun/features_check.py "$DEV/features.json"
   say "ps reports the container's processes, and crun agrees"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/ps.sh
@@ -283,9 +309,9 @@ SHELL_INIT='if [ -w /sys/fs/cgroup/cgroup.subtree_control ]; then
 fi'
 shell() {
   cri_image; fetch_bundle
-  local run=(run --rm --privileged --cgroupns=private -v "$REPO:/src:ro" -v "$BUNDLE:/bundle" -w /src --entrypoint /bin/bash)
+  local run=(--rm --privileged --cgroupns=private -v "$REPO:/src:ro" -v "$BUNDLE:/bundle" -w /src --entrypoint /bin/bash)
   if [ $# -gt 0 ]; then
-    "$ENGINE" "${run[@]}" -i "$CRI_IMAGE" -c "$SHELL_INIT"'
+    container "${run[@]}" -i "$CRI_IMAGE" -c "$SHELL_INIT"'
 exec "$@"' bash "$@"
     return
   fi
@@ -297,11 +323,78 @@ ${B}A privileged container with nexcage (crun backend), crun, containerd and cri
   /src/tests/cri/pod_on_nexcage.sh          a pod through containerd's CRI
   /src/tests/perf/crun.sh -n 5              the crun perf suite
 EOF
-  "$ENGINE" "${run[@]}" -it "$CRI_IMAGE" -c "$SHELL_INIT"'
+  container "${run[@]}" -it "$CRI_IMAGE" -c "$SHELL_INIT"'
 exec bash'
 }
 
 # --- act -----------------------------------------------------------------------
+
+# The images a workflow builds under a short name, `docker build -t
+# nexcage:ci` say, and then uses by that name.
+short_names() { { grep -oE -- '-t [a-z0-9][a-z0-9._-]*:[A-Za-z0-9_.-]+' "$1" || true; } | sed 's/^-t //' | sort -u; }
+
+# Whether the store act's jobs use, the one DOCKER_HOST names, has IMAGE.
+api_has_image() {
+  local rc=0
+  podman --url "$DOCKER_HOST" image exists "$1" || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) die "cannot ask $DOCKER_HOST whether it has $1 (podman exit $rc)" ;;
+  esac
+}
+
+# The short names of NAME... that podman has as both localhost/NAME and
+# docker.io/library/NAME.
+both_names() {
+  local n
+  for n in "$@"; do
+    if api_has_image "localhost/$n" && api_has_image "docker.io/library/$n"; then echo "$n"; fi
+  done
+}
+
+# act_images "NAME..." CMD...: CMD is an act run of a workflow that builds
+# images and then uses them by these short names, as crun_build.yml builds
+# nexcage:ci, runs it, and builds its CRI and runtime-spec images FROM it.
+# Through podman's Docker API a short name is localhost/NAME when that exists
+# and docker.io/library/NAME otherwise, for `docker build -t` and `docker run`
+# alike, so the job runs what it built. A build's FROM, though, takes
+# docker.io/library/NAME first. With both names there, the job builds
+# localhost/nexcage:ci and runs its checks on it, but builds its CRI image on
+# whatever an earlier run left as docker.io/library/nexcage:ci, and critest
+# tests that. So a run is refused while a name is there twice, and fails if
+# one is there twice after it: the job writes only the name it resolves to, so
+# the other came from something that built the same name while it ran. Such
+# runs take turns, too: two at once would build the same names in the middle
+# of each other's steps. No image is renamed or removed here.
+act_images() (
+  local names=$1 n rc=0 twice; shift
+  exec 9>"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/nexcage-dev-act-images.lock"
+  if ! flock -n 9; then
+    say "another act run that builds images under short names is going on; waiting for it to end"
+    flock 9
+  fi
+  if [ "$ENGINE" = podman ]; then
+    # shellcheck disable=SC2086  # one word per name
+    twice=$(both_names $names)
+    if [ -n "$twice" ]; then
+      for n in $twice; do
+        echo "${R}dev.sh:${N} podman has both localhost/$n and docker.io/library/$n. The job's 'docker build -t $n' and 'docker run $n' take the first, while a build FROM $n takes the second, so the job could test an image it did not build. Remove the name you do not use; dev.sh's own commands use the localhost/ ones, and an earlier act run most likely left the other: podman rmi docker.io/library/$n" >&2
+      done
+      return 1
+    fi
+  fi
+  "$@" || rc=$?
+  if [ "$ENGINE" = podman ]; then
+    # shellcheck disable=SC2086
+    twice=$(both_names $names)
+    for n in $twice; do
+      echo "${R}dev.sh:${N} localhost/$n and docker.io/library/$n are both there now, and were not when the job started: something else built $n while it ran, so the job's steps after that may have used that image instead of its own. Run the job again while nothing else builds $n" >&2
+      rc=1
+    done
+  fi
+  return "$rc"
+)
 
 act_jobs() {
   have "$ACT" || die "act is not installed; see scripts/dev.sh doctor"
@@ -319,7 +412,12 @@ act_jobs() {
   local common gitdir
   common=$(git rev-parse --path-format=absolute --git-common-dir)
   gitdir=$(git rev-parse --path-format=absolute --git-dir)
-  [ "$common" = "$gitdir" ] || extra=(--container-options "-v $common:$common:ro" "${extra[@]}")
+  # The job container gets the same caps as container(). Containers a job
+  # starts through the engine's socket are its siblings, not its children, and
+  # are not covered by them.
+  local opts="--memory $CONTAINER_MEMORY --memory-swap $CONTAINER_MEMORY --pids-limit 4096"
+  [ "$common" = "$gitdir" ] || opts="-v $common:$common:ro $opts"
+  extra=(--container-options "$opts" "${extra[@]}")
   # A job's `docker build` goes to podman through the socket. The act image's
   # docker CLI then builds with buildx's docker-container driver, which leaves
   # the image in its cache and never loads it, so the job's next `docker run`
@@ -328,12 +426,18 @@ act_jobs() {
   [ "$ENGINE" != podman ] || extra=(--env DOCKER_BUILDKIT=0 "${extra[@]}")
   mkdir -p "$DEV/act-artifacts"
   for a in "${jobs[@]}"; do
-    local wf=${a%%:*} job=${a#*:} event=pull_request
+    local wf=${a%%:*} job=${a#*:} event=pull_request names
     local -a run=("$ACT") with=()
     [ -f ".github/workflows/$wf" ] || die "no workflow .github/workflows/$wf"
     [ "$job" != "$a" ] || die "'$a': name a job as WORKFLOW:JOB, e.g. ci.yml:simulation"
     case "$wf" in
       dependency_check.yml)
+        # It reads the crun pin from deps/crun, and with .actrc's --bind act
+        # takes the checkout as it is: the workflow's `submodules: recursive`
+        # does nothing here, and a worktree has no deps/crun of its own.
+        if [ ! -e deps/crun/.git ]; then
+          warn "skipping $a: deps/crun is not checked out here (git submodule update --init --depth 1 deps/crun)"; continue
+        fi
         # Scheduled, so it is dispatched here. Given a token its last step
         # files, edits or closes issues in the repository; dry_run prints
         # what it would do instead. The token is gh's, read inside the step
@@ -346,6 +450,8 @@ act_jobs() {
         # shellcheck disable=SC2016  # the inner shell expands these
         run=(bash -c 'GITHUB_TOKEN=$(gh auth token) exec "$0" "$@"' "$ACT") ;;
     esac
+    names=$(short_names ".github/workflows/$wf" | tr '\n' ' ')
+    [ -z "$names" ] || run=(act_images "${names% }" "${run[@]}")
     step "act-${wf%.yml}-$job" "${run[@]}" "$event" -W ".github/workflows/$wf" -j "$job" \
       --artifact-server-path "$DEV/act-artifacts" "${with[@]}" "${extra[@]}"
   done
@@ -462,7 +568,7 @@ case "$cmd" in
   build)   build ;;
   test)    unit ;;
   sim)     sim ;;
-  check)   step test unit; step sim sim; summary ;;
+  check)   step test unit; step sim sim; step scripts bash tests/scripts/run.sh; summary ;;
   crun)    crun_checks ;;
   cri)     cri ;;
   e2e)     step sim sim; step crun crun_checks; step cri cri; summary ;;

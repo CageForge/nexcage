@@ -10,7 +10,7 @@ directly.
 
 ```bash
 scripts/dev.sh setup        # once: podman socket, act's runner image, a busybox rootfs
-scripts/dev.sh check        # before a commit: zig fmt, unit tests, the simulator
+scripts/dev.sh check        # before a commit: zig fmt, unit tests, the simulator, the script tests
 scripts/dev.sh all          # before a pull request: check, then every CI job through act
 ```
 
@@ -23,12 +23,12 @@ scripts/dev.sh all          # before a pull request: check, then every CI job th
 | `build` | `build` (Debug only) | Debug to `zig-out/bin`, ReleaseSafe to `zig-out/release/bin` | zig 0.15.1 | seconds |
 | `test` | `check` | `zig fmt --check`, unit tests | zig | 6 s |
 | `sim` | `sim` | Every command against fake `pct`/`pvesh`/`pvesm` ([TESTING.md](../TESTING.md#running-against-fake-proxmox-tools)) | zig, unshare, python3, tar, zstd | 12 s |
-| `check` | | `test` + `sim` | | 20 s |
+| `check` | | `test` + `sim` + `tests/scripts/run.sh`, the tests of the shell scripts in `scripts/` | jq, dpkg-deb, readelf for the script tests | 20 s |
 | `crun` | | The crun-backend image and what `crun_build.yml` checks on it, in its order: `version`, the features ABI, the features document, `ps` against crun, `update`'s flags, a Proxmox LXC container under `--root`, an isolation profile, `--systemd-cgroup`, a bundle from a foreign working directory, `kill`, `exec`'s process spec, a profile's limits on `update`, memory values, the re-execution. Not the `.deb`, the runtime-spec suite or critest, which only `act crun_build.yml:docker` runs, nor the pod, which is `cri` | a container engine | 3 min first, then a minute |
 | `cri` | | A pod through containerd's CRI with nexcage as the runtime handler: sandbox, CNI address, container, `exec`, `update`, removal | a container engine | 5 s, plus the images |
 | `e2e` | `e2e` | `sim` + `crun` + `cri` | | |
 | `shell [CMD]` | `dev-shell` | A shell with nexcage (crun backend), crun, containerd and crictl, or CMD run there | a container engine | |
-| `act` | `act` | The GitHub-hosted CI jobs, in the runner image | act, a container engine; gh logged in for `dependency_check.yml` | 1.5–4 min per job |
+| `act` | `act` | The GitHub-hosted CI jobs, in the runner image | act, a container engine; gh logged in and `deps/crun` checked out for `dependency_check.yml` | 1.5–4 min per job |
 | `all` | `local-ci` | `check`, then `act`, whose `crun_build.yml` job is `crun` and `cri` as CI runs them | | 12 min |
 | `pve-e2e` | | `proxmox_e2e.yml` on the self-hosted Proxmox VE runner, for this branch | gh, the branch pushed | 10 min |
 | `perf` | `perf` | Times the lifecycle commands; see [Performance](#performance) | zig, python3, tar; unshare and zstd unless `--suite crun`; a container engine unless `--suite lxc` | 1 min for `lxc`, 4 min for both with `--against` |
@@ -61,11 +61,11 @@ Ubuntu 24.04 and later AppArmor forbids mounts there by default;
 ## Containers
 
 `crun`, `cri`, `shell` and `perf --suite crun` build `localhost/nexcage:ci`
-from the repository's `Dockerfile` — the same image `crun_build.yml` builds —
-which clones vendored crun at its pin and builds the crun backend. With
-unchanged sources the engine's layer cache makes a rebuild take seconds. The
-CRI image `localhost/nexcage:cri-test` adds containerd, crictl and the CNI
-plugins on top of it.
+from the repository's `Dockerfile`, as `crun_build.yml` builds its
+`nexcage:ci`; the Dockerfile clones vendored crun at its pin and builds the
+crun backend. With unchanged sources the engine's layer cache makes a rebuild
+take seconds. The CRI image `localhost/nexcage:cri-test` adds containerd,
+crictl and the CNI plugins on top of it.
 
 The tests run in a privileged container with its own cgroup namespace. Under
 rootless podman two things differ from CI's rootful Docker, and the tests
@@ -81,6 +81,12 @@ handle both:
   `tests/cri/pod_on_nexcage.sh` sees the user namespace and sets
   `restrict_oom_score_adj` and `disable_apparmor`, as containerd's own startup
   warning asks.
+
+conmon, which watches each of podman's containers, writes an empty file named
+`oom` into podman's working directory when a process in the container is
+killed for lack of memory, as critest makes happen. `dev.sh` runs containers
+from `zig-out/dev`, so the file lands there; `.gitignore` names `/oom` for a
+run by hand from the checkout.
 
 `scripts/dev.sh shell` leaves you in that container with the checkout at
 `/src` (read-only) and a busybox bundle at `/bundle`, its processes already
@@ -100,10 +106,13 @@ nexcage --runtime crun delete --force demo
 ## CI through act
 
 `scripts/dev.sh act` runs, by default, every job a pull request gets on a
-GitHub-hosted runner except those of `security.yml`: `ci.yml` (`build-test`,
-`simulation`), `version-check.yml`, `crun_build.yml` and
-`memory_leak_check.yml`, plus the crun job of `dependency_check.yml` in its dry
-run. Name jobs to run others, and pass act's own options after `--`:
+GitHub-hosted runner except `security.yml`'s Semgrep, Trivy and gitleaks
+jobs, which download their rules, databases and images, and the two that
+build a binary only for a self-hosted job: `ci.yml` (`build-test`,
+`simulation`, `scripts`), `security.yml`'s `zizmor`, `version-check.yml`,
+`crun_build.yml` and `memory_leak_check.yml`, plus the crun job of
+`dependency_check.yml` in its dry run. Name jobs to run others, and pass
+act's own options after `--`:
 
 ```bash
 scripts/dev.sh act ci.yml:simulation
@@ -113,7 +122,7 @@ scripts/dev.sh act crun_build.yml:docker -- --verbose
 `.actrc` maps `ubuntu-latest`, `ubuntu-24.04` and `ubuntu-22.04` to
 `localhost/nexcage-act:latest` — catthehacker's act image plus `gh`, built from
 `.github/act` — turns pulling off, and adds `--bind`, because act's copy of the
-checkout drops the submodule's `.git` file. `dev.sh` adds three things act
+checkout drops the submodule's `.git` file. `dev.sh` adds four things act
 cannot know:
 
 - `DOCKER_HOST` pointing at podman's socket.
@@ -125,16 +134,58 @@ cannot know:
 - In a linked `git worktree`, a read-only mount of the main repository's
   `.git`, which the worktree's `.git` file points into and which is otherwise
   outside the container.
+- For a workflow that builds images and then uses them by short name, as
+  `crun_build.yml` builds `nexcage:ci`, runs its checks on it and builds its
+  CRI and runtime-spec images `FROM` it: under podman, the job's
+  `docker build -t nexcage:ci` and `docker run nexcage:ci` both take
+  `localhost/nexcage:ci` when that exists, and `docker.io/library/nexcage:ci`
+  otherwise. The first is the name `crun`, `cri` and `shell` give their
+  image, so the job's build takes it over; they build theirs again before
+  they use it. A build `FROM nexcage:ci`, though, takes
+  `docker.io/library/nexcage:ci` first. With both names there, the job runs
+  its checks on its own build but builds its CRI image on whatever an earlier
+  run left as `docker.io/library/nexcage:ci`, and critest tests that. So
+  `dev.sh` refuses the job while one of its images has both names, and says
+  which to remove (`podman rmi docker.io/library/nexcage:ci`, most likely an
+  earlier act run's), and fails it if one has both when it ends: something
+  else built that name while it ran. It renames and removes nothing itself.
+  It also runs one such job at a time: a second, from another worktree say,
+  waits for the first rather than building the same names in the middle of
+  its steps. `crun`, `cri` and `shell` build `localhost/nexcage:ci`,
+  `:builder` and `:cri-test` as well and take no turn, so one of them in
+  another checkout while such a job runs can still change what it tests:
+  run them one at a time.
 
 `dependency_check.yml` is scheduled, so `dev.sh` dispatches it, with
 `dry_run=true` and the token `gh auth token` holds: the job reads the
 repository's open issues and the crun releases and prints what it would file,
 edit or close. Without that input and with a token it does those things in
 CageForge/nexcage, so keep `--input dry_run=true` when running act on it by
-hand; without a gh login `dev.sh` skips the job and says so.
+hand; without a gh login `dev.sh` skips the job and says so. It skips it too,
+and says so, where `deps/crun` is not checked out — in a worktree, say — since
+with `--bind` the workflow's `submodules: recursive` checks nothing out:
+`git submodule update --init --depth 1 deps/crun` first. The image builds
+leave `deps/crun` out of their context (`.dockerignore`), since the Dockerfile
+clones crun itself, so a checked-out one does not get in their way.
 
-Not in the default set: `proxmox_e2e.yml` and `buildagent.yml`, which need
-self-hosted runners, and `security.yml`.
+Two things act runs differently from GitHub's runners:
+
+- `ci.yml`'s `build-test` fails at its last step, "Upload binary
+  (ReleaseSafe)": act 0.2.89's artifact server does not know the
+  `mime_type` field `actions/upload-artifact@v7` sends, and the step fails
+  with "Failed to CreateArtifact: ... Unexpected end of JSON input" after five
+  attempts. Every step before it is what CI runs; the job's FAIL comes from
+  that one step.
+- `crun_build.yml`'s runtime-spec suite: `tests/runtime-tools/known-failures`
+  is the list for rootful Docker, and under rootless podman five tests differ
+  from it, so the step fails here
+  ([RUNTIME_SPEC_VALIDATION.md](RUNTIME_SPEC_VALIDATION.md) names them).
+
+Not in the default set: the jobs of `proxmox_e2e.yml`, `k8s_e2e.yml` and
+`buildagent.yml` that need self-hosted runners, and the two GitHub-hosted ones
+that only build for them, `proxmox_e2e.yml`'s `binary` and `k8s_e2e.yml`'s
+`build`; and `security.yml`'s Semgrep, Trivy and gitleaks jobs, which
+download their rules, databases and images.
 
 ## The Proxmox E2E
 
@@ -221,6 +272,7 @@ python3 tests/perf/report.py zig-out/dev/perf/latest/samples.tsv \
 | `tests/perf/lxc_sim.sh`, `tests/perf/crun.sh` | The perf suites; each writes samples |
 | `tests/perf/report.py` | Summary, comparison, regression verdict |
 | `tests/crun/features_check.py` | The features document check, shared with `crun_build.yml` |
+| `tests/scripts/` | Tests of the shell scripts in `scripts/`, against fakes of the tools they call |
 | `zig-out/dev/` | Logs, the busybox bundle, act's artifacts, perf runs (`make clean` removes it) |
 
 After `make clean`, run `git worktree prune` if `perf --against` had created a

@@ -2,7 +2,9 @@
 # Installs a nexcage .deb into a clean Debian 13 container, as a Proxmox VE 9
 # node is, and runs it there (#380). That proves the Depends line brings in
 # everything the binary links, and that the crun backend is in the binary:
-# `features` is answered by libcrun itself.
+# `features` is answered by libcrun itself, so it fails on a binary without
+# the backend; its output goes to a file, since in a pipe the status would be
+# the last command's. The binary has to be a PIE.
 #
 # What the package carries is read from the package, not from the installed
 # tree: a minimized image skips /usr/share/doc and man pages on install.
@@ -25,12 +27,38 @@ for f in ./usr/bin/nexcage \
     echo "$payload" | grep -qx "$f" || { echo "check_deb.sh: $f missing from $NAME" >&2; exit 1; }
 done
 
+# The man page's header names the package's version: build_deb_local.sh
+# writes it there from VERSION, and the page once said 0.13.0 for several
+# releases after that one.
+version=$(dpkg-deb -f "$DEB" Version)
+th=$(dpkg-deb --fsys-tarfile "$DEB" | tar -xO ./usr/share/man/man1/nexcage.1.gz | gzip -dc | sed -n 1p)
+case "$th" in
+    *"\"nexcage ${version%-*}\""*) echo "man page in $NAME: $th" ;;
+    *) echo "check_deb.sh: the man page in $NAME does not name version ${version%-*}: ${th:-unreadable}" >&2; exit 1 ;;
+esac
+
+# Position-independent, so the kernel loads it at a random address: it runs as
+# root and parses bundles in libcrun's C code. build.zig asks for a PIE; Zig's
+# default for an executable is not one.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+dpkg-deb --fsys-tarfile "$DEB" | tar -x -C "$tmp" ./usr/bin/nexcage
+type=$(readelf -h "$tmp/usr/bin/nexcage" | sed -n 's/^ *Type: *//p')
+case "$type" in
+    DYN*) echo "nexcage in $NAME: $type" ;;
+    *) echo "check_deb.sh: nexcage in $NAME is not position-independent (${type:-unreadable})" >&2; exit 1 ;;
+esac
+
+# Docker Hub answers a runner's anonymous pulls with 429 at times.
+sh "$(dirname "$0")/retry_on_429.sh" docker pull debian:trixie
 docker run --rm -v "$DIR:/dist:ro" debian:trixie sh -euxc "
   apt-get update -qq
   apt-get install -y -qq /dist/$NAME
   nexcage version
   nexcage --help > /dev/null
-  nexcage --runtime crun features | head -3
+  nexcage --runtime crun features > /tmp/features.json
+  head -3 /tmp/features.json
+  grep -q '\"io.cageforge.nexcage.backend\": *\"crun\"' /tmp/features.json
   for c in config.json config.oci.example.json; do
     dpkg-deb --fsys-tarfile /dist/$NAME | tar -xO ./usr/share/doc/nexcage/examples/\$c > /tmp/\$c
     nexcage --config /tmp/\$c version

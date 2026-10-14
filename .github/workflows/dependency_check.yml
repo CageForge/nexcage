@@ -37,19 +37,36 @@ on:
         default: false
         type: boolean
 
+# Read-only by default; the two jobs that file issues may write issues and
+# nothing else. Without this block they ran with the repository's default
+# token, which can write code, releases and workflows' runs.
+permissions:
+  contents: read
+
 jobs:
   check-oci-specs:
     name: Check OCI Specs Updates
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Check OCI Runtime Spec version
         id: oci_runtime
         run: |
           set -uo pipefail
           LATEST_RUNTIME=$(curl -sS https://api.github.com/repos/opencontainers/runtime-spec/releases/latest | jq -r '.tag_name // empty')
+          # Another project's release name, which ends up in an issue's
+          # title: only a version-shaped one is used.
+          if ! [[ $LATEST_RUNTIME =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            [ -z "$LATEST_RUNTIME" ] || echo "::warning::runtime-spec's latest release is named '$LATEST_RUNTIME', which is not a version; ignoring it"
+            LATEST_RUNTIME=""
+          fi
 
           # The version nexcage itself declares: OCI_RUNTIME_SPEC_VERSION in
           # src/core/constants.zig, which its `state` output carries. This used
@@ -74,8 +91,16 @@ jobs:
       - name: Create Issue for OCI Updates
         if: steps.oci_runtime.outputs.update_available == 'true'
         uses: actions/github-script@v9
+        # The versions reach the script as environment variables. Spliced
+        # into its source, as they were, another project's release name ran
+        # as JavaScript in a job that can write issues.
+        env:
+          CURRENT: ${{ steps.oci_runtime.outputs.current_runtime_spec }}
+          LATEST: ${{ steps.oci_runtime.outputs.latest_runtime_spec }}
+          DRY_RUN: ${{ inputs.dry_run == true }}
         with:
           script: |
+            const { CURRENT, LATEST, DRY_RUN } = process.env;
             const open = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -88,15 +113,15 @@ jobs:
               return;
             }
 
-            const title = `[Dependency] nexcage reports ociVersion ${{ steps.oci_runtime.outputs.current_runtime_spec }}, runtime-spec is ${{ steps.oci_runtime.outputs.latest_runtime_spec }}`;
+            const title = `[Dependency] nexcage reports ociVersion ${CURRENT}, runtime-spec is ${LATEST}`;
             let body = '## OCI Runtime Spec\n\n';
-            body += `nexcage reports \`"ociVersion": "${{ steps.oci_runtime.outputs.current_runtime_spec }}"\` in its \`state\` output; `;
-            body += `the OCI runtime-spec is at ${{ steps.oci_runtime.outputs.latest_runtime_spec }}.\n\n`;
+            body += `nexcage reports \`"ociVersion": "${CURRENT}"\` in its \`state\` output; `;
+            body += `the OCI runtime-spec is at ${LATEST}.\n\n`;
             body += `That is what the repository declares, not a guess: the number comes from the ociVersion nexcage emits. `;
             body += `Raising it is a claim about conformance, so it is a decision rather than a bump — this issue only reports the difference.\n\n`;
             body += `Filed by the Dependency Updates Check workflow.`;
 
-            if (${{ inputs.dry_run == true }}) {
+            if (DRY_RUN === 'true') {
               core.info(`dry run: would file "${title}"`);
               return;
             }
@@ -111,10 +136,14 @@ jobs:
   check-crun:
     name: Check crun Updates
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          persist-credentials: false
           submodules: recursive
           fetch-depth: 0
 
@@ -189,6 +218,11 @@ jobs:
             echo "base_version=$BASE"
             echo "base_source=$SOURCE"
           } >> "$GITHUB_OUTPUT"
+
+      # The release binary is built from the commit the Dockerfile clones, so
+      # the pin reported above is what ships only if the two agree.
+      - name: The Dockerfile builds the crun deps/crun pins
+        run: sh scripts/ci/check_crun_pin.sh
 
       - name: Check latest crun release
         id: latest_crun
@@ -279,6 +313,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [check-oci-specs, check-crun]
     if: always()
+    permissions: {}
     steps:
       - name: Check Summary
         run: |

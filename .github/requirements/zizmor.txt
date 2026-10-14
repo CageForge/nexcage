@@ -1,0 +1,5 @@
+# zizmor, the GitHub Actions linter security.yml runs, pinned by version and
+# hash (it has no dependencies):
+#   pip install --require-hashes --only-binary :all: -r .github/requirements/zizmor.txt
+zizmor==1.26.1 \
+    --hash=sha256:6a958d8a0941d7e1d0de8436670b5cb7fc64c8028b4d16e3f519ccc77f953cef

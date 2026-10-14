@@ -35,9 +35,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Every image here comes from Docker Hub in the end, which answers a
+      # runner's anonymous requests with 429 Too Many Requests at times: this
+      # job failed on main resolving ubuntu:26.04. Those commands run through
+      # scripts/ci/retry_on_429.sh, which tries again on a 429 and on
+      # nothing else.
+      - name: Images it starts from
+        run: |
+          set -eux
+          sh scripts/ci/retry_on_429.sh docker pull busybox:1.36
+          sh scripts/ci/retry_on_429.sh docker pull debian:trixie
 
       - name: Build image
-        run: docker build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t nexcage:ci .
+        run: sh scripts/ci/retry_on_429.sh docker build --build-arg BUILD_FLAGS=-Denable-backend-crun=true -t nexcage:ci .
 
       - name: Run the binary
         run: docker run --rm nexcage:ci version
@@ -67,7 +80,7 @@ jobs:
       - name: The features ABI still matches the vendored header
         run: |
           set -eux
-          docker build --target builder -t nexcage:builder .
+          sh scripts/ci/retry_on_429.sh docker build --target builder -t nexcage:builder .
           docker run --rm -v "$PWD/scripts:/s:ro" nexcage:builder \
             sh /s/check_features_abi.sh
 
@@ -165,7 +178,7 @@ jobs:
       - name: A pod runs on nexcage through containerd's CRI
         run: |
           set -eux
-          docker build -f tests/cri/Dockerfile -t nexcage:cri-test tests/cri
+          sh scripts/ci/retry_on_429.sh docker build -f tests/cri/Dockerfile -t nexcage:cri-test tests/cri
           docker run --rm --privileged --cgroupns=private \
             -v "$PWD/tests/cri:/t:ro" nexcage:cri-test /t/pod_on_nexcage.sh
 
@@ -178,7 +191,7 @@ jobs:
       - name: The runtime-spec validation suite
         run: |
           set -eux
-          docker build -f tests/runtime-tools/Dockerfile -t nexcage:runtime-tools tests/runtime-tools
+          sh scripts/ci/retry_on_429.sh docker build -f tests/runtime-tools/Dockerfile -t nexcage:runtime-tools tests/runtime-tools
           docker run --rm --privileged --cgroupns=private \
             -v "$PWD/tests/runtime-tools:/t:ro" nexcage:runtime-tools /t/run.sh
 

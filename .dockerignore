@@ -4,6 +4,11 @@
 .gitmodules
 .github
 
+# The crun submodule. The Dockerfile clones crun itself at its pin, and a
+# checkout's own deps/crun, .git and all, made that clone fail: git clones only
+# into an empty directory. deps/oci-spec-zig is part of the build and stays.
+deps/crun
+
 # Build artifacts
 zig-out
 .zig-cache

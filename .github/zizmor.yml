@@ -1,0 +1,11 @@
+# zizmor's settings for this repository (security.yml runs it).
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # GitHub's own actions may stay on a version tag; every other action
+        # is pinned to a full commit, since a tag can be moved (trivy-action's
+        # were, to credential-stealing code). Dependabot keeps the pins
+        # current.
+        "actions/*": ref-pin
+        "*": hash-pin

@@ -23,9 +23,17 @@ reason. The step fails on a failure the list does not name, and on a named
 test that passes. A runtime whose `kill` did nothing turned it red on `kill`
 and `killsig`.
 
-The list is for that host. On a host without AppArmor,
-`linux_process_apparmor_profile` passes; where `capset` is not permitted,
-`process_capabilities` fails.
+The list is for that host, and for rootful Docker. On a host without
+AppArmor, `linux_process_apparmor_profile` passes; where `capset` is not
+permitted, `process_capabilities` fails. Under rootless podman, which is how
+`scripts/dev.sh act` runs `crun_build.yml` on a workstation, the container's
+root is a user namespace's, and five tests differ from the list, so the step
+fails there: `linux_devices`, `linux_masked_paths`, `linux_readonly_paths` and
+`mounts` fail with crun as with nexcage, and `linux_ns_itype` fails with
+nexcage alone, at libcrun's `mknodat /dev/null: Operation not permitted`,
+where the image's crun passes. That last difference is open: libcrun as
+nexcage drives it does not get round a device node it may not make in a user
+namespace, as the crun binary does.
 
 ## Results
 
