@@ -12,17 +12,16 @@ services:
     container_name: nexcage
     privileged: true  # Required for container management
     volumes:
-      # Configuration
-      - ./config.json:/etc/nexcage/config.json:ro
+      # A configuration file goes at /etc/nexcage/config.json, root's and
+      # writable by nobody else, or nexcage refuses it; the default without
+      # one is a Proxmox host's. For example:
+      # - /etc/nexcage/config.json:/etc/nexcage/config.json:ro
       # State and runtime data
       - nexcage-data:/var/lib/nexcage
       # Container storage
       - /var/lib/containers:/var/lib/containers
       # Docker socket (if needed for integration)
       # - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - NEXCAGE_CONFIG=/etc/nexcage/config.json
     networks:
       - nexcage-network
     cap_add:
@@ -59,10 +58,7 @@ services:
     container_name: nexcage-libcrun
     privileged: true
     volumes:
-      - ./config.json:/etc/nexcage/config.json:ro
       - nexcage-data:/var/lib/nexcage
-    environment:
-      - LOG_LEVEL=${LOG_LEVEL:-info}
     networks:
       - nexcage-network
     cap_add:

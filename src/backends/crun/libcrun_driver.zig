@@ -37,7 +37,6 @@ pub const CrunDriver = struct {
     exec_tty: bool = false,
     exec_cwd: ?[]const u8 = null,
     exec_user: ?[]const u8 = null,
-    exec_env: ?[]const []const u8 = null,
     _console_socket_z: ?[:0]u8 = null,
     _pid_file_z: ?[:0]u8 = null,
     // Stored strings and context to keep them valid during usage
@@ -304,12 +303,6 @@ pub const CrunDriver = struct {
         if (self.logger) |log| {
             try log.info("Successfully created OCI container with libcrun: {s}", .{config.name});
         }
-    }
-
-    pub fn run(self: *Self, config: core.types.SandboxConfig) !void {
-        try self.create(config);
-        errdefer self.delete(config.name) catch {};
-        try self.start(config.name);
     }
 
     /// Start an OCI container using libcrun
@@ -1035,19 +1028,14 @@ pub const CrunDriver = struct {
             if (i > 0) try w.writeAll(",");
             try core.json.writeString(w, a);
         }
+        // The environment is PATH alone: nexcage has no --env, and a caller
+        // gives the command its variables on its command line ('env FOO=1
+        // <command>'). Without PATH the exec'd process has none, and `nexcage
+        // exec c1 ls` fails with "executable file not found" on a container
+        // that has ls. runc leaves it to the caller; a caller typing a
+        // command has no way to know that is why.
         try w.writeAll("],\"env\":[");
-        if (self.exec_env) |env| {
-            for (env, 0..) |e, i| {
-                if (i > 0) try w.writeAll(",");
-                try core.json.writeString(w, e);
-            }
-        } else {
-            // Without an env the exec'd process has no PATH, and `nexcage exec
-            // c1 ls` fails with "executable file not found" on a container that
-            // has ls. runc leaves it to the caller; a caller typing a command
-            // has no way to know that is why.
-            try core.json.writeString(w, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
-        }
+        try core.json.writeString(w, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
         try w.writeAll("],\"cwd\":");
         try core.json.writeString(w, self.exec_cwd orelse "/");
         try w.writeAll("}\n");

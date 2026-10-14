@@ -114,21 +114,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Utils module
-    const utils_mod = b.addModule("utils", .{
-        .root_source_file = b.path("src/utils/mod.zig"),
-        .imports = &.{
-            .{ .name = "core", .module = core_mod },
-            .{ .name = "oci_spec", .module = oci_spec_mod },
-        },
-    });
-
     // Backends module
     const backends_mod = b.addModule("backends", .{
         .root_source_file = b.path("src/backends/mod.zig"),
         .imports = &.{
             .{ .name = "core", .module = core_mod },
-            .{ .name = "utils", .module = utils_mod },
             .{ .name = "oci_spec", .module = oci_spec_mod },
         },
     });
@@ -141,7 +131,6 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "core", .module = core_mod },
             .{ .name = "backends", .module = backends_mod },
-            .{ .name = "utils", .module = utils_mod },
         },
     });
 
@@ -290,7 +279,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("core", core_mod);
     exe.root_module.addImport("cli", cli_mod);
     exe.root_module.addImport("backends", backends_mod);
-    exe.root_module.addImport("utils", utils_mod);
 
     // Install the executable
     b.installArtifact(exe);
@@ -344,7 +332,6 @@ pub fn build(b: *std.Build) void {
     test_exe.root_module.addImport("core", core_mod);
     test_exe.root_module.addImport("cli", cli_mod);
     test_exe.root_module.addImport("backends", backends_mod);
-    test_exe.root_module.addImport("utils", utils_mod);
 
     const run_test = b.addRunArtifact(test_exe);
 
@@ -389,7 +376,6 @@ pub fn build(b: *std.Build) void {
             file_mod.addImport("core", core_mod);
             file_mod.addImport("cli", cli_mod);
             file_mod.addImport("backends", backends_mod);
-            file_mod.addImport("utils", utils_mod);
             // The Proxmox backend's bundle translation imports the parser
             file_mod.addImport("oci_spec", oci_spec_mod);
 
@@ -397,6 +383,19 @@ pub fn build(b: *std.Build) void {
             file_test.linkSystemLibrary("c");
             file_test.addIncludePath(.{ .cwd_relative = "/usr/include" });
             file_test.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+            // With the crun backend on, a test that reaches its driver --
+            // tests/declarations_test.zig reaches all of it -- calls into
+            // libcrun, and links it as the binary does.
+            if (libcrun_lib) |lib| {
+                file_test.root_module.linkLibrary(lib);
+                file_test.root_module.linkSystemLibrary("systemd", .{ .use_pkg_config = .no, .needed = true });
+                file_test.linkSystemLibrary("cap");
+                file_test.linkSystemLibrary("seccomp");
+                file_test.linkSystemLibrary("json-c");
+                file_test.linkSystemLibrary("pthread");
+                file_test.linkSystemLibrary("dl");
+                file_test.linkSystemLibrary("rt");
+            }
 
             test_step.dependOn(&b.addRunArtifact(file_test).step);
         }

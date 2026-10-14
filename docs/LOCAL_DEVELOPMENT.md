@@ -223,10 +223,10 @@ Two suites:
 simulator's fake tools. For each command:
 
 - `calls`: how many times it ran `pct`, `pvesh`, `pvesm`, `pveam`,
-  `pveversion` or `zfs` — every call the fake tools log; `create` and `run`
-  ask `zfs version`. On a real node each is a Perl process costing 0.3–1 s, so this
-  is most of what a user of a real node waits for, and it does not vary
-  between runs. Any increase is a regression.
+  `pveversion` or `zfs` — every call the fake tools log. On a real node each
+  is a Perl process costing 0.3–1 s, so this is most of what a user of a real
+  node waits for, and it does not vary between runs. Any increase is a
+  regression.
 - `wall_us`: nexcage's own wall time, measured inside the namespace. The fakes
   are shell scripts, so it includes a few milliseconds per call; it is for
   comparing two builds on one machine, not a prediction for a Proxmox host.

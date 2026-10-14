@@ -95,8 +95,3 @@ pub const HelpCommand = struct {
         // Help command accepts any arguments
     }
 };
-
-/// Create a help command instance
-pub fn createHelpCommand() HelpCommand {
-    return HelpCommand{};
-}

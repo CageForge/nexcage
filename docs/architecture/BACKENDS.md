@@ -30,10 +30,7 @@ flowchart LR
   router["cli/router.zig"] --> driver["proxmox-lxc/driver.zig<br/>ProxmoxLxcDriver"]
   driver --> pve["pve.zig<br/>pct list parsing, VMIDs, PVE version"]
   driver --> oci["oci.zig<br/>OCI bundles, mounts, namespaces"]
-  driver --> tm["template_manager.zig<br/>template cache"]
-  driver --> zfs["zfs.zig<br/>optional datasets"]
   pve -->|runs| tools[("pct, pvesh, pveversion, pveam")]
-  zfs -->|runs| ztools[("zfs, zpool")]
   driver -->|writes| state[("/run/nexcage/NAME/state.json<br/>under --root DIR: DIR/.proxmox-lxc/NAME")]
 ```
 

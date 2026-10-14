@@ -109,6 +109,9 @@ check "create checks the name across the cluster first, then asks for a VMID" \
 check "pct create argv: vmid, template, hostname, bridge, rootfs from config" \
   called_re "^pct create 100 $TPL --hostname web-1 --memory [0-9]+ --cores [0-9]+ --net0 name=eth0,bridge=vmbr50,ip=dhcp --unprivileged 1 --rootfs local-lvm:2$"
 check "no --ostype unless configured" not_called_re "--ostype"
+# A rootfs on ZFS is Proxmox's to make, through proxmox.storage. nexcage has no
+# pool of its own, and asked `zfs version` twice per create all the same.
+check "create runs no zfs command" not_called_re "^zfs "
 check "state.json written, valid, status created" \
   all 'json_ok "$S/run/nexcage/web-1/state.json"' '[ "$(json_get "$S/run/nexcage/web-1/state.json" status)" = created ]'
 check "runtime-metadata.json valid, vmid 100" \
@@ -118,6 +121,7 @@ nx create --name web-1 "$TPL"
 check "duplicate name -> exit 1, no second pct create" all 'rc 1' 'err_has "already exists"' 'not_called_re "^pct create"'
 nx create --name bad_name "$TPL";  check "invalid hostname (underscore) -> exit 2" all 'rc 2' 'not_called_re "^pct create"'
 nx create --name -lead "$TPL";     check "invalid hostname (leading dash) -> refused" all '[ "$RC" != 0 ]' 'not_called_re "^pct create"'
+nx create --name trail- "$TPL";    check "invalid hostname (trailing dash) -> exit 2" all 'rc 2' 'err_has "ending in a hyphen"' 'not_called_re "^pct create"'
 nx create "$TPL";                  check "missing --name -> exit 2" all 'rc 2' 'not_called_re "^pct"'
 nx create --name web-x;            check "missing image -> exit 2" all 'rc 2' 'not_called_re "^pct"'
 
@@ -511,6 +515,14 @@ check "an option exec does not have, written with =, is a usage error" \
 nx exec web-1 --tty=false echo hi
 check "and so is a value for one that takes none, not a command" \
   all 'rc 2' "err_has \"'--tty=false': exec has no option '--tty' that takes a value\"" 'not_called_re "^pct exec"'
+# nexcage has no --env: a command takes its variables on its own line ('env
+# FOO=1 <command>'). Were -e parsed, pct exec would run the command without
+# them, so it is refused as an option exec does not have.
+for flag in -e --env; do
+  nx exec $flag FOO=bar web-1 true
+  check "exec $flag is a usage error: nexcage has no --env" \
+    all 'rc 2' "err_has \"unknown option '$flag'\"" 'not_called_re "^pct exec"'
+done
 
 # `exec --process <file>` hands over an OCI process spec: an identity to become,
 # an environment, a terminal. `pct exec` takes a command and returns when it

@@ -4,6 +4,5 @@
 pub const types = @import("types.zig");
 pub const driver = @import("driver.zig");
 pub const common = @import("common.zig");
-pub const zfs = @import("zfs.zig");
 pub const pve = @import("pve.zig");
 pub const oci = @import("oci.zig");

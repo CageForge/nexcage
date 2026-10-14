@@ -2,7 +2,6 @@ const std = @import("std");
 const core = @import("core");
 const cli = @import("cli");
 const backends = @import("backends");
-const utils = @import("utils");
 
 /// Main entry point for the modular architecture
 /// Application context
@@ -501,7 +500,6 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
         .tty = false,
         .user = null,
         .workdir = null,
-        .env = null,
         .args = null,
     };
     errdefer options.deinit();

@@ -56,7 +56,6 @@ pub const ExecCommand = struct {
             .tty = options.tty,
             .cwd = options.workdir,
             .user = options.user,
-            .env = options.env,
             .console_socket = options.console_socket,
             .pid_file = options.pid_file,
         } };

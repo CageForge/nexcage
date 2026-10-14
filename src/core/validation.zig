@@ -1,25 +1,9 @@
 const std = @import("std");
 const types = @import("types.zig");
 
-/// Security-focused validation utilities for paths, IDs, and user inputs
+/// The checks of a name a container is given: an id, and, for the Proxmox
+/// LXC backend, which makes the name the container's hostname, a hostname.
 pub const SecurityValidation = struct {
-    /// Canonicalize and validate that path is within allowed boundaries
-    /// Returns canonicalized path or error if outside boundaries
-    pub fn validatePath(path: []const u8, allowed_prefixes: []const []const u8, allocator: std.mem.Allocator) ![]u8 {
-        // Canonicalize the path
-        const resolved = try std.fs.path.resolve(allocator, &[_][]const u8{path});
-        defer allocator.free(resolved);
-
-        // Check if path is within any allowed prefix
-        for (allowed_prefixes) |prefix| {
-            if (std.mem.startsWith(u8, resolved, prefix)) {
-                return try allocator.dupe(u8, resolved);
-            }
-        }
-
-        return types.Error.ValidationError;
-    }
-
     /// Validate container ID format (alphanumeric, hyphens, underscores, 1-64 chars)
     pub fn validateContainerId(id: []const u8) !void {
         if (id.len == 0 or id.len > 64) return types.Error.InvalidInput;
@@ -37,11 +21,6 @@ pub const SecurityValidation = struct {
         }
     }
 
-    /// Validate VMID (1-999999999)
-    pub fn validateVmid(vmid: u32) !void {
-        if (vmid == 0 or vmid > 999999999) return types.Error.InvalidInput;
-    }
-
     /// Validate hostname (RFC-1123 compliant)
     pub fn validateHostname(name: []const u8) !void {
         if (name.len == 0 or name.len > 253) return types.Error.InvalidInput;
@@ -53,6 +32,8 @@ pub const SecurityValidation = struct {
             const c = name[i];
             if (c == '.') {
                 if (label_len == 0 or label_len > 63) return types.Error.InvalidInput;
+                // A label ends in a letter or digit: "a-.b" is not a name
+                if (name[i - 1] == '-') return types.Error.InvalidInput;
                 label_len = 0;
                 continue;
             }
@@ -72,115 +53,12 @@ pub const SecurityValidation = struct {
         }
 
         if (label_len == 0 or label_len > 63) return types.Error.InvalidInput;
-    }
-
-    /// Validate network specification string (safe charset, reasonable length)
-    pub fn validateNetSpec(spec: []const u8) !void {
-        if (spec.len == 0 or spec.len > 512) return types.Error.InvalidInput;
-
-        for (spec) |c| {
-            const allowed = (c >= 'a' and c <= 'z') or
-                (c >= 'A' and c <= 'Z') or
-                (c >= '0' and c <= '9') or
-                (c == ',') or (c == '=') or (c == ':') or
-                (c == '.') or (c == '-') or (c == '_') or
-                (c == '/') or (c == '%');
-
-            if (!allowed) return types.Error.InvalidInput;
-        }
-    }
-
-    /// Validate file size limits
-    pub fn validateFileSize(size: u64, max_size: u64) !void {
-        if (size > max_size) return types.Error.FileTooLarge;
-    }
-
-    /// Validate memory limits (reasonable bounds)
-    pub fn validateMemoryLimit(mb: u64) !void {
-        if (mb == 0 or mb > 1024 * 1024) return types.Error.InvalidInput; // 0 < MB < 1TB
-    }
-
-    /// Validate CPU core limits
-    pub fn validateCpuCores(cores: u32) !void {
-        if (cores == 0 or cores > 128) return types.Error.InvalidInput;
-    }
-
-    /// Validate generic size in bytes against min/max
-    pub fn validateSizeRange(bytes: u64, min_bytes: u64, max_bytes: u64) !void {
-        if (bytes < min_bytes or bytes > max_bytes) return types.Error.InvalidInput;
-    }
-
-    /// Validate environment variable name (POSIX-ish)
-    pub fn validateEnvName(name: []const u8) !void {
-        if (name.len == 0 or name.len > 128) return types.Error.InvalidInput;
-        if (!((name[0] >= 'A' and name[0] <= 'Z') or (name[0] == '_'))) return types.Error.InvalidInput;
-        for (name) |c| {
-            const ok = (c >= 'A' and c <= 'Z') or (c >= 'a' and c <= 'z') or (c >= '0' and c <= '9') or (c == '_');
-            if (!ok) return types.Error.InvalidInput;
-        }
-    }
-
-    /// Validate environment variable value (no control chars)
-    pub fn validateEnvValue(value: []const u8) !void {
-        if (value.len > 4096) return types.Error.InvalidInput;
-        for (value) |c| {
-            if (c < 32 and c != '\t') return types.Error.InvalidInput;
-        }
-    }
-
-    /// Validate storage name (alnum, dash, underscore, 1..64)
-    pub fn validateStorageName(name: []const u8) !void {
-        if (name.len == 0 or name.len > 64) return types.Error.InvalidInput;
-        for (name) |c| {
-            const ok = (c >= 'A' and c <= 'Z') or (c >= 'a' and c <= 'z') or (c >= '0' and c <= '9') or (c == '-') or (c == '_');
-            if (!ok) return types.Error.InvalidInput;
-        }
-    }
-
-    /// Validate single path component (no '/', no traversal tokens)
-    pub fn validatePathComponent(comp: []const u8) !void {
-        if (comp.len == 0 or comp.len > 255) return types.Error.InvalidInput;
-        if (std.mem.indexOf(u8, comp, "/") != null) return types.Error.InvalidInput;
-        if (std.mem.eql(u8, comp, ".") or std.mem.eql(u8, comp, "..")) return types.Error.InvalidInput;
-        for (comp) |c| {
-            if (c == 0) return types.Error.InvalidInput;
-        }
-    }
-
-    /// Validate simple rate limit (ops per second within bound)
-    pub fn validateRateLimit(ops_per_sec: u32, max_ops: u32) !void {
-        if (ops_per_sec == 0 or ops_per_sec > max_ops) return types.Error.InvalidInput;
+        if (name[name.len - 1] == '-') return types.Error.InvalidInput;
     }
 };
 
 /// Path security utilities
 pub const PathSecurity = struct {
-    /// Allowed prefixes for different path types
-    /// Bundles used to be confined to these two directories. A container
-    /// engine chooses its own — containerd keeps one per task under
-    /// /run/containerd/, podman under its storage root — so the list refused
-    /// every bundle an engine would hand over, and runc and crun accept any.
-    /// Kept only for the message that tells a person where to put one.
-    pub const BUNDLE_PREFIXES = [_][]const u8{
-        "/var/lib/nexcage/bundles/",
-        "/tmp/nexcage-bundles/",
-    };
-
-    pub const CONFIG_PREFIXES = [_][]const u8{
-        "/etc/nexcage/",
-        "/var/lib/nexcage/config/",
-    };
-
-    pub const LOG_PREFIXES = [_][]const u8{
-        "/var/log/nexcage/",
-        "/tmp/nexcage-logs/",
-    };
-
-    pub const TEMPLATE_PREFIXES = [_][]const u8{
-        "/var/lib/vz/template/cache/",
-        "/tmp/nexcage-template-cache/",
-    };
-
     /// Secure path joining that prevents directory traversal
     pub fn secureJoin(allocator: std.mem.Allocator, base: []const u8, relative: []const u8) ![]u8 {
         // Check for directory traversal attempts
@@ -209,19 +87,21 @@ pub const PathSecurity = struct {
         if (resolved.len == 0 or resolved[0] != '/') return types.Error.ValidationError;
         return resolved;
     }
-
-    /// Validate and canonicalize config path
-    pub fn validateConfigPath(path: []const u8, allocator: std.mem.Allocator) ![]u8 {
-        return SecurityValidation.validatePath(path, &CONFIG_PREFIXES, allocator);
-    }
-
-    /// Validate and canonicalize log path
-    pub fn validateLogPath(path: []const u8, allocator: std.mem.Allocator) ![]u8 {
-        return SecurityValidation.validatePath(path, &LOG_PREFIXES, allocator);
-    }
-
-    /// Validate and canonicalize template path
-    pub fn validateTemplatePath(path: []const u8, allocator: std.mem.Allocator) ![]u8 {
-        return SecurityValidation.validatePath(path, &TEMPLATE_PREFIXES, allocator);
-    }
 };
+
+test "a hostname is RFC 1123's: no label empty, longer than 63, or starting or ending in '-'" {
+    // The Proxmox LXC backend makes a container's name its hostname, and
+    // Proxmox refuses one that is not a DNS name; checked here, it is refused
+    // before an image is pulled or a VMID taken. A test under tests/ used to
+    // assert this on a copy of the rules written inline, which refused
+    // "test-" while this function accepted it.
+    const V = SecurityValidation;
+    for ([_][]const u8{ "web-1", "a", "Web-1", "test.container", "a1-b2.c3", "x" ** 63 }) |name| {
+        try V.validateHostname(name);
+    }
+    for ([_][]const u8{ "", "test-", "-test", "a-.b", "a.-b", "a..b", ".a", "a.", "test@container", "a_b", "x" ** 64 }) |name| {
+        V.validateHostname(name) catch continue;
+        std.debug.print("accepted '{s}'\n", .{name});
+        return error.TestUnexpectedResult;
+    }
+}

@@ -274,7 +274,7 @@ pub const LogLevel = @import("logging.zig").LogLevel;
 
 test "an explicit info overrides a file's debug" {
     const allocator = std.testing.allocator;
-    var config = try @import("config.zig").Config.init(allocator, .lxc);
+    var config = try @import("config.zig").Config.init(allocator);
     defer config.deinit();
     config.log_level = .debug;
 

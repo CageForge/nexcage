@@ -39,17 +39,6 @@ pub fn parsePctListLine(line: []const u8) ?PctListEntry {
     };
 }
 
-/// Returns the VMID of the container named `name` in `pct list` output,
-/// borrowing from `output`.
-pub fn findVmidByName(output: []const u8, name: []const u8) ?[]const u8 {
-    var lines = std.mem.splitScalar(u8, output, '\n');
-    while (lines.next()) |line| {
-        const entry = parsePctListLine(line) orelse continue;
-        if (std.mem.eql(u8, entry.name, name)) return entry.vmid;
-    }
-    return null;
-}
-
 /// The fields nexcage reads from `pct status <vmid> --verbose`, which prints
 /// one "key: value" line per field. `pid` is the host PID of the container's
 /// init, which pct takes from `lxc-info -p`; it is present only while the
@@ -514,24 +503,6 @@ pub const PveClient = struct {
             return core.Error.OperationFailed;
         };
         return try self.allocator.dupe(u8, vmid);
-    }
-
-    /// Check if VMID already exists in Proxmox
-    pub fn vmidExists(self: *const Self, vmid: []const u8) !bool {
-        const args = [_][]const u8{ "pct", "list" };
-        const res = common.runCommand(self.allocator, self.logger, &args) catch return false;
-        defer {
-            self.allocator.free(res.stdout);
-            self.allocator.free(res.stderr);
-        }
-        if (res.exit_code != 0) return false;
-
-        var lines = std.mem.splitScalar(u8, res.stdout, '\n');
-        while (lines.next()) |line| {
-            const entry = parsePctListLine(line) orelse continue;
-            if (std.mem.eql(u8, entry.vmid, vmid)) return true;
-        }
-        return false;
     }
 
     /// A /cluster/resources entry is a container rather than a virtual machine.
@@ -1171,22 +1142,6 @@ pub const PveClient = struct {
             }
             return self.mapPctError(res.stderr);
         }
-    }
-
-    /// Get VMID by container name
-    pub fn getVmidByName(self: *const Self, name: []const u8) ![]u8 {
-        const args = [_][]const u8{ "pct", "list" };
-        const res = try common.runCommand(self.allocator, self.logger, &args);
-        defer {
-            self.allocator.free(res.stdout);
-            self.allocator.free(res.stderr);
-        }
-        // A failing `pct list` is not "no such container": create would read
-        // that as the name being free.
-        if (res.exit_code != 0) return self.mapPctError(res.stderr);
-
-        const vmid = findVmidByName(res.stdout, name) orelse return core.Error.NotFound;
-        return try self.allocator.dupe(u8, vmid);
     }
 
     /// Map pct command errors to core errors
@@ -2382,21 +2337,6 @@ test "parsePctListLine skips the header and blank lines" {
     try std.testing.expect(parsePctListLine(try pctRow(&buf, "VMID", "Status", "Lock", "Name")) == null);
     try std.testing.expect(parsePctListLine("") == null);
     try std.testing.expect(parsePctListLine("   \r") == null);
-}
-
-test "findVmidByName matches whole names only" {
-    const output =
-        \\VMID       Status     Lock         Name
-        \\101        running                 web-1
-        \\102        stopped    backup       web-10
-        \\1000       stopped                 db
-        \\
-    ;
-    try std.testing.expectEqualStrings("101", findVmidByName(output, "web-1").?);
-    try std.testing.expectEqualStrings("102", findVmidByName(output, "web-10").?);
-    try std.testing.expectEqualStrings("1000", findVmidByName(output, "db").?);
-    try std.testing.expect(findVmidByName(output, "web") == null);
-    try std.testing.expect(findVmidByName(output, "backup") == null);
 }
 
 fn testEntry(vmid: []const u8, name: []const u8, node: []const u8) core.ContainerInfo {

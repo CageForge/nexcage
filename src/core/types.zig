@@ -43,14 +43,6 @@ pub const SandboxConfig = struct {
     /// `create --memory`, `--cores`, `--ip` and the rest (#308): what pct
     /// create is usually given. Borrowed the same way.
     pve: ProxmoxCreateOptions = .{},
-
-    pub fn deinit(self: *SandboxConfig) void {
-        self.allocator.free(self.name);
-        if (self.resources) |*r| r.deinit();
-        if (self.security) |*s| s.deinit();
-        if (self.network) |*n| n.deinit(self.allocator);
-        if (self.storage) |*s| s.deinit(self.allocator);
-    }
 };
 
 /// What `create` says to pct beyond the image and the name, on the Proxmox LXC
@@ -92,13 +84,6 @@ pub const ProxmoxCreateOptions = struct {
 
 /// Runtime type enumeration
 pub const RuntimeType = enum {
-    lxc,
-    crun,
-    proxmox_lxc,
-};
-
-/// Container type enumeration
-pub const ContainerType = enum {
     lxc,
     crun,
     proxmox_lxc,
@@ -178,22 +163,6 @@ pub const StorageConfig = struct {
     rootfs: ?[]const u8 = null,
     volumes: ?[]const Volume = null,
     tmpfs: ?[]const TmpfsMount = null,
-
-    pub fn deinit(self: *StorageConfig, allocator: std.mem.Allocator) void {
-        if (self.rootfs) |r| allocator.free(r);
-        if (self.volumes) |v| {
-            for (v) |*vol| {
-                vol.deinit(allocator);
-            }
-            allocator.free(v);
-        }
-        if (self.tmpfs) |t| {
-            for (t) |*tmp| {
-                tmp.deinit(allocator);
-            }
-            allocator.free(t);
-        }
-    }
 };
 
 /// Volume mount
@@ -202,12 +171,6 @@ pub const Volume = struct {
     destination: []const u8,
     read_only: bool = false,
     options: ?[]const u8 = null,
-
-    pub fn deinit(self: *Volume, allocator: std.mem.Allocator) void {
-        // source, destination, options are not allocated, just referenced
-        _ = self;
-        _ = allocator;
-    }
 };
 
 /// Tmpfs mount
@@ -215,12 +178,6 @@ pub const TmpfsMount = struct {
     destination: []const u8,
     size: ?u64 = null,
     mode: ?u32 = null,
-
-    pub fn deinit(self: *TmpfsMount, allocator: std.mem.Allocator) void {
-        // destination is not allocated, just referenced
-        _ = self;
-        _ = allocator;
-    }
 };
 
 /// Command enumeration
@@ -296,7 +253,6 @@ pub const RuntimeOptions = struct {
     tty: bool = false,
     user: ?[]const u8 = null,
     workdir: ?[]const u8 = null,
-    env: ?[]const []const u8 = null,
     args: ?[]const []const u8 = null,
     /// `exec --process <file>`: a file holding an OCI process spec, which
     /// is the shape a container engine sends an exec in.
@@ -351,12 +307,6 @@ pub const RuntimeOptions = struct {
         if (co.mount_points.len > 0) self.allocator.free(co.mount_points);
         if (self.console_socket) |cs| self.allocator.free(cs);
         if (self.pid_file) |pf| self.allocator.free(pf);
-        if (self.env) |e| {
-            for (e) |env_var| {
-                // env vars are not allocated, just referenced
-                _ = env_var;
-            }
-        }
         if (self.args) |a| {
             for (a) |arg| {
                 // args are not allocated, just referenced
@@ -388,8 +338,6 @@ pub const RoutingRule = struct {
 
 /// Container configuration
 pub const ContainerConfig = struct {
-    default_container_type: ContainerType,
-
     // Which backend a container goes to, by name: first matching rule wins.
     // A pattern is a glob unless it starts with ^ or ends with $, in which
     // case it is a regular expression. This is the only routing there is;
@@ -435,7 +383,6 @@ pub const ProxmoxSettings = struct {
 pub const ProxmoxLxcBackendConfig = struct {
     allocator: std.mem.Allocator,
     // Optional overrides from config file
-    zfs_pool: ?[]const u8 = null,
     default_memory_mb: ?u32 = null,
     default_cores: ?u32 = null,
     default_bridge: ?[]const u8 = null,
@@ -445,7 +392,6 @@ pub const ProxmoxLxcBackendConfig = struct {
     rootfs_size_gb: ?u32 = null,
 
     pub fn deinit(self: *ProxmoxLxcBackendConfig) void {
-        if (self.zfs_pool) |p| self.allocator.free(p);
         if (self.default_bridge) |b| self.allocator.free(b);
         if (self.default_ostype) |o| self.allocator.free(o);
         if (self.default_storage) |s| self.allocator.free(s);
