@@ -17,7 +17,7 @@
 - [The 2026-10 hardening audit](docs/audits/2026-10-hardening-audit.md) lists the defects found in 0.17.0, how each was fixed and tested, and the risks still open, each with an owner.
 
 ## Verifying a release
-- `checksums.txt` shows a download is the file published next to it. Releases after 0.17.0 also have a GitHub build attestation for the binary and the `.deb`, made by `release.yml` when it built them: `gh attestation verify <file> -R CageForge/nexcage` checks that the file came from that workflow in this repository, and from which commit ([docs/INSTALL.md](docs/INSTALL.md)). `provenance.json` is a statement the workflow writes about itself and is not signed, and the CycloneDX SBOM lists no components ([#318](https://github.com/CageForge/nexcage/issues/318), [#333](https://github.com/CageForge/nexcage/issues/333)).
+- `checksums.txt` shows a download is the file published next to it. From the first release after 0.17.0, `release.yml` makes a GitHub build attestation for the binary and the `.deb` when it builds them; no release has been made with that step yet. For such a release, `gh attestation verify <file> -R CageForge/nexcage` checks that the file came from that workflow in this repository, and from which commit ([docs/INSTALL.md](docs/INSTALL.md)). `provenance.json` is a statement the workflow writes about itself and is not signed, and the CycloneDX SBOM lists no components ([#318](https://github.com/CageForge/nexcage/issues/318), [#333](https://github.com/CageForge/nexcage/issues/333)).
 
 ## CI
 - Workflows pin every third-party action to a commit and grant each job only the token permissions it needs; `security.yml` fails on what zizmor, Semgrep, Trivy and Gitleaks find. None of these scanners reads Zig or libcrun's C.
