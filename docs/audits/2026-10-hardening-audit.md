@@ -3,7 +3,7 @@
 An audit of nexcage 0.17.0 for security and robustness, and the fixes that
 came out of it, from 2026-10-10 to 2026-10-14. It found 77 defects: 2
 critical, 6 high, 26 medium, 33 low and 10 of no direct consequence (info).
-69 are fixed on the branches below, 5 partly, and 3 wait for steps only the
+66 are fixed on the branches below, 8 partly, and 3 wait for steps only the
 maintainer can take in GitHub's settings and on a machine.
 
 What nexcage trusts and refuses after this work is
@@ -102,8 +102,11 @@ execution mode isolates is [ISOLATION.md](../architecture/ISOLATION.md).
 
 ## Behaviour changes
 
-Fixing some findings changed what a user sees. The maintainer approved each
-of these. Beyond them, inputs that should never have been accepted are now
+Fixing some findings changed what a user sees. The list below is the
+changes the maintainer approved; it is not every visible change. Others
+follow from fixes and are in the CHANGELOG: for example, `create` from a
+bundle names on stderr the confinement and the `linux.resources` it does not
+apply, and listings escape the text Proxmox gives them. Beyond them, inputs that should never have been accepted are now
 refused, and one input is now accepted: `--rootless <bool>`, which go-runc
 adds after the global options when its caller sets one, is ignored before
 the command and after it, as crun does, where it used to be read as the
@@ -158,7 +161,7 @@ check.
 
 | ID | Severity | Category | Finding | Location (at 8d373127) | Status | Commits | Regression tests |
 |---|---|---|---|---|---|---|---|
-| F001 | high | isolation | Bundle mounts written raw into `/etc/pve/lxc/<vmid>.conf`: config-line injection, any host path | `src/backends/proxmox-lxc/oci.zig:135` | fixed | 1e19a8b0 2caae931 d8ab4672 0c74dd2b 0c6394b9 0a9637b0 dd747c80 7c84e2f9 4fc6dceb aec99111 572f6db5 | `oci.zig` tests "a mount path goes into a pct property string only when ...", "a mount pct cannot take as a bind mount is refused ..."; `tests/sim/run.sh:1039`, `:1110` |
+| F001 | high | isolation | Bundle mounts written raw into `/etc/pve/lxc/<vmid>.conf`: config-line injection, any host path | `src/backends/proxmox-lxc/oci.zig:135` | partially fixed: the injection; any host path stays mountable, as decided ([ISOLATION.md](../architecture/ISOLATION.md), *Host bind mounts*) | 1e19a8b0 2caae931 d8ab4672 0c74dd2b 0c6394b9 0a9637b0 dd747c80 7c84e2f9 4fc6dceb aec99111 572f6db5 | `oci.zig` tests "a mount path goes into a pct property string only when ...", "a mount pct cannot take as a bind mount is refused ..."; `tests/sim/run.sh:1039`, `:1110` |
 | F002 | critical | isolation | A NUL-smuggled duplicate key in `config.json` bypassed an isolation profile | `src/core/profile.zig:126` | fixed | 39229295 2c6b5c35 54de5d9a df7d7279 17e03d63 aec99111 | `profile.zig` test "a key or a string with a NUL in it is refused ..."; `tests/crun/profile.sh` |
 | F003 | critical | ci-supply-chain | A fork pull request can run as root on the self-hosted runners; the `if:` guard is in a file the fork controls | `.github/workflows/proxmox_e2e.yml:27` | maintainer action | 76a407b1 1b184dc5 f89afeff 727213ba | `tests/scripts/check_runner_exposure.sh`; `scripts/check_runner_exposure.sh` against the live settings |
 | F004 | high | isolation | `update` on a crun container ignored its profile's memory and pids caps | `src/cli/router.zig:356` | fixed | 67699b6d 54577176 51633c6a c8542fc0 ced9e057 54de5d9a 37b1fb72 e5d6bae9 | `profile.zig` test "update holds a container made under a profile to the caps recorded at create"; `tests/crun/profile_update.sh` |
@@ -170,13 +173,13 @@ check.
 | F010 | medium | stability | A bundle's `cpu.shares` and `memory.limit` crashed `create` (unchecked casts) | `src/backends/proxmox-lxc/driver.zig:389` | fixed | a142b312 b7350d91 1fae4db1 631b93f2 fd752225 | `oci.zig` tests "cpu.shares past the kernel's maximum is refused, not cast", "memory.limit -1 is no limit ..."; `tests/sim/run.sh:1138`, `:1152` |
 | F011 | low | stability | `update` and `create` limit arithmetic overflowed and panicked on large values | `src/core/resources.zig:31` | fixed | 75a2552f | `resources.zig` test "limits at the top of i64 are converted or refused, never a trap"; `tests/sim/run.sh:297` |
 | F012 | high | correctness | `pull` and `create` took whichever template newly appeared on the storage as the pulled image | `src/backends/proxmox-lxc/pve.zig:236` | fixed | e164bd39 f78fceae 330b37b8 1b9274cc a2ad2518 | `pve.zig` test "a pulled template is named for the whole reference, and two references never share a name"; `tests/sim/run.sh:229`, `:233`, `:2397` |
-| F013 | medium | security | `create` reused any template whose name contained the image's name and tag | `src/backends/proxmox-lxc/pve.zig:271` | fixed | e164bd39 f78fceae 9b5dd517 99a9894e 65dbb94f a2ad2518 | `tests/sim/run.sh:209`, `:215`, `:2383` |
+| F013 | medium | security | `create` reused any template whose name contained the image's name and tag | `src/backends/proxmox-lxc/pve.zig:271` | partially fixed: no substring match; a file uploaded under the derived name is still used (residual 9) | e164bd39 f78fceae 9b5dd517 99a9894e 65dbb94f a2ad2518 | `tests/sim/run.sh:209`, `:215`, `:2383` |
 | F014 | medium | quality | crun `update --resources` gave libcrun a buffer without a NUL (heap over-read) | `src/backends/crun/libcrun_driver.zig:555` | fixed | 8ffb1c02 | `tests/crun/update.sh` |
 | F015 | low | docs | ADR-003 described security controls that were never built | `docs/architecture/ADR-003-Security-Architecture.md:4` | fixed | dfdc86dc | None: a document. Its references were checked against the tree |
 | F016 | medium | correctness | Under `--root`, Proxmox LXC state sat where routing looks for libcrun's, so LXC containers went to crun | `src/cli/router.zig:407` | fixed | 5a355c73 127ea8d4 5e589e27 0379cace 3da33cc9 835e44b3 46291930 3181575b 6756e699 bbc024ef 038c5699 | `state_root.zig` test "under a caller's root the Proxmox LXC records are not in libcrun's directory"; `router.zig` test "a Proxmox LXC container's state under --root is not taken for libcrun's"; `tests/crun/lxc_root.sh` |
 | F017 | medium | stability | An id without crun state went to Proxmox, which matched any CT by name or VMID | `src/cli/router.zig:399` | fixed | eea56bb9 7d5488c9 0379cace 8bc82280 dea3d6bf 1858b46c 8da2bad1 7c84e2f9 4fc6dceb 6ad6d3ed 064a2461 2066fde0 3181575b 6756e699 fd752225 038c5699 b6c6af29 8a7abaf7 | `router.zig` test "an id with no backend's record is in neither backend"; `tests/sim/run.sh:610`, `:616` |
 | F018 | low | stability | An error outside `core.types.Error` aborted nexcage with a panic | `src/cli/registry.zig:199` | fixed | f5cfa304 98838793 | `registry.zig` test "a command error outside core.types.Error is an error exit naming it, not a panic"; `tests/sim/run.sh:98` |
-| F019 | medium | isolation | `user_namespace: "require"` accepted the host's user namespace, joined by path, or a mapping of host root | `src/core/profile.zig:202` | fixed | 9dae56c9 1cd3d62e edba4df7 395b9fd6 8cfba539 ceffbd46 2c6b5c35 7f5accf9 df7d7279 | `profile.zig` tests "a user namespace that leaves the container's root the host's is refused", "a user namespace joined by path is read from inside it ..."; `tests/crun/profile.sh` |
+| F019 | medium | isolation | `user_namespace: "require"` accepted the host's user namespace, joined by path, or a mapping of host root | `src/core/profile.zig:202` | partially fixed: mappings and the joined namespace are checked; libcrun opens the path again (residual 10) | 9dae56c9 1cd3d62e edba4df7 395b9fd6 8cfba539 ceffbd46 2c6b5c35 7f5accf9 df7d7279 | `profile.zig` tests "a user namespace that leaves the container's root the host's is refused", "a user namespace joined by path is read from inside it ..."; `tests/crun/profile.sh` |
 | F020 | medium | correctness | `capabilities.drop` accepted misspelt names, which drop nothing | `src/core/config.zig:428` | fixed | b9221b63 | `config.zig` test "a profile that is misspelt, mis-named or names what it cannot do refuses the file"; `tests/sim/run.sh:1389` |
 | F021 | medium | stability | A document nested past 256 levels aborted nexcage under a profile | `src/core/profile.zig:126` | fixed | 39229295 2cb8bb9e 54de5d9a | `profile.zig` test "a document nested deeper than any runtime spec is refused, not a panic" |
 | F022 | medium | stability | The 1 MiB output cap silently cut cluster listings on a large cluster | `src/backends/proxmox-lxc/common.zig:14` | fixed | 77189e77 4a3aabca a796bbf9 | `common.zig` test "the cluster's listing is read whole: 2 MiB is within its cap"; `tests/sim/run.sh:1894` |

@@ -54,8 +54,7 @@ What a container is isolated by, mode by mode, is in
   drives the crun backend only: it always passes `--pid-file`, and the Proxmox
   LXC backend refuses `--pid-file` and `--console-socket` on `create` and
   `run` (`src/cli/router.zig:213-241`; `tests/sim/run.sh:1443`, `:1446` for
-  `create`; `run`'s refusal, `src/cli/router.zig:226-241`, has no check of
-  its own; [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md)).
+  `create`, `:700`-`:705` for `run`; [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md)).
 
 ### What nexcage does not do
 
