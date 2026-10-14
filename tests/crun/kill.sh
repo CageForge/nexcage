@@ -67,7 +67,11 @@ caught() {
 }
 
 cd /
-rm -f "$SIG"
+# The init runs as root with no capability at all (the spec names none), so
+# it can write only what root owns: on a CI runner the rootfs directory
+# belongs to the runner's user, and the init could not create the file there.
+# The file is made here, by root, before the init starts.
+rm -f "$SIG"; : > "$SIG"
 nx create --bundle "$BUNDLE" "$ID" >/dev/null 2>&1 || fail "create"
 nx start "$ID" >/dev/null 2>&1 || fail "start"
 caught ready || fail "the init never got as far as setting its traps"
