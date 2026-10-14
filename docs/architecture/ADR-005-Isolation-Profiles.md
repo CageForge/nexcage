@@ -171,7 +171,8 @@ Routing stays as it is, **next to** profiles, and decides only at `create`:
 1. a profile, from `--profile` or the program name;
 2. else `--runtime`;
 3. else the first matching routing rule;
-4. else LXC.
+4. else the configuration's `container_config.default_runtime`, LXC unless
+   the file sets it.
 
 `--runtime` together with a profile whose backend differs exits 2.
 
@@ -239,7 +240,7 @@ edited later, running containers keep what they were made with.
 | A profile is named that the file does not define | `create` exits 2, naming it and listing the defined ones | No fallback to weaker isolation |
 | A misspelt key or parameter in `profiles` | The whole file is refused | Strict reading, decision 1 |
 | **A wrapper script `exec`s nexcage without `exec -a "$0"`** | The program name is lost; the container is made **without the profile**, by routing | Cannot be detected by nexcage. Documented next to the engine configuration, and the tests' trace wrappers use `exec -a`. A wrapper can pass `--profile` instead |
-| The bundle lacks what a requirement asks (no user namespace, or one that maps host root; no seccomp filter, or one that refuses no call) | `create` fails; the pod stays in `ContainerCreating` with the reason in `kubectl describe` | The reason names the `securityContext` field that fixes it |
+| The bundle lacks what a requirement asks (no user namespace, or one that maps host root; no seccomp filter, or one that refuses no call) | `create` fails; the pod stays in `ContainerCreating` with the reason in `kubectl describe` | For a missing user namespace or filter, and a filter that refuses no call, the reason names the pod field that fixes it: `hostUsers: false`, `securityContext.seccompProfile.type: RuntimeDefault` (`src/core/profile.zig:559-571`, `:613`). A mapping of host root, a joined namespace, `run.oci.keep_original_groups` and `run.oci.seccomp_bpf_data` are named as what was refused, with no field to set |
 | A requirement breaks the pod's sandbox (pause) container | The pod never starts | Assumption 4: #315's test runs a whole pod, sandbox included, under `hardened` |
 | A bundle carries `io.cageforge.nexcage.profile` | Refused | Otherwise `state` could report a profile that was not applied |
 | A profile's parameters are edited while its containers run | Running containers keep the old parameters; `state` shows the same name | The name means "as defined at create"; documented |
