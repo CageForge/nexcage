@@ -99,13 +99,15 @@ the configuration file on the node. Nothing in a bundle defines or changes one.
 
   | Parameter | Effect |
   |---|---|
-  | `user_namespace: "require"` | A bundle without a user namespace and uid/gid mappings is refused. Nothing is added: a user namespace changes who owns the root filesystem, which is the engine's to arrange (Kubernetes `hostUsers: false`) |
-  | `seccomp: "require"` | A bundle without `linux.seccomp` is refused. The message names the fix (`securityContext.seccompProfile.type: RuntimeDefault`) |
-  | `capabilities.drop` | Removed from every capability set of the container's process. A later `exec --process` gets no capability the container's own process was denied: nexcage takes that from the config libcrun stored at create, not from the profile, which only `create` reads (decision 3) |
+  | `user_namespace: "require"` | A bundle without a user namespace and uid/gid mappings is refused, and so is one whose mappings map host uid or gid 0. A user namespace joined by `path` is checked as well as the mappings: they still have to be there and leave host uid and gid 0 out, although libcrun ignores them when it joins, and the joined namespace has to be a user namespace, not nexcage's own, and leave host uid and gid 0 out, read from inside it; one that cannot be read is refused. The annotation `run.oci.keep_original_groups` (other than `"0"`), which would leave the container nexcage's own supplementary groups, is refused (`checkUserNamespace`, `checkJoined`, `refuseKeptGroups` in `src/core/profile.zig`). Nothing is added: a user namespace changes who owns the root filesystem, which is the engine's to arrange (Kubernetes `hostUsers: false`) |
+  | `seccomp: "require"` | A bundle without `linux.seccomp` is refused, and so is a filter that refuses no system call by itself: its default action and every rule allow, log, or leave the call to user space (`SCMP_ACT_NOTIFY`, `SCMP_ACT_TRACE`). Which calls it refuses is not judged. The annotation `run.oci.seccomp_bpf_data`, which has libcrun install a precompiled program instead, is refused (`checkSeccomp`, `refusePrecompiledSeccomp` in `src/core/profile.zig`). The message names the fix (`securityContext.seccompProfile.type: RuntimeDefault`) |
+  | `capabilities.drop` | Removed from every capability set of the container's process. The names are the kernel's, and a profile naming one the kernel does not have refuses the file; a bundle whose capabilities are spelt otherwise (`cap_net_raw`, `13`), which libcap would read past a drop that compares names, is refused (`checkCapabilityNames`). A later `exec --process` gets no capability the container's own process was denied: nexcage takes that from the config libcrun stored at create, not from the profile, which only `create` reads (decision 3) |
   | `limits.memory`, `limits.pids` | The bundle's limit, or the profile's when the bundle has none or a larger one. create records the caps in the stored config (`io.cageforge.nexcage.profile.memory`, `.pids`), and a later `update` above them, or to no limit, is refused: an engine builds a resize from its pre-profile copy of the spec, as it does exec's process |
 
   `no_new_privileges`, AppArmor, read-only root and the rest can follow when
-  someone asks for them, under the same rule (decision 4).
+  someone asks for them, under the same rule (decision 4). What a profile
+  leaves to the bundle today is listed in
+  [ISOLATION.md](ISOLATION.md#crun-under-an-isolation-profile).
 - **`lxc` parameters** are the keys the `proxmox` and `network` sections take
   today (`storage`, `rootfs_size_gb`, `unprivileged`, `ostype`, `bridge`), with
   the same meaning, so a profile is a named override of those sections. #316
@@ -169,7 +171,8 @@ Routing stays as it is, **next to** profiles, and decides only at `create`:
 1. a profile, from `--profile` or the program name;
 2. else `--runtime`;
 3. else the first matching routing rule;
-4. else LXC.
+4. else the configuration's `container_config.default_runtime`, LXC unless
+   the file sets it.
 
 `--runtime` together with a profile whose backend differs exits 2.
 
@@ -237,7 +240,7 @@ edited later, running containers keep what they were made with.
 | A profile is named that the file does not define | `create` exits 2, naming it and listing the defined ones | No fallback to weaker isolation |
 | A misspelt key or parameter in `profiles` | The whole file is refused | Strict reading, decision 1 |
 | **A wrapper script `exec`s nexcage without `exec -a "$0"`** | The program name is lost; the container is made **without the profile**, by routing | Cannot be detected by nexcage. Documented next to the engine configuration, and the tests' trace wrappers use `exec -a`. A wrapper can pass `--profile` instead |
-| The bundle lacks what a requirement asks (no user namespace, no seccomp) | `create` fails; the pod stays in `ContainerCreating` with the reason in `kubectl describe` | The reason names the `securityContext` field that fixes it |
+| The bundle lacks what a requirement asks (no user namespace, or one that maps host root; no seccomp filter, or one that refuses no call) | `create` fails; the pod stays in `ContainerCreating` with the reason in `kubectl describe` | For a missing user namespace or filter, and a filter that refuses no call, the reason names the pod field that fixes it: `hostUsers: false`, `securityContext.seccompProfile.type: RuntimeDefault` (`src/core/profile.zig:559-571`, `:613`). A mapping of host root, a joined namespace, `run.oci.keep_original_groups` and `run.oci.seccomp_bpf_data` are named as what was refused, with no field to set |
 | A requirement breaks the pod's sandbox (pause) container | The pod never starts | Assumption 4: #315's test runs a whole pod, sandbox included, under `hardened` |
 | A bundle carries `io.cageforge.nexcage.profile` | Refused | Otherwise `state` could report a profile that was not applied |
 | A profile's parameters are edited while its containers run | Running containers keep the old parameters; `state` shows the same name | The name means "as defined at create"; documented |
@@ -308,7 +311,9 @@ Negative and costs:
 
 1. **The program-name form is `nexcage@<profile>`.**
 2. **`seccomp: "require"` refuses** a bundle without a filter. nexcage does not
-   apply a filter of its own.
+   apply a filter of its own. Since the hardening of 2026-10 a filter that
+   refuses no system call by itself, and a precompiled program in its place,
+   count as none ([audit](../audits/2026-10-hardening-audit.md), F058).
 3. **An unknown key anywhere in the configuration file is an error from
    0.17.0**, with no release of warnings first (#371).
 
@@ -318,6 +323,8 @@ Negative and costs:
   is one thing on one backend"
 - [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md) — why a profile does not name
   Proxmox LXC
+- [ISOLATION.md](ISOLATION.md) — what a profile enforces, where, and what it
+  leaves to the bundle and the operator
 - [#314](https://github.com/CageForge/nexcage/issues/314),
   [#315](https://github.com/CageForge/nexcage/issues/315),
   [#316](https://github.com/CageForge/nexcage/issues/316),

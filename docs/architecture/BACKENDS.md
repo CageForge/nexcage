@@ -3,7 +3,8 @@
 `src/backends/mod.zig` always imports the Proxmox LXC backend, and the crun
 backend only when its build option (declared in `build.zig`) is on.
 The CLI router (`src/cli/router.zig`) sends `create` and `run` to a backend
-according to the routing rules in the config file, Proxmox LXC without rules.
+according to the routing rules in the config file, and when none matches to
+its `container_config.default_runtime`, which is Proxmox LXC unless set.
 Every other command goes to the backend that has a record of the container —
 libcrun's `status` file, or the `state.json` nexcage writes for a Proxmox LXC
 container — and an id neither has a record of does not exist. `--runtime`
@@ -22,6 +23,10 @@ libcrun has a record of. See
 
 A command routed to a backend that is compiled out fails with
 `UnsupportedOperation`.
+
+What a container is kept from on each backend, from a template, from a
+bundle, or under an isolation profile, and what the operator has to add, is
+in [ISOLATION.md](ISOLATION.md).
 
 ## Proxmox LXC
 
@@ -88,13 +93,15 @@ nexcage has no list of host paths a bundle may not mount, so whoever writes
 the bundle chooses what of the host the container sees, as `--mp` lets
 whoever runs nexcage choose. Within those options, what the container can do
 there is the user namespace's to decide. In an unprivileged container (the
-default) container root is uid 100000 on the host, so through the mount it
-has the access any other unprivileged user has: it reads what is
-world-readable and writes nothing root owns, while files owned by the mapped
-uids are its own. In a
-privileged container (`proxmox.unprivileged: false`) container
-root is host root on whatever the mount shows. Read a bundle's mounts before
-creating a container from it.
+default) the container's ids 0 to 65535 are host ids 100000 to 165535,
+Proxmox's default map, which nexcage does not change and every unprivileged
+container on the node shares. Through the mount the container has those
+ids' rights: it reads and writes what any user may, world-writable files
+and directories that root owns included, and the files those ids own are
+its own. A mount of another unprivileged container's volume therefore gives
+it that container's files, its root's included. In a privileged container
+(`proxmox.unprivileged: false`) container root is host root on whatever the
+mount shows. Read a bundle's mounts before creating a container from it.
 
 **Features.** A bundle turns on no Proxmox features. Its namespaces are
 LXC's to make, and a user namespace in the bundle used to set `nesting=1`
@@ -147,9 +154,14 @@ with the vendored header field by field. What nexcage does around libcrun:
   `version`, `--help` and Proxmox LXC commands no longer need `/proc`,
   `open_tree` or an executable memfd. The requirements are in
   [INSTALL.md](../INSTALL.md#for-a-container-engine).
-- **`delete --force` removes the cgroup an unfinished `create` left**: the
-  default `/sys/fs/cgroup/<id>`, when libcrun's state for the id has no status
-  file and `delete` was not given `--systemd-cgroup`, and with `rmdir` alone
-  (see `delete` in the [CLI reference](../CLI_REFERENCE.md#delete)). The
-  config libcrun kept routes such an id here (`core/state_root.zig`
-  `crunHas`), so an engine's `delete --force`, without `--runtime`, gets this.
+- **`delete --force` removes the cgroup an unfinished `create` left**, when
+  it is the default one: `/sys/fs/cgroup/<id>`, which libcrun's cgroupfs
+  manager makes for a bundle that names no `cgroupsPath`. It does so when
+  libcrun's state for the id has no status file, the config libcrun kept
+  names no `cgroupsPath` and `delete` was not given `--systemd-cgroup`, and
+  with `rmdir` alone (`createDidNotFinish`, `removeLeftoverCgroup` in
+  `backends/crun/libcrun_driver.zig`; see `delete` in the
+  [CLI reference](../CLI_REFERENCE.md#delete)). The config libcrun kept
+  routes such an id here (`core/state_root.zig` `crunHas`), so an engine's
+  `delete --force`, without `--runtime`, reaches libcrun. A Kubernetes pod's
+  containers name a `cgroupsPath`, so their cgroup is not removed this way.
