@@ -107,8 +107,8 @@ of these. Beyond them, inputs that should never have been accepted are now
 refused, and one input is now accepted: `--rootless <bool>`, which go-runc
 adds after the global options when its caller sets one, is ignored before
 the command and after it, as crun does, where it used to be read as the
-command's name (G001, 235e12d0). It is listed under change 4 below; whether
-decision 4 covers it is for the maintainer to confirm (item 20 of the
+command's name (G001, 235e12d0). No approved decision names it, so it is
+not in the list below; the maintainer has yet to confirm it (item 20 of the
 residual risks). The
 [CHANGELOG](https://github.com/CageForge/nexcage/blob/main/CHANGELOG.md) has
 them in full.
@@ -121,8 +121,7 @@ them in full.
    `--runtime lxc`; `delete --force` of an unknown id exits 0; records under
    `--root` are in `<root>/.proxmox-lxc` (F016, F017, F029).
 4. `--systemd-cgroup` before the command is honoured; the shipped Kubernetes
-   configurations set `SystemdCgroup` (G001, G002). `--rootless <bool>` is
-   accepted and ignored there, as crun does (G001).
+   configurations set `SystemdCgroup` (G001, G002).
 5. A pulled template is named for the whole reference, and only that file is
    used (F012, F013).
 6. A name is acted on only when one container has it: several matches are
