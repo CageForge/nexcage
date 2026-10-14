@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The fixes of the 2026-10 hardening audit: 77 findings, 71 of them fixed here
+([report](docs/audits/2026-10-hardening-audit.md)). What nexcage trusts,
+refuses and isolates is now written down with the code and tests behind each
+claim ([ADR-003](docs/architecture/ADR-003-Security-Architecture.md),
+[ISOLATION.md](docs/architecture/ISOLATION.md)).
+
+**Thirteen behaviour changes, each approved by the maintainer, can make something that worked
+stop working**: `./config.json` is no longer read, a configuration others
+can write is refused, an id nexcage has no record of no longer reaches
+Proxmox without `--runtime lxc`, and a bundle's mounts and namespaces are
+held to what Proxmox can apply. They are under *Changed*.
+
+### Security
+- **crun, isolation profiles.**
+  - A bundle with a NUL in a key or a string, or nested deeper than 64 levels, is refused with or without a profile: libcrun's parser read a second `"process\u0000"` as the one to apply, past every check (F002, F021).
+  - `update` holds a container made under a profile to the memory and pids caps recorded at create (F004), and `linux.resources.unified` no longer undoes them at create (F028).
+  - A capability must be spelt as the kernel spells it, in the profile's drop list and in the bundle: libcap read `cap_net_raw` and `13` past a drop that compared names (F007, F020).
+  - `user_namespace: "require"` refuses a mapping of host uid or gid 0, a joined namespace that maps either or is nexcage's own, and `run.oci.keep_original_groups` (F019). `seccomp: "require"` refuses a filter that refuses no system call, and `run.oci.seccomp_bpf_data` (F058).
+- **crun, the driver.**
+  - `create` gives libcrun the bytes it checked, never the bundle's file to read again (G005).
+  - Memory values libcrun's arithmetic would overflow on are refused before libcrun sees them: the release build traps on such an overflow, and `create` died half way. `delete --force` removes the cgroup an unfinished create left (G005).
+  - `exec`'s process spec is a new 0600 file with a random name in the container's own state directory, not `/tmp/nexcage-exec-<pid>.json`, where a planted directory made every exec abort (F006).
+  - `update --resources` hands libcrun a NUL-terminated document (F014).
+  - `kill` hands libcrun the signal number it checked (F045).
+  - The structures shared with libcrun are compared with its header at build time (F061).
+- **The release binary is position-independent** (F057), so libcrun's C code, which parses bundles as root, is not at a fixed address.
+- **Configuration.** Root reads `/etc/nexcage` or `--config` only, and refuses a file that anyone but root or the caller could have written, in place or by replacing it in its directory (F005, F038).
+- **Proxmox LXC.**
+  - A bundle's mounts become `pct set --mpN` property strings, checked; they were appended raw to `/etc/pve/lxc/<vmid>.conf`, so a newline in a path added any line to the container's configuration (F001). Their `ro`, `nosuid`, `nodev` and `noexec` are applied (F024).
+  - A bundle's rootfs is packed into a 0600 file in a private directory, not the shared template store, and removed on failure and on SIGINT, SIGTERM and SIGHUP (F027).
+  - `exec` gives the command LXC's clean environment, not the caller's (G003).
+  - `kill` signals the container's init through a pidfd, and only if the PID is in the container's cgroup (F023).
+  - A command checks the container's hostname again right before acting on its VMID, which Proxmox gives to the next container created (F030). A name two containers have is refused rather than resolved to either, and a numeric name is a name, not a VMID (F008, F029).
+  - Snapshot names, storages, volids, `--filename` and `--node` are held to Proxmox's own rules before they reach a `pvesh` path, which `pvesh` hands to another node's shell unquoted (F039).
+  - A pulled template is the file named for the whole reference, not whatever appeared on the storage or contained the image's name (F012, F013).
+- **Logs and output.** Control characters, C1 controls and U+2028/U+2029 in text nexcage did not write are escaped in log lines, on stderr and in tables (F062). Log files are opened `O_APPEND|O_NOFOLLOW` (F042).
+- **Robustness of the root process.** No crash, panic or trap on: a mount of the wrong type in a bundle (F009); a bundle's `cpu.shares` or `memory.limit` (F010); large `update` values (F011); an error outside a command's set (F018); a clock that steps back (F044); an OCI spec over 1 MiB where the configuration is looked for, which is passed over (F036). Errors and `health` name the configuration file actually read (F037). A JSON log line keeps the start of a long message (F043). `state.json` is replaced, never rewritten in place, so a reader never sees it empty (F049).
+- **libcrun's re-execution from a sealed copy** (the CVE-2019-5736 protection) runs for `create` and `exec`, not before `main` on every run: `version`, `--help` and every Proxmox LXC command no longer need `/proc`, `open_tree` or an executable memfd (G004).
+
+### Changed
+1. **The configuration file comes from `/etc/nexcage` or `--config` only** (F005, F038). `./config.json` in the working directory is not read. A file, or its directory, that is owned by anyone but root or the user running nexcage, or that group or others can write, is refused with the reason; a symlink's target directory is checked too. A pipe (`--config <(...)`) is still read. Run `chmod go-w` on a configuration and its directory.
+2. **Proxmox LXC `exec` clears the caller's environment** (`pct exec --keep-env 0`, G003). The command gets LXC's `PATH`, `container=lxc` and the container's `lxc.environment`. Pass what it needs on its command line: `exec <name> -- env VAR=value cmd`.
+3. **An id reaches the Proxmox backend only through nexcage's record of it, or `--runtime lxc`** (F016, F017, F029). Every command after `create` goes to the backend whose record of the id is on disk; an id with none does not exist, and `delete --force` of it exits 0 and touches nothing. A Proxmox container nexcage did not create, or whose record a reboot cleared from `/run`, is reached with `--runtime lxc`, and a command that changes it writes the record again. Through a record an id is a name, never a VMID. Under `--root <dir>` the records are in `<dir>/.proxmox-lxc/<name>`; one an earlier nexcage left in `<dir>/<name>` is not read, so reach that container once with `--runtime lxc`.
+4. **`--systemd-cgroup` before the command is honoured** (G001), where containerd's shim and conmon put it: the crun backend's containers are placed through systemd, under their pod's slice. The shipped containerd and k3s handlers set `SystemdCgroup` to follow the kubelet's driver (G002); a handler copied from an older example needs the line.
+5. **A pulled template is named for the whole reference** (F012, F013): `docker.io/library/redis:7` is `docker.io_library_redis_7-<16 hex>.tar`, and `create` uses only that exact file. A template an earlier nexcage pulled under another name is pulled again. A `--filename` may not end in `.` or have the shape of a derived name.
+6. **A name means one container** (F008, F029, F030). A name more than one container has is an error naming each; a name wins over a VMID; the container's hostname is checked again before any command acts on it; and `create` fails when the cluster's listing cannot be read, instead of treating the name as free.
+7. **A bundle's mounts on Proxmox LXC are checked strictly** (F001, F024). A path that is relative, not normalised, or holds a newline, `,`, `=` or another control character is refused, and so is any mount option Proxmox cannot apply; `ro`, `nosuid`, `nodev`, `noexec` and `noatime` are applied. Only bind mounts are made; the kernel filesystems a runtime-spec bundle mounts are LXC's own.
+8. **No quiet fallback to this host when the cluster's listing fails** (F008, F022, F040). `list`, every lookup and `create` exit 1 naming the failure; `images` names a node or storage it could not list.
+9. **A bundle's namespaces set no Proxmox features** (F025). A user namespace in a bundle used to turn on `nesting=1,keyctl=1`, and any namespace list `keyctl=1`. An image that needs them gets them from the operator: `pct set <vmid> --features nesting=1`.
+10. **A failed `create` or `run` removes what it made** (F031, F048). A `create` that fails after `pct create`, and a `run` whose start fails, destroy the CT and its record, once its hostname is checked; the name is free for a retry. Every Proxmox tool nexcage runs but `pct exec` gets SIGTERM when nexcage dies, so a killed `create` does not finish later without it.
+11. **`health` runs only checks that can pass and fail** (F063): five, where there were eleven, and it can exit 0. Under `--root` it reports both the root and its `.proxmox-lxc`.
+12. **The command `exec` runs is never read as nexcage's options** (F034), with `--` or without. `--flag=value` for an exec flag that takes no value, such as `--tty=false`, is a usage error (exit 2). `--log-file` records how many words the command has, not the words.
+13. **Control characters are escaped** in tool errors, bundle text and logs (F062). A multi-line `pct` error is one line with `\n`; in text log lines and on stderr every backslash is doubled. The JSON log is unchanged in form.
+
+Refused now as input that should never have been accepted: a `--node` that is not a Proxmox node name; a snapshot name, storage, volid or `--filename` Proxmox would not take; `kill <id> 1_5`; an `update` on Proxmox LXC that asks for a setting Proxmox has no option for (F046), a quota under a hundredth of a core, or memory 0 (F041); and under a profile, the bundles listed under *Security*. `--rootless <value>` is accepted and ignored, as crun does. `create` from a bundle names the `linux.resources` and the confinement it does not apply (F026).
+
+### CI and supply chain
+- **The self-hosted runners**: a workflow's `if:` does not keep a fork off them, and `docs/CI_CD_SETUP.md` says what does. `scripts/check_runner_exposure.sh` reads the repository's settings and fails until an administrator has restricted the runners, removed the stale secrets and made the token read-only (F003, F033, F054). The fork-PR approval policy is `all_external_contributors`.
+- Every workflow has a least-privilege `permissions:` block, every third-party action is pinned to a commit, and no `${{ }}` expression is spliced into a script (F032, F054, F055).
+- `security.yml` fails on what zizmor, Semgrep, Trivy and Gitleaks find; Semgrep and Gitleaks first have to find a planted key (F051, #321). Valgrind's errors fail `memory_leak_check.yml`, and `ci.yml` runs shellcheck.
+- A release attests its binary and `.deb` where they are built, and publishes only the files its own jobs built, checked by sha256 (F052, #318). Its gates for "the crun backend is in it" can fail (G006).
+- The release build checks Zig's sha256, crun's tarball against a pinned sha256 and the Dockerfile's crun against the `deps/crun` pin (F050, F053); `gen_crun_headers_local.sh` works in a directory of its own (F056).
+- `proxmox_e2e.yml` tests the binary a release ships (G007). Docker Hub's 429 is retried. `manage_github_runner.sh remove` deregisters the Proxmox-host runner (F065). `buildagent.yml` says its runner is gone (F064, #339).
+
+### Removed
+- **Dead code**, none of it reachable: the `utils` module (F047), the template and ZFS managers (`create` runs no `zfs`, F060), the unused validators (F035), `validateBundleVolumes` (F066), `Config` fields the file cannot set (F059), the second command-registration path and unused error and logger helpers (F067), the `exec` environment plumbing for an `--env` nexcage never had (G008), the lookup of a container by `pct list` alone, and `build.zig`'s include paths for a `crun-1.23.1` directory (F069).
+- **Tests under `tests/` that tested only Zig's standard library** (F068); `tests/declarations_test.zig` now compiles every public declaration of core, backends and cli.
+- `docker-compose.yml`'s `./config.json` mount.
+
+### Documentation
+- **ADR-003 is the threat model of what ships** (#320, F015): what nexcage is and runs as, its assets and actors, trust boundaries, what is validated and refused where, its state, the CI runners, and its assumptions, each pointing at code or a test. The 2024 text described controls that were never built.
+- **`docs/architecture/ISOLATION.md`**: what each execution mode isolates, what it does not, and what the operator adds.
+- **`docs/audits/2026-10-hardening-audit.md`**: the audit, every finding with its fix and tests, and what is still open.
+
 ## [0.17.0] - 2026-10-09
 
 A pod can run under an isolation profile.
