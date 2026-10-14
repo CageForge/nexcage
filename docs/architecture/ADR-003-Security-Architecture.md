@@ -40,14 +40,21 @@ What a container is isolated by, mode by mode, is in
   (`src/backends/crun/libcrun_driver.zig:103-109`).
 - **Runs as root.** A container engine runs it as root, as its handler's
   binary (`deploy/kubernetes/node/containerd.toml:16`,
-  `deploy/kubernetes/node/crio.conf:12`), and a person with sudo; `pct` and
-  libcrun need it (`src/main.zig:335`). Under rootless podman it runs as the user, inside
-  podman's user namespace (`src/core/config.zig:589-593`).
+  `deploy/kubernetes/node/crio.conf:12`), and a person with sudo. nexcage
+  does not check that it is root: `geteuid` is read only by tests and by
+  the owner checks of the configuration file and the bundle archive's
+  directory (`src/core/config.zig:540`, `src/backends/proxmox-lxc/oci.zig:193`).
+  `pct` and the namespaces and cgroups libcrun makes need root, and a call
+  refused for want of it ends in "permission denied; nexcage needs root on
+  the Proxmox host" (`describeError`, `src/main.zig:335`). Under rootless
+  podman it runs as the user, inside podman's user namespace
+  (`src/core/config.zig:589-593`).
 - **Two kinds of caller.** A person or a script drives the Proxmox LXC
   backend, and the crun backend at the command line. A container engine
   drives the crun backend only: it always passes `--pid-file`, and the Proxmox
   LXC backend refuses `--pid-file` and `--console-socket` on `create` and
-  `run` (`src/cli/router.zig:213-241`; `tests/sim/run.sh:1443`, `:1446`;
+  `run` (`src/cli/router.zig:213-241`; `tests/sim/run.sh:1443`, `:1446` for
+  `create`; `run`'s refusal, `:226-241`, has no check of its own;
   [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md)).
 
 ### What nexcage does not do
@@ -169,7 +176,7 @@ names a directory under libcrun's state root.
 | `--runtime` | Caller | `lxc`, `proxmox-lxc` or `crun`; anything else exits 2 | `src/main.zig:267-275`, `:542-549` | `tests/sim/run.sh:734`, `:736`, `:1331`, `:1347` |
 | Profile name | Engine (argv[0]); person | Defined in the configuration; argv[0] and `--profile` agree; `--runtime` agrees | `src/main.zig:280-293`; `findProfile`, `src/cli/router.zig:158-180` | `tests/sim/run.sh:1368`, `:1371`, `:1373`, `:1375` |
 | Configuration file | Root | Only `/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json` or `--config`; owned by root or the caller and writable by nobody else, its directory likewise (sticky allowed), a symlink's target directory likewise; a directory or a FIFO with no writer is not waited on; at most 1 MiB; an OCI spec is passed over; an unknown key, a wrong type or a misspelt runtime refuses the file | `default_paths`, `src/core/config.zig:26-29`; `openTrusted`, `distrust`, `checkLinkTarget`, `:509-614`; `validate`, `:837-935` | `config.zig` tests "a config.json in the working directory is not read", "a configuration others can write, or replace in its directory, is refused", "only a file of root's or of the user running nexcage is trusted", "a symlink to a configuration is trusted only where the file it leads to is", "a FIFO where the configuration should be is not waited on"; `tests/sim/run.sh:269`, `:759`-`:798`, `:819`, `:1297`-`:1309` |
-| Container name, Proxmox LXC `create` | Caller | An RFC 1123 hostname; unique in the cluster, asked of the cluster (a listing that fails refuses the create) | `src/backends/proxmox-lxc/driver.zig:111-153` | `validation.zig` test "a hostname is RFC 1123's: no label empty, longer than 63, or starting or ending in '-'"; `tests/sim/run.sh:121`-`:124`, `:313`, `:1917` |
+| Container name, Proxmox LXC `create` | Caller | An RFC 1123 hostname that no container in the cluster's listing has at `create` (a listing that fails refuses the create). Nothing holds the name until `pct create` has run: overlapping creates, or a create while the node of a container with the name is down, can give two containers one name, and every later command then refuses it ([ISOLATION.md](ISOLATION.md#proxmox-lxc-from-a-template-or-a-registry-image)) | `src/backends/proxmox-lxc/driver.zig:111-153`, `:116-126` | `validation.zig` test "a hostname is RFC 1123's: no label empty, longer than 63, or starting or ending in '-'"; `tests/sim/run.sh:121`-`:124`, `:313`, `:1917`, `:1962` |
 | Container id, crun | Engine; caller | 1 to 64 of `[A-Za-z0-9_-]` on every driver entry | `validateContainerId`, `src/core/validation.zig:8-22`; `src/backends/crun/libcrun_driver.zig:202`, `:315`, `:352`, `:394`, `:478`, `:636`, `:781`, `:808`, `:853` | None of its own |
 | An id, every command after `create` | Caller | Must have a record: libcrun's `status` file, or its kept `config.json` without a `state.json`, or nexcage's `state.json`; one path component. Otherwise it does not exist, and `delete --force` of it exits 0 and touches nothing. `--runtime lxc` reaches a Proxmox container without a record, and is refused for an id libcrun has | `findBackend`, `src/cli/router.zig:114-127`, `:443-455`; `crunHas`, `lxcHas`, `has`, `src/core/state_root.zig:92-111` | `router.zig` tests "an id with no backend's record is in neither backend", "under --root the Proxmox LXC records are in their own directory"; `state_root.zig` test "a create libcrun did not finish is libcrun's, and a directory with a state.json never is"; `tests/sim/run.sh:610`, `:613`, `:616`, `:622`, `:1805` |
 | An id to a Proxmox container | Caller | A name before a VMID; a VMID only with `--runtime lxc`; a name two containers have, a miss while the cluster lists a container it gives no name, and an empty id are no answer | `pick`, `choose`, `src/backends/proxmox-lxc/pve.zig:569-639`; `src/cli/router.zig:206` | `pve.zig` tests "a name wins over a VMID, whichever the listing puts first", "a name two containers share is no answer", "by name alone, a VMID finds nothing", "a miss is no answer while a container has no name", "an empty id names no container, not one without a name"; `tests/sim/run.sh:1946`-`:1968`, `:2130`-`:2145`, `:2167`-`:2179` |
@@ -228,7 +235,7 @@ panic"; `tests/sim/run.sh:98`).
 | nexcage's record of a Proxmox LXC container | `/run/nexcage/<name>/state.json` and `runtime-metadata.json`; under `--root <dir>`, `<dir>/.proxmox-lxc/<name>/`, out of libcrun's way | By root, written to a new file (`O_EXCL\|O_NOFOLLOW`, synced) and renamed over the old one; the directories and files with the default modes, 0755 and 0644 under a umask of 022. Written at `create` right after `pct create`, and by `start`, `stop`, `pause`, `resume` and `rollback`; removed at `delete` and by an undone `create`. The name is one path component, never `.` or `..` | Which backend an id is on; "created" against "stopped"; `state`'s `bundle`. Not the VMID or the status, which are read from Proxmox each time: a record proves a name, not a VMID | `writeOciState`, `src/backends/proxmox-lxc/driver.zig:981-1000`; `writeFileAtomic`, `src/backends/proxmox-lxc/common.zig:229-252`; `forget`, `recordAs`, `driver.zig:908-945`; `src/core/state_root.zig:21-37`, `:44-59`. `common.zig` test "writeFileAtomic: a reader keeps a whole file, and a failed write keeps the old one"; `tests/sim/run.sh:115`, `:1198`, `:1210`, `:1216`, `:1225` |
 | libcrun's state | `/run/crun/<id>`, or `<dir>/<id>` under `--root` | By libcrun, 0700. nexcage reads whether `status` or `config.json` is there to route, and reads the kept `config.json` for a profile's caps and bounding set | Routing; `update` and `exec` under a profile | `crunHas`, `src/core/state_root.zig:67-95`; `holdToProfile`, `boundProcessFile`, `src/backends/crun/libcrun_driver.zig:697-715`, `:901-926`. `tests/crun/exec_spec.sh` (mode 700), `tests/crun/lxc_root.sh` |
 | `exec`'s process spec | In the container's libcrun state directory | A new 0600 file with a random name, `O_EXCL\|O_NOFOLLOW`; removed after the exec. One a killed exec leaves goes with the container | That libcrun reads what nexcage wrote | `writeSpecFile`, `src/backends/crun/libcrun_driver.zig:952-997`. `libcrun_driver.zig` test "exec's process spec is a new 0600 file in the container's own state directory"; `tests/crun/exec_spec.sh` |
-| A bundle's packed rootfs | `$TMPDIR` or `/var/tmp`, in `nexcage-bundle-<name>-<random>/rootfs.tar.zst` | 0600 in a new 0700 directory, under a base only root or nexcage's user owns and that is sticky if others can write it; removed after `pct create`, on failure, and on SIGINT, SIGTERM and SIGHUP. SIGKILL leaves it, readable by root only | Nothing after `pct create` | `src/backends/proxmox-lxc/oci.zig:47-233`. `tests/sim/run.sh:886`-`:967` |
+| A bundle's packed rootfs | `$TMPDIR` or `/var/tmp`, in `nexcage-bundle-<name>-<random>/rootfs.tar.zst` | 0600 in a new 0700 directory, under a base only root or nexcage's user owns and that is sticky if others can write it; removed after `pct create`, on failure, and on SIGINT, SIGTERM and SIGHUP, one handler for the three (`src/backends/proxmox-lxc/oci.zig:51-52`), of which the simulator sends SIGTERM. SIGKILL leaves it, readable by root only | Nothing after `pct create` | `src/backends/proxmox-lxc/oci.zig:47-233`. `tests/sim/run.sh:886`-`:967` |
 | Logs | `--log`, `--log-file`, `NEXCAGE_LOG_FILE`, `log_file` in the configuration | Appended (`O_APPEND\|O_CREAT\|O_NOFOLLOW\|O_CLOEXEC`), mode 0640 when created; text escaped; the command `exec` runs is counted, never written | An engine reads `--log` for the reason a call failed | `openAppend`, `src/core/logging.zig:49-56`; `src/main.zig:229-234`. `logging.zig` test "two writers to one log file keep each other's lines"; `tests/sim/run.sh:501`, `:506`, `:1413` |
 | The configuration | `/etc/nexcage/config.json`, `/etc/nexcage/nexcage.json`, or `--config` | Root's; nexcage never writes it, and refuses one others could have written | Everything in [B2](#trust-boundaries-and-data-flows) | The configuration row [above](#what-is-validated-and-where) |
 | A container's Proxmox configuration | `/etc/pve/lxc/<vmid>.conf` | Through `pct` and `pvesh` only; nexcage writes no file under `/etc/pve` | Proxmox | `applyMountPoints`, `src/backends/proxmox-lxc/oci.zig:459-486`. `tests/sim/run.sh:1039` |
@@ -307,7 +314,8 @@ that rests on it does not either.
    profile requires one.
 6. **libcrun 1.30.1 is trusted to do what the bundle says.** Its C code
    parses the bundle in the root process; the binary is a PIE and libcrun is
-   compiled with UBSan traps (`build.zig:154-162`, `:252`), and the
+   compiled with UBSan traps (`build.zig:154-162`, `:252`), which stop the
+   kinds of undefined behaviour UBSan checks, not memory errors, and the
    structures nexcage shares with it are compared with its header at build
    time (`src/backends/crun/mod.zig:17-40`).
 7. **An engine builds the bundle from what admission allowed**, passes
