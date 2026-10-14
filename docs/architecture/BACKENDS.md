@@ -23,6 +23,10 @@ libcrun has a record of. See
 A command routed to a backend that is compiled out fails with
 `UnsupportedOperation`.
 
+What a container is kept from on each backend, from a template, from a
+bundle, or under an isolation profile, and what the operator has to add, is
+in [ISOLATION.md](ISOLATION.md).
+
 ## Proxmox LXC
 
 ```mermaid
