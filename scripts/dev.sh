@@ -19,6 +19,9 @@ CRUN_IMAGE=${CRUN_IMAGE:-localhost/nexcage:ci}
 CRI_IMAGE=${CRI_IMAGE:-localhost/nexcage:cri-test}
 BUSYBOX=docker.io/library/busybox:1.36
 DEV=$REPO/zig-out/dev
+# Caps for every container and podman build this script starts; see container().
+CONTAINER_MEMORY=${CONTAINER_MEMORY:-2g}
+BUILD_MEMORY=${BUILD_MEMORY:-4g}
 BUNDLE=$DEV/bundle
 
 # The jobs `act` runs by default: every job a pull request gets on a
@@ -86,7 +89,9 @@ engine() {
   die "no container engine answers. Install podman (preferred: rootless, storage under ~) or start Docker, or set CONTAINER_ENGINE"
 }
 # podman's default image format drops fields Docker's has; ask for Docker's.
-engine_build() { engine; if [ "$ENGINE" = podman ]; then podman build --format docker "$@"; else docker build "$@"; fi; }
+# A podman build's RUN steps are capped like the containers below; docker
+# build under BuildKit takes no --memory.
+engine_build() { engine; if [ "$ENGINE" = podman ]; then podman build --format docker --memory "$BUILD_MEMORY" "$@"; else docker build "$@"; fi; }
 image_exists() { engine; "$ENGINE" image inspect "$1" >/dev/null 2>&1; }
 
 podman_socket() { echo "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"; }
@@ -243,7 +248,14 @@ crun_image() { say "crun image $CRUN_IMAGE"; engine_build --build-arg BUILD_FLAG
 # for lack of memory, as critest makes happen. Run from the checkout, that file
 # landed in it, so containers are run from zig-out/dev.
 in_dev() { mkdir -p "$DEV"; (cd "$DEV" && "$@"); }
-privileged() { in_dev "$ENGINE" run --rm --privileged --cgroupns=private "$@"; }
+# Every container started here is capped. critest runs a container out of
+# memory on purpose, and this is someone's workstation: without a cap, a limit
+# that does not take hold inside the container takes the desktop down instead
+# (it happened, 2026-10-13). Rootless podman can set these only where systemd
+# delegates the memory and pids controllers to the user, which it does by
+# default.
+container() { in_dev "$ENGINE" run --memory "$CONTAINER_MEMORY" --memory-swap "$CONTAINER_MEMORY" --pids-limit 4096 "$@"; }
+privileged() { container --rm --privileged --cgroupns=private "$@"; }
 
 # What crun_build.yml checks, in the same order, on the same scripts, but for
 # four of its steps: the .deb, the runtime-spec suite and critest, which only
@@ -252,12 +264,12 @@ privileged() { in_dev "$ENGINE" run --rm --privileged --cgroupns=private "$@"; }
 # handed to the container (it prints a skip: line saying so).
 crun_checks() {
   engine; crun_image; fetch_bundle
-  say "the binary runs";   in_dev "$ENGINE" run --rm "$CRUN_IMAGE" version
+  say "the binary runs";   container --rm "$CRUN_IMAGE" version
   say "the features ABI still matches the vendored header"
   engine_build --target builder -t localhost/nexcage:builder .
-  in_dev "$ENGINE" run --rm -v "$REPO/scripts:/s:ro" localhost/nexcage:builder sh /s/check_features_abi.sh
+  container --rm -v "$REPO/scripts:/s:ro" localhost/nexcage:builder sh /s/check_features_abi.sh
   say "the features document comes from this build's libcrun"
-  in_dev "$ENGINE" run --rm "$CRUN_IMAGE" --runtime crun features > "$DEV/features.json"
+  container --rm "$CRUN_IMAGE" --runtime crun features > "$DEV/features.json"
   python3 tests/crun/features_check.py "$DEV/features.json"
   say "ps reports the container's processes, and crun agrees"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/ps.sh
@@ -297,9 +309,9 @@ SHELL_INIT='if [ -w /sys/fs/cgroup/cgroup.subtree_control ]; then
 fi'
 shell() {
   cri_image; fetch_bundle
-  local run=(run --rm --privileged --cgroupns=private -v "$REPO:/src:ro" -v "$BUNDLE:/bundle" -w /src --entrypoint /bin/bash)
+  local run=(--rm --privileged --cgroupns=private -v "$REPO:/src:ro" -v "$BUNDLE:/bundle" -w /src --entrypoint /bin/bash)
   if [ $# -gt 0 ]; then
-    in_dev "$ENGINE" "${run[@]}" -i "$CRI_IMAGE" -c "$SHELL_INIT"'
+    container "${run[@]}" -i "$CRI_IMAGE" -c "$SHELL_INIT"'
 exec "$@"' bash "$@"
     return
   fi
@@ -311,7 +323,7 @@ ${B}A privileged container with nexcage (crun backend), crun, containerd and cri
   /src/tests/cri/pod_on_nexcage.sh          a pod through containerd's CRI
   /src/tests/perf/crun.sh -n 5              the crun perf suite
 EOF
-  in_dev "$ENGINE" "${run[@]}" -it "$CRI_IMAGE" -c "$SHELL_INIT"'
+  container "${run[@]}" -it "$CRI_IMAGE" -c "$SHELL_INIT"'
 exec bash'
 }
 
@@ -400,7 +412,12 @@ act_jobs() {
   local common gitdir
   common=$(git rev-parse --path-format=absolute --git-common-dir)
   gitdir=$(git rev-parse --path-format=absolute --git-dir)
-  [ "$common" = "$gitdir" ] || extra=(--container-options "-v $common:$common:ro" "${extra[@]}")
+  # The job container gets the same caps as container(). Containers a job
+  # starts through the engine's socket are its siblings, not its children, and
+  # are not covered by them.
+  local opts="--memory $CONTAINER_MEMORY --memory-swap $CONTAINER_MEMORY --pids-limit 4096"
+  [ "$common" = "$gitdir" ] || opts="-v $common:$common:ro $opts"
+  extra=(--container-options "$opts" "${extra[@]}")
   # A job's `docker build` goes to podman through the socket. The act image's
   # docker CLI then builds with buildx's docker-container driver, which leaves
   # the image in its cache and never loads it, so the job's next `docker run`
