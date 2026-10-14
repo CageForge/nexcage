@@ -54,8 +54,8 @@ What a container is isolated by, mode by mode, is in
   drives the crun backend only: it always passes `--pid-file`, and the Proxmox
   LXC backend refuses `--pid-file` and `--console-socket` on `create` and
   `run` (`src/cli/router.zig:213-241`; `tests/sim/run.sh:1443`, `:1446` for
-  `create`; `run`'s refusal, `:226-241`, has no check of its own;
-  [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md)).
+  `create`; `run`'s refusal, `src/cli/router.zig:226-241`, has no check of
+  its own; [ADR-006](ADR-006-LXC-Driven-By-An-Engine.md)).
 
 ### What nexcage does not do
 
@@ -186,7 +186,7 @@ names a directory under libcrun's state root.
 | `create`'s pct options | Person | `--ip` and `--gw` without `,` or `=`, which would add a `net0` key; `--vlan` 1 to 4094; limits converted exactly or refused | `src/cli/create.zig:127-150`; `resourceOptions`, `src/backends/proxmox-lxc/pve.zig:1491-1577` | `tests/sim/run.sh:297`-`:309` |
 | Bundle path | Engine | Absolute and resolved; no list of allowed places | `validateBundlePath`, `src/core/validation.zig:83-89` | `tests/sim/run.sh:859`, `:862` |
 | Bundle, crun | Pod author | At most 16 MiB; read once, and libcrun is given those bytes; a JSON object, with duplicate keys, a NUL in a key or a string, and nesting past 64 levels refused; no `io.cageforge.nexcage.profile*` annotation; memory values libcrun can do arithmetic on; the profile's checks | `src/backends/crun/libcrun_driver.zig:231-274`; `parse`, `checkDocument`, `refuseClaim`, `src/core/profile.zig:418-486`; `checkMemory`, `libcrun_driver.zig:728-748` | [ISOLATION.md](ISOLATION.md#crun-with-the-engines-bundle-as-it-is) |
-| Bundle, Proxmox LXC | Bundle author | At most 10 MiB; values of the wrong type refused; mounts, options and limits checked | `deps/oci-spec-zig/src/runtime/bundle.zig:94`; `src/backends/proxmox-lxc/oci.zig:267-446` | [ISOLATION.md](ISOLATION.md#proxmox-lxc-from-an-oci-bundle) |
+| Bundle, Proxmox LXC | Bundle author | At most 10 MiB. A value of the wrong type is refused in `mounts` and each mount's fields, in `linux`, `linux.resources` with its `memory` and `cpu`, `memoryPolicy`, `intelRdt` and `netDevices`, and in the entries of `process.args` and `process.env`; it is passed over, with no error, in `root`, `process`, `hostname`, `args` or `env` as a whole, `linux.seccomp` and `linux.namespaces`, none of which the backend applies. Mounts, options and limits checked | `deps/oci-spec-zig/src/runtime/bundle.zig:94`; refused `:207-237`, `:240-466`, `:632-644`; passed over `:162-200`, `:473-516`; `src/backends/proxmox-lxc/oci.zig:267-446` | [ISOLATION.md](ISOLATION.md#proxmox-lxc-from-an-oci-bundle) |
 | `exec --process` file, crun | Pod, through the engine | Under a profile: parsed as above and cut to the container's bounding set. Otherwise passed to libcrun by path | `src/backends/crun/libcrun_driver.zig:861-926` | `tests/crun/profile.sh` |
 | `update` document | Engine | At most 1 MiB; a JSON object read as libcrun reads it; memory values; a profile's recorded caps; handed over NUL-terminated (crun). On Proxmox LXC a setting Proxmox has no option for is refused by name | `src/cli/update.zig:126-132`; `src/backends/crun/libcrun_driver.zig:635-691`; `src/backends/proxmox-lxc/driver.zig:775-792` | `tests/crun/profile_update.sh`, `tests/crun/update.sh`; `tests/sim/run.sh:1647`-`:1668` |
 | Tools' output | Proxmox | Read up to 1 MiB, the cluster listing up to 64 MiB; more is an error, never a short answer; a listing that fails is an error, never an empty cluster or this host alone | `runCommandMax`, `src/backends/proxmox-lxc/common.zig:13-55`; `clusterResources`, `list`, `pve.zig:759`, `:1187` | `common.zig` tests "output past the cap is an error, not a short answer", "the cluster's listing is read whole: 2 MiB is within its cap"; `tests/sim/run.sh:1894`, `:1911`, `:1914`, `:1924`, `:1929` |
@@ -283,7 +283,7 @@ this model:
   (`Dockerfile:65-75`, held to the submodule by `scripts/ci/check_crun_pin.sh`)
   and crun's release tarball, for its generated headers, checked against a
   pinned sha256 (`scripts/gen_crun_headers_local.sh:11-63`); it attests the binary and the `.deb`
-  where they are built (`.github/workflows/release.yml:84-101`, `:158`).
+  where they are built (`.github/workflows/release.yml:84-101`, `:158`, `:316`).
   `gh attestation verify` checks a download ([INSTALL.md](../INSTALL.md#from-a-release)).
   `provenance.json` is a statement the workflow writes about itself, unsigned
   (`.github/workflows/release.yml:168-199`), and the CycloneDX SBOM lists no
