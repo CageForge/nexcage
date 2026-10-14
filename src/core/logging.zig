@@ -13,6 +13,15 @@ pub const LogLevel = enum(u8) {
     fatal = 5,
 };
 
+/// True in the copy of nexcage that libcrun's CVE-2019-5736 protection
+/// re-executes, for create and exec on the crun backend, until the copy
+/// reaches the point where the first run re-executed
+/// (CrunDriver.runFromSealedCopy). The copy starts again from main, so every
+/// line the first run logged before that point came twice, in the engine's
+/// --log file too; below warn the copy leaves them out. A warning or an error
+/// there is kept, in case the copy meets one the first run did not.
+pub var rerun_from_copy: bool = false;
+
 /// Log context
 /// How a log line is written. A container engine passes --log-format json and
 /// then reads the file back to find out why the runtime failed, so the shape
@@ -80,6 +89,7 @@ pub const LogContext = struct {
 
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
         if (@intFromEnum(level) < @intFromEnum(self.level)) return;
+        if (rerun_from_copy and @intFromEnum(level) < @intFromEnum(LogLevel.warn)) return;
 
         if (self.echo) |echo| {
             if (@intFromEnum(level) >= @intFromEnum(LogLevel.@"error")) {
@@ -183,6 +193,28 @@ test "an error is echoed as a plain line, and nothing below it is" {
     const logged = try tmp.dir.readFile("log.json", &buf);
     try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, logged, "\n"));
     try std.testing.expect(std.mem.indexOf(u8, logged, "\"level\":\"error\"") != null);
+}
+
+test "the re-executed copy leaves out the lines below warn until it is told it has caught up" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const log_file = try tmp.dir.createFile("log", .{});
+    defer log_file.close();
+    var logger = LogContext.init(std.testing.allocator, log_file, .info, "nexcage");
+    logger.format = .json;
+
+    rerun_from_copy = true;
+    defer rerun_from_copy = false;
+    try logger.info("Executing create command", .{});
+    try logger.warn("kept", .{});
+    rerun_from_copy = false;
+    try logger.info("Creating OCI container with libcrun", .{});
+
+    var buf: [1024]u8 = undefined;
+    const got = try tmp.dir.readFile("log", &buf);
+    try std.testing.expect(std.mem.indexOf(u8, got, "Executing create command") == null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "\"msg\":\"kept\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "Creating OCI container with libcrun") != null);
 }
 
 test "without echo an error goes to the log alone" {

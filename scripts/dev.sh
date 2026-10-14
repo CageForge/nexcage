@@ -245,6 +245,18 @@ crun_checks() {
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/ps.sh
   say "a bundle is found from a working directory that is not it"
   privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/foreign_cwd.sh
+  say "kill sends the signal nexcage validated"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/kill.sh
+  say "exec's process spec cannot be planted against"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/exec_spec.sh
+  say "an isolation profile's limits hold on update"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/profile_update.sh
+  say "memory values are checked before libcrun"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/memory_values.sh
+  say "the re-execution happens for containers only"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/rexec.sh
+  say "--systemd-cgroup before the command reaches libcrun"
+  privileged -v "$BUNDLE:/bundle" -v "$REPO/tests/crun:/t:ro" --entrypoint /bin/sh "$CRUN_IMAGE" /t/systemd_cgroup.sh
 }
 
 # Always through crun_image: an image left from older sources would test them.

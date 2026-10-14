@@ -394,10 +394,14 @@ pub const ConfigLoader = struct {
                 .string => |s| if (!std.mem.eql(u8, s, "require")) return self.refuse("'{s}' is \"{s}\"; the only value is \"require\"", .{ path, s }),
                 else => return self.refuse("'{s}' must be \"require\"", .{path}),
             },
+            // Against the kernel's names, not their shape: CAP_SYSADMIN has
+            // the shape, matches nothing, and dropped nothing, without a word.
             .capabilities => switch (value) {
                 .array => |items| for (items.items) |item| {
-                    if (item != .string or !isCapabilityName(item.string))
+                    if (item != .string)
                         return self.refuse("'{s}' must list capability names, such as \"CAP_NET_RAW\"", .{path});
+                    if (!profile_mod.isCapabilityName(item.string))
+                        return self.refuse("'{s}' names \"{s}\", which is not one of the kernel's capability names, such as \"CAP_NET_RAW\"", .{ path, item.string });
                 },
                 else => return self.refuse("'{s}' must be a list of capability names", .{path}),
             },
@@ -423,14 +427,6 @@ pub const ConfigLoader = struct {
                 else => return self.refuse("'{s}' must be a list of rules", .{path}),
             },
         }
-    }
-
-    fn isCapabilityName(name: []const u8) bool {
-        if (!std.mem.startsWith(u8, name, "CAP_") or name.len == 4) return false;
-        for (name[4..]) |c| {
-            if (!((c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_')) return false;
-        }
-        return true;
     }
 
     /// Records why the file is refused, for main to print, and returns the
@@ -944,6 +940,16 @@ test "a profile is read with its crun parameters" {
     try std.testing.expect(cfg.findProfile("missing") == null);
 }
 
+test "a profile drops any of the kernel's capabilities, the newest included" {
+    var loader = ConfigLoader.init(std.testing.allocator);
+    var cfg = try loader.loadFromString(
+        \\{ "profiles": { "h": { "runtime": "crun", "crun": { "capabilities": { "drop":
+        \\    ["CAP_CHOWN", "CAP_SYS_ADMIN", "CAP_AUDIT_READ", "CAP_BPF", "CAP_CHECKPOINT_RESTORE"] } } } } }
+    );
+    defer cfg.deinit();
+    try std.testing.expectEqual(@as(usize, 5), cfg.findProfile("h").?.drop_capabilities.len);
+}
+
 test "a profile that is misspelt, mis-named or names what it cannot do refuses the file" {
     const cases = [_]struct { file: []const u8, says: []const u8 }{
         .{ .file = "{ \"profiles\": { \"Hardened\": { \"runtime\": \"crun\" } } }", .says = "a profile name is lower-case letters" },
@@ -952,6 +958,11 @@ test "a profile that is misspelt, mis-named or names what it cannot do refuses t
         .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"seccomp\": \"yes\" } } } }", .says = "the only value is \"require\"" },
         .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"user_namspace\": \"require\" } } } }", .says = "'profiles.h.crun.user_namspace' is not a key nexcage reads" },
         .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"capabilities\": { \"drop\": [\"NET_RAW\"] } } } } }", .says = "capability names, such as" },
+        // The shape of a capability name, and none: each would drop nothing.
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"capabilities\": { \"drop\": [\"CAP_NET_RAW\", \"CAP_SYSADMIN\"] } } } } }", .says = "names \"CAP_SYSADMIN\", which is not one of the kernel's capability names" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"capabilities\": { \"drop\": [\"CAP_NETRAW\"] } } } } }", .says = "names \"CAP_NETRAW\"" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"capabilities\": { \"drop\": [\"CAP_SYS_MODULES\"] } } } } }", .says = "names \"CAP_SYS_MODULES\"" },
+        .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"capabilities\": { \"drop\": [\"cap_net_raw\"] } } } } }", .says = "names \"cap_net_raw\"" },
         .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"limits\": { \"memory\": \"lots\" } } } } }", .says = "must be a size" },
         .{ .file = "{ \"profiles\": { \"h\": { \"runtime\": \"crun\", \"crun\": { \"limits\": { \"pids\": 0 } } } } }", .says = "1 or more" },
     };

@@ -75,6 +75,17 @@ it. Routing decides only where `create` and `run` put a new container, so a
 A routing pattern is a regular expression only when it starts with `^` or ends
 with `$`; `".*"` is read as a wildcard and matches nothing. Use `"*"`.
 
+`create` and `exec` on the crun backend first re-execute nexcage from a sealed
+copy of its binary, as crun and runc do, so that a process in a container
+cannot reach the binary on the host through `/proc/<pid>/exe`
+(CVE-2019-5736). That needs `/proc` and one of `open_tree`, a bind mount or an
+executable memfd; a systemd unit that runs the engine with
+`SystemCallFilter=@system-service` and the default kill action needs `@mount`
+as well, or the call dies of `SIGSYS`. If none is possible, `create` and
+`exec` exit 1 and say which. No other command does it: `version`, `--help`
+and every Proxmox LXC command need none of this. A binary on a read-only
+mount counts as protected already and is not copied.
+
 ## A Kubernetes node on Proxmox VE (since 0.16.0)
 
 A node whose kubelet runs pods on nexcage needs four things:
@@ -123,6 +134,26 @@ curl -fsSLo /etc/crio/crio.conf.d/10-nexcage.conf "$SRC/deploy/kubernetes/node/c
 systemctl restart crio
 ```
 
+**The cgroup driver** has to be the kubelet's. On a node whose kubelet uses
+systemd's driver, the engine names a pod's cgroup `<pod slice>:<prefix>:<id>`
+whatever the runtime. Only `--systemd-cgroup`, which the engine passes when it
+is set up for that driver, has nexcage ask systemd, over D-Bus, to place the
+container under the pod's slice, as runc and crun do. Without it, any runtime,
+nexcage included, makes that name a cgroup at the root of the hierarchy,
+outside the pod's cgroup and every limit the kubelet sets on it.
+
+- k3s run as a service gives its kubelet the systemd driver. The template
+  gives nexcage's handler k3s's own setting, `SystemdCgroup = {{ .SystemdCgroup }}`.
+- `containerd.toml` sets `SystemdCgroup = true`. Make it what the runc
+  handler has: `false` only where the kubelet uses cgroupfs.
+- CRI-O has one `cgroup_manager` for every handler, systemd by default, and
+  nexcage follows it like the others. The drop-in leaves it alone.
+
+Releases up to 0.17.0 dropped `--systemd-cgroup` before the command, which is
+where every engine puts it, and the files they shipped did not set it. A
+container created by one of them keeps its cgroup at the root until it is
+deleted, so restart the pods that run on nexcage after upgrading.
+
 **The RuntimeClass**, once per cluster (on k3s, `kubectl` reads
 `/etc/rancher/k3s/k3s.yaml`):
 
@@ -154,7 +185,10 @@ kubectl delete pod nexcage-hello
 
 A pod that stays `ContainerCreating` says why in `kubectl describe pod`. The
 two usual causes are a binary without the crun backend (`nexcage --runtime
-crun features` fails) and a missing library (`nexcage version` fails).
+crun features` fails) and a missing library (`nexcage version` fails). A third
+is `cannot open sd-bus`: the engine asked for systemd's cgroup driver, and
+nexcage could not reach systemd. Set the engine's driver to the kubelet's, as
+under *The cgroup driver* above.
 
 To take it off the node: delete the `RuntimeClass` once no pod names it, remove
 the template, the `containerd.toml` entry or the CRI-O drop-in, restart the
@@ -186,6 +220,7 @@ cat >> /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl <<'EOF'
 
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage-hardened.options]
   BinaryName = "/usr/local/bin/nexcage@hardened"
+  SystemdCgroup = {{ .SystemdCgroup }}
 EOF
 systemctl restart k3s
 
@@ -197,10 +232,11 @@ handler: nexcage-hardened
 YAML
 ```
 
-containerd 2.x takes the same two tables in `/etc/containerd/config.toml`. For
-CRI-O, add a `[crio.runtime.runtimes.nexcage-hardened]` table whose
-`runtime_path` is `/usr/local/bin/nexcage@hardened`. `k8s_e2e.yml` checks only
-the k3s way.
+containerd 2.x takes the same two tables in `/etc/containerd/config.toml`, with
+`SystemdCgroup` set as in `containerd.toml`: `{{ .SystemdCgroup }}` is k3s's
+template, which containerd does not read. For CRI-O, add a
+`[crio.runtime.runtimes.nexcage-hardened]` table whose `runtime_path` is
+`/usr/local/bin/nexcage@hardened`. `k8s_e2e.yml` checks only the k3s way.
 
 A pod under `hardened` has to ask for what it requires:
 
@@ -215,7 +251,13 @@ Without them it stays `ContainerCreating`. `kubectl describe pod` gives the
 reason, for example "profile 'hardened' requires a user namespace … set
 hostUsers: false on the pod". A profile only takes away: a pod's 2Gi limit
 under `hardened` becomes 1G, while a 512M limit stays 512M. `kubectl exec`
-gets no capability the pod's container lacks.
+gets no capability the pod's container lacks, and an in-place resize cannot
+take the container above the profile's caps: containerd resends the pod's own
+limit with every update, so under `hardened` a pod declaring more than 1G
+cannot be resized in place, and the kubelet's CPU manager (static policy)
+cannot move it to other CPUs either. Declare limits within the profile's,
+and on a node with swap (NodeSwap, `LimitedSwap`) keep memory plus swap
+within the memory cap as well.
 
 ## From source
 

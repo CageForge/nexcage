@@ -1,9 +1,15 @@
 const std = @import("std");
 
 /// FFI bindings for libcrun library
-/// Using extern struct with minimal fields needed for API calls
 pub const Libcrun = struct {
-    /// Context structure (only fields we need to set)
+    /// struct libcrun_context_s from deps/crun/src/libcrun/container.h at the
+    /// vendored commit, field for field. libcrun is handed a pointer to it
+    /// and reads every field, so "only the fields we set" is not an option:
+    /// this used to lack `no_open_tree_namespace`, which 1.30 added after
+    /// `no_pivot`, and the offsets still matched only because the new bool
+    /// fell into the padding before `argv`. The next field would not have.
+    /// crun/mod.zig compares this with the header when the backend is built
+    /// (expectSameLayout), so a pin that moves a field fails the build.
     pub const Context = extern struct {
         state_root: [*c]const u8,
         id: [*c]const u8,
@@ -22,6 +28,8 @@ pub const Libcrun = struct {
         no_new_keyring: bool,
         force_no_cgroup: bool,
         no_pivot: bool,
+        /// Turns off libcrun's open_tree mount path; zeroed, as crun leaves it.
+        no_open_tree_namespace: bool,
         argv: [*][*c]u8,
         argc: c_int,
         handler_manager: ?*anyopaque,
@@ -170,13 +178,20 @@ pub const Libcrun = struct {
     /// document, which is what a container engine sends for an in-place resize,
     /// or a list of settings in crun's section/name vocabulary, which is what a
     /// command line says.
+    ///
+    /// `content` must end in a NUL, whatever `len` says: libcrun marks `len`
+    /// unused and strlen()s the pointer (container.c, parse_json_file). Typed
+    /// as a plain many-pointer, it took the slice update.zig read, which has
+    /// no terminator, and libcrun read on past the allocation: a resize the
+    /// engine sent was refused as "invalid utf-8 at position <len>" at some
+    /// lengths, and a 64 KiB document crashed the process on an unmapped page.
     pub const UpdateValue = extern struct {
         section: [*:0]const u8,
         name: [*:0]const u8,
         numeric: bool,
         value: [*:0]const u8,
     };
-    pub extern fn libcrun_container_update(context: *Context, id: [*c]const u8, content: [*]const u8, len: usize, err: *?*Error) c_int;
+    pub extern fn libcrun_container_update(context: *Context, id: [*c]const u8, content: [*:0]const u8, len: usize, err: *?*Error) c_int;
     pub extern fn libcrun_container_update_from_values(context: *Context, id: [*c]const u8, values: [*]UpdateValue, len: usize, err: *?*Error) c_int;
 
     /// int libcrun_container_read_pids (libcrun_context_t *context, const char *id,
@@ -325,4 +340,44 @@ pub const Libcrun = struct {
 
     /// Default state root
     pub const DEFAULT_STATE_ROOT: []const u8 = "/run/crun";
+
+    /// int ensure_cloned_binary (void), from cloned_binary.c: the
+    /// CVE-2019-5736 protection. Unless the process already runs from a
+    /// sealed copy of its binary, it makes one and re-executes from it with
+    /// the same arguments (read back from /proc/self/cmdline), which does not
+    /// return. Running from the copy, it returns a positive number at once.
+    /// On failure: -ENOTRECOVERABLE (/proc/self/exe cannot be opened),
+    /// -EINVAL (/proc/self/cmdline cannot be read), -EIO (no copy could be
+    /// made) or -ENOEXEC (the copy could not be executed).
+    pub extern fn ensure_cloned_binary() c_int;
 };
+
+/// Fails the build unless `Mirror` lays out `C` exactly: the same fields in
+/// the same order, each at the same offset and of the same size, and the same
+/// size overall. `C` is the struct as @cImport translates it from the vendored
+/// header. Field names are compared too: the mirrors keep crun's.
+pub fn expectSameLayout(comptime Mirror: type, comptime C: type) void {
+    const theirs = @typeInfo(C).@"struct".fields;
+    const ours = @typeInfo(Mirror).@"struct".fields;
+    const n = @min(theirs.len, ours.len);
+    inline for (0..n) |i| {
+        const t = theirs[i];
+        const o = ours[i];
+        if (!std.mem.eql(u8, t.name, o.name)) @compileError(std.fmt.comptimePrint(
+            "{s} has diverged from the vendored header's {s}: field {d} is `{s}` here and `{s}` there",
+            .{ @typeName(Mirror), @typeName(C), i, o.name, t.name },
+        ));
+        if (@offsetOf(Mirror, o.name) != @offsetOf(C, t.name) or @sizeOf(o.type) != @sizeOf(t.type)) @compileError(std.fmt.comptimePrint(
+            "{s}.{s} is {d} bytes at offset {d}, and in the vendored header {d} bytes at offset {d}",
+            .{ @typeName(Mirror), o.name, @sizeOf(o.type), @offsetOf(Mirror, o.name), @sizeOf(t.type), @offsetOf(C, t.name) },
+        ));
+    }
+    if (theirs.len != ours.len) @compileError(std.fmt.comptimePrint(
+        "{s} has {d} fields and the vendored header's {s} has {d}: the first {d} agree, so one end gained or lost a field",
+        .{ @typeName(Mirror), ours.len, @typeName(C), theirs.len, n },
+    ));
+    if (@sizeOf(Mirror) != @sizeOf(C)) @compileError(std.fmt.comptimePrint(
+        "{s} is {d} bytes and the vendored header's {s} is {d}",
+        .{ @typeName(Mirror), @sizeOf(Mirror), @typeName(C), @sizeOf(C) },
+    ));
+}

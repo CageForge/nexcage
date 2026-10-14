@@ -42,7 +42,7 @@ next step, not by size.
 | 7 | ~~No CNI~~ | **The engine's, not the runtime's.** containerd and CRI-O create the sandbox's network namespace, run the CNI plugins in it and hand the runtime a path to join. Verified on both: a pod gets an address from host-local and reaches another pod over TCP | Pod IPs from the cluster CNI, `NetworkPolicy`, service routing |
 | 8 | ~~No sandbox model~~ | **The engine's, not the runtime's.** containerd and CRI-O create the pod sandbox and hand each container in it the sandbox's namespaces to join by path in `linux.namespaces`. Verified: a sandbox and a container in it both run on nexcage | Multi-container pods sharing a network namespace, the pause container |
 | 9 | No image service | **Not the runtime's job for Kubernetes**: containerd and CRI-O implement `ImageService` themselves and hand the runtime a bundle whose rootfs is already unpacked — runc never pulls anything either. For the command-line use there is now `images` (what the cluster can create from, per node and storage), `pull` (an OCI image into a chosen storage) and `rmi`. Pull with credentials is not possible: `oci-registry-pull` has no parameter for them | CRI `ImageService`: pull with credentials, list, remove, image FS stats |
-| 10 | ~~Fixed resources~~ | **Done.** A bundle's `linux.resources` apply at create through libcrun, and **`update`** changes a running container's limits: `update --resources=- <id>` with the document on stdin is what containerd sends for an in-place pod resize. On Proxmox LXC the same settings become `pct set` in its terms (MiB, cores, a cgroup v2 weight), and what pct cannot express is refused by name | Pod requests and limits, and resizing them in place |
+| 10 | ~~Fixed resources~~ | **Done.** A bundle's `linux.resources` apply at create through libcrun, and **`update`** changes a running container's limits: `update --resources=- <id>` with the document on stdin is what containerd sends for an in-place pod resize. Under an isolation profile a resize above the profile's memory or pids cap, or to no limit, is refused naming the cap; containerd resends the pod's declared limit with every update, the CPU manager's cpuset updates included, so declare limits within the profile's ([CLI_REFERENCE.md](CLI_REFERENCE.md#isolation-profiles)). On Proxmox LXC the same settings become `pct set` in its terms (MiB, cores, a cgroup v2 weight), and what pct cannot express is refused by name | Pod requests and limits, and resizing them in place |
 | 11 | ~~Single host~~ | **Reads and lifecycle cover the cluster**: `list`, `state`, `start`, `stop`, `delete`, `update` and the snapshot verbs find a container on any node and act through that node's API. `exec`, `kill`, `pause`, `resume` and the `pid` in `state` stay local and say so. They reach into a container's processes or its cgroup freezer from the host, and no API offers that. For the same reason, `state` reports a frozen container on another node as `running`. `create --node <name>` places a new one on a chosen node, from a template that node can read | A node per PVE host, or a scheduler that targets more than one |
 
 One further gap is operational rather than functional: nexcage exposes no
@@ -273,6 +273,10 @@ name, and `crictl` drives the same interface the kubelet drives:
   runtime_type = 'io.containerd.runc.v2'
   [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
     BinaryName = '/usr/local/bin/nexcage'
+    # As runc's handler has it. This run was in a container without systemd,
+    # so cgroupfs; a node whose kubelet uses systemd's driver sets true, as
+    # deploy/kubernetes/node/containerd.toml does.
+    SystemdCgroup = false
 ```
 
 ```
@@ -322,8 +326,11 @@ JSON schema and which is far larger than the two structs whose hand-written
 mirror had just put a features document at the wrong offset. The third takes the
 path of a file holding that process as JSON, and libcrun's own parser builds the
 struct — a path has no layout to get wrong. So `--process <file>` hands the
-engine's own file over untouched, and a command typed on a command line is
-written to a temporary spec of the same shape.
+engine's own file over as it is, and a command typed on a command line is
+written to a temporary spec of the same shape. A container made under an
+isolation profile is the exception: libcrun gets a copy of the engine's file
+with every capability set cut to the container's bounding set (see
+[CLI_REFERENCE.md](CLI_REFERENCE.md#isolation-profiles)).
 
 Parsing `--process` mattered more than adding the call. Without it the flag fell
 through as an unknown option and its *value* became the container id, so
@@ -382,6 +389,20 @@ What made both findings defects rather than guesses was the same control as
 before: two runtime handlers in one CRI-O config, one ending in nexcage and one
 in `/usr/bin/crun`, same pod, same bundles.
 
+A third thing stood in the way and nothing here saw it, because no run gave
+nexcage systemd's cgroup driver: **`--systemd-cgroup` before the command was
+dropped.** conmon puts it first of all whenever CRI-O's `cgroup_manager` is
+systemd, which is CRI-O's default and has no per-handler setting, and
+containerd's shim puts it after `--log-format` for a handler with
+`SystemdCgroup = true`. nexcage read it only after the command, where no
+engine sends it, so libcrun stayed on its cgroupfs manager. That manager takes
+the kubelet's `kubepods-besteffort-pod<uid>.slice:crio:<id>` for a directory
+name and makes it at the root of the hierarchy: outside the pod's cgroup, its
+QoS class and `kubepods.slice`, and every limit the kubelet sets on them. It is
+read before the command now, and `tests/crun/systemd_cgroup.sh` checks it in
+each engine's order. In a container without systemd, which is where that
+check runs, `create` then fails with `cannot open sd-bus`, as crun's does.
+
 **A pod network, and it is not this runtime's work.** The engine creates the
 sandbox's network namespace, runs the CNI plugins in it, and hands the runtime a
 path in `linux.namespaces`; joining a namespace by path is what libcrun already
@@ -416,11 +437,12 @@ passes on this one.
 Of the gaps a pod needs, the CRI run settles three of them, and not because
 nexcage grew them: the shim captures the container's output to the file the
 kubelet reads, the sandbox holds the namespaces its containers join, and the
-cgroup comes from the spec containerd writes. That is the shape of this whole
-stage — the engine owns the pod, the runtime owns the container. What is left
-from that row is what a cluster adds on top of a plain CNI bridge:
-`NetworkPolicy` and service routing, which belong to a CNI plugin and kube-proxy,
-not to a runtime.
+cgroup comes from the spec containerd writes, made the way the handler's
+`SystemdCgroup` says, which has to be the kubelet's driver. That is the shape
+of this whole stage — the engine owns the pod, the runtime owns the container.
+What is left from that row is what a cluster adds on top of a plain CNI
+bridge: `NetworkPolicy` and service routing, which belong to a CNI plugin and
+kube-proxy, not to a runtime.
 
 ### Stage 5 — Kubernetes scheduling a pod onto nexcage
 
@@ -441,6 +463,7 @@ pod that names the class.
   runtime_type = "io.containerd.runc.v2"
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
   BinaryName = "/nexcage-traced"
+  SystemdCgroup = {{ .SystemdCgroup }}
 ```
 
 `/nexcage-traced` is a small shell wrapper the script writes. It appends each
@@ -449,6 +472,22 @@ binary (`$NEXCAGE`, by default `/usr/bin/nexcage`, where the `.deb` puts it);
 that log is where the list of what Kubernetes asks a runtime, below, comes
 from. Outside the test, a plain setup points `BinaryName` straight at
 `/usr/bin/nexcage`.
+
+`SystemdCgroup` came later, and a pod that is Ready does not show why it is
+needed. k3s run as a service gives its kubelet systemd's cgroup driver, and
+containerd then names every pod's cgroup
+`kubepods-<qos>-pod<uid>.slice:cri-containerd:<id>`, whatever the runtime.
+Only a handler with `SystemdCgroup` makes the shim pass `--systemd-cgroup`,
+which has systemd place the container under the pod's slice. The trace from
+that node has no `--systemd-cgroup` on any call, and nexcage dropped the flag
+before the command anyway, so libcrun's cgroupfs manager made that name a
+cgroup at the root of the hierarchy, beside `kubepods.slice`: no pod-level
+limit, QoS class or node-allocatable cap was over the pod, sandbox included.
+A pod's own limits still held, which is why the checks read from inside a pod
+could not see it. The script now reads each pod's container and sandbox from
+the host as well, `/proc/<pid>/cgroup` of the PID crictl reports, and fails
+unless both are in the pod's cgroup under `kubepods.slice`, or under
+`/kubepods/` on a kubelet with the cgroupfs driver.
 
 ```yaml
 apiVersion: node.k8s.io/v1
@@ -541,7 +580,8 @@ The script installs what a release ships for a node (#313):
 administrator to install. A run checks those files and not a copy of them. The
 only difference is that the template's `BinaryName` points at the trace
 wrapper. The containerd and CRI-O examples in the same directory are the
-configurations stage 4 verified, and no workflow installs them.
+configurations stage 4 verified, since set for a systemd node's cgroup driver,
+and no workflow installs them.
 
 Then it does the same for isolation profiles (#315). It adds the two handlers
 [INSTALL.md](INSTALL.md#an-isolation-profile-per-runtimeclass-since-0170)
@@ -553,7 +593,11 @@ one pod under each, and reads from inside each pod:
 - `Seccomp: 2`;
 - the `CapBnd` of pid 1 and of a process `kubectl exec` starts;
 - `memory.max`: 1G for hardened, which asked for 2Gi, and 256M for small;
-- `pids.max`.
+- `pids.max`;
+
+and from the host, that each pod's container and sandbox are in its pod's
+cgroup under `kubepods.slice` (`/kubepods/` with the cgroupfs driver), as for
+the first pod.
 
 A third pod under `nexcage-hardened` without `hostUsers: false` must stay
 uncreated, with "requires a user namespace" in its events.

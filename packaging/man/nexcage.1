@@ -208,8 +208,21 @@ The backend for this command, overriding the configuration's routing.
 this package's binary, so a command sent to it fails.
 .TP
 .B \-\-systemd\-cgroup
-Accepted so that a container engine is not refused. Given after \fBcreate\fR,
-it is passed to libcrun on the crun backend; anywhere else it has no effect.
+Before or after the command: \fBcreate\fR on the crun backend has systemd place
+the container, as crun and runc do. libcrun asks systemd, over D\-Bus, for a
+scope under the slice the bundle's cgroupsPath names
+(\fIslice\fR:\fIprefix\fR:\fIname\fR). containerd sends it for a handler with
+SystemdCgroup = true; CRI\-O and podman send it whenever their cgroup manager
+is systemd. It has to match the kubelet's cgroup driver: without it, a
+cgroupsPath in that form becomes a cgroup of that very name at the root of the
+hierarchy, outside the pod's. Where systemd cannot be reached, \fBcreate\fR
+fails, as crun's does. Later commands follow the manager the container was
+created with; \fBdelete \-\-force\fR under it leaves
+/sys/fs/cgroup/\fIid\fR alone. On the Proxmox LXC backend it changes nothing.
+.TP
+\fB\-\-rootless\fR \fIvalue\fR
+Accepted and ignored, as crun does: go\-runc sends \fB\-\-rootless\fR=\fBtrue\fR|\fBfalse\fR
+when its caller sets one, and libcrun decides for itself.
 .TP
 .B \-\-version
 In place of a command, the same output as the \fBversion\fR command.

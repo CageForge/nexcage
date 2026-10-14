@@ -103,6 +103,26 @@ is cpu.weight "$want" "--cpu-share 512, as --resources gives it"
 upd --cpu-shares 2
 is cpu.weight "$low" "--cpu-shares 2, runc's spelling"
 
+# libcrun reads the document up to a NUL, whatever length it is given, and
+# nexcage used to hand it one without: depending on what lay past the end of
+# the buffer the resize was refused ("invalid utf-8 string at position <n>",
+# at 128, 256 and 1024 bytes among others) or the process died on an unmapped
+# page (64 KiB). Each size here is a whole, valid document, padded with spaces.
+sized() {  # <bytes> <shares>: a linux.resources document of exactly that size
+    start="{\"cpu\":{\"shares\":$2}"
+    printf '%s' "$start"
+    head -c $(( $1 - ${#start} - 1 )) /dev/zero | tr '\0' ' '
+    printf '}'
+}
+for n in 128 256 1024 5000 65536; do
+    sized "$n" 512 > /tmp/update.doc
+    [ "$(wc -c < /tmp/update.doc)" -eq "$n" ] || fail "the $n-byte document is $(wc -c < /tmp/update.doc) bytes: the check would prove nothing"
+    resources 2
+    rc=0; nx update --resources - "$ID" < /tmp/update.doc >/dev/null 2>/tmp/update.err || rc=$?
+    [ "$rc" = 0 ] || fail "update --resources with a $n-byte document exited $rc: $(tr '\n' ' ' < /tmp/update.err)"
+    is cpu.weight "$want" "a $n-byte linux.resources document"
+done
+
 # What cgroup v2 has no file for is refused, not dropped.
 if nx update --kernel-memory 64M "$ID" >/dev/null 2>/tmp/update.err; then
     fail "--kernel-memory was accepted on cgroup v2, where there is nothing to set"

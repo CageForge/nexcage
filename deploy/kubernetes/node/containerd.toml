@@ -1,7 +1,17 @@
 # nexcage as a runtime of containerd 2.x (configuration version 3). Merge it
 # into /etc/containerd/config.toml and restart containerd. The default runtime
 # stays what it was: a pod gets nexcage only by naming the RuntimeClass.
+#
+# SystemdCgroup must be what the runc handler has, and match the kubelet's
+# cgroupDriver: true for systemd, which kubeadm sets up since 1.22; false only
+# on a node whose kubelet uses cgroupfs. With the systemd driver containerd
+# names each pod's cgroup "<pod slice>:cri-containerd:<id>" whatever the
+# runtime, and only this option makes the shim pass --systemd-cgroup, so that
+# systemd places the container under the pod's slice. Without it the name
+# becomes a cgroup at the root of the hierarchy, outside kubepods.slice and
+# every limit the kubelet sets there.
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage]
   runtime_type = 'io.containerd.runc.v2'
   [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nexcage.options]
     BinaryName = '/usr/bin/nexcage'
+    SystemdCgroup = true
