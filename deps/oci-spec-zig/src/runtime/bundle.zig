@@ -104,6 +104,7 @@ pub const OciBundleParser = struct {
         defer parsed.deinit();
 
         var bundle_config = try self.parseOciConfig(&parsed.value, rootfs_path);
+        errdefer bundle_config.deinit();
 
         // Try to parse metadata.json if it exists
         const metadata_path = try std.fs.path.join(self.allocator, &[_][]const u8{ bundle_path, "metadata.json" });
@@ -145,16 +146,24 @@ pub const OciBundleParser = struct {
             .environment = null,
             .mounts = null,
             .memory_limit = null,
-            .cpu_limit = null,
+            .cpu_shares = null,
             .capabilities = null,
             .seccomp_profile = null,
         };
+        // Every return below an error frees what was parsed before it
+        errdefer bundle_config.deinit();
 
         if (config.* != .object) {
             return BundleError.InvalidConfigFormat;
         }
 
         const obj = config.object;
+
+        if (obj.get("root")) |root_val| {
+            if (root_val == .object) {
+                if (root_val.object.get("readonly")) |v| bundle_config.confinement.@"root.readonly" = asksFor(v);
+            }
+        }
 
         // Parse hostname
         if (obj.get("hostname")) |hostname_val| {
@@ -171,66 +180,57 @@ pub const OciBundleParser = struct {
                 // Parse args (command to run)
                 if (process_obj.get("args")) |args_val| {
                     if (args_val == .array) {
-                        const args_array = args_val.array;
-                        var process_args = try self.allocator.alloc([]const u8, args_array.items.len);
-                        for (args_array.items, 0..) |arg_val, i| {
-                            if (arg_val == .string) {
-                                process_args[i] = try self.allocator.dupe(u8, arg_val.string);
-                            }
-                        }
-                        bundle_config.process_args = process_args;
+                        bundle_config.process_args = try self.dupeStrings(args_val.array.items);
                     }
                 }
 
                 // Parse environment variables
                 if (process_obj.get("env")) |env_val| {
                     if (env_val == .array) {
-                        const env_array = env_val.array;
-                        var environment = try self.allocator.alloc([]const u8, env_array.items.len);
-                        for (env_array.items, 0..) |env_val_item, i| {
-                            if (env_val_item == .string) {
-                                environment[i] = try self.allocator.dupe(u8, env_val_item.string);
-                            }
-                        }
-                        bundle_config.environment = environment;
+                        bundle_config.environment = try self.dupeStrings(env_val.array.items);
                     }
                 }
 
-                // Parse capabilities
-                if (process_obj.get("capabilities")) |caps_val| {
-                    if (caps_val == .object) {
-                        // TODO: Parse capabilities and convert to LXC format
-                        self.logInfo("Capabilities found in OCI config, will be converted to LXC format", .{});
-                    }
+                // Capabilities and the rest of the process's confinement:
+                // recorded by name, not translated
+                inline for (.{ "capabilities", "noNewPrivileges", "apparmorProfile", "selinuxLabel", "rlimits" }) |key| {
+                    if (process_obj.get(key)) |v| @field(bundle_config.confinement, "process." ++ key) = asksFor(v);
                 }
             }
         }
 
-        // Parse mounts
+        // Parse mounts. Each one is an object, and its fields are strings: a
+        // slot for anything else used to be left undefined, and deinit freed
+        // whatever its pointers held -- a crash of the root process on
+        // `"mounts": [1]`. A bundle like that is refused, as runc and crun
+        // refuse it.
         if (obj.get("mounts")) |mounts_val| {
+            try expectKind(mounts_val, .array);
             if (mounts_val == .array) {
                 const mounts_array = mounts_val.array;
                 var mounts = try self.allocator.alloc(MountConfig, mounts_array.items.len);
-                for (mounts_array.items, 0..) |mount_val, i| {
-                    if (mount_val == .object) {
-                        const mount_obj = mount_val.object;
-                        mounts[i] = MountConfig{
-                            .allocator = self.allocator,
-                            .source = if (mount_obj.get("source")) |s|
-                                if (s == .string) try self.allocator.dupe(u8, s.string) else null
-                            else
-                                null,
-                            .destination = if (mount_obj.get("destination")) |d|
-                                if (d == .string) try self.allocator.dupe(u8, d.string) else null
-                            else
-                                null,
-                            .type = if (mount_obj.get("type")) |t|
-                                if (t == .string) try self.allocator.dupe(u8, t.string) else null
-                            else
-                                null,
-                            .options = null, // TODO: Parse mount options
-                        };
-                    }
+                var filled: usize = 0;
+                errdefer {
+                    for (mounts[0..filled]) |*m| m.deinit();
+                    self.allocator.free(mounts);
+                }
+                for (mounts_array.items) |mount_val| {
+                    if (mount_val != .object) return BundleError.InvalidConfigFormat;
+                    const mount_obj = mount_val.object;
+                    var mount = MountConfig{ .allocator = self.allocator };
+                    errdefer mount.deinit();
+                    mount.source = try self.optionalString(mount_obj, "source");
+                    mount.destination = try self.optionalString(mount_obj, "destination");
+                    mount.type = try self.optionalString(mount_obj, "type");
+                    // Options were dropped here ("TODO"), so a mount asked to
+                    // be read-only or nosuid reached the backend as neither.
+                    if (mount_obj.get("options")) |opts| switch (opts) {
+                        .null => {},
+                        .array => |a| mount.options = try self.dupeStrings(a.items),
+                        else => return BundleError.InvalidConfigFormat,
+                    };
+                    mounts[filled] = mount;
+                    filled += 1;
                 }
                 bundle_config.mounts = mounts;
             }
@@ -238,36 +238,38 @@ pub const OciBundleParser = struct {
 
         // Parse Linux resources
         if (obj.get("linux")) |linux_val| {
+            try expectKind(linux_val, .object);
             if (linux_val == .object) {
                 const linux_obj = linux_val.object;
 
                 // Parse memory limit
                 if (linux_obj.get("resources")) |resources_val| {
+                    try expectKind(resources_val, .object);
                     if (resources_val == .object) {
                         const resources_obj = resources_val.object;
 
+                        // memory.limit is an int64 and cpu.shares a uint64,
+                        // kept as the runtime-spec types them: what a limit
+                        // of -1 means is the backend's to say. The limit was
+                        // cast to u64 here, and -1 -- runc's "no limit" --
+                        // took the process down.
                         if (resources_obj.get("memory")) |memory_val| {
+                            try expectKind(memory_val, .object);
                             if (memory_val == .object) {
-                                const memory_obj = memory_val.object;
-                                if (memory_obj.get("limit")) |limit_val| {
-                                    if (limit_val == .integer) {
-                                        bundle_config.memory_limit = @as(u64, @intCast(limit_val.integer));
-                                    }
-                                }
+                                bundle_config.memory_limit = try optionalInt(i64, memory_val.object, "limit");
                             }
                         }
 
                         // Parse CPU limit
                         if (resources_obj.get("cpu")) |cpu_val| {
+                            try expectKind(cpu_val, .object);
                             if (cpu_val == .object) {
-                                const cpu_obj = cpu_val.object;
-                                if (cpu_obj.get("shares")) |shares_val| {
-                                    if (shares_val == .integer) {
-                                        bundle_config.cpu_limit = @as(f64, @floatFromInt(shares_val.integer));
-                                    }
-                                }
+                                bundle_config.cpu_shares = try optionalInt(u64, cpu_val.object, "shares");
                             }
                         }
+
+                        if (resources_obj.get("devices")) |v| bundle_config.confinement.@"linux.resources.devices" = asksFor(v);
+                        bundle_config.other_resources = try self.otherResources(resources_obj);
                     }
                 }
 
@@ -463,6 +465,10 @@ pub const OciBundleParser = struct {
                     }
                 }
 
+                inline for (.{ "seccomp", "maskedPaths", "readonlyPaths", "devices" }) |key| {
+                    if (linux_obj.get(key)) |v| @field(bundle_config.confinement, "linux." ++ key) = asksFor(v);
+                }
+
                 // Parse seccomp profile
                 if (linux_obj.get("seccomp")) |seccomp_val| {
                     if (seccomp_val == .object) {
@@ -544,36 +550,18 @@ pub const OciBundleParser = struct {
         // Parse ENTRYPOINT from metadata.json
         if (obj.get("entrypoint")) |entrypoint_val| {
             if (entrypoint_val == .array) {
-                const entrypoint_array = entrypoint_val.array;
-                var entrypoint = try self.allocator.alloc([]const u8, entrypoint_array.items.len);
+                config.entrypoint = try self.dupeStrings(entrypoint_val.array.items);
 
-                for (entrypoint_array.items, 0..) |ep_val, i| {
-                    if (ep_val == .string) {
-                        entrypoint[i] = try self.allocator.dupe(u8, ep_val.string);
-                    }
-                }
-
-                config.entrypoint = entrypoint;
-
-                self.logInfo("Parsed ENTRYPOINT from metadata: {d} args", .{entrypoint_array.items.len});
+                self.logInfo("Parsed ENTRYPOINT from metadata: {d} args", .{entrypoint_val.array.items.len});
             }
         }
 
         // Parse CMD from metadata.json
         if (obj.get("cmd")) |cmd_val| {
             if (cmd_val == .array) {
-                const cmd_array = cmd_val.array;
-                var cmd = try self.allocator.alloc([]const u8, cmd_array.items.len);
+                config.cmd = try self.dupeStrings(cmd_val.array.items);
 
-                for (cmd_array.items, 0..) |cmd_item, i| {
-                    if (cmd_item == .string) {
-                        cmd[i] = try self.allocator.dupe(u8, cmd_item.string);
-                    }
-                }
-
-                config.cmd = cmd;
-
-                self.logInfo("Parsed CMD from metadata: {d} args", .{cmd_array.items.len});
+                self.logInfo("Parsed CMD from metadata: {d} args", .{cmd_val.array.items.len});
             }
         }
 
@@ -586,6 +574,107 @@ pub const OciBundleParser = struct {
             }
         }
     }
+
+    /// What a linux.resources object sets besides memory.limit, cpu.shares
+    /// and devices, which are read above, by name: "memory.swap",
+    /// "pids.limit", "unified". A null, an empty list or an empty object sets
+    /// nothing. Recorded so that a backend that applies the other two alone
+    /// can say what it leaves out; they were dropped without a word.
+    fn otherResources(self: *OciBundleParser, resources: std.json.ObjectMap) BundleError!?[]const []const u8 {
+        var names = std.ArrayListUnmanaged([]const u8){};
+        errdefer {
+            for (names.items) |n| self.allocator.free(n);
+            names.deinit(self.allocator);
+        }
+        var sections = resources.iterator();
+        while (sections.next()) |sec| {
+            const section = sec.key_ptr.*;
+            if (setsNothing(sec.value_ptr.*) or std.mem.eql(u8, section, "devices")) continue;
+            // A list (hugepageLimits) or a bare value is a setting of its
+            // own; an object's fields are each one.
+            if (sec.value_ptr.* != .object) {
+                const name = try self.allocator.dupe(u8, section);
+                errdefer self.allocator.free(name);
+                try names.append(self.allocator, name);
+                continue;
+            }
+            var fields = sec.value_ptr.object.iterator();
+            while (fields.next()) |f| {
+                const field = f.key_ptr.*;
+                if (setsNothing(f.value_ptr.*)) continue;
+                if (std.mem.eql(u8, section, "memory") and std.mem.eql(u8, field, "limit")) continue;
+                if (std.mem.eql(u8, section, "cpu") and std.mem.eql(u8, field, "shares")) continue;
+                const name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ section, field });
+                errdefer self.allocator.free(name);
+                try names.append(self.allocator, name);
+            }
+        }
+        if (names.items.len == 0) {
+            names.deinit(self.allocator);
+            return null;
+        }
+        return try names.toOwnedSlice(self.allocator);
+    }
+
+    fn setsNothing(v: std.json.Value) bool {
+        return switch (v) {
+            .null => true,
+            .array => |a| a.items.len == 0,
+            .object => |o| o.count() == 0,
+            else => false,
+        };
+    }
+
+    /// A copy of a JSON array of strings. Any other element refuses the
+    /// bundle: these arrays were allocated whole and only their string
+    /// elements written, so `"args": ["/bin/sh", 1]` left a slot undefined
+    /// that deinit then freed.
+    fn dupeStrings(self: *OciBundleParser, items: []const std.json.Value) BundleError![]const []const u8 {
+        const out = try self.allocator.alloc([]const u8, items.len);
+        var filled: usize = 0;
+        errdefer {
+            for (out[0..filled]) |s| self.allocator.free(s);
+            self.allocator.free(out);
+        }
+        for (items) |item| {
+            if (item != .string) return BundleError.InvalidConfigFormat;
+            out[filled] = try self.allocator.dupe(u8, item.string);
+            filled += 1;
+        }
+        return out;
+    }
+
+    /// A copy of an object's string field, null when it is absent or null. A
+    /// field of another type refuses the bundle rather than reading as absent.
+    fn optionalString(self: *OciBundleParser, obj: std.json.ObjectMap, key: []const u8) BundleError!?[]const u8 {
+        const val = obj.get(key) orelse return null;
+        if (val == .null) return null;
+        if (val != .string) return BundleError.InvalidConfigFormat;
+        return try self.allocator.dupe(u8, val.string);
+    }
+
+    /// Checks that a value config.json holds where the runtime-spec has an
+    /// object or an array is one; null counts as absent. Anything else was
+    /// skipped with all it held -- `"mounts": {...}` created the container
+    /// with no mounts, and a memory or cpu that was not an object with no
+    /// limit -- and is refused, as runc and crun refuse it.
+    fn expectKind(value: std.json.Value, comptime kind: std.meta.Tag(std.json.Value)) BundleError!void {
+        if (value != kind and value != .null) return BundleError.InvalidConfigFormat;
+    }
+
+    /// An object's integer field as the runtime-spec types it, null when it
+    /// is absent or null. A fraction, a string or a value outside T refuses
+    /// the bundle; one silently left out would be a limit not applied.
+    fn optionalInt(comptime T: type, obj: std.json.ObjectMap, key: []const u8) BundleError!?T {
+        const val = obj.get(key) orelse return null;
+        return switch (val) {
+            .null => null,
+            .integer => |i| std.math.cast(T, i) orelse BundleError.InvalidConfigFormat,
+            // A number past i64 that may still fit T, such as a uint64
+            .number_string => |s| std.fmt.parseInt(T, s, 10) catch BundleError.InvalidConfigFormat,
+            else => BundleError.InvalidConfigFormat,
+        };
+    }
 };
 
 /// OCI Bundle configuration extracted from config.json
@@ -596,10 +685,17 @@ pub const OciBundleConfig = struct {
     process_args: ?[]const []const u8 = null,
     environment: ?[]const []const u8 = null,
     mounts: ?[]const MountConfig = null,
-    memory_limit: ?u64 = null,
-    cpu_limit: ?f64 = null,
+    /// linux.resources.memory.limit in bytes; -1 is the runtime-spec's "no limit"
+    memory_limit: ?i64 = null,
+    /// linux.resources.cpu.shares, the cgroup v1 weight
+    cpu_shares: ?u64 = null,
+    /// What else linux.resources sets, by name under it, as "memory.swap"
+    other_resources: ?[]const []const u8 = null,
     capabilities: ?[]const u8 = null,
     seccomp_profile: ?[]const u8 = null,
+
+    /// The confinement config.json asks for, by field
+    confinement: Confinement = .{},
 
     // Extended OCI fields
     annotations: ?std.json.ObjectMap = null,
@@ -642,6 +738,10 @@ pub const OciBundleConfig = struct {
                 m.deinit();
             }
             self.allocator.free(mounts);
+        }
+        if (self.other_resources) |names| {
+            for (names) |n| self.allocator.free(n);
+            self.allocator.free(names);
         }
         if (self.capabilities) |caps| self.allocator.free(caps);
         if (self.seccomp_profile) |profile| self.allocator.free(profile);
@@ -696,19 +796,54 @@ pub const OciBundleConfig = struct {
     }
 };
 
+/// The confinement a bundle asks for, by the config.json field that asks
+/// for it. Only whether each field asks for anything is recorded: nothing
+/// here translates them, and a backend that cannot apply them has to say
+/// which it leaves out rather than create the container as if it had.
+pub const Confinement = struct {
+    @"process.capabilities": bool = false,
+    @"process.noNewPrivileges": bool = false,
+    @"process.apparmorProfile": bool = false,
+    @"process.selinuxLabel": bool = false,
+    @"process.rlimits": bool = false,
+    @"root.readonly": bool = false,
+    @"linux.seccomp": bool = false,
+    @"linux.maskedPaths": bool = false,
+    @"linux.readonlyPaths": bool = false,
+    @"linux.devices": bool = false,
+    @"linux.resources.devices": bool = false,
+};
+
+/// Whether a confinement field asks for anything: true, a non-empty string
+/// or list, or an object -- even an empty one asks for something, such as
+/// no capabilities at all.
+fn asksFor(val: std.json.Value) bool {
+    return switch (val) {
+        .bool => |b| b,
+        .string => |str| str.len > 0,
+        .array => |a| a.items.len > 0,
+        .object => true,
+        else => false,
+    };
+}
+
 /// Mount configuration from OCI spec
 pub const MountConfig = struct {
     allocator: std.mem.Allocator,
     source: ?[]const u8 = null,
     destination: ?[]const u8 = null,
     type: ?[]const u8 = null,
-    options: ?[]const u8 = null,
+    /// The mount's options as config.json lists them: "ro", "nosuid", "rbind"...
+    options: ?[]const []const u8 = null,
 
     pub fn deinit(self: *MountConfig) void {
         if (self.source) |s| self.allocator.free(s);
         if (self.destination) |d| self.allocator.free(d);
         if (self.type) |t| self.allocator.free(t);
-        if (self.options) |o| self.allocator.free(o);
+        if (self.options) |opts| {
+            for (opts) |o| self.allocator.free(o);
+            self.allocator.free(opts);
+        }
     }
 };
 

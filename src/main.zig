@@ -199,7 +199,11 @@ fn run() !void {
             failure_reported = true;
             return error.InvalidInput;
         }
-        core.state_root.set(root);
+        core.state_root.set(root) catch {
+            printError("--root is longer than a path can be: '{s}'", .{root});
+            failure_reported = true;
+            return error.InvalidInput;
+        };
     }
 
     // Initialize application context in place: commands hold &app.logger
@@ -219,11 +223,15 @@ fn run() !void {
     }
 
     var command_name = args[found.index];
-    const command_args = args[found.index + 1 ..];
+    const command_args = args[found.index + 1 .. own_end];
+    // What exec runs, after nexcage's own words and the `--` that can end them
+    const container_command = if (own_end < args.len and std.mem.eql(u8, args[own_end], "--")) args[own_end + 1 ..] else args[own_end..];
 
-    // Log command execution start - safely handle logger errors
+    // Log command execution start - safely handle logger errors. nexcage's
+    // own words only: the command exec runs is the container's, and is
+    // counted, not written down.
     if (app.advanced_logger) |*logger| {
-        logger.logCommandStart(command_name, command_args) catch {};
+        logger.logCommandStart(command_name, command_args, container_command.len) catch {};
     }
 
     // Handle help command
@@ -241,10 +249,7 @@ fn run() !void {
     // is handed to it whole.
     var options = try parseRuntimeOptions(allocator, command_name, args[found.index + 1 .. own_end]);
     defer options.deinit();
-    if (own_end < args.len) {
-        const command = if (std.mem.eql(u8, args[own_end], "--")) args[own_end + 1 ..] else args[own_end..];
-        if (command.len > 0) options.args = command;
-    }
+    if (container_command.len > 0) options.args = container_command;
 
     // Every engine sends --systemd-cgroup before the command, and the parser
     // only sees the words after it. Dropped there, the flag left libcrun on
@@ -646,7 +651,14 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, command_name: []const u8, a
             i += 2;
         } else if (std.mem.eql(u8, arg, "--node") and i + 1 < args.len) {
             // Which node of the Proxmox cluster `create` should make the
-            // container on.
+            // container on, `pull` pull on, `images` list, `rmi` remove from.
+            // It goes into pvesh paths, /nodes/<node>/..., and pvesh hands
+            // the path of a call for another node to that node's shell over
+            // ssh, unquoted, so it is held to Proxmox's own rule first.
+            if (!isNodeName(args[i + 1])) {
+                printError("--node \"{f}\" is not a Proxmox node name: letters, digits and '-', a letter or digit first and last", .{core.json.quoted(args[i + 1])});
+                return error.InvalidInput;
+            }
             options.node = try allocator.dupe(u8, args[i + 1]);
             i += 2;
         } else if (std.mem.eql(u8, arg, "--process") and i + 1 < args.len) {
@@ -1226,6 +1238,23 @@ fn expectCommand(raw: []const []const u8, name: []const u8, systemd_cgroup: bool
     const found = findCommand(args);
     try std.testing.expectEqualStrings(name, args[found.index]);
     try std.testing.expectEqual(systemd_cgroup, found.systemd_cgroup);
+}
+
+/// A node name as Proxmox's pve-node format takes it
+/// (PVE::JSONSchema::pve_verify_node_name): one DNS label, letters, digits
+/// and '-', with a letter or digit first and last.
+fn isNodeName(name: []const u8) bool {
+    if (name.len == 0) return false;
+    if (!std.ascii.isAlphanumeric(name[0]) or !std.ascii.isAlphanumeric(name[name.len - 1])) return false;
+    for (name) |c| {
+        if (!(std.ascii.isAlphanumeric(c) or c == '-')) return false;
+    }
+    return true;
+}
+
+test "--node takes what Proxmox's pve-node takes, and nothing that changes a path" {
+    for ([_][]const u8{ "pve", "prox-home", "titan", "n1", "7", "Node-2" }) |ok| try std.testing.expect(isNodeName(ok));
+    for ([_][]const u8{ "", "-pve", "pve-", "a/b", "..", "pve.local", "x;id", "a b", "titan\n", "n\x00" }) |bad| try std.testing.expect(!isNodeName(bad));
 }
 
 test "findCommand: --systemd-cgroup before the command is recorded, in each engine's order" {

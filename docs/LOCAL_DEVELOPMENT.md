@@ -24,7 +24,7 @@ scripts/dev.sh all          # before a pull request: check, then every CI job th
 | `test` | `check` | `zig fmt --check`, unit tests | zig | 6 s |
 | `sim` | `sim` | Every command against fake `pct`/`pvesh`/`pvesm` ([TESTING.md](../TESTING.md#running-against-fake-proxmox-tools)) | zig, unshare, python3, tar, zstd | 12 s |
 | `check` | | `test` + `sim` | | 20 s |
-| `crun` | | The crun-backend image and what `crun_build.yml` checks on it: `version`, the features ABI, the features document, `ps` against crun, a bundle from a foreign working directory | a container engine | 3 min first, then seconds |
+| `crun` | | The crun-backend image and what `crun_build.yml` checks on it, in its order: `version`, the features ABI, the features document, `ps` against crun, `update`'s flags, a Proxmox LXC container under `--root`, an isolation profile, `--systemd-cgroup`, a bundle from a foreign working directory, `kill`, `exec`'s process spec, a profile's limits on `update`, memory values, the re-execution. Not the `.deb`, the runtime-spec suite or critest, which only `act crun_build.yml:docker` runs, nor the pod, which is `cri` | a container engine | 3 min first, then a minute |
 | `cri` | | A pod through containerd's CRI with nexcage as the runtime handler: sandbox, CNI address, container, `exec`, `update`, removal | a container engine | 5 s, plus the images |
 | `e2e` | `e2e` | `sim` + `crun` + `cri` | | |
 | `shell [CMD]` | `dev-shell` | A shell with nexcage (crun backend), crun, containerd and crictl, or CMD run there | a container engine | |
@@ -73,7 +73,9 @@ handle both:
 
 - Only `cpu`, `memory` and `pids` are delegated to a user's cgroups, so
   controllers are enabled one at a time; a single write naming `cpuset` or
-  `io` would fail as a whole and enable nothing.
+  `io` would fail as a whole and enable nothing. `tests/crun/update.sh` checks
+  `--cpuset-cpus` only where `cpuset` is in the container's
+  `cgroup.controllers`, and prints a `skip:` line here.
 - containerd runs in a user namespace, where the kernel refuses to lower
   `oom_score_adj` and AppArmor profiles cannot be loaded.
   `tests/cri/pod_on_nexcage.sh` sees the user namespace and sets

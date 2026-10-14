@@ -7,6 +7,19 @@ echo "pvesh $*" >> "$SIM/calls"
 # makes the difference between the two tools visible here.
 HERE=${SIM_NODE:-$(hostname)}
 
+# A string as Proxmox's API writes it in JSON: a quote, a backslash and a
+# control character escaped, anything else as it is. Text someone else set --
+# a snapshot's description, a name -- was printed raw between quotes here, so
+# a control character in it made the answer invalid JSON, which the real API
+# never gives, and nexcage's handling of such text could not be checked.
+jstr() {
+  case $1 in
+    *[\"\\[:cntrl:]]*)
+      python3 -c 'import json, sys; sys.stdout.buffer.write(json.dumps(sys.argv[1], ensure_ascii=False).encode("utf-8", "surrogateescape"))' "$1" ;;
+    *) printf '"%s"' "$1" ;;
+  esac
+}
+
 # fail_all means the host cannot answer at all, and that has to include pvesh:
 # the checks that inject it are about nexcage refusing rather than guessing, and
 # they stop meaning anything if one of the two tools still answers.
@@ -14,6 +27,10 @@ HERE=${SIM_NODE:-$(hostname)}
 
 case "$1 $2" in
   "get /cluster/resources")
+    # $SIM/fail_resources holds what pvesh says when the cluster cannot answer
+    # -- pmxcfs down, this node out of quorum -- while `pct list`, which reads
+    # this host's configs, still works. Only both together were modelled.
+    [ -e "$SIM/fail_resources" ] && { cat "$SIM/fail_resources" >&2; exit 255; }
     # The real API's --type enumeration is vm, storage, node, sdn. It rejects
     # anything else, and nexcage asked for "lxc" for three releases: every
     # lookup failed and fell back to `pct list`, which is right for a container
@@ -50,9 +67,27 @@ case "$1 $2" in
         old_status=$(awk -v n="$name" '$1==n {print $2}' "$SIM/stale_status" 2>/dev/null)
         [ -n "$old_status" ] && status=$old_status
       fi
-      printf ',{"vmid":%s,"name":"%s","node":"%s","status":"%s","type":"lxc"}' \
-        "$vmid" "$name" "${node:-$HERE}" "$status"
-    done < "$SIM/db"
+      # $SIM/stale_name holds "vmid name" lines: the name pvestatd last saw
+      # for a VMID, which the listing keeps for a few seconds after the VMID
+      # has gone to another container.
+      if [ -s "$SIM/stale_name" ]; then
+        old_name=$(awk -v v="$vmid" '$1==v {print $2}' "$SIM/stale_name" 2>/dev/null)
+        [ -n "$old_name" ] && name=$old_name
+      fi
+      # $SIM/noname lists VMIDs the cluster has no report for: a container
+      # its node made seconds ago, or any container of a node down for five
+      # minutes, whose reports pmxcfs has dropped. PVE::API2Tools::
+      # extract_vm_stats then gives the entry no name and status "unknown".
+      if [ -s "$SIM/noname" ] && grep -qxF "$vmid" "$SIM/noname"; then
+        printf ',{"vmid":%s,"node":"%s","status":"unknown","type":"lxc"}' "$vmid" "${node:-$HERE}"
+        continue
+      fi
+      printf ',{"vmid":%s,"name":%s,"node":"%s","status":"%s","type":"lxc"}' \
+        "$vmid" "$(jstr "$name")" "${node:-$HERE}" "$status"
+    # In Proxmox's order: Cluster.pm walks `sort keys %$idlist`, a string
+    # sort, so VMID 1000 comes before 150. Rows used to come in the order
+    # they were made, and a lookup that took the first match was right by luck.
+    done < <(LC_ALL=C sort -k1,1 "$SIM/db")
     printf ']\n'
     ;;
   "get /nodes")
@@ -73,6 +108,9 @@ case "$1 $2" in
   "get /nodes/"*/storage)
     # $SIM/node_storages holds "node storage shared" lines.
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage|\1|p')
+    # A node that does not answer: the API proxies the call to it, and its
+    # failure comes back. $SIM/fail_storage.<node> holds what was said.
+    [ -e "$SIM/fail_storage.$node" ] && { cat "$SIM/fail_storage.$node" >&2; exit 255; }
     printf '['
     sep=""
     if [ -s "$SIM/node_storages" ]; then
@@ -91,13 +129,24 @@ case "$1 $2" in
     # "the template is not there" check mean something.
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
     want_storage=$(echo "$2" | sed -n 's|/nodes/[^/]*/storage/\([^/]*\)/content.*|\1|p')
+    # $SIM/fail_list_in holds N: the Nth listing from now fails, the way a
+    # shared storage that is briefly not online does, and the ones after it
+    # answer again.
+    if [ -s "$SIM/fail_list_in" ]; then
+      n=$(cat "$SIM/fail_list_in")
+      if [ "$n" -le 1 ]; then
+        rm -f "$SIM/fail_list_in"
+        echo "storage '$want_storage' is not online" >&2; exit 255
+      fi
+      echo $((n - 1)) > "$SIM/fail_list_in"
+    fi
     printf '['
     sep=""
     while read -r n volid; do
       [ "$n" = "$node" ] || continue
       # a volid is "<storage>:vztmpl/<file>", so it belongs to one storage
       [ "${volid%%:*}" = "$want_storage" ] || continue
-      printf '%s{"volid":"%s","content":"vztmpl","format":"tzst"}' "$sep" "$volid"
+      printf '%s{"volid":%s,"content":"vztmpl","format":"tzst"}' "$sep" "$(jstr "$volid")"
       sep=","
     done < "${SIM}/node_templates" 2>/dev/null
     printf ']\n'
@@ -129,15 +178,15 @@ case "$1 $2" in
     if [ -s "$SIM/snaps.$vmid" ]; then
       while read -r name t desc; do
         [ -n "$name" ] || continue
-        printf '{"name":"%s","snaptime":%s' "$name" "$t"
-        [ -n "$desc" ] && printf ',"description":"%s"' "$desc"
-        [ -n "$parent" ] && printf ',"parent":"%s"' "$parent"
+        printf '{"name":%s,"snaptime":%s' "$(jstr "$name")" "$t"
+        [ -n "$desc" ] && printf ',"description":%s' "$(jstr "$desc")"
+        [ -n "$parent" ] && printf ',"parent":%s' "$(jstr "$parent")"
         printf '},'
         parent=$name
       done < "$SIM/snaps.$vmid"
     fi
     printf '{"name":"current","description":"You are here!"'
-    [ -n "$parent" ] && printf ',"parent":"%s"' "$parent"
+    [ -n "$parent" ] && printf ',"parent":%s' "$(jstr "$parent")"
     printf ',"running":0}]\n'
     ;;
   "create /nodes/"*/lxc/*/snapshot/*/rollback)
@@ -234,8 +283,8 @@ case "$1 $2" in
   "create /nodes/"*)
     # oci-registry-pull. The pulled file has to appear in two places: $SIM/templates,
     # which the create path's template detection reads, and $SIM/node_templates,
-    # which is what a storage's content listing answers from -- `pull` reads the
-    # volid back from the storage rather than composing it.
+    # which is what a storage's content listing answers from -- `pull` checks
+    # the storage holds the file it named.
     [ -e "$SIM/fail_pull" ] && { echo "pull failed" >&2; exit 1; }
     # What Proxmox does when its pull task fails, a refused login among others
     # (#309): skopeo's reason on stdout, the failed command on stderr, nothing
@@ -248,20 +297,107 @@ case "$1 $2" in
     fi
     node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/storage/.*|\1|p')
     store=$(echo "$2" | sed -n 's|/nodes/[^/]*/storage/\([^/]*\)/oci-registry-pull|\1|p')
-    ref=$4; tag=${ref##*:}; img=${ref%:*}; img=${img##*/}
+    shift 2
+    ref=""; fname=""; has_fname=0
+    while [ $# -gt 0 ]; do
+      case $1 in
+        --reference) ref=$2; shift 2 ;;
+        --filename) fname=$2; has_fname=1; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    if [ "$has_fname" = 1 ] && [ ${#fname} -gt 255 ]; then
+      echo "400 Parameter verification failed." >&2
+      echo "filename: value may only be 255 characters long" >&2; exit 2
+    fi
+    if [ "$has_fname" = 1 ] && [ -z "$fname" ]; then
+      echo "400 Parameter verification failed." >&2
+      echo "filename: value must be at least 1 characters long" >&2; exit 2
+    fi
+    # Proxmox's pattern for --reference (pve-storage, Status.pm
+    # oci_registry_pull; \d and \w spelled out): an optional registry and port,
+    # a lower-case path, and a tag, which is not optional -- a reference
+    # without one, or pinned by a digest, is refused. This fake pulled any
+    # reference, the empty one too, and printed a template for it.
+    LC_ALL=C
+    ref_re='^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]))*(:[0-9]+)?/)?[a-z0-9]+(([._]|__|-*)[a-z0-9]+)*(/[a-z0-9]+(([._]|__|-*)[a-z0-9]+)*)*:[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$'
+    if ! [[ $ref =~ $ref_re ]]; then
+      echo "400 Parameter verification failed." >&2
+      echo "reference: value does not match the regex pattern" >&2; exit 2
+    fi
+    # The file is pve-storage's normalize_content_filename of --filename, or of
+    # the reference without one, plus ".tar": everything up to the last '/' or
+    # '\' goes, and every character outside [a-zA-Z0-9_.-] becomes '_'. So
+    # docker.io/library/redis:7 alone is redis_7.tar, and so is
+    # ghcr.io/someone/redis:7. This fake used to ignore --filename.
+    [ "$has_fname" = 1 ] || fname=$ref
+    file=$(printf '%s' "$fname" | sed 's|.*[/\\]||; s/[^a-zA-Z0-9_.-]/_/g').tar
+    volid="${store:-local}:vztmpl/$file"
+    # Proxmox does not write over a file that is there: the handler dies before
+    # it starts the task, and pvesh exits with the errno Perl holds, 25.
+    if grep -qxF "$node $volid" "$SIM/node_templates" 2>/dev/null; then
+      echo "refusing to override existing file '$file'" >&2; exit 25
+    fi
+    # The pull runs as a task, and the task's log is named for its UPID, which
+    # holds the node and the file: /var/log/pve/tasks/<x>/<UPID>, a single file
+    # name of 255 bytes at most. A longer one fails before skopeo runs, with
+    # nothing written (pve-common, PVE/UPID.pm open_log, PVE/File.pm
+    # create_owned_file_fh), and pvesh exits with the errno Perl holds,
+    # ENAMETOOLONG. This fake printed any UPID, so a name too long for its task
+    # was pulled here and failed on Proxmox.
+    upid="UPID:$node:00000001:00000001:00000001:ociregistrypull:$file:root@pam:"
+    if [ ${#upid} -gt 255 ]; then
+      echo "unable to create file '/var/log/pve/tasks/1/$upid' - File name too long" >&2; exit 36
+    fi
+    # A file written to a storage is listed by the node that wrote it, and
+    # by every node of a shared storage: pve-storage's `shared` says the
+    # storage holds the same files whichever node reads it -- the NFS or
+    # CephFS mount behind it is one -- so a pull on one node is in every
+    # node's content listing at once, as a removal is gone from all of them
+    # (the delete case below). The fake listed the file for the pulling node
+    # alone, and the documented pull-then-create --node failed here, not on
+    # Proxmox.
+    lands() {  # <volid>
+      local n
+      echo "$node $1" >> "$SIM/node_templates"
+      for n in $(awk -v s="${1%%:*}" -v me="$node" '$2==s && $3=="1" && $1!=me {print $1}' "$SIM/node_storages" 2>/dev/null); do
+        echo "$n $1" >> "$SIM/node_templates"
+      done
+    }
+    # $SIM/also_lands holds volids another writer puts on the storage while
+    # this pull runs: a second pull, an upload, another create's bundle archive.
+    if [ -s "$SIM/also_lands" ]; then
+      while read -r other; do
+        echo "$other" >> "$SIM/templates"
+        lands "$other"
+      done < "$SIM/also_lands"
+      rm -f "$SIM/also_lands"
+    fi
     # The volid names the storage that was asked for, as it does on PVE. This
     # used to write local: whatever the path said, so a correct --storage on
     # create failed against the fake at pct create, not against Proxmox.
-    echo "${store:-local}:vztmpl/${img}_${tag}.tar" >> "$SIM/templates"
-    echo "$node ${store:-local}:vztmpl/${img}_${tag}.tar" >> "$SIM/node_templates"
+    echo "$volid" >> "$SIM/templates"
+    lands "$volid"
+    # What pvesh prints for the task it ran, as captured on PVE 9.2
+    echo "$upid"
     ;;
   "set /nodes/"*/lxc/*/config)
     # A container's options through its node's API -- what `update` uses for
     # a container elsewhere. Recorded like every call; nothing more to model.
     ;;
   "get /nodes/"*/lxc/*/config)
-    # What `update --memory-swap` reads when no --memory came with it.
-    echo '{"memory":512,"swap":512,"cores":1}'
+    # A container's config, as its node's API gives it: what `update
+    # --memory-swap` reads when no --memory came with it, and the hostname a
+    # command checks right before it stops or destroys the container.
+    # Only the node the container is on has its config: the API proxies the
+    # call to the node in the path, and that node reads its own
+    # nodes/<node>/lxc/<vmid>.conf. Answering for any node let a check that
+    # asked the wrong one pass.
+    node=$(echo "$2" | sed -n 's|/nodes/\([^/]*\)/lxc/.*|\1|p')
+    vmid=$(echo "$2" | sed -n 's|.*/lxc/\([0-9]*\)/config|\1|p')
+    host=$(awk -v v="$vmid" -v n="$node" -v h="$HERE" '$1==v && ($4==n || ($4=="" && n==h)) {print $3; f=1} END {exit !f}' "$SIM/db") || {
+      echo "Configuration file 'nodes/$node/lxc/$vmid.conf' does not exist" >&2; exit 2; }
+    printf '{"cores":1,"hostname":"%s","memory":512,"swap":512}\n' "$host"
     ;;
   *) echo "fake pvesh: unsupported $*" >&2; exit 99 ;;
 esac

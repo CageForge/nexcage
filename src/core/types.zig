@@ -308,8 +308,9 @@ pub const RuntimeOptions = struct {
     node: ?[]const u8 = null,
     /// `pull --storage <name>`: the Proxmox storage to put the template on.
     storage_name: ?[]const u8 = null,
-    /// `pull --filename <name>`: the destination file name, which Proxmox
-    /// normalises.
+    /// `pull --filename <name>`: the destination file name, before the
+    /// ".tar" Proxmox adds. A name Proxmox would normalise is refused, not
+    /// passed on (pve.zig, isPlainFileName).
     filename: ?[]const u8 = null,
     /// `update --resources <file>`: a runtime-spec `linux.resources` object,
     /// which is how a container engine sends a resize. `-` is stdin.

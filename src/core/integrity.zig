@@ -55,22 +55,17 @@ pub const IntegrityChecker = struct {
     fn checkStorageIntegrity(self: *IntegrityChecker, report: *IntegrityReport) !void {
         if (self.logger) |log| try log.info("Checking storage integrity...", .{});
 
-        // Where per-container state goes: /run/nexcage, or --root. The first
-        // create makes it, so its absence is no fault; one nexcage cannot
-        // write to is. Opened as a directory: a blocking open of a FIFO in
-        // its place cannot hang the check.
-        const root = state_root.get();
-        if (std.fs.openDirAbsolute(root, .{})) |d| {
-            var dir = d;
-            dir.close();
-            if (std.posix.access(root, std.posix.W_OK)) {
-                try report.addCheck("state_root", .pass, "State directory: {s}", .{root});
-            } else |err| {
-                try report.addCheck("state_root", .fail, "State directory {s} is not writable: {s}", .{ root, @errorName(err) });
-            }
-        } else |err| switch (err) {
-            error.FileNotFound => try report.addCheck("state_root", .warn, "State directory {s} does not exist yet; the first create makes it", .{root}),
-            else => try report.addCheck("state_root", .fail, "State directory {s} cannot be opened: {s}", .{ root, @errorName(err) }),
+        // Where per-container state goes: /run/nexcage; under --root, the
+        // root itself, where libcrun keeps its containers, and
+        // <root>/.proxmox-lxc, where the Proxmox LXC backend keeps its
+        // records. Only the second was checked, so a root nexcage cannot
+        // write to came out as a directory not made yet, and the next create
+        // failed on it.
+        if (state_root.isDefault()) {
+            try checkStateDir(report, state_root.get());
+        } else {
+            try checkStateDir(report, state_root.crun());
+            try checkStateDir(report, state_root.get());
         }
 
         // Proxmox VE's container configurations, there on every node
@@ -127,6 +122,75 @@ pub const IntegrityChecker = struct {
         };
     }
 };
+
+/// One directory create writes in. The first create makes it, and any
+/// directory above it that is missing, so its absence is no fault; one nexcage
+/// cannot write to is, and so is one it cannot make because the nearest
+/// directory above it that exists is not writable. Opened as a directory: a
+/// blocking open of a FIFO in its place cannot hang the check.
+fn checkStateDir(report: *IntegrityReport, path: []const u8) !void {
+    if (std.fs.openDirAbsolute(path, .{})) |d| {
+        var dir = d;
+        dir.close();
+        if (std.posix.access(path, std.posix.W_OK)) {
+            try report.addCheck("state_root", .pass, "State directory: {s}", .{path});
+        } else |err| {
+            try report.addCheck("state_root", .fail, "State directory {s} is not writable: {s}", .{ path, @errorName(err) });
+        }
+        return;
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => return report.addCheck("state_root", .fail, "State directory {s} cannot be opened: {s}", .{ path, @errorName(err) }),
+    }
+    var above = std.fs.path.dirname(path);
+    while (above) |parent| : (above = std.fs.path.dirname(parent)) {
+        if (std.fs.openDirAbsolute(parent, .{})) |d| {
+            var dir = d;
+            dir.close();
+        } else |err| switch (err) {
+            error.FileNotFound => continue,
+            else => return report.addCheck("state_root", .fail, "State directory {s} cannot be made: {s} cannot be opened: {s}", .{ path, parent, @errorName(err) }),
+        }
+        std.posix.access(parent, std.posix.W_OK) catch |err| {
+            return report.addCheck("state_root", .fail, "State directory {s} cannot be made: {s} is not writable: {s}", .{ path, parent, @errorName(err) });
+        };
+        break;
+    }
+    try report.addCheck("state_root", .warn, "State directory {s} does not exist yet; the first create makes it", .{path});
+}
+
+test "a state directory that cannot be made fails, one not made yet in a writable place warns" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makeDir("ro");
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const base = try tmp.dir.realpath(".", &buf);
+    var report = IntegrityReport.init(std.testing.allocator);
+    defer report.deinit();
+
+    const missing = try std.fmt.allocPrint(std.testing.allocator, "{s}/rw/a/b", .{base});
+    defer std.testing.allocator.free(missing);
+    try checkStateDir(&report, missing);
+    try std.testing.expectEqual(CheckResult.warn, report.checks.items[0].result);
+
+    // A file where a directory above it would have to be
+    try tmp.dir.writeFile(.{ .sub_path = "file", .data = "" });
+    const under_file = try std.fmt.allocPrint(std.testing.allocator, "{s}/file/x", .{base});
+    defer std.testing.allocator.free(under_file);
+    try checkStateDir(&report, under_file);
+    try std.testing.expectEqual(CheckResult.fail, report.checks.items[1].result);
+
+    // Root writes in a directory whatever its mode, so this one is
+    // read-only to everyone else only
+    if (std.os.linux.geteuid() == 0) return;
+    try std.posix.fchmodat(tmp.dir.fd, "ro", 0o555, 0);
+    defer std.posix.fchmodat(tmp.dir.fd, "ro", 0o755, 0) catch {};
+    const ro = try std.fmt.allocPrint(std.testing.allocator, "{s}/ro/.proxmox-lxc", .{base});
+    defer std.testing.allocator.free(ro);
+    try checkStateDir(&report, ro);
+    try std.testing.expectEqual(CheckResult.fail, report.checks.items[2].result);
+    try std.testing.expect(std.mem.indexOf(u8, report.checks.items[2].message, "cannot be made") != null);
+}
 
 /// What `zpool status -x` says, as a check. It prints "all pools are
 /// healthy" when they are, the status of each pool that is not, and "no

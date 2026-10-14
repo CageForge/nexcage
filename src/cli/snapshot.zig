@@ -33,6 +33,11 @@ const Rest = struct {
 /// The snapshot's name, the first word after the container, and the verb's
 /// options after it. `takes` says which options the verb has; anything else
 /// after the name is a usage error, not a second name silently ignored.
+///
+/// The name is checked against Proxmox's own rule here, before the container
+/// is looked up: for a container on another node it goes into a pvesh path,
+/// which pvesh hands to that node's shell, so a name like 'x;cmd;' was a
+/// command run as root there.
 fn nameAndRest(options: types.RuntimeOptions, logger: ?*core.LogContext, verb: []const u8, takes: Rest) !struct { name: []const u8, rest: Rest } {
     const args = options.args orelse &[_][]const u8{};
     if (args.len == 0) {
@@ -57,6 +62,7 @@ fn nameAndRest(options: types.RuntimeOptions, logger: ?*core.LogContext, verb: [
             return types.Error.InvalidInput;
         }
     }
+    try backends.proxmox_lxc.pve.checkSnapshotName(logger, args[0]);
     return .{ .name = args[0], .rest = rest };
 }
 
@@ -101,7 +107,9 @@ pub const SnapshotCommand = struct {
             "storage does the work, so it has to be one that can snapshot -- zfs,\n" ++
             "lvm-thin or qcow2; a raw volume on a directory storage cannot, and the\n" ++
             "command says so.\n\n" ++
-            "The name is Proxmox's: letters, digits, '-' and '_', and not 'current'.\n\n" ++
+            "The name is Proxmox's: a letter, then letters, digits, '-' or '_', 2 to\n" ++
+            "40 characters, and not 'current'. Any other name is refused before\n" ++
+            "Proxmox is asked anything.\n\n" ++
             "Options:\n" ++
             "  --description <text>  A note kept with the snapshot\n" ++
             "  -h, --help            Show this help message\n\n" ++
@@ -276,6 +284,8 @@ pub const SnapshotsCommand = struct {
         const backend = try backends.proxmox_lxc.driver.ProxmoxLxcDriver.init(allocator, proxmox_config);
         defer backend.deinit();
         if (self.base.logger) |log| backend.setLogger(log);
+        // a VMID finds the container only when --runtime lxc asked for one
+        backend.by = if (options.runtime_type != null) .name_or_vmid else .name;
 
         const list = try backend.listSnapshots(allocator, container_id);
         defer {
@@ -302,10 +312,14 @@ pub const SnapshotsCommand = struct {
             }
             try w.writeAll(if (list.len == 0) "]\n" else "\n]\n");
         } else {
+            // The names and descriptions are whoever took the snapshot's
+            // text, and reach the terminal of whoever lists them; escaped,
+            // each stays in its cell (core.logging.cell). The JSON is
+            // escaped as JSON.
             try w.writeAll("NAME\tCREATED\tDESCRIPTION\n");
             for (list) |s| {
                 const created = if (s.snaptime) |t| backends.proxmox_lxc.pve.formatUtc(&when, t) else "";
-                try w.print("{s}\t{s}\t{s}\n", .{ s.name, created, s.description });
+                try w.print("{f}\t{s}\t{f}\n", .{ core.logging.cell(s.name), created, core.logging.cell(s.description) });
             }
         }
         try stdout.writeAll(out.items);

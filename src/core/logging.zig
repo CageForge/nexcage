@@ -147,15 +147,25 @@ fn cut(buf: []u8, comptime format: []const u8, args: anytype) []const u8 {
 /// which some readers take for line breaks, and any byte that is not part of
 /// valid UTF-8, since a terminal not in UTF-8 mode takes a lone 0x9b for CSI.
 fn writeEscaped(out: *std.Io.Writer, msg: []const u8) !void {
+    return escapeTo(out, msg, .keep_tab);
+}
+
+/// What a tab is to the text being escaped: kept in a log message, where it
+/// is as harmless as a space, and escaped in a table cell, where it would
+/// start a column of its own.
+const Tab = enum { keep_tab, escape_tab };
+
+fn escapeTo(out: *std.Io.Writer, msg: []const u8, tab: Tab) !void {
     var start: usize = 0;
     var i: usize = 0;
     while (i < msg.len) {
-        const len, const escape = nextCharacter(msg[i..]);
+        const len, const escape = nextCharacter(msg[i..], tab);
         if (escape) {
             try out.writeAll(msg[start..i]);
             for (msg[i..][0..len]) |c| switch (c) {
                 '\n' => try out.writeAll("\\n"),
                 '\r' => try out.writeAll("\\r"),
+                '\t' => try out.writeAll("\\t"),
                 '\\' => try out.writeAll("\\\\"),
                 else => try out.print("\\x{x:0>2}", .{c}),
             };
@@ -166,11 +176,30 @@ fn writeEscaped(out: *std.Io.Writer, msg: []const u8) !void {
     try out.writeAll(msg[start..]);
 }
 
-/// The length of the character `rest` starts with, and whether writeEscaped
+/// A cell of a table nexcage prints holding text it did not write: a
+/// snapshot's description, a container's or a template's name as Proxmox
+/// lists them. Escaped as a log message is, and a tab too. `snapshots` wrote
+/// descriptions as they came, so anyone allowed to set one could send an
+/// escape sequence to the terminal of whoever listed the snapshots, or start
+/// rows and columns of their own. Used with `{f}`.
+pub const Cell = struct {
+    s: []const u8,
+
+    pub fn format(self: Cell, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        try escapeTo(w, self.s, .escape_tab);
+    }
+};
+
+pub fn cell(s: []const u8) Cell {
+    return .{ .s = s };
+}
+
+/// The length of the character `rest` starts with, and whether escapeTo
 /// escapes it. A byte that does not start valid UTF-8 is taken on its own.
-fn nextCharacter(rest: []const u8) struct { usize, bool } {
+fn nextCharacter(rest: []const u8, tab: Tab) struct { usize, bool } {
     const c = rest[0];
-    if (c < 0x80) return .{ 1, (c < 0x20 and c != '\t') or c == 0x7f or c == '\\' };
+    if (c == '\t') return .{ 1, tab == .escape_tab };
+    if (c < 0x80) return .{ 1, c < 0x20 or c == 0x7f or c == '\\' };
     const len = std.unicode.utf8ByteSequenceLength(c) catch return .{ 1, true };
     if (len > rest.len) return .{ 1, true };
     const cp = std.unicode.utf8Decode(rest[0..len]) catch return .{ 1, true };
@@ -234,6 +263,29 @@ pub const LogContext = struct {
 
     pub fn fatal(self: *LogContext, comptime format: []const u8, args: anytype) !void {
         try self.log(.fatal, format, args);
+    }
+
+    /// Writes a warning to `echo` the way an error is echoed there: one
+    /// plain line, escaped. Only errors are echoed by themselves; a caller
+    /// whose warning is about protection the command did not give uses this
+    /// beside warn(), so whoever ran the command sees it when --log sends
+    /// the log to a file. Nothing is written without an echo, or when
+    /// --log-level asked for errors only.
+    pub fn echoWarning(self: *LogContext, comptime format: []const u8, args: anytype) void {
+        const echo = self.echo orelse return;
+        if (@intFromEnum(LogLevel.warn) < @intFromEnum(self.level)) return;
+        const whole: ?[]u8 = std.fmt.allocPrint(self.allocator, format, args) catch null;
+        defer if (whole) |m| self.allocator.free(m);
+        var fallback: [json_message_max]u8 = undefined;
+        const text = whole orelse cut(&fallback, format, args);
+
+        var echo_buffer: [1024]u8 = undefined;
+        var echo_writer = echo.writerStreaming(&echo_buffer);
+        const out = &echo_writer.interface;
+        out.print("{s}: warning: ", .{self.component}) catch {};
+        writeEscaped(out, text) catch {};
+        out.writeAll("\n") catch {};
+        out.flush() catch {};
     }
 
     fn log(self: *LogContext, level: LogLevel, comptime format: []const u8, args: anytype) !void {
@@ -427,6 +479,47 @@ test "a logged value cannot add a line or a terminal escape" {
             try tmp.dir.readFile("stderr", &buf),
         );
     }
+}
+
+test "a table cell of someone else's text is one cell of one row, and sends the terminal nothing" {
+    // What a snapshot's description can hold: a terminal's title sequence
+    // (ESC ] ... BEL), CSI as UTF-8, a tab that would start a column, a
+    // newline that would start a row, and a backslash before an n. Cyrillic
+    // is kept as it is.
+    const given = "d1\x1b]0;pwned\x07\u{9b}2J\tforged\ncol\\n \u{440}";
+    var buf: [256]u8 = undefined;
+    var w = std.Io.Writer.fixed(&buf);
+    try w.print("snap\t{f}\n", .{cell(given)});
+    const got = w.buffered();
+    try std.testing.expectEqualStrings("snap\td1\\x1b]0;pwned\\x07\\xc2\\x9b2J\\tforged\\ncol\\\\n \u{440}\n", got);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, got, "\t"));
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, got, "\n"));
+    // Plain text is as it was
+    w = std.Io.Writer.fixed(&buf);
+    try w.print("{f}", .{cell("before the \"e2e\" write")});
+    try std.testing.expectEqualStrings("before the \"e2e\" write", w.buffered());
+}
+
+test "a warning echoed on purpose is one escaped line, as an echoed error is" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const log_file = try tmp.dir.createFile("log", .{});
+    defer log_file.close();
+    const echo_file = try tmp.dir.createFile("stderr", .{});
+    defer echo_file.close();
+
+    var logger = LogContext.init(std.testing.allocator, log_file, .info, "nexcage");
+    logger.echo = echo_file;
+    logger.echoWarning("linux.seccomp in {s}/config.json: not applied", .{"/b/x\nnexcage: forged\x1b[2J\u{85}"});
+    // --log-level error: not written
+    logger.level = .@"error";
+    logger.echoWarning("quiet", .{});
+
+    var buf: [512]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        "nexcage: warning: linux.seccomp in /b/x\\nnexcage: forged\\x1b[2J\\xc2\\x85/config.json: not applied\n",
+        try tmp.dir.readFile("stderr", &buf),
+    );
 }
 
 test "the re-executed copy leaves out the lines below warn until it is told it has caught up" {

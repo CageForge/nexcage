@@ -494,7 +494,7 @@ fn nul(what: []const u8, kind: []const u8, at: *const Path, why: *Refusal) error
 }
 
 /// Where in a document a refusal points, as linux.namespaces[1].path. A NUL
-/// or another control character in a key is written as \u0000, as Shown
+/// or another control character in a key is written as \u0000, as shown
 /// writes it.
 const Path = struct {
     buf: [128]u8 = undefined,
@@ -533,26 +533,9 @@ const Path = struct {
 };
 
 /// A string from the bundle, as a refusal shows it with `{f}`: escaped as
-/// between the quotes of a JSON string, a newline as \n and a NUL as \u0000,
-/// so that a bundle cannot start a line of its own, or move the cursor, in
-/// the log the engine keeps of the message. That covers C0, DEL, and C1,
-/// which UTF-8 writes as 0xc2 then 0x80 to 0x9f: U+009B is a terminal's CSI,
-/// as ESC [ is; and U+2028 and U+2029, which some readers take for line
-/// breaks. A quote or a backslash is escaped too, so the bundle cannot close
-/// the quotes a refusal puts round it. json.writeStringContents is the one
-/// place that says which characters these are, for the state file and the
-/// JSON log as for this.
-const Shown = struct {
-    s: []const u8,
-
-    pub fn format(self: Shown, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        try @import("json.zig").writeStringContents(w, self.s);
-    }
-};
-
-fn shown(s: []const u8) Shown {
-    return .{ .s = s };
-}
+/// between the quotes of a JSON string, as json.quoted says. The Proxmox LXC
+/// backend's refusals of a bundle quote it the same way.
+const shown = @import("json.zig").quoted;
 
 /// The object under `key`, made when it is not there. The pointer is good
 /// until the next key is added to `obj`.

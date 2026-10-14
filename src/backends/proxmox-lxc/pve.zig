@@ -77,6 +77,125 @@ pub fn parsePctStatus(output: []const u8) PctStatus {
     return result;
 }
 
+/// Whether a cgroup.procs list -- one PID per line -- holds `pid`.
+fn listsPid(procs: []const u8, pid: std.posix.pid_t) bool {
+    var lines = std.mem.tokenizeScalar(u8, procs, '\n');
+    while (lines.next()) |line| {
+        const listed = std.fmt.parseInt(std.posix.pid_t, line, 10) catch continue;
+        if (listed == pid) return true;
+    }
+    return false;
+}
+
+test "listsPid finds a whole PID in a cgroup.procs list, never a part of one" {
+    try std.testing.expect(listsPid("1\n4242\n77\n", 4242));
+    try std.testing.expect(listsPid("4242", 4242));
+    try std.testing.expect(!listsPid("42420\n", 4242));
+    try std.testing.expect(!listsPid("14242\n", 4242));
+    try std.testing.expect(!listsPid("", 4242));
+    try std.testing.expect(!listsPid("\n\n", 4242));
+}
+
+/// What a search of a cgroup tree for a PID found.
+const CgroupSearch = struct {
+    found: bool = false,
+    /// Cgroups passed over because they could not be opened or read
+    unread: usize = 0,
+    /// Why the first of them could not be
+    first_error: ?anyerror = null,
+
+    fn passOver(self: *CgroupSearch, err: anyerror) void {
+        if (self.unread == 0) self.first_error = err;
+        self.unread += 1;
+    }
+};
+
+/// Whether a cgroup.procs anywhere under `root` lists `pid`.
+///
+/// The tree is not nexcage's to trust. ns/ is delegated to the container,
+/// whose root can make cgroups there that cannot be read -- a threaded
+/// cgroup's cgroup.procs fails with EOPNOTSUPP -- and systemd and nested
+/// containers remove theirs while the walk goes on (ENOENT, ENODEV). Failing
+/// on one of those made kill fail on a live container, so a tenant could stop
+/// an engine's TERM-then-KILL from landing. A cgroup that cannot be opened or
+/// read is passed over as one that lists no process instead: a threaded
+/// cgroup's processes are listed in its domain's cgroup.procs, which is read
+/// too, and a removed one has none. Passing over can only turn a match into
+/// "not running"; it never lets a signal reach a process outside the tree.
+fn cgroupTreeLists(allocator: std.mem.Allocator, root: std.fs.Dir, pid: std.posix.pid_t) !CgroupSearch {
+    var search = CgroupSearch{};
+    var walker = try root.walk(allocator);
+    defer walker.deinit();
+    while (true) {
+        // The Walker leaves out a directory it could not open and drops one
+        // it could not list, so the next call carries on with the rest.
+        const entry = walker.next() catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => {
+                search.passOver(err);
+                continue;
+            },
+        } orelse return search;
+        if (entry.kind != .file or !std.mem.eql(u8, entry.basename, "cgroup.procs")) continue;
+        const procs = entry.dir.readFileAlloc(allocator, entry.basename, 16 * 1024 * 1024) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => {
+                search.passOver(err);
+                continue;
+            },
+        };
+        defer allocator.free(procs);
+        if (listsPid(procs, pid)) {
+            search.found = true;
+            return search;
+        }
+    }
+}
+
+test "cgroupTreeLists passes over a cgroup it cannot read, and still finds the PID" {
+    const allocator = std.testing.allocator;
+    const posix = std.posix;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+
+    // The init's cgroup, as systemd in a container has it
+    try tmp.dir.makePath("ns/init.scope");
+    try tmp.dir.writeFile(.{ .sub_path = "ns/init.scope/cgroup.procs", .data = "1\n4242\n" });
+    // A cgroup.procs whose read fails, as a threaded cgroup's does: here one
+    // longer than the walk reads
+    try tmp.dir.makePath("ns/t");
+    {
+        const long = try tmp.dir.createFile("ns/t/cgroup.procs", .{});
+        defer long.close();
+        try long.setEndPos(16 * 1024 * 1024 + 1);
+    }
+    // and cgroups that cannot be opened: a chain deeper than the file
+    // descriptors left to the walk, which a tenant can make as well
+    {
+        var chain = std.ArrayListUnmanaged(u8){};
+        defer chain.deinit(allocator);
+        try chain.appendSlice(allocator, "ns/d");
+        for (0..64) |_| try chain.appendSlice(allocator, "/d");
+        try tmp.dir.makePath(chain.items);
+    }
+
+    // The lowest free descriptor, and a few above it: the walk holds one per
+    // level it is in
+    const old_limit = try posix.getrlimit(.NOFILE);
+    const lowest = try posix.dup(tmp.dir.fd);
+    posix.close(lowest);
+    try posix.setrlimit(.NOFILE, .{ .cur = @intCast(lowest + 16), .max = old_limit.max });
+    const absent = cgroupTreeLists(allocator, tmp.dir, 999);
+    const present = cgroupTreeLists(allocator, tmp.dir, 4242);
+    try posix.setrlimit(.NOFILE, old_limit);
+
+    // Every cgroup is visited when the PID is in none, whatever the order
+    const a = try absent;
+    try std.testing.expect(!a.found);
+    try std.testing.expect(a.unread >= 2);
+    try std.testing.expect((try present).found);
+}
+
 pub const PveVersion = struct {
     major: u32,
     minor: u32,
@@ -164,28 +283,37 @@ pub const PveClient = struct {
         return try self.allocator.dupe(u8, node_name);
     }
 
-    /// The volid of a template on `storage` that already holds `reference`,
-    /// or null. What `create` asks before it pulls: an image already there is
-    /// what a container engine would use too, and `pull` is the explicit
-    /// fetch. Matched the way an "already there" pull is matched.
-    pub fn findTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8, reference: []const u8, filename: ?[]const u8) !?[]u8 {
-        const volids = try self.volidsOf(allocator, node, storage);
-        defer {
-            for (volids) |v| allocator.free(v);
-            allocator.free(volids);
-        }
-        return try self.matchTemplate(allocator, volids, reference, filename);
+    /// The volid of the template a pull of `reference` into `storage` writes,
+    /// when the storage already holds it; null when it does not. What `create`
+    /// asks before it pulls: an image already there is what a container engine
+    /// would use too, and `pull` is the explicit fetch.
+    ///
+    /// Only that exact file counts. This used to take the first template whose
+    /// name merely contained the image's last path component and its tag, so
+    /// docker.io/library/debian:12 was answered with Proxmox's own
+    /// debian-12-standard system template, redis:7 with redis_7.2.4.tar or with
+    /// a file someone else had uploaded, and an image from one registry with a
+    /// same-named one pulled from another.
+    pub fn findTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8, reference: []const u8) !?[]u8 {
+        const volid = try self.pullVolid(allocator, storage, reference, null);
+        errdefer allocator.free(volid);
+        if (try self.holdsTemplate(allocator, node, storage, volid)) return volid;
+        allocator.free(volid);
+        return null;
     }
 
     /// Pull an OCI image into a storage on a node, and answer with the volid
-    /// the storage ended up holding.
+    /// of the template it wrote.
     ///
-    /// The volid is read back from the storage rather than composed from the
-    /// reference. Composing it -- which `create` did until 0.13.0 -- is a
-    /// guess about how PVE normalises a name, and the endpoint's own
-    /// documentation says the filename "will be normalized". Asking the
-    /// storage is the only way to know, and the answer is what `pct create`
-    /// needs to be given.
+    /// nexcage names the file rather than leaving it to Proxmox: `filename`
+    /// when the caller gave one, else `pulledTemplateName` of the reference,
+    /// so the answer is exactly <storage>:vztmpl/<name>.tar once the storage
+    /// lists it, and that file or an error. This used to list the storage
+    /// before and after the pull and take whatever had appeared. A listing that
+    /// failed once made every template already there look new, and a file
+    /// another pull, an upload or a bundle create wrote meanwhile was taken
+    /// for this one; either way `create` built the container from it and
+    /// exited 0.
     ///
     /// There is no credential parameter on this endpoint, so a private registry
     /// cannot be authenticated here. The caller is told rather than left to
@@ -198,96 +326,101 @@ pub const PveClient = struct {
         reference: []const u8,
         filename: ?[]const u8,
     ) ![]u8 {
-        const before = try self.volidsOf(allocator, node, storage);
-        defer {
-            for (before) |v| allocator.free(v);
-            allocator.free(before);
-        }
+        const volid = try self.pullVolid(allocator, storage, reference, filename);
+        errdefer allocator.free(volid);
+        // The file name pvesh is given: the volid's, without the ".tar"
+        // Proxmox adds to it.
+        const name = volid[storage.len + ":vztmpl/".len .. volid.len - ".tar".len];
 
         const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/oci-registry-pull", .{ node, storage });
         defer self.allocator.free(path);
-
-        var args = std.ArrayListUnmanaged([]const u8){};
-        defer args.deinit(self.allocator);
-        try args.appendSlice(self.allocator, &.{ "pvesh", "create", path, "--reference", reference });
-        if (filename) |f| try args.appendSlice(self.allocator, &.{ "--filename", f });
-
-        const res = try common.runCommand(self.allocator, self.logger, args.items);
+        const args = [_][]const u8{ "pvesh", "create", path, "--reference", reference, "--filename", name };
+        const res = try common.runCommand(self.allocator, self.logger, &args);
         defer {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        const already_there = res.exit_code == 25 and
+
+        // Proxmox will not write over a file that is there: the handler dies
+        // with "refusing to override existing file", and pvesh exits with
+        // whatever errno Perl holds at that point (25 in practice). Under the
+        // name derived from the reference, that file is this reference pulled
+        // before, as far as the storage can say, and it is the answer. A name
+        // the caller chose says nothing about what the file holds, so there
+        // it is an error, not a pull that quietly did not happen.
+        const already_there = res.exit_code != 0 and
             std.mem.indexOf(u8, res.stderr, "refusing to override existing file") != null;
+        if (already_there and filename != null) {
+            if (self.logger) |log| log.err("{s} is already on {s}, and a pull does not write over it; it may hold any image. Remove it first (nexcage rmi {s}) or give another --filename", .{ volid, storage, volid }) catch {};
+            return core.Error.OperationFailed;
+        }
         if (res.exit_code != 0 and !already_there) {
-            if (self.logger) |log| reportPullFailure(log, reference, storage, node, pullFailureReason(res.stdout, res.stderr));
+            if (self.logger) |log| reportPullFailure(log, reference, storage, node, volid, pullFailureReason(res.stdout, res.stderr));
             return core.Error.OperationFailed;
         }
 
-        const after = try self.volidsOf(allocator, node, storage);
-        defer {
-            for (after) |v| allocator.free(v);
-            allocator.free(after);
-        }
-
-        // What appeared. With nothing new and no "already there", the pull
-        // reported success and left the storage as it was, which is worth an
-        // error rather than a volid nobody can use.
-        for (after) |candidate| {
-            var found_before = false;
-            for (before) |old_volid| {
-                if (std.mem.eql(u8, old_volid, candidate)) found_before = true;
+        if (try self.holdsTemplate(allocator, node, storage, volid)) {
+            if (already_there) {
+                if (self.logger) |log| log.info("{s} is already on {s} as {s}; not pulled again", .{ reference, storage, volid }) catch {};
             }
-            if (!found_before) return try allocator.dupe(u8, candidate);
-        }
-
-        if (already_there) {
-            // Nothing new because it was there already: name the one that
-            // matches what was asked for.
-            if (try self.matchTemplate(allocator, after, reference, filename)) |match| return match;
+            return volid;
         }
 
         // pvesh exits 0 when the pull task it ran failed (#309): the reason is
         // in its output, and nothing reached the storage.
-        if (self.logger) |log| reportPullFailure(log, reference, storage, node, pullFailureReason(res.stdout, res.stderr));
+        if (self.logger) |log| reportPullFailure(log, reference, storage, node, volid, pullFailureReason(res.stdout, res.stderr));
         return core.Error.OperationFailed;
     }
 
-    /// The volid whose file name looks like what was asked for, or null.
-    fn matchTemplate(self: *const Self, allocator: std.mem.Allocator, volids: []const []u8, reference: []const u8, filename: ?[]const u8) !?[]u8 {
-        _ = self;
+    /// <storage>:vztmpl/<name>.tar, the volid a pull of `reference` writes:
+    /// `filename` when one was given, else the name derived from the
+    /// reference. The storage goes into pvesh paths, so it is checked here,
+    /// before anything is asked of Proxmox (see templateVolidStorage).
+    fn pullVolid(self: *const Self, allocator: std.mem.Allocator, storage: []const u8, reference: []const u8, filename: ?[]const u8) ![]u8 {
+        if (!isStorageId(storage)) {
+            if (self.logger) |log| log.err("'{s}' is not a Proxmox storage name: a letter, then letters, digits, '-', '_' or '.', and a letter or digit last", .{storage}) catch {};
+            return core.Error.InvalidInput;
+        }
         if (filename) |f| {
-            for (volids) |v| {
-                if (std.mem.endsWith(u8, v, f)) return try allocator.dupe(u8, v);
+            // Proxmox normalises the name it is given (anything outside
+            // letters, digits, '.', '_' and '-' becomes '_', and everything up
+            // to a '/' goes). A name it would change is refused rather than
+            // guessed at, because the volid has to be known exactly.
+            if (!isPlainFileName(f)) {
+                if (self.logger) |log| log.err("--filename '{s}': letters, digits, '.', '_' and '-' only, not starting with '.' or '-', not ending in '.', without '..', at most {d} characters; Proxmox adds .tar", .{ f, max_pull_name }) catch {};
+                return core.Error.InvalidInput;
             }
-        }
-        // docker.io/library/redis:7 -> "redis" and "7"
-        const colon = std.mem.lastIndexOfScalar(u8, reference, ':') orelse reference.len;
-        const name_part = reference[0..colon];
-        const tag = if (colon < reference.len) reference[colon + 1 ..] else "latest";
-        const slash = std.mem.lastIndexOfScalar(u8, name_part, '/');
-        const image = if (slash) |i| name_part[i + 1 ..] else name_part;
-        for (volids) |v| {
-            if (std.mem.indexOf(u8, v, image) != null and std.mem.indexOf(u8, v, tag) != null) {
-                return try allocator.dupe(u8, v);
+            // `create` takes the file under a reference's derived name for
+            // that reference, so a name of that shape is not given by hand:
+            // `pull ghcr.io/someone/redis:7 --filename <the name of
+            // docker.io/library/redis:7>` made `create docker.io/library/redis:7`
+            // start ghcr.io's image.
+            if (hasDerivedShape(f)) {
+                if (self.logger) |log| log.err("--filename '{s}' ends in '-' and 16 hex digits, the shape of the name nexcage gives a pull for its reference; leave --filename out to get that name, or choose another", .{f}) catch {};
+                return core.Error.InvalidInput;
             }
+            return std.fmt.allocPrint(allocator, "{s}:vztmpl/{s}.tar", .{ storage, f });
         }
-        return null;
+        const name = try pulledTemplateName(allocator, reference);
+        defer allocator.free(name);
+        return std.fmt.allocPrint(allocator, "{s}:vztmpl/{s}.tar", .{ storage, name });
     }
 
-    /// The volids of the templates on one storage of one node.
-    fn volidsOf(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8) ![][]u8 {
+    /// Whether `storage` on `node` lists exactly `volid`. A storage that
+    /// cannot be listed is an error, never a "no": read as an empty storage,
+    /// it once made a pull take a template that was there all along for the
+    /// one it had just written.
+    fn holdsTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, storage: []const u8, volid: []const u8) !bool {
         var out = std.ArrayListUnmanaged(Template){};
         defer {
             for (out.items) |*t| t.deinit();
             out.deinit(allocator);
         }
-        self.appendTemplatesOf(allocator, &out, node, storage, false) catch {};
-
-        var volids = try allocator.alloc([]u8, out.items.len);
-        errdefer allocator.free(volids);
-        for (out.items, 0..) |t, i| volids[i] = try allocator.dupe(u8, t.volid);
-        return volids;
+        try self.appendTemplatesOf(allocator, &out, node, storage, false, .fail);
+        for (out.items) |t| {
+            if (std.mem.eql(u8, t.volid, volid)) return true;
+        }
+        return false;
     }
 
     /// Remove a template from the storage it is on.
@@ -299,13 +432,13 @@ pub const PveClient = struct {
     /// the file goes for every node at once, and the caller should know that
     /// before it happens rather than after.
     pub fn removeTemplate(self: *const Self, allocator: std.mem.Allocator, node: []const u8, volid: []const u8) !bool {
-        const colon = std.mem.indexOfScalar(u8, volid, ':') orelse {
+        // Before any pvesh call: the volid goes into the delete's path whole.
+        const storage = templateVolidStorage(volid) orelse {
             if (self.logger) |log| {
-                log.err("a template is named <storage>:vztmpl/<file>, got '{s}'", .{volid}) catch {};
+                log.err("a template is named <storage>:vztmpl/<file>, the file in letters, digits, '.', '_' and '-' without '..', got '{s}'. A template named otherwise is removed on its node (pveam remove)", .{volid}) catch {};
             }
             return core.Error.InvalidInput;
         };
-        const storage = volid[0..colon];
 
         // Is it there, and is that storage shared?
         var shared = false;
@@ -329,14 +462,7 @@ pub const PveClient = struct {
                 return core.Error.NotFound;
             }
 
-            const volids = try self.volidsOf(allocator, node, storage);
-            defer {
-                for (volids) |v| allocator.free(v);
-                allocator.free(volids);
-            }
-            for (volids) |v| {
-                if (std.mem.eql(u8, v, volid)) present = true;
-            }
+            present = try self.holdsTemplate(allocator, node, storage, volid);
         }
 
         if (!present) {
@@ -431,6 +557,12 @@ pub const PveClient = struct {
         vmid: []u8,
         node: []u8,
         local: bool,
+        /// The container's name when it was found, or null when the listing
+        /// had none to give -- a container on another node that the cluster
+        /// has no report for (Pick.unnamed), which only its VMID can have
+        /// found. What `confirm` checks the container against, and the name
+        /// nexcage keeps its state under, whatever the caller typed.
+        name: ?[]u8,
 
         /// The node to address through the API, or null when `pct` will do.
         pub fn remote(self: *const Location) ?[]const u8 {
@@ -440,61 +572,224 @@ pub const PveClient = struct {
         pub fn deinit(self: *Location) void {
             self.allocator.free(self.vmid);
             self.allocator.free(self.node);
+            if (self.name) |n| self.allocator.free(n);
         }
     };
 
-    /// Find a container by name or VMID anywhere in the cluster.
+    /// Which of `containers` an identifier names.
     ///
-    /// Falls back to `pct list` when the cluster cannot be asked -- a host
-    /// where pvesh is unavailable keeps working exactly as it did, seeing its
-    /// own containers and nothing else.
-    pub fn locate(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8) !Location {
-        const here = self.getNodeName() catch null;
-        defer if (here) |h| self.allocator.free(h);
+    /// A name is looked for first, across every entry, and a VMID only when no
+    /// container has that name. One pass taking the first entry that matched
+    /// either let a container *named* 1000 lose to the one with VMID 1000
+    /// whenever the listing put that one first -- and Proxmox sorts VMIDs as
+    /// strings, so "1000" comes before "150". Two containers with the name is
+    /// no answer at all: which of them came first was the listing's choice,
+    /// and acting on it destroyed another node's container as readily as the
+    /// one meant.
+    ///
+    /// `unnamed` is nothing matching while the listing has a container it
+    /// gives no name, the first of them: that one may be the container asked
+    /// for. /cluster/resources takes a container's name from its node's last
+    /// report (PVE::API2Tools::extract_vm_stats), which a container made a
+    /// few seconds ago does not have yet, and which pmxcfs drops five minutes
+    /// after a node goes down, so every container there loses its name. Taken
+    /// for `none`, it let delete --force forget nexcage's record of a
+    /// container that was still running, unnamed, on another node.
+    pub const Pick = union(enum) { none, one: usize, many, unnamed: usize };
 
-        // The cluster first, because only it knows which node a container is on.
-        //
-        // Its "not found" is not an answer, though: /cluster/resources is a
-        // cached view that pvestatd refreshes every few seconds, so a container
-        // created a moment ago is not in it yet while `pct list` sees it at
-        // once. Treating that as missing made `create` followed straight away by
-        // `start` fail on a real host. So a miss here means keep looking, and
-        // only both sources coming up empty is a container that does not exist.
-        if (self.clusterLookup(allocator, name_or_vmid, here)) |found| {
-            return found;
-        } else |err| {
-            if (self.logger) |log| {
-                if (err == core.Error.NotFound) {
-                    log.debug("'{s}' is not in the cluster's listing yet; asking this host", .{name_or_vmid}) catch {};
-                } else {
-                    log.debug("the cluster could not be asked about '{s}' ({s}); asking this host", .{ name_or_vmid, @errorName(err) }) catch {};
-                }
+    /// What an identifier may be taken for. nexcage's record of a container
+    /// proves it made one with that name, and nothing about a VMID: a record
+    /// of `250` whose container was destroyed outside nexcage let a lookup
+    /// fall through to VMID 250, a container nexcage never made, and delete
+    /// --force destroyed it. So a command that found the container through
+    /// its record looks for the name alone, and a VMID is looked for only
+    /// when the caller asked for the Proxmox backend with --runtime lxc.
+    pub const By = enum { name, name_or_vmid };
+
+    pub fn pick(containers: []const core.ContainerInfo, name_or_vmid: []const u8, by: By) Pick {
+        // An empty id names nothing. It matched every container the listing
+        // had no name for: `--runtime lxc delete --force ''`, an unset shell
+        // variable, destroyed one.
+        if (name_or_vmid.len == 0) return .none;
+        var found: ?usize = null;
+        for (containers, 0..) |c, i| {
+            if (!std.mem.eql(u8, c.name, name_or_vmid)) continue;
+            if (found) |f| {
+                if (!std.mem.eql(u8, containers[f].id, c.id)) return .many;
+            } else found = i;
+        }
+        if (found) |f| return .{ .one = f };
+        if (by == .name_or_vmid) {
+            for (containers, 0..) |c, i| {
+                if (std.mem.eql(u8, c.id, name_or_vmid)) return .{ .one = i };
             }
         }
+        for (containers, 0..) |c, i| {
+            if (c.name.len == 0) return .{ .unnamed = i };
+        }
+        return .none;
+    }
 
-        // getVmidByName allocates with the client's allocator; the Location owns
-        // a copy made with the caller's. Both exist for a moment and only one
-        // was being freed -- a leak the GPA reported on every start, stop, pause
-        // and resume that came through this path.
-        const vmid = try self.getVmidByName(name_or_vmid);
-        defer self.allocator.free(vmid);
+    /// The one container among `containers` that `name_or_vmid` names, or
+    /// NotFound when no container has it. A name more than one container has
+    /// is refused, and the message names each of them; so is a miss while a
+    /// container has no name to compare, which is never NotFound.
+    pub fn choose(self: *const Self, containers: []const core.ContainerInfo, name_or_vmid: []const u8, by: By) !usize {
+        switch (pick(containers, name_or_vmid, by)) {
+            .one => |i| return i,
+            .none => return core.Error.NotFound,
+            .unnamed => |i| {
+                if (self.logger) |log| {
+                    var more: usize = 0;
+                    for (containers[i + 1 ..]) |c| {
+                        if (c.name.len == 0) more += 1;
+                    }
+                    var buf: [64]u8 = undefined;
+                    const others = if (more == 0) "" else std.fmt.bufPrint(&buf, ", and so may {d} more", .{more}) catch "";
+                    log.err("no container in the cluster's listing is named '{s}', but CT {s} on {s} has no name there and may be that one{s}. Proxmox names a container from its node's reports, which one made seconds ago does not have yet and a node down for five minutes no longer sends. Nothing was done; try again once the cluster names it", .{ name_or_vmid, containers[i].id, containers[i].node orelse "this host", others }) catch {};
+                }
+                return core.Error.OperationFailed;
+            },
+            .many => {
+                if (self.logger) |log| {
+                    var buf: [512]u8 = undefined;
+                    var w = std.Io.Writer.fixed(&buf);
+                    var first = true;
+                    for (containers) |c| {
+                        if (!std.mem.eql(u8, c.name, name_or_vmid)) continue;
+                        w.print("{s}VMID {s} on {s}", .{ if (first) "" else ", ", c.id, c.node orelse "this host" }) catch break;
+                        first = false;
+                    }
+                    log.err("'{s}' names more than one container: {s}. Nothing was done; address one by its VMID, with --runtime lxc", .{ name_or_vmid, w.buffered() }) catch {};
+                }
+                return core.Error.OperationFailed;
+            },
+        }
+    }
 
-        const vmid_owned = try allocator.dupe(u8, vmid);
+    /// Find a container by name or VMID anywhere in the cluster.
+    ///
+    /// Both sources are read: the cluster's listing, which knows every node,
+    /// and `pct list`, which is current for this one -- the listing is a cache
+    /// pvestatd refreshes every few seconds, so a container created a moment
+    /// ago is missing from it and one whose VMID was just reused can still
+    /// carry the old name there. `list` merges the two, this host's word
+    /// winning for its own containers. A cluster that cannot be asked is an
+    /// error that says why; it used to be a quiet fallback to `pct list`,
+    /// which answers for this host alone, so a container on another node was
+    /// "not found" and create's cluster-wide check passed a name another node
+    /// had.
+    pub fn locate(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8, by: By) !Location {
+        const all = try self.list(self.allocator);
+        defer {
+            for (all) |*c| c.deinit();
+            self.allocator.free(all);
+        }
+        const c = all[try self.choose(all, name_or_vmid, by)];
+
+        const here = self.getNodeName() catch null;
+        defer if (here) |h| self.allocator.free(h);
+        // `pct list` rows carry this host's name, or none when it is unknown
+        const local = if (c.node) |n| (if (here) |h| std.mem.eql(u8, h, n) else false) else true;
+        const node = c.node orelse here orelse "localhost";
+
+        const vmid_owned = try allocator.dupe(u8, c.id);
         errdefer allocator.free(vmid_owned);
+        const node_owned = try allocator.dupe(u8, node);
+        errdefer allocator.free(node_owned);
         return Location{
             .allocator = allocator,
             .vmid = vmid_owned,
-            .node = try allocator.dupe(u8, here orelse "localhost"),
-            .local = true,
+            .node = node_owned,
+            .local = local,
+            .name = if (c.name.len > 0) try allocator.dupe(u8, c.name) else null,
         };
     }
 
-    /// /cluster/resources, which lists every container on every node.
-    fn clusterLookup(self: *const Self, allocator: std.mem.Allocator, name_or_vmid: []const u8, here: ?[]const u8) !Location {
+    /// Refuse unless the container at `loc` is still the one that was found.
+    ///
+    /// A command finds a container by name and acts on its VMID a moment
+    /// later -- behind a 60-second shutdown, a minute later -- and Proxmox
+    /// hands a destroyed container's VMID to the very next one created:
+    /// /cluster/nextid answers the lowest free one. A retried `delete --force
+    /// web-old` destroyed web-new that way, which had taken web-old's VMID in
+    /// between. So the hostname is read again from the container's own config,
+    /// which is current, right before any command acts on the container:
+    /// stops, destroys or starts it, signals, freezes or thaws it, runs a
+    /// command in it, or changes its limits or its snapshots.
+    /// Found by VMID with no name to compare, the VMID is what was asked for.
+    pub fn confirm(self: *const Self, loc: *const Location) !void {
+        const expected = loc.name orelse return;
+        return self.confirmName(loc.vmid, loc.remote(), expected);
+    }
+
+    /// confirm, for a container known by its VMID and the name it was made
+    /// under rather than by a Location: the one a failed create or run is
+    /// undoing. Its VMID can change hands the same way while pct start runs.
+    pub fn confirmName(self: *const Self, vmid: []const u8, node: ?[]const u8, expected: []const u8) !void {
+        const now = try self.hostnameOf(vmid, node);
+        defer self.allocator.free(now);
+        if (std.mem.eql(u8, now, expected)) return;
+        if (self.logger) |log| log.err("CT {s} is no longer '{s}' but '{s}': the container was replaced after nexcage found it, and nothing was done to it", .{ vmid, expected, now }) catch {};
+        return core.Error.NotFound;
+    }
+
+    /// A container's hostname, from its config: `pct config` here, the node's
+    /// API elsewhere. Proxmox calls a container without one CT<vmid> in its
+    /// listings, and so does this.
+    fn hostnameOf(self: *const Self, vmid: []const u8, node: ?[]const u8) ![]u8 {
+        if (node) |n| {
+            const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}/config", .{ n, vmid });
+            defer self.allocator.free(path);
+            const args = [_][]const u8{ "pvesh", "get", path, "--output-format", "json" };
+            const res = try common.runCommand(self.allocator, self.logger, &args);
+            defer {
+                self.allocator.free(res.stdout);
+                self.allocator.free(res.stderr);
+            }
+            if (res.exit_code != 0) {
+                if (self.logger) |log| log.err("pvesh get {s} failed: {s}", .{ path, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
+                return errorFor(res.stderr);
+            }
+            const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch |err| {
+                if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+                if (self.logger) |log| log.err("the config of CT {s} on {s} is not JSON: {s}", .{ vmid, n, @errorName(err) }) catch {};
+                return core.Error.OperationFailed;
+            };
+            defer parsed.deinit();
+            if (parsed.value == .object) {
+                if (parsed.value.object.get("hostname")) |h| {
+                    if (h == .string and h.string.len > 0) return try self.allocator.dupe(u8, h.string);
+                }
+            }
+        } else {
+            const args = [_][]const u8{ "pct", "config", vmid };
+            const res = try common.runCommand(self.allocator, self.logger, &args);
+            defer {
+                self.allocator.free(res.stdout);
+                self.allocator.free(res.stderr);
+            }
+            if (res.exit_code != 0) return self.mapPctError(res.stderr);
+            var lines = std.mem.splitScalar(u8, res.stdout, '\n');
+            while (lines.next()) |line| {
+                if (!std.mem.startsWith(u8, line, "hostname:")) continue;
+                const h = std.mem.trim(u8, line["hostname:".len..], " \t\r");
+                if (h.len > 0) return try self.allocator.dupe(u8, h);
+            }
+        }
+        return try std.fmt.allocPrint(self.allocator, "CT{s}", .{vmid});
+    }
+
+    /// /cluster/resources, parsed: every guest on every node. Whatever keeps
+    /// it from being read is an error naming the cause -- the listing is
+    /// read with a cap that fits a large cluster, and a failure is logged with
+    /// what pvesh said -- because every caller used to take any failure for
+    /// "ask this host instead".
+    fn clusterResources(self: *const Self) !std.json.Parsed(std.json.Value) {
         // `--type vm`, not `--type lxc`: the API's enumeration is vm, storage,
         // node, sdn, and it rejects anything else with "400 Parameter
         // verification failed". Containers come back under vm with their own
-        // `type` field set to lxc, which is what the filter below reads.
+        // `type` field set to lxc, which is what isLxcEntry reads.
         //
         // This was `--type lxc` when cluster support was written, so every
         // lookup failed and fell back to `pct list` -- which works for a
@@ -502,50 +797,29 @@ pub const PveClient = struct {
         // the exact thing the cluster support was for. The simulator's fake
         // accepted the wrong flag, so the tests agreed with the mistake.
         const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json" };
-        const res = try common.runCommand(self.allocator, self.logger, &args);
+        const res = common.runCommandMax(self.allocator, self.logger, &args, common.cluster_max_output) catch |err| {
+            if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) could not be read", .{}) catch {};
+            return err;
+        };
         defer {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        if (res.exit_code != 0) return core.Error.OperationFailed;
-
-        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch {
+        if (res.exit_code != 0) {
+            if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) failed: {s}", .{std.mem.trim(u8, res.stderr, " \t\r\n")}) catch {};
+            return listingError(res.stderr);
+        }
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch |err| {
+            if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+            if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) is not JSON: {s}", .{@errorName(err)}) catch {};
             return core.Error.OperationFailed;
         };
-        defer parsed.deinit();
-        if (parsed.value != .array) return core.Error.OperationFailed;
-
-        for (parsed.value.array.items) |item| {
-            if (item != .object) continue;
-            const obj = item.object;
-            if (!isLxcEntry(obj)) continue;
-
-            const vmid_num = switch (obj.get("vmid") orelse continue) {
-                .integer => |i| i,
-                .float => |f| @as(i64, @intFromFloat(f)),
-                .string => |str| std.fmt.parseInt(i64, str, 10) catch continue,
-                else => continue,
-            };
-            var vmid_buf: [24]u8 = undefined;
-            const vmid_str = std.fmt.bufPrint(&vmid_buf, "{d}", .{vmid_num}) catch continue;
-
-            const name = if (obj.get("name")) |n| (if (n == .string) n.string else "") else "";
-            if (!std.mem.eql(u8, name, name_or_vmid) and !std.mem.eql(u8, vmid_str, name_or_vmid)) continue;
-
-            const node = if (obj.get("node")) |n| (if (n == .string) n.string else "") else "";
-            if (node.len == 0) return core.Error.OperationFailed;
-
-            const vmid_owned = try allocator.dupe(u8, vmid_str);
-            errdefer allocator.free(vmid_owned);
-            return Location{
-                .allocator = allocator,
-                .vmid = vmid_owned,
-                .node = try allocator.dupe(u8, node),
-                .local = if (here) |h| std.mem.eql(u8, h, node) else false,
-            };
+        if (parsed.value != .array) {
+            parsed.deinit();
+            if (self.logger) |log| log.err("the cluster's listing of its containers (pvesh get /cluster/resources) is not a list", .{}) catch {};
+            return core.Error.OperationFailed;
         }
-
-        return core.Error.NotFound;
+        return parsed;
     }
 
     /// A template as a storage lists it.
@@ -568,44 +842,48 @@ pub const PveClient = struct {
         }
     };
 
-    /// The nodes of the cluster, or just this one when the cluster cannot be
-    /// asked. The caller frees each name and the slice.
+    /// The nodes of the cluster. The caller frees each name and the slice.
+    ///
+    /// A standalone host answers /nodes with itself, so a failure here is a
+    /// failure, reported with pvesh's words. It used to be answered with this
+    /// host alone, and `images` then listed one node's templates as if they
+    /// were the cluster's.
     pub fn nodes(self: *const Self, allocator: std.mem.Allocator) ![][]u8 {
         const args = [_][]const u8{ "pvesh", "get", "/nodes", "--output-format", "json" };
-        if (common.runCommand(self.allocator, self.logger, &args)) |res| {
-            defer {
-                self.allocator.free(res.stdout);
-                self.allocator.free(res.stderr);
-            }
-            if (res.exit_code == 0) {
-                if (std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{})) |parsed| {
-                    defer parsed.deinit();
-                    if (parsed.value == .array) {
-                        var out = std.ArrayListUnmanaged([]u8){};
-                        errdefer {
-                            for (out.items) |n| allocator.free(n);
-                            out.deinit(allocator);
-                        }
-                        for (parsed.value.array.items) |item| {
-                            if (item != .object) continue;
-                            const n = item.object.get("node") orelse continue;
-                            if (n != .string) continue;
-                            try out.append(allocator, try allocator.dupe(u8, n.string));
-                        }
-                        if (out.items.len > 0) return try out.toOwnedSlice(allocator);
-                        out.deinit(allocator);
-                    }
-                } else |_| {}
-            }
-        } else |_| {}
+        const res = try common.runCommand(self.allocator, self.logger, &args);
+        defer {
+            self.allocator.free(res.stdout);
+            self.allocator.free(res.stderr);
+        }
+        if (res.exit_code != 0) {
+            if (self.logger) |log| log.err("the cluster's list of nodes (pvesh get /nodes) failed: {s}", .{std.mem.trim(u8, res.stderr, " \t\r\n")}) catch {};
+            return errorFor(res.stderr);
+        }
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch |err| {
+            if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+            if (self.logger) |log| log.err("the cluster's list of nodes (pvesh get /nodes) is not JSON: {s}", .{@errorName(err)}) catch {};
+            return core.Error.OperationFailed;
+        };
+        defer parsed.deinit();
 
-        // No cluster to ask: this host is the whole of it.
-        const here = try self.getNodeName();
-        defer self.allocator.free(here);
-        var one = try allocator.alloc([]u8, 1);
-        errdefer allocator.free(one);
-        one[0] = try allocator.dupe(u8, here);
-        return one;
+        var out = std.ArrayListUnmanaged([]u8){};
+        errdefer {
+            for (out.items) |n| allocator.free(n);
+            out.deinit(allocator);
+        }
+        if (parsed.value == .array) {
+            for (parsed.value.array.items) |item| {
+                if (item != .object) continue;
+                const n = item.object.get("node") orelse continue;
+                if (n != .string) continue;
+                try out.append(allocator, try allocator.dupe(u8, n.string));
+            }
+        }
+        if (out.items.len == 0) {
+            if (self.logger) |log| log.err("the cluster's list of nodes (pvesh get /nodes) names none", .{}) catch {};
+            return core.Error.OperationFailed;
+        }
+        return try out.toOwnedSlice(allocator);
     }
 
     /// Every container template the cluster can see.
@@ -661,7 +939,15 @@ pub const PveClient = struct {
         for (node_names) |node| {
             if (only_node) |want| if (!std.mem.eql(u8, want, node)) continue;
 
-            const stores = try self.templateStorages(node);
+            // One node that cannot answer fails the listing, and the message
+            // names it: a listing without that node's templates would read as
+            // "it has none".
+            const stores = self.templateStorages(node) catch |err| {
+                if (only_node == null) {
+                    if (self.logger) |log| log.err("the cluster's templates cannot all be listed while node {s} does not answer; 'images --node <node>' lists the others one at a time", .{node}) catch {};
+                }
+                return err;
+            };
             defer {
                 for (stores) |st| {
                     self.allocator.free(st.name);
@@ -678,7 +964,7 @@ pub const PveClient = struct {
                     if (already) continue;
                     try seen_shared.append(self.allocator, try self.allocator.dupe(u8, st.name));
                 }
-                try self.appendTemplatesOf(allocator, &out, node, st.name, st.shared);
+                try self.appendTemplatesOf(allocator, &out, node, st.name, st.shared, .skip);
             }
         }
 
@@ -697,9 +983,18 @@ pub const PveClient = struct {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        if (res.exit_code != 0) return core.Error.OperationFailed;
+        if (res.exit_code != 0) {
+            if (self.logger) |log| log.err("node {s} could not be asked for its storages: {s}", .{ node, std.mem.trim(u8, res.stderr, " \t\r\n") }) catch {};
+            return errorFor(res.stderr);
+        }
 
-        const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{});
+        // A parse error is not one of core.Error's, and the command registry
+        // casts into that set: it would end the process with a panic.
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch |err| {
+            if (err == error.OutOfMemory) return core.Error.OutOfMemory;
+            if (self.logger) |log| log.err("node {s} listed its storages in something other than JSON: {s}", .{ node, @errorName(err) }) catch {};
+            return core.Error.OperationFailed;
+        };
         defer parsed.deinit();
         if (parsed.value != .array) return core.Error.OperationFailed;
 
@@ -724,6 +1019,12 @@ pub const PveClient = struct {
         return try out.toOwnedSlice(self.allocator);
     }
 
+    /// What to do with a storage that cannot be listed. Choosing a template
+    /// needs the answer, so there it is an error. `images` shows what the
+    /// cluster has, and one offline mount should not hide every template in
+    /// it, so there the storage is left out, with a warning that names it.
+    const Unlisted = enum { fail, skip };
+
     fn appendTemplatesOf(
         self: *const Self,
         allocator: std.mem.Allocator,
@@ -731,27 +1032,29 @@ pub const PveClient = struct {
         node: []const u8,
         storage: []const u8,
         shared: bool,
+        when_unlisted: Unlisted,
     ) !void {
         const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/content", .{ node, storage });
         defer self.allocator.free(path);
         const args = [_][]const u8{ "pvesh", "get", path, "--content", "vztmpl", "--output-format", "json" };
-        const res = common.runCommand(self.allocator, self.logger, &args) catch return;
+        // runCommand has said why it could not run pvesh
+        const res = common.runCommand(self.allocator, self.logger, &args) catch |err| {
+            if (when_unlisted == .skip) return;
+            return err;
+        };
         defer {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        // A storage that cannot be read is skipped rather than fatal: one
-        // offline mount should not hide every template in the cluster.
         if (res.exit_code != 0) {
-            if (self.logger) |log| {
-                log.debug("storage {s} on {s} could not be listed", .{ storage, node }) catch {};
-            }
-            return;
+            return self.unlisted(when_unlisted, node, storage, std.mem.trim(u8, res.stderr, " \t\r\n"));
         }
 
-        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch return;
+        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{}) catch {
+            return self.unlisted(when_unlisted, node, storage, "the answer was not JSON");
+        };
         defer parsed.deinit();
-        if (parsed.value != .array) return;
+        if (parsed.value != .array) return self.unlisted(when_unlisted, node, storage, "the answer was not a list");
 
         for (parsed.value.array.items) |item| {
             if (item != .object) continue;
@@ -764,15 +1067,35 @@ pub const PveClient = struct {
                 else => 0,
             } else 0;
 
+            const node_copy = try allocator.dupe(u8, node);
+            errdefer allocator.free(node_copy);
+            const storage_copy = try allocator.dupe(u8, storage);
+            errdefer allocator.free(storage_copy);
+            const volid_copy = try allocator.dupe(u8, volid);
+            errdefer allocator.free(volid_copy);
+            const format_copy = try allocator.dupe(u8, format);
+            errdefer allocator.free(format_copy);
             try out.append(allocator, .{
                 .allocator = allocator,
-                .node = try allocator.dupe(u8, node),
-                .storage = try allocator.dupe(u8, storage),
-                .volid = try allocator.dupe(u8, volid),
-                .format = try allocator.dupe(u8, format),
+                .node = node_copy,
+                .storage = storage_copy,
+                .volid = volid_copy,
+                .format = format_copy,
                 .size = size,
                 .shared = shared,
             });
+        }
+    }
+
+    fn unlisted(self: *const Self, when: Unlisted, node: []const u8, storage: []const u8, why: []const u8) !void {
+        switch (when) {
+            .fail => {
+                if (self.logger) |log| log.err("storage {s} on {s} could not be listed: {s}", .{ storage, node, why }) catch {};
+                return core.Error.OperationFailed;
+            },
+            .skip => {
+                if (self.logger) |log| log.warn("storage {s} on {s} could not be listed, so its templates are not shown: {s}", .{ storage, node, why }) catch {};
+            },
         }
     }
 
@@ -784,13 +1107,13 @@ pub const PveClient = struct {
     /// the storages on that node which do hold templates, because the fix is
     /// usually to put the template on one of them.
     pub fn requireTemplateOnNode(self: *const Self, node: []const u8, volid: []const u8) !void {
-        const colon = std.mem.indexOfScalar(u8, volid, ':') orelse {
+        // The storage goes into a path on that node; see templateVolidStorage.
+        const storage = templateVolidStorage(volid) orelse {
             if (self.logger) |log| {
-                log.err("--node needs a template named as <storage>:vztmpl/<file>, got '{s}'", .{volid}) catch {};
+                log.err("--node needs a template named as <storage>:vztmpl/<file>, the file in letters, digits, '.', '_' and '-' without '..', got '{s}'", .{volid}) catch {};
             }
             return core.Error.InvalidInput;
         };
-        const storage = volid[0..colon];
 
         const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/storage/{s}/content", .{ node, storage });
         defer self.allocator.free(path);
@@ -868,9 +1191,14 @@ pub const PveClient = struct {
 
     /// Map pct command errors to core errors
     pub fn mapPctError(self: *const Self, stderr: []const u8) core.Error {
-        const s = stderr;
         if (self.logger) |log| log.err("pct command failed: {s}", .{std.mem.trim(u8, stderr, " \t\r\n")}) catch {};
+        return errorFor(stderr);
+    }
 
+    /// What a Proxmox tool's complaint means, for a caller that has already
+    /// said which call it was.
+    fn errorFor(stderr: []const u8) core.Error {
+        const s = stderr;
         if (std.mem.indexOf(u8, s, "already exists") != null) return core.Error.OperationFailed;
         if (std.mem.indexOf(u8, s, "No such file or directory") != null or
             std.mem.indexOf(u8, s, "does not exist") != null or
@@ -881,27 +1209,38 @@ pub const PveClient = struct {
         return core.Error.OperationFailed;
     }
 
-    /// List containers across the cluster, falling back to this host.
+    /// What a listing that failed means. Never NotFound, whatever the tool
+    /// said: a listing that could not be read says nothing about any one
+    /// container, and NotFound from a lookup is what create takes for "the
+    /// name is free". errorFor reads "not found" or "No such file or
+    /// directory" as a missing container, which is right for a call about one
+    /// container -- and it let create past its cluster-wide check whenever
+    /// the listing failed with those words.
+    fn listingError(stderr: []const u8) core.Error {
+        const err = errorFor(stderr);
+        return if (err == core.Error.NotFound) core.Error.OperationFailed else err;
+    }
+
+    /// List containers across the cluster.
     ///
     /// `pct list` answers for the node it runs on and nothing else, so on a
     /// cluster it showed a fraction of what was there without saying so. The
     /// cluster's own listing carries the node, which is the column a person
-    /// then needs to make sense of the rest.
+    /// then needs to make sense of the rest. A cluster that cannot be listed
+    /// is an error, not this host's list in its place: that was the same
+    /// fraction, still without saying so.
     pub fn list(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
-        const cluster = self.clusterList(allocator) catch |err| {
-            if (self.logger) |log| {
-                log.debug("the cluster could not be listed ({s}); listing this host", .{@errorName(err)}) catch {};
-            }
-            return self.localList(allocator);
-        };
+        const cluster = try self.clusterList(allocator);
 
         // The cluster's listing is a cached view: pvestatd refreshes it every
         // few seconds, so a container created a moment ago is in `pct list` and
         // not yet here. Returning only the cluster's answer made `nexcage list`
         // -- and `state`, which reads it -- miss a container that plainly
         // exists. This host's own containers are merged in, by VMID.
-        const local = self.localList(allocator) catch {
-            return cluster;
+        const local = self.localList(allocator) catch |err| {
+            for (cluster) |*c| c.deinit();
+            self.allocator.free(cluster);
+            return err;
         };
         defer {
             for (local) |*c| c.deinit();
@@ -918,14 +1257,23 @@ pub const PveClient = struct {
         // a moment ago is still "stopped" there. So a local entry replaces the
         // cluster's for the same VMID rather than being dropped as a duplicate,
         // which is what made `state` say stopped right after a successful start
-        // while `list` said running. The cluster stays authoritative for the one
-        // thing only it knows: which node a container on another host is on.
+        // while `list` said running. The name is replaced too: the cache keeps
+        // a destroyed container's name for a VMID the next one has taken, and a
+        // lookup of the old name found the new container. The cluster stays
+        // authoritative for the one thing only it knows: which node a container
+        // on another host is on.
         for (local) |*c| {
             var replaced = false;
             for (merged.items) |*m| {
                 if (!std.mem.eql(u8, m.id, c.id)) continue;
+                const status = try allocator.dupe(u8, c.status);
                 allocator.free(m.status);
-                m.status = try allocator.dupe(u8, c.status);
+                m.status = status;
+                if (c.name.len > 0) {
+                    const name = try allocator.dupe(u8, c.name);
+                    allocator.free(m.name);
+                    m.name = name;
+                }
                 replaced = true;
             }
             if (replaced) continue;
@@ -943,18 +1291,9 @@ pub const PveClient = struct {
     }
 
     fn clusterList(self: *const Self, allocator: std.mem.Allocator) ![]core.ContainerInfo {
-        // `--type vm` and a filter, for the reason spelt out in clusterLookup.
-        const args = [_][]const u8{ "pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json" };
-        const res = try common.runCommand(self.allocator, self.logger, &args);
-        defer {
-            self.allocator.free(res.stdout);
-            self.allocator.free(res.stderr);
-        }
-        if (res.exit_code != 0) return core.Error.OperationFailed;
-
-        const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, res.stdout, .{});
+        // `--type vm` and a filter, for the reason spelt out in clusterResources.
+        const parsed = try self.clusterResources();
         defer parsed.deinit();
-        if (parsed.value != .array) return core.Error.OperationFailed;
 
         var containers = std.ArrayListUnmanaged(core.ContainerInfo){};
         errdefer {
@@ -974,6 +1313,14 @@ pub const PveClient = struct {
             };
             var vmid_buf: [24]u8 = undefined;
             const vmid_str = std.fmt.bufPrint(&vmid_buf, "{d}", .{vmid_num}) catch continue;
+            // A container its node has not reported yet has no name here, and
+            // nor does every container of a node down for five minutes: the
+            // API takes the name from the node's last report (Pick.unnamed).
+            // It stays empty. The VMID used to be put in its place,
+            // and then a container really named after its VMID -- `create
+            // --name 100` on a fresh host gets VMID 100 -- passed for one
+            // without a name: found "by VMID", it had no record written or
+            // removed and no identity to confirm before it was destroyed.
             const name = if (obj.get("name")) |n| (if (n == .string) n.string else "") else "";
             const status = if (obj.get("status")) |st| (if (st == .string) st.string else "unknown") else "unknown";
             const node = if (obj.get("node")) |n| (if (n == .string) n.string else "") else "";
@@ -981,7 +1328,7 @@ pub const PveClient = struct {
             try containers.append(self.allocator, core.ContainerInfo{
                 .allocator = allocator,
                 .id = try allocator.dupe(u8, vmid_str),
-                .name = try allocator.dupe(u8, if (name.len > 0) name else vmid_str),
+                .name = try allocator.dupe(u8, name),
                 .status = try allocator.dupe(u8, status),
                 .backend_type = try allocator.dupe(u8, "proxmox-lxc"),
                 .runtime = try allocator.dupe(u8, "pct"),
@@ -1000,7 +1347,10 @@ pub const PveClient = struct {
             self.allocator.free(res.stdout);
             self.allocator.free(res.stderr);
         }
-        if (res.exit_code != 0) return self.mapPctError(res.stderr);
+        if (res.exit_code != 0) {
+            if (self.logger) |log| log.err("this host's listing of its containers (pct list) failed: {s}", .{std.mem.trim(u8, res.stderr, " \t\r\n")}) catch {};
+            return listingError(res.stderr);
+        }
 
         var lines = std.mem.splitScalar(u8, res.stdout, '\n');
         var containers = std.ArrayListUnmanaged(core.ContainerInfo){};
@@ -1180,7 +1530,9 @@ pub const PveClient = struct {
     /// The limits in pct's options, appended to `args` (each string owned by
     /// it): what `update` says to `pct set` and `create` to `pct create`
     /// (#308). `memory_fallback` is the memory limit in bytes when `values`
-    /// has a swap but no memory of its own.
+    /// has a swap but no memory of its own. A value pct cannot say as it was
+    /// asked is refused, naming the setting, rather than said as a different
+    /// limit.
     pub fn resourceOptions(self: *const Self, values: []const core.types.ResourceUpdate, memory_fallback: ?i64, args: *std.ArrayListUnmanaged([]const u8)) !void {
         const res = core.resources;
         var memory_bytes: ?i64 = null;
@@ -1198,7 +1550,17 @@ pub const PveClient = struct {
                     return core.Error.UnsupportedOperation;
                 }
                 memory_bytes = num;
-                try pushOption(self.allocator, args, "--memory", "{d}", .{res.mibCeil(num)});
+                const mib = res.mibCeil(num) catch {
+                    if (self.logger) |log| log.err("memory.limit (--memory) of {d} bytes is more than Proxmox can hold: it keeps MiB and works the bytes out again in 64 bits", .{num}) catch {};
+                    return core.Error.InvalidInput;
+                };
+                // Raised to pct's least, 0 (runc's "leave it as it is") and
+                // 4 MiB both became a limit of 16 MiB that nobody asked for.
+                if (mib < res.min_memory_mib) {
+                    if (self.logger) |log| log.err("memory.limit (--memory) of {d} bytes is less than the {d} MiB pct takes, and raised to that it would be a limit nobody asked for; give at least {d}M, or leave it out", .{ num, res.min_memory_mib, res.min_memory_mib }) catch {};
+                    return core.Error.InvalidInput;
+                }
+                try pushOption(self.allocator, args, "--memory", "{d}", .{mib});
             } else if (isSetting(v, "memory", "swap")) {
                 if (num < 0) {
                     if (self.logger) |log| log.err("--memory-swap -1: Proxmox has no unlimited swap for a container; give a size", .{}) catch {};
@@ -1210,6 +1572,12 @@ pub const PveClient = struct {
             } else if (isSetting(v, "cpu", "period")) {
                 period = num;
             } else if (isSetting(v, "cpu", "shares")) {
+                // 0 is runc's "leave it as it is" and became the lowest
+                // weight; a negative number of shares is none at all.
+                if (num <= 0) {
+                    if (self.logger) |log| log.err("cpu.shares (--cpu-share) of {d} is no CPU weight: shares run from 2 to 262144, and 0 is runc's \"leave it as it is\", which pct cannot say; give a number of shares, or leave it out", .{num}) catch {};
+                    return core.Error.InvalidInput;
+                }
                 try pushOption(self.allocator, args, "--cpuunits", "{d}", .{res.sharesToWeight(num)});
             } else {
                 if (self.logger) |log| log.err("{s}.{s} has no Proxmox setting for a container: Proxmox knows memory, swap, cpulimit and cpuunits, so this backend takes --memory, --memory-swap, --cpu-quota/--cpu-period and --cpu-share", .{ v.section, v.name }) catch {};
@@ -1226,12 +1594,23 @@ pub const PveClient = struct {
                 if (self.logger) |log| log.err("--memory-swap is memory plus swap, as runc means it, and {d} is less than the memory limit of {d}", .{ total, limit }) catch {};
                 return core.Error.InvalidInput;
             }
-            try pushOption(self.allocator, args, "--swap", "{d}", .{@divFloor(total - limit + (1024 * 1024 - 1), 1024 * 1024)});
+            // total >= limit >= 0, so the difference cannot overflow; its
+            // MiB, which Proxmox turns back into bytes, can be too many.
+            const swap_mib = res.mibCeil(total - limit) catch {
+                if (self.logger) |log| log.err("memory.swap (--memory-swap) of {d} bytes is more than Proxmox can hold: it keeps MiB and works the bytes out again in 64 bits", .{total}) catch {};
+                return core.Error.InvalidInput;
+            };
+            try pushOption(self.allocator, args, "--swap", "{d}", .{swap_mib});
         }
         if (quota) |q| {
             var buf: [32]u8 = undefined;
-            const cores = res.cpulimit(&buf, q, period orelse 100000) catch {
-                if (self.logger) |log| log.err("--cpu-period must be positive", .{}) catch {};
+            const p = period orelse 100000;
+            const cores = res.cpulimit(&buf, q, p) catch |err| {
+                if (self.logger) |log| switch (err) {
+                    error.QuotaTooLarge => log.err("cpu.quota (--cpu-quota) of {d} over a period of {d} is more cores than pct takes", .{ q, p }) catch {},
+                    error.QuotaTooSmall => log.err("cpu.quota (--cpu-quota) of {d} over a period of {d} is less than a hundredth of a core, the least Proxmox can set, and pct's cpulimit 0 would be no limit at all; give a larger quota, or -1 for no limit", .{ q, p }) catch {},
+                    else => log.err("cpu.period (--cpu-period) must be positive", .{}) catch {},
+                };
                 return core.Error.InvalidInput;
             };
             try pushOption(self.allocator, args, "--cpulimit", "{s}", .{cores});
@@ -1289,7 +1668,15 @@ pub const PveClient = struct {
                 }
             }
         }
-        return mib * 1024 * 1024;
+        // A size in bytes is what the swap is worked out from, so a config
+        // whose MiB are past 64 bits of bytes, or below none, is an error
+        // here rather than an overflow there.
+        const bytes = std.math.mul(i64, mib, 1024 * 1024) catch -1;
+        if (bytes < 0) {
+            if (self.logger) |log| log.err("the config of CT {s} gives a memory of {d} MiB, which is no size in bytes that 64 bits hold", .{ vmid, mib }) catch {};
+            return core.Error.OperationFailed;
+        }
+        return bytes;
     }
 
     /// Whether a container's processes are frozen, read from the cgroup itself.
@@ -1333,13 +1720,83 @@ pub const PveClient = struct {
             if (self.logger) |log| log.err("CT {s} is not running", .{vmid}) catch {};
             return core.Error.OperationFailed;
         };
-        std.posix.kill(pid, signo) catch |err| {
-            if (self.logger) |log| log.err("sending signal {d} to PID {d} (init of CT {s}) failed: {s}", .{ signo, pid, vmid, @errorName(err) }) catch {};
-            return switch (err) {
-                error.PermissionDenied => core.Error.PermissionDenied,
-                else => core.Error.OperationFailed,
-            };
+
+        // `pct status`, another process, read that PID a moment ago -- for a
+        // perl tool, most of a second. The init can exit in between and its
+        // PID go to an unrelated process, which kill(2) as root would hit.
+        // A pidfd names one process for good: it is opened first, the PID is
+        // then confirmed to be in the container's cgroup, and the signal goes
+        // through the pidfd, so it reaches that process or none. A PID that
+        // is not the container's any more means the container is not running.
+        const linux = std.os.linux;
+        const open_rc = linux.pidfd_open(pid, 0);
+        switch (linux.E.init(open_rc)) {
+            .SUCCESS => {},
+            .SRCH => {
+                if (self.logger) |log| log.err("CT {s} is not running: its init, PID {d}, has exited", .{ vmid, pid }) catch {};
+                return core.Error.OperationFailed;
+            },
+            .NOSYS => {
+                if (self.logger) |log| log.err("this kernel has no pidfd_open (Linux 5.3); nexcage sends a container a signal only through one", .{}) catch {};
+                return core.Error.UnsupportedOperation;
+            },
+            else => |e| {
+                if (self.logger) |log| log.err("pidfd_open for PID {d} (init of CT {s}) failed: {s}", .{ pid, vmid, @tagName(e) }) catch {};
+                return core.Error.OperationFailed;
+            },
+        }
+        const pidfd: std.posix.fd_t = @intCast(open_rc);
+        defer std.posix.close(pidfd);
+
+        if (!try self.inContainerCgroup(vmid, pid)) {
+            if (self.logger) |log| log.err("CT {s} is not running: PID {d}, which pct status reported as its init, is not in the container's cgroup", .{ vmid, pid }) catch {};
+            return core.Error.OperationFailed;
+        }
+
+        switch (linux.E.init(linux.pidfd_send_signal(pidfd, signo, null, 0))) {
+            .SUCCESS => {},
+            .SRCH => {
+                if (self.logger) |log| log.err("CT {s} is not running: its init, PID {d}, has exited", .{ vmid, pid }) catch {};
+                return core.Error.OperationFailed;
+            },
+            .PERM => {
+                if (self.logger) |log| log.err("sending signal {d} to PID {d} (init of CT {s}) is not permitted", .{ signo, pid, vmid }) catch {};
+                return core.Error.PermissionDenied;
+            },
+            else => |e| {
+                if (self.logger) |log| log.err("sending signal {d} to PID {d} (init of CT {s}) failed: {s}", .{ signo, pid, vmid, @tagName(e) }) catch {};
+                return core.Error.OperationFailed;
+            },
+        }
+    }
+
+    /// Whether `pid` is one of CT `vmid`'s processes: listed in a
+    /// cgroup.procs anywhere under /sys/fs/cgroup/lxc/<vmid>/, where Proxmox
+    /// puts them -- the init under ns/, and systemd's units below that, so
+    /// the whole tree is looked through.
+    fn inContainerCgroup(self: *const Self, vmid: []const u8, pid: std.posix.pid_t) !bool {
+        // A VMID is a number, and nothing else may become part of the path
+        for (vmid) |c| if (!std.ascii.isDigit(c)) return false;
+        if (vmid.len == 0) return false;
+
+        const root = try std.fmt.allocPrint(self.allocator, "/sys/fs/cgroup/lxc/{s}", .{vmid});
+        defer self.allocator.free(root);
+        var dir = std.fs.cwd().openDir(root, .{ .iterate = true }) catch |err| switch (err) {
+            // A stopped container has no cgroup, and a stopping one's is
+            // being removed
+            error.FileNotFound, error.NoDevice => return false,
+            else => {
+                if (self.logger) |log| log.err("cannot read {s}: {s}", .{ root, @errorName(err) }) catch {};
+                return core.Error.OperationFailed;
+            },
         };
+        defer dir.close();
+
+        const search = try cgroupTreeLists(self.allocator, dir, pid);
+        if (!search.found and search.unread > 0) {
+            if (self.logger) |log| log.warn("{d} cgroups under {s} could not be read and were passed over, the first with {s}; PID {d} may be in one of them", .{ search.unread, root, @errorName(search.first_error.?), pid }) catch {};
+        }
+        return search.found;
     }
 
     /// Run a command inside the container with `pct exec`, and return the
@@ -1360,9 +1817,16 @@ pub const PveClient = struct {
             return core.Error.OperationFailed;
         }
 
+        // --keep-env 0: lxc-attach --clear-env, so the command starts from
+        // LXC's default PATH, container=lxc and the container's own
+        // lxc.environment. pct's default is to keep the environment, which
+        // handed the command -- a binary from the image, running as the
+        // container's root -- every variable of the shell or job that ran
+        // nexcage: API tokens, cloud keys, SSH_AUTH_SOCK. Proxmox meant to
+        // change that default in PVE 9 and has not (pct.pm's FIXME).
         var args = std.ArrayListUnmanaged([]const u8){};
         defer args.deinit(self.allocator);
-        try args.appendSlice(self.allocator, &.{ "pct", "exec", vmid, "--" });
+        try args.appendSlice(self.allocator, &.{ "pct", "exec", vmid, "--keep-env", "0", "--" });
         try args.appendSlice(self.allocator, argv);
 
         var child = std.process.Child.init(args.items, self.allocator);
@@ -1419,6 +1883,7 @@ pub const PveClient = struct {
     /// snapshot -- a raw volume on a directory storage -- is pct's refusal,
     /// passed on with the one thing pct does not say: which storages can.
     pub fn snapshot(self: *const Self, vmid: []const u8, name: []const u8, description: ?[]const u8, node: ?[]const u8) !void {
+        try checkSnapshotName(self.logger, name);
         var args = std.ArrayListUnmanaged([]const u8){};
         defer args.deinit(self.allocator);
         var path: ?[]u8 = null;
@@ -1437,6 +1902,7 @@ pub const PveClient = struct {
     /// container itself first, with a kill, and `start_after` is pct's own
     /// --start: bring it up again afterwards.
     pub fn rollback(self: *const Self, vmid: []const u8, name: []const u8, start_after: bool, node: ?[]const u8) !void {
+        try checkSnapshotName(self.logger, name);
         var args = std.ArrayListUnmanaged([]const u8){};
         defer args.deinit(self.allocator);
         var path: ?[]u8 = null;
@@ -1453,6 +1919,7 @@ pub const PveClient = struct {
 
     /// Delete a snapshot. A name that is not there is pct's error, passed on.
     pub fn deleteSnapshot(self: *const Self, vmid: []const u8, name: []const u8, node: ?[]const u8) !void {
+        try checkSnapshotName(self.logger, name);
         if (node) |n| {
             const path = try std.fmt.allocPrint(self.allocator, "/nodes/{s}/lxc/{s}/snapshot/{s}", .{ n, vmid, name });
             defer self.allocator.free(path);
@@ -1534,6 +2001,283 @@ fn pctRow(buf: []u8, vmid: []const u8, status: []const u8, lock: []const u8, nam
     return std.fmt.bufPrint(buf, "{s: <10} {s: <10} {s: <12} {s: <20}", .{ vmid, status, lock, name });
 }
 
+/// A pull's UPID without its node and its file, as PVE::UPID::encode writes it
+/// for pvesh, which runs as root@pam. pstart takes 9 hex digits once a node
+/// has been up for 497 days.
+const pull_upid_rest = "UPID:" ++ ":00000000:000000000:00000000:ociregistrypull:" ++ ":root@pam:";
+
+/// The longest node name: a node is named for its hostname, and the kernel
+/// keeps 64 characters of one.
+const max_node_name = 64;
+
+/// The longest file name nexcage gives a pull, before the ".tar" Proxmox adds:
+/// 127 characters. The file itself could have 255, but the pull runs as a
+/// task, and Proxmox names the task's log for its UPID, which holds the node
+/// and the file: /var/log/pve/tasks/<x>/<UPID>, one file name of 255 bytes at
+/// most (pve-common, PVE/UPID.pm encode and open_log). Past that, pvesh fails
+/// with "unable to create file ... File name too long" before anything is
+/// pulled. This was sized for the file alone once, and a reference of 160
+/// characters, written out whole, failed on a node whose name was 24.
+const max_pull_name = 255 - pull_upid_rest.len - max_node_name - ".tar".len;
+
+/// The file name nexcage pulls `reference` under, before the ".tar" Proxmox
+/// adds: the whole reference -- registry, namespace, name and tag -- with every
+/// character a template's file name cannot have turned into '_', then '-' and
+/// the first 16 hex digits of the reference's SHA-256.
+///
+/// Proxmox's own name is the last path component and the tag, so
+/// docker.io/library/redis:7 and ghcr.io/someone/redis:7 were both
+/// redis_7.tar: the name could not say which image a file held, and the second
+/// pull was refused as already there. The whole reference spelled out says it
+/// to a person reading `images`. The digest says it to nexcage, because '/'
+/// and ':' both becoming '_' still lets two references read the same
+/// (a/b_c:1 and a_b/c:1), and because past 110 characters a reference is cut
+/// here (see max_pull_name) while the digest covers all of it.
+fn pulledTemplateName(allocator: std.mem.Allocator, reference: []const u8) ![]u8 {
+    const readable = reference[0..@min(reference.len, max_pull_name - 17)];
+    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(reference, &digest, .{});
+    const hex = std.fmt.bytesToHex(digest[0..8], .lower);
+
+    const name = try allocator.alloc(u8, readable.len + 1 + hex.len);
+    for (readable, 0..) |c, i| {
+        // A leading '.' would hide the file from the storage's listing, a
+        // leading '-' reads as an option, and ".." -- which a tag may hold --
+        // is what `rmi` refuses in a volid. (Only an empty reference gives a
+        // name that starts with the '-' below, and Proxmox refuses that
+        // reference before it looks at the name.)
+        const keep = isFileNameChar(c) and
+            !(i == 0 and (c == '.' or c == '-')) and
+            !(c == '.' and i > 0 and name[i - 1] == '.');
+        name[i] = if (keep) c else '_';
+    }
+    name[readable.len] = '-';
+    @memcpy(name[readable.len + 1 ..], &hex);
+    return name;
+}
+
+/// Whether a file name ends the way pulledTemplateName ends one: '-' and 16
+/// lower-case hex digits.
+fn hasDerivedShape(name: []const u8) bool {
+    if (name.len < 17 or name[name.len - 17] != '-') return false;
+    for (name[name.len - 16 ..]) |c| {
+        if (!(std.ascii.isDigit(c) or (c >= 'a' and c <= 'f'))) return false;
+    }
+    return true;
+}
+
+/// What Proxmox keeps of a template's file name: normalize_content_filename
+/// turns every other character into '_'.
+fn isFileNameChar(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '_' or c == '.' or c == '-';
+}
+
+/// A file name `pull --filename` may give: one Proxmox's normalisation leaves
+/// as it is, so that the file is known to be exactly <name>.tar afterwards,
+/// and one `rmi` takes.
+fn isPlainFileName(name: []const u8) bool {
+    if (name.len == 0 or name.len > max_pull_name) return false;
+    if (name[0] == '.' or name[0] == '-') return false;
+    // `rmi` refuses ".." in a volid, so a template is not named with it --
+    // nor with a last '.', which the ".tar" Proxmox adds turns into "..".
+    // "myredis." was pulled as myredis..tar, printed, and then refused by
+    // `rmi` and `create --node`.
+    if (std.mem.indexOf(u8, name, "..") != null or name[name.len - 1] == '.') return false;
+    for (name) |c| {
+        if (!isFileNameChar(c)) return false;
+    }
+    return true;
+}
+
+/// A storage ID as Proxmox's parse_id takes it: two characters at least, a
+/// letter first, a letter or digit last, and letters, digits, '-', '_' or '.'
+/// between.
+fn isStorageId(id: []const u8) bool {
+    if (id.len < 2) return false;
+    if (!std.ascii.isAlphabetic(id[0]) or !std.ascii.isAlphanumeric(id[id.len - 1])) return false;
+    for (id) |c| {
+        if (!(std.ascii.isAlphanumeric(c) or c == '-' or c == '_' or c == '.')) return false;
+    }
+    return true;
+}
+
+/// The storage of a volid that is exactly <storage>:vztmpl/<file>, or null:
+/// the storage a Proxmox storage ID, the file in the characters Proxmox gives
+/// a template's file name and without "..". The volid and its storage go
+/// into pvesh paths, and for a node other than this one pvesh passes the path
+/// to that node's shell over ssh without quoting it -- the options it quotes,
+/// the path it does not (pve-manager, PVE/CLI/pvesh.pm, proxy_handler).
+fn templateVolidStorage(volid: []const u8) ?[]const u8 {
+    const colon = std.mem.indexOfScalar(u8, volid, ':') orelse return null;
+    const storage = volid[0..colon];
+    const kind = ":vztmpl/";
+    if (!isStorageId(storage) or !std.mem.startsWith(u8, volid[colon..], kind)) return null;
+    const file = volid[colon + kind.len ..];
+    if (file.len == 0 or std.mem.indexOf(u8, file, "..") != null) return null;
+    for (file) |c| {
+        if (!isFileNameChar(c)) return null;
+    }
+    return storage;
+}
+
+/// Proxmox's rule for a snapshot name, pve-snapshot-name in pve-common: the
+/// pve-configid format, a letter and then letters, digits, '-' or '_', two to
+/// 40 characters. "current" fits it, and is refused too: it is the API's name
+/// for where the container is now, not a snapshot.
+fn isSnapshotName(name: []const u8) bool {
+    if (name.len < 2 or name.len > 40) return false;
+    if (!std.ascii.isAlphabetic(name[0])) return false;
+    for (name) |c| {
+        if (!(std.ascii.isAlphanumeric(c) or c == '-' or c == '_')) return false;
+    }
+    return !std.mem.eql(u8, name, "current");
+}
+
+/// Refuse a snapshot name Proxmox would not take, before it reaches pct or a
+/// pvesh path. Proxmox checks the name too, but on the way to another node
+/// pvesh hands the path to that node's shell first (see templateVolidStorage),
+/// so a name was a command there.
+pub fn checkSnapshotName(logger: ?*core.LogContext, name: []const u8) core.Error!void {
+    if (isSnapshotName(name)) return;
+    if (logger) |log| {
+        if (std.mem.eql(u8, name, "current")) {
+            log.err("'current' is reserved: it is Proxmox's name for where the container is now, not a snapshot", .{}) catch {};
+        } else {
+            log.err("'{s}' is not a snapshot name Proxmox takes: a letter, then letters, digits, '-' or '_', 2 to 40 characters", .{name}) catch {};
+        }
+    }
+    return core.Error.InvalidInput;
+}
+
+test "snapshot names as Proxmox takes them, and not 'current'" {
+    for ([_][]const u8{ "before-upgrade_1", "xx", "Snap2", "a" ++ "b" ** 39, "Current" }) |ok| {
+        try std.testing.expect(isSnapshotName(ok));
+    }
+    for ([_][]const u8{ "", "x", "current", "1abc", "-x", "_x", "a/b", "../a", "x;id;", "x y", "a.b", "a" ++ "b" ** 40 }) |bad| {
+        try std.testing.expect(!isSnapshotName(bad));
+    }
+    try std.testing.expectError(core.Error.InvalidInput, checkSnapshotName(null, "x;touch${IFS}/root/pwn;"));
+    try checkSnapshotName(null, "before");
+}
+
+test "a template volid is <storage>:vztmpl/<file> and nothing more" {
+    try std.testing.expectEqualStrings("local", templateVolidStorage("local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst").?);
+    try std.testing.expectEqualStrings("shared-rdma", templateVolidStorage("shared-rdma:vztmpl/docker.io_library_redis_7-a0ed741ac6ba1c57.tar").?);
+    for ([_][]const u8{
+        "not-a-volid",
+        "local:vztmpl/",
+        "local:iso/x.iso",
+        "local:vztmpl/../../x.tar",
+        "local:vztmpl/a/b.tar",
+        "local:vztmpl/x..tar",
+        "local:vztmpl/evil;id>pwn.tar.zst",
+        "local:vztmpl/a b.tar",
+        "x;id;:vztmpl/a.tar",
+        ":vztmpl/a.tar",
+    }) |bad| {
+        try std.testing.expect(templateVolidStorage(bad) == null);
+    }
+}
+
+test "storage IDs as Proxmox parses them" {
+    try std.testing.expect(isStorageId("local"));
+    try std.testing.expect(isStorageId("shared-rdma"));
+    try std.testing.expect(isStorageId("nfs.backup_2"));
+    try std.testing.expect(!isStorageId("l"));
+    try std.testing.expect(!isStorageId("2local"));
+    try std.testing.expect(!isStorageId("local-"));
+    try std.testing.expect(!isStorageId("x;id;"));
+    try std.testing.expect(!isStorageId("a/b"));
+    try std.testing.expect(!isStorageId(""));
+}
+
+test "a pulled template is named for the whole reference, and two references never share a name" {
+    const a = std.testing.allocator;
+    const redis = try pulledTemplateName(a, "docker.io/library/redis:7");
+    defer a.free(redis);
+    // The digest is pinned: tests/sim derives the same name with sha256sum.
+    try std.testing.expectEqualStrings("docker.io_library_redis_7-a0ed741ac6ba1c57", redis);
+    try std.testing.expect(isPlainFileName(redis));
+
+    const other = try pulledTemplateName(a, "ghcr.io/someone/redis:7");
+    defer a.free(other);
+    try std.testing.expectEqualStrings("ghcr.io_someone_redis_7-", other[0 .. other.len - 16]);
+
+    // The same once '/' and ':' are '_', told apart by the digest
+    const left = try pulledTemplateName(a, "a/b_c:1");
+    defer a.free(left);
+    const right = try pulledTemplateName(a, "a_b/c:1");
+    defer a.free(right);
+    try std.testing.expectEqualStrings(left[0 .. left.len - 16], right[0 .. right.len - 16]);
+    try std.testing.expect(!std.mem.eql(u8, left, right));
+
+    // Too long for a pull's task: cut, and still told apart
+    const long_a = "registry.example/" ++ "x" ** 250 ++ ":1";
+    const long_b = "registry.example/" ++ "x" ** 250 ++ ":2";
+    const cut_a = try pulledTemplateName(a, long_a);
+    defer a.free(cut_a);
+    const cut_b = try pulledTemplateName(a, long_b);
+    defer a.free(cut_b);
+    try std.testing.expectEqual(@as(usize, 127), max_pull_name);
+    try std.testing.expectEqual(max_pull_name, cut_a.len);
+    try std.testing.expectEqualStrings("registry.example_" ++ "x" ** 93 ++ "-", cut_a[0 .. cut_a.len - 16]);
+    try std.testing.expect(isPlainFileName(cut_a));
+    try std.testing.expect(!std.mem.eql(u8, cut_a, cut_b));
+
+    // The UPID of its pull, on a node with the longest name and with a
+    // 9-digit pstart, is still one file name
+    const upid = try std.fmt.allocPrint(a, "UPID:{s}:000700FD:10057F07B:6AC81A67:ociregistrypull:{s}.tar:root@pam:", .{ "n" ** max_node_name, cut_a });
+    defer a.free(upid);
+    try std.testing.expectEqual(@as(usize, 255), upid.len);
+
+    // Nothing Proxmox would rewrite, hide or read as an option, and nothing
+    // rmi would refuse
+    const odd = try pulledTemplateName(a, "-x/y z@sha256:ab");
+    defer a.free(odd);
+    try std.testing.expectEqualStrings("_x_y_z_sha256_ab-", odd[0 .. odd.len - 16]);
+    try std.testing.expect(isPlainFileName(odd));
+    const dots = try pulledTemplateName(a, "registry.example/app:1...2");
+    defer a.free(dots);
+    try std.testing.expectEqualStrings("registry.example_app_1._.2-", dots[0 .. dots.len - 16]);
+    try std.testing.expect(isPlainFileName(dots));
+    const volid = try std.fmt.allocPrint(a, "local:vztmpl/{s}.tar", .{dots});
+    defer a.free(volid);
+    try std.testing.expect(templateVolidStorage(volid) != null);
+}
+
+test "a --filename is one Proxmox leaves as it is" {
+    try std.testing.expect(isPlainFileName("redis-7"));
+    try std.testing.expect(isPlainFileName("my_app.v2"));
+    try std.testing.expect(!isPlainFileName(""));
+    try std.testing.expect(!isPlainFileName("a/b"));
+    try std.testing.expect(!isPlainFileName("redis:7"));
+    try std.testing.expect(!isPlainFileName(".hidden"));
+    try std.testing.expect(!isPlainFileName("-x"));
+    try std.testing.expect(!isPlainFileName("a b"));
+    try std.testing.expect(!isPlainFileName("a..b"));
+    // Proxmox adds ".tar": "foo." would be foo..tar, which rmi refuses
+    try std.testing.expect(!isPlainFileName("foo."));
+    try std.testing.expect(isPlainFileName("x" ** max_pull_name));
+    try std.testing.expect(!isPlainFileName("x" ** (max_pull_name + 1)));
+
+    // What pull prints for a name it takes, rmi and create --node take
+    for ([_][]const u8{ "redis-7", "my_app.v2", "a.b-c_d", "x" ** max_pull_name }) |ok| {
+        try std.testing.expect(isPlainFileName(ok));
+        const volid = try std.fmt.allocPrint(std.testing.allocator, "local:vztmpl/{s}.tar", .{ok});
+        defer std.testing.allocator.free(volid);
+        try std.testing.expect(templateVolidStorage(volid) != null);
+    }
+
+    // The shape of a derived name, which a --filename may not have
+    try std.testing.expect(hasDerivedShape("docker.io_library_redis_7-a0ed741ac6ba1c57"));
+    try std.testing.expect(hasDerivedShape("-0123456789abcdef"));
+    try std.testing.expect(!hasDerivedShape("redis-7"));
+    try std.testing.expect(!hasDerivedShape("app-0123456789abcde"));
+    try std.testing.expect(!hasDerivedShape("app-0123456789ABCDEF"));
+    try std.testing.expect(!hasDerivedShape("app_0123456789abcdef"));
+    try std.testing.expect(!hasDerivedShape("app-0123456789abcdefg"));
+}
+
 /// Why a registry pull failed, from what pvesh printed. A pull task that
 /// fails still lets pvesh exit 0; skopeo's own message, `level=fatal
 /// msg="..."`, is on stdout, and stderr only says that `skopeo copy` failed.
@@ -1572,9 +2316,9 @@ fn registryOf(reference: []const u8) []const u8 {
 /// Proxmox's pull runs skopeo with no --authfile, and skopeo reads root's
 /// auth file on the node that pulls (#309). A refused login says where it
 /// goes; the file under /run is skopeo's default and gone after a reboot.
-fn reportPullFailure(log: *core.LogContext, reference: []const u8, storage: []const u8, node: []const u8, reason: ?[]const u8) void {
+fn reportPullFailure(log: *core.LogContext, reference: []const u8, storage: []const u8, node: []const u8, volid: []const u8, reason: ?[]const u8) void {
     const why = reason orelse {
-        log.err("the pull of {s} reported success but {s} on {s} holds no new template", .{ reference, storage, node }) catch {};
+        log.err("the pull of {s} reported success but {s} on {s} does not hold {s}", .{ reference, storage, node, volid }) catch {};
         return;
     };
     log.err("pulling {s} into {s} on {s} failed: {s}", .{ reference, storage, node, why }) catch {};
@@ -1653,6 +2397,52 @@ test "findVmidByName matches whole names only" {
     try std.testing.expectEqualStrings("1000", findVmidByName(output, "db").?);
     try std.testing.expect(findVmidByName(output, "web") == null);
     try std.testing.expect(findVmidByName(output, "backup") == null);
+}
+
+fn testEntry(vmid: []const u8, name: []const u8, node: []const u8) core.ContainerInfo {
+    return .{ .allocator = std.testing.allocator, .id = vmid, .name = name, .status = "stopped", .backend_type = "proxmox-lxc", .node = node };
+}
+
+test "a name wins over a VMID, whichever the listing puts first" {
+    // Proxmox lists VMIDs in string order, so 1000 comes before 150
+    const rows = [_]core.ContainerInfo{ testEntry("1000", "db-prod", "pve"), testEntry("150", "1000", "pve") };
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "1000", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 0 }, PveClient.pick(&rows, "db-prod", .name_or_vmid));
+    // a VMID no container is named after still finds its container
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "150", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "web", .name_or_vmid));
+}
+
+test "a name two containers share is no answer" {
+    const rows = [_]core.ContainerInfo{ testEntry("100", "web-1", "titan"), testEntry("101", "web-1", "pve"), testEntry("102", "web-2", "pve") };
+    try std.testing.expectEqual(PveClient.Pick.many, PveClient.pick(&rows, "web-1", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "101", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 2 }, PveClient.pick(&rows, "web-2", .name_or_vmid));
+}
+
+test "by name alone, a VMID finds nothing" {
+    const rows = [_]core.ContainerInfo{ testEntry("250", "tenant-b-db", "pve"), testEntry("100", "web-1", "pve") };
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "250", .name));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "web-1", .name));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 0 }, PveClient.pick(&rows, "250", .name_or_vmid));
+}
+
+test "a miss is no answer while a container has no name" {
+    // CT 300 on titan, which the cluster has no report for: it may be rem-1
+    const rows = [_]core.ContainerInfo{ testEntry("100", "web-1", "pve"), testEntry("300", "", "titan") };
+    try std.testing.expectEqual(PveClient.Pick{ .unnamed = 1 }, PveClient.pick(&rows, "rem-1", .name));
+    try std.testing.expectEqual(PveClient.Pick{ .unnamed = 1 }, PveClient.pick(&rows, "rem-1", .name_or_vmid));
+    // what does match is still found
+    try std.testing.expectEqual(PveClient.Pick{ .one = 0 }, PveClient.pick(&rows, "web-1", .name));
+    try std.testing.expectEqual(PveClient.Pick{ .one = 1 }, PveClient.pick(&rows, "300", .name_or_vmid));
+    // and with every container named, a miss is a miss
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(rows[0..1], "rem-1", .name));
+}
+
+test "an empty id names no container, not one without a name" {
+    const rows = [_]core.ContainerInfo{ testEntry("300", "", "titan"), testEntry("100", "web-1", "pve") };
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "", .name_or_vmid));
+    try std.testing.expectEqual(PveClient.Pick.none, PveClient.pick(&rows, "", .name));
 }
 
 test "parsePctStatus reads the init's host PID of a running container" {
@@ -1804,4 +2594,24 @@ test "formatUtc writes the epoch second as UTC with a zone" {
     try std.testing.expectEqualStrings("2026-09-30T23:59:59Z", formatUtc(&buf, 1790812799));
     try std.testing.expectEqualStrings("1970-01-01T00:00:00Z", formatUtc(&buf, 0));
     try std.testing.expectEqualStrings("", formatUtc(&buf, -1));
+}
+
+test "resourceOptions: a swap whose MiB Proxmox cannot hold is refused, not an overflow" {
+    // The memory limit a swap is worked out from -- create's, the bundle's
+    // or the default, or update's, the container's -- is 16 MiB at least as
+    // those come, but taken as given here. With a byte, memory plus swap at
+    // the top of i64 left nothing to round up into.
+    const client = PveClient.init(std.testing.allocator, null);
+    var args = std.ArrayListUnmanaged([]const u8){};
+    defer {
+        for (args.items) |a| std.testing.allocator.free(a);
+        args.deinit(std.testing.allocator);
+    }
+    const swap = [_]core.types.ResourceUpdate{.{ .section = "memory", .name = "swap", .value = "9223372036854775807", .numeric = true }};
+    try std.testing.expectError(core.Error.InvalidInput, client.resourceOptions(&swap, 1, &args));
+    try std.testing.expectEqual(@as(usize, 0), args.items.len);
+    // With a MiB less in the difference it fits, and is said in MiB
+    try client.resourceOptions(&swap, 1024 * 1024 - 1, &args);
+    try std.testing.expectEqualStrings("--swap", args.items[0]);
+    try std.testing.expectEqualStrings("8796093022207", args.items[1]);
 }

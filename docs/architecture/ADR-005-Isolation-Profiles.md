@@ -174,8 +174,12 @@ Routing stays as it is, **next to** profiles, and decides only at `create`:
 `--runtime` together with a profile whose backend differs exits 2.
 
 **After `create`, the container decides, not the configuration (#372).** Every
-other command goes to the backend that has the container: libcrun's state
-directory for the id first (a `stat`), then the Proxmox cluster. Neither the
+other command goes to the backend that has the container: libcrun's `status`
+file for the id first (a `stat`), then the Proxmox backend's own record of it
+(its `state.json`, another `stat`); with neither, the container does not exist,
+and only `--runtime lxc` sends the id to the Proxmox cluster. The record is of
+a name, so through it the id finds a container by name only; a VMID takes
+`--runtime lxc`. Neither the
 profile nor routing is consulted. A profile renamed, edited or removed, or a
 rule changed, while containers run can then never send `kill` or `delete` to
 the wrong backend or block them with "unknown profile".
