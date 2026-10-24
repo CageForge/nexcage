@@ -1,6 +1,6 @@
 # ADR-006: The Proxmox LXC backend driven by a container engine
 
-- Status: **Accepted** 2026-10-09. The answers are under *Decided on review*: alternative D, and `runtime: lxc` stays refused for an engine. Since 2026-10-13 it is accepted for the command line ([#394](https://github.com/CageForge/nexcage/issues/394), point 5).
+- Status: **Accepted** 2026-10-09. The answers are under *Decided on review*: alternative D, and `runtime: lxc` stays refused for an engine. Since 2026-10-13 it is accepted for the command line ([#394](https://github.com/CageForge/nexcage/issues/394), point 5). Since 2026-10-23 a Kubernetes pod is refused on Proxmox LXC by the containerd shim as well (point 6).
 - Date: 2026-10-09
 - Issue: [#316](https://github.com/CageForge/nexcage/issues/316)
 - Builds on: [ADR-005](ADR-005-Isolation-Profiles.md), Isolation profiles
@@ -175,6 +175,34 @@ as #371 made it do. ADR-005's `lxc` keys are not implemented.
      refused. It passes `--pid-file`, which this backend has always refused,
      and the message names the profile.
    - #316, an engine driving a Proxmox container, is unchanged.
+
+6. **2026-10-23: no Kubernetes pods on Proxmox LXC, through any shim.**
+   `containerd-shim-nexcage-v2`, the containerd shim of the Rust rewrite,
+   built the Proxmox LXC task model: the exit is the container's cgroup,
+   `/sys/fs/cgroup/lxc/<vmid>`, going away, since systemd's
+   `pve-container@<vmid>` records no exit status on 9.2. Under `ctr` it ran
+   on the E2E node end to end: create, start, exec, ps, stats, SIGKILL,
+   poweroff from inside, delete, and a shim killed under a running
+   container. Under a kubelet (k3s v1.36.5, containerd 2.3.4) no pod
+   container started:
+   - CRI bind-mounts files into every container (`/etc/hosts`,
+     `/etc/hostname`, `/etc/resolv.conf`, `/dev/termination-log`). `pct`
+     takes them into the config as `mpN` entries, and its pre-start hook
+     refuses to start: "directory '.../etc-hosts' does not exist". Proxmox
+     mounts only directories.
+   - The container ignores the pod's network, IPC and UTS namespaces, which
+     the bundle names by path, so it would not have the pod's address (E3).
+   - Both are possible with raw LXC keys, `lxc.mount.entry` and
+     `lxc.namespace.share.*`, which `pct` does not take. Writing them into
+     `/etc/pve/lxc/<vmid>.conf` is what the 2026-10 hardening audit removed
+     for its injection risk.
+
+   So the shim refuses, at `Create` and before the runtime is run, any
+   bundle CRI annotates with `io.kubernetes.cri.container-type`, sandbox or
+   container, with a message that names the reason and says to give the pod
+   a RuntimeClass whose handler runs crun. `ctr` and `nerdctl` write no such
+   annotation and keep the Proxmox LXC model. This is point 1 again, now
+   measured: a pod is crun's. #316 is unchanged.
 
 ## Verification of this ADR
 
