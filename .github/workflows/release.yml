@@ -400,7 +400,7 @@ jobs:
       # that writes releases. `gh release create` could do the same, as
       # zizmor's superfluous-actions says; swapping it is a change of its own.
       - name: Create Release  # zizmor: ignore[superfluous-actions]
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: v${{ needs.build.outputs.version }}
           files: release/*
